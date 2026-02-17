@@ -1,0 +1,20 @@
+{
+  "name": "zvault",
+  "private": true,
+  "workspaces": [
+    "sdk",
+    "zvault-app"
+  ],
+  "scripts": {
+    "build:sdk": "cd sdk && bun run build",
+    "build:frontend": "cd zvault-app && bun run build",
+    "build": "bun run build:sdk && bun run build:frontend",
+    "dev": "cd zvault-app && bun run dev",
+    "vercel-build": "bun run build:sdk && bun run build:frontend"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.0.1",
+    "bech32": "^2.0.0",
+    "next": "16.1.1"
+  }
+}

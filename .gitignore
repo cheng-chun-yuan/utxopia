@@ -1,0 +1,32 @@
+# Root-level ignores
+.DS_Store
+*.log
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment files (if needed at root)
+.env
+.env.local
+
+# Anchor build artifacts (should be in contracts/ but ignore at root too)
+# Note: Root target/ should not exist - it's likely an IDE artifact
+target/
+.anchor/
+
+# IDE artifacts (flycheck, etc.)
+**/flycheck*/
+
+# SDK build output
+sdk/dist/
+
+# Subdirectories have their own .gitignore files
+# See backend/.gitignore, contracts/.gitignore, and frontend/.gitignore
+test-ledger/
+.vercel
+.env*.local
