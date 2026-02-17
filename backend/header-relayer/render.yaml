@@ -1,0 +1,20 @@
+services:
+  - type: worker
+    name: header-relayer
+    env: docker
+    dockerfilePath: ./Dockerfile
+    region: oregon
+    plan: free
+    envVars:
+      - key: SOLANA_RPC_URL
+        value: https://api.devnet.solana.com
+      - key: PROGRAM_ID
+        value: S6rgPjCeBhkYBejWyDR1zzU3sYCMob36LAf8tjwj8pn
+      - key: BITCOIN_NETWORK
+        value: testnet
+      - key: START_BLOCK_HEIGHT
+        value: "4835045"
+      - key: POLL_INTERVAL_MS
+        value: "30000"
+      - key: RELAYER_KEYPAIR
+        sync: false  # Set manually in dashboard for security

@@ -1,0 +1,12 @@
+# FROST Signer 3 Configuration
+
+[signer]
+id = 3
+bind = "0.0.0.0:9003"
+key_file = "config/signer3.key.enc"
+
+[security]
+rate_limit = 60
+
+[logging]
+level = "info"

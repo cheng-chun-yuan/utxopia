@@ -1,0 +1,12 @@
+# FROST Signer 2 Configuration
+
+[signer]
+id = 2
+bind = "0.0.0.0:9002"
+key_file = "config/signer2.key.enc"
+
+[security]
+rate_limit = 60
+
+[logging]
+level = "info"

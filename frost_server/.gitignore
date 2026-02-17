@@ -1,0 +1,13 @@
+# Encrypted key shares (sensitive - never commit!)
+*.key.enc
+config/*.key.enc
+
+# Group public key (regenerate with DKG)
+config/group_pubkey.txt
+
+# Build artifacts
+target/
+
+# IDE
+.idea/
+.vscode/

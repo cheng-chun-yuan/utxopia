@@ -1,0 +1,24 @@
+# FROST Signer 1 Configuration
+# This file is used when running: frost-server run --config config/signer1.toml
+
+[signer]
+# Unique signer identifier (1-indexed)
+id = 1
+
+# HTTP server bind address
+bind = "0.0.0.0:9001"
+
+# Path to encrypted key share file
+key_file = "config/signer1.key.enc"
+
+[security]
+# Authentication secret for coordinator requests
+# Set via FROST_AUTH_SECRET environment variable in production
+# auth_secret = ""
+
+# Rate limiting (requests per minute per session)
+rate_limit = 60
+
+[logging]
+# Log level: trace, debug, info, warn, error
+level = "info"

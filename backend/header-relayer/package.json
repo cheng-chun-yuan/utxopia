@@ -1,0 +1,12 @@
+{
+  "name": "header-relayer",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "init": "bun run init-light-client.ts",
+    "start": "bun run index.ts"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.95.0"
+  }
+}
