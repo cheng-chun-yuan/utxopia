@@ -1,0 +1,1235 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0f0f12;
+  --foreground: #f1f0f3;
+  --card: #202027;
+  --card-foreground: #f1f0f3;
+  --primary: #f7931a;
+  --primary-foreground: #0a0a0a;
+  --secondary: #2c2c36;
+  --secondary-foreground: #f1f0f3;
+  --muted: #16161b;
+  --muted-foreground: #8b8a9e;
+  --accent: #ffabfe;
+  --accent-foreground: #0a0a0a;
+  --destructive: #ef4444;
+  --destructive-foreground: #ededed;
+  --border: #8b8a9e33;
+  --input: #16161b;
+  --ring: #ffabfe;
+  --radius: 0.75rem;
+
+  /* Zeus-style colors */
+  --zeus-purple: #ffabfe;
+  --zeus-purple-bg: #fd82ff1a;
+  --zeus-gray: #8b8a9e;
+  --zeus-gray-light: #c7c5d1;
+  --zeus-warning: #ffb546;
+  --zeus-warning-bg: #ffb5461a;
+  --zeus-success: #4ade80;
+  --default-transition-timing-function: ease;
+  --default-transition-duration: 300ms;
+
+  /* Bitcoin orange */
+  --btc-orange: #f7931a;
+  --btc-orange-light: #ffa940;
+  --btc-orange-dark: #e8850f;
+  --btc-orange-bg: #f7931a1a;
+  --btc-orange-bg-hover: #f7931a33;
+
+  /* Privacy colors */
+  --privacy-purple: #9945ff;
+  --privacy-teal: #14f195;
+  --privacy-bg: #14f1951a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* Semantic text colors - use text-gray, text-gray-light, etc. */
+  --color-gray: #8b8a9e;
+  --color-gray-light: #c7c5d1;
+  --color-gray-dark: #6b6a7e;
+
+  /* Bitcoin colors - use text-btc, bg-btc, etc. */
+  --color-btc: #f7931a;
+  --color-btc-light: #ffa940;
+  --color-btc-dark: #e8850f;
+
+  /* Privacy/Solana colors - use text-privacy, text-sol, etc. */
+  --color-privacy: #14f195;
+  --color-sol: #9945ff;
+  --color-sol-dark: #8b3de8;
+  --color-purple: #ffabfe;
+
+  /* Status colors */
+  --color-success: #4ade80;
+  --color-warning: #ffb546;
+  --color-warning-alt: #ffa726;
+  --color-error: #ef4444;
+
+  /* Cyber colors */
+  --color-cyan: #00ffff;
+
+  /* Disabled state colors - use disabled:bg-disabled, disabled:text-disabled */
+  --color-disabled: #8b8a9e;
+  --color-disabled-bg: rgb(139 138 158 / 0.2);
+}
+
+/*
+ * Color Usage Guide:
+ * ==================
+ * Instead of hardcoded hex values, use Tailwind theme colors with opacity modifiers:
+ *
+ * Backgrounds:
+ *   bg-background      (#0f0f12)
+ *   bg-muted           (#16161b)
+ *   bg-card            (#202027)
+ *   bg-secondary       (#2c2c36)
+ *   bg-privacy/10      (privacy with 10% opacity)
+ *   bg-btc/10          (btc with 10% opacity)
+ *   bg-gray/10         (gray with 10% opacity)
+ *   bg-purple/10       (purple with 10% opacity)
+ *   bg-success/10      (success with 10% opacity)
+ *   bg-cyan/10         (cyan with 10% opacity)
+ *
+ * Text:
+ *   text-foreground    (#f1f0f3)
+ *   text-gray          (#8b8a9e)
+ *   text-gray-light    (#c7c5d1)
+ *   text-privacy       (#14f195)
+ *   text-btc           (#f7931a)
+ *   text-btc-light     (#ffa940)
+ *   text-purple        (#ffabfe)
+ *   text-sol           (#9945ff)
+ *   text-success       (#4ade80)
+ *   text-warning       (#ffb546)
+ *   text-error         (#ef4444)
+ *   text-cyan          (#00ffff)
+ *
+ * Borders:
+ *   border-border      (default border color)
+ *   border-gray/15     (gray with 15% opacity)
+ *   border-gray/20     (gray with 20% opacity)
+ *   border-privacy/20  (privacy with 20% opacity)
+ *   border-btc/20      (btc with 20% opacity)
+ *   border-purple/20   (purple with 20% opacity)
+ *   border-success/20  (success with 20% opacity)
+ *
+ * Opacity shortcuts (hex suffix → Tailwind):
+ *   1a = /10, 26 = /15, 33 = /20, 40 = /25, 4D = /30, 66 = /40, 80 = /50
+ */
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+* {
+  border-color: var(--border);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+/* Zeus-style gradient backgrounds */
+.gradient-bg-primary {
+  background: linear-gradient(
+    314.6deg,
+    #fff4ab 2.43%,
+    #ffebd4 24.82%,
+    #ffd4fd 59.61%,
+    #ceabff 97.04%
+  );
+  box-shadow:
+    0px 4px 12px 0px #ffffff80 inset,
+    0px 4px 4px 0px #ffffff40 inset;
+  color: black;
+}
+
+.gradient-bg-primary:enabled:hover {
+  box-shadow:
+    inset 0px 4px 4px rgba(255, 255, 255, 0.25),
+    inset 0px 4px 16px rgba(255, 255, 255, 1);
+}
+
+.gradient-bg-primary:disabled {
+  color: #8b8a9e;
+  opacity: 0.4;
+}
+
+.secondary-bg {
+  background: #2c2c36;
+  box-shadow: 0px 0px 16px 0px #ff674633 inset;
+  color: #f1f0f3;
+}
+
+.tertiary-bg {
+  color: #c7c5d1;
+  background-color: #202027;
+  box-shadow: 0px 4px 12px 0px #8b8a9e26 inset;
+}
+
+.tertiary-bg:hover {
+  background-color: #16161b;
+  color: #f1f0f3;
+  box-shadow:
+    0px -4px 12px 0px #8b8a9e26 inset,
+    0px 4px 12px 0px #8b8a9e26 inset;
+}
+
+.gradient-bg-card {
+  position: relative;
+}
+
+.gradient-bg-card > * {
+  z-index: 1;
+  position: relative;
+}
+
+.gradient-bg-card::before {
+  content: "";
+  position: absolute;
+  top: 0px;
+  left: 0px;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(178, 131, 255, 0.25) 0.28%,
+      rgba(253, 131, 255, 0.25) 21.32%,
+      rgba(255, 191, 131, 0.25) 32.42%,
+      rgba(15, 15, 18, 0.25) 49.79%,
+      rgba(255, 103, 70, 0.25) 100%
+    ),
+    linear-gradient(0deg, rgba(139, 138, 158, 0.2), rgba(139, 138, 158, 0.2));
+  pointer-events: none;
+}
+
+.gradient-bg-card::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: calc(100% - 2px);
+  height: calc(100% - 2px);
+  border-radius: inherit;
+  background:
+    linear-gradient(
+      90.83deg,
+      rgba(253, 131, 255, 0.08) 0%,
+      rgba(178, 131, 255, 0.08) 10%,
+      rgba(123, 92, 175, 0.0711953) 22.46%,
+      rgba(15, 15, 18, 0.0540223) 41.2%,
+      rgba(15, 15, 18, 0) 56.08%,
+      rgba(255, 103, 70, 0.0500765) 81.52%,
+      rgba(255, 103, 70, 0.08) 100%
+    ),
+    linear-gradient(#16161b, #16161b);
+  pointer-events: none;
+}
+
+/* Typography */
+.text-body1 {
+  font-family: var(--font-rethink-sans), "Rethink Sans", sans-serif;
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.text-body2 {
+  font-family: var(--font-rethink-sans), "Rethink Sans", sans-serif;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.text-body2-semibold {
+  font-family: var(--font-rethink-sans), "Rethink Sans", sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.text-heading5 {
+  font-family: var(--font-rethink-sans), "Rethink Sans", sans-serif;
+  font-weight: 600;
+  font-size: 20px;
+  line-height: 28px;
+}
+
+.text-heading6 {
+  font-family: var(--font-rethink-sans), "Rethink Sans", sans-serif;
+  font-weight: 600;
+  font-size: 18px;
+  line-height: 26px;
+}
+
+.text-caption {
+  font-family: var(--font-rethink-sans), "Rethink Sans", sans-serif;
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 150%;
+}
+
+/* Divider with text */
+.divider-text {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  width: 100%;
+  gap: 16px;
+}
+
+.divider-text::before,
+.divider-text::after {
+  content: "";
+  display: block;
+  flex: 1;
+  border-top: solid 1px;
+  border-color: #8b8a9e66;
+}
+
+/* Stealth button styles */
+.btn-primary {
+  background: linear-gradient(
+    314.6deg,
+    #fff4ab 2.43%,
+    #ffebd4 24.82%,
+    #ffd4fd 59.61%,
+    #ceabff 97.04%
+  );
+  box-shadow:
+    0px 4px 12px 0px #ffffff80 inset,
+    0px 4px 4px 0px #ffffff40 inset;
+  color: black;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-primary:hover:not(:disabled) {
+  box-shadow:
+    inset 0px 4px 4px rgba(255, 255, 255, 0.25),
+    inset 0px 4px 16px rgba(255, 255, 255, 1);
+}
+
+.btn-primary:disabled {
+  color: #8b8a9e;
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: #2c2c36;
+  box-shadow: 0px 0px 16px 0px #ff674633 inset;
+  color: #f1f0f3;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-tertiary {
+  color: #c7c5d1;
+  background-color: #202027;
+  box-shadow: 0px 4px 12px 0px #8b8a9e26 inset;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-tertiary:hover {
+  background-color: #16161b;
+  color: #f1f0f3;
+}
+
+/* Warning/error boxes */
+.warning-box {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  color: #ffb546;
+  background: #ffb5461a;
+  border: 1px solid #ffb54633;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.success-box {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.1);
+  border: 1px solid rgba(74, 222, 128, 0.2);
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* Bitcoin orange gradient button */
+.btn-bitcoin {
+  background: linear-gradient(135deg, #f7931a 0%, #ffa940 50%, #f7931a 100%);
+  box-shadow:
+    0px 4px 12px 0px rgba(247, 147, 26, 0.4),
+    0px 2px 4px 0px rgba(247, 147, 26, 0.2) inset;
+  color: white;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-bitcoin:hover:not(:disabled) {
+  box-shadow:
+    0px 6px 20px 0px rgba(247, 147, 26, 0.5),
+    0px 2px 8px 0px rgba(255, 255, 255, 0.3) inset;
+  transform: translateY(-1px);
+}
+
+.btn-bitcoin:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Bitcoin box styling */
+.bitcoin-box {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  color: #f7931a;
+  background: rgba(247, 147, 26, 0.1);
+  border: 1px solid rgba(247, 147, 26, 0.25);
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+/* Privacy shield box */
+.privacy-box {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  color: #14f195;
+  background: linear-gradient(135deg, rgba(20, 241, 149, 0.1) 0%, rgba(153, 69, 255, 0.1) 100%);
+  border: 1px solid rgba(20, 241, 149, 0.25);
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+/* Bitcoin orange gradient card */
+.gradient-bg-bitcoin {
+  position: relative;
+}
+
+.gradient-bg-bitcoin > * {
+  z-index: 1;
+  position: relative;
+}
+
+.gradient-bg-bitcoin::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(247, 147, 26, 0.2) 0%,
+    rgba(255, 169, 64, 0.15) 50%,
+    rgba(247, 147, 26, 0.1) 100%
+  );
+  pointer-events: none;
+}
+
+.gradient-bg-bitcoin::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: calc(100% - 2px);
+  height: calc(100% - 2px);
+  border-radius: inherit;
+  background: linear-gradient(135deg, #1a1a1f 0%, #16161b 100%);
+  pointer-events: none;
+}
+
+/* Privacy gradient background */
+.gradient-bg-privacy {
+  position: relative;
+  overflow: hidden;
+}
+
+.gradient-bg-privacy::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(20, 241, 149, 0.08) 0%,
+    rgba(153, 69, 255, 0.05) 40%,
+    transparent 70%
+  );
+  animation: privacy-pulse 8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes privacy-pulse {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.1) rotate(180deg);
+    opacity: 0.8;
+  }
+}
+
+/* Bitcoin icon glow */
+.btc-glow {
+  filter: drop-shadow(0 0 8px rgba(247, 147, 26, 0.5));
+}
+
+/* Privacy shield glow */
+.privacy-glow {
+  filter: drop-shadow(0 0 8px rgba(20, 241, 149, 0.5));
+}
+
+/* Animated privacy lines */
+.privacy-lines {
+  position: relative;
+  overflow: hidden;
+}
+
+.privacy-lines::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(20, 241, 149, 0.1) 50%,
+    transparent 100%
+  );
+  animation: privacy-scan 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes privacy-scan {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* Bitcoin/Privacy hybrid gradient */
+.gradient-btc-privacy {
+  background: linear-gradient(
+    135deg,
+    rgba(247, 147, 26, 0.15) 0%,
+    rgba(255, 171, 254, 0.1) 35%,
+    rgba(153, 69, 255, 0.1) 65%,
+    rgba(20, 241, 149, 0.15) 100%
+  );
+}
+
+/* Cyber/Electric gradient (Cyan to Purple) */
+.gradient-bg-cyber {
+  position: relative;
+}
+
+.gradient-bg-cyber > * {
+  z-index: 1;
+  position: relative;
+}
+
+.gradient-bg-cyber::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(0, 255, 255, 0.12) 0%,
+    rgba(59, 130, 246, 0.08) 50%,
+    rgba(139, 92, 246, 0.06) 100%
+  );
+  pointer-events: none;
+}
+
+.gradient-bg-cyber::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: calc(100% - 2px);
+  height: calc(100% - 2px);
+  border-radius: inherit;
+  background: linear-gradient(135deg, #1a1a1f 0%, #16161b 100%);
+  pointer-events: none;
+}
+
+/* Cyan glow effect */
+.cyber-glow {
+  filter: drop-shadow(0 0 8px rgba(0, 255, 255, 0.5));
+}
+
+/* ============================================
+   HACKER STYLE BACKGROUNDS
+   ============================================ */
+
+/* Matrix rain background */
+.hacker-bg {
+  position: relative;
+  overflow: hidden;
+}
+
+.hacker-bg::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(ellipse at 20% 20%, rgba(247, 147, 26, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 80%, rgba(20, 241, 149, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 50%, rgba(153, 69, 255, 0.05) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Grid overlay */
+.hacker-grid {
+  position: relative;
+}
+
+.hacker-grid::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image:
+    linear-gradient(rgba(20, 241, 149, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(20, 241, 149, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Animated scan line */
+.scan-line::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(20, 241, 149, 0.5), transparent);
+  animation: scan-down 8s linear infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+@keyframes scan-down {
+  0% {
+    top: -2px;
+    opacity: 0;
+  }
+  5% {
+    opacity: 1;
+  }
+  95% {
+    opacity: 1;
+  }
+  100% {
+    top: 100vh;
+    opacity: 0;
+  }
+}
+
+/* Glowing border effect */
+.glow-border {
+  position: relative;
+}
+
+.glow-border::before {
+  content: "";
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  border-radius: inherit;
+  background: linear-gradient(45deg, #F7931A, #14F195, #9945FF, #F7931A);
+  background-size: 400% 400%;
+  animation: glow-rotate 6s ease infinite;
+  z-index: -1;
+  opacity: 0.5;
+  filter: blur(8px);
+}
+
+@keyframes glow-rotate {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+/* Terminal text effect */
+.terminal-text {
+  font-family: 'Courier New', monospace;
+  color: #14F195;
+  text-shadow: 0 0 5px rgba(20, 241, 149, 0.5);
+}
+
+/* Blinking cursor */
+.cursor-blink::after {
+  content: "_";
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+
+/* Matrix word rain container */
+.matrix-rain {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.matrix-rain .rain-column {
+  position: absolute;
+  top: -100%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: bold;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  animation: rain-fall linear infinite;
+  opacity: 0.6;
+  text-shadow: 0 0 10px currentColor;
+}
+
+.matrix-rain .rain-column span {
+  color: #14F195;
+  text-shadow: 0 0 8px #14F195, 0 0 15px #14F195;
+}
+
+.matrix-rain .rain-column span.btc {
+  color: #F7931A;
+  text-shadow: 0 0 8px #F7931A, 0 0 15px #F7931A;
+}
+
+.matrix-rain .rain-column span.purple {
+  color: #9945FF;
+  text-shadow: 0 0 8px #9945FF, 0 0 15px #9945FF;
+}
+
+@keyframes rain-fall {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(calc(100vh + 100%));
+  }
+}
+
+/* Cyber corners */
+.cyber-corners {
+  position: relative;
+}
+
+.cyber-corners::before,
+.cyber-corners::after {
+  content: "";
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 2px solid;
+  pointer-events: none;
+}
+
+.cyber-corners::before {
+  top: -1px;
+  left: -1px;
+  border-color: #F7931A transparent transparent #F7931A;
+}
+
+.cyber-corners::after {
+  bottom: -1px;
+  right: -1px;
+  border-color: transparent #14F195 #14F195 transparent;
+}
+
+/* Noise texture overlay */
+.noise-overlay {
+  position: relative;
+}
+
+.noise-overlay::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  opacity: 0.02;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Pulsing glow for important elements */
+.pulse-glow {
+  animation: pulse-glow-anim 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow-anim {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(247, 147, 26, 0.3), 0 0 10px rgba(20, 241, 149, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 15px rgba(247, 147, 26, 0.5), 0 0 25px rgba(20, 241, 149, 0.3);
+  }
+}
+
+/* Holographic effect */
+.holographic {
+  background: linear-gradient(
+    135deg,
+    rgba(247, 147, 26, 0.1) 0%,
+    rgba(20, 241, 149, 0.1) 25%,
+    rgba(153, 69, 255, 0.1) 50%,
+    rgba(255, 171, 254, 0.1) 75%,
+    rgba(247, 147, 26, 0.1) 100%
+  );
+  background-size: 200% 200%;
+  animation: holographic-shift 5s ease infinite;
+}
+
+@keyframes holographic-shift {
+  0%, 100% {
+    background-position: 0% 0%;
+  }
+  50% {
+    background-position: 100% 100%;
+  }
+}
+
+/* ============================================
+   FULL HACKER MODE - CYBERPUNK EFFECTS
+   ============================================ */
+
+/* Neon text glows */
+.neon-privacy {
+  text-shadow: 0 0 5px #14f195, 0 0 10px #14f195, 0 0 20px #14f195, 0 0 40px #14f195;
+}
+
+.neon-btc {
+  text-shadow: 0 0 5px #f7931a, 0 0 10px #f7931a, 0 0 20px #f7931a, 0 0 40px #f7931a;
+}
+
+.neon-purple {
+  text-shadow: 0 0 5px #ffabfe, 0 0 10px #ffabfe, 0 0 20px #ffabfe;
+}
+
+.neon-sol {
+  text-shadow: 0 0 5px #9945ff, 0 0 10px #9945ff, 0 0 20px #9945ff;
+}
+
+/* Flicker animation for text */
+@keyframes flicker {
+  0%, 19.999%, 22%, 62.999%, 64%, 64.999%, 70%, 100% {
+    opacity: 1;
+  }
+  20%, 21.999%, 63%, 63.999%, 65%, 69.999% {
+    opacity: 0.4;
+  }
+}
+
+.flicker {
+  animation: flicker 3s infinite;
+}
+
+/* Glitch text effect */
+.glitch-text {
+  position: relative;
+}
+
+.glitch-text::before,
+.glitch-text::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+}
+
+.glitch-text::before {
+  left: 2px;
+  text-shadow: -2px 0 #f7931a;
+  clip: rect(24px, 550px, 90px, 0);
+  animation: glitch-anim-1 2s infinite linear alternate-reverse;
+}
+
+.glitch-text::after {
+  left: -2px;
+  text-shadow: -2px 0 #14f195;
+  clip: rect(85px, 550px, 140px, 0);
+  animation: glitch-anim-2 2s infinite linear alternate-reverse;
+}
+
+@keyframes glitch-anim-1 {
+  0% { clip: rect(30px, 9999px, 10px, 0); }
+  20% { clip: rect(15px, 9999px, 100px, 0); }
+  40% { clip: rect(50px, 9999px, 40px, 0); }
+  60% { clip: rect(70px, 9999px, 90px, 0); }
+  80% { clip: rect(20px, 9999px, 60px, 0); }
+  100% { clip: rect(10px, 9999px, 80px, 0); }
+}
+
+@keyframes glitch-anim-2 {
+  0% { clip: rect(60px, 9999px, 80px, 0); }
+  20% { clip: rect(40px, 9999px, 20px, 0); }
+  40% { clip: rect(90px, 9999px, 55px, 0); }
+  60% { clip: rect(10px, 9999px, 70px, 0); }
+  80% { clip: rect(80px, 9999px, 30px, 0); }
+  100% { clip: rect(25px, 9999px, 95px, 0); }
+}
+
+/* CRT scanlines overlay */
+.crt-scanlines {
+  position: relative;
+}
+
+.crt-scanlines::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(
+    transparent 0 2px,
+    rgba(0, 0, 0, 0.1) 2px 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Data stream animation */
+@keyframes data-stream {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+}
+
+.data-stream {
+  animation: data-stream 4s linear infinite;
+}
+
+/* Intense glow on hover */
+.hover-glow {
+  transition: box-shadow 0.3s ease, filter 0.3s ease;
+}
+
+.hover-glow:hover {
+  box-shadow: 0 0 20px currentColor, 0 0 40px currentColor;
+  filter: brightness(1.2);
+}
+
+/* Chromatic aberration */
+.chromatic {
+  position: relative;
+}
+
+.chromatic::before {
+  content: attr(data-text);
+  position: absolute;
+  left: -2px;
+  top: 0;
+  color: #f7931a;
+  opacity: 0.5;
+  z-index: -1;
+}
+
+.chromatic::after {
+  content: attr(data-text);
+  position: absolute;
+  left: 2px;
+  top: 0;
+  color: #14f195;
+  opacity: 0.5;
+  z-index: -1;
+}
+
+/* Enhanced glow border animation */
+.glow-border-intense::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: -3px;
+  right: -3px;
+  bottom: -3px;
+  border-radius: inherit;
+  background: linear-gradient(45deg, #F7931A, #14F195, #9945FF, #FFABFE, #F7931A);
+  background-size: 400% 400%;
+  animation: glow-rotate 4s ease infinite;
+  z-index: -1;
+  opacity: 0.7;
+  filter: blur(12px);
+}
+
+/* Terminal cursor blink animation */
+@keyframes terminal-cursor {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.terminal-cursor::after {
+  content: "█";
+  animation: terminal-cursor 1s step-end infinite;
+  color: #14f195;
+}
+
+/* Enhanced privacy lines scan effect */
+.privacy-lines-fast::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(20, 241, 149, 0.15) 50%,
+    transparent 100%
+  );
+  animation: privacy-scan 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Typewriter text effect */
+@keyframes typewriter {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+.typewriter {
+  overflow: hidden;
+  white-space: nowrap;
+  animation: typewriter 2s steps(40) 1s forwards;
+}
+
+/* Matrix code rain glow */
+.matrix-glow {
+  text-shadow: 0 0 5px #14f195, 0 0 10px #14f195, 0 0 15px #14f195;
+  color: #14f195;
+}
+
+/* Hacker card with animated border */
+.hacker-card {
+  position: relative;
+  background: linear-gradient(135deg, rgba(15, 15, 18, 0.9), rgba(32, 32, 39, 0.9));
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+
+.hacker-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, #F7931A, #14F195, #9945FF);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: hacker-border-shift 3s ease infinite;
+}
+
+@keyframes hacker-border-shift {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* Breathing glow for important elements */
+@keyframes breathing-glow {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(20, 241, 149, 0.3), inset 0 0 10px rgba(20, 241, 149, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(20, 241, 149, 0.5), inset 0 0 15px rgba(20, 241, 149, 0.2);
+  }
+}
+
+.breathing-glow {
+  animation: breathing-glow 3s ease-in-out infinite;
+}
+
+/* Scan reveal effect */
+@keyframes scan-reveal {
+  0% {
+    clip-path: polygon(0 0, 0 0, 0 100%, 0% 100%);
+  }
+  100% {
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 0% 100%);
+  }
+}
+
+.scan-reveal {
+  animation: scan-reveal 0.5s ease-out forwards;
+}
+
+/* Neon border pulse */
+@keyframes neon-pulse {
+  0%, 100% {
+    border-color: rgba(20, 241, 149, 0.3);
+    box-shadow: 0 0 5px rgba(20, 241, 149, 0.2);
+  }
+  50% {
+    border-color: rgba(20, 241, 149, 0.8);
+    box-shadow: 0 0 20px rgba(20, 241, 149, 0.4), 0 0 30px rgba(20, 241, 149, 0.2);
+  }
+}
+
+.neon-border-pulse {
+  animation: neon-pulse 2s ease-in-out infinite;
+}
+
+/* Bitcoin neon border pulse */
+@keyframes btc-neon-pulse {
+  0%, 100% {
+    border-color: rgba(247, 147, 26, 0.3);
+    box-shadow: 0 0 5px rgba(247, 147, 26, 0.2);
+  }
+  50% {
+    border-color: rgba(247, 147, 26, 0.8);
+    box-shadow: 0 0 20px rgba(247, 147, 26, 0.4), 0 0 30px rgba(247, 147, 26, 0.2);
+  }
+}
+
+.btc-neon-border-pulse {
+  animation: btc-neon-pulse 2s ease-in-out infinite;
+}

@@ -1,0 +1,578 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import {
+  ArrowLeft,
+  ArrowDownToLine,
+  Wallet,
+  Shield,
+  Key,
+  Copy,
+  Check,
+  Send,
+  Tag,
+  Loader2,
+  LogOut,
+  TrendingUp,
+  ExternalLink,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { FeatureCard, type FeatureCardColor } from "@/components/ui/feature-card";
+import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
+import { useZVaultKeys } from "@/hooks/use-zvault";
+import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
+import { useZkeyName } from "@/hooks/use-zkey-name";
+import { useStealthInbox } from "@/hooks/use-zvault";
+import { notifyCopied } from "@/lib/notifications";
+import { TooltipText } from "@/components/ui/tooltip";
+import { OnboardingModal } from "@/components/onboarding-modal";
+
+interface FeatureConfig {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  subtext: string;
+  href: string;
+  color: FeatureCardColor;
+  disabled?: boolean;
+  badge?: string;
+}
+
+const features: FeatureConfig[] = [
+  {
+    icon: <ArrowDownToLine className="w-full h-full" />,
+    title: "Deposit",
+    description: "BTC → zkBTC",
+    subtext: "Bridge Bitcoin",
+    href: "/bridge/deposit",
+    color: "btc",
+  },
+  {
+    icon: <Send className="w-full h-full" />,
+    title: "Pay",
+    description: "Send zkBTC",
+    subtext: "Public or Private",
+    href: "/bridge/pay",
+    color: "privacy",
+  },
+  {
+    icon: <Wallet className="w-full h-full" />,
+    title: "Notes",
+    description: "All your zkBTC",
+    subtext: "Claim & manage",
+    href: "/bridge/activity",
+    color: "privacy",
+  },
+  {
+    icon: <TrendingUp className="w-full h-full" />,
+    title: "Earn",
+    description: "Yield on zkBTC",
+    subtext: "DeFi yields",
+    href: "/bridge/earn",
+    color: "purple",
+    disabled: true,
+    badge: "Coming Soon",
+  },
+];
+
+export default function BridgePage() {
+  const wallet = useWallet();
+  const { setVisible } = useWalletModal();
+  const {
+    keys,
+    stealthAddressEncoded,
+    isLoading,
+    error,
+    deriveKeys,
+    clearKeys,
+  } = useZVaultKeys();
+  const { copied, copy } = useCopyToClipboard();
+  const {
+    registeredName,
+    hasRegisteredName,
+    isLoading: isLoadingName,
+    isRegistering,
+    isCheckingAvailability,
+    isNameTaken,
+    error: nameError,
+    registerName,
+    verifyMyName,
+    formatName,
+    validateName,
+    checkAvailability,
+  } = useZkeyName();
+  const {
+    totalAmountSats,
+    depositCount,
+    isLoading: isLoadingInbox,
+  } = useStealthInbox();
+
+  // Name registration state
+  const [showNameInput, setShowNameInput] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+  const nameValidationError = nameInput ? validateName(nameInput) : null;
+
+  // Debounced availability check
+  useEffect(() => {
+    if (!nameInput || nameValidationError) return;
+
+    const timer = setTimeout(() => {
+      checkAvailability(nameInput);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [nameInput, nameValidationError, checkAvailability]);
+
+  const handleRegisterName = async () => {
+    if (!nameInput || nameValidationError) return;
+
+    if (hasRegisteredName && !registeredName) {
+      const verified = await verifyMyName(nameInput);
+      if (verified) {
+        setShowNameInput(false);
+        setNameInput("");
+        return;
+      }
+    }
+
+    const success = await registerName(nameInput);
+    if (success) {
+      setShowNameInput(false);
+      setNameInput("");
+    }
+  };
+
+  const shortAddress = stealthAddressEncoded
+    ? `${stealthAddressEncoded.slice(0, 16)}...${stealthAddressEncoded.slice(-16)}`
+    : "";
+
+  return (
+    <main className="min-h-screen bg-background relative overflow-hidden">
+      {/* Background effects */}
+      <div className="hacker-bg fixed inset-0 pointer-events-none" />
+      <div className="hacker-grid fixed inset-0 pointer-events-none opacity-30" />
+
+      {/* Content */}
+      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen p-4">
+        {/* Header */}
+        <div className="w-full max-w-[680px] mb-6 flex items-center justify-between">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-body2 text-gray hover:text-gray-light transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Home
+          </Link>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-btc/10 border border-btc/20 backdrop-blur-sm">
+              <BitcoinIcon className="w-3.5 h-3.5" />
+              <span className="text-caption text-btc font-semibold">BTC</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-privacy/10 border border-privacy/20 backdrop-blur-sm">
+              <Shield className="w-3.5 h-3.5 text-privacy" />
+              <span className="text-caption text-privacy font-semibold">ZK</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Dashboard Container — glassmorphism card */}
+        <div
+          className={cn(
+            "backdrop-blur-xl bg-card/80 border border-gray/20",
+            "w-[680px] max-w-[calc(100vw-32px)] rounded-[24px]",
+            "shadow-[0_0_60px_rgba(20,241,149,0.04),0_0_120px_rgba(153,69,255,0.03)]",
+            "p-8"
+          )}
+        >
+          {/* Title Section */}
+          <div className="text-center mb-8">
+            <h1 className="text-[28px] font-bold text-foreground mb-2 tracking-tight">
+              <span className="bg-gradient-to-r from-privacy via-purple to-btc bg-clip-text text-transparent">
+                zVault
+              </span>{" "}
+              Bridge
+            </h1>
+            <p className="text-body2 text-gray">
+              Bridge Bitcoin to Solana with zero-knowledge privacy
+            </p>
+          </div>
+
+          {/* Stealth Address Section */}
+          <div className="mb-6 p-5 bg-muted/60 backdrop-blur-sm border border-privacy/15 rounded-[16px]">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-[8px] bg-privacy/10">
+                  <Key className="w-4 h-4 text-privacy" />
+                </div>
+                <h2 className="text-body1 text-foreground">
+                  Your{" "}
+                  <TooltipText
+                    text="Stealth Address"
+                    tooltip="A one-time address that hides your identity. Only you can scan and claim funds sent to it."
+                  />
+                </h2>
+              </div>
+              {keys && (
+                <button
+                  onClick={clearKeys}
+                  className="flex items-center gap-1.5 px-2 py-1 rounded-[6px] text-caption text-gray hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                  title="Clear keys and log out"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  Log out
+                </button>
+              )}
+            </div>
+
+            {!wallet.connected ? (
+              <div className="text-center py-5">
+                <p className="text-body2 text-gray mb-4">
+                  Connect your wallet to generate a private stealth address
+                </p>
+                <button
+                  onClick={() => setVisible(true)}
+                  className={cn(
+                    "inline-flex items-center gap-2 px-5 py-2.5 rounded-[12px]",
+                    "bg-privacy/20 hover:bg-privacy/30 border border-privacy/30",
+                    "text-body2 text-privacy transition-all duration-200 cursor-pointer",
+                    "hover:shadow-[0_0_20px_rgba(20,241,149,0.15)]"
+                  )}
+                >
+                  <Wallet className="w-4 h-4" />
+                  Connect Wallet
+                </button>
+              </div>
+            ) : !keys ? (
+              <div className="text-center py-5">
+                <p className="text-body2 text-gray mb-4">
+                  Sign a message to derive your private zVault keys
+                </p>
+                {error && (
+                  <p className="text-caption text-red-400 mb-3">{error}</p>
+                )}
+                <div className="flex items-center justify-center gap-3">
+                  <button
+                    onClick={deriveKeys}
+                    disabled={isLoading}
+                    className={cn(
+                      "inline-flex items-center gap-2 px-5 py-2.5 rounded-[12px]",
+                      "bg-privacy hover:bg-privacy/80 disabled:bg-gray/30",
+                      "text-body2 text-background disabled:text-gray transition-all duration-200 cursor-pointer",
+                      "hover:shadow-[0_0_20px_rgba(20,241,149,0.2)]"
+                    )}
+                  >
+                    <Key className="w-4 h-4" />
+                    {isLoading ? "Signing..." : "Sign to Derive Keys"}
+                  </button>
+                  <button
+                    onClick={() => wallet.disconnect().catch(() => {})}
+                    className={cn(
+                      "inline-flex items-center gap-2 px-4 py-2.5 rounded-[12px]",
+                      "bg-gray/20 hover:bg-red-500/20 border border-gray/30 hover:border-red-500/30",
+                      "text-body2 text-gray hover:text-red-400 transition-colors cursor-pointer"
+                    )}
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                {/* Show registered name if available */}
+                {registeredName && (
+                  <div className="flex items-center gap-2 p-3 bg-privacy/10 border border-privacy/30 rounded-[10px] mb-3">
+                    <Tag className="w-4 h-4 text-privacy" />
+                    <span className="text-body2-semibold text-privacy">
+                      {formatName(registeredName)}
+                    </span>
+                    <button
+                      onClick={() => { copy(formatName(registeredName)); notifyCopied(".zkey.sol name"); }}
+                      className="ml-auto p-1.5 rounded-[6px] bg-privacy/10 hover:bg-privacy/20 transition-colors cursor-pointer"
+                      title="Copy .zkey.sol name"
+                    >
+                      {copied ? (
+                        <Check className="w-3 h-3 text-green-400" />
+                      ) : (
+                        <Copy className="w-3 h-3 text-privacy" />
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {/* Stealth address */}
+                <div className="flex items-center gap-2 p-3 bg-background/50 rounded-[10px] mb-2">
+                  <code className="flex-1 text-caption font-mono text-privacy truncate">
+                    {shortAddress}
+                  </code>
+                  <button
+                    onClick={() => { copy(stealthAddressEncoded || ""); notifyCopied("Stealth address"); }}
+                    className={cn(
+                      "p-2 rounded-[6px] transition-colors cursor-pointer",
+                      "bg-privacy/10 hover:bg-privacy/20"
+                    )}
+                    title="Copy stealth address"
+                  >
+                    {copied ? (
+                      <Check className="w-4 h-4 text-green-400" />
+                    ) : (
+                      <Copy className="w-4 h-4 text-privacy" />
+                    )}
+                  </button>
+                </div>
+
+                {/* Name registration/verification */}
+                {!registeredName && !showNameInput && !isLoadingName && (
+                  <button
+                    onClick={() => setShowNameInput(true)}
+                    className="flex items-center gap-2 text-caption text-privacy hover:text-privacy/80 transition-colors mt-2 cursor-pointer"
+                  >
+                    <Tag className="w-3 h-3" />
+                    {hasRegisteredName ? (
+                      <>Verify your .zkey.sol name</>
+                    ) : (
+                      <>
+                        Register a{" "}
+                        <TooltipText
+                          text=".zkey.sol name"
+                          tooltip="A human-readable name (like alice.zkey.sol) that makes it easy for others to send you private payments."
+                          className="text-privacy"
+                        />
+                      </>
+                    )}
+                  </button>
+                )}
+                {isLoadingName && (
+                  <div className="flex items-center gap-2 text-caption text-gray mt-2">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Checking for registered name...
+                  </div>
+                )}
+
+                {showNameInput && (
+                  <div className="mt-3 p-3 bg-background/50 rounded-[10px] border border-gray/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          value={nameInput}
+                          onChange={(e) => setNameInput(e.target.value.toLowerCase())}
+                          placeholder="yourname"
+                          className={cn(
+                            "w-full px-3 py-2 bg-muted border rounded-[8px]",
+                            "text-body2 text-foreground placeholder:text-gray",
+                            "outline-none transition-colors",
+                            nameValidationError || isNameTaken
+                              ? "border-red-500/50"
+                              : "border-gray/30 focus:border-privacy/50"
+                          )}
+                        />
+                        {isCheckingAvailability && (
+                          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 text-gray animate-spin" />
+                        )}
+                      </div>
+                      <span className="text-body2 text-gray">.zkey.sol</span>
+                    </div>
+                    {nameValidationError && (
+                      <p className="text-caption text-red-400 mb-2">{nameValidationError}</p>
+                    )}
+                    {!nameValidationError && isNameTaken && nameInput && (
+                      <p className="text-caption text-red-400 mb-2">This name is already taken</p>
+                    )}
+                    {nameError && (
+                      <p className="text-caption text-red-400 mb-2">{nameError}</p>
+                    )}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleRegisterName}
+                        disabled={isRegistering || isCheckingAvailability || (isNameTaken && !hasRegisteredName) || !nameInput || !!nameValidationError}
+                        className={cn(
+                          "flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-[8px]",
+                          "bg-privacy hover:bg-privacy/80 text-background",
+                          "disabled:bg-gray/30 disabled:text-gray disabled:cursor-not-allowed",
+                          "transition-colors text-caption cursor-pointer"
+                        )}
+                      >
+                        {isRegistering ? (
+                          <>
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            {hasRegisteredName ? "Verifying..." : "Registering..."}
+                          </>
+                        ) : isCheckingAvailability ? (
+                          <>
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Checking...
+                          </>
+                        ) : (
+                          <>
+                            <Tag className="w-3 h-3" />
+                            {hasRegisteredName && !registeredName ? "Verify" : "Register"}
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowNameInput(false);
+                          setNameInput("");
+                        }}
+                        className="px-3 py-2 rounded-[8px] bg-gray/20 hover:bg-gray/30 text-gray-light text-caption transition-colors cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-caption text-gray mt-2">
+                  Share this address to receive private payments. Only you can claim funds sent here.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Claimable Notes Summary — gradient accent */}
+          {keys && (
+            <div className={cn(
+              "mb-6 p-5 rounded-[16px] relative overflow-hidden",
+              "bg-gradient-to-r from-privacy/5 via-muted/80 to-purple/5",
+              "border border-privacy/20"
+            )}>
+              <div className="flex items-center justify-between relative z-10">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-[10px] bg-privacy/10 border border-privacy/20">
+                    <Wallet className="w-5 h-5 text-privacy" />
+                  </div>
+                  <div>
+                    <p className="text-caption text-gray mb-0.5">Claimable Notes</p>
+                    <div className="flex items-baseline gap-2">
+                      {isLoadingInbox ? (
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin text-privacy" />
+                          <span className="text-body2 text-gray">Scanning...</span>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="text-[22px] font-bold text-privacy font-mono tracking-tight">
+                            {(Number(totalAmountSats) / 100_000_000).toFixed(8)}
+                          </span>
+                          <span className="text-body2 text-gray">zBTC</span>
+                          {depositCount > 0 && (
+                            <span className="text-caption text-gray/60 ml-1">
+                              ({depositCount} note{depositCount !== 1 ? "s" : ""})
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {depositCount > 0 && (
+                  <Link
+                    href="/bridge/activity?tab=claimable"
+                    className={cn(
+                      "flex items-center gap-1.5 px-4 py-2 rounded-[10px]",
+                      "bg-privacy/10 hover:bg-privacy/20 border border-privacy/20",
+                      "text-privacy text-body2 transition-all duration-200 cursor-pointer",
+                      "hover:shadow-[0_0_15px_rgba(20,241,149,0.1)]"
+                    )}
+                  >
+                    View Notes
+                    <Wallet className="w-4 h-4" />
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Divider with label */}
+          <div className="flex items-center gap-3 mb-5">
+            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray/20 to-transparent" />
+            <span className="text-caption text-gray/50 uppercase tracking-widest">Actions</span>
+            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray/20 to-transparent" />
+          </div>
+
+          {/* Feature Cards Grid - 2x2 */}
+          <div className="grid grid-cols-2 gap-4 mb-8">
+            {features.map((feature) => (
+              <FeatureCard
+                key={feature.title}
+                icon={feature.icon}
+                title={feature.title}
+                description={feature.description}
+                subtext={feature.subtext}
+                href={feature.href}
+                color={feature.color}
+                disabled={feature.disabled}
+                badge={feature.badge}
+              />
+            ))}
+          </div>
+
+          {/* Info Section */}
+          <div className="p-4 bg-privacy/5 border border-privacy/10 rounded-[12px] mb-5">
+            <div className="flex items-start gap-3">
+              <Shield className="w-5 h-5 text-privacy shrink-0 mt-0.5" />
+              <div>
+                <p className="text-body2-semibold text-privacy mb-1">
+                  Privacy Preserving Bridge
+                </p>
+                <p className="text-caption text-gray">
+                  Your deposits and withdrawals are protected by zero-knowledge proofs.
+                  No one can link your Bitcoin deposits to zBTC claims.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Network Status */}
+          <div className="flex items-center gap-2 py-2.5 px-4 bg-warning/5 border border-warning/15 rounded-[10px]">
+            <div className="w-2 h-2 rounded-full bg-warning animate-pulse" />
+            <span className="text-caption text-warning">
+              Bitcoin Testnet3 + Solana Devnet
+            </span>
+          </div>
+
+          {/* Footer */}
+          <div className="flex flex-row justify-between items-center gap-2 mt-6 text-gray pt-4 border-t border-gray/10">
+            <div className="flex flex-row items-center gap-4">
+              <a
+                href="https://zVault.xyz"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 hover:text-gray-light transition-colors text-caption cursor-pointer"
+              >
+                zVault
+                <ExternalLink className="w-3 h-3 opacity-50" />
+              </a>
+              <a
+                href="https://github.com/cheng-chun-yuan/zVault"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 hover:text-gray-light transition-colors text-caption cursor-pointer"
+              >
+                GitHub
+                <ExternalLink className="w-3 h-3 opacity-50" />
+              </a>
+              <a
+                href="https://docs.zVault.xyz"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 hover:text-gray-light transition-colors text-caption cursor-pointer"
+              >
+                Docs
+                <ExternalLink className="w-3 h-3 opacity-50" />
+              </a>
+            </div>
+            <p className="text-caption text-gray/50">Powered by zVault</p>
+          </div>
+        </div>
+      </div>
+
+      {/* First-time user onboarding */}
+      <OnboardingModal />
+    </main>
+  );
+}
