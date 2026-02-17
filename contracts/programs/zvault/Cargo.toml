@@ -1,0 +1,38 @@
+[package]
+name = "zvault-pinocchio"
+version = "0.1.0"
+description = "zVault - Privacy-preserving BTC to Solana bridge (Pinocchio)"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "zvault_pinocchio"
+
+[features]
+default = []
+idl-build = []
+# Enable demo instructions (ADD_DEMO_NOTE, ADD_DEMO_STEALTH) for devnet/testnet only.
+# SECURITY: DO NOT enable in production/mainnet builds.
+devnet = []
+# Use SHA256 instead of Poseidon for localnet testing (test validator lacks Poseidon syscall)
+# SECURITY: DO NOT enable in production/devnet builds - only for local testing.
+localnet = ["devnet"]
+
+[dependencies]
+pinocchio = "0.9"
+pinocchio-token = "0.4"
+pinocchio-system = "0.3"
+pinocchio-associated-token-account = "0.3"
+solana-bn254 = "~2.1"
+solana-poseidon = "~2.1"
+thiserror = "2.0"
+num-derive = "0.4"
+hex-literal = "0.4"
+
+[dev-dependencies]
+mollusk-svm = "0.0.13"
+solana-sdk = "2.1"
+
+[lints.rust]
+# Solana programs use target_os = "solana" which is not a standard cfg value
+unexpected_cfgs = { level = "allow", check-cfg = ["cfg(target_os, values(\"solana\"))"] }

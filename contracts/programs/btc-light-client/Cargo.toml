@@ -1,0 +1,22 @@
+[package]
+name = "btc-light-client"
+version = "0.1.0"
+description = "Simple Bitcoin Light Client for Solana - Permissionless header relay (Pinocchio)"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "btc_light_client"
+
+[features]
+default = []
+# SECURITY: The `testing` feature is removed for production.
+# DO NOT re-add this feature for production builds.
+
+[dependencies]
+pinocchio = "0.9"
+pinocchio-system = "0.3"
+
+[dev-dependencies]
+mollusk-svm = "0.0.13"
+solana-sdk = "2.1"
