@@ -1,18 +1,18 @@
 //! zVault - Privacy-Preserving BTC to Solana Bridge (Pinocchio)
 //!
-//! SHIELDED-ONLY ARCHITECTURE (Unified Stealth Model):
+//! SHIELDED-ONLY ARCHITECTURE (JoinSplit Model):
 //! - zBTC exists only as commitments in Merkle tree
 //! - Users never hold public zBTC tokens
 //! - Amount revealed ONLY at BTC withdrawal
 //! - All deposits use stealth announcements for recipient discovery
+//! - All transfers use JoinSplit(N,M) proofs with EdDSA-Poseidon signatures
 //!
 //! ## Privacy Guarantee
 //!
 //! | Operation     | Amount Visible? |
 //! |---------------|-----------------|
 //! | Deposit       | No (in commitment) |
-//! | Split         | No |
-//! | Stealth Send  | No |
+//! | Transact      | No (JoinSplit) |
 //! | Withdraw      | Yes (unavoidable) |
 //!
 //! ## Core Flow
@@ -20,7 +20,7 @@
 //! ```text
 //! BTC Deposit → Verify SPV → Stealth Announcement → Mint to Pool → Commitment in Tree
 //!                                                                          ↓
-//!                                      Split/Transfer (private, ZK proof)
+//!                                    JoinSplit Transact (private, ZK proof)
 //!                                                                          ↓
 //!                              Withdraw → ZK Proof → Burn from Pool → BTC
 //! ```
@@ -62,9 +62,6 @@ pub mod instruction {
     // Core operations
     pub const INITIALIZE: u8 = 0;
     pub const VERIFY_STEALTH_DEPOSIT: u8 = 1;
-    pub const CLAIM: u8 = 2;
-    pub const SPEND_SPLIT: u8 = 3;
-    pub const SPEND_PARTIAL_PUBLIC: u8 = 4;
     pub const REQUEST_REDEMPTION: u8 = 5;
     pub const COMPLETE_REDEMPTION: u8 = 6;
     pub const SET_PAUSED: u8 = 7;
@@ -81,6 +78,9 @@ pub mod instruction {
     // Demo/testing (admin only) - DISABLED IN PRODUCTION
     #[cfg(feature = "devnet")]
     pub const ADD_DEMO_STEALTH: u8 = 13;
+
+    // JoinSplit (Railgun-aligned)
+    pub const TRANSACT: u8 = 14;
 }
 
 entrypoint!(process_instruction);
@@ -96,21 +96,11 @@ pub fn process_instruction(
         .ok_or(ProgramError::InvalidInstructionData)?;
 
     match *discriminator {
-        // Core operations (Unified Stealth Model)
         instruction::INITIALIZE => {
             instructions::process_initialize(program_id, accounts, data)
         }
         instruction::VERIFY_STEALTH_DEPOSIT => {
-            instructions::process_verify_stealth_deposit_v2(program_id, accounts, data)
-        }
-        instruction::CLAIM => {
-            instructions::process_claim(program_id, accounts, data)
-        }
-        instruction::SPEND_PARTIAL_PUBLIC => {
-            instructions::process_spend_partial_public(program_id, accounts, data)
-        }
-        instruction::SPEND_SPLIT => {
-            instructions::process_spend_split(program_id, accounts, data)
+            instructions::process_verify_stealth_deposit(program_id, accounts, data)
         }
         instruction::REQUEST_REDEMPTION => {
             instructions::process_request_redemption(program_id, accounts, data)
@@ -142,6 +132,10 @@ pub fn process_instruction(
         }
         instruction::UPDATE_VK_REGISTRY => {
             instructions::process_update_vk_registry(program_id, accounts, data)
+        }
+        // JoinSplit (Railgun-aligned)
+        instruction::TRANSACT => {
+            instructions::process_transact(program_id, accounts, data)
         }
         _ => Err(ProgramError::InvalidInstructionData),
     }
@@ -176,7 +170,6 @@ fn process_set_paused(
     }
     let paused = data[0] != 0;
 
-    // Validate authority and update state in a single borrow
     {
         let mut pool_data = pool_state.try_borrow_mut_data()?;
         let pool = PoolState::from_bytes_mut(&mut pool_data)?;
@@ -200,19 +193,16 @@ mod tests {
     fn test_discriminators_unique() {
         let discriminators: &[u8] = &[
             instruction::INITIALIZE,
-            instruction::SPEND_SPLIT,
-            instruction::SPEND_PARTIAL_PUBLIC,
+            instruction::VERIFY_STEALTH_DEPOSIT,
             instruction::REQUEST_REDEMPTION,
             instruction::COMPLETE_REDEMPTION,
             instruction::SET_PAUSED,
-            instruction::CLAIM,
             instruction::REGISTER_NAME,
             instruction::UPDATE_NAME,
             instruction::TRANSFER_NAME,
-            instruction::VERIFY_STEALTH_DEPOSIT,
             instruction::INIT_VK_REGISTRY,
             instruction::UPDATE_VK_REGISTRY,
-            // Demo instructions (only in devnet builds)
+            instruction::TRANSACT,
             #[cfg(feature = "devnet")]
             instruction::ADD_DEMO_STEALTH,
         ];

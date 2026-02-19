@@ -49,8 +49,12 @@ use crate::utils::{
 /// Required confirmations for demo mode (reduced from 6)
 pub const DEMO_REQUIRED_CONFIRMATIONS: u64 = 1;
 
-/// Instruction data for verify_stealth_deposit_v2
-pub struct VerifyStealthDepositV2Data {
+/// Instruction data for verify_stealth_deposit
+///
+/// The commitment field uses JoinSplit format: Poseidon(npk, token, amount)
+/// where npk = Poseidon(MPK, random), token = ZBTC_TOKEN_ID.
+/// The backend pre-computes this commitment before calling this instruction.
+pub struct VerifyStealthDepositData {
     pub txid: [u8; 32],
     pub block_height: u64,
     pub amount_sats: u64,
@@ -59,7 +63,7 @@ pub struct VerifyStealthDepositV2Data {
     pub commitment: [u8; 32],
 }
 
-impl VerifyStealthDepositV2Data {
+impl VerifyStealthDepositData {
     pub const HEADER_SIZE: usize = 32 + 8 + 8 + 4 + 32 + 32; // 116 bytes
 
     pub fn from_bytes(data: &[u8]) -> Result<Self, ProgramError> {
@@ -110,9 +114,9 @@ impl VerifyStealthDepositV2Data {
 /// 11. `[]` Token-2022 program
 ///
 /// # Instruction data
-/// - Header: VerifyStealthDepositV2Data (117 bytes)
+/// - Header: VerifyStealthDepositData (117 bytes)
 /// - merkle_proof: TxMerkleProof (variable length)
-pub fn process_verify_stealth_deposit_v2(
+pub fn process_verify_stealth_deposit(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     data: &[u8],
@@ -135,13 +139,17 @@ pub fn process_verify_stealth_deposit_v2(
     let token_program = &accounts[11];
 
     // Parse instruction data
-    let ix_data = VerifyStealthDepositV2Data::from_bytes(data)?;
-    let merkle_proof = TxMerkleProof::parse(&data[VerifyStealthDepositV2Data::HEADER_SIZE..])?;
+    let ix_data = VerifyStealthDepositData::from_bytes(data)?;
+    let merkle_proof = TxMerkleProof::parse(&data[VerifyStealthDepositData::HEADER_SIZE..])?;
 
     // Validate account owners
     validate_program_owner(pool_state_info, program_id)?;
-    validate_program_owner(light_client_info, program_id)?;
-    validate_program_owner(block_header_info, program_id)?;
+    // Light client and block header are owned by btc-relay program
+    let btc_relay_id: &Pubkey = unsafe {
+        &*(&crate::constants::BTC_RELAY_PROGRAM_ID as *const [u8; 32] as *const Pubkey)
+    };
+    validate_program_owner(light_client_info, btc_relay_id)?;
+    validate_program_owner(block_header_info, btc_relay_id)?;
     validate_program_owner(commitment_tree_info, program_id)?;
     validate_token_2022_owner(zbtc_mint)?;
     validate_token_2022_owner(pool_vault)?;
