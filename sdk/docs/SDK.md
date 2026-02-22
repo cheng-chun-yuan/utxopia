@@ -1,6 +1,6 @@
-# @zvault/sdk v2.0
+# @zvault/sdk v3.0 (JoinSplit Architecture)
 
-Privacy-preserving BTC to Solana bridge SDK using ZK proofs.
+Privacy-preserving BTC to Solana bridge SDK using Groth16 JoinSplit proofs.
 
 ## Installation
 
@@ -11,18 +11,94 @@ bun add @zvault/sdk
 ## Quick Start
 
 ```typescript
-import { depositToNote, claimNote, splitNote, formatBtc } from '@zvault/sdk';
+import {
+  createNonInteractiveDeposit,
+  generateJoinSplitProof,
+  buildTransactInstruction,
+  scanDepositRecords,
+  formatBtc,
+} from '@zvault/sdk';
 
-// 1. DEPOSIT: Generate credentials
-const result = await depositToNote(100_000n); // 0.001 BTC
-console.log('Send BTC to:', result.taprootAddress);
-console.log('Save this link:', result.claimLink);
+// 1. DEPOSIT: Generate npk-based deposit (user sends any amount)
+const deposit = await createNonInteractiveDeposit(recipientMeta, groupPubKey);
+console.log('Send BTC to:', deposit.btcAddress);
 
-// 2. CLAIM: After BTC is confirmed (requires merkle proof from backend)
-const claimed = await claimNote(config, result.claimLink, merkleProof);
+// 2. SCAN: Detect incoming deposits via viewing key
+const notes = await scanDepositRecords(myKeys, depositRecords);
+for (const note of notes) {
+  console.log(`Received ${formatBtc(note.amount)} at index ${note.leafIndex}`);
+}
 
-// 3. SPLIT: Divide into two outputs
-const { output1, output2 } = await splitNote(config, result.note, 50_000n);
+// 3. TRANSACT: JoinSplit proof for private transfer
+const proof = await generateJoinSplitProof({
+  nInputs: 1, nOutputs: 2,
+  merkleRoot, boundParamsHash, token,
+  publicKey, signature, nullifyingKey,
+  inputs: [{ random, value, leafIndex, merkleProof }],
+  outputs: [{ npk: npk1, value: value1 }, { npk: npk2, value: value2 }],
+});
+
+// 4. BUILD: Create Solana instruction
+const ix = buildTransactInstruction({
+  nInputs: 1, nOutputs: 2,
+  proofBytes: proof.proof,
+  merkleRoot, boundParamsHash,
+  nullifiers, commitmentsOut, stealthData,
+  accounts: { poolState, commitmentTree, vkRegistry, user, nullifierRecords },
+});
+```
+
+---
+
+## Architecture
+
+### Deposit Flow
+
+```
+┌──────────────┐      ┌──────────────────┐      ┌──────────────────┐
+│   Sender     │      │   Bitcoin        │      │   Solana         │
+│              │      │   Network        │      │                  │
+│  SDK creates │─BTC─▶│  Taproot addr    │      │  verify_stealth  │
+│  npk + OP_   │      │  + OP_RETURN     │─SPV─▶│  _deposit        │
+│  RETURN      │      │  (64 bytes)      │      │                  │
+└──────────────┘      └──────────────────┘      │  Computes:       │
+                                                 │  Poseidon(npk,   │
+┌──────────────┐                                │  token, amount)  │
+│  Recipient   │                                │       │          │
+│              │◀──── scanDepositRecords ───────│  DepositRecord   │
+│  Viewing key │      (match npk via ECDH)      │  PDA (200 bytes) │
+│  detects     │                                └──────────────────┘
+│  deposit     │
+└──────────────┘
+```
+
+### JoinSplit Model
+
+All zBTC exists as commitments in a Merkle tree (depth 16). No public tokens.
+
+| Operation | Amount Visible? |
+|-----------|-----------------|
+| Deposit | No (in commitment) |
+| Transact | No (JoinSplit proof) |
+| Withdraw | Yes (unavoidable) |
+
+### 3-Key Model
+
+```
+Spending Key (Baby Jubjub) ─► Signs JoinSplit transactions (EdDSA-Poseidon)
+       │
+       ├─► Nullifying Key (BN254) ─► Generates nullifiers, prevents double-spend
+       │
+       └─► Viewing Key (Ed25519) ─► Scans deposit records, detects incoming payments
+```
+
+### Commitment Model
+
+```
+MPK = Poseidon(spendingPub.x, spendingPub.y, nullifyingKey)
+NPK = Poseidon(MPK, random)
+Commitment = Poseidon(NPK, token, amount)
+Nullifier = Poseidon(nullifyingKey, leafIndex)
 ```
 
 ---
@@ -33,272 +109,120 @@ const { output1, output2 } = await splitNote(config, result.note, 50_000n);
 
 ```typescript
 import {
-  // === Note Operations ===
-  generateNote,              // Create note with random secrets
-  computeNoteCommitment,     // Compute Poseidon(pubKeyX, amount)
-  computeNoteNullifier,      // Compute nullifier for leaf index
-  getNotePublicKeyX,         // Get pubKey.x from note.nullifier
-  serializeNote,             // Note → JSON-serializable object
-  deserializeNote,           // JSON → Note
-  formatBtc,                 // 100000n → "0.001 BTC"
-  parseBtc,                  // "0.001 BTC" → 100000n
+  // === Deposit ===
+  depositToNote,                    // Generate BTC deposit credentials (legacy)
+  createNonInteractiveDeposit,      // npk-based deposit (any amount, no backend)
+
+  // === JoinSplit Prover ===
+  initProver,                       // Initialize WASM prover
+  generateJoinSplitProof,           // Generate JoinSplit Groth16 proof
+  circuitExists,                    // Check if circuit variant exists
+  proofToBytes,                     // ProofData → Uint8Array
+
+  // === Instruction Builders ===
+  buildTransactInstruction,         // JoinSplit transact instruction
+  buildRedemptionRequestInstruction, // BTC withdrawal request
 
   // === Key Derivation ===
-  deriveKeysFromWallet,      // Wallet signature → ZVaultKeys
-  deriveKeysFromSignature,   // Raw signature → ZVaultKeys
-  deriveKeysFromSeed,        // Seed bytes → ZVaultKeys
-  createStealthMetaAddress,  // Keys → StealthMetaAddress
-  encodeStealthMetaAddress,  // StealthMetaAddress → string
-  decodeStealthMetaAddress,  // string → StealthMetaAddress
+  deriveKeysFromWallet,             // Wallet → ZVaultKeys
+  deriveKeysFromSeed,               // Seed → ZVaultKeys
+  createStealthMetaAddress,         // Keys → StealthMetaAddress
 
-  // === Poseidon Hashing ===
-  initPoseidon,              // Initialize WASM (call once at startup)
-  poseidonHash,              // Async hash
-  poseidonHashSync,          // Sync hash (after init)
-  computeUnifiedCommitment,  // Poseidon(pubKeyX, amount) async
-  computeNullifier,          // Poseidon(privKey, leafIndex) async
-  hashNullifier,             // Poseidon(nullifier) async
+  // === Poseidon (JoinSplit) ===
+  computeMPKSync,                   // Master Public Key
+  computeNPKSync,                   // Note Public Key
+  computeJoinSplitCommitmentSync,   // Commitment
+  computeJoinSplitNullifierSync,    // Nullifier
 
-  // === Cryptography ===
-  generateGrumpkinKeyPair,   // Random keypair on Grumpkin curve
-  grumpkinEcdh,              // ECDH shared secret
-  pointMul,                  // Scalar multiplication
-  sha256Hash,                // SHA-256
-  doubleSha256,              // Bitcoin double-SHA256
-  bigintToBytes,             // bigint → Uint8Array(32)
-  bytesToBigint,             // Uint8Array → bigint
-  hexToBytes,                // "0x..." → Uint8Array
-  bytesToHex,                // Uint8Array → "0x..."
+  // === Bound Parameters ===
+  computeBoundParamsHash,           // Hash transaction binding params
 
-  // === Constants ===
-  GRUMPKIN_GENERATOR,        // Curve generator point
-  BN254_FIELD_PRIME,         // Field modulus
-  TREE_DEPTH,                // Merkle tree depth (20)
-} from '@zvault/sdk';
-```
+  // === Stealth & Scanning ===
+  createStealthDeposit,             // Create stealth deposit (interactive)
+  scanDepositRecords,               // Scan DepositRecord PDAs for owned notes (npk-based)
+  scanAnnouncements,                // Scan stealth announcements (legacy)
+  parseDepositRecord,               // Parse on-chain DepositRecord (200 bytes)
 
-### Prover (`@zvault/sdk/prover`)
-
-```typescript
-import {
-  initProver,                    // Initialize WASM prover
-  isProverAvailable,             // Check if circuits loaded
-  setCircuitPath,                // Set circuit artifacts path
-
-  // === Proof Generation ===
-  generateClaimProof,            // Claim deposited BTC
-  generateSpendSplitProof,       // Split 1 note → 2 notes
-  generateSpendPartialPublicProof, // Partial public withdraw
-  generatePoolDepositProof,      // Deposit to yield pool
-  generatePoolWithdrawProof,     // Withdraw from pool
-  generatePoolClaimYieldProof,   // Claim yield rewards
-
-  // === Verification ===
-  verifyProof,                   // Local proof verification
-  proofToBytes,                  // ProofData → Uint8Array
-  cleanup,                       // Release WASM resources
+  // === PDA ===
+  deriveVkRegistryPDA,              // VK registry for JoinSplit(N,M)
+  derivePoolStatePDA,               // Pool state
+  deriveCommitmentTreePDA,          // Commitment tree
+  deriveDepositRecordPDA,           // Deposit record by txid + vout
 
   // === Types ===
-  type ProofData,
-  type ClaimInputs,
-  type SpendSplitInputs,
-  type SpendPartialPublicInputs,
-  type MerkleProofInput,
-} from '@zvault/sdk/prover';
-```
-
-### Stealth Addresses (`@zvault/sdk/stealth`)
-
-```typescript
-import {
-  // === Deposit ===
-  createStealthDeposit,          // Create stealth deposit for recipient
-  prepareStealthDeposit,         // Prepare BTC stealth deposit
-  buildStealthOpReturn,          // Build OP_RETURN for BTC tx
-
-  // === Scanning ===
-  scanAnnouncements,             // Scan for notes owned by keys
-  scanAnnouncementsViewOnly,     // Scan with view-only keys
-  parseStealthAnnouncement,      // Parse on-chain announcement
-
-  // === Claiming ===
-  prepareClaimInputs,            // Prepare inputs for claim proof
-
-  // === Types ===
-  type StealthDeposit,
+  type JoinSplitProofInputs,
+  type TransactInstructionOptions,
+  type JoinSplitNote,
+  type ZVaultKeys,
+  type StealthMetaAddress,
+  type BoundParams,
+  type NonInteractiveDepositResult,
   type ScannedNote,
-  type OnChainStealthAnnouncement,
-} from '@zvault/sdk/stealth';
-```
-
-### Bitcoin (`@zvault/sdk/bitcoin`)
-
-```typescript
-import {
-  // === Taproot Addresses ===
-  deriveTaprootAddress,          // commitment → P2TR address
-  verifyTaprootAddress,          // Verify address matches commitment
-  createP2TRScriptPubkey,        // Create scriptPubKey
-  isValidBitcoinAddress,         // Validate address format
-
-  // === Claim Links ===
-  createClaimLink,               // Note → shareable URL
-  parseClaimLink,                // URL → Note
-  encodeClaimLink,               // Note → base64 string
-  decodeClaimLink,               // base64 → Note
-
-  // === Esplora API ===
-  EsploraClient,                 // Bitcoin block explorer client
-  esploraTestnet,                // Pre-configured testnet client
-  esploraMainnet,                // Pre-configured mainnet client
-
-  // === Types ===
-  type EsploraTransaction,
-  type EsploraUtxo,
-} from '@zvault/sdk/bitcoin';
-```
-
-### Solana (`@zvault/sdk/solana`)
-
-```typescript
-import {
-  // === Configuration ===
-  DEVNET_CONFIG,                 // Devnet addresses
-  MAINNET_CONFIG,                // Mainnet addresses
-  LOCALNET_CONFIG,               // Localnet addresses
-  getConfig,                     // Get current config
-  setConfig,                     // Set network config
-
-  // === Program IDs ===
-  ZVAULT_PROGRAM_ID,             // Main zVault program
-  BTC_LIGHT_CLIENT_PROGRAM_ID,   // Bitcoin header verification
-
-  // === PDA Derivation ===
-  derivePoolStatePDA,            // Pool state account
-  deriveCommitmentTreePDA,       // Merkle tree account
-  deriveNullifierRecordPDA,      // Nullifier record
-  deriveStealthAnnouncementPDA,  // Stealth announcement
-  deriveDepositRecordPDA,        // BTC deposit record
-
-  // === Instructions ===
-  buildClaimInstructionData,     // Build claim instruction
-  buildSplitInstructionData,     // Build split instruction
-  buildSpendPartialPublicInstructionData,
-
-  // === ChadBuffer (large proof upload) ===
-  uploadProofToBuffer,           // Upload proof in chunks
-  closeBuffer,                   // Close and reclaim rent
-  needsBuffer,                   // Check if proof needs buffer
-
-  // === Commitment Tree ===
-  fetchCommitmentTree,           // Fetch tree state from chain
-  parseCommitmentTreeData,       // Parse tree account data
-  isValidRoot,                   // Check if root is in history
-} from '@zvault/sdk/solana';
-```
-
-### Yield Pool (`@zvault/sdk/pool`)
-
-```typescript
-import {
-  // === Pool Operations ===
-  createStealthPoolDeposit,      // Deposit to yield pool
-  scanPoolAnnouncements,         // Scan for pool positions
-  preparePoolDepositInputs,      // Prepare deposit proof inputs
-  preparePoolWithdrawInputs,     // Prepare withdraw proof inputs
-  preparePoolClaimYieldInputs,   // Prepare yield claim inputs
-
-  // === Calculations ===
-  calculateYield,                // Calculate accrued yield
-  calculateTotalValue,           // Principal + yield
-  formatYieldRate,               // Format APY display
-
-  // === Types ===
-  type StealthPoolPosition,
-  type ScannedPoolPosition,
-} from '@zvault/sdk/pool';
-```
-
-### Name Registry (`@zvault/sdk/registry`)
-
-```typescript
-import {
-  // === Lookup ===
-  lookupZkeyName,                // "alice.zkey" → StealthMetaAddress
-  reverseLookupZkeyName,         // StealthMetaAddress → "alice.zkey"
-
-  // === Validation ===
-  isValidName,                   // Check name format
-  normalizeName,                 // Lowercase + trim
-  formatZkeyName,                // Add .zkey suffix
-  hashName,                      // Name → PDA seed
-
-  // === Instruction Building ===
-  buildRegisterNameData,         // Register name instruction
-  buildUpdateNameData,           // Update name instruction
-  buildTransferNameData,         // Transfer name instruction
-
-  // === Types ===
-  type NameRegistryEntry,
-} from '@zvault/sdk/registry';
-```
-
-### Deposit Watcher (`@zvault/sdk/watcher`)
-
-```typescript
-// Web (localStorage)
-import {
-  WebDepositWatcher,
-  createWebWatcher,
-} from '@zvault/sdk/watcher/web';
-
-// React Native (AsyncStorage)
-import {
-  NativeDepositWatcher,
-  createNativeWatcher,
-  setAsyncStorage,
-} from '@zvault/sdk/watcher/native';
-```
-
-### React Hooks (`@zvault/sdk/react`)
-
-```typescript
-import {
-  useDepositWatcher,             // Track deposit confirmations
-  useSingleDeposit,              // Track single deposit
-  type UseDepositWatcherReturn,
-} from '@zvault/sdk/react';
+} from '@zvault/sdk';
 ```
 
 ---
 
 ## Core Types
 
-### Note
+### NonInteractiveDepositResult
 
 ```typescript
-interface Note {
-  amount: bigint;           // Satoshis
-  nullifier: bigint;        // Random secret (used as privKey)
-  secret: bigint;           // Additional entropy
-  commitment: bigint;       // Poseidon(pubKeyX, amount)
-  nullifierHash: bigint;    // Poseidon(nullifier)
-  // Byte representations
-  nullifierBytes: Uint8Array;
-  secretBytes: Uint8Array;
-  commitmentBytes: Uint8Array;
-  nullifierHashBytes: Uint8Array;
+interface NonInteractiveDepositResult {
+  btcAddress: string;              // Taproot address to send BTC to
+  depositOutputKey: Uint8Array;    // Tweaked output key (32 bytes)
+  opReturnPayload: Uint8Array;     // 64 bytes: ephemeralPub || npk
+  npk: Uint8Array;                 // Note public key (32 bytes)
+  ephemeralPub: Uint8Array;        // Ed25519 ephemeral key (32 bytes)
 }
 ```
 
-### ZVaultKeys (DKSAP)
+### JoinSplitNote
+
+```typescript
+interface JoinSplitNote {
+  npk: bigint;         // Poseidon(MPK, random)
+  token: bigint;       // ZBTC_TOKEN_ID (0x7a627463)
+  amount: bigint;      // satoshis
+  random: bigint;      // blinding factor
+  leafIndex: number;   // Merkle tree position
+  commitment: bigint;  // Poseidon(npk, token, amount)
+}
+```
+
+### JoinSplitProofInputs
+
+```typescript
+interface JoinSplitProofInputs {
+  nInputs: number;
+  nOutputs: number;
+  merkleRoot: bigint;
+  boundParamsHash: bigint;
+  token: bigint;
+  publicKey: [bigint, bigint];  // BJJ (x, y)
+  signature: [bigint, bigint, bigint]; // EdDSA-Poseidon (R8x, R8y, S)
+  nullifyingKey: bigint;
+  inputs: Array<{
+    random: bigint;
+    value: bigint;
+    leafIndex: bigint;
+    merkleProof: { siblings: bigint[]; indices: number[] };
+  }>;
+  outputs: Array<{ npk: bigint; value: bigint }>;
+}
+```
+
+### ZVaultKeys
 
 ```typescript
 interface ZVaultKeys {
-  spendingPrivKey: bigint;      // Can spend funds
-  spendingPubKey: GrumpkinPoint;
-  viewingPrivKey: bigint;       // Can view balances (safe to share)
-  viewingPubKey: GrumpkinPoint;
+  solanaPublicKey: Uint8Array;          // User identity (32 bytes)
+  spendingPrivKey: bigint;              // Baby Jubjub private key
+  spendingPubKey: BabyJubPoint;         // BJJ public key
+  nullifyingKey: bigint;                // BN254 scalar
+  viewingPrivKey: Uint8Array;           // Ed25519 private key
+  viewingPubKey: Uint8Array;            // Ed25519 public key
+  mpk: bigint;                          // Poseidon(pubX, pubY, nullifyingKey)
 }
 ```
 
@@ -306,31 +230,22 @@ interface ZVaultKeys {
 
 ```typescript
 interface StealthMetaAddress {
-  spendingPubKey: GrumpkinPoint;  // K = k*G
-  viewingPubKey: GrumpkinPoint;   // V = v*G
+  spendingPubKey: Uint8Array;  // 32 bytes BJJ compressed
+  viewingPubKey: Uint8Array;   // 32 bytes Ed25519
+  mpk: Uint8Array;             // 32 bytes (Poseidon hash as BE bytes)
 }
+// Total: 96 bytes when serialized
 ```
 
-### ProofData
+### ScannedNote
 
 ```typescript
-interface ProofData {
-  proof: Uint8Array;        // Groth16 proof bytes
-  publicInputs: string[];   // Public inputs as field strings
-}
-```
-
-### ClaimInputs
-
-```typescript
-interface ClaimInputs {
-  privKey: bigint;          // Spending private key
-  pubKeyX: bigint;          // Public key x-coordinate
-  amount: bigint;           // Amount in satoshis
-  leafIndex: bigint;        // Position in merkle tree
-  merkleRoot: bigint;       // Current tree root
-  merkleProof: MerkleProofInput;
-  recipient: bigint;        // Recipient address as field
+interface ScannedNote {
+  amount: bigint;                  // Plaintext amount in satoshis
+  ephemeralPub: Uint8Array;        // Ed25519 ephemeral key
+  stealthPub: BabyJubPoint;       // Derived Baby Jubjub pub key
+  leafIndex: number;               // Merkle tree position
+  commitment: Uint8Array;          // 32-byte Poseidon hash
 }
 ```
 
@@ -338,113 +253,136 @@ interface ClaimInputs {
 
 ## Usage Examples
 
-### 1. Generate Deposit
+### 1. Non-Interactive Deposit (npk-based)
+
+The recommended deposit method. User can send **any amount** of BTC — the commitment is computed on-chain.
+
+```typescript
+import { createNonInteractiveDeposit, createStealthMetaAddress, initPoseidon } from '@zvault/sdk';
+
+await initPoseidon();
+
+// Recipient shares their stealth meta-address (96 bytes)
+const meta = createStealthMetaAddress(recipientKeys);
+
+// Sender creates deposit (no backend API call needed)
+const deposit = await createNonInteractiveDeposit(meta, groupPubKey, 'testnet');
+
+console.log('Send BTC to:', deposit.btcAddress);
+console.log('OP_RETURN payload (64 bytes):', deposit.opReturnPayload);
+// User can send ANY amount to this address
+```
+
+### 2. Scan for Incoming Deposits
+
+```typescript
+import { scanDepositRecords, parseDepositRecord } from '@zvault/sdk';
+
+// Fetch DepositRecord PDAs from Solana
+const rawRecords = await fetchDepositRecordAccounts(connection);
+
+// Parse on-chain data (200 bytes each)
+const records = rawRecords
+  .map(r => parseDepositRecord(r.data))
+  .filter(Boolean);
+
+// Scan with viewing key (no amount decryption needed)
+const myNotes = await scanDepositRecords(myKeys, records);
+for (const note of myNotes) {
+  console.log(`Received ${note.amount} sats at leaf ${note.leafIndex}`);
+}
+```
+
+### 3. Legacy Deposit (with fixed amount)
 
 ```typescript
 import { depositToNote, initPoseidon } from '@zvault/sdk';
 
-// Initialize Poseidon (once at app startup)
 await initPoseidon();
-
-// Generate deposit credentials
 const deposit = await depositToNote(100_000n, 'testnet');
 
 console.log('Taproot address:', deposit.taprootAddress);
 console.log('Claim link:', deposit.claimLink);
-console.log('Display:', deposit.displayAmount); // "0.001 BTC"
-
-// Save the note securely - needed for claiming later
-localStorage.setItem('note', JSON.stringify(serializeNote(deposit.note)));
+console.log('Display:', deposit.displayAmount); // "0.00100000 BTC"
 ```
 
-### 2. Claim with ZK Proof
+### 4. JoinSplit Transfer
 
 ```typescript
-import { generateClaimProof, initProver, setCircuitPath } from '@zvault/sdk/prover';
-import { computeNoteCommitment, computeNoteNullifier, getNotePublicKeyX } from '@zvault/sdk';
+import { generateJoinSplitProof, buildTransactInstruction } from '@zvault/sdk';
 
-// Initialize prover
-setCircuitPath('/circuits');
-await initProver();
-
-// Prepare claim inputs
-const note = deserializeNote(JSON.parse(localStorage.getItem('note')));
-const pubKeyX = getNotePublicKeyX(note);
-const leafIndex = 42n; // Get from backend
-
-const proof = await generateClaimProof({
-  privKey: note.nullifier,
-  pubKeyX,
-  amount: note.amount,
-  leafIndex,
-  merkleRoot: merkleProof.root,
-  merkleProof: {
-    siblings: merkleProof.pathElements,
-    indices: merkleProof.pathIndices,
-  },
-  recipient: recipientAsBigint,
+// Generate proof (1 input → 2 outputs split)
+const proof = await generateJoinSplitProof({
+  nInputs: 1,
+  nOutputs: 2,
+  merkleRoot: currentRoot,
+  boundParamsHash: boundHash,
+  token: ZBTC_TOKEN_ID,
+  publicKey: [myPubX, myPubY],
+  signature: [r8x, r8y, s],
+  nullifyingKey: myNullifyingKey,
+  inputs: [{
+    random: inputNote.random,
+    value: inputNote.amount,
+    leafIndex: BigInt(inputNote.leafIndex),
+    merkleProof: { siblings: proof.pathElements, indices: proof.pathIndices },
+  }],
+  outputs: [
+    { npk: recipientNPK, value: 50_000n },
+    { npk: changeNPK, value: 50_000n },
+  ],
 });
 
-// Submit to Solana
-const ix = buildClaimInstructionData(proof, merkleRoot, nullifierHash, amount, recipient);
+// Build Solana instruction
+const ix = buildTransactInstruction({ ... });
 ```
 
-### 3. Stealth Transfer
+### 5. Stealth Transfer (in-protocol)
 
 ```typescript
-import { createStealthDeposit, scanAnnouncements } from '@zvault/sdk/stealth';
-import { decodeStealthMetaAddress } from '@zvault/sdk';
+import { createStealthDeposit, scanAnnouncements } from '@zvault/sdk';
 
 // Sender: Create stealth deposit
-const recipientMeta = decodeStealthMetaAddress('st1q...');
 const deposit = await createStealthDeposit(recipientMeta, 50_000n);
+// deposit.ephemeralPub, deposit.commitment, deposit.encryptedAmount
 
-// deposit.ephemeralPub - include in announcement
-// deposit.stealthPub - recipient's one-time address
-// deposit.encryptedAmount - encrypted amount
-
-// Recipient: Scan for incoming
+// Recipient: Scan for incoming (legacy announcement-based)
 const notes = await scanAnnouncements(myKeys, announcements);
 for (const note of notes) {
   console.log(`Received ${note.amount} sats at index ${note.leafIndex}`);
 }
 ```
 
-### 4. Yield Pool
+---
+
+## On-Chain Data Parsing
+
+### parseDepositRecord (200 bytes)
+
+Parses an on-chain `DepositRecord` PDA into structured data:
 
 ```typescript
-import { createStealthPoolDeposit, calculateYield } from '@zvault/sdk/pool';
+import { parseDepositRecord } from '@zvault/sdk';
 
-// Deposit to pool
-const poolDeposit = await createStealthPoolDeposit(
-  myKeys,
-  100_000n,
-  poolId
-);
-
-// Check yield later
-const positions = await scanPoolAnnouncements(myKeys, poolAnnouncements);
-for (const pos of positions) {
-  const yield = calculateYield(pos.principal, pos.depositEpoch, currentEpoch, yieldRate);
-  console.log(`Position: ${pos.principal} sats, Yield: ${yield} sats`);
-}
+const record = parseDepositRecord(accountData);
+// Returns: { ephemeralPub, npk, commitment, amount, leafIndex, timestamp }
 ```
 
-### 5. Name Registry
+**Layout:**
 
-```typescript
-import { lookupZkeyName, isValidName } from '@zvault/sdk/registry';
-
-// Lookup stealth address by name
-const meta = await lookupZkeyName(connection, 'alice.zkey');
-if (meta) {
-  const deposit = await createStealthDeposit(meta, amount);
-}
-
-// Validate name
-if (isValidName('alice')) {
-  // Valid: 1-32 chars, alphanumeric + underscore
-}
+```
+Offset   Field              Size
+0        discriminator       1     (0x02)
+1        minted              1
+8        commitment         32     Poseidon(npk, token, amount)
+40       amount_sats         8     u64 LE
+48       btc_txid           32
+80       block_height        8
+88       leaf_index          8     u64 LE
+96       depositor          32
+128      timestamp           8     i64 LE
+136      ephemeral_pub      32     Ed25519 key (for scanning)
+168      npk                32     Note public key
 ```
 
 ---
@@ -452,68 +390,199 @@ if (isValidName('alice')) {
 ## Network Configuration
 
 ```typescript
-import { setConfig, DEVNET_CONFIG } from '@zvault/sdk/solana';
+import { setConfig } from '@zvault/sdk';
 
-// Use devnet (default)
-setConfig('devnet');
-
-// Or use custom config
-setConfig({
-  programId: 'your-program-id',
-  zbtcMint: 'your-mint',
-  // ...
-});
+setConfig('devnet');  // or 'localnet', 'mainnet'
 ```
+
+---
+
+## Constants
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `ZBTC_TOKEN_ID` | `0x7a627463n` | "zbtc" as u32, used in commitment computation |
+| `DEPOSIT_OP_RETURN_SIZE` | `64` | OP_RETURN payload: ephemeralPub (32) + npk (32) |
+| `TREE_DEPTH` | `16` | Merkle tree depth (65,536 leaves max) |
+
+---
+
+## All Modules Reference
+
+The SDK exports **217 functions/constants** and **63 types** across these modules:
+
+### Cryptography (`./crypto`)
+
+Low-level primitives for BN254, Baby Jubjub, Ed25519/X25519:
+
+| Export | Description |
+|--------|-------------|
+| `randomFieldElement` | Generate random BN254 field element |
+| `babyJubAdd/Double/Mul/Negate` | Baby Jubjub curve arithmetic |
+| `babyJubCompress/Decompress` | BJJ point compression (32 bytes) |
+| `generateBabyJubKeyPair` | Random BJJ keypair |
+| `ed25519GenerateKeyPair` | Random Ed25519 keypair |
+| `ed25519PubToX25519` | Convert Ed25519 pub to X25519 for ECDH |
+| `x25519Ecdh` | X25519 Diffie-Hellman |
+| `encryptAmountEd25519/decryptAmountEd25519` | XOR-based amount encryption |
+| `sha256Hash/doubleSha256/taggedHash` | Hash utilities |
+| Constants | `BN254_FIELD_PRIME`, `BABYJUB_ORDER`, `BABYJUB_BASE8`, etc. |
+
+### Key Derivation (`./keys`)
+
+Derive 3-key set from Solana wallet signature:
+
+| Export | Description |
+|--------|-------------|
+| `deriveKeysFromWallet(wallet)` | Full key derivation from wallet adapter |
+| `deriveKeysFromSignature(sig, pubkey)` | Keys from raw Ed25519 signature |
+| `deriveKeysFromSeed(seed)` | Keys from arbitrary seed bytes |
+| `createStealthMetaAddress(keys)` | 96-byte shareable stealth address |
+| `serialize/deserializeStealthMetaAddress` | Stealth address encoding |
+| `createDelegatedViewKey(keys, permissions)` | Time-limited view-only key |
+| `clearZVaultKeys(keys)` | Secure memory clearing |
+| `extractViewOnlyBundle(keys)` | Export view-only key bundle |
+
+### Stealth Deposit (`./stealth-deposit`)
+
+Direct BTC deposit with stealth data:
+
+| Export | Description |
+|--------|-------------|
+| `prepareStealthDeposit(meta, groupPubKey, network)` | Build complete deposit transaction data |
+| `buildStealthOpReturn(ephemeralPub, npk)` | Build 64-byte OP_RETURN script |
+| `parseStealthOpReturn(script)` | Parse OP_RETURN to extract stealth data |
+| `verifyStealthDeposit(data)` | Verify deposit data integrity |
+| `STEALTH_OP_RETURN_SIZE` | 64 bytes |
+
+### PSBT Builder (`./psbt`)
+
+Construct Bitcoin PSBTs for deposits:
+
+| Export | Description |
+|--------|-------------|
+| `buildDepositPsbt(params)` | Build PSBT with OP_RETURN for wallet signing |
+| `estimateDepositFee(params)` | Estimate transaction fee |
+| `fetchUtxos(address, network)` | Fetch spendable UTXOs from Esplora |
+| `selectUtxos(utxos, target)` | Coin selection algorithm |
+
+### Bitcoin Clients (`./core/esplora`, `./core/mempool`)
+
+| Export | Description |
+|--------|-------------|
+| `EsploraClient` | Full Esplora API client (tx, utxo, broadcast) |
+| `esploraTestnet/esploraMainnet` | Pre-configured instances |
+| `MempoolClient` | mempool.space API client (headers, SPV) |
+| `mempoolTestnet/mempoolMainnet` | Pre-configured instances |
+| `reverseBytes` | Byte reversal for Bitcoin endianness |
+
+### Commitment Tree (`./commitment-tree`)
+
+On-chain Merkle tree interaction:
+
+| Export | Description |
+|--------|-------------|
+| `fetchCommitmentTree(connection, address)` | Read tree state from Solana |
+| `buildCommitmentTreeFromChain(connection, address)` | Reconstruct full tree |
+| `getLeafIndexForCommitment(connection, commitment)` | Find commitment's leaf index |
+| `fetchMerkleProofForCommitment(connection, commitment)` | Get Merkle proof for a commitment |
+| `getMerkleProofFromTree(tree, leafIndex)` | Compute proof from local tree |
+| `isValidRoot(tree, root)` | Check if root is in history |
+| `parseCommitmentTreeData(data)` | Parse raw account data |
+
+### Name Registry (`./name-registry`)
+
+`.zkey` human-readable stealth address registry:
+
+| Export | Description |
+|--------|-------------|
+| `lookupZkeyName(connection, name)` | Resolve name to stealth address |
+| `reverseLookupZkeyName(connection, pubkey)` | Find name for a pubkey |
+| `isValidName/normalizeName/formatZkeyName` | Name validation and formatting |
+| `buildRegisterNameData/buildUpdateNameData/buildTransferNameData` | Instruction data builders |
+| Constants | `MAX_NAME_LENGTH`, `NAME_REGISTRY_SIZE` (256 bytes) |
+
+### Deposit Watcher (`./watcher`)
+
+Real-time deposit monitoring (web + mobile):
+
+| Export | Description |
+|--------|-------------|
+| `BaseDepositWatcher` | Abstract watcher with polling |
+| `WebDepositWatcher` / `createWebWatcher` | Browser-based watcher |
+| `NativeDepositWatcher` / `createNativeWatcher` | React Native watcher |
+| `serializeDeposit/deserializeDeposit` | Persistence helpers |
+| `DEFAULT_WATCHER_CONFIG` | Default polling config |
+
+### React Hooks (`./react`)
+
+| Export | Description |
+|--------|-------------|
+| `useDepositWatcher(config)` | Watch multiple deposits with auto-polling |
+| `useSingleDeposit(depositId)` | Watch a single deposit status |
+
+### Priority Fees (`./solana/priority-fee`)
+
+| Export | Description |
+|--------|-------------|
+| `estimatePriorityFee(rpc, accounts)` | Get fee estimate from Helius/RPC |
+| `buildPriorityFeeInstructionData(config)` | Build compute budget instructions |
+| `encodeSetComputeUnitLimit/Price` | Raw instruction encoding |
+| Constants | `DEFAULT_COMPUTE_UNITS`, `DEFAULT_PRIORITY_FEE` |
+
+### Connection Adapters (`./solana/connection`)
+
+| Export | Description |
+|--------|-------------|
+| `createConnectionAdapterFromKit(rpc)` | Adapter from @solana/kit |
+| `createConnectionAdapterFromWeb3(connection)` | Adapter from @solana/web3.js |
+| `createFetchConnectionAdapter(url)` | Adapter from raw fetch |
+| `getConnectionAdapter(config)` | Auto-detect and create adapter |
+
+### ChadBuffer (`./chadbuffer`)
+
+Large data upload to Solana (for SPV proofs exceeding tx size):
+
+| Export | Description |
+|--------|-------------|
+| `uploadTransactionToBuffer(rpc, payer, data)` | Upload raw BTC tx |
+| `uploadProofToBuffer(rpc, payer, buffer, proof)` | Upload Merkle proof |
+| `closeBuffer(rpc, payer, buffer)` | Reclaim rent |
+| `prepareVerifyDeposit(rpc, txid)` | Prepare SPV verification data |
+| Constants | `CHADBUFFER_PROGRAM_ID`, `MAX_DATA_PER_WRITE` (1020 bytes) |
+
+### Configuration (`./config`)
+
+| Export | Description |
+|--------|-------------|
+| `getConfig/setConfig/createConfig` | Network config management |
+| `DEVNET_CONFIG/MAINNET_CONFIG/LOCALNET_CONFIG` | Pre-built configs |
+| `SDK_VERSION/DEPLOYMENT_INFO` | Build metadata |
+| `JOINSPLIT_TREE_DEPTH` | 16 |
+
+### Demo (`./demo`)
+
+Development/testing helpers (devnet only):
+
+| Export | Description |
+|--------|-------------|
+| `DEMO_INSTRUCTION` | Demo instruction discriminator (13) |
+| `buildAddDemoStealthData(params)` | Build demo deposit instruction |
+| `parseAddDemoStealthData(data)` | Parse demo deposit data |
 
 ---
 
 ## Testing
 
 ```bash
-# Run all tests
-bun test
-
-# Run specific test file
-bun test src/prover.test.ts
-
-# Run with circuits (required for prover tests)
-bun run copy-circuits && bun test
+bun test              # Run all tests
+bun run build         # Compile TypeScript
 ```
 
 ---
 
-## Migration from v1.x
+## Related Documentation
 
-### Breaking Changes
-
-1. **Import paths changed** - Use subpath imports for tree-shaking:
-   ```typescript
-   // Before
-   import { generateClaimProof } from '@zvault/sdk';
-
-   // After
-   import { generateClaimProof } from '@zvault/sdk/prover';
-   ```
-
-2. **Grumpkin functions moved** - Now in main crypto exports:
-   ```typescript
-   // Before
-   import { generateKeyPair } from '@zvault/sdk/grumpkin';
-
-   // After
-   import { generateGrumpkinKeyPair } from '@zvault/sdk';
-   ```
-
-3. **ClaimInputs requires recipient** - Proof is now bound to recipient:
-   ```typescript
-   generateClaimProof({
-     // ... other fields
-     recipient: recipientAsBigint, // NEW: Required
-   });
-   ```
-
-4. **depositToNote computes commitment** - No longer returns placeholder:
-   ```typescript
-   const deposit = await depositToNote(amount);
-   // deposit.note.commitment is now real Poseidon hash
-   ```
+- [Technical Overview](../../docs/TECHNICAL.md) - Full technical documentation
+- [Circuits](../../docs/CIRCUITS.md) - JoinSplit ZK circuit design
+- [Documentation Index](../../docs/INDEX.md) - All docs hub

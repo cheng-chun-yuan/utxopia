@@ -20,31 +20,44 @@ Priority: CLI args > Environment variables > `.env` file > Defaults
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ZVAULT_NETWORK` | No | `testnet` | Network mode: `mainnet`, `testnet`, `regtest`, `demo` |
-| `ZVAULT_DEMO_MODE` | No | `false` | Enable demo mode (no real transactions) |
+| `ZVAULT_NETWORK` | No | `devnet` | Network mode: `mainnet`, `testnet`, `devnet` |
+| `ZVAULT_DEMO_MODE` | No | `false` | Enable demo mode (`"1"` to enable; devnet/testnet only) |
+| `ZVAULT_LOG_LEVEL` | No | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| `ZVAULT_DEPOSIT_LIMIT_SATS` | No | network-based* | Maximum deposit per transaction |
 | `API_PORT` | No | `3001` | REST API server port |
+
+*Deposit limit defaults: mainnet=1,000,000,000 (10 BTC), testnet=10,000,000,000, devnet=100,000,000,000.
 
 ### Bitcoin Configuration
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `POOL_SIGNING_KEY` | Yes* | - | Hex-encoded private key for BTC signing |
+| `ZVAULT_BITCOIN_RPC` | No | network-based* | Esplora/Blockstream API endpoint |
+| `POOL_SIGNING_KEY` | Yes** | - | Hex-encoded private key for BTC signing (legacy) |
 | `POOL_RECEIVE_ADDRESS` | No | testnet faucet | Pool wallet address for swept funds |
-| `ESPLORA_URL` | No | `https://mempool.space/testnet/api` | Esplora API endpoint |
-| `BTC_NETWORK` | No | `testnet` | Bitcoin network: `mainnet`, `testnet`, `regtest` |
+| `ESPLORA_URL` | No | `https://mempool.space/testnet/api` | Esplora API endpoint (tracker) |
 
-*Required for redemption service, optional for deposit tracker (uses simulated mode).
+*Bitcoin API defaults: mainnet=`https://blockstream.info/api`, testnet/devnet=`https://blockstream.info/testnet/api`.
+
+**Required for redemption service, optional for deposit tracker (uses simulated mode). Prefer `ZVAULT_BTC_SIGNER_KEY` in FROST config.
 
 ### Solana Configuration
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `SOLANA_RPC_URL` | No | `https://api.devnet.solana.com` | Solana RPC endpoint |
-| `VERIFIER_KEYPAIR` | Yes* | - | Path to Solana keypair JSON file |
-| `ZVAULT_PROGRAM_ID` | No | `5S5y...` (devnet) | zVault program ID |
-| `LIGHT_CLIENT_PROGRAM_ID` | No | `95vW...` (devnet) | BTC light client program ID |
+| `ZVAULT_SOLANA_RPC` | No | network-based* | Solana RPC endpoint |
+| `SOLANA_RPC_URL` | No | `https://api.devnet.solana.com` | Solana RPC (tracker service) |
+| `VERIFIER_KEYPAIR` | Yes** | - | Path to Solana keypair JSON file |
+| `ZVAULT_PROGRAM_ID` | No*** | `AtztELZfz3GHA8hFQCv7aT9Mt47Xhknv3ZCNb3fmXsgf` | zVault program ID |
+| `ZVAULT_POOL_STATE` | No*** | `8bbcVecB619HHsHn2TQMraJ8R8WjQjApdZY7h9JCJW7b` | Pool state PDA |
+| `ZVAULT_COMMITMENT_TREE` | No*** | `HtfDXZ5mBQNBdZrDxJMbXCDkyUqFdTDj7zAqo3aqrqiA` | Commitment tree PDA |
+| `ZVAULT_ZBTC_MINT` | No*** | `HiDyAcEBTS7SRiLA49BZ5B6XMBAksgwLEAHpvteR8vbV` | zBTC mint address |
 
-*Required for SPV verification, optional for tracker-only mode.
+*Solana RPC defaults: devnet=`https://api.devnet.solana.com`, testnet=`https://api.testnet.solana.com`, mainnet=`https://api.mainnet-beta.solana.com`.
+
+**Required for SPV verification, optional for tracker-only mode.
+
+***Devnet defaults are used automatically. Required for testnet/mainnet.
 
 ### Deposit Tracker Configuration
 
@@ -66,6 +79,25 @@ Priority: CLI args > Environment variables > `.env` file > Defaults
 | `REDEMPTION_MIN_WITHDRAWAL` | No | `10000` | Minimum withdrawal amount (sats) |
 | `REDEMPTION_MAX_WITHDRAWAL` | No | `100000000` | Maximum withdrawal amount (sats) |
 | `REDEMPTION_FEE_RATE` | No | `5` | Target fee rate (sat/vbyte) |
+
+### FROST Signing Configuration
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `ZVAULT_SIGNING_MODE` | No | `single` (devnet) | Signing mode: `single` or `frost` |
+| `ZVAULT_BTC_SIGNER_KEY` | Yes* | — | Hex BTC private key (single-key mode) |
+| `ZVAULT_FROST_THRESHOLD` | Yes** | — | FROST threshold (e.g., 2) |
+| `ZVAULT_FROST_PARTICIPANTS` | Yes** | — | Total signers (e.g., 3) |
+| `ZVAULT_FROST_KEY_SHARE` | Yes** | — | Encrypted key share |
+| `ZVAULT_FROST_SIGNER_URLS` | Yes** | — | Comma-separated signer URLs |
+| `ZVAULT_FROST_API_KEY` | No | — | Optional API key for FROST servers |
+| `ZVAULT_FROST_GROUP_PUBKEY` | Yes** | — | Hex x-only group public key (64 chars) |
+
+*Required when `ZVAULT_SIGNING_MODE=single`. **Required when `ZVAULT_SIGNING_MODE=frost`.
+
+> **Note**: On mainnet, `ZVAULT_SIGNING_MODE` defaults to `frost`. Single-key mode is rejected by `validate_for_production()`.
+
+For FROST signer server configuration, see [FROST Server Documentation](../../docs/FROST.md).
 
 ### Logging Configuration
 

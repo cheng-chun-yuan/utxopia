@@ -35,55 +35,63 @@ The zVault backend provides server-side services for the privacy-preserving Bitc
 ```
 backend/src/
 ├── lib.rs                    # Library root with re-exports
-├── main.rs                   # CLI entry point
+├── main.rs                   # CLI entry point (api, tracker, redemption, demo)
 │
+│── # ── Legacy Top-Level Modules (being migrated into directories) ──
+├── api_server.rs             # Combined API server (REST + WS)
+├── btc_client.rs             # Bitcoin RPC/Esplora client
+├── btc_spv.rs                # SPV proof utilities
+├── config.rs                 # ZVaultConfig (env-based, SigningMode)
+├── esplora.rs                # Esplora API bindings
+├── frost_client.rs           # Shared FROST client (broadcast, session retry, round coordination)
+├── logging.rs                # Logging setup
+├── middleware.rs              # HTTP middleware
+├── sol_client.rs             # Solana RPC client
+├── taproot.rs                # Taproot address generation
+│
+│── # ── Organized Module Directories ──
 ├── common/                   # Shared Infrastructure
 │   ├── config.rs            # Unified configuration management
 │   ├── error.rs             # Common error types (ZVaultError)
-│   ├── logging.rs           # Structured JSON logging
-│   └── mod.rs               # Re-exports
+│   └── logging.rs           # Structured JSON logging
 │
 ├── bitcoin/                  # Bitcoin Layer
 │   ├── client.rs            # Esplora API client
-│   ├── signer.rs            # Transaction signing (SingleKey, FROST-ready)
-│   ├── taproot.rs           # Taproot address generation with commitments
-│   ├── spv.rs               # SPV proof generation
-│   └── mod.rs               # Re-exports
+│   ├── signer.rs            # Transaction signing (SingleKey, FROST)
+│   ├── frost_client.rs      # FROST client (directory version)
+│   ├── taproot.rs           # Taproot address generation
+│   └── spv.rs               # SPV proof generation
 │
 ├── solana/                   # Solana Layer
-│   ├── client.rs            # Solana RPC client
-│   └── mod.rs               # Re-exports
+│   └── client.rs            # Solana RPC client
 │
 ├── storage/                  # Storage Layer
 │   ├── traits.rs            # DepositStore, StealthStore traits
 │   ├── sqlite.rs            # SQLite implementation
-│   ├── memory.rs            # In-memory implementation (testing)
-│   └── mod.rs               # Re-exports
+│   └── memory.rs            # In-memory implementation (testing)
 │
 ├── types/                    # Shared Types
 │   ├── deposit.rs           # DepositRecord, DepositStatus
 │   ├── redemption.rs        # WithdrawalRequest, WithdrawalStatus
 │   ├── stealth.rs           # StealthDepositRecord, StealthData
-│   ├── units.rs             # BTC/satoshi conversion utilities
-│   └── mod.rs               # Re-exports
+│   └── units.rs             # BTC/satoshi conversion utilities
 │
 ├── services/                 # Domain Services (re-exports)
-│   └── mod.rs               # Re-exports from deposit_tracker/, redemption/, stealth/
+│   └── mod.rs
 │
-├── api/                      # API Layer
+├── api/                      # API Layer (structured)
 │   ├── middleware.rs        # Rate limiting, input validation
 │   ├── server.rs            # Application state, server setup
 │   ├── websocket.rs         # Real-time WebSocket handlers
-│   ├── routes/              # Route handlers (planned)
-│   └── mod.rs               # Re-exports
+│   └── routes/              # Route handlers
 │
 ├── deposit_tracker/          # Deposit Tracking Service
 │   ├── service.rs           # Main orchestrator
+│   ├── api.rs               # REST endpoints (/api/deposits, /api/pool/info)
 │   ├── watcher.rs           # Esplora address polling
-│   ├── sweeper.rs           # UTXO sweep transactions
-│   ├── verifier.rs          # SPV proof submission to Solana
+│   ├── sweeper.rs           # UTXO sweep (SingleKey or FROST)
+│   ├── verifier.rs          # SPV proof submission (npk + ephemeral_pub)
 │   ├── websocket.rs         # Real-time status updates
-│   ├── api.rs               # REST endpoints
 │   ├── db.rs                # In-memory store
 │   ├── sqlite_db.rs         # SQLite persistence
 │   └── types.rs             # Service-specific types
@@ -91,26 +99,31 @@ backend/src/
 ├── redemption/               # Redemption Service
 │   ├── service.rs           # Main orchestrator
 │   ├── builder.rs           # BTC transaction construction
-│   ├── signer.rs            # Transaction signing
+│   ├── signer.rs            # Transaction signing (SingleKey, MpcSigner)
 │   ├── queue.rs             # Request queue management
 │   ├── watcher.rs           # Solana burn event watcher
 │   └── types.rs             # Service-specific types
 │
-└── stealth/                  # Stealth Deposit Service
-    ├── service.rs           # Stealth address handling
-    ├── api.rs               # REST endpoints
-    └── types.rs             # Stealth-specific types
+├── stealth/                  # Stealth Deposit Service
+│   ├── service.rs           # Stealth address handling
+│   ├── api.rs               # REST endpoints
+│   └── types.rs             # Stealth-specific types
+│
+└── bin/
+    └── redemption.rs        # Standalone redemption binary
 ```
+
+> **Note**: The codebase has a hybrid structure with legacy top-level modules and organized directories. Both paths coexist — `lib.rs` re-exports from both.
 
 ## Data Flow
 
-### 1. Deposit Flow
+### 1. Deposit Flow (npk-based)
 
 ```
 User                    Frontend/SDK              Backend                 Bitcoin/Solana
  │                           │                       │                         │
- │  Generate Note           │                       │                         │
- │  (nullifier + secret)    │                       │                         │
+ │  Generate Deposit        │                       │                         │
+ │  (npk via ECDH)          │                       │                         │
  │─────────────────────────▶│                       │                         │
  │                           │                       │                         │
  │                           │  Register Deposit    │                         │
@@ -119,17 +132,26 @@ User                    Frontend/SDK              Backend                 Bitcoi
  │                           │  Taproot Address     │                         │
  │                           │◀──────────────────────│                         │
  │                           │                       │                         │
- │  Send BTC                │                       │                         │
+ │  Send BTC (any amount)   │                       │                         │
+ │  + OP_RETURN: eph(32)    │                       │                         │
+ │    + npk(32) = 64 bytes  │                       │                         │
  │──────────────────────────────────────────────────────────────────────────▶│
  │                           │                       │                         │
  │                           │                       │  Watch Address         │
  │                           │                       │◀────────────────────────│
  │                           │                       │                         │
- │                           │                       │  Sweep to Pool         │
+ │                           │                       │  Sweep + OP_RETURN     │
  │                           │                       │────────────────────────▶│
  │                           │                       │                         │
  │                           │                       │  Submit SPV Proof      │
+ │                           │                       │  (npk + ephemeral_pub) │
  │                           │                       │────────────────────────▶│
+ │                           │                       │                         │
+ │                           │                       │  On-chain: compute     │
+ │                           │                       │  Poseidon(npk, token,  │
+ │                           │                       │  amount) → commitment  │
+ │                           │                       │  → Merkle tree insert  │
+ │                           │                       │  → DepositRecord PDA   │
  │                           │                       │                         │
  │                           │  WebSocket: Ready    │                         │
  │                           │◀──────────────────────│                         │
@@ -181,9 +203,10 @@ User                    Frontend/SDK              Backend                 Bitcoi
 | Component | Purpose |
 |-----------|---------|
 | `EsploraClient` | HTTP client for Esplora API (address watching, UTXO fetching, TX broadcast) |
-| `SingleKeySigner` | Single-key transaction signing (production-ready) |
-| `Signer` trait | Abstraction for FROST threshold signing migration |
-| `TaprootDeposit` | Taproot address generation with embedded commitments |
+| `SingleKeySigner` | Single-key transaction signing (development) |
+| `FrostClient` | FROST threshold signing client (broadcast verification, session retry, round coordination) |
+| `Signer` trait | Abstraction for single-key / FROST signing modes |
+| `TaprootDeposit` | Taproot address generation with npk-tweaked keys |
 | `SpvProofGenerator` | Merkle proof generation for SPV verification |
 
 ### Solana Layer

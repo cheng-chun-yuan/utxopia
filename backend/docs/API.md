@@ -70,11 +70,34 @@ Get deposit tracker statistics.
 
 ---
 
+## Pool Info
+
+### GET /api/pool/info
+
+Returns pool configuration needed by SDK for non-interactive deposits.
+
+**Response**
+```json
+{
+  "group_pubkey": "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+  "network": "testnet",
+  "timelock_blocks": 1
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `group_pubkey` | string | Pool's x-only public key (64 hex chars, secp256k1) |
+| `network` | string | Bitcoin network (`"testnet"` or `"mainnet"`) |
+| `timelock_blocks` | number | Timelock blocks for deposit script |
+
+---
+
 ## Deposit Tracking
 
 ### POST /api/deposits
 
-Register a new deposit for tracking.
+Register a new deposit for tracking (npk-based flow).
 
 **Request Body**
 ```json
@@ -90,6 +113,8 @@ Register a new deposit for tracking.
 | `taproot_address` | string | Yes | Taproot deposit address (tb1p... for testnet) |
 | `commitment` | string | Yes | 32-byte commitment hash (64 hex chars) |
 | `amount_sats` | number | Yes | Expected deposit amount in satoshis |
+
+> **Note**: The `npk` and `ephemeral_pub` fields are extracted automatically from the deposit transaction's 64-byte OP_RETURN (`ephemeral_pub(32) + npk(32)`) during sweep processing. The on-chain commitment is computed as `Poseidon(npk, ZBTC_TOKEN_ID, amount)`.
 
 **Response (Success)**
 ```json
@@ -121,17 +146,18 @@ Get status of a specific deposit.
   "taproot_address": "tb1p...",
   "commitment": "abcd1234...",
   "amount_sats": 100000,
-  "actual_amount_sats": 100000,
   "confirmations": 2,
   "sweep_confirmations": 0,
   "can_claim": false,
   "deposit_txid": "abc123...",
   "sweep_txid": null,
   "solana_tx": null,
+  "leaf_index": null,
+  "ephemeral_pub": "02abcd...",
+  "npk": "1234abcd...",
   "error": null,
   "created_at": 1704067200,
-  "updated_at": 1704067500,
-  "expires_at": 1704153600
+  "updated_at": 1704067500
 }
 ```
 
@@ -480,7 +506,9 @@ All errors follow a consistent format:
 - Valid hexadecimal characters only
 - `0x` prefix optional
 - Commitment: 64 characters (32 bytes)
-- Public keys: 66 characters (33 bytes compressed)
+- NPK: 64 characters (32 bytes)
+- Ephemeral public key: 64 characters (32 bytes, Ed25519)
+- Public keys: 64 or 66 characters (32/33 bytes)
 
 ### Amounts
 - Must be greater than 0

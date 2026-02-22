@@ -107,14 +107,25 @@ loop {
 
 #### 2. UTXO Sweeper
 - Builds sweep transactions from deposit addresses to pool wallet
-- Signs with embedded commitment data
+- Parses 64-byte OP_RETURN from deposit tx: `ephemeral_pub(32) + npk(32)`
+- Signs with single key or FROST threshold signing
+- Creates sweep tx with OP_RETURN carrying commitment data
 - Broadcasts to Bitcoin network
+
+```
+OP_RETURN format (64 bytes):
+┌──────────────────┬──────────────────┐
+│ ephemeral_pub    │ npk              │
+│ (32 bytes)       │ (32 bytes)       │
+└──────────────────┴──────────────────┘
+```
 
 ```rust
 // Sweep confirmed deposits
 for deposit in confirmed_deposits.filter(|d| d.can_sweep()) {
-    let sweep_tx = build_sweep_tx(&deposit, &pool_address)?;
-    let signed_tx = signer.sign(sweep_tx)?;
+    let op_return = extract_deposit_op_return(&deposit.tx)?;
+    let sweep_tx = build_sweep_tx(&deposit, &pool_address, &op_return)?;
+    let signed_tx = signer.sign(sweep_tx)?; // SingleKey or FROST
     esplora.broadcast(signed_tx).await?;
     deposit.mark_sweep_broadcast(txid);
 }
@@ -122,14 +133,21 @@ for deposit in confirmed_deposits.filter(|d| d.can_sweep()) {
 
 #### 3. SPV Verifier
 - Generates Merkle proofs for sweep transactions
-- Submits proofs to Solana light client
-- Records verified deposits on-chain
+- Submits proofs to Solana light client with `npk` and `ephemeral_pub`
+- On-chain: commitment computed as `Poseidon(npk, ZBTC_TOKEN_ID, amount)`
+- Creates DepositRecord PDA (200 bytes) on Solana
 
 ```rust
-// Verify swept deposits
+// Verify swept deposits (passes npk + ephemeral_pub to on-chain program)
 for deposit in swept_deposits.filter(|d| d.can_verify()) {
     let proof = spv.generate_proof(&deposit.sweep_txid).await?;
-    let sig = solana.verify_btc_deposit(proof).await?;
+    let sig = solana.verify_deposit(
+        &deposit.sweep_txid,
+        deposit.vout,
+        &deposit.npk,           // 32 bytes
+        &deposit.ephemeral_pub, // 32 bytes
+        deposit.amount_sats,
+    ).await?;
     deposit.mark_ready(sig, leaf_index);
 }
 ```
@@ -144,19 +162,39 @@ CREATE TABLE deposits (
     taproot_address TEXT NOT NULL UNIQUE,
     commitment TEXT NOT NULL,
     amount_sats INTEGER NOT NULL,
-    status TEXT NOT NULL,
-    actual_amount_sats INTEGER,
+    status TEXT NOT NULL DEFAULT 'pending',
     confirmations INTEGER DEFAULT 0,
+
+    -- Deposit TX
     deposit_txid TEXT,
+    deposit_vout INTEGER,
+    deposit_block_height INTEGER,
+
+    -- Sweep TX
     sweep_txid TEXT,
+    sweep_confirmations INTEGER DEFAULT 0,
+    sweep_block_height INTEGER,
+    pool_address TEXT,
+
+    -- Solana
     solana_tx TEXT,
     leaf_index INTEGER,
-    retry_count INTEGER DEFAULT 0,
-    error TEXT,
+
+    -- OP_RETURN Data (npk-based deposit)
+    ephemeral_pub TEXT,             -- Ed25519 ephemeral key (32 bytes hex)
+    encrypted_amount_hex TEXT,      -- Deprecated (legacy)
+    npk TEXT,                       -- Note public key (32 bytes hex)
+    auto_detected INTEGER DEFAULT 0,
+
+    -- Lifecycle
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    expires_at INTEGER NOT NULL
+    error TEXT,
+    retry_count INTEGER DEFAULT 0,
+    last_retry_at INTEGER
 );
+CREATE INDEX idx_deposits_status ON deposits(status);
+CREATE INDEX idx_deposits_taproot_address ON deposits(taproot_address);
 ```
 
 ### Error Handling

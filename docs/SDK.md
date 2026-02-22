@@ -162,11 +162,11 @@ interface ScannedNote {
 
 ```typescript
 // Program IDs (devnet)
-ZVAULT_PROGRAM_ID = 'GqdjVMBDmFEd6wSV4TzRsvnVWnE4pMMdhVo8U4iXvYUX';
-CHADBUFFER_PROGRAM_ID = 'C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF';
+ZVAULT_PROGRAM_ID = '2qQPgW6LpzokD1Uemhy2Ng5Xjhr6VuHwJgC2GamUKzQB';
+CHADBUFFER_PROGRAM_ID = '6VrJmWbhN9WbEkg87JizunVMpL6CHKGVmzWCf3o3LRgy';
 
 // Merkle tree
-TREE_DEPTH = 20;
+TREE_DEPTH = 16;
 MAX_LEAVES = 2 ** 20;  // ~1 million
 
 // Cryptography

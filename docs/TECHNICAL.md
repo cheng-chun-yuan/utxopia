@@ -21,8 +21,9 @@ BTC Deposit ─► Taproot Address ─► SPV Verify ─► Shielded Pool ─►
 
 | Innovation | What It Does | Why It Matters |
 |------------|--------------|----------------|
-| **6 circom ZK Circuits** | Client-side proof generation (Groth16) | No trusted backend, compact proofs |
-| **Baby Jubjub + Ed25519** | Spending keys + viewing keys | Efficient in-circuit + fast ECDH |
+| **JoinSplit(N,M) Proofs** | Unified N-input M-output transfers (Groth16) | One circuit for all operations |
+| **3-Key Model** | Spending (BJJ) + Nullifying + Viewing (Ed25519) | Railgun-aligned key hierarchy |
+| **EdDSA-Poseidon Signatures** | In-circuit signature verification | Authorization without revealing keys |
 | **Full SPV Bridge** | Bitcoin light client on Solana | Trustless BTC verification |
 | **Stealth Addresses** | EIP-5564/DKSAP protocol | Unlinkable one-time addresses |
 | **ChadBuffer** | On-chain large data storage | BTC SPV data exceeding Solana limits |
@@ -37,8 +38,8 @@ BTC Deposit ─► Taproot Address ─► SPV Verify ─► Shielded Pool ─►
 │                            BITCOIN LAYER                                         │
 │   User Wallet ──► Taproot Address ──► Bitcoin Network ──► Block Confirmation    │
 │        │              │                                         │               │
-│        │         (commitment                              (6+ confirms)         │
-│        │          in script)                                    │               │
+│        │     (OP_RETURN: ephemeralPub                      (1+ confirms)        │
+│        │      + npk, 64 bytes)                                  │               │
 │        │              │                                         ▼               │
 │        │              └──────────────────────────► Header Relayer Service       │
 └────────│────────────────────────────────────────────────────────│───────────────┘
@@ -57,9 +58,9 @@ BTC Deposit ─► Taproot Address ─► SPV Verify ─► Shielded Pool ─►
 │   ┌────────────────────────────────────────────────────────────────────────┐    │
 │   │                    zVault Program (Pinocchio)                          │    │
 │   │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌───────────┐│    │
-│   │   │ Commitment   │  │  Nullifier   │  │   Stealth    │  │   Name    ││    │
-│   │   │    Tree      │  │  Registry    │  │ Announcements│  │ Registry  ││    │
-│   │   │ (depth 20)   │  │(double-spend)│  │ (BJJ+Ed25519)│  │ (.zkey)   ││    │
+│   │   │ Commitment   │  │  Nullifier   │  │   Deposit    │  │   Name    ││    │
+│   │   │    Tree      │  │  Registry    │  │   Records    │  │ Registry  ││    │
+│   │   │ (depth 16)   │  │(double-spend)│  │(npk+stealth) │  │ (.zkey)   ││    │
 │   │   └──────────────┘  └──────────────┘  └──────────────┘  └───────────┘│    │
 │   └────────────────────────────────────────────────────────────────────────┘    │
 └────────────────────────────────────────────────────────────────────────────────-┘
@@ -85,7 +86,7 @@ BTC Deposit ─► Taproot Address ─► SPV Verify ─► Shielded Pool ─►
 | Component | Responsibility |
 |-----------|---------------|
 | **BTC Light Client** | Maintains Bitcoin header chain, validates SPV proofs |
-| **zVault Program** | Manages commitments, nullifiers, stealth announcements, names |
+| **zVault Program** | Manages commitments, nullifiers, deposit records (npk-based), names |
 | **Header Relayer** | Syncs Bitcoin headers to Solana (permissionless) |
 | **SDK** | Client-side proof generation, key derivation, transaction building |
 | **FROST Server** | BTC redemption signing (2-of-3 threshold) |
@@ -140,44 +141,36 @@ For BTC withdrawals, 2-of-3 multi-party signing:
 - **No trusted backend**: Zero centralized components for proof generation
 - **Groth16**: ~256 byte proofs (2 G1 + 1 G2 on BN254), fits inline in Solana transactions
 
-### 6 Circuits
+### JoinSplit Circuit (Railgun-Aligned)
 
-| Circuit | Purpose | Key Constraints |
-|---------|---------|-----------------|
-| `claim` | Mint zkBTC from deposit | Merkle proof, nullifier, amount match |
-| `spend_split` | Split 1 note into 2 notes | Amount conservation, unique recipients |
-| `spend_partial_public` | Partial withdrawal + change | Public + change outputs |
-| `pool_deposit` | Enter yield pool | Unified → Pool commitment |
-| `pool_withdraw` | Exit with yield | Yield calculation in-circuit |
-| `pool_claim_yield` | Compound yields | Re-stake with epoch reset |
+Single parameterized `JoinSplit(N, M, 16)` template. N inputs + M outputs, Merkle depth 16.
 
-### Unified Commitment Model
+| Variant | Purpose |
+|---------|---------|
+| `joinsplit_1x2` | Deposit claim (1 input → 2 outputs) |
+| `joinsplit_2x2` | Standard private transfer |
+| `joinsplit_NxM` | General case (N+M <= 14, 91 total variants) |
 
-```circom
-// Commitment = Poseidon(pub_key_x, amount)
-template Commitment() {
-    signal input pub_key_x;
-    signal input amount;
-    signal output commitment;
-    component hasher = Poseidon(2);
-    hasher.inputs[0] <== pub_key_x;
-    hasher.inputs[1] <== amount;
-    commitment <== hasher.out;
-}
+**Public signals**: `merkleRoot`, `boundParamsHash`, `nullifiers[N]`, `commitmentsOut[M]`
 
-// Nullifier = Poseidon(Poseidon(priv_key, leaf_index))
-template Nullifier() {
-    signal input priv_key;
-    signal input leaf_index;
-    signal output nullifier_hash;
-    component h1 = Poseidon(2);
-    h1.inputs[0] <== priv_key;
-    h1.inputs[1] <== leaf_index;
-    component h2 = Poseidon(1);
-    h2.inputs[0] <== h1.out;
-    nullifier_hash <== h2.out;
-}
+### Commitment & Nullifier Model
+
 ```
+MPK = Poseidon(spendingPub.x, spendingPub.y, nullifyingKey)
+NPK = Poseidon(MPK, random)
+Commitment = Poseidon(NPK, token, amount)
+Nullifier = Poseidon(nullifyingKey, leafIndex)
+
+Message hash = Poseidon(merkleRoot, boundParamsHash, nullifiers..., commitmentsOut...)
+Signature = EdDSA-Poseidon(spendingKey, messageHash)
+```
+
+**In-circuit logic**:
+1. Verify MPK matches spending public key + nullifying key
+2. For each input: verify commitment in Merkle tree, verify nullifier
+3. For each output: verify commitment = Poseidon(npk, token, amount) + range check (120-bit)
+4. Verify sum(valueIn) == sum(valueOut)
+5. Verify EdDSA-Poseidon signature over message hash
 
 ### On-Chain Verification
 
@@ -208,7 +201,7 @@ User Keys:
 └── viewing_priv  (Ed25519)     ──► viewing_pub  (can detect incoming)
 
 Stealth Meta-Address (public, shareable):
-[spending_pub_x(32) || viewing_pub(32)] = 64 bytes
+[spending_pub(32) || viewing_pub(32) || mpk(32)] = 96 bytes
 ```
 
 ### Protocol Flow
@@ -234,16 +227,74 @@ eph_priv (Ed25519) ─┐                          viewing_priv ─┐
                                                   ZK PROOF ──► CLAIM
 ```
 
-### On-Chain Announcement (90 bytes)
+### Non-Interactive Deposit Flow (npk-based)
+
+Users deposit BTC with an OP_RETURN containing stealth data. The commitment is computed **on-chain** from the npk and the actual BTC amount received, so users can send any amount.
 
 ```
-├── discriminator:     1 byte
-├── type:              1 byte
-├── ephemeral_pub:    32 bytes (Ed25519 public key)
-├── encrypted_amount:  8 bytes (XOR-encrypted with derived key)
-├── commitment:       32 bytes (Poseidon hash)
-├── leaf_index:        8 bytes (u64 LE)
-└── created_at:        8 bytes (i64 LE timestamp)
+SENDER (Wallet)                                      SOLANA (On-Chain)
+
+1. Generate ephemeral Ed25519 keypair
+2. ECDH: shared_secret = X25519(eph_priv, recipient_viewing_pub)
+3. Derive random = SHA256(shared_secret || "random")
+4. Compute NPK = Poseidon(recipient_MPK, random)
+5. Build 64-byte OP_RETURN:
+   ┌──────────────────┬──────────────────┐
+   │ ephemeral_pub    │ npk              │
+   │ (32 bytes)       │ (32 bytes)       │
+   └──────────────────┴──────────────────┘
+6. Send BTC to Taproot address ─────────────────────►  Bitcoin Network
+                                                              │
+                                                    (confirmations)
+                                                              │
+                                                              ▼
+                                                    Backend sweeps UTXO
+                                                    with OP_RETURN intact
+                                                              │
+                                                              ▼
+                                            ┌─────────────────────────────────┐
+                                            │ verify_stealth_deposit (ix 1)   │
+                                            │                                 │
+                                            │ 1. Validate SPV proof           │
+                                            │ 2. Extract amount from UTXO     │
+                                            │ 3. Compute commitment ON-CHAIN: │
+                                            │    Poseidon(npk, 0x7a627463,    │
+                                            │            amount_sats)         │
+                                            │ 4. Insert into Merkle tree      │
+                                            │ 5. Create DepositRecord PDA     │
+                                            └─────────────────────────────────┘
+
+RECIPIENT (Viewing Key)
+
+1. Scan DepositRecord PDAs
+2. ECDH: shared_secret = X25519(viewing_priv, ephemeral_pub)
+3. Derive random = SHA256(shared_secret || "random")
+4. Compute expected_NPK = Poseidon(own_MPK, random)
+5. If expected_NPK == record.npk → this deposit is mine
+6. Amount is plaintext in record (no decryption needed)
+```
+
+**Key constant**: `ZBTC_TOKEN_ID = 0x7a627463` ("zbtc" as u32, used in commitment computation)
+
+### On-Chain DepositRecord (200 bytes)
+
+Each verified deposit creates a `DepositRecord` PDA on Solana:
+
+```
+Offset   Field              Size    Description
+──────   ──────             ────    ────────────
+0        discriminator       1      Account type (0x02)
+1        minted              1      Whether deposit has been claimed
+2-7      _padding            6      Reserved
+8-39     commitment         32      Poseidon(npk, token, amount) — computed on-chain
+40-47    amount_sats         8      BTC amount (u64 LE)
+48-79    btc_txid           32      Bitcoin transaction hash
+80-87    block_height        8      Bitcoin block height (u64 LE)
+88-95    leaf_index          8      Position in commitment Merkle tree (u64 LE)
+96-127   depositor          32      Solana pubkey of verifier
+128-135  timestamp           8      Unix timestamp (i64 LE)
+136-167  ephemeral_pub      32      Ed25519 ephemeral public key (for scanning)
+168-199  npk                32      Note public key (for commitment verification)
 ```
 
 ### Key Properties
@@ -261,14 +312,18 @@ eph_priv (Ed25519) ─┐                          viewing_priv ─┐
 
 | Disc | Name | Purpose |
 |------|------|---------|
-| 0 | `INITIALIZE` | Initialize pool state |
-| 4 | `SPLIT_COMMITMENT` | Split 1 note into 2 notes (Groth16) |
+| 0 | `INITIALIZE` | Initialize pool state and commitment tree |
+| 1 | `VERIFY_STEALTH_DEPOSIT` | Verify BTC via SPV, compute commitment on-chain, create DepositRecord |
 | 5 | `REQUEST_REDEMPTION` | Burn zkBTC, request BTC withdrawal |
-| 8 | `VERIFY_DEPOSIT` | Record BTC deposit (SPV verified) |
-| 9 | `CLAIM` | Mint zkBTC with Groth16 proof |
-| 10 | `SPEND_PARTIAL_PUBLIC` | Partial public spend + change (Groth16) |
-| 12 | `ANNOUNCE_STEALTH` | Stealth transfer announcement |
-| 17 | `REGISTER_NAME` | Register .zkey name |
+| 6 | `COMPLETE_REDEMPTION` | Relayer marks redemption complete |
+| 7 | `SET_PAUSED` | Admin pause/unpause |
+| 8 | `REGISTER_NAME` | Register .zkey name |
+| 9 | `UPDATE_NAME` | Update .zkey name data |
+| 10 | `TRANSFER_NAME` | Transfer .zkey name ownership |
+| 11 | `INIT_VK_REGISTRY` | Initialize VK hash registry for JoinSplit(N,M) |
+| 12 | `UPDATE_VK_REGISTRY` | Update VK hash (circuit upgrades) |
+| 13 | `ADD_DEMO_STEALTH` | Demo deposit (devnet only, disabled on mainnet) |
+| 14 | `TRANSACT` | JoinSplit N-to-M private transfer (Groth16) |
 
 ---
 
@@ -278,14 +333,15 @@ eph_priv (Ed25519) ─┐                          viewing_priv ─┐
 |-----------|------------|---------|
 | **Proof System** | Groth16 (BN254) via circom/snarkjs | ZK proof generation/verification |
 | **Hash Function** | Poseidon | ZK-friendly hashing |
-| **Commitment** | `Poseidon(pub_key_x, amount)` | Binding amounts to keys |
-| **Nullifier** | `Poseidon(Poseidon(priv_key, leaf_index))` | Double-spend prevention |
+| **Commitment** | `Poseidon(npk, token, amount)` | Binding amounts to keys |
+| **Nullifier** | `Poseidon(nullifyingKey, leafIndex)` | Double-spend prevention |
+| **Signature** | EdDSA-Poseidon | In-circuit authorization |
 | **Spending Keys** | Baby Jubjub (BN254 embedded curve) | In-circuit key derivation |
 | **Viewing Keys** | Ed25519 / X25519 | ECDH for stealth scanning |
 | **Amount Encryption** | XOR with SHA-256 derived key | Lightweight, deterministic |
 | **BTC Deposits** | Taproot (BIP-341) | Commitment-bound addresses |
 | **BTC Redemption** | FROST (secp256k1-tr) | 2-of-3 threshold signing |
-| **Merkle Tree** | Depth 20 (~1M leaves) | Commitment storage |
+| **Merkle Tree** | Depth 16 (65,536 leaves) | Commitment storage |
 | **Token** | zkBTC (Token-2022) | Shielded token standard |
 | **Viewing Key Encryption** | AES-GCM + PBKDF2 (150k iterations) | Delegated viewing keys |
 
@@ -322,13 +378,133 @@ eph_priv (Ed25519) ─┐                          viewing_priv ─┐
 
 | Program | Address |
 |---------|---------|
-| zVault | `GqdjVMBDmFEd6wSV4TzRsvnVWnE4pMMdhVo8U4iXvYUX` |
-| BTC Light Client | `S6rgPjCeBhkYBejWyDR1zzU3sYCMob36LAf8tjwj8pn` |
-| ChadBuffer | `C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF` |
+| zVault | `2qQPgW6LpzokD1Uemhy2Ng5Xjhr6VuHwJgC2GamUKzQB` |
+| BTC Light Client | `3xAPsqgkUfivNgrJiC2gzCb7XQ9Y4prw8uhPWhVMjhnk` |
+| ChadBuffer | `6VrJmWbhN9WbEkg87JizunVMpL6CHKGVmzWCf3o3LRgy` |
+
+> **Note**: Program IDs change on each deployment. The canonical source is `contracts/config.json` (deploy scripts) and `sdk/src/config.ts` (SDK).
+
+---
+
+## On-Chain Error Codes
+
+Custom error codes start at 6000 to avoid conflicts with Solana system errors.
+
+### Core Errors (6000–6020)
+
+| Code | Name | Description |
+|------|------|-------------|
+| 6000 | `PoolPaused` | Pool is paused by admin |
+| 6001 | `AmountTooSmall` | Deposit amount below minimum |
+| 6002 | `AmountTooLarge` | Deposit amount above maximum |
+| 6003 | `InvalidMerkleProof` | Merkle proof verification failed |
+| 6004 | `NullifierAlreadyUsed` | Double-spend attempt detected |
+| 6005 | `CommitmentNotFound` | Commitment not in Merkle tree |
+| 6006 | `InvalidCommitment` | Commitment hash is malformed |
+| 6007 | `InvalidBtcAddress` | Bitcoin address format invalid |
+| 6008 | `RedemptionNotFound` | Redemption request PDA not found |
+| 6009 | `RedemptionAlreadyCompleted` | Redemption already processed |
+| 6010 | `InvalidRedemptionState` | Redemption in wrong state for operation |
+| 6011 | `Unauthorized` | Signer not authorized |
+| 6012 | `InsufficientBalance` | Not enough balance |
+| 6013 | `Overflow` | Arithmetic overflow |
+| 6014 | `InvalidProofLength` | ZK proof bytes wrong length |
+| 6015 | `AlreadyMinted` | Deposit already claimed |
+| 6016 | `ZeroAmount` | Amount must be > 0 |
+| 6017 | `InvalidBlockHeader` | BTC block header invalid |
+| 6018 | `InsufficientConfirmations` | Not enough BTC confirmations |
+| 6019 | `InvalidSpvProof` | SPV proof verification failed |
+| 6020 | `TreeFull` | Commitment tree at capacity (65,536) |
+
+### ZK & Account Errors (6021–6030)
+
+| Code | Name | Description |
+|------|------|-------------|
+| 6021 | `InvalidRoot` | Merkle root not in history |
+| 6022 | `InvalidZkProof` | Groth16 proof malformed |
+| 6023 | `ZkVerificationFailed` | Groth16 pairing check failed |
+| 6024 | `NotInitialized` | Account not initialized |
+| 6025 | `AlreadyInitialized` | Account already initialized |
+| 6026 | `InvalidAccountOwner` | Wrong account owner |
+| 6027 | `InvalidAccountData` | Account data parse failure |
+| 6028 | `InvalidStealthOpReturn` | OP_RETURN stealth data invalid |
+| 6029 | `StealthDataNotFound` | No stealth data in transaction |
+| 6030 | `InsufficientFunds` | Shielded pool underfunded |
+
+### Security Errors (6060–6066)
+
+| Code | Name | Description |
+|------|------|-------------|
+| 6060 | `AccountNotWritable` | Required writable account is read-only |
+| 6061 | `InvalidMint` | Wrong token mint |
+| 6062 | `DemoDisabledOnMainnet` | Demo instructions rejected on mainnet |
+| 6063 | `NotRentExempt` | Account not rent-exempt |
+| 6064 | `DuplicateAccounts` | Same account passed twice |
+| 6065 | `AccountClosed` | Account has been closed |
+| 6066 | `InvalidVkRegistry` | VK registry doesn't match circuit variant |
+
+> Source: `contracts/programs/zvault/src/error.rs`
+
+---
+
+## On-Chain Account Layouts
+
+### CommitmentTree (3824 bytes)
+
+Incremental Merkle tree using Poseidon hashing. Discriminator: `0x05`. PDA seed: `"commitment_tree"`.
+
+```
+Offset  Size   Field
+──────  ─────  ─────────────────────────────────────
+0       1      discriminator (0x05)
+1       1      bump
+2       6      padding (alignment)
+8       32     current_root
+40      8      next_index (u64 LE, leaf count)
+48      512    frontier (16 × 32 bytes, rightmost filled nodes)
+560     3200   root_history (100 × 32 bytes, circular buffer)
+3760    4      root_history_index (u32 LE)
+3764    60     reserved
+──────  ─────  ─────────────────────────────────────
+Total: 3824 bytes
+```
+
+| Property | Value |
+|----------|-------|
+| Depth | 16 (65,536 max leaves) |
+| Hash function | Poseidon2 (BN254 scalar field) |
+| Root history | 100 entries (front-running protection) |
+| Zero hash | Pre-computed per level, matching circomlib |
+
+### VkRegistry (256 bytes)
+
+Stores Groth16 VK hashes for JoinSplit(N,M) variants. Discriminator: `0x14`. PDA seed: `"vk_registry"`.
+
+```
+Offset  Size   Field
+──────  ─────  ─────────────────────────────
+0       1      discriminator (0x14)
+1       1      padding
+2       1      n_inputs (JoinSplit N)
+3       1      n_outputs (JoinSplit M)
+4       32     authority (update key)
+36      32     vk_hash (Groth16 VK hash)
+68      188    reserved
+──────  ─────  ─────────────────────────────
+Total: 256 bytes
+```
+
+Public inputs per variant: `2 + N + M` (merkleRoot + boundParamsHash + N nullifiers + M commitments).
+
+> Source: `contracts/programs/zvault/src/state/commitment_tree.rs`, `vk_registry.rs`
 
 ---
 
 ## Related Documentation
 
-- [SDK Reference](./SDK.md) - TypeScript SDK guide
+- [Documentation Index](./INDEX.md) - All docs hub
+- [SDK Reference](../sdk/docs/SDK.md) - TypeScript SDK guide
+- [FROST Server](./FROST.md) - Threshold signing documentation
+- [Circuits](./CIRCUITS.md) - JoinSplit ZK circuit design
+- [How to Run](./RUNNING.md) - Operational guide for all services
 - [Main README](../README.md) - Project overview
