@@ -17,7 +17,15 @@
     "test:demo": "bun run scripts/test-demo-flow.ts",
     "test:name": "bun run scripts/test-name-registry.ts",
     "test:all": "bun run scripts/test-all.ts",
-    "setup:devnet": "bun run scripts/devnet-setup.ts"
+    "test:all:devnet": "NETWORK=devnet bun run scripts/test-all.ts",
+    "test:redemption": "bun run scripts/test-redemption-lifecycle.ts",
+    "test:redemption:devnet": "NETWORK=devnet bun run scripts/test-redemption-lifecycle.ts",
+    "setup:devnet": "bun run scripts/devnet-setup.ts",
+    "test:joinsplit": "bun run scripts/test-joinsplit-proof.ts",
+    "setup:localnet": "bun run scripts/setup-localnet.ts",
+    "test:flows": "bun run scripts/test-user-flows.ts",
+    "regtest:up": "docker compose -f ../docker-compose.regtest.yml up -d",
+    "regtest:down": "docker compose -f ../docker-compose.regtest.yml down"
   },
   "dependencies": {
     "@noble/hashes": "^2.0.1",
