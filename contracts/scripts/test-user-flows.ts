@@ -53,6 +53,27 @@ import {
   serializeMerkleProof,
   stripWitnessData,
 } from "./regtest-helpers.js";
+import {
+  Seeds,
+  TREE_DEPTH,
+  derivePoolStatePDA,
+  deriveCommitmentTreePDA,
+  deriveVkRegistryPDA,
+  deriveNullifierPDA,
+  deriveStealthAnnouncementPDA,
+  deriveRedemptionPDA,
+  deriveDepositRecordPDA,
+  deriveLightClientPDA,
+  deriveBlockHeaderPDA,
+  parseCommitmentTree,
+  parsePoolState,
+  parseRedemptionRequest,
+  parseLightClientTipHeight,
+  createTxBufferAccount,
+  buildSubmitHeaderIx,
+  buildRequestRedemptionIx,
+  loadAuthorityKeypair,
+} from "./test-helpers.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -84,34 +105,13 @@ let PROGRAM_ID = loadProgramId();
 // Constants
 const ZBTC_TOKEN_ID = 0x7a627463n; // "zbtc" as u32
 const BN254_FIELD_PRIME = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
-const TREE_DEPTH = 16;
-const BUFFER_HEADER_SIZE = 32; // ChadBuffer authority pubkey
 
 // Instruction discriminators
 const Instruction = {
   VERIFY_STEALTH_DEPOSIT: 1,
   INIT_VK_REGISTRY: 11,
   TRANSACT: 14,
-  REQUEST_REDEMPTION: 5,
 } as const;
-
-// BTC Relay discriminators
-const BTCRelayDisc = {
-  SUBMIT_HEADER: 1,
-} as const;
-
-// Seeds
-const Seeds = {
-  POOL_STATE: "pool_state",
-  COMMITMENT_TREE: "commitment_tree",
-  VK_REGISTRY: "vk_registry",
-  NULLIFIER: "nullifier",
-  STEALTH_ANNOUNCEMENT: "stealth",
-  REDEMPTION: "redemption",
-  DEPOSIT: "deposit",
-  BTC_LIGHT_CLIENT: "btc_light_client",
-  BLOCK_HEADER: "block_header",
-};
 
 // =============================================================================
 // Poseidon Instance
@@ -205,111 +205,6 @@ function randomEphemeralPub(): Uint8Array {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
   return bytes;
-}
-
-// =============================================================================
-// PDA Derivations
-// =============================================================================
-
-function derivePoolStatePDA(): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync([Buffer.from(Seeds.POOL_STATE)], PROGRAM_ID);
-}
-
-function deriveCommitmentTreePDA(): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync([Buffer.from(Seeds.COMMITMENT_TREE)], PROGRAM_ID);
-}
-
-function deriveVkRegistryPDA(nInputs: number, nOutputs: number): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from(Seeds.VK_REGISTRY), Buffer.from([nInputs]), Buffer.from([nOutputs])],
-    PROGRAM_ID,
-  );
-}
-
-function deriveNullifierPDA(nullifierHash: Uint8Array): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from(Seeds.NULLIFIER), Buffer.from(nullifierHash)],
-    PROGRAM_ID,
-  );
-}
-
-function deriveStealthAnnouncementPDA(ephemeralPub: Uint8Array): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from(Seeds.STEALTH_ANNOUNCEMENT), Buffer.from(ephemeralPub)],
-    PROGRAM_ID,
-  );
-}
-
-function deriveRedemptionPDA(user: PublicKey, nonce: bigint): [PublicKey, number] {
-  const nonceBuf = Buffer.alloc(8);
-  nonceBuf.writeBigUInt64LE(nonce);
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from(Seeds.REDEMPTION), user.toBuffer(), nonceBuf],
-    PROGRAM_ID,
-  );
-}
-
-function deriveDepositRecordPDA(txid: Uint8Array): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from(Seeds.DEPOSIT), Buffer.from(txid)],
-    PROGRAM_ID,
-  );
-}
-
-function deriveLightClientPDA(btcLightClientId: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from(Seeds.BTC_LIGHT_CLIENT)],
-    btcLightClientId,
-  );
-}
-
-function deriveBlockHeaderPDA(height: bigint, btcLightClientId: PublicKey): [PublicKey, number] {
-  const heightBuf = Buffer.alloc(8);
-  heightBuf.writeBigUInt64LE(height);
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from(Seeds.BLOCK_HEADER), heightBuf],
-    btcLightClientId,
-  );
-}
-
-// =============================================================================
-// On-chain state parsers
-// =============================================================================
-
-function parseCommitmentTree(data: Buffer) {
-  if (data.length < 100 || data[0] !== 0x05) return null;
-  return {
-    discriminator: data[0],
-    bump: data[1],
-    currentRoot: data.subarray(8, 40),
-    nextIndex: data.readBigUInt64LE(40),
-    frontier: data.subarray(48, 48 + TREE_DEPTH * 32),
-  };
-}
-
-function parsePoolState(data: Buffer) {
-  if (data.length < 268 || data[0] !== 0x01) return null;
-  return {
-    totalMinted: data.readBigUInt64LE(140),
-    totalBurned: data.readBigUInt64LE(148),
-    pendingRedemptions: data.readBigUInt64LE(156),
-    totalShielded: data.readBigUInt64LE(188),
-  };
-}
-
-function parseRedemptionRequest(data: Buffer) {
-  if (data.length < 118 || data[0] !== 0x04) return null;
-  return {
-    status: data[1],
-    requester: new PublicKey(data.subarray(16, 48)),
-    amountSats: data.readBigUInt64LE(48),
-    btcAddressLen: data[2],
-  };
-}
-
-function parseLightClientTipHeight(data: Buffer): bigint | null {
-  if (data.length < 144 || data[0] !== 0x06) return null;
-  return data.readBigUInt64LE(136);
 }
 
 // =============================================================================
@@ -528,76 +423,6 @@ function serializeGroth16Proof(proof: any): Uint8Array {
 }
 
 // =============================================================================
-// ChadBuffer Account Creation (upload raw tx data)
-// =============================================================================
-
-async function createTxBufferAccount(
-  connection: Connection,
-  payer: Keypair,
-  rawTx: Uint8Array,
-  chadbufferId: PublicKey,
-): Promise<Keypair> {
-  const bufferKeypair = Keypair.generate();
-  const space = BUFFER_HEADER_SIZE + rawTx.length;
-  const lamports = await connection.getMinimumBalanceForRentExemption(space);
-
-  // Step 1: Create account owned by ChadBuffer
-  const createIx = SystemProgram.createAccount({
-    fromPubkey: payer.publicKey,
-    newAccountPubkey: bufferKeypair.publicKey,
-    lamports,
-    space,
-    programId: chadbufferId,
-  });
-  const createTx = new Transaction().add(createIx);
-  await sendAndConfirmTransaction(connection, createTx, [payer, bufferKeypair], { commitment: "confirmed" });
-
-  // Step 2: Init with first chunk (disc=0)
-  const MAX_CHUNK = 900;
-  const firstChunk = rawTx.slice(0, MAX_CHUNK);
-  const initData = new Uint8Array(1 + firstChunk.length);
-  initData[0] = 0; // Init discriminator
-  initData.set(firstChunk, 1);
-
-  const initIx = new TransactionInstruction({
-    programId: chadbufferId,
-    keys: [
-      { pubkey: payer.publicKey, isSigner: true, isWritable: true },
-      { pubkey: bufferKeypair.publicKey, isSigner: false, isWritable: true },
-    ],
-    data: Buffer.from(initData),
-  });
-  const initTx = new Transaction().add(initIx);
-  await sendAndConfirmTransaction(connection, initTx, [payer], { commitment: "confirmed" });
-
-  // Step 3: Write remaining chunks (disc=2) if needed
-  let offset = firstChunk.length;
-  while (offset < rawTx.length) {
-    const chunk = rawTx.slice(offset, offset + MAX_CHUNK);
-    const writeData = new Uint8Array(1 + 3 + chunk.length);
-    writeData[0] = 2; // Write discriminator
-    writeData[1] = offset & 0xff;
-    writeData[2] = (offset >> 8) & 0xff;
-    writeData[3] = (offset >> 16) & 0xff;
-    writeData.set(chunk, 4);
-
-    const writeIx = new TransactionInstruction({
-      programId: chadbufferId,
-      keys: [
-        { pubkey: payer.publicKey, isSigner: true, isWritable: true },
-        { pubkey: bufferKeypair.publicKey, isSigner: false, isWritable: true },
-      ],
-      data: Buffer.from(writeData),
-    });
-    const writeTx = new Transaction().add(writeIx);
-    await sendAndConfirmTransaction(connection, writeTx, [payer], { commitment: "confirmed" });
-    offset += chunk.length;
-  }
-
-  return bufferKeypair;
-}
-
-// =============================================================================
 // Instruction Builders
 // =============================================================================
 
@@ -718,35 +543,6 @@ function buildVerifyStealthDepositIx(
   });
 }
 
-/**
- * Submit block header to BTC relay (disc=1)
- * Data: disc(1) + raw_header(80) + block_height(8)
- */
-function buildSubmitHeaderIx(
-  lightClient: PublicKey,
-  blockHeaderPda: PublicKey,
-  submitter: PublicKey,
-  rawHeader: Uint8Array,
-  blockHeight: bigint,
-  btcLightClientId: PublicKey,
-): TransactionInstruction {
-  const data = Buffer.alloc(89);
-  data[0] = BTCRelayDisc.SUBMIT_HEADER;
-  Buffer.from(rawHeader).copy(data, 1);
-  data.writeBigUInt64LE(blockHeight, 81);
-
-  return new TransactionInstruction({
-    keys: [
-      { pubkey: lightClient, isSigner: false, isWritable: true },
-      { pubkey: blockHeaderPda, isSigner: false, isWritable: true },
-      { pubkey: submitter, isSigner: true, isWritable: true },
-      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-    ],
-    programId: btcLightClientId,
-    data,
-  });
-}
-
 function buildTransactIx(
   poolState: PublicKey,
   commitmentTree: PublicKey,
@@ -803,54 +599,6 @@ function buildTransactIx(
   return new TransactionInstruction({ keys, programId: PROGRAM_ID, data });
 }
 
-function buildRequestRedemptionIx(
-  poolState: PublicKey,
-  commitmentTree: PublicKey,
-  nullifierRecord: PublicKey,
-  redemptionRequest: PublicKey,
-  user: PublicKey,
-  params: {
-    proofHash: Uint8Array;
-    merkleRoot: Uint8Array;
-    nullifierHash: Uint8Array;
-    amountSats: bigint;
-    vkHash: Uint8Array;
-    btcAddress: string;
-    nonce: bigint;
-  },
-): TransactionInstruction {
-  const btcAddrBytes = Buffer.from(params.btcAddress, "utf-8");
-  const nonceBuf = Buffer.alloc(8);
-  nonceBuf.writeBigUInt64LE(params.nonce);
-
-  const dataLen = 1 + 32 + 32 + 32 + 8 + 32 + 1 + btcAddrBytes.length + 8;
-  const data = Buffer.alloc(dataLen);
-  let off = 0;
-
-  data[off++] = Instruction.REQUEST_REDEMPTION;
-  Buffer.from(params.proofHash).copy(data, off); off += 32;
-  Buffer.from(params.merkleRoot).copy(data, off); off += 32;
-  Buffer.from(params.nullifierHash).copy(data, off); off += 32;
-  data.writeBigUInt64LE(params.amountSats, off); off += 8;
-  Buffer.from(params.vkHash).copy(data, off); off += 32;
-  data[off++] = btcAddrBytes.length;
-  btcAddrBytes.copy(data, off); off += btcAddrBytes.length;
-  nonceBuf.copy(data, off);
-
-  return new TransactionInstruction({
-    keys: [
-      { pubkey: poolState, isSigner: false, isWritable: true },
-      { pubkey: commitmentTree, isSigner: false, isWritable: false },
-      { pubkey: nullifierRecord, isSigner: false, isWritable: true },
-      { pubkey: redemptionRequest, isSigner: false, isWritable: true },
-      { pubkey: user, isSigner: true, isWritable: true },
-      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-    ],
-    programId: PROGRAM_ID,
-    data,
-  });
-}
-
 // =============================================================================
 // Helpers
 // =============================================================================
@@ -889,19 +637,7 @@ async function main() {
 
   const connection = new Connection(RPC_URL, "confirmed");
 
-  // Load authority keypair
-  let keypairPath = process.env.KEYPAIR || "";
-  if (!keypairPath) {
-    try {
-      const configOut = execSync("solana config get", { encoding: "utf-8" });
-      const match = configOut.match(/Keypair Path:\s*(.+)/);
-      if (match) keypairPath = match[1].trim();
-    } catch {}
-  }
-  if (!keypairPath) keypairPath = `${process.env.HOME}/.config/solana/id.json`;
-  const authority = Keypair.fromSecretKey(
-    Uint8Array.from(JSON.parse(fs.readFileSync(keypairPath, "utf-8"))),
-  );
+  const authority = loadAuthorityKeypair();
 
   // Fund
   const balance = await connection.getBalance(authority.publicKey);
@@ -918,8 +654,8 @@ async function main() {
   console.log("  Done");
 
   // Derive PDAs
-  const [poolState] = derivePoolStatePDA();
-  const [commitmentTree] = deriveCommitmentTreePDA();
+  const [poolState] = derivePoolStatePDA(PROGRAM_ID);
+  const [commitmentTree] = deriveCommitmentTreePDA(PROGRAM_ID);
 
   // Load localnet config for mint/vault/programs
   const localConfig = loadLocalnetConfig();
@@ -956,7 +692,7 @@ async function main() {
     const vkJsonPath = path.resolve(__dirname, `../../circuits/build/${circuitName}/${circuitName}.vkey.json`);
     const vkJson = JSON.parse(fs.readFileSync(vkJsonPath, "utf-8"));
     const vkHash = computeVkHash(vkJson);
-    const [vkRegistry] = deriveVkRegistryPDA(nIn, nOut);
+    const [vkRegistry] = deriveVkRegistryPDA(PROGRAM_ID,nIn, nOut);
 
     const existing = await connection.getAccountInfo(vkRegistry);
     if (existing && existing.data[0] === 0x14) {
@@ -1047,7 +783,7 @@ async function main() {
   const newBlockHeight = BigInt(blockHeight);
   console.log(`  Light client tip: height=${tipHeight}, submitting block ${newBlockHeight}`);
 
-  const [blockHeaderPda] = deriveBlockHeaderPDA(newBlockHeight, BTC_LIGHT_CLIENT_ID);
+  const [blockHeaderPda] = deriveBlockHeaderPDA(BTC_LIGHT_CLIENT_ID, newBlockHeight);
 
   const submitHeaderIx = buildSubmitHeaderIx(
     lightClient, blockHeaderPda, authority.publicKey,
@@ -1063,7 +799,7 @@ async function main() {
   console.log(`  ChadBuffer: ${bufferKeypair.publicKey.toBase58().slice(0, 20)}...`);
 
   // Step: Call verify_stealth_deposit
-  const [depositRecord] = deriveDepositRecordPDA(txHash);
+  const [depositRecord] = deriveDepositRecordPDA(PROGRAM_ID,txHash);
   console.log(`  Deposit record PDA: ${depositRecord.toBase58().slice(0, 20)}...`);
 
   const verifyDepositIx = buildVerifyStealthDepositIx(
@@ -1176,10 +912,10 @@ async function main() {
   // Submit TRANSACT
   const nullifierBytes0 = bigintToBytes32BE(nullifier0);
   const commitmentBytes1 = bigintToBytes32BE(commitment1);
-  const [nullifierPDA0] = deriveNullifierPDA(nullifierBytes0);
+  const [nullifierPDA0] = deriveNullifierPDA(PROGRAM_ID,nullifierBytes0);
   const ephPub1 = randomEphemeralPub();
-  const [stealthAnn1] = deriveStealthAnnouncementPDA(ephPub1);
-  const [vkRegistry1x1] = deriveVkRegistryPDA(1, 1);
+  const [stealthAnn1] = deriveStealthAnnouncementPDA(PROGRAM_ID,ephPub1);
+  const [vkRegistry1x1] = deriveVkRegistryPDA(PROGRAM_ID,1, 1);
 
   const transactIx2 = buildTransactIx(
     poolState, commitmentTree, vkRegistry1x1, authority.publicKey,
@@ -1294,12 +1030,12 @@ async function main() {
   const nullifierBytes1 = bigintToBytes32BE(nullifier1);
   const commitmentBytes2 = bigintToBytes32BE(commitment2);
   const commitmentBytes3 = bigintToBytes32BE(commitment3);
-  const [nullifierPDA1] = deriveNullifierPDA(nullifierBytes1);
+  const [nullifierPDA1] = deriveNullifierPDA(PROGRAM_ID,nullifierBytes1);
   const ephPub2 = randomEphemeralPub();
   const ephPub3 = randomEphemeralPub();
-  const [stealthAnn2] = deriveStealthAnnouncementPDA(ephPub2);
-  const [stealthAnn3] = deriveStealthAnnouncementPDA(ephPub3);
-  const [vkRegistry1x2] = deriveVkRegistryPDA(1, 2);
+  const [stealthAnn2] = deriveStealthAnnouncementPDA(PROGRAM_ID,ephPub2);
+  const [stealthAnn3] = deriveStealthAnnouncementPDA(PROGRAM_ID,ephPub3);
+  const [vkRegistry1x2] = deriveVkRegistryPDA(PROGRAM_ID,1, 2);
 
   const transactIx3 = buildTransactIx(
     poolState, commitmentTree, vkRegistry1x2, authority.publicKey,
@@ -1394,12 +1130,13 @@ async function main() {
   const btcAddress = "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx";
   const requestNonce = 1n;
 
-  const [nullifierPDA2] = deriveNullifierPDA(nullifierBytes2);
-  const [redemptionPDA] = deriveRedemptionPDA(authority.publicKey, requestNonce);
+  const [nullifierPDA2] = deriveNullifierPDA(PROGRAM_ID,nullifierBytes2);
+  const [redemptionPDA] = deriveRedemptionPDA(PROGRAM_ID,authority.publicKey, requestNonce);
   console.log(`  Nullifier PDA: ${nullifierPDA2.toBase58().slice(0, 20)}...`);
   console.log(`  Redemption PDA: ${redemptionPDA.toBase58().slice(0, 20)}...`);
 
   const redemptionIx = buildRequestRedemptionIx(
+    PROGRAM_ID,
     poolState,
     commitmentTree,
     nullifierPDA2,
