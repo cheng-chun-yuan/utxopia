@@ -1,6 +1,16 @@
 /**
  * Full E2E Flow Test: Groth16 Verification — Claim + Spend Partial Public
  *
+ * ⚠️  DEPRECATED: This test uses legacy claim/spend_partial_public circuits.
+ * The current zVault implementation uses JoinSplit circuits instead.
+ *
+ * For current E2E tests, use:
+ * - scripts/e2e-mock-spv.ts - Mock SPV deposit flow
+ * - scripts/e2e-full-spv-flow.ts - Full SPV + JoinSplit flow
+ * - scripts/e2e-instructions.ts - Individual instruction tests
+ *
+ * This file is kept for reference only and tests will be skipped.
+ *
  * Tests the complete flow with real Groth16 proofs on localnet:
  * 1. Deposit → Merkle tree → Generate proof → Verify on-chain → Claim
  * 2. Deposit → Spend Partial Public with change commitment
@@ -45,25 +55,9 @@ import {
   type E2ETestContext,
 } from "./setup";
 
-import {
-  generateTestKeys,
-  createAndSubmitStealthDeposit,
-  scanAndPrepareClaim,
-  checkNullifierExists,
-  getTokenBalance,
-} from "./stealth-helpers";
-
-import { initPoseidon, poseidonHashSync, computeUnifiedCommitmentSync } from "../../src/poseidon";
-import { babyJubMul, BABYJUB_BASE8 } from "../../src/crypto";
-import { deriveNullifierRecordPDA, deriveStealthAnnouncementPDA } from "../../src/pda";
-import {
-  buildClaimInstruction,
-  buildSpendPartialPublicInstruction,
-  hexToBytes,
-  bigintTo32Bytes,
-} from "../../src/instructions";
-import { bigintToBytes, bytesToBigint } from "../../src/crypto";
-import { getConfig } from "../../src/config";
+// NOTE: Imports removed — this test file is DEPRECATED and all tests are describe.skip'd.
+// Legacy imports referenced removed modules (stealth-helpers, buildSpendPartialPublicInstruction).
+// For current tests, see: scripts/e2e-mock-spv.ts, scripts/e2e-full-spv-flow.ts
 
 import * as path from "path";
 import * as fs from "fs";
@@ -194,7 +188,7 @@ async function sendKitTransaction(
 let ctx: E2ETestContext;
 let skipTests = false;
 
-describe("Full E2E Flow — Groth16 Verification", () => {
+describe.skip("Full E2E Flow — Groth16 Verification (DEPRECATED - uses legacy circuits)", () => {
   beforeAll(async () => {
     // Initialize Poseidon
     await initPoseidon();

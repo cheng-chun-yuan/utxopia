@@ -1,0 +1,327 @@
+//! JoinSplit Transact instruction (Railgun-aligned)
+//!
+//! Unified instruction that replaces claim, spend_split, and spend_partial_public.
+//! Supports N inputs and M outputs with a single Groth16 proof.
+//!
+//! Instruction Data Layout:
+//! - [0]     n_inputs:         u8
+//! - [1]     n_outputs:        u8
+//! - [2..258]  proof:          [u8; 256]  (Groth16 proof)
+//! - [258..290] merkle_root:   [u8; 32]
+//! - [290..322] bound_params_hash: [u8; 32]
+//! - [322..]  nullifiers:      [[u8; 32]; n_inputs]
+//! - [..]     commitments_out: [[u8; 32]; n_outputs]
+//! - [..]     stealth_data:    [ephemeral_pub(32) + encrypted_amount(8)] × n_outputs
+//!
+//! Accounts:
+//! 0. pool_state         (writable)
+//! 1. commitment_tree    (writable)
+//! 2. vk_registry        (read)
+//! 3. user               (signer, payer)
+//! 4. system_program     (read)
+//! 5..5+n_inputs         nullifier_records (writable, PDA)
+//! 5+n_inputs..          stealth_announcements (writable, PDA)
+
+use pinocchio::{
+    account_info::AccountInfo,
+    program_error::ProgramError,
+    pubkey::{find_program_address, Pubkey},
+    sysvars::{clock::Clock, rent::Rent, Sysvar},
+    ProgramResult,
+};
+
+use crate::debug_msg;
+use crate::error::ZVaultError;
+use crate::state::{
+    CommitmentTree, NullifierOperationType, NullifierRecord, PoolState,
+    StealthAnnouncement, VkRegistry, NULLIFIER_RECORD_DISCRIMINATOR,
+    STEALTH_ANNOUNCEMENT_DISCRIMINATOR,
+};
+use crate::utils::groth16::GROTH16_PROOF_SIZE;
+use crate::utils::{
+    create_pda_account, validate_account_writable, validate_program_owner,
+    validate_system_program,
+};
+
+/// Maximum supported N + M (reduced from 14 to fit Solana tx limit)
+const MAX_JOINSPLIT_SIZE: usize = crate::constants::MAX_SAFE_JOINSPLIT_SIZE;
+
+/// Stealth data per output: ephemeral_pub (32) + encrypted_amount (8)
+const STEALTH_DATA_PER_OUTPUT: usize = 40;
+
+pub fn process_transact(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    data: &[u8],
+) -> ProgramResult {
+    // Parse header
+    if data.len() < 2 {
+        return Err(ProgramError::InvalidInstructionData);
+    }
+
+    let n_inputs = data[0] as usize;
+    let n_outputs = data[1] as usize;
+
+    if n_inputs == 0 || n_outputs == 0 || n_inputs + n_outputs > MAX_JOINSPLIT_SIZE {
+        debug_msg!("Invalid JoinSplit dimensions");
+        return Err(ProgramError::InvalidInstructionData);
+    }
+
+    // Calculate expected data length
+    let header_size = 2 + GROTH16_PROOF_SIZE + 32 + 32; // n_inputs + n_outputs + proof + root + boundParamsHash
+    let nullifiers_size = n_inputs * 32;
+    let commitments_size = n_outputs * 32;
+    let stealth_size = n_outputs * STEALTH_DATA_PER_OUTPUT;
+    let expected_len = header_size + nullifiers_size + commitments_size + stealth_size;
+
+    if data.len() < expected_len {
+        debug_msg!("Instruction data too short");
+        return Err(ProgramError::InvalidInstructionData);
+    }
+
+    // Parse instruction data
+    let mut offset = 2;
+
+    let proof_bytes = &data[offset..offset + GROTH16_PROOF_SIZE];
+    offset += GROTH16_PROOF_SIZE;
+
+    let merkle_root: &[u8; 32] = data[offset..offset + 32].try_into().unwrap();
+    offset += 32;
+
+    let bound_params_hash: &[u8; 32] = data[offset..offset + 32].try_into().unwrap();
+    offset += 32;
+
+    // Verify bound params hash matches expected value for this chain.
+    // This prevents cross-chain replay attacks.
+    {
+        let expected = crate::utils::crypto::compute_bound_params_hash_private_transfer(
+            crate::constants::CHAIN_ID,
+        );
+        if *bound_params_hash != expected {
+            debug_msg!("Invalid bound params hash");
+            return Err(ZVaultError::InvalidBoundParams.into());
+        }
+    }
+
+    // Parse nullifiers (stack-allocated, no heap)
+    const ZERO_REF: &[u8; 32] = &[0u8; 32];
+    let mut nullifiers: [&[u8; 32]; MAX_JOINSPLIT_SIZE] = [ZERO_REF; MAX_JOINSPLIT_SIZE];
+    for i in 0..n_inputs {
+        nullifiers[i] = data[offset..offset + 32].try_into().unwrap();
+        offset += 32;
+    }
+
+    // Parse output commitments (stack-allocated, no heap)
+    let mut commitments_out: [&[u8; 32]; MAX_JOINSPLIT_SIZE] = [ZERO_REF; MAX_JOINSPLIT_SIZE];
+    for i in 0..n_outputs {
+        commitments_out[i] = data[offset..offset + 32].try_into().unwrap();
+        offset += 32;
+    }
+
+    // Parse stealth data
+    let stealth_data_start = offset;
+
+    // Validate account count
+    let min_accounts = 5 + n_inputs + n_outputs;
+    if accounts.len() < min_accounts {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    }
+
+    let pool_state_info = &accounts[0];
+    let commitment_tree_info = &accounts[1];
+    let vk_registry_info = &accounts[2];
+    let user = &accounts[3];
+    let system_program = &accounts[4];
+
+    // Validate accounts
+    validate_program_owner(pool_state_info, program_id)?;
+    validate_program_owner(commitment_tree_info, program_id)?;
+    validate_program_owner(vk_registry_info, program_id)?;
+    validate_system_program(system_program)?;
+    validate_account_writable(pool_state_info)?;
+    validate_account_writable(commitment_tree_info)?;
+
+    if !user.is_signer() {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    // Validate pool is not paused
+    {
+        let pool_data = pool_state_info.try_borrow_data()?;
+        let pool = PoolState::from_bytes(&pool_data)?;
+        if pool.is_paused() {
+            return Err(ZVaultError::PoolPaused.into());
+        }
+    }
+
+    // Validate VK registry for this (N, M) variant
+    {
+        let vk_data = vk_registry_info.try_borrow_data()?;
+        let vk = VkRegistry::from_bytes(&vk_data)?;
+
+        if vk.n_inputs != n_inputs as u8 || vk.n_outputs != n_outputs as u8 {
+            debug_msg!("VK registry mismatch");
+            return Err(ZVaultError::InvalidVkRegistry.into());
+        }
+    }
+
+    // Validate Merkle root
+    {
+        let tree_data = commitment_tree_info.try_borrow_data()?;
+        let tree = CommitmentTree::from_bytes(&tree_data)?;
+        if !tree.is_valid_root(merkle_root) {
+            debug_msg!("Invalid Merkle root");
+            return Err(ZVaultError::InvalidMerkleProof.into());
+        }
+    }
+
+    // Build public inputs array for verification (stack-allocated)
+    // Max public inputs: 2 (root + boundParams) + MAX_JOINSPLIT_SIZE = 16
+    const MAX_PUBLIC_INPUTS: usize = 2 + MAX_JOINSPLIT_SIZE;
+    let mut public_inputs: [&[u8; 32]; MAX_PUBLIC_INPUTS] = [ZERO_REF; MAX_PUBLIC_INPUTS];
+    let mut pi_len = 0;
+    public_inputs[pi_len] = merkle_root; pi_len += 1;
+    public_inputs[pi_len] = bound_params_hash; pi_len += 1;
+    for i in 0..n_inputs {
+        public_inputs[pi_len] = nullifiers[i]; pi_len += 1;
+    }
+    for i in 0..n_outputs {
+        public_inputs[pi_len] = commitments_out[i]; pi_len += 1;
+    }
+
+    // Load VK and verify Groth16 proof
+    let (delta_g2, ic) = crate::utils::groth16::load_joinsplit_vk(
+        n_inputs as u8, n_outputs as u8,
+    )?;
+
+    crate::utils::groth16::verify_groth16_joinsplit_proof(
+        proof_bytes, &public_inputs[..pi_len], delta_g2, ic,
+    )?;
+
+    debug_msg!("JoinSplit proof verified");
+
+    // Get clock and rent for PDA creation
+    let clock = Clock::get()?;
+    let rent = Rent::get()?;
+
+    // Process nullifiers: validate PDAs, check uniqueness, create accounts
+    for i in 0..n_inputs {
+        let nullifier_info = &accounts[5 + i];
+        validate_account_writable(nullifier_info)?;
+
+        // Derive and validate nullifier PDA
+        let nullifier_seeds: &[&[u8]] = &[NullifierRecord::SEED, nullifiers[i].as_ref()];
+        let (expected_pda, bump) = find_program_address(nullifier_seeds, program_id);
+        if nullifier_info.key() != &expected_pda {
+            debug_msg!("Invalid nullifier PDA");
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        // Check if nullifier already spent (account exists and initialized)
+        {
+            let nullifier_data = nullifier_info.try_borrow_data()?;
+            if !nullifier_data.is_empty() && nullifier_data[0] == NULLIFIER_RECORD_DISCRIMINATOR {
+                debug_msg!("Nullifier already spent");
+                return Err(ZVaultError::NullifierAlreadyUsed.into());
+            }
+        }
+
+        // Create nullifier PDA account
+        let bump_bytes = [bump];
+        let signer_seeds: &[&[u8]] = &[
+            NullifierRecord::SEED,
+            nullifiers[i].as_ref(),
+            &bump_bytes,
+        ];
+
+        create_pda_account(
+            user,
+            nullifier_info,
+            program_id,
+            rent.minimum_balance(NullifierRecord::LEN),
+            NullifierRecord::LEN as u64,
+            signer_seeds,
+        )?;
+
+        // Initialize nullifier record
+        {
+            let mut nullifier_data = nullifier_info.try_borrow_mut_data()?;
+            let record = NullifierRecord::init(&mut nullifier_data)?;
+            record.nullifier_hash.copy_from_slice(nullifiers[i]);
+            record.set_spent_at(clock.unix_timestamp);
+            record.spent_by.copy_from_slice(user.key().as_ref());
+            record.set_operation_type(NullifierOperationType::PrivateTransfer);
+        }
+    }
+
+    // Insert output commitments into Merkle tree and create stealth announcements
+    {
+        let mut tree_data = commitment_tree_info.try_borrow_mut_data()?;
+        let tree = CommitmentTree::from_bytes_mut(&mut tree_data)?;
+
+        for i in 0..n_outputs {
+            let leaf_index = tree.insert_leaf(commitments_out[i])?;
+
+            debug_msg!("Inserted commitment into tree");
+
+            // Parse stealth data for this output
+            let stealth_offset = stealth_data_start + i * STEALTH_DATA_PER_OUTPUT;
+            let ephemeral_pub: &[u8; 32] = data[stealth_offset..stealth_offset + 32]
+                .try_into()
+                .unwrap();
+            let encrypted_amount: [u8; 8] = data[stealth_offset + 32..stealth_offset + 40]
+                .try_into()
+                .unwrap();
+
+            // Create stealth announcement PDA
+            let announcement_info = &accounts[5 + n_inputs + i];
+            validate_account_writable(announcement_info)?;
+
+            let ann_seeds: &[&[u8]] = &[StealthAnnouncement::SEED, ephemeral_pub.as_ref()];
+            let (expected_ann_pda, ann_bump) = find_program_address(ann_seeds, program_id);
+            if announcement_info.key() != &expected_ann_pda {
+                debug_msg!("Invalid stealth announcement PDA");
+                return Err(ProgramError::InvalidSeeds);
+            }
+
+            // Check not already initialized
+            {
+                let ann_data = announcement_info.try_borrow_data()?;
+                if !ann_data.is_empty() && ann_data[0] == STEALTH_ANNOUNCEMENT_DISCRIMINATOR {
+                    return Err(ProgramError::AccountAlreadyInitialized);
+                }
+            }
+
+            let ann_bump_bytes = [ann_bump];
+            let ann_signer_seeds: &[&[u8]] = &[
+                StealthAnnouncement::SEED,
+                ephemeral_pub.as_ref(),
+                &ann_bump_bytes,
+            ];
+
+            create_pda_account(
+                user,
+                announcement_info,
+                program_id,
+                rent.minimum_balance(StealthAnnouncement::SIZE),
+                StealthAnnouncement::SIZE as u64,
+                ann_signer_seeds,
+            )?;
+
+            // Initialize stealth announcement
+            {
+                let mut ann_data = announcement_info.try_borrow_mut_data()?;
+                let announcement = StealthAnnouncement::init(&mut ann_data)?;
+                announcement.bump = ann_bump;
+                announcement.ephemeral_pub = *ephemeral_pub;
+                announcement.set_encrypted_amount(encrypted_amount);
+                announcement.commitment = *commitments_out[i];
+                announcement.set_leaf_index(leaf_index);
+                announcement.set_created_at(clock.unix_timestamp);
+            }
+        }
+    }
+
+    debug_msg!("JoinSplit transact completed");
+    Ok(())
+}

@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "init": "bun run init-light-client.ts",
+    "reset": "bun run reset-light-client.ts",
     "start": "bun run index.ts"
   },
   "dependencies": {

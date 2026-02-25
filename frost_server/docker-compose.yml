@@ -1,0 +1,63 @@
+services:
+  frost-signer-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: frost-signer-1
+    ports:
+      - "9001:9001"
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+    environment:
+      - RUST_LOG=info,frost_server=debug
+      - FROST_KEY_PASSWORD=testpassword123
+    entrypoint: ["/app/frost-server"]
+    command: [
+      "run", "--bind", "0.0.0.0:9001", "--id", "1",
+      "--password", "testpassword123", "--network", "testnet",
+      "--solana-rpc-url", "http://host.docker.internal:8899",
+      "--zvault-program-id", "2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV"
+    ]
+
+  frost-signer-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: frost-signer-2
+    ports:
+      - "9002:9002"
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+    environment:
+      - RUST_LOG=info,frost_server=debug
+      - FROST_KEY_PASSWORD=testpassword123
+    entrypoint: ["/app/frost-server"]
+    command: [
+      "run", "--bind", "0.0.0.0:9002", "--id", "2",
+      "--password", "testpassword123", "--network", "testnet",
+      "--solana-rpc-url", "http://host.docker.internal:8899",
+      "--zvault-program-id", "2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV"
+    ]
+
+  frost-signer-3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: frost-signer-3
+    ports:
+      - "9003:9003"
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+    environment:
+      - RUST_LOG=info,frost_server=debug
+      - FROST_KEY_PASSWORD=testpassword123
+    entrypoint: ["/app/frost-server"]
+    command: [
+      "run", "--bind", "0.0.0.0:9003", "--id", "3",
+      "--password", "testpassword123", "--network", "testnet",
+      "--solana-rpc-url", "http://host.docker.internal:8899",
+      "--zvault-program-id", "2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV"
+    ]

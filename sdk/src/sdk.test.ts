@@ -1,12 +1,10 @@
 /**
- * zVault SDK Tests (Consolidated)
+ * zVault SDK Tests (Consolidated) — JoinSplit Architecture
  *
  * Core tests for all SDK functionality:
- * - DEPOSIT: deposit, claimNote, claimPublic
- * - TRANSFER: splitNote, createClaimLink
- * - WITHDRAW: withdraw
+ * - DEPOSIT: depositToNote
+ * - TRANSFER: createClaimLink
  * - KEYS: deriveKeysFromSeed, createStealthMetaAddress
- * - YIELD POOL: createStealthPoolDeposit, scanPoolAnnouncements
  * - NAME REGISTRY: registerName utilities
  */
 
@@ -14,12 +12,11 @@ import { expect, test, describe } from "bun:test";
 import { address, createSolanaRpc, getProgramDerivedAddress, type Address } from "@solana/kit";
 
 // Core SDK imports
-import { depositToNote, claimNote, splitNote } from "./api";
+import { depositToNote } from "./api";
 import { generateNote, formatBtc, parseBtc } from "./note";
 import { createClaimLink, parseClaimLink } from "./claim-link";
 import { deriveKeysFromSeed, createStealthMetaAddress, encodeStealthMetaAddress, decodeStealthMetaAddress } from "./keys";
 import { createStealthDeposit, scanAnnouncements } from "./stealth";
-import { createStealthPoolDeposit, scanPoolAnnouncements, calculateYield, calculateTotalValue } from "./yield-pool";
 import { createEmptyMerkleProof, TREE_DEPTH } from "./merkle";
 import { poseidonHashSync, initPoseidon } from "./poseidon";
 import { generateBabyJubKeyPair, babyJubMul, BABYJUB_BASE8, isOnBabyJubCurve } from "./crypto";
@@ -27,8 +24,6 @@ import { buildRegisterNameData, hashName, isValidName, NAME_REGISTRY_SEED, ZVAUL
 
 // Test constants
 const TEST_SEED = new Uint8Array(32).fill(0x42);
-const POOL_ID = new Uint8Array(8).fill(0x01);
-
 // ============================================================================
 // 1. DEPOSIT Functions (BTC → zkBTC)
 // ============================================================================
@@ -49,8 +44,8 @@ describe("DEPOSIT", () => {
     expect(d1.taprootAddress).not.toBe(d2.taprootAddress);
   });
 
-  test("claimNote function exists", () => {
-    expect(typeof claimNote).toBe("function");
+  test("depositToNote function exists", () => {
+    expect(typeof depositToNote).toBe("function");
   });
 });
 
@@ -77,8 +72,11 @@ describe("TRANSFER", () => {
     expect(parsed?.secret).toBe(note.secret);
   });
 
-  test("splitNote function exists", () => {
-    expect(typeof splitNote).toBe("function");
+  test("claim link roundtrip", () => {
+    const note = generateNote(75_000n);
+    const link = createClaimLink(note);
+    const parsed = parseClaimLink(link);
+    expect(parsed?.amount).toBe(75_000n);
   });
 });
 
@@ -163,67 +161,7 @@ describe("KEY & STEALTH", () => {
 });
 
 // ============================================================================
-// 4. YIELD POOL Functions
-// ============================================================================
-
-describe("YIELD POOL", () => {
-  test("createStealthPoolDeposit() creates valid position", () => {
-    const keys = deriveKeysFromSeed(TEST_SEED);
-    const meta = createStealthMetaAddress(keys);
-
-    const pos = createStealthPoolDeposit(meta, 1_000_000n, 10n, POOL_ID);
-
-    expect(pos.principal).toBe(1_000_000n);
-    expect(pos.depositEpoch).toBe(10n);
-    expect(pos.commitment).toBeGreaterThan(0n);
-  });
-
-  test("scanPoolAnnouncements() finds own positions", () => {
-    const keys = deriveKeysFromSeed(TEST_SEED);
-    const meta = createStealthMetaAddress(keys);
-    const pos = createStealthPoolDeposit(meta, 1_000_000n, 10n, POOL_ID);
-
-    const found = scanPoolAnnouncements(keys, [{
-      poolId: pos.poolId,
-      ephemeralPub: pos.ephemeralPub,
-      principal: pos.principal,
-      depositEpoch: pos.depositEpoch,
-      poolCommitment: pos.commitmentBytes,
-      leafIndex: 0,
-      createdAt: BigInt(Date.now()),
-    }]);
-
-    expect(found.length).toBe(1);
-  });
-
-  test("calculateYield() computes correctly", () => {
-    // 1 BTC, 10 epochs, 5% rate
-    const yield_ = calculateYield(100_000_000n, 10n, 20n, 500);
-    expect(yield_).toBe(50_000_000n); // 0.5 BTC
-  });
-
-  test("calculateTotalValue() returns principal + yield", () => {
-    const keys = deriveKeysFromSeed(TEST_SEED);
-    const meta = createStealthMetaAddress(keys);
-    const pos = createStealthPoolDeposit(meta, 100_000_000n, 10n, POOL_ID);
-
-    const found = scanPoolAnnouncements(keys, [{
-      poolId: pos.poolId,
-      ephemeralPub: pos.ephemeralPub,
-      principal: pos.principal,
-      depositEpoch: pos.depositEpoch,
-      poolCommitment: pos.commitmentBytes,
-      leafIndex: 0,
-      createdAt: BigInt(Date.now()),
-    }]);
-
-    const total = calculateTotalValue(found[0], 20n, 500);
-    expect(total).toBe(150_000_000n); // 1 BTC + 0.5 BTC yield
-  });
-});
-
-// ============================================================================
-// 5. NAME REGISTRY (.zkey.sol)
+// 4. NAME REGISTRY (.zkey.sol)
 // ============================================================================
 
 describe("NAME REGISTRY", () => {
@@ -247,7 +185,7 @@ describe("NAME REGISTRY", () => {
 
     const data = buildRegisterNameData("test", meta.spendingPubKey, meta.viewingPubKey);
 
-    expect(data[0]).toBe(17); // REGISTER_NAME discriminator
+    expect(data[0]).toBe(8); // REGISTER_NAME discriminator
     expect(data[1]).toBe(4);  // name length
   });
 

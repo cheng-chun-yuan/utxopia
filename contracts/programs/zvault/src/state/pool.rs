@@ -45,12 +45,6 @@ pub struct PoolState {
     /// Number of pending redemption requests
     pending_redemptions: [u8; 8],
 
-    /// Number of direct claims
-    direct_claims: [u8; 8],
-
-    /// Number of split operations
-    split_count: [u8; 8],
-
     /// Timestamp of last update
     last_update: [u8; 8],
 
@@ -64,7 +58,7 @@ pub struct PoolState {
     total_shielded: [u8; 8],
 
     /// Reserved for future use
-    _reserved: [u8; 56],
+    _reserved: [u8; 72],
 }
 
 impl PoolState {
@@ -128,14 +122,6 @@ impl PoolState {
         u64::from_le_bytes(self.pending_redemptions)
     }
 
-    pub fn direct_claims(&self) -> u64 {
-        u64::from_le_bytes(self.direct_claims)
-    }
-
-    pub fn split_count(&self) -> u64 {
-        u64::from_le_bytes(self.split_count)
-    }
-
     pub fn last_update(&self) -> i64 {
         i64::from_le_bytes(self.last_update)
     }
@@ -177,14 +163,6 @@ impl PoolState {
         self.pending_redemptions = value.to_le_bytes();
     }
 
-    pub fn set_direct_claims(&mut self, value: u64) {
-        self.direct_claims = value.to_le_bytes();
-    }
-
-    pub fn set_split_count(&mut self, value: u64) {
-        self.split_count = value.to_le_bytes();
-    }
-
     pub fn set_last_update(&mut self, value: i64) {
         self.last_update = value.to_le_bytes();
     }
@@ -205,12 +183,6 @@ impl PoolState {
     pub fn increment_deposit_count(&mut self) -> Result<(), ProgramError> {
         let count = self.deposit_count();
         self.set_deposit_count(count.checked_add(1).ok_or(ProgramError::ArithmeticOverflow)?);
-        Ok(())
-    }
-
-    pub fn increment_direct_claims(&mut self) -> Result<(), ProgramError> {
-        let count = self.direct_claims();
-        self.set_direct_claims(count.checked_add(1).ok_or(ProgramError::ArithmeticOverflow)?);
         Ok(())
     }
 

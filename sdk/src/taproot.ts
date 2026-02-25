@@ -6,8 +6,9 @@
  * cryptographic binding between the BTC deposit and the claim.
  */
 
-import { taggedHash, bytesToHex, hexToBytes } from "./crypto";
+import { taggedHash, hexToBytes, bytesToHex } from "./crypto";
 import * as bech32 from "bech32";
+import { secp256k1 } from "@noble/curves/secp256k1.js";
 
 // zVault internal key (x-only pubkey)
 // In production, this should be the FROST threshold key
@@ -28,15 +29,15 @@ const INTERNAL_KEY_HEX =
  * @param internalKey - Optional custom internal key (x-only, 32 bytes)
  * @returns Taproot address (bc1p... or tb1p...)
  */
-export async function deriveTaprootAddress(
+export function deriveTaprootAddress(
   commitment: Uint8Array,
   network: "mainnet" | "testnet" | "regtest" = "testnet",
   internalKey?: Uint8Array
-): Promise<{
+): {
   address: string;
   outputKey: Uint8Array;
   tweak: Uint8Array;
-}> {
+} {
   // Use provided internal key or default
   const key = internalKey || hexToBytes(INTERNAL_KEY_HEX);
   if (key.length !== 32) {
@@ -47,21 +48,28 @@ export async function deriveTaprootAddress(
   const tweakInput = new Uint8Array(64);
   tweakInput.set(key, 0);
   tweakInput.set(commitment, 32);
-  const tweak = await taggedHash("TapTweak", tweakInput);
+  const tweak = taggedHash("TapTweak", tweakInput);
 
-  // For a full implementation, we would add tweak * G to the internal key
-  // This requires secp256k1 point arithmetic
-  // For now, we use a simplified approach that still provides binding
-
-  // Compute output key (simplified - in production use secp256k1)
-  // output_key = internal_key XOR tweak (simplified binding)
-  const outputKey = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) {
-    outputKey[i] = key[i] ^ tweak[i];
+  // BIP-341: output_key = lift_x(internal_key) + tweak * G
+  const tweakScalar = bytesToBigInt(tweak);
+  const SECP256K1_ORDER = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+  if (tweakScalar >= SECP256K1_ORDER) {
+    throw new Error("Tweak scalar exceeds curve order");
   }
 
+  // lift_x: recover full point from x-only key (even y per BIP-340)
+  const keyHex = "02" + bytesToHex(key);
+  const internalPoint = secp256k1.Point.fromHex(keyHex);
+  // tweak * G
+  const tweakPoint = secp256k1.Point.BASE.multiply(tweakScalar);
+  // Q = P + t*G
+  const outputPoint = internalPoint.add(tweakPoint);
+  // x-only output key (BIP-340): drop prefix from compressed form
+  const outputKeyHex = outputPoint.toHex(true); // 33-byte compressed hex
+  const outputKey = hexToBytes(outputKeyHex.slice(2)); // drop "02"/"03" prefix
+
   // Encode as bech32m address
-  const hrp = network === "mainnet" ? "bc" : "tb";
+  const hrp = network === "mainnet" ? "bc" : network === "regtest" ? "bcrt" : "tb";
   const words = bech32.bech32m.toWords(outputKey);
   // Witness version 1 for taproot
   const address = bech32.bech32m.encode(hrp, [1, ...words]);
@@ -81,28 +89,25 @@ export async function deriveTaprootAddress(
  * @param internalKey - Optional internal key
  * @returns true if address matches expected derivation
  */
-export async function verifyTaprootAddress(
+export function verifyTaprootAddress(
   address: string,
   commitment: Uint8Array,
   internalKey?: Uint8Array
-): Promise<boolean> {
+): boolean {
   try {
-    // Decode address
     const decoded = bech32.bech32m.decode(address);
     const witnessVersion = decoded.words[0];
     if (witnessVersion !== 1) {
-      return false; // Not a taproot address
+      return false;
     }
 
     const actualOutputKey = new Uint8Array(
       bech32.bech32m.fromWords(decoded.words.slice(1))
     );
 
-    // Derive expected address
     const network = decoded.prefix === "bc" ? "mainnet" : "testnet";
-    const expected = await deriveTaprootAddress(commitment, network, internalKey);
+    const expected = deriveTaprootAddress(commitment, network, internalKey);
 
-    // Compare output keys
     return arraysEqual(actualOutputKey, expected.outputKey);
   } catch {
     return false;
@@ -211,12 +216,189 @@ export function isValidBitcoinAddress(address: string): {
   }
 }
 
+function bytesToBigInt(bytes: Uint8Array): bigint {
+  let result = 0n;
+  for (let i = 0; i < bytes.length; i++) {
+    result = (result << 8n) | BigInt(bytes[i]);
+  }
+  return result;
+}
+
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
     if (a[i] !== b[i]) return false;
   }
   return true;
+}
+
+// ========== OP_RETURN Helpers ==========
+
+/** OP_RETURN payload size for deposit: ephemeralPub (32) + npk (32) = 64 bytes */
+export const DEPOSIT_OP_RETURN_SIZE = 64;
+
+/**
+ * Build a 64-byte OP_RETURN payload for non-interactive stealth deposits.
+ *
+ * Layout:
+ *   [0..32)  ephemeralPub     — Ed25519 public key
+ *   [32..64) npk              — Note public key (Poseidon hash)
+ *
+ * Amount is no longer embedded — the on-chain program reads it from the BTC output.
+ * The caller wraps this in an OP_RETURN script (0x6a + push opcode + payload).
+ */
+export function buildDepositOpReturn(
+  ephemeralPub: Uint8Array,
+  npk: Uint8Array,
+): Uint8Array {
+  if (ephemeralPub.length !== 32) throw new Error("ephemeralPub must be 32 bytes");
+  if (npk.length !== 32) throw new Error("npk must be 32 bytes");
+
+  const payload = new Uint8Array(DEPOSIT_OP_RETURN_SIZE);
+  payload.set(ephemeralPub, 0);
+  payload.set(npk, 32);
+  return payload;
+}
+
+/**
+ * Parse a 64-byte OP_RETURN payload back into its constituent fields.
+ *
+ * @returns Parsed fields, or null if data is not exactly 64 bytes.
+ */
+export function parseDepositOpReturn(data: Uint8Array): {
+  ephemeralPub: Uint8Array;
+  npk: Uint8Array;
+} | null {
+  if (data.length !== DEPOSIT_OP_RETURN_SIZE) return null;
+
+  return {
+    ephemeralPub: data.slice(0, 32),
+    npk: data.slice(32, 64),
+  };
+}
+
+/**
+ * Create an OP_RETURN script from an arbitrary payload (up to 80 bytes).
+ *
+ * Format: OP_RETURN (0x6a) + OP_PUSHDATA (length byte) + payload
+ */
+export function createOpReturnScriptFromPayload(payload: Uint8Array): Uint8Array {
+  if (payload.length > 80) throw new Error("OP_RETURN payload exceeds 80 bytes");
+
+  // For payloads <= 75 bytes, use a single-byte push opcode (OP_PUSH_N).
+  // For 76..80 bytes, use OP_PUSHDATA1 (0x4c) + 1-byte length.
+  if (payload.length <= 75) {
+    const script = new Uint8Array(2 + payload.length);
+    script[0] = 0x6a; // OP_RETURN
+    script[1] = payload.length; // direct push opcode
+    script.set(payload, 2);
+    return script;
+  } else {
+    const script = new Uint8Array(3 + payload.length);
+    script[0] = 0x6a; // OP_RETURN
+    script[1] = 0x4c; // OP_PUSHDATA1
+    script[2] = payload.length;
+    script.set(payload, 3);
+    return script;
+  }
+}
+
+/**
+ * Create an OP_RETURN script embedding a 32-byte commitment
+ *
+ * Format: OP_RETURN (0x6a) + PUSH32 (0x20) + commitment (32 bytes) = 34 bytes
+ */
+export function createOpReturnScript(commitment: Uint8Array): Uint8Array {
+  if (commitment.length !== 32) {
+    throw new Error("Commitment must be 32 bytes");
+  }
+  const script = new Uint8Array(34);
+  script[0] = 0x6a; // OP_RETURN
+  script[1] = 0x20; // Push 32 bytes
+  script.set(commitment, 2);
+  return script;
+}
+
+/**
+ * Parse a 32-byte commitment from an OP_RETURN script
+ *
+ * @returns The 32-byte commitment, or null if script is not a valid OP_RETURN
+ */
+export function parseOpReturnCommitment(script: Uint8Array): Uint8Array | null {
+  if (script.length !== 34) return null;
+  if (script[0] !== 0x6a) return null; // OP_RETURN
+  if (script[1] !== 0x20) return null; // Push 32
+  return script.slice(2);
+}
+
+/**
+ * Build a minimal mock BTC transaction with P2TR output and OP_RETURN commitment
+ *
+ * Structure: version(4) + 1 input(coinbase) + 2 outputs(P2TR + OP_RETURN) + locktime(4)
+ * Follows the pattern from sdk/scripts/e2e-mock-spv.ts
+ */
+export function buildMockBtcTransaction(
+  amountSats: bigint,
+  taprootOutputKey: Uint8Array,
+  commitment: Uint8Array
+): Uint8Array {
+  if (taprootOutputKey.length !== 32) {
+    throw new Error("Taproot output key must be 32 bytes");
+  }
+  if (commitment.length !== 32) {
+    throw new Error("Commitment must be 32 bytes");
+  }
+
+  const parts: Uint8Array[] = [];
+
+  // Version (4 bytes LE)
+  parts.push(new Uint8Array([0x02, 0x00, 0x00, 0x00]));
+
+  // Input count
+  parts.push(new Uint8Array([0x01]));
+
+  // Coinbase input: prev_txid(32) + prev_vout(4) + script_len(1) + script(4) + sequence(4)
+  const input = new Uint8Array(32 + 4 + 1 + 4 + 4);
+  input.fill(0x00, 0, 32);       // prev_txid = 0 (coinbase)
+  input.fill(0xff, 32, 36);      // prev_vout = 0xffffffff
+  input[36] = 0x04;              // script length = 4
+  input[37] = 0xde; input[38] = 0xad; input[39] = 0xbe; input[40] = 0xef;
+  input.fill(0xff, 41, 45);      // sequence = 0xffffffff
+  parts.push(input);
+
+  // Output count = 2
+  parts.push(new Uint8Array([0x02]));
+
+  // Output 0: P2TR (amount + scriptPubKey)
+  const out0 = new Uint8Array(8 + 1 + 34);
+  new DataView(out0.buffer, out0.byteOffset, 8).setBigUint64(0, amountSats, true);
+  out0[8] = 34;    // script length
+  out0[9] = 0x51;  // OP_1
+  out0[10] = 0x20; // Push 32
+  out0.set(taprootOutputKey, 11);
+  parts.push(out0);
+
+  // Output 1: OP_RETURN with commitment
+  const out1 = new Uint8Array(8 + 1 + 34);
+  // amount = 0 for OP_RETURN
+  out1[8] = 34;    // script length
+  out1[9] = 0x6a;  // OP_RETURN
+  out1[10] = 0x20; // Push 32
+  out1.set(commitment, 11);
+  parts.push(out1);
+
+  // Locktime (4 bytes)
+  parts.push(new Uint8Array([0x00, 0x00, 0x00, 0x00]));
+
+  // Concatenate all parts
+  const totalLen = parts.reduce((sum, p) => sum + p.length, 0);
+  const rawTx = new Uint8Array(totalLen);
+  let offset = 0;
+  for (const p of parts) {
+    rawTx.set(p, offset);
+    offset += p.length;
+  }
+  return rawTx;
 }
 
 /**

@@ -13,7 +13,7 @@ import { initializeLightClient, getLightClientState, hexToBytes, bytesToHex } fr
 // Configuration from environment
 const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
 const PROGRAM_ID = new PublicKey(
-  process.env.PROGRAM_ID || 'S6rgPjCeBhkYBejWyDR1zzU3sYCMob36LAf8tjwj8pn'
+  process.env.PROGRAM_ID || 'DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS'
 );
 const BITCOIN_NETWORK = (process.env.BITCOIN_NETWORK || 'testnet') as BitcoinNetwork;
 const START_BLOCK_HEIGHT = process.env.START_BLOCK_HEIGHT
@@ -81,8 +81,8 @@ async function main() {
   // Convert to internal byte order (reversed)
   const blockHash = hexToBytesReversed(blockHashHex);
 
-  // Network ID: 0=mainnet, 1=testnet, 2=signet
-  const networkId = BITCOIN_NETWORK === 'mainnet' ? 0 : BITCOIN_NETWORK === 'testnet' ? 1 : 2;
+  // Network ID: 0=mainnet, 1=testnet, 2=regtest
+  const networkId = BITCOIN_NETWORK === 'mainnet' ? 0 : BITCOIN_NETWORK === 'regtest' ? 2 : 1;
 
   // Initialize
   console.log('\nInitializing light client...');

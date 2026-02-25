@@ -43,8 +43,8 @@ pub struct RedemptionService {
 }
 
 impl RedemptionService {
-    /// Create a new redemption service with single-key signer
-    pub fn new_with_signer(config: RedemptionConfig, signer: SingleKeySigner) -> Self {
+    /// Create a new redemption service with any TxSigner implementation
+    pub fn new_with_signer(config: RedemptionConfig, signer: impl TxSigner + 'static) -> Self {
         Self {
             watcher: Arc::new(RwLock::new(BurnWatcher::new_devnet())),
             queue: WithdrawalQueue::default(),
@@ -71,6 +71,7 @@ impl RedemptionService {
         user_solana_address: String,
         amount_sats: u64,
         btc_address: String,
+        redemption_nonce: Option<u64>,
     ) -> Result<String, ServiceError> {
         // Validate amount
         if amount_sats < self.config.min_withdrawal {
@@ -93,12 +94,13 @@ impl RedemptionService {
             .map_err(|e| ServiceError::InvalidAddress(e.to_string()))?;
 
         // Create request
-        let request = WithdrawalRequest::new(
+        let mut request = WithdrawalRequest::new(
             solana_burn_tx,
             user_solana_address,
             amount_sats,
             btc_address,
         );
+        request.redemption_nonce = redemption_nonce;
 
         let id = request.id.clone();
 
@@ -142,10 +144,25 @@ impl RedemptionService {
         self.queue.update(request.clone()).await.ok();
 
         // Build transaction
-        let unsigned = self
+        let mut unsigned = self
             .builder
             .build_withdrawal(&request, &utxos)
             .map_err(|e| ServiceError::BuildError(e.to_string()))?;
+
+        // Attach Solana verification data for FROST signers (if nonce is available)
+        if let Some(nonce) = request.redemption_nonce {
+            unsigned.solana_verification = Some(crate::frost_client::SolanaVerification::Withdrawal {
+                requester: request.user_solana_address.clone(),
+                nonce,
+                expected_amount_sats: request.amount_sats,
+                expected_btc_address: request.btc_address.clone(),
+            });
+        }
+
+        // TODO: Send mark_processing Solana instruction (disc=2) to transition
+        // RedemptionRequest PDA from Pending→Processing before FROST signing.
+        // This blocks user cancellation and is required by the FROST verifier.
+        // Requires SolClient integration into RedemptionService.
 
         // Update status to signing
         request.mark_signing();
@@ -155,6 +172,7 @@ impl RedemptionService {
         let signed_tx = self
             .signer
             .sign(&unsigned)
+            .await
             .map_err(|e| ServiceError::SignError(e.to_string()))?;
 
         // Serialize for broadcasting
@@ -165,12 +183,25 @@ impl RedemptionService {
         request.mark_broadcasting();
         self.queue.update(request.clone()).await.ok();
 
-        // Broadcast (simulated for POC)
-        // In production: self.esplora.broadcast_tx(&tx_hex).await?
-        println!("=== Broadcasting Transaction (Simulated) ===");
-        println!("TXID: {}", txid);
-        println!("Size: {} bytes", tx_hex.len() / 2);
-        println!("Fee: {} sats", unsigned.fee);
+        // Broadcast mode controlled by ZVAULT_BROADCAST_MODE env var
+        let broadcast_mode = std::env::var("ZVAULT_BROADCAST_MODE")
+            .unwrap_or_else(|_| "simulated".to_string());
+
+        if broadcast_mode == "real" {
+            println!("=== Broadcasting Transaction (Real) ===");
+            println!("TXID: {}", txid);
+            println!("Size: {} bytes", tx_hex.len() / 2);
+            println!("Fee: {} sats", unsigned.fee);
+            self.esplora
+                .broadcast_tx(&tx_hex)
+                .await
+                .map_err(|e| ServiceError::BroadcastError(e.to_string()))?;
+        } else {
+            println!("=== Broadcasting Transaction (Simulated) ===");
+            println!("TXID: {}", txid);
+            println!("Size: {} bytes", tx_hex.len() / 2);
+            println!("Fee: {} sats", unsigned.fee);
+        }
 
         // Update status to confirming
         request.mark_confirming(txid.clone());
@@ -263,7 +294,7 @@ impl RedemptionService {
         // Convert burns to withdrawal requests
         for burn in burns {
             match self
-                .submit_withdrawal(burn.signature, burn.user, burn.amount, burn.btc_address)
+                .submit_withdrawal(burn.signature, burn.user, burn.amount, burn.btc_address, None)
                 .await
             {
                 Ok(_) => result.requests_created += 1,
@@ -444,6 +475,7 @@ mod tests {
                 "user_pubkey".to_string(),
                 100_000,
                 "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx".to_string(),
+                None,
             )
             .await;
 
@@ -467,6 +499,7 @@ mod tests {
                 "user".to_string(),
                 100, // Too small
                 "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx".to_string(),
+                None,
             )
             .await;
 

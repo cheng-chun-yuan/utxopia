@@ -135,7 +135,7 @@ async fn cmd_withdraw(args: &[String]) {
     let service = get_service();
 
     match service
-        .submit_withdrawal(sol_tx.clone(), user.clone(), amount, btc_address.clone())
+        .submit_withdrawal(sol_tx.clone(), user.clone(), amount, btc_address.clone(), None)
         .await
     {
         Ok(id) => {

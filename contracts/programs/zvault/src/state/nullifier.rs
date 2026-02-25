@@ -44,11 +44,8 @@ pub struct NullifierRecord {
     /// User who spent this nullifier
     pub spent_by: [u8; 32],
 
-    /// Request ID that spent this nullifier
-    spent_in_request: [u8; 8],
-
     /// Reserved for future use
-    _reserved: [u8; 16],
+    _reserved: [u8; 8],
 }
 
 impl NullifierRecord {
@@ -104,10 +101,6 @@ impl NullifierRecord {
         i64::from_le_bytes(self.spent_at)
     }
 
-    pub fn spent_in_request(&self) -> u64 {
-        u64::from_le_bytes(self.spent_in_request)
-    }
-
     // Setters
     pub fn set_operation_type(&mut self, op_type: NullifierOperationType) {
         self.operation_type = op_type as u8;
@@ -117,7 +110,4 @@ impl NullifierRecord {
         self.spent_at = value.to_le_bytes();
     }
 
-    pub fn set_spent_in_request(&mut self, value: u64) {
-        self.spent_in_request = value.to_le_bytes();
-    }
 }

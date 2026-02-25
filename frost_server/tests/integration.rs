@@ -70,6 +70,9 @@ fn test_full_signing_flow() {
             session_id,
             sighash: sighash_hex.clone(),
             tweak: None,
+            signing_context: None,
+            merkle_root: None,
+            solana_verification: None,
         };
 
         let response: Round1Response = client
@@ -98,6 +101,7 @@ fn test_full_signing_flow() {
             tweak: None,
             commitments: commitments.clone(),
             identifier_map: identifier_map.clone(),
+            merkle_root: None,
         };
 
         let response: Round2Response = client
@@ -134,6 +138,7 @@ fn test_dkg_ceremony() {
 
     // DKG Round 1
     let mut round1_packages: BTreeMap<u16, String> = BTreeMap::new();
+    let mut x25519_pubkeys: BTreeMap<u16, String> = BTreeMap::new();
 
     for url in &SIGNER_URLS {
         let request = DkgRound1Request {
@@ -151,6 +156,7 @@ fn test_dkg_ceremony() {
             .expect("DKG round 1 parse failed");
 
         round1_packages.insert(response.signer_id, response.package);
+        x25519_pubkeys.insert(response.signer_id, response.x25519_public_key);
     }
 
     println!("DKG Round 1 complete: {} packages", round1_packages.len());
@@ -162,6 +168,7 @@ fn test_dkg_ceremony() {
         let request = DkgRound2Request {
             ceremony_id,
             round1_packages: round1_packages.clone(),
+            x25519_pubkeys: x25519_pubkeys.clone(),
         };
 
         let response: DkgRound2Response = client
@@ -195,6 +202,7 @@ fn test_dkg_ceremony() {
             ceremony_id,
             round1_packages: round1_packages.clone(),
             round2_packages: packages_for_signer,
+            x25519_pubkeys: x25519_pubkeys.clone(),
         };
 
         let response: DkgFinalizeResponse = client

@@ -1,0 +1,17 @@
+services:
+  esplora:
+    image: blockstream/esplora
+    container_name: zvault-esplora-regtest
+    command: ["/srv/explorer/run.sh", "bitcoin-regtest", "explorer"]
+    ports:
+      - "3000:80"       # Esplora REST API (nginx)
+    volumes:
+      - esplora-regtest-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost/regtest/api/blocks/tip/height"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+volumes:
+  esplora-regtest-data:

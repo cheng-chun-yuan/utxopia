@@ -78,7 +78,7 @@ pub struct LightClientState {
 
 impl LightClientState {
     pub const SIZE: usize = core::mem::size_of::<Self>();
-    pub const SEED: &'static [u8] = b"light_client";
+    pub const SEED: &'static [u8] = b"btc_light_client";
 
     pub fn from_bytes(data: &[u8]) -> Result<&Self, ProgramError> {
         if data.len() < Self::SIZE {

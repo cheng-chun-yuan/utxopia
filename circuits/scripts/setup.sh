@@ -1,8 +1,14 @@
 #!/bin/bash
-# Groth16 trusted setup for all circuits
+# Groth16 trusted setup for JoinSplit circuit variants
 # Uses Powers of Tau ceremony + circuit-specific Phase 2
 #
-# Requires: npx snarkjs (bun add -g npx snarkjs)
+# Usage:
+#   bash scripts/setup.sh             # Setup tier-1 (default)
+#   bash scripts/setup.sh --tier1     # Same as default
+#   bash scripts/setup.sh --tier2     # Tier-1 + additional variants
+#   bash scripts/setup.sh --all       # All compiled variants
+#
+# Requires: npx snarkjs
 
 set -e
 
@@ -11,19 +17,41 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$ROOT_DIR/build"
 PTAU_DIR="$BUILD_DIR/ptau"
 
-CIRCUITS=(
-  "claim"
-  "spend_split"
-  "spend_partial_public"
-  "pool_deposit"
-  "pool_withdraw"
-  "pool_claim_yield"
-)
+TIER="${1:---tier1}"
 
-# Powers of Tau size (2^16 = 65536 constraints should be sufficient)
-PTAU_POWER=16
+# Define tier variants (must match compile.sh)
+TIER1_CIRCUITS=("joinsplit_1x1" "joinsplit_1x2" "joinsplit_2x1" "joinsplit_2x2")
+TIER2_CIRCUITS=("${TIER1_CIRCUITS[@]}" "joinsplit_1x3" "joinsplit_3x1" "joinsplit_2x3" "joinsplit_3x2" "joinsplit_1x4" "joinsplit_4x1")
 
-echo "=== Groth16 Trusted Setup ==="
+case "$TIER" in
+  --tier1)
+    CIRCUITS=("${TIER1_CIRCUITS[@]}")
+    ;;
+  --tier2)
+    CIRCUITS=("${TIER2_CIRCUITS[@]}")
+    ;;
+  --all)
+    # Discover all compiled variants (those with .r1cs files)
+    CIRCUITS=()
+    for d in "$BUILD_DIR"/joinsplit_*/; do
+      [ -d "$d" ] || continue
+      name=$(basename "$d")
+      if [ -f "$d/${name}.r1cs" ]; then
+        CIRCUITS+=("$name")
+      fi
+    done
+    ;;
+  *)
+    echo "Unknown tier: $TIER"
+    echo "Usage: bash scripts/setup.sh [--tier1 | --tier2 | --all]"
+    exit 1
+    ;;
+esac
+
+# Powers of Tau size (2^18 = 262144 constraints — EdDSA-Poseidon adds ~5K constraints)
+PTAU_POWER=18
+
+echo "=== Groth16 Trusted Setup for ${#CIRCUITS[@]} variants ($TIER) ==="
 
 # Phase 1: Powers of Tau (shared across all circuits)
 mkdir -p "$PTAU_DIR"
@@ -74,8 +102,9 @@ for circuit in "${CIRCUITS[@]}"; do
 done
 
 echo ""
-echo "=== Trusted setup complete ==="
+echo "=== Trusted setup complete for ${#CIRCUITS[@]} variants ==="
 echo ""
 echo "Next steps:"
 echo "  1. Verify keys: npx snarkjs zkey verify build/<circuit>/<circuit>.r1cs $PTAU_FILE build/<circuit>/<circuit>.zkey"
-echo "  2. Generate proof: npx snarkjs groth16 fullprove input.json build/<circuit>/<circuit>_js/<circuit>.wasm build/<circuit>/<circuit>.zkey proof.json public.json"
+echo "  2. Export VK for Rust: node scripts/export-vk-rust.js <variant_name>"
+echo "  3. Copy to SDK: cp -r build/joinsplit_* ../sdk/circuits/"

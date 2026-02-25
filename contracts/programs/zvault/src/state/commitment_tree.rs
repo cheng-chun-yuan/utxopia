@@ -1,7 +1,7 @@
 //! Commitment tree state account (zero-copy)
 //!
 //! Implements a proper incremental Merkle tree using Poseidon hashing.
-//! The tree supports up to 2^20 (~1M) leaf commitments.
+//! The tree supports up to 2^16 (65536) leaf commitments.
 //!
 //! This implementation matches standard ZK protocols (Tornado Cash, Semaphore):
 //! - Pre-computed zero hashes for empty subtrees
@@ -14,8 +14,9 @@ use crate::utils::crypto::poseidon2_hash;
 /// Discriminator for CommitmentTree account
 pub const COMMITMENT_TREE_DISCRIMINATOR: u8 = 0x05;
 
-/// Maximum tree depth (supports 2^20 = ~1M commitments)
-pub const TREE_DEPTH: usize = 20;
+/// Maximum tree depth (supports 2^16 = 65536 commitments)
+/// Reduced from 20 for JoinSplit circuit compatibility.
+pub const TREE_DEPTH: usize = 16;
 
 /// Number of historical roots to keep (for front-running protection)
 pub const ROOT_HISTORY_SIZE: usize = 100;
@@ -45,10 +46,6 @@ pub const ZERO_HASHES: [[u8; 32]; TREE_DEPTH + 1] = [
     hex_literal::hex!("190d33b12f986f961e10c0ee44d8b9af11be25588cad89d416118e4bf4ebe80c"), // Level 14
     hex_literal::hex!("22f98aa9ce704152ac17354914ad73ed1167ae6596af510aa5b3649325e06c92"), // Level 15
     hex_literal::hex!("2a7c7c9b6ce5880b9f6f228d72bf6a575a526f29c66ecceef8b753d38bba7323"), // Level 16
-    hex_literal::hex!("2e8186e558698ec1c67af9c14d463ffc470043c9c2988b954d75dd643f36b992"), // Level 17
-    hex_literal::hex!("0f57c5571e9a4eab49e2c8cf050dae948aef6ead647392273546249d1c1ff10f"), // Level 18
-    hex_literal::hex!("1830ee67b5fb554ad5f63d4388800e1cfe78e310697d46e43c9ce36134f72cca"), // Level 19
-    hex_literal::hex!("2134e76ac5d21aab186c2be1dd8f84ee880a1e46eaf712f9d371b6df22191f3e"), // Level 20
 ];
 
 /// Commitment tree for Merkle proofs (zero-copy layout)
@@ -59,7 +56,7 @@ pub const ZERO_HASHES: [[u8; 32]; TREE_DEPTH + 1] = [
 /// - padding: 6 bytes
 /// - current_root: 32 bytes
 /// - next_index: 8 bytes
-/// - frontier: 20 * 32 = 640 bytes (rightmost filled nodes at each level)
+/// - frontier: 16 * 32 = 512 bytes (rightmost filled nodes at each level)
 /// - root_history: 100 * 32 = 3200 bytes
 /// - root_history_index: 4 bytes
 /// - reserved: 60 bytes
@@ -99,7 +96,7 @@ impl CommitmentTree {
     pub const LEN: usize = core::mem::size_of::<Self>();
     pub const SEED: &'static [u8] = b"commitment_tree";
 
-    /// Maximum number of leaves (2^20 = ~1M)
+    /// Maximum number of leaves (2^16 = 65536)
     pub const MAX_LEAVES: u64 = 1u64 << TREE_DEPTH;
 
     /// Parse from account data
@@ -204,7 +201,7 @@ impl CommitmentTree {
     pub fn insert_leaf(&mut self, commitment: &[u8; 32]) -> Result<u64, ProgramError> {
         let leaf_index = self.next_index();
         if leaf_index >= Self::MAX_LEAVES {
-            return Err(ProgramError::InvalidAccountData); // Tree full
+            return Err(crate::error::ZVaultError::TreeFull.into());
         }
 
         let mut current_hash = *commitment;

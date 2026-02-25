@@ -378,8 +378,8 @@ Offset   Field              Size    Description
 
 | Program | Address |
 |---------|---------|
-| zVault | `2qQPgW6LpzokD1Uemhy2Ng5Xjhr6VuHwJgC2GamUKzQB` |
-| BTC Light Client | `3xAPsqgkUfivNgrJiC2gzCb7XQ9Y4prw8uhPWhVMjhnk` |
+| zVault | `2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV` |
+| BTC Light Client | `DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS` |
 | ChadBuffer | `6VrJmWbhN9WbEkg87JizunVMpL6CHKGVmzWCf3o3LRgy` |
 
 > **Note**: Program IDs change on each deployment. The canonical source is `contracts/config.json` (deploy scripts) and `sdk/src/config.ts` (SDK).

@@ -23,32 +23,32 @@ beforeAll(async () => {
 });
 
 // Mock stealth announcement data builder
+// Layout must match parseAnnouncementData: disc(1) + bump(1) + ephemeralPub(32 Ed25519) + encryptedAmount(8) + commitment(32) + leafIndex(8) + createdAt(8) = 90
 function buildMockAnnouncementData(commitment: bigint, leafIndex: number): Uint8Array {
-  const data = new Uint8Array(91);
+  const data = new Uint8Array(90);
 
   // Discriminator (0x08 for StealthAnnouncement)
   data[0] = 0x08;
   // Bump
   data[1] = 0xff;
 
-  // Ephemeral pub (33 bytes) - mock compressed pubkey
-  data[2] = 0x02;
-  for (let i = 3; i < 35; i++) data[i] = i;
+  // Ephemeral pub (32 bytes Ed25519)
+  for (let i = 2; i < 34; i++) data[i] = i;
 
-  // Encrypted amount (8 bytes)
-  const amountView = new DataView(data.buffer, 35, 8);
+  // Encrypted amount (8 bytes) at offset 34
+  const amountView = new DataView(data.buffer, 34, 8);
   amountView.setBigUint64(0, 100000n, true);
 
-  // Commitment (32 bytes, big-endian)
+  // Commitment (32 bytes, big-endian) at offset 42
   const commitmentBytes = bigintToBytes(commitment);
-  data.set(commitmentBytes, 43);
+  data.set(commitmentBytes, 42);
 
-  // Leaf index (8 bytes, little-endian)
-  const indexView = new DataView(data.buffer, 75, 8);
+  // Leaf index (8 bytes, little-endian) at offset 74
+  const indexView = new DataView(data.buffer, 74, 8);
   indexView.setBigUint64(0, BigInt(leafIndex), true);
 
-  // Created at (8 bytes)
-  const timeView = new DataView(data.buffer, 83, 8);
+  // Created at (8 bytes) at offset 82
+  const timeView = new DataView(data.buffer, 82, 8);
   timeView.setBigInt64(0, BigInt(Date.now()), true);
 
   return data;

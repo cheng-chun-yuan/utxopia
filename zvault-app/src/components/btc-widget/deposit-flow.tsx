@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { getConnectionAdapter } from "@/lib/adapters/connection-adapter";
 import {
-  Copy, Check, AlertCircle, Key,
+  Copy, Check, AlertCircle, Key, Wallet,
   RefreshCw, QrCode, ExternalLink, Send, Tag, Info,
   Zap, Loader2, CheckCircle2
 } from "lucide-react";
@@ -15,11 +15,17 @@ import {
   lookupZkeyName,
   decodeStealthMetaAddress,
   bytesToHex,
+  hexToBytes,
   createStealthDeposit,
+  createNonInteractiveDeposit,
+  buildDepositPsbt,
+  selectUtxos,
+  getConfig,
   type StealthMetaAddress,
   type PreparedStealthDeposit,
 } from "@zvault/sdk";
 import { Tooltip } from "@/components/ui/tooltip";
+import { useBitcoinWalletStore } from "@/stores/bitcoin-wallet-store";
 
 // Network: "testnet" for tb1p... addresses, "mainnet" for bc1p... addresses
 const BITCOIN_NETWORK: "mainnet" | "testnet" = "testnet";
@@ -45,6 +51,12 @@ export function DepositFlow() {
   const [stealthDeposit, setStealthDeposit] = useState<PreparedStealthDeposit | null>(null);
   const [resolvingRecipient, setResolvingRecipient] = useState(false);
 
+  // Wallet deposit state (PSBT flow)
+  const [walletDepositAmount, setWalletDepositAmount] = useState("10000");
+  const [walletDepositing, setWalletDepositing] = useState(false);
+  const [walletDepositTxid, setWalletDepositTxid] = useState<string | null>(null);
+  const btcWallet = useBitcoinWalletStore();
+
   const resetFlow = () => {
     // Stealth mode reset
     setShowQR(false);
@@ -57,6 +69,9 @@ export function DepositFlow() {
     // Demo mode reset
     setDemoAmount("10000");
     setDemoResult(null);
+    // Wallet deposit reset
+    setWalletDepositAmount("10000");
+    setWalletDepositTxid(null);
   };
 
   // Demo mode: Submit mock stealth deposit via backend relayer (keeps user anonymous)
@@ -192,6 +207,76 @@ export function DepositFlow() {
       setError(err instanceof Error ? err.message : "Failed to prepare stealth deposit");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Wallet-integrated PSBT deposit
+  const submitWalletDeposit = async () => {
+    if (!resolvedMeta || !btcWallet.connected) return;
+
+    const amountSats = parseInt(walletDepositAmount);
+    if (!amountSats || amountSats < 546) {
+      notifyError("Amount must be at least 546 sats");
+      return;
+    }
+
+    setWalletDepositing(true);
+    setError(null);
+    setWalletDepositTxid(null);
+
+    try {
+      const config = getConfig();
+      const groupPubKey = hexToBytes(config.groupPubKey);
+
+      // 1. Create non-interactive deposit (client-side only, npk-based)
+      const deposit = await createNonInteractiveDeposit(
+        resolvedMeta,
+        groupPubKey,
+        BITCOIN_NETWORK,
+      );
+
+      // 2. Fetch wallet UTXOs
+      const utxos = await btcWallet.getPaymentUtxos();
+      if (utxos.length === 0) {
+        throw new Error("No confirmed UTXOs available in wallet");
+      }
+
+      // 3. Select UTXOs
+      const selected = selectUtxos(
+        utxos.map((u) => ({
+          txid: u.txid,
+          vout: u.vout,
+          value: u.value,
+          scriptPubkeyHex: u.scriptPubkeyHex,
+        })),
+        amountSats,
+        2, // fee rate: 2 sat/vB for testnet
+      );
+
+      // 4. Build PSBT
+      const psbtResult = buildDepositPsbt({
+        senderUtxos: selected,
+        depositAddress: deposit.btcAddress,
+        depositAmountSats: amountSats,
+        opReturnPayload: deposit.opReturnPayload,
+        changeAddress: btcWallet.address!,
+        feeRate: 2,
+        network: BITCOIN_NETWORK === "testnet" ? "testnet" : "mainnet",
+      });
+
+      // 5. Sign & broadcast via wallet
+      const { txid } = await btcWallet.signAndBroadcastPsbt(psbtResult.psbtBase64);
+
+      setWalletDepositTxid(txid);
+      notifySuccess(`Deposit broadcast! TxID: ${txid.slice(0, 12)}...`);
+
+      // Refresh balance
+      btcWallet.refreshBalance();
+    } catch (err) {
+      console.error("Wallet deposit error:", err);
+      setError(err instanceof Error ? err.message : "Wallet deposit failed");
+    } finally {
+      setWalletDepositing(false);
     }
   };
 
@@ -408,29 +493,132 @@ export function DepositFlow() {
             </>
           )}
 
-          {/* ========== NORMAL MODE: Generate Stealth Deposit ========== */}
-          {/* Generate Stealth Deposit Button - amount is determined by actual BTC sent */}
-          {!demoMode && resolvedMeta && !stealthDeposit && (
-            <button
-              onClick={generateStealthDeposit}
-              disabled={loading}
-              className={cn(
-                "btn-primary w-full mb-4",
-                "disabled:bg-gray/20 disabled:text-gray disabled:cursor-not-allowed"
-              )}
-            >
-              {loading ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  Generating...
-                </>
+          {/* ========== NORMAL MODE: Wallet Deposit or QR Code ========== */}
+          {!demoMode && resolvedMeta && !stealthDeposit && !walletDepositTxid && (
+            <>
+              {/* Wallet Deposit (PSBT) — shown when BTC wallet is connected */}
+              {btcWallet.connected ? (
+                <div className="mb-4">
+                  <label className="text-body2 text-gray-light pl-2 mb-2 block">Amount (satoshis)</label>
+                  <input
+                    type="number"
+                    value={walletDepositAmount}
+                    onChange={(e) => setWalletDepositAmount(e.target.value)}
+                    placeholder="10000"
+                    min="546"
+                    className={cn(
+                      "w-full p-3 bg-muted border border-gray/15 rounded-[12px] mb-1",
+                      "text-body2 font-mono text-foreground placeholder:text-gray",
+                      "outline-none focus:border-btc/40 transition-colors"
+                    )}
+                  />
+                  <p className="text-caption text-gray pl-2 mb-3">
+                    {walletDepositAmount ? `${(parseInt(walletDepositAmount) / 100_000_000).toFixed(8)} BTC` : ""}
+                    {btcWallet.balance !== null && ` · Balance: ${(btcWallet.balance / 100_000_000).toFixed(8)} BTC`}
+                  </p>
+
+                  <button
+                    onClick={submitWalletDeposit}
+                    disabled={walletDepositing || !walletDepositAmount || parseInt(walletDepositAmount) < 546}
+                    className={cn(
+                      "w-full py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2 mb-3",
+                      "bg-btc hover:bg-btc/90 text-background",
+                      "disabled:bg-gray/20 disabled:text-gray disabled:cursor-not-allowed"
+                    )}
+                  >
+                    {walletDepositing ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Building & Signing...
+                      </>
+                    ) : (
+                      <>
+                        <Wallet className="w-4 h-4" />
+                        Deposit via Wallet
+                      </>
+                    )}
+                  </button>
+
+                  <p className="text-caption text-gray text-center mb-3">— or —</p>
+
+                  <button
+                    onClick={generateStealthDeposit}
+                    disabled={loading}
+                    className={cn(
+                      "btn-secondary w-full",
+                      "disabled:bg-gray/20 disabled:text-gray disabled:cursor-not-allowed"
+                    )}
+                  >
+                    {loading ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <QrCode className="w-4 h-4" />
+                        Show QR Code Instead
+                      </>
+                    )}
+                  </button>
+                </div>
               ) : (
-                <>
-                  <Send className="w-4 h-4" />
-                  Generate Deposit Address
-                </>
+                /* No wallet connected — show QR code flow */
+                <button
+                  onClick={generateStealthDeposit}
+                  disabled={loading}
+                  className={cn(
+                    "btn-primary w-full mb-4",
+                    "disabled:bg-gray/20 disabled:text-gray disabled:cursor-not-allowed"
+                  )}
+                >
+                  {loading ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      Generate Deposit Address
+                    </>
+                  )}
+                </button>
               )}
-            </button>
+            </>
+          )}
+
+          {/* Wallet Deposit Result */}
+          {!demoMode && walletDepositTxid && (
+            <div className="mb-4">
+              <div className="p-4 bg-success/10 border border-success/30 rounded-[12px] mb-3">
+                <div className="flex items-center gap-2 text-success mb-2">
+                  <CheckCircle2 className="w-5 h-5" />
+                  <span className="text-body2-semibold">Deposit Broadcast!</span>
+                </div>
+                <p className="text-caption text-gray mb-2">
+                  Your BTC deposit has been sent. The backend will automatically detect, sweep, and verify it on Solana.
+                </p>
+                <code className="block text-[10px] font-mono text-btc bg-muted p-2 rounded-[8px] break-all">
+                  {walletDepositTxid}
+                </code>
+              </div>
+
+              <a
+                href={`https://mempool.space/testnet/tx/${walletDepositTxid}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-tertiary w-full mb-3 justify-center"
+              >
+                View on Mempool
+                <ExternalLink className="w-4 h-4" />
+              </a>
+
+              <button onClick={resetFlow} className="btn-secondary w-full">
+                <RefreshCw className="w-4 h-4" />
+                Start New Deposit
+              </button>
+            </div>
           )}
 
           {/* Stealth Deposit Result (Normal Mode) */}

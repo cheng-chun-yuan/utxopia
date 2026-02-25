@@ -69,6 +69,10 @@ import { lookupZkeyName, type ZkeyStealthAddress } from "./name-registry";
 import {
   poseidonHashSync,
   computeNullifierSync as poseidonComputeNullifier,
+  computeMPKSync,
+  computeNPKSync,
+  computeJoinSplitCommitmentSync,
+  computeJoinSplitNullifierSync,
 } from "./poseidon";
 
 // ========== Amount Encryption Helpers ==========
@@ -141,17 +145,19 @@ export interface ScannedNote {
 }
 
 /**
- * Prepared claim inputs for ZK proof (requires spending key)
+ * Prepared claim inputs for JoinSplit ZK proof (requires spending key)
  */
 export interface ClaimInputs {
   stealthPrivKey: bigint;
+  nullifyingKey: bigint;
   amount: bigint;
   leafIndex: number;
   merklePath: bigint[];
   merkleIndices: number[];
   merkleRoot: bigint;
   nullifier: bigint;
-  amountPub: bigint;
+  npk: bigint;
+  random: bigint;
 }
 
 // ========== On-chain Announcement ==========
@@ -171,6 +177,13 @@ export interface OnChainStealthAnnouncement {
 
 /** Domain separator for stealth key derivation */
 const STEALTH_KEY_DOMAIN = new TextEncoder().encode("zVault-stealth-v1");
+
+/**
+ * ZBTC token identifier for JoinSplit commitments.
+ * This is a fixed constant — Poseidon(npk, ZBTC_TOKEN_ID, amount).
+ * Value: SHA256("zbtc") mod BN254_SCALAR_FIELD, truncated to fit.
+ */
+export const ZBTC_TOKEN_ID = 0x7a627463n; // "zbtc" as u32 (simple, deterministic)
 
 /**
  * Derive stealth scalar from X25519 shared secret
@@ -216,13 +229,16 @@ function deriveStealthPrivKey(
 // ========== Sender Functions ==========
 
 /**
- * Create a stealth deposit
+ * Create a stealth deposit (JoinSplit-compatible)
  *
  * 1. Generate Ed25519 ephemeral keypair
  * 2. sharedSecret = X25519(ephemeral.priv, viewingPub)
  * 3. stealthPub = spendingPub + hash(sharedSecret) × BASE8
- * 4. commitment = Poseidon(stealthPub.x, amount)
- * 5. encryptedAmount = amount XOR sha256(sharedSecret)[0..8]
+ * 4. stealthMPK = Poseidon(stealthPub.x, stealthPub.y, nullifyingKey)
+ *    (sender uses recipientMPK from meta-address for stealth deposits)
+ * 5. npk = Poseidon(recipientMPK, random)
+ * 6. commitment = Poseidon(npk, ZBTC_TOKEN_ID, amount)
+ * 7. encryptedAmount = amount XOR sha256(sharedSecret)[0..8]
  */
 export async function createStealthDeposit(
   recipientMeta: StealthMetaAddress,
@@ -236,11 +252,15 @@ export async function createStealthDeposit(
   // X25519 ECDH: shared secret
   const sharedSecret = x25519Ecdh(ephemeral.privKey, viewingPubKey);
 
-  // Derive stealth public key (Baby Jubjub)
-  const stealthPub = deriveStealthPubKey(spendingPubKey, sharedSecret);
+  // Derive stealth scalar as the random value for NPK
+  const stealthScalar = deriveStealthScalar(sharedSecret);
 
-  // Compute commitment
-  const commitmentBigint = poseidonHashSync([stealthPub.x, amountSats]);
+  // Use recipient's MPK from meta-address to compute NPK
+  const recipientMPK = bytesToBigint(recipientMeta.mpk);
+  const npk = computeNPKSync(recipientMPK, stealthScalar);
+
+  // Compute JoinSplit commitment = Poseidon(npk, token, amount)
+  const commitmentBigint = computeJoinSplitCommitmentSync(npk, ZBTC_TOKEN_ID, amountSats);
   const commitment = bigintToBytes(commitmentBigint);
 
   // Encrypt amount
@@ -262,19 +282,22 @@ export interface StealthOutputWithKeys extends StealthOutputData {
 }
 
 /**
- * Create stealth deposit with stealthPubKeyX for circuit input
+ * Create stealth deposit with npk for JoinSplit circuit input
  */
 export async function createStealthDepositWithKeys(
   recipientMeta: StealthMetaAddress,
   amountSats: bigint
 ): Promise<StealthOutputWithKeys> {
-  const { spendingPubKey, viewingPubKey } = parseStealthMetaAddress(recipientMeta);
+  const { viewingPubKey } = parseStealthMetaAddress(recipientMeta);
 
   const ephemeral = ed25519GenerateKeyPair();
   const sharedSecret = x25519Ecdh(ephemeral.privKey, viewingPubKey);
-  const stealthPub = deriveStealthPubKey(spendingPubKey, sharedSecret);
 
-  const commitmentBigint = poseidonHashSync([stealthPub.x, amountSats]);
+  const stealthScalar = deriveStealthScalar(sharedSecret);
+  const recipientMPK = bytesToBigint(recipientMeta.mpk);
+  const npk = computeNPKSync(recipientMPK, stealthScalar);
+
+  const commitmentBigint = computeJoinSplitCommitmentSync(npk, ZBTC_TOKEN_ID, amountSats);
   const commitment = bigintToBytes(commitmentBigint);
   const encryptedAmount = encryptAmount(amountSats, sharedSecret);
 
@@ -282,7 +305,79 @@ export async function createStealthDepositWithKeys(
     ephemeralPub: new Uint8Array(ephemeral.pubKey),
     encryptedAmount,
     commitment,
-    stealthPubKeyX: stealthPub.x,
+    stealthPubKeyX: npk, // npk is the note public key for circuit
+  };
+}
+
+// ========== Non-Interactive Deposit (OP_RETURN) ==========
+
+/**
+ * Result of a non-interactive deposit preparation.
+ * Contains everything needed to build a PSBT with an OP_RETURN output.
+ *
+ * npk-based flow: user can send any amount of BTC. The commitment is
+ * computed on-chain from npk + actual amount.
+ */
+export interface NonInteractiveDepositResult {
+  /** Taproot address to send BTC to */
+  btcAddress: string;
+  /** 32-byte x-only output key for the deposit P2TR output */
+  depositOutputKey: Uint8Array;
+  /** 64-byte OP_RETURN payload (ephemeralPub || npk) */
+  opReturnPayload: Uint8Array;
+  /** 32-byte note public key (for tracking) */
+  npk: Uint8Array;
+  /** 32-byte Ed25519 ephemeral public key */
+  ephemeralPub: Uint8Array;
+}
+
+/**
+ * Create a non-interactive stealth deposit (npk-based).
+ *
+ * This is the client-side-only deposit flow: no backend API call needed.
+ * The ephemeral key and npk are embedded in the BTC transaction's OP_RETURN
+ * output so the backend can passively detect them.
+ *
+ * The user can send ANY amount of BTC — the commitment is computed on-chain
+ * from the npk + actual BTC amount received.
+ *
+ * @param recipientMeta - Recipient's stealth meta-address
+ * @param groupPubKey - FROST group public key (32-byte x-only), used as Taproot internal key
+ * @param network - Bitcoin network for address encoding
+ */
+export async function createNonInteractiveDeposit(
+  recipientMeta: StealthMetaAddress,
+  groupPubKey: Uint8Array,
+  network: "mainnet" | "testnet" | "regtest" = "testnet",
+): Promise<NonInteractiveDepositResult> {
+  const { viewingPubKey } = parseStealthMetaAddress(recipientMeta);
+
+  // 1. Generate ephemeral Ed25519 keypair
+  const ephemeral = ed25519GenerateKeyPair();
+
+  // 2. X25519 ECDH shared secret
+  const sharedSecret = x25519Ecdh(ephemeral.privKey, viewingPubKey);
+
+  // 3. Derive stealth scalar → NPK (no commitment — computed on-chain)
+  const stealthScalar = deriveStealthScalar(sharedSecret);
+  const recipientMPK = bytesToBigint(recipientMeta.mpk);
+  const npkBigint = computeNPKSync(recipientMPK, stealthScalar);
+  const npk = bigintToBytes(npkBigint);
+
+  // 4. Derive Taproot address from npk + group key
+  const { deriveTaprootAddress, buildDepositOpReturn } = await import("./taproot");
+  const { address: btcAddress, outputKey } = deriveTaprootAddress(npk, network, groupPubKey);
+
+  // 5. Build 64-byte OP_RETURN payload (ephemeralPub || npk)
+  const ephemeralPub = new Uint8Array(ephemeral.pubKey);
+  const opReturnPayload = buildDepositOpReturn(ephemeralPub, npk);
+
+  return {
+    btcAddress,
+    depositOutputKey: outputKey,
+    opReturnPayload,
+    npk,
+    ephemeralPub,
   };
 }
 
@@ -305,6 +400,9 @@ export async function scanAnnouncements(
   const found: ScannedNote[] = [];
   const MAX_SATS = 21_000_000n * 100_000_000n;
 
+  // Compute MPK for this key set
+  const mpk = computeMPKSync(keys.spendingPubKey.x, keys.spendingPubKey.y, keys.nullifyingKey);
+
   for (const ann of announcements) {
     try {
       // X25519 ECDH with viewing key
@@ -317,18 +415,18 @@ export async function scanAnnouncements(
         continue;
       }
 
-      // Derive stealth public key
+      // Derive stealth public key (still needed for spending)
       const stealthPub = deriveStealthPubKey(keys.spendingPubKey, sharedSecret);
 
-      // Verify commitment
-      const expectedCommitmentStealth = poseidonHashSync([stealthPub.x, amount]);
+      // Derive stealth scalar as random for NPK
+      const stealthScalar = deriveStealthScalar(sharedSecret);
+
+      // Compute expected NPK and commitment (JoinSplit format)
+      const npk = computeNPKSync(mpk, stealthScalar);
+      const expectedCommitment = computeJoinSplitCommitmentSync(npk, ZBTC_TOKEN_ID, amount);
       const actualCommitment = bytesToBigint(ann.commitment);
 
-      // Also try raw commitment for change outputs
-      const expectedCommitmentRaw = poseidonHashSync([keys.spendingPubKey.x, amount]);
-
-      if (expectedCommitmentStealth !== actualCommitment &&
-          expectedCommitmentRaw !== actualCommitment) {
+      if (expectedCommitment !== actualCommitment) {
         continue;
       }
 
@@ -361,6 +459,8 @@ export interface ViewOnlyKeys {
   viewingPrivKey: Uint8Array;
   /** Baby Jubjub spending public key */
   spendingPubKey: BabyJubPoint;
+  /** Nullifying key (needed for MPK computation in JoinSplit scanning) */
+  nullifyingKey: bigint;
 }
 
 /**
@@ -388,6 +488,13 @@ export async function scanAnnouncementsViewOnly(
   const found: ViewOnlyScannedNote[] = [];
   const MAX_SATS = 21_000_000n * 100_000_000n;
 
+  // Compute MPK for this key set
+  const mpk = computeMPKSync(
+    viewOnlyKeys.spendingPubKey.x,
+    viewOnlyKeys.spendingPubKey.y,
+    viewOnlyKeys.nullifyingKey
+  );
+
   for (const ann of announcements) {
     try {
       const sharedSecret = x25519Ecdh(viewOnlyKeys.viewingPrivKey, ann.ephemeralPub);
@@ -397,8 +504,9 @@ export async function scanAnnouncementsViewOnly(
         continue;
       }
 
-      const stealthPub = deriveStealthPubKey(viewOnlyKeys.spendingPubKey, sharedSecret);
-      const expectedCommitment = poseidonHashSync([stealthPub.x, amount]);
+      const stealthScalar = deriveStealthScalar(sharedSecret);
+      const npk = computeNPKSync(mpk, stealthScalar);
+      const expectedCommitment = computeJoinSplitCommitmentSync(npk, ZBTC_TOKEN_ID, amount);
       const actualCommitment = bytesToBigint(ann.commitment);
 
       if (expectedCommitment !== actualCommitment) {
@@ -430,6 +538,7 @@ export function exportViewOnlyKeys(keys: ZVaultKeys): ViewOnlyKeys {
   return {
     viewingPrivKey: keys.viewingPrivKey,
     spendingPubKey: keys.spendingPubKey,
+    nullifyingKey: keys.nullifyingKey,
   };
 }
 
@@ -463,25 +572,99 @@ export async function prepareClaimInputs(
     );
   }
 
-  // Compute nullifier
-  const nullifier = poseidonComputeNullifier(stealthPrivKey, BigInt(note.leafIndex));
+  // Derive the random value (stealth scalar) for NPK
+  const stealthScalar = deriveStealthScalar(sharedSecret);
+
+  // Compute MPK and NPK
+  const mpk = computeMPKSync(keys.spendingPubKey.x, keys.spendingPubKey.y, keys.nullifyingKey);
+  const npk = computeNPKSync(mpk, stealthScalar);
+
+  // Compute JoinSplit nullifier
+  const nullifier = computeJoinSplitNullifierSync(keys.nullifyingKey, BigInt(note.leafIndex));
 
   return {
     stealthPrivKey,
+    nullifyingKey: keys.nullifyingKey,
     amount: note.amount,
     leafIndex: note.leafIndex,
     merklePath: merkleProof.pathElements,
     merkleIndices: merkleProof.pathIndices,
     merkleRoot: merkleProof.root,
     nullifier,
-    amountPub: note.amount,
+    npk,
+    random: stealthScalar,
   };
 }
 
 // ========== On-chain Parsing ==========
 
 /**
+ * Parse a DepositRecord account data (on-chain, 200 bytes)
+ *
+ * Layout (200 bytes):
+ * - discriminator (1 byte)        offset 0
+ * - minted (1 byte)               offset 1
+ * - _padding (6 bytes)            offset 2
+ * - commitment (32 bytes)         offset 8   — computed on-chain
+ * - amount_sats (8 bytes LE)      offset 40  — plaintext
+ * - btc_txid (32 bytes)           offset 48
+ * - block_height (8 bytes LE)     offset 80
+ * - leaf_index (8 bytes LE)       offset 88
+ * - depositor (32 bytes)          offset 96
+ * - timestamp (8 bytes LE)        offset 128
+ * - ephemeral_pub (32 bytes)      offset 136
+ * - npk (32 bytes)                offset 168
+ */
+export function parseDepositRecord(data: Uint8Array): {
+  ephemeralPub: Uint8Array;
+  npk: Uint8Array;
+  commitment: Uint8Array;
+  amount: bigint;
+  leafIndex: number;
+  timestamp: number;
+} | null {
+  if (data.length < 200) return null;
+
+  // Discriminator check (0x02 for DepositRecord)
+  if (data[0] !== 0x02) return null;
+
+  const commitment = data.slice(8, 40);
+
+  const amountView = new DataView(data.buffer, data.byteOffset + 40, 8);
+  const amount = amountView.getBigUint64(0, true);
+
+  const leafIndexView = new DataView(data.buffer, data.byteOffset + 88, 8);
+  const leafIndexBigInt = leafIndexView.getBigUint64(0, true);
+  if (leafIndexBigInt > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error("Leaf index overflow");
+  }
+  const leafIndex = Number(leafIndexBigInt);
+
+  const timestampView = new DataView(data.buffer, data.byteOffset + 128, 8);
+  const timestampBigInt = timestampView.getBigInt64(0, true);
+  const timestamp = timestampBigInt < 0n ? 0 :
+    timestampBigInt > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER :
+    Number(timestampBigInt);
+
+  const ephemeralPub = data.slice(136, 168);
+  const npk = data.slice(168, 200);
+
+  return {
+    ephemeralPub,
+    npk,
+    commitment,
+    amount,
+    leafIndex,
+    timestamp,
+  };
+}
+
+/**
  * Parse a StealthAnnouncement account data (Ed25519 ephemeral key)
+ *
+ * @deprecated Use parseDepositRecord() instead. Stealth data is now stored
+ * in DepositRecord. This function is kept for backwards compatibility with
+ * existing on-chain StealthAnnouncement accounts.
  *
  * Layout (90 bytes):
  * - discriminator (1 byte)
@@ -548,6 +731,7 @@ export function parseStealthAnnouncement(
 
 /**
  * Convert on-chain announcement to format expected by scanAnnouncements
+ * @deprecated Use scanDepositRecords() instead for npk-based deposits.
  */
 export function announcementToScanFormat(
   announcement: OnChainStealthAnnouncement
@@ -563,6 +747,63 @@ export function announcementToScanFormat(
     commitment: announcement.commitment,
     leafIndex: announcement.leafIndex,
   };
+}
+
+/**
+ * Scan deposit records using npk matching (more efficient than scanning announcements).
+ *
+ * For each DepositRecord, computes expected npk from the viewing key and checks
+ * if it matches. Since the amount is stored in plaintext in the DepositRecord,
+ * no decryption is needed.
+ */
+export async function scanDepositRecords(
+  source: WalletSignerAdapter | ZVaultKeys,
+  records: {
+    ephemeralPub: Uint8Array;
+    npk: Uint8Array;
+    commitment: Uint8Array;
+    amount: bigint;
+    leafIndex: number;
+  }[]
+): Promise<ScannedNote[]> {
+  const keys = isWalletAdapter(source) ? await deriveKeysFromWallet(source) : source;
+
+  const found: ScannedNote[] = [];
+  const mpk = computeMPKSync(keys.spendingPubKey.x, keys.spendingPubKey.y, keys.nullifyingKey);
+
+  for (const record of records) {
+    try {
+      // X25519 ECDH with viewing key to get shared secret
+      const sharedSecret = x25519Ecdh(keys.viewingPrivKey, record.ephemeralPub);
+
+      // Derive stealth scalar and expected npk
+      const stealthScalar = deriveStealthScalar(sharedSecret);
+      const expectedNpk = computeNPKSync(mpk, stealthScalar);
+      const actualNpk = bytesToBigint(record.npk);
+
+      if (expectedNpk !== actualNpk) {
+        continue; // Not ours
+      }
+
+      // Derive stealth public key (for spending)
+      const stealthPub = deriveStealthPubKey(keys.spendingPubKey, sharedSecret);
+
+      found.push({
+        amount: record.amount,
+        ephemeralPub: record.ephemeralPub,
+        stealthPub,
+        leafIndex: record.leafIndex,
+        commitment: record.commitment,
+      });
+    } catch (error) {
+      if (error instanceof TypeError || error instanceof RangeError) {
+        throw error;
+      }
+      continue;
+    }
+  }
+
+  return found;
 }
 
 // ========== Connection Adapter for .zkey Name Lookup ==========
@@ -705,9 +946,12 @@ export async function createStealthOutput(
 ): Promise<StealthOutputData> {
   const ephemeral = ed25519GenerateKeyPair();
   const sharedSecret = x25519Ecdh(ephemeral.privKey, keys.viewingPubKey);
-  const stealthPub = deriveStealthPubKey(keys.spendingPubKey, sharedSecret);
 
-  const commitmentBigint = poseidonHashSync([stealthPub.x, amountSats]);
+  const stealthScalar = deriveStealthScalar(sharedSecret);
+  const mpk = computeMPKSync(keys.spendingPubKey.x, keys.spendingPubKey.y, keys.nullifyingKey);
+  const npk = computeNPKSync(mpk, stealthScalar);
+
+  const commitmentBigint = computeJoinSplitCommitmentSync(npk, ZBTC_TOKEN_ID, amountSats);
   const commitment = bigintToBytes(commitmentBigint);
   const encryptedAmount = encryptAmount(amountSats, sharedSecret);
 
@@ -719,7 +963,7 @@ export async function createStealthOutput(
 }
 
 /**
- * Create stealth output with stealthPubKeyX for circuit input
+ * Create stealth output with npk for JoinSplit circuit input
  */
 export async function createStealthOutputWithKeys(
   keys: ZVaultKeys,
@@ -727,9 +971,12 @@ export async function createStealthOutputWithKeys(
 ): Promise<StealthOutputWithKeys> {
   const ephemeral = ed25519GenerateKeyPair();
   const sharedSecret = x25519Ecdh(ephemeral.privKey, keys.viewingPubKey);
-  const stealthPub = deriveStealthPubKey(keys.spendingPubKey, sharedSecret);
 
-  const commitmentBigint = poseidonHashSync([stealthPub.x, amountSats]);
+  const stealthScalar = deriveStealthScalar(sharedSecret);
+  const mpk = computeMPKSync(keys.spendingPubKey.x, keys.spendingPubKey.y, keys.nullifyingKey);
+  const npk = computeNPKSync(mpk, stealthScalar);
+
+  const commitmentBigint = computeJoinSplitCommitmentSync(npk, ZBTC_TOKEN_ID, amountSats);
   const commitment = bigintToBytes(commitmentBigint);
   const encryptedAmount = encryptAmount(amountSats, sharedSecret);
 
@@ -737,7 +984,7 @@ export async function createStealthOutputWithKeys(
     ephemeralPub: new Uint8Array(ephemeral.pubKey),
     encryptedAmount,
     commitment,
-    stealthPubKeyX: stealthPub.x,
+    stealthPubKeyX: npk,
   };
 }
 
@@ -770,11 +1017,10 @@ export function computeNullifierHashForNote(
   keys: ZVaultKeys,
   note: ScannedNote
 ): Uint8Array {
-  const sharedSecret = x25519Ecdh(keys.viewingPrivKey, note.ephemeralPub);
-  const stealthPrivKey = deriveStealthPrivKey(keys.spendingPrivKey, sharedSecret);
-  const nullifier = poseidonComputeNullifier(stealthPrivKey, BigInt(note.leafIndex));
-  const nullifierHash = poseidonHashSync([nullifier]);
-  return bigintToBytes(nullifierHash);
+  // In JoinSplit model, nullifier = Poseidon(nullifyingKey, leafIndex)
+  // No extra hash layer — the nullifier IS the public output
+  const nullifier = computeJoinSplitNullifierSync(keys.nullifyingKey, BigInt(note.leafIndex));
+  return bigintToBytes(nullifier);
 }
 
 /**

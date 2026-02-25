@@ -71,6 +71,7 @@ import {
   parseLightClientTipHeight,
   createTxBufferAccount,
   buildSubmitHeaderIx,
+  buildResetTipIx,
   buildRequestRedemptionIx,
   loadAuthorityKeypair,
 } from "./test-helpers.js";
@@ -82,22 +83,29 @@ const __dirname = path.dirname(__filename);
 // Configuration
 // =============================================================================
 
-const RPC_URL = process.env.RPC_URL || "http://127.0.0.1:8899";
+const NETWORK = process.env.NETWORK || "localnet";
+const RPC_URL = process.env.RPC_URL || (NETWORK === "devnet"
+  ? "https://api.devnet.solana.com"
+  : "http://127.0.0.1:8899");
+
+const DEVNET_PROGRAM_ID = "2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV";
+
+function loadConfig(): any {
+  const configFile = NETWORK === "devnet" ? ".devnet-config.json" : ".localnet-config.json";
+  const configPath = path.join(__dirname, "..", configFile);
+  return JSON.parse(fs.readFileSync(configPath, "utf-8"));
+}
 
 function loadProgramId(): PublicKey {
   if (process.env.PROGRAM_ID) return new PublicKey(process.env.PROGRAM_ID);
   try {
-    const configPath = path.join(__dirname, "..", ".localnet-config.json");
-    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    const config = loadConfig();
     return new PublicKey(config.programs.zVault);
   } catch {
-    return new PublicKey("3Df8Xv9hMtVVLRxagnbCsofvgn18yPzfCqTmbUEnx9KF");
+    return NETWORK === "devnet"
+      ? new PublicKey(DEVNET_PROGRAM_ID)
+      : new PublicKey("3Df8Xv9hMtVVLRxagnbCsofvgn18yPzfCqTmbUEnx9KF");
   }
-}
-
-function loadLocalnetConfig(): any {
-  const configPath = path.join(__dirname, "..", ".localnet-config.json");
-  return JSON.parse(fs.readFileSync(configPath, "utf-8"));
 }
 
 let PROGRAM_ID = loadProgramId();
@@ -110,6 +118,7 @@ const BN254_FIELD_PRIME = 218882428718392752222464057452572750885483644004160343
 const Instruction = {
   VERIFY_STEALTH_DEPOSIT: 1,
   INIT_VK_REGISTRY: 11,
+  ADD_DEMO_STEALTH: 13,
   TRANSACT: 14,
 } as const;
 
@@ -627,10 +636,15 @@ async function main() {
   const ESPLORA_URL = process.env.BITCOIN_API_URL || "http://localhost:3000/regtest/api";
 
   console.log("============================================================");
-  console.log("zVault E2E User Flow Test — 4 Parts (regtest BTC)");
+  console.log(`zVault E2E User Flow Test — 4 Parts (${NETWORK})`);
   console.log("============================================================");
+  console.log(`Network: ${NETWORK}`);
   console.log(`RPC: ${RPC_URL}`);
-  console.log(`Esplora: ${ESPLORA_URL}`);
+  if (NETWORK === "devnet") {
+    console.log("Bitcoin API: https://mempool.space/testnet/api");
+  } else {
+    console.log(`Esplora: ${ESPLORA_URL}`);
+  }
 
   PROGRAM_ID = loadProgramId();
   console.log(`Program: ${PROGRAM_ID.toBase58()}`);
@@ -642,7 +656,13 @@ async function main() {
   // Fund
   const balance = await connection.getBalance(authority.publicKey);
   if (balance < LAMPORTS_PER_SOL) {
-    const sig = await connection.requestAirdrop(authority.publicKey, 10 * LAMPORTS_PER_SOL);
+    if (NETWORK === "devnet") {
+      console.log("  Requesting devnet airdrop...");
+    }
+    const sig = await connection.requestAirdrop(
+      authority.publicKey,
+      NETWORK === "devnet" ? 2 * LAMPORTS_PER_SOL : 10 * LAMPORTS_PER_SOL,
+    );
     await connection.confirmTransaction(sig);
   }
 
@@ -657,19 +677,26 @@ async function main() {
   const [poolState] = derivePoolStatePDA(PROGRAM_ID);
   const [commitmentTree] = deriveCommitmentTreePDA(PROGRAM_ID);
 
-  // Load localnet config for mint/vault/programs
-  const localConfig = loadLocalnetConfig();
-  const zkbtcMint = new PublicKey(localConfig.accounts.zkbtcMint);
-  const poolVault = new PublicKey(localConfig.accounts.poolVault);
-  const BTC_LIGHT_CLIENT_ID = new PublicKey(localConfig.programs.btcLightClient);
-  const CHADBUFFER_ID = new PublicKey(localConfig.programs.chadbuffer);
+  // Load config for mint/vault/programs
+  const networkConfig = loadConfig();
+  const zkbtcMint = new PublicKey(networkConfig.accounts.zkbtcMint);
+  const poolVault = new PublicKey(networkConfig.accounts.poolVault);
+  const BTC_LIGHT_CLIENT_ID = new PublicKey(networkConfig.programs.btcLightClient);
+  const CHADBUFFER_ID = new PublicKey(networkConfig.programs.chadbuffer);
 
   // =========================================================================
   // Setup: Generate keys (shared across all parts)
   // =========================================================================
   console.log("\nGenerating Baby Jubjub spending key...");
   const spendingSeed = new Uint8Array(32);
-  crypto.getRandomValues(spendingSeed);
+  if (NETWORK === "devnet" && process.env.TESTNET_SPENDING_SEED) {
+    const seedBuf = Buffer.from(process.env.TESTNET_SPENDING_SEED, "hex");
+    if (seedBuf.length !== 32) throw new Error("TESTNET_SPENDING_SEED must be 32 bytes (64 hex chars)");
+    spendingSeed.set(seedBuf);
+    console.log("  Using deterministic spending seed from TESTNET_SPENDING_SEED");
+  } else {
+    crypto.getRandomValues(spendingSeed);
+  }
   const { privKeyBuf, pubKeyX, pubKeyY } = await generateEddsaKeyPair(spendingSeed);
 
   // Derive nullifying key
@@ -706,149 +733,319 @@ async function main() {
   }
 
   // =========================================================================
-  // PART 1: Deposit — VERIFY_STEALTH_DEPOSIT (disc=1) with real SPV
+  // PART 1: Deposit
   // =========================================================================
-  console.log("\n" + "=".repeat(60));
-  console.log("PART 1: DEPOSIT — VERIFY_STEALTH_DEPOSIT (25,000 sats)");
-  console.log("=".repeat(60));
 
   // Create note keys
-  const random0 = randomFieldElement();
-  const amount0 = 25_000n;
+  let random0: bigint;
+  if (NETWORK === "devnet" && process.env.TESTNET_RANDOM) {
+    random0 = BigInt("0x" + process.env.TESTNET_RANDOM) % BN254_FIELD_PRIME;
+    console.log("  Using deterministic random from TESTNET_RANDOM");
+  } else {
+    random0 = randomFieldElement();
+  }
+  const amount0 = NETWORK === "devnet" && process.env.TESTNET_AMOUNT
+    ? BigInt(process.env.TESTNET_AMOUNT)
+    : 25_000n;
   const npk0 = poseidonHash([mpk, random0]);
   const npk0Bytes = bigintToBytes32BE(npk0);
   // Commitment will be computed ON-CHAIN: Poseidon(npk, ZBTC_TOKEN_ID, amount)
   // But we compute it locally for later verification in Parts 2-4
   const commitment0 = poseidonHash([npk0, ZBTC_TOKEN_ID, amount0]);
-  console.log(`  npk0: ${npk0.toString(16).slice(0, 16)}...`);
-  console.log(`  Expected commitment0: ${commitment0.toString(16).slice(0, 16)}...`);
 
   // Read tree state before deposit
   const treeBefore1 = await readOnChainTree(connection, commitmentTree);
   const leafIndex0 = Number(treeBefore1.nextIndex);
-  console.log(`  Tree next_index before: ${leafIndex0}`);
 
-  // Create real BTC transaction on regtest
-  console.log("  Creating real BTC transaction...");
+  if (NETWORK === "devnet") {
+    // ---- Devnet: VERIFY_STEALTH_DEPOSIT with real SPV ----
+    // Two modes:
+    //   A) TESTNET_TXID set → use pre-existing testnet tx from mempool.space
+    //   B) USE_REGTEST=1   → create tx on local regtest, submit to devnet Solana
+    const useRegtest = process.env.USE_REGTEST === "1";
+    const btcSource = useRegtest ? "regtest" : "testnet";
+    console.log("\n" + "=".repeat(60));
+    console.log(`PART 1: DEPOSIT — VERIFY_STEALTH_DEPOSIT (devnet+${btcSource} SPV)`);
+    console.log("=".repeat(60));
 
-  // Step 1a: Create real OP_RETURN tx on regtest
-  const ephPub0 = randomEphemeralPub();
-  const payloadHex = Buffer.from(ephPub0).toString("hex") + Buffer.from(npk0Bytes).toString("hex");
-  const poolAddr = getNewAddress("bech32");
-  const txid = createOpReturnTx(poolAddr, Number(amount0), payloadHex);
-  console.log(`  Txid: ${txid}`);
+    let txid: string;
+    let ephPub0: Uint8Array;
+    let btcApiUrl: string;
 
-  // Step 1b: Mine a block to confirm the tx
-  console.log("  Mining 1 block...");
-  mineBlocks(1);
+    if (useRegtest) {
+      // Mode B: Create tx on local regtest
+      btcApiUrl = process.env.BITCOIN_API_URL || "http://localhost:3000/regtest/api";
+      console.log(`  Bitcoin API: ${btcApiUrl}`);
 
-  // Step 1c: Wait for Esplora to index it
-  await waitForTxIndexed(txid, ESPLORA_URL);
+      ephPub0 = randomEphemeralPub();
+      const payloadHex = Buffer.from(ephPub0).toString("hex") + Buffer.from(npk0Bytes).toString("hex");
+      const poolAddr = getNewAddress("bech32");
+      txid = createOpReturnTx(poolAddr, Number(amount0), payloadHex);
+      console.log(`  Txid: ${txid}`);
 
-  // Step 1d: Fetch real data from Esplora
-  const txStatus = await fetchTxStatus(txid, ESPLORA_URL);
-  if (!txStatus.confirmed || !txStatus.block_hash || !txStatus.block_height) {
-    throw new Error("Tx not confirmed after mining");
+      console.log("  Mining 1 block...");
+      mineBlocks(1);
+      await waitForTxIndexed(txid, btcApiUrl);
+    } else {
+      // Mode A: Pre-existing testnet tx
+      const testnetTxid = process.env.TESTNET_TXID;
+      if (!testnetTxid) throw new Error("TESTNET_TXID env var required for devnet E2E (or set USE_REGTEST=1)");
+      if (!process.env.TESTNET_AMOUNT) throw new Error("TESTNET_AMOUNT env var required (sats)");
+      if (!process.env.TESTNET_SPENDING_SEED) throw new Error("TESTNET_SPENDING_SEED env var required (64-char hex)");
+      if (!process.env.TESTNET_RANDOM) throw new Error("TESTNET_RANDOM env var required (64-char hex)");
+      const testnetEphPub = process.env.TESTNET_EPH_PUB;
+      if (!testnetEphPub) throw new Error("TESTNET_EPH_PUB env var required (64-char hex)");
+      ephPub0 = Buffer.from(testnetEphPub, "hex");
+      if (ephPub0.length !== 32) throw new Error("TESTNET_EPH_PUB must be 32 bytes (64 hex chars)");
+
+      txid = testnetTxid;
+      btcApiUrl = "https://mempool.space/testnet/api";
+    }
+
+    console.log(`  Amount: ${amount0} sats`);
+    console.log(`  npk0: ${npk0.toString(16).slice(0, 16)}...`);
+    console.log(`  Expected commitment0: ${commitment0.toString(16).slice(0, 16)}...`);
+    console.log(`  Tree next_index before: ${leafIndex0}`);
+
+    // 1. Fetch tx status (must be confirmed)
+    console.log(`  Fetching tx status from ${btcApiUrl}...`);
+    const txStatus = await fetchTxStatus(txid, btcApiUrl);
+    if (!txStatus.confirmed || !txStatus.block_hash || !txStatus.block_height) {
+      throw new Error(`Tx ${txid} not confirmed`);
+    }
+    const blockHash = txStatus.block_hash;
+    const blockHeight = txStatus.block_height;
+    console.log(`  Confirmed at height ${blockHeight}, block ${blockHash.slice(0, 16)}...`);
+
+    // 2. Fetch block header, raw tx, merkle proof
+    const rawHeader = await fetchBlockHeader(blockHash, btcApiUrl);
+    console.log(`  Block header: ${rawHeader.length} bytes`);
+
+    const rawTxBuf = await fetchRawTx(txid, btcApiUrl);
+    const strippedTx = stripWitnessData(rawTxBuf);
+    const rawSweepTx = new Uint8Array(strippedTx);
+    console.log(`  Raw tx: ${rawTxBuf.length} bytes (witness-stripped: ${strippedTx.length} bytes)`);
+
+    const txidBytes = Buffer.from(txid, "hex");
+    txidBytes.reverse(); // internal byte order
+    const txHash = new Uint8Array(txidBytes);
+
+    const esploraProof = await fetchMerkleProof(txid, btcApiUrl);
+    console.log(`  Merkle proof: ${esploraProof.merkle.length} hashes, pos=${esploraProof.pos}`);
+    const merkleProofData = serializeMerkleProof(txid, esploraProof);
+
+    // 3. Handle block header sync — reset tip + submit header
+    const [lightClient] = deriveLightClientPDA(BTC_LIGHT_CLIENT_ID);
+    const lcInfo = await connection.getAccountInfo(lightClient);
+    if (!lcInfo) throw new Error("Light client not initialized");
+    const tipHeight = parseLightClientTipHeight(Buffer.from(lcInfo.data));
+    if (tipHeight === null) throw new Error("Light client state invalid");
+
+    const newBlockHeight = BigInt(blockHeight);
+    console.log(`  Light client tip: height=${tipHeight}`);
+
+    const [blockHeaderPda] = deriveBlockHeaderPDA(BTC_LIGHT_CLIENT_ID, newBlockHeight);
+    const existingHeader = await connection.getAccountInfo(blockHeaderPda);
+
+    if (existingHeader) {
+      console.log(`  Block header PDA already exists at height ${newBlockHeight}`);
+    } else {
+      // Reset tip to parent block, then submit this block's header
+      const prevHeight = newBlockHeight - 1n;
+
+      // Fetch the parent block hash from the Bitcoin API
+      const parentBlockHashResp = await fetch(`${btcApiUrl}/block-height/${Number(prevHeight)}`);
+      if (!parentBlockHashResp.ok) throw new Error(`Failed to fetch block hash at height ${prevHeight}: ${parentBlockHashResp.status}`);
+      const parentBlockHash = (await parentBlockHashResp.text()).trim();
+      const parentHashBytes = Buffer.from(parentBlockHash, "hex");
+      parentHashBytes.reverse(); // internal byte order
+
+      console.log(`  Resetting light client tip to height ${prevHeight}...`);
+      const resetIx = buildResetTipIx(
+        lightClient, authority.publicKey,
+        prevHeight, new Uint8Array(parentHashBytes),
+        BTC_LIGHT_CLIENT_ID,
+      );
+      const resetTx = new Transaction().add(resetIx);
+      await sendAndConfirmTransaction(connection, resetTx, [authority], { commitment: "confirmed" });
+      console.log(`  Light client tip reset to height ${prevHeight}`);
+
+      // Submit the block header
+      const submitHeaderIx = buildSubmitHeaderIx(
+        lightClient, blockHeaderPda, authority.publicKey,
+        new Uint8Array(rawHeader), newBlockHeight, BTC_LIGHT_CLIENT_ID,
+      );
+      const submitHeaderTx = new Transaction().add(submitHeaderIx);
+      await sendAndConfirmTransaction(connection, submitHeaderTx, [authority], { commitment: "confirmed" });
+      console.log(`  Block header submitted at height ${newBlockHeight}`);
+    }
+
+    // 4. Upload stripped tx to ChadBuffer
+    console.log("  Uploading sweep tx to ChadBuffer...");
+    const bufferKeypair = await createTxBufferAccount(connection, authority, rawSweepTx, CHADBUFFER_ID);
+    console.log(`  ChadBuffer: ${bufferKeypair.publicKey.toBase58().slice(0, 20)}...`);
+
+    // 5. Call verify_stealth_deposit
+    const [depositRecord] = deriveDepositRecordPDA(PROGRAM_ID, txHash);
+    console.log(`  Deposit record PDA: ${depositRecord.toBase58().slice(0, 20)}...`);
+
+    const verifyDepositIx = buildVerifyStealthDepositIx(
+      poolState, lightClient, blockHeaderPda, commitmentTree,
+      depositRecord, bufferKeypair.publicKey, authority.publicKey,
+      zkbtcMint, poolVault,
+      {
+        txid: txHash,
+        blockHeight: newBlockHeight,
+        amountSats: amount0,
+        txSize: rawSweepTx.length,
+        ephemeralPub: ephPub0,
+        npk: npk0Bytes,
+        merkleProofData,
+      },
+    );
+
+    try {
+      const tx = new Transaction().add(verifyDepositIx);
+      const sig = await sendAndConfirmTransaction(connection, tx, [authority], { commitment: "confirmed" });
+      console.log(`  Verify deposit tx: ${sig.slice(0, 20)}...`);
+    } catch (err: any) {
+      console.error(`  FAIL: ${err.message?.slice(0, 300)}`);
+      if (err.logs) for (const log of err.logs) console.error(`    ${log}`);
+      process.exit(1);
+    }
+
+    // Verify tree updated
+    const treeAfter1 = await readOnChainTree(connection, commitmentTree);
+    if (Number(treeAfter1.nextIndex) !== leafIndex0 + 1) {
+      console.error(`  FAIL: next_index expected ${leafIndex0 + 1}, got ${treeAfter1.nextIndex}`);
+      process.exit(1);
+    }
+
+    const depositRecordInfo = await connection.getAccountInfo(depositRecord);
+    if (!depositRecordInfo || depositRecordInfo.data[0] !== 0x02) {
+      console.error("  FAIL: Deposit record PDA not created");
+      process.exit(1);
+    }
+    const recordLeafIndex = Buffer.from(depositRecordInfo.data).readBigUInt64LE(88);
+    console.log(`  Deposit record: leaf_index=${recordLeafIndex}`);
+    console.log(`  Commitment at leaf ${leafIndex0} (computed on-chain via SPV)`);
+    console.log("  PART 1 PASSED");
+  } else {
+    // ---- Localnet: VERIFY_STEALTH_DEPOSIT with real BTC regtest + SPV ----
+    console.log("\n" + "=".repeat(60));
+    console.log("PART 1: DEPOSIT — VERIFY_STEALTH_DEPOSIT (25,000 sats)");
+    console.log("=".repeat(60));
+    console.log(`  npk0: ${npk0.toString(16).slice(0, 16)}...`);
+    console.log(`  Expected commitment0: ${commitment0.toString(16).slice(0, 16)}...`);
+    console.log(`  Tree next_index before: ${leafIndex0}`);
+
+    // Create real BTC transaction on regtest
+    console.log("  Creating real BTC transaction...");
+
+    const ephPub0 = randomEphemeralPub();
+    const payloadHex = Buffer.from(ephPub0).toString("hex") + Buffer.from(npk0Bytes).toString("hex");
+    const poolAddr = getNewAddress("bech32");
+    const txid = createOpReturnTx(poolAddr, Number(amount0), payloadHex);
+    console.log(`  Txid: ${txid}`);
+
+    console.log("  Mining 1 block...");
+    mineBlocks(1);
+    await waitForTxIndexed(txid, ESPLORA_URL);
+
+    const txStatus = await fetchTxStatus(txid, ESPLORA_URL);
+    if (!txStatus.confirmed || !txStatus.block_hash || !txStatus.block_height) {
+      throw new Error("Tx not confirmed after mining");
+    }
+    const blockHash = txStatus.block_hash;
+    const blockHeight = txStatus.block_height;
+
+    const rawHeader = await fetchBlockHeader(blockHash, ESPLORA_URL);
+    console.log(`  Block header: ${rawHeader.length} bytes at height ${blockHeight}`);
+
+    const rawTxBuf = await fetchRawTx(txid, ESPLORA_URL);
+    const strippedTx = stripWitnessData(rawTxBuf);
+    const rawSweepTx = new Uint8Array(strippedTx);
+    console.log(`  Raw tx: ${rawTxBuf.length} bytes (witness-stripped: ${strippedTx.length} bytes)`);
+
+    const txidBytes = Buffer.from(txid, "hex");
+    txidBytes.reverse();
+    const txHash = new Uint8Array(txidBytes);
+
+    const esploraProof = await fetchMerkleProof(txid, ESPLORA_URL);
+    console.log(`  Merkle proof: ${esploraProof.merkle.length} hashes, pos=${esploraProof.pos}`);
+    const merkleProofData = serializeMerkleProof(txid, esploraProof);
+
+    const [lightClient] = deriveLightClientPDA(BTC_LIGHT_CLIENT_ID);
+    const lcInfo = await connection.getAccountInfo(lightClient);
+    if (!lcInfo) throw new Error("Light client not initialized");
+    const tipHeight = parseLightClientTipHeight(Buffer.from(lcInfo.data));
+    if (tipHeight === null) throw new Error("Light client state invalid");
+
+    const newBlockHeight = BigInt(blockHeight);
+    console.log(`  Light client tip: height=${tipHeight}, submitting block ${newBlockHeight}`);
+
+    const [blockHeaderPda] = deriveBlockHeaderPDA(BTC_LIGHT_CLIENT_ID, newBlockHeight);
+
+    const submitHeaderIx = buildSubmitHeaderIx(
+      lightClient, blockHeaderPda, authority.publicKey,
+      new Uint8Array(rawHeader), newBlockHeight, BTC_LIGHT_CLIENT_ID,
+    );
+    const submitHeaderTx = new Transaction().add(submitHeaderIx);
+    await sendAndConfirmTransaction(connection, submitHeaderTx, [authority], { commitment: "confirmed" });
+    console.log(`  Block header submitted at height ${newBlockHeight}`);
+
+    console.log("  Uploading sweep tx to ChadBuffer...");
+    const bufferKeypair = await createTxBufferAccount(connection, authority, rawSweepTx, CHADBUFFER_ID);
+    console.log(`  ChadBuffer: ${bufferKeypair.publicKey.toBase58().slice(0, 20)}...`);
+
+    const [depositRecord] = deriveDepositRecordPDA(PROGRAM_ID, txHash);
+    console.log(`  Deposit record PDA: ${depositRecord.toBase58().slice(0, 20)}...`);
+
+    const verifyDepositIx = buildVerifyStealthDepositIx(
+      poolState, lightClient, blockHeaderPda, commitmentTree,
+      depositRecord, bufferKeypair.publicKey, authority.publicKey,
+      zkbtcMint, poolVault,
+      {
+        txid: txHash,
+        blockHeight: newBlockHeight,
+        amountSats: amount0,
+        txSize: rawSweepTx.length,
+        ephemeralPub: ephPub0,
+        npk: npk0Bytes,
+        merkleProofData,
+      },
+    );
+
+    try {
+      const tx = new Transaction().add(verifyDepositIx);
+      const sig = await sendAndConfirmTransaction(connection, tx, [authority], { commitment: "confirmed" });
+      console.log(`  Verify deposit tx: ${sig.slice(0, 20)}...`);
+    } catch (err: any) {
+      console.error(`  FAIL: ${err.message?.slice(0, 300)}`);
+      if (err.logs) for (const log of err.logs) console.error(`    ${log}`);
+      process.exit(1);
+    }
+
+    const treeAfter1 = await readOnChainTree(connection, commitmentTree);
+    if (Number(treeAfter1.nextIndex) !== leafIndex0 + 1) {
+      console.error(`  FAIL: next_index expected ${leafIndex0 + 1}, got ${treeAfter1.nextIndex}`);
+      process.exit(1);
+    }
+
+    const depositRecordInfo = await connection.getAccountInfo(depositRecord);
+    if (!depositRecordInfo || depositRecordInfo.data[0] !== 0x02) {
+      console.error("  FAIL: Deposit record PDA not created");
+      process.exit(1);
+    }
+    const recordLeafIndex = Buffer.from(depositRecordInfo.data).readBigUInt64LE(88);
+    console.log(`  Deposit record: leaf_index=${recordLeafIndex}, minted=${depositRecordInfo.data[1]}`);
+    if (Number(recordLeafIndex) !== leafIndex0) {
+      console.error(`  FAIL: leaf_index mismatch: ${recordLeafIndex} vs ${leafIndex0}`);
+      process.exit(1);
+    }
+    console.log(`  Commitment at leaf ${leafIndex0} (computed on-chain)`);
+    console.log("  PART 1 PASSED");
   }
-  const blockHash = txStatus.block_hash;
-  const blockHeight = txStatus.block_height;
-
-  // Fetch raw header (80 bytes)
-  const rawHeader = await fetchBlockHeader(blockHash, ESPLORA_URL);
-  console.log(`  Block header: ${rawHeader.length} bytes at height ${blockHeight}`);
-
-  // Fetch raw tx and strip witness data for correct txid hashing on-chain
-  const rawTxBuf = await fetchRawTx(txid, ESPLORA_URL);
-  const strippedTx = stripWitnessData(rawTxBuf);
-  const rawSweepTx = new Uint8Array(strippedTx);
-  console.log(`  Raw tx: ${rawTxBuf.length} bytes (witness-stripped: ${strippedTx.length} bytes)`);
-
-  // Compute txid in internal byte order (reversed display)
-  const txidBytes = Buffer.from(txid, "hex");
-  txidBytes.reverse();
-  const txHash = new Uint8Array(txidBytes);
-
-  // Fetch and serialize merkle proof
-  const esploraProof = await fetchMerkleProof(txid, ESPLORA_URL);
-  console.log(`  Merkle proof: ${esploraProof.merkle.length} hashes, pos=${esploraProof.pos}`);
-  const merkleProofData = serializeMerkleProof(txid, esploraProof);
-
-  // Step 1e: Read light client tip and submit real block header
-  const [lightClient] = deriveLightClientPDA(BTC_LIGHT_CLIENT_ID);
-  const lcInfo = await connection.getAccountInfo(lightClient);
-  if (!lcInfo) throw new Error("Light client not initialized");
-  const tipHeight = parseLightClientTipHeight(Buffer.from(lcInfo.data));
-  if (tipHeight === null) throw new Error("Light client state invalid");
-
-  const newBlockHeight = BigInt(blockHeight);
-  console.log(`  Light client tip: height=${tipHeight}, submitting block ${newBlockHeight}`);
-
-  const [blockHeaderPda] = deriveBlockHeaderPDA(BTC_LIGHT_CLIENT_ID, newBlockHeight);
-
-  const submitHeaderIx = buildSubmitHeaderIx(
-    lightClient, blockHeaderPda, authority.publicKey,
-    new Uint8Array(rawHeader), newBlockHeight, BTC_LIGHT_CLIENT_ID,
-  );
-  const submitHeaderTx = new Transaction().add(submitHeaderIx);
-  await sendAndConfirmTransaction(connection, submitHeaderTx, [authority], { commitment: "confirmed" });
-  console.log(`  Block header submitted at height ${newBlockHeight}`);
-
-  // Step: Upload raw sweep tx to ChadBuffer
-  console.log("  Uploading sweep tx to ChadBuffer...");
-  const bufferKeypair = await createTxBufferAccount(connection, authority, rawSweepTx, CHADBUFFER_ID);
-  console.log(`  ChadBuffer: ${bufferKeypair.publicKey.toBase58().slice(0, 20)}...`);
-
-  // Step: Call verify_stealth_deposit
-  const [depositRecord] = deriveDepositRecordPDA(PROGRAM_ID,txHash);
-  console.log(`  Deposit record PDA: ${depositRecord.toBase58().slice(0, 20)}...`);
-
-  const verifyDepositIx = buildVerifyStealthDepositIx(
-    poolState, lightClient, blockHeaderPda, commitmentTree,
-    depositRecord, bufferKeypair.publicKey, authority.publicKey,
-    zkbtcMint, poolVault,
-    {
-      txid: txHash,
-      blockHeight: newBlockHeight,
-      amountSats: amount0,
-      txSize: rawSweepTx.length,
-      ephemeralPub: ephPub0,
-      npk: npk0Bytes,
-      merkleProofData,
-    },
-  );
-
-  try {
-    const tx = new Transaction().add(verifyDepositIx);
-    const sig = await sendAndConfirmTransaction(connection, tx, [authority], { commitment: "confirmed" });
-    console.log(`  Verify deposit tx: ${sig.slice(0, 20)}...`);
-  } catch (err: any) {
-    console.error(`  FAIL: ${err.message?.slice(0, 300)}`);
-    if (err.logs) for (const log of err.logs) console.error(`    ${log}`);
-    process.exit(1);
-  }
-
-  // Verify Part 1
-  const treeAfter1 = await readOnChainTree(connection, commitmentTree);
-  if (Number(treeAfter1.nextIndex) !== leafIndex0 + 1) {
-    console.error(`  FAIL: next_index expected ${leafIndex0 + 1}, got ${treeAfter1.nextIndex}`);
-    process.exit(1);
-  }
-
-  // Verify deposit record PDA created
-  const depositRecordInfo = await connection.getAccountInfo(depositRecord);
-  if (!depositRecordInfo || depositRecordInfo.data[0] !== 0x02) {
-    console.error("  FAIL: Deposit record PDA not created");
-    process.exit(1);
-  }
-  // Read leaf_index from deposit record (offset 88, 8 bytes LE)
-  const recordLeafIndex = Buffer.from(depositRecordInfo.data).readBigUInt64LE(88);
-  console.log(`  Deposit record: leaf_index=${recordLeafIndex}, minted=${depositRecordInfo.data[1]}`);
-  if (Number(recordLeafIndex) !== leafIndex0) {
-    console.error(`  FAIL: leaf_index mismatch: ${recordLeafIndex} vs ${leafIndex0}`);
-    process.exit(1);
-  }
-  console.log(`  Commitment at leaf ${leafIndex0} (computed on-chain)`);
-  console.log("  PART 1 PASSED");
 
   // =========================================================================
   // PART 2: Private Send — JoinSplit 1x1 (TRANSACT, disc=14)
@@ -1220,11 +1417,11 @@ async function main() {
   console.log("\n" + "=".repeat(60));
   console.log("ALL 4 PARTS PASSED");
   console.log("=".repeat(60));
-  console.log(`  Part 1: Deposit (SPV) - 25,000 sats -> leaf ${leafIndex0} [verify_stealth_deposit]`);
-  console.log(`  Part 2: Private Send  - 25,000 sats -> leaf ${leafIndex1} (nullified leaf ${leafIndex0})`);
-  console.log(`  Part 3: Split         - 15,000 + 10,000 sats -> leaves ${leafIndex2},${leafIndex3} (nullified leaf ${leafIndex1})`);
-  console.log(`  Part 4: Withdraw      - 15,000 sats redemption request (nullified leaf ${leafIndex2})`);
-  console.log(`  Remaining: 10,000 sats at leaf ${leafIndex3}`);
+  console.log(`  Part 1: Deposit (SPV${NETWORK === "devnet" ? "+testnet" : ""}) - ${amount0} sats -> leaf ${leafIndex0}`);
+  console.log(`  Part 2: Private Send  - ${amount1} sats -> leaf ${leafIndex1} (nullified leaf ${leafIndex0})`);
+  console.log(`  Part 3: Split         - ${amount2} + ${amount3} sats -> leaves ${leafIndex2},${leafIndex3} (nullified leaf ${leafIndex1})`);
+  console.log(`  Part 4: Withdraw      - ${amount2} sats redemption request (nullified leaf ${leafIndex2})`);
+  console.log(`  Remaining: ${amount3} sats at leaf ${leafIndex3}`);
   console.log("=".repeat(60));
 
   process.exit(0);

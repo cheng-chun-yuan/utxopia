@@ -40,6 +40,10 @@ pub struct AppState {
     pub ws_state: SharedWebSocketState,
     /// Stealth deposit v2 store
     pub stealth_store: StealthDepositStore,
+    /// Pool group public key (x-only, hex-encoded)
+    pub group_pubkey: String,
+    /// Bitcoin network ("testnet" | "mainnet")
+    pub bitcoin_network: String,
 }
 
 /// Shared app state type
@@ -50,10 +54,18 @@ pub fn create_deposit_router(tracker: DepositTrackerService) -> Router {
     let ws_state = create_ws_state();
     let tracker_with_ws = tracker.with_websocket(ws_state.clone());
 
+    // Get pool group pubkey from sweeper if available
+    let group_pubkey = {
+        // Default POC key (secp256k1 generator x-coord)
+        "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798".to_string()
+    };
+
     let state = Arc::new(AppState {
         tracker: Arc::new(RwLock::new(tracker_with_ws)),
         ws_state,
         stealth_store: StealthDepositStore::new(),
+        group_pubkey,
+        bitcoin_network: "testnet".to_string(),
     });
 
     // CORS configuration
@@ -75,6 +87,8 @@ pub fn create_deposit_router(tracker: DepositTrackerService) -> Router {
         .route("/ws/deposits/:id", get(ws_deposit_handler_wrapper))
         .route("/ws/deposits", get(ws_all_deposits_handler_wrapper))
         .route("/ws/stealth/:id", get(ws_stealth_deposit_handler))
+        // Pool info (for SDK non-interactive deposits)
+        .route("/api/pool/info", get(handle_pool_info))
         // Health check and monitoring
         .route("/api/tracker/health", get(handle_health))
         .route("/api/tracker/stats", get(handle_tracker_stats))
@@ -157,6 +171,19 @@ async fn handle_list_deposits(State(state): State<SharedAppState>) -> impl IntoR
     Json(serde_json::json!({
         "deposits": deposits,
         "stats": tracker.stats()
+    }))
+}
+
+/// GET /api/pool/info
+///
+/// Returns pool configuration needed by SDK for non-interactive deposits.
+/// The SDK uses this to derive deposit addresses client-side without
+/// calling POST /api/stealth/prepare.
+async fn handle_pool_info(State(state): State<SharedAppState>) -> impl IntoResponse {
+    Json(serde_json::json!({
+        "group_pubkey": state.group_pubkey,
+        "network": state.bitcoin_network,
+        "timelock_blocks": 1,
     }))
 }
 
@@ -299,25 +326,42 @@ async fn handle_prepare_stealth_deposit(
         return stealth_error_response("Invalid spending public key format (expected 66 hex chars)");
     }
 
-    // Generate ephemeral keypair (placeholder - in production use proper crypto)
-    let ephemeral_pub = format!("02{}", hex::encode(&rand::random::<[u8; 32]>()));
-    let ephemeral_priv_encrypted = hex::encode(&rand::random::<[u8; 32]>());
+    if !is_valid_pubkey_hex(&req.ephemeral_pub) {
+        return stealth_error_response("Invalid ephemeral public key format (expected 66 hex chars)");
+    }
 
-    // Derive commitment (placeholder - in production compute Poseidon2)
-    let commitment = hex::encode(&rand::random::<[u8; 32]>());
+    // Validate commitment (64 hex chars = 32 bytes)
+    if req.commitment.len() != 64 || !req.commitment.chars().all(|c| c.is_ascii_hexdigit()) {
+        return stealth_error_response("Invalid commitment format (expected 64 hex chars)");
+    }
 
-    // Derive BTC address (placeholder - in production derive from commitment)
-    let btc_address = format!(
-        "tb1p{}",
-        hex::encode(&rand::random::<[u8; 32]>())[..58].to_lowercase()
-    );
+    // Parse commitment bytes for address derivation
+    let commitment_bytes = match hex::decode(&req.commitment) {
+        Ok(bytes) if bytes.len() == 32 => {
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&bytes);
+            arr
+        }
+        _ => return stealth_error_response("Invalid commitment: must be 32 bytes hex"),
+    };
 
-    // Create record
+    // Derive BTC Taproot address from pool keys + commitment
+    let pool_keys = crate::taproot::PoolKeys::new();
+    let network = bitcoin::Network::Testnet; // TODO: derive from config
+    let btc_address = match crate::taproot::generate_deposit_address(&pool_keys, &commitment_bytes, network) {
+        Ok(deposit) => deposit.address,
+        Err(e) => return stealth_error_response(&format!("Failed to derive BTC address: {}", e)),
+    };
+
+    let ephemeral_pub = req.ephemeral_pub.clone();
+    let commitment = req.commitment.clone();
+
+    // Create record (ephemeral private key is held client-side in stealth flow)
     let record = StealthDepositRecord::new(
         req.viewing_pub,
         req.spending_pub,
         ephemeral_pub.clone(),
-        ephemeral_priv_encrypted,
+        String::new(), // ephemeral private key stays client-side
         commitment,
         btc_address.clone(),
     );
@@ -503,6 +547,9 @@ pub async fn start_tracker_server(
     println!("  GET  /api/deposits          - List all deposits");
     println!("  WS   /ws/deposits/:id       - Subscribe to deposit updates");
     println!("  WS   /ws/deposits           - Subscribe to all updates");
+    println!();
+    println!("Pool Info:");
+    println!("  GET  /api/pool/info          - Pool config for SDK deposits");
     println!();
     println!("Stealth Deposit Endpoints:");
     println!("  POST /api/stealth/prepare   - Prepare stealth deposit");

@@ -3,6 +3,7 @@
 //! Signs BTC transactions for withdrawals.
 //! POC uses single-key signing; production will use MPC.
 
+use async_trait::async_trait;
 use bitcoin::{
     hashes::Hash,
     secp256k1::{self, Message, Secp256k1, SecretKey},
@@ -10,12 +11,14 @@ use bitcoin::{
     Amount, TapTweakHash, Transaction, TxOut, Witness, XOnlyPublicKey,
 };
 
+use crate::frost_client::{FrostClient, PrevoutInfo, SigningContext};
 use crate::redemption::builder::UnsignedTx;
 
 /// Trait for transaction signers
+#[async_trait]
 pub trait TxSigner: Send + Sync {
     /// Sign a transaction
-    fn sign(&self, unsigned: &UnsignedTx) -> Result<Transaction, SignerError>;
+    async fn sign(&self, unsigned: &UnsignedTx) -> Result<Transaction, SignerError>;
 
     /// Get the signer's public key
     fn public_key(&self) -> XOnlyPublicKey;
@@ -72,8 +75,9 @@ impl SingleKeySigner {
     }
 }
 
+#[async_trait]
 impl TxSigner for SingleKeySigner {
-    fn sign(&self, unsigned: &UnsignedTx) -> Result<Transaction, SignerError> {
+    async fn sign(&self, unsigned: &UnsignedTx) -> Result<Transaction, SignerError> {
         let mut tx = unsigned.tx.clone();
 
         // Build prevouts for sighash
@@ -139,35 +143,113 @@ impl TxSigner for SingleKeySigner {
     }
 }
 
-/// Placeholder MPC signer (for future implementation)
+/// FROST threshold signer using HTTP calls to FROST signer servers
 pub struct MpcSigner {
-    /// MPC coordinator endpoint
-    pub endpoint: String,
-    /// Session ID
-    pub session_id: String,
-    /// Public key
+    /// FROST HTTP client
+    frost_client: FrostClient,
+    /// Group public key (x-only)
     pub public_key: XOnlyPublicKey,
+    /// Secp256k1 context
+    secp: Secp256k1<secp256k1::All>,
 }
 
 impl MpcSigner {
-    /// Create a new MPC signer (placeholder)
-    pub fn new(endpoint: String, session_id: String, public_key: XOnlyPublicKey) -> Self {
+    /// Create a new MPC signer backed by FROST threshold signing
+    ///
+    /// # Arguments
+    /// * `frost_client` - Configured FROST HTTP client
+    /// * `public_key` - The FROST group public key (x-only)
+    pub fn new(frost_client: FrostClient, public_key: XOnlyPublicKey) -> Self {
         Self {
-            endpoint,
-            session_id,
+            frost_client,
             public_key,
+            secp: Secp256k1::new(),
         }
     }
 }
 
+#[async_trait]
 impl TxSigner for MpcSigner {
-    fn sign(&self, _unsigned: &UnsignedTx) -> Result<Transaction, SignerError> {
-        // In production, this would:
-        // 1. Send unsigned tx to MPC coordinator
-        // 2. Participate in threshold signing protocol
-        // 3. Receive signature shares
-        // 4. Aggregate into final signature
-        Err(SignerError::MpcNotImplemented)
+    async fn sign(&self, unsigned: &UnsignedTx) -> Result<Transaction, SignerError> {
+        let mut tx = unsigned.tx.clone();
+
+        // Build prevouts for sighash
+        let prevouts: Vec<TxOut> = unsigned
+            .utxos
+            .iter()
+            .map(|utxo| {
+                let script_pubkey = hex::decode(&utxo.script_pubkey)
+                    .map(|bytes| bitcoin::ScriptBuf::from_bytes(bytes))
+                    .unwrap_or_else(|_| bitcoin::ScriptBuf::new());
+
+                TxOut {
+                    value: Amount::from_sat(utxo.amount_sats),
+                    script_pubkey,
+                }
+            })
+            .collect();
+
+        let prevouts_ref = Prevouts::All(&prevouts);
+
+        // Taproot tweak using the group public key (standard BIP-341 tweak)
+        let tweak = TapTweakHash::from_key_and_tweak(self.public_key, None);
+        let tweak_bytes = tweak.to_byte_array();
+
+        // Build signing context for signer-side verification
+        let raw_tx_hex = hex::encode(bitcoin::consensus::encode::serialize(&tx));
+        let context_prevouts: Vec<PrevoutInfo> = unsigned
+            .utxos
+            .iter()
+            .map(|utxo| PrevoutInfo {
+                txid: utxo.txid.clone(),
+                vout: utxo.vout,
+                amount_sats: utxo.amount_sats,
+                script_pubkey_hex: utxo.script_pubkey.clone(),
+            })
+            .collect();
+
+        // Sign each input via FROST
+        for i in 0..tx.input.len() {
+            let mut sighash_cache = SighashCache::new(&tx);
+
+            let sighash = sighash_cache
+                .taproot_key_spend_signature_hash(i, &prevouts_ref, TapSighashType::Default)
+                .map_err(|e| SignerError::SigningFailed(e.to_string()))?;
+
+            let sighash_bytes: [u8; 32] = sighash.to_byte_array();
+
+            let signing_context = SigningContext {
+                raw_tx_hex: raw_tx_hex.clone(),
+                prevouts: context_prevouts.clone(),
+                input_index: i as u32,
+            };
+
+            // Build Solana verification data if redemption metadata is available
+            let solana_verification = unsigned.solana_verification.clone();
+
+            // Call FROST signers to get threshold signature.
+            // Pass merkle_root: Some(&[]) to trigger BIP-341 key-only tweak during
+            // FROST aggregate. Empty bytes = H_TapTweak(P) = key-only spend.
+            // Without this, aggregate produces a signature for the raw group key,
+            // but the pool address uses the tweaked output key.
+            let sig_bytes = self
+                .frost_client
+                .sign_sighash_tweaked(&sighash_bytes, Some(&tweak_bytes), Some(signing_context), Some(&[]), solana_verification)
+                .await
+                .map_err(|e| SignerError::FrostSigningFailed(e.to_string()))?;
+
+            let sig = bitcoin::secp256k1::schnorr::Signature::from_slice(&sig_bytes)
+                .map_err(|e| SignerError::SigningFailed(format!("invalid schnorr signature: {}", e)))?;
+
+            let signature = bitcoin::taproot::Signature {
+                signature: sig,
+                sighash_type: TapSighashType::Default,
+            };
+
+            tx.input[i].witness = Witness::from_slice(&[signature.to_vec()]);
+        }
+
+        Ok(tx)
     }
 
     fn public_key(&self) -> XOnlyPublicKey {
@@ -188,8 +270,11 @@ pub enum SignerError {
     #[error("signing failed: {0}")]
     SigningFailed(String),
 
-    #[error("MPC signing not implemented")]
-    MpcNotImplemented,
+    #[error("FROST threshold signing failed: {0}")]
+    FrostSigningFailed(String),
+
+    #[error("FROST HTTP error: {0}")]
+    FrostHttpError(String),
 
     #[error("MPC session error: {0}")]
     MpcSessionError(String),

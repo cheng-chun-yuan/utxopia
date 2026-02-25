@@ -4,18 +4,18 @@
  * Universal prover that works in both Browser and Node.js environments.
  * Uses Groth16 proofs via snarkjs with lazy loading.
  *
- * UNIFIED MODEL:
- * - Commitment = Poseidon(pub_key_x, amount)
- * - Nullifier = Poseidon(priv_key, leaf_index)
- * - Nullifier Hash = Poseidon(nullifier)
+ * JOINSPLIT MODEL:
+ * - Commitment = Poseidon(npk, token, amount)
+ * - Nullifier = Poseidon(nullifyingKey, leafIndex)
+ * - Signature = EdDSA-Poseidon over (merkleRoot, boundParamsHash, nullifiers..., commitmentsOut...)
  */
 
 import {
-  hashNullifierSync,
-  computeUnifiedCommitmentSync,
-  computeNullifierSync,
+  poseidonHashSync,
+  computeJoinSplitCommitmentSync,
+  computeJoinSplitNullifierSync,
 } from "../poseidon";
-import { babyJubMul, BABYJUB_BASE8, BN254_FIELD_PRIME } from "../crypto";
+import { BN254_FIELD_PRIME } from "../crypto";
 import { getConfig } from "../config";
 import type { Address } from "@solana/kit";
 
@@ -24,7 +24,6 @@ const MAX_SATOSHIS = 21_000_000n * 100_000_000n;
 
 /**
  * Validate that proof inputs are within BN254 field bounds.
- * Prevents invalid proofs from being generated with out-of-range values.
  */
 function validateFieldInputs(fields: Record<string, bigint>): void {
   for (const [name, value] of Object.entries(fields)) {
@@ -57,10 +56,7 @@ export interface ProofData {
   verificationKey?: Uint8Array;
 }
 
-export type CircuitType =
-  | "claim"
-  | "spend_split"
-  | "spend_partial_public";
+export type CircuitType = `joinsplit_${number}x${number}`;
 
 // Environment detection
 const isBrowser = typeof window !== "undefined";
@@ -71,9 +67,6 @@ let circuitBasePath = isBrowser ? "/circuits/groth16" : "./circuits";
 
 /**
  * Set the base path for circuit artifacts
- *
- * @example Browser: setCircuitPath("/circuits/groth16")
- * @example Node.js: setCircuitPath("../circuits/build")
  */
 export function setCircuitPath(path: string): void {
   circuitBasePath = path;
@@ -85,12 +78,6 @@ export function setCircuitPath(path: string): void {
 export function getCircuitPath(): string {
   return circuitBasePath;
 }
-
-const CIRCUIT_NAMES: Record<CircuitType, string> = {
-  claim: "claim",
-  spend_split: "spend_split",
-  spend_partial_public: "spend_partial_public",
-};
 
 // Lazy-loaded snarkjs module
 let snarkjs: any = null;
@@ -128,7 +115,7 @@ function getCircuitArtifactPaths(circuitType: CircuitType): CircuitArtifact {
     return circuitCache.get(circuitType)!;
   }
 
-  const name = CIRCUIT_NAMES[circuitType];
+  const name = circuitType; // "joinsplit_NxM"
   const artifact: CircuitArtifact = {
     wasmPath: `${circuitBasePath}/${name}/${name}_js/${name}.wasm`,
     zkeyPath: `${circuitBasePath}/${name}/${name}.zkey`,
@@ -160,12 +147,10 @@ async function generateProof(
   let publicSignals: string[];
 
   if (isBun && isNode) {
-    // In bun: use Node.js subprocess to avoid WASM issues
     const result = await generateProofViaNodeSubprocess(artifacts, inputs);
     proof = result.proof;
     publicSignals = result.publicSignals;
   } else {
-    // In browser or Node.js: use snarkjs directly
     await ensureSnarkjsLoaded();
     const result = await snarkjs.groth16.fullProve(
       inputs,
@@ -179,7 +164,6 @@ async function generateProof(
   const elapsed = (typeof performance !== "undefined" ? performance.now() : Date.now()) - startTime;
   console.log(`[Prover] Groth16 proof generated in ${elapsed.toFixed(0)}ms`);
 
-  // Serialize proof to bytes for on-chain submission
   const proofBytes = serializeProof(proof);
   console.log(`[Prover] Proof size: ${proofBytes.length} bytes`);
 
@@ -200,11 +184,9 @@ async function generateProofViaNodeSubprocess(
   const fs = await import("fs");
   const path = await import("path");
 
-  // Resolve absolute paths for the artifacts
   const wasmPath = path.resolve(artifacts.wasmPath);
   const zkeyPath = path.resolve(artifacts.zkeyPath);
 
-  // Write inputs to temp file
   const tmpDir = path.dirname(wasmPath);
   const tmpInput = path.join(tmpDir, `_prover_input_${Date.now()}.json`);
   const tmpProof = path.join(tmpDir, `_prover_proof_${Date.now()}.json`);
@@ -247,17 +229,8 @@ async function generateProofViaNodeSubprocess(
  * Serialize snarkjs Groth16 proof to 256 bytes (2 G1 + 1 G2 on BN254)
  */
 function serializeProof(proof: any): Uint8Array {
-  // snarkjs proof: { pi_a: [x, y, "1"], pi_b: [[x1, x2], [y1, y2], ["1","0"]], pi_c: [x, y, "1"] }
-  // BN254 G1 = 64 bytes (32 x + 32 y), G2 = 128 bytes (64 x + 64 y)
-  // Total: 64 + 128 + 64 = 256 bytes
   const bytes = new Uint8Array(256);
 
-  // Serialize to Ethereum precompile / solana-bn254 big-endian format:
-  //   G1 A: [x_BE(32), y_BE(32)]
-  //   G2 B: [x_imag_BE(32), x_real_BE(32), y_imag_BE(32), y_real_BE(32)]
-  //   G1 C: [x_BE(32), y_BE(32)]
-  //
-  // snarkjs pi_b format: [[x_c0(real), x_c1(imag)], [y_c0(real), y_c1(imag)], ...]
   const piA = proof.pi_a;
   const piB = proof.pi_b;
   const piC = proof.pi_c;
@@ -267,10 +240,10 @@ function serializeProof(proof: any): Uint8Array {
   writeBigIntBE(bytes, 32, BigInt(piA[1]), 32);
 
   // G2 point B (128 bytes): [x_imag, x_real, y_imag, y_real]
-  writeBigIntBE(bytes, 64, BigInt(piB[0][1]), 32);    // x_imag (c1)
-  writeBigIntBE(bytes, 96, BigInt(piB[0][0]), 32);     // x_real (c0)
-  writeBigIntBE(bytes, 128, BigInt(piB[1][1]), 32);    // y_imag (c1)
-  writeBigIntBE(bytes, 160, BigInt(piB[1][0]), 32);    // y_real (c0)
+  writeBigIntBE(bytes, 64, BigInt(piB[0][1]), 32);
+  writeBigIntBE(bytes, 96, BigInt(piB[0][0]), 32);
+  writeBigIntBE(bytes, 128, BigInt(piB[1][1]), 32);
+  writeBigIntBE(bytes, 160, BigInt(piB[1][0]), 32);
 
   // G1 point C (64 bytes)
   writeBigIntBE(bytes, 192, BigInt(piC[0]), 32);
@@ -287,13 +260,11 @@ function writeBigIntBE(buf: Uint8Array, offset: number, value: bigint, length: n
 }
 
 // ==========================================================================
-// Public API - Proof Generation Functions
+// Public API
 // ==========================================================================
 
 /**
  * Initialize the prover (preloads snarkjs module)
- *
- * Call this early in your app to reduce latency on first proof generation.
  */
 export async function initProver(): Promise<void> {
   await ensureSnarkjsLoaded();
@@ -314,232 +285,104 @@ export async function isProverAvailable(): Promise<boolean> {
 }
 
 // ==========================================================================
-// Unified Model Proof Generation
+// JoinSplit Proof Generation (Railgun-aligned)
 // ==========================================================================
 
 /**
- * Claim proof inputs (Unified Model)
- *
- * Claims commitment to a public Solana wallet.
- * Public key is derived in-circuit from priv_key via BabyPbk().
+ * JoinSplit proof inputs
  */
-export interface ClaimInputs {
-  /** Spending private key (Baby Jubjub scalar) */
-  privKey: bigint;
-  /** Amount in satoshis */
-  amount: bigint;
-  /** Position in Merkle tree */
-  leafIndex: bigint;
-  /** Merkle tree root */
+export interface JoinSplitProofInputs {
+  nInputs: number;
+  nOutputs: number;
   merkleRoot: bigint;
-  /** Merkle proof (20 levels) */
-  merkleProof: MerkleProofInput;
-  /** Recipient address (32 bytes as bigint) - bound to proof, cannot be changed */
-  recipient: bigint;
+  boundParamsHash: bigint;
+  token: bigint;
+  publicKey: [bigint, bigint];  // BJJ (x, y)
+  signature: [bigint, bigint, bigint];  // EdDSA-Poseidon (R8x, R8y, S)
+  nullifyingKey: bigint;
+  inputs: Array<{
+    random: bigint;
+    value: bigint;
+    leafIndex: bigint;
+    merkleProof: { siblings: bigint[]; indices: number[] };
+  }>;
+  outputs: Array<{ npk: bigint; value: bigint }>;
 }
 
 /**
- * Generate a claim proof (Unified Model)
+ * Generate a JoinSplit proof
  *
- * Proves ownership of commitment (pub_key_x, amount) and reveals amount for public claim.
+ * Unified prover for all JoinSplit variants.
+ * Selects the joinsplit_NxM circuit based on nInputs/nOutputs.
  */
-export async function generateClaimProof(inputs: ClaimInputs): Promise<ProofData> {
-  validateFieldInputs({
-    merkleRoot: inputs.merkleRoot,
-    privKey: inputs.privKey,
-    recipient: inputs.recipient,
-  });
-  validateAmount(inputs.amount, "amount");
+export async function generateJoinSplitProof(inputs: JoinSplitProofInputs): Promise<ProofData> {
+  const { nInputs, nOutputs } = inputs;
 
-  const pathElements = inputs.merkleProof.siblings.map((s) => s.toString());
-  const pathIndices = inputs.merkleProof.indices;
-
-  // Compute nullifier and nullifier hash
-  const nullifier = computeNullifierSync(inputs.privKey, inputs.leafIndex);
-  const nullifierHash = hashNullifierSync(nullifier);
-
-  const circuitInputs: InputMap = {
-    priv_key: inputs.privKey.toString(),
-    amount: inputs.amount.toString(),
-    leaf_index: inputs.leafIndex.toString(),
-    merkle_path: pathElements,
-    path_indices: pathIndices,
-    merkle_root: inputs.merkleRoot.toString(),
-    nullifier_hash: nullifierHash.toString(),
-    amount_pub: inputs.amount.toString(),
-    recipient: inputs.recipient.toString(),
-  };
-
-  return generateProof("claim", circuitInputs);
-}
-
-/**
- * Spend split proof inputs (Unified Model)
- *
- * Splits one commitment into two commitments.
- * All public keys are derived in-circuit from private keys via BabyPbk().
- */
-export interface SpendSplitInputs {
-  /** Input: Spending private key (Baby Jubjub scalar) */
-  privKey: bigint;
-  /** Input: Amount in satoshis */
-  amount: bigint;
-  /** Input: Position in Merkle tree */
-  leafIndex: bigint;
-  /** Merkle tree root */
-  merkleRoot: bigint;
-  /** Merkle proof (20 levels) */
-  merkleProof: MerkleProofInput;
-  /** Output 1: Private key (Baby Jubjub scalar) */
-  output1PrivKey: bigint;
-  /** Output 1: Amount in satoshis */
-  output1Amount: bigint;
-  /** Output 2: Private key (Baby Jubjub scalar) */
-  output2PrivKey: bigint;
-  /** Output 2: Amount in satoshis */
-  output2Amount: bigint;
-}
-
-/**
- * Generate a spend split proof (Unified Model)
- *
- * Commitment -> Commitment + Commitment
- * Amount conservation: input_amount == output1_amount + output2_amount
- */
-export async function generateSpendSplitProof(inputs: SpendSplitInputs): Promise<ProofData> {
-  validateFieldInputs({
-    merkleRoot: inputs.merkleRoot,
-    privKey: inputs.privKey,
-    output1PrivKey: inputs.output1PrivKey,
-    output2PrivKey: inputs.output2PrivKey,
-  });
-  validateAmount(inputs.amount, "amount");
-  validateAmount(inputs.output1Amount, "output1Amount");
-  validateAmount(inputs.output2Amount, "output2Amount");
-
-  if (inputs.amount !== inputs.output1Amount + inputs.output2Amount) {
-    throw new Error("Spend split must conserve amount (input == output1 + output2)");
+  if (nInputs < 1 || nOutputs < 1 || nInputs + nOutputs > 14) {
+    throw new Error(`Invalid JoinSplit dimensions: ${nInputs}x${nOutputs} (N+M must be 2..14)`);
   }
 
-  if (inputs.merkleProof.siblings.length !== 20) {
-    throw new Error(`Spend split circuit requires 20-level merkle tree, got ${inputs.merkleProof.siblings.length} siblings`);
+  validateFieldInputs({
+    merkleRoot: inputs.merkleRoot,
+    boundParamsHash: inputs.boundParamsHash,
+    token: inputs.token,
+    publicKeyX: inputs.publicKey[0],
+    publicKeyY: inputs.publicKey[1],
+    nullifyingKey: inputs.nullifyingKey,
+  });
+
+  // Compute nullifiers
+  const nullifiers: bigint[] = [];
+  for (const inp of inputs.inputs) {
+    const nullifier = computeJoinSplitNullifierSync(inputs.nullifyingKey, inp.leafIndex);
+    nullifiers.push(nullifier);
   }
-
-  const pathElements = inputs.merkleProof.siblings.map((s) => s.toString());
-  const pathIndices = inputs.merkleProof.indices;
-
-  // Compute nullifier hash
-  const nullifier = computeNullifierSync(inputs.privKey, inputs.leafIndex);
-  const nullifierHash = hashNullifierSync(nullifier);
-
-  // Derive output public keys from private keys for commitment computation
-  const output1PubKeyX = babyJubMul(inputs.output1PrivKey, BABYJUB_BASE8).x;
-  const output2PubKeyX = babyJubMul(inputs.output2PrivKey, BABYJUB_BASE8).x;
 
   // Compute output commitments
-  const outputCommitment1 = computeUnifiedCommitmentSync(output1PubKeyX, inputs.output1Amount);
-  const outputCommitment2 = computeUnifiedCommitmentSync(output2PubKeyX, inputs.output2Amount);
-
-  const circuitInputs: InputMap = {
-    priv_key: inputs.privKey.toString(),
-    amount: inputs.amount.toString(),
-    leaf_index: inputs.leafIndex.toString(),
-    merkle_path: pathElements,
-    path_indices: pathIndices,
-    output1_priv_key: inputs.output1PrivKey.toString(),
-    output1_amount: inputs.output1Amount.toString(),
-    output2_priv_key: inputs.output2PrivKey.toString(),
-    output2_amount: inputs.output2Amount.toString(),
-    merkle_root: inputs.merkleRoot.toString(),
-    nullifier_hash: nullifierHash.toString(),
-    output_commitment1: outputCommitment1.toString(),
-    output_commitment2: outputCommitment2.toString(),
-  };
-
-  return generateProof("spend_split", circuitInputs);
-}
-
-/**
- * Spend partial public proof inputs (Unified Model)
- *
- * Performs partial public claim: Commitment -> Public Amount + Change Commitment
- * All public keys are derived in-circuit from private keys via BabyPbk().
- */
-export interface SpendPartialPublicInputs {
-  /** Input: Spending private key (Baby Jubjub scalar) */
-  privKey: bigint;
-  /** Input: Amount in satoshis */
-  amount: bigint;
-  /** Input: Position in Merkle tree */
-  leafIndex: bigint;
-  /** Merkle tree root */
-  merkleRoot: bigint;
-  /** Merkle proof (20 levels) */
-  merkleProof: MerkleProofInput;
-  /** Public amount to claim (revealed) */
-  publicAmount: bigint;
-  /** Change: Private key (Baby Jubjub scalar) */
-  changePrivKey: bigint;
-  /** Change: Amount in satoshis */
-  changeAmount: bigint;
-  /** Recipient Solana wallet (as bigint from 32 bytes) */
-  recipient: bigint;
-}
-
-/**
- * Generate a spend partial public proof (Unified Model)
- *
- * Commitment -> Public Amount + Change Commitment
- * Amount conservation: input_amount == public_amount + change_amount
- */
-export async function generateSpendPartialPublicProof(inputs: SpendPartialPublicInputs): Promise<ProofData> {
-  validateFieldInputs({
-    merkleRoot: inputs.merkleRoot,
-    privKey: inputs.privKey,
-    changePrivKey: inputs.changePrivKey,
-    recipient: inputs.recipient,
-  });
-  validateAmount(inputs.amount, "amount");
-  validateAmount(inputs.publicAmount, "publicAmount");
-  validateAmount(inputs.changeAmount, "changeAmount");
-
-  if (inputs.amount !== inputs.publicAmount + inputs.changeAmount) {
-    throw new Error("Spend partial public must conserve amount (input == public + change)");
+  const commitmentsOut: bigint[] = [];
+  for (const out of inputs.outputs) {
+    const commitment = computeJoinSplitCommitmentSync(out.npk, inputs.token, out.value);
+    commitmentsOut.push(commitment);
   }
 
-  if (inputs.merkleProof.siblings.length !== 20) {
-    throw new Error(`Spend partial public circuit requires 20-level merkle tree, got ${inputs.merkleProof.siblings.length} siblings`);
-  }
+  // Compute message hash: Poseidon(merkleRoot, boundParamsHash, nullifiers..., commitmentsOut...)
+  const hashInputs: bigint[] = [
+    inputs.merkleRoot,
+    inputs.boundParamsHash,
+    ...nullifiers,
+    ...commitmentsOut,
+  ];
+  const _msgHash = poseidonHashSync(hashInputs);
 
-  const pathElements = inputs.merkleProof.siblings.map((s) => s.toString());
-  const pathIndices = inputs.merkleProof.indices;
-
-  // Compute nullifier hash
-  const nullifier = computeNullifierSync(inputs.privKey, inputs.leafIndex);
-  const nullifierHash = hashNullifierSync(nullifier);
-
-  // Derive change public key from private key for commitment computation
-  const changePubKeyX = babyJubMul(inputs.changePrivKey, BABYJUB_BASE8).x;
-
-  // Compute change commitment
-  const changeCommitment = computeUnifiedCommitmentSync(changePubKeyX, inputs.changeAmount);
-
+  // Build circuit inputs
   const circuitInputs: InputMap = {
-    priv_key: inputs.privKey.toString(),
-    amount: inputs.amount.toString(),
-    leaf_index: inputs.leafIndex.toString(),
-    merkle_path: pathElements,
-    path_indices: pathIndices,
-    change_priv_key: inputs.changePrivKey.toString(),
-    change_amount: inputs.changeAmount.toString(),
-    merkle_root: inputs.merkleRoot.toString(),
-    nullifier_hash: nullifierHash.toString(),
-    public_amount: inputs.publicAmount.toString(),
-    change_commitment: changeCommitment.toString(),
-    recipient: inputs.recipient.toString(),
+    merkleRoot: inputs.merkleRoot.toString(),
+    boundParamsHash: inputs.boundParamsHash.toString(),
+    nullifiers: nullifiers.map(n => n.toString()),
+    commitmentsOut: commitmentsOut.map(c => c.toString()),
+    token: inputs.token.toString(),
+    publicKey: inputs.publicKey.map(p => p.toString()),
+    signature: inputs.signature.map(s => s.toString()),
+    nullifyingKey: inputs.nullifyingKey.toString(),
+    randomIn: inputs.inputs.map(i => i.random.toString()),
+    valueIn: inputs.inputs.map(i => i.value.toString()),
+    leavesIndices: inputs.inputs.map(i => i.leafIndex.toString()),
+    npkOut: inputs.outputs.map(o => o.npk.toString()),
+    valueOut: inputs.outputs.map(o => o.value.toString()),
   };
 
-  return generateProof("spend_partial_public", circuitInputs);
+  // Build path arrays (2D arrays for circuit)
+  const pathElements: string[][] = [];
+  const pathIndices: number[][] = [];
+  for (const inp of inputs.inputs) {
+    pathElements.push(inp.merkleProof.siblings.map(s => s.toString()));
+    pathIndices.push(inp.merkleProof.indices);
+  }
+  circuitInputs.pathElements = pathElements as any;
+  circuitInputs.pathIndices = pathIndices as any;
+
+  const variantName: CircuitType = `joinsplit_${nInputs}x${nOutputs}`;
+  return generateProof(variantName, circuitInputs);
 }
 
 // ==========================================================================
@@ -551,7 +394,6 @@ export async function generateSpendPartialPublicProof(inputs: SpendPartialPublic
  */
 export async function circuitExists(circuitType: CircuitType): Promise<boolean> {
   if (isBrowser) {
-    // In browser, try to fetch the wasm file
     try {
       const artifacts = getCircuitArtifactPaths(circuitType);
       const response = await fetch(artifacts.wasmPath, { method: "HEAD" });
@@ -560,7 +402,6 @@ export async function circuitExists(circuitType: CircuitType): Promise<boolean> 
       return false;
     }
   } else {
-    // In Node.js, check if files exist on disk
     try {
       const fs = await import("fs");
       const artifacts = getCircuitArtifactPaths(circuitType);
@@ -570,29 +411,6 @@ export async function circuitExists(circuitType: CircuitType): Promise<boolean> 
     }
   }
 }
-
-/**
- * Verify a proof using snarkjs (Node.js only, uses subprocess for bun compatibility)
- *
- * Note: This verifies that the proof bytes are well-formed (correct size, non-zero).
- * Full snarkjs verification requires the original proof JSON object - use snarkjs directly
- * in tests for cryptographic verification (see groth16-claim.test.ts).
- */
-export async function verifyProof(_circuitType: CircuitType, proof: ProofData): Promise<boolean> {
-  // Basic structural validation
-  if (proof.proof.length !== 256) return false;
-  if (proof.publicInputs.length === 0) return false;
-
-  // Check proof is not all zeros
-  const allZeros = proof.proof.every(b => b === 0);
-  if (allZeros) return false;
-
-  return true;
-}
-
-// ==========================================================================
-// Utilities
-// ==========================================================================
 
 /**
  * Convert proof to raw bytes for on-chain submission
@@ -623,12 +441,6 @@ export function getGroth16VerifierProgramId(): Address {
 
 /**
  * Build instruction data for Groth16 verification
- *
- * Format:
- * - proof_bytes (256 bytes): Serialized Groth16 proof (2 G1 + 1 G2 point)
- * - public_inputs_count (4 bytes, LE)
- * - public_inputs (N x 32 bytes, big-endian)
- * - vk_hash (32 bytes)
  */
 export function buildVerifyInstructionData(
   proof: Uint8Array,
@@ -636,7 +448,6 @@ export function buildVerifyInstructionData(
   vkHash: string
 ): Uint8Array {
   const piBytes = publicSignals.flatMap((pi) => {
-    // Encode as 32-byte big-endian field element (matching BN254 format)
     const bytes = new Array(32).fill(0);
     const bigint = BigInt(pi);
     for (let i = 31; i >= 0; i--) {
@@ -651,31 +462,22 @@ export function buildVerifyInstructionData(
     vkHashBytes[i] = parseInt(cleanHex.substr(i * 2, 2), 16);
   }
 
-  const totalSize =
-    proof.length + // proof bytes (~256)
-    4 + // public_inputs_count
-    piBytes.length +
-    32; // vk_hash
-
+  const totalSize = proof.length + 4 + piBytes.length + 32;
   const data = new Uint8Array(totalSize);
   let offset = 0;
 
-  // Proof bytes
   data.set(proof, offset);
   offset += proof.length;
 
-  // Public inputs count (little-endian)
   const piCount = publicSignals.length;
   data[offset++] = piCount & 0xff;
   data[offset++] = (piCount >> 8) & 0xff;
   data[offset++] = (piCount >> 16) & 0xff;
   data[offset++] = (piCount >> 24) & 0xff;
 
-  // Public inputs
   data.set(new Uint8Array(piBytes), offset);
   offset += piBytes.length;
 
-  // VK hash
   data.set(vkHashBytes, offset);
 
   return data;

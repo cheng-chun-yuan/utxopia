@@ -2,33 +2,39 @@
 /**
  * Export Groth16 verification key as Rust hex constants
  *
- * Usage: node scripts/export-vk-rust.js <circuit_name>
- * Example: node scripts/export-vk-rust.js claim
+ * Usage:
+ *   node scripts/export-vk-rust.js <circuit_name>
+ *   node scripts/export-vk-rust.js joinsplit_1x2
+ *   node scripts/export-vk-rust.js joinsplit_2x2 --full   # Include shared VK components
  *
  * Reads: build/<circuit>/<circuit>.vkey.json
  * Outputs: Rust code to stdout
  *
+ * For JoinSplit variants, only DELTA_G2 and IC are circuit-specific.
+ * ALPHA_G1, BETA_G2, GAMMA_G2 are shared across all variants from the same ceremony.
+ *
  * Format matches solana-bn254's Ethereum precompile format:
  * - G1: [x_BE(32), y_BE(32)] = 64 bytes
  * - G2: [x_imag_BE(32), x_real_BE(32), y_imag_BE(32), y_real_BE(32)] = 128 bytes
- *
- * snarkjs vkey.json G2 format:
- *   [[x_c0, x_c1], [y_c0, y_c1], [z_c0, z_c1]]
- *   where c0 = real, c1 = imaginary
- *
- * Ethereum precompile G2 format:
- *   [x_imag_BE(32), x_real_BE(32), y_imag_BE(32), y_real_BE(32)]
  */
 
 const fs = require("fs");
 const path = require("path");
 
-const circuitName = process.argv[2] || "claim";
+const circuitName = process.argv[2];
+const fullMode = process.argv.includes("--full");
+
+if (!circuitName) {
+  console.error("Usage: node scripts/export-vk-rust.js <circuit_name> [--full]");
+  console.error("Example: node scripts/export-vk-rust.js joinsplit_1x2");
+  process.exit(1);
+}
+
 const vkeyPath = path.join(__dirname, "..", "build", circuitName, `${circuitName}.vkey.json`);
 
 if (!fs.existsSync(vkeyPath)) {
   console.error(`Verification key not found: ${vkeyPath}`);
-  console.error(`Run setup.sh first to generate keys.`);
+  console.error(`Run compile.sh and setup.sh first to generate keys.`);
   process.exit(1);
 }
 
@@ -43,7 +49,7 @@ function fieldToHex32(decStr) {
 }
 
 /**
- * Format 32-byte hex as Rust array literal
+ * Format 32-byte hex as Rust array literal entries
  */
 function hexToRustBytes(hex) {
   const bytes = [];
@@ -64,16 +70,12 @@ function encodeG1(point) {
 
 /**
  * Encode G2 point as [x_imag_BE(32), x_real_BE(32), y_imag_BE(32), y_real_BE(32)] = 128 bytes
- *
- * snarkjs: [[x_c0(real), x_c1(imag)], [y_c0(real), y_c1(imag)], ...]
- * Ethereum: [x_c1(imag), x_c0(real), y_c1(imag), y_c0(real)]
  */
 function encodeG2(point) {
   const xReal = fieldToHex32(point[0][0]);
   const xImag = fieldToHex32(point[0][1]);
   const yReal = fieldToHex32(point[1][0]);
   const yImag = fieldToHex32(point[1][1]);
-  // Ethereum precompile order: x_imag, x_real, y_imag, y_real
   return hexToRustBytes(xImag + xReal + yImag + yReal);
 }
 
@@ -89,23 +91,32 @@ function formatRustArray(bytes, indent = "    ") {
   return lines.join("\n");
 }
 
-// Generate Rust code
-const alphaG1 = encodeG1(vkey.vk_alpha_1);
-const betaG2 = encodeG2(vkey.vk_beta_2);
-const gammaG2 = encodeG2(vkey.vk_gamma_2);
+// Parse variant name to get (N, M)
+const variantMatch = circuitName.match(/joinsplit_(\d+)x(\d+)/);
+const variantLabel = variantMatch
+  ? `JoinSplit(${variantMatch[1]}, ${variantMatch[2]}, 16)`
+  : circuitName;
+
+// Encode VK components
 const deltaG2 = encodeG2(vkey.vk_delta_2);
 const icPoints = vkey.IC.map(encodeG1);
-
 const nPublic = vkey.nPublic;
-const icCount = icPoints.length; // nPublic + 1
+const icCount = icPoints.length;
 
-let output = `/// Verification key for the ${circuitName} circuit
-/// Generated from ${circuitName}.vkey.json
-/// DO NOT EDIT - regenerate with: node scripts/export-vk-rust.js ${circuitName}
-pub mod ${circuitName}_vk {
-    /// Number of public inputs
-    pub const NUM_PUBLIC_INPUTS: usize = ${nPublic};
+// Sanitize module name for Rust
+const modName = circuitName.replace(/-/g, "_");
 
+let output = "";
+
+if (fullMode) {
+  // Full mode: include shared VK components
+  const alphaG1 = encodeG1(vkey.vk_alpha_1);
+  const betaG2 = encodeG2(vkey.vk_beta_2);
+  const gammaG2 = encodeG2(vkey.vk_gamma_2);
+
+  output += `/// Shared verification key components (same for all variants from this ceremony)
+/// DO NOT EDIT - regenerate with: node scripts/export-vk-rust.js ${circuitName} --full
+pub mod common_vk {
     /// VK alpha (G1 point, 64 bytes)
     pub const ALPHA_G1: [u8; 64] = [
 ${formatRustArray(alphaG1)}
@@ -120,6 +131,18 @@ ${formatRustArray(betaG2)}
     pub const GAMMA_G2: [u8; 128] = [
 ${formatRustArray(gammaG2)}
     ];
+}
+
+`;
+}
+
+// Circuit-specific VK (delta + IC)
+output += `/// Verification key for ${variantLabel}
+/// Generated from ${circuitName}.vkey.json
+/// DO NOT EDIT - regenerate with: node scripts/export-vk-rust.js ${circuitName}
+pub mod ${modName}_vk {
+    /// Number of public inputs
+    pub const NUM_PUBLIC_INPUTS: usize = ${nPublic};
 
     /// VK delta (G2 point, 128 bytes)
     pub const DELTA_G2: [u8; 128] = [

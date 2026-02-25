@@ -1,0 +1,38 @@
+{
+  "name": "zvault-devnet-test",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bootstrap": "bash bootstrap.sh",
+    "verify": "bun run verify-readiness.ts",
+    "test:health": "bun test tests/00-health.test.ts --timeout 30000",
+    "test:frost": "bun test tests/01-frost-dkg.test.ts --timeout 60000",
+    "test:deposit": "bun test tests/02-deposit.test.ts --timeout 300000",
+    "test:lifecycle": "bun test tests/03-tracker-lifecycle.test.ts --timeout 900000",
+    "test:joinsplit": "bun test tests/04-joinsplit.test.ts --timeout 300000",
+    "test:redemption": "bun test tests/05-redemption.test.ts --timeout 900000",
+    "test:full": "bun test tests/06-full-flow.test.ts --timeout 1800000",
+    "test:all": "bun test tests/ --timeout 1800000",
+    "test:local": "TEST_MODE=local bun test tests/ --timeout 120000",
+    "test:local:health": "TEST_MODE=local bun test tests/00-health.test.ts --timeout 30000",
+    "test:local:deposit": "TEST_MODE=local bun test tests/02-deposit.test.ts --timeout 120000",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "docker:regtest:up": "docker compose up -d bitcoin",
+    "docker:regtest:down": "docker compose down bitcoin",
+    "esplora-proxy": "bun run esplora-proxy.ts",
+    "test:local:lifecycle": "TEST_MODE=local bun test tests/03-tracker-lifecycle.test.ts --timeout 300000"
+  },
+  "dependencies": {
+    "@solana/kit": "^2.1.0",
+    "@solana/web3.js": "^1.98.0",
+    "@zvault/sdk": "file:../sdk"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "bun-types": "latest",
+    "dotenv": "^16.4.7"
+  }
+}

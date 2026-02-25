@@ -15,7 +15,5 @@ export type {
   MerkleProofInput,
   ProofData,
   CircuitType,
-  ClaimInputs,
-  SpendSplitInputs,
-  SpendPartialPublicInputs,
+  JoinSplitProofInputs,
 } from "./web";

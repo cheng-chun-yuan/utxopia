@@ -32,11 +32,6 @@
       "import": "./dist/stealth/index.js",
       "default": "./dist/stealth/index.js"
     },
-    "./pool": {
-      "types": "./dist/pool/index.d.ts",
-      "import": "./dist/pool/index.js",
-      "default": "./dist/pool/index.js"
-    },
     "./bitcoin": {
       "types": "./dist/bitcoin/index.d.ts",
       "import": "./dist/bitcoin/index.js",
@@ -93,12 +88,16 @@
     "test:e2e:tree": "bun test test/e2e/tree-consistency.test.ts",
     "copy-circuits": "mkdir -p circuits && cp -r ../circuits/build/* circuits/",
     "e2e": "bun run scripts/e2e-instructions.ts",
+    "e2e:spv": "bun run scripts/e2e-full-spv-flow.ts",
+    "e2e:mock-spv": "bun run scripts/e2e-mock-spv.ts",
     "e2e:localnet": "NETWORK=localnet bun run scripts/e2e-instructions.ts",
     "e2e:devnet": "NETWORK=devnet bun run scripts/e2e-instructions.ts"
   },
   "dependencies": {
     "@noble/curves": "^2.0.1",
     "@noble/hashes": "^1.8.0",
+    "@scure/base": "^2.0.0",
+    "@scure/btc-signer": "^2.0.1",
     "@solana-program/system": "^0.10.0",
     "@solana/kit": "^5.5.0",
     "@solana/spl-token": "^0.4.14",

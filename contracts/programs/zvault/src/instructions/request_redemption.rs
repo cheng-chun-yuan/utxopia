@@ -1,10 +1,10 @@
-//! Request redemption instruction - burns zBTC from pool with ZK proof, queues BTC withdrawal
+//! Request redemption instruction — locks zBTC in escrow, queues BTC withdrawal
 //!
-//! SHIELDED-ONLY ARCHITECTURE:
+//! ESCROW-BASED ARCHITECTURE:
 //! - User proves ownership of commitment via ZK proof
-//! - zBTC is burned from pool vault (not user wallet)
-//! - Amount is revealed here (unavoidable for BTC withdrawal)
-//! - This is the ONLY operation where amount becomes public
+//! - zBTC is locked (sub_shielded) but NOT burned yet
+//! - Burn happens in complete_redemption after SPV-verified BTC delivery
+//! - User can cancel (cancel_redemption) while status is Pending
 
 use pinocchio::{
     account_info::AccountInfo,
@@ -22,7 +22,7 @@ use crate::state::{
     RedemptionRequest, RedemptionStatus, NULLIFIER_RECORD_DISCRIMINATOR,
     REDEMPTION_REQUEST_DISCRIMINATOR,
 };
-use crate::utils::{validate_program_owner, validate_system_program, validate_token_2022_owner, validate_token_program_key, validate_account_writable};
+use crate::utils::{validate_program_owner, validate_system_program, validate_account_writable};
 
 /// Request redemption instruction data (with ZK proof)
 ///
@@ -96,22 +96,19 @@ impl RequestRedemptionData {
     }
 }
 
-/// Request redemption accounts (shielded-only architecture)
+/// Request redemption accounts (escrow-based — no token accounts needed)
 pub struct RequestRedemptionAccounts<'a> {
     pub pool_state: &'a AccountInfo,
     pub commitment_tree: &'a AccountInfo,
     pub nullifier_record: &'a AccountInfo,
     pub redemption_request: &'a AccountInfo,
-    pub zbtc_mint: &'a AccountInfo,
-    pub pool_vault: &'a AccountInfo,
     pub user: &'a AccountInfo,
-    pub token_program: &'a AccountInfo,
     pub system_program: &'a AccountInfo,
 }
 
 impl<'a> RequestRedemptionAccounts<'a> {
     pub fn from_accounts(accounts: &'a [AccountInfo]) -> Result<Self, ProgramError> {
-        if accounts.len() < 9 {
+        if accounts.len() < 6 {
             return Err(ProgramError::NotEnoughAccountKeys);
         }
 
@@ -119,13 +116,9 @@ impl<'a> RequestRedemptionAccounts<'a> {
         let commitment_tree = &accounts[1];
         let nullifier_record = &accounts[2];
         let redemption_request = &accounts[3];
-        let zbtc_mint = &accounts[4];
-        let pool_vault = &accounts[5];
-        let user = &accounts[6];
-        let token_program = &accounts[7];
-        let system_program = &accounts[8];
+        let user = &accounts[4];
+        let system_program = &accounts[5];
 
-        // Validate user is signer
         if !user.is_signer() {
             return Err(ProgramError::MissingRequiredSignature);
         }
@@ -135,19 +128,16 @@ impl<'a> RequestRedemptionAccounts<'a> {
             commitment_tree,
             nullifier_record,
             redemption_request,
-            zbtc_mint,
-            pool_vault,
             user,
-            token_program,
             system_program,
         })
     }
 }
 
-/// Process redemption request (shielded-only architecture)
+/// Process redemption request (escrow-based architecture)
 ///
-/// This is the ONLY operation where amount is revealed (unavoidable for BTC withdrawal).
-/// User proves ownership via ZK proof, zBTC is burned from pool vault.
+/// Locks zBTC by decrementing total_shielded. Does NOT burn tokens.
+/// Burn happens later in complete_redemption after SPV-verified BTC delivery.
 pub fn process_request_redemption(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -159,21 +149,15 @@ pub fn process_request_redemption(
     // SECURITY: Validate account owners BEFORE deserializing any data
     validate_program_owner(accounts.pool_state, program_id)?;
     validate_program_owner(accounts.commitment_tree, program_id)?;
-    // Note: nullifier_record and redemption_request may not exist yet (will be created)
-    validate_token_2022_owner(accounts.zbtc_mint)?;
-    validate_token_2022_owner(accounts.pool_vault)?;
-    validate_token_program_key(accounts.token_program)?;
     validate_system_program(accounts.system_program)?;
 
     // SECURITY: Validate writable accounts
     validate_account_writable(accounts.pool_state)?;
     validate_account_writable(accounts.nullifier_record)?;
     validate_account_writable(accounts.redemption_request)?;
-    validate_account_writable(accounts.zbtc_mint)?;
-    validate_account_writable(accounts.pool_vault)?;
 
     // Load and validate pool state
-    let (pool_bump, min_deposit, pending_redemptions, total_shielded) = {
+    let (min_deposit, pending_redemptions, total_shielded) = {
         let pool_data = accounts.pool_state.try_borrow_data()?;
         let pool = PoolState::from_bytes(&pool_data)?;
 
@@ -182,7 +166,6 @@ pub fn process_request_redemption(
         }
 
         (
-            pool.bump,
             pool.min_deposit(),
             pool.pending_redemptions(),
             pool.total_shielded(),
@@ -206,7 +189,6 @@ pub fn process_request_redemption(
     }
 
     // SECURITY: Always verify root is valid in commitment tree
-    // Demo mode bypass removed for mainnet security
     {
         let tree_data = accounts.commitment_tree.try_borrow_data()?;
         let tree = CommitmentTree::from_bytes(&tree_data)?;
@@ -280,25 +262,33 @@ pub fn process_request_redemption(
         nullifier.nullifier_hash.copy_from_slice(&ix_data.nullifier_hash);
         nullifier.set_spent_at(clock.unix_timestamp);
         nullifier.spent_by.copy_from_slice(accounts.user.key().as_ref());
-        nullifier.set_spent_in_request(ix_data.request_nonce);
         nullifier.set_operation_type(NullifierOperationType::FullWithdrawal);
     }
 
-    // Burn zBTC from pool vault (not user wallet - shielded-only architecture)
-    // Pool PDA is the authority for the pool vault
-    let bump_bytes = [pool_bump];
-    let pool_signer_seeds: &[&[u8]] = &[PoolState::SEED, &bump_bytes];
+    // Create redemption request PDA
+    let (_, redemption_bump) = find_program_address(
+        &[RedemptionRequest::SEED, accounts.user.key().as_ref(), &nonce_bytes],
+        program_id,
+    );
+    let redemption_bump_bytes = [redemption_bump];
+    let redemption_signer_seeds: [Seed; 4] = [
+        Seed::from(RedemptionRequest::SEED),
+        Seed::from(accounts.user.key().as_ref()),
+        Seed::from(nonce_bytes.as_slice()),
+        Seed::from(&redemption_bump_bytes),
+    ];
+    let redemption_signer = [Signer::from(&redemption_signer_seeds)];
 
-    crate::utils::burn_zbtc_signed(
-        accounts.token_program,
-        accounts.zbtc_mint,
-        accounts.pool_vault,
-        accounts.pool_state,
-        ix_data.amount_sats,
-        pool_signer_seeds,
-    )?;
+    CreateAccount {
+        from: accounts.user,
+        to: accounts.redemption_request,
+        lamports: Rent::get()?.minimum_balance(RedemptionRequest::LEN),
+        space: RedemptionRequest::LEN as u64,
+        owner: program_id,
+    }
+    .invoke_signed(&redemption_signer)?;
 
-    // Create redemption request
+    // Initialize redemption request
     {
         let mut redemption_data = accounts.redemption_request.try_borrow_mut_data()?;
         let redemption = RedemptionRequest::init(&mut redemption_data)?;
@@ -308,15 +298,13 @@ pub fn process_request_redemption(
         redemption.set_amount_sats(ix_data.amount_sats);
         redemption.set_btc_address(&ix_data.btc_address[..ix_data.btc_address_len as usize])?;
         redemption.set_status(RedemptionStatus::Pending);
-        redemption.set_created_at(clock.unix_timestamp);
     }
 
-    // Update pool state
+    // Update pool state — lock funds (sub_shielded) but do NOT burn
     {
         let mut pool_data = accounts.pool_state.try_borrow_mut_data()?;
         let pool = PoolState::from_bytes_mut(&mut pool_data)?;
 
-        pool.add_burned(ix_data.amount_sats)?;
         pool.sub_shielded(ix_data.amount_sats)?;
         pool.set_pending_redemptions(pending_redemptions.saturating_add(1));
         pool.set_last_update(clock.unix_timestamp);

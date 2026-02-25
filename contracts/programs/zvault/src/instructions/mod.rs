@@ -1,4 +1,4 @@
-//! Instruction handlers for zVault (Unified Stealth Model)
+//! Instruction handlers for zVault (JoinSplit Architecture)
 //!
 //! ## Core Operations
 //!
@@ -6,9 +6,7 @@
 //! |-------------|---------|
 //! | `initialize` | Setup pool state and commitment tree |
 //! | `verify_stealth_deposit` | Verify BTC via SPV, create stealth announcement, mint to pool |
-//! | `spend_split` | Split 1 commitment into 2 (spend_split circuit) |
-//! | `spend_partial_public` | Partial public claim with change (spend_partial_public circuit) |
-//! | `claim` | Full claim to public wallet (claim circuit) |
+//! | `transact` | JoinSplit N-to-M private transfer (Groth16) |
 //! | `request_redemption` | Prove ownership, burn from pool, queue BTC withdrawal |
 //! | `complete_redemption` | Relayer marks redemption complete |
 //!
@@ -18,13 +16,13 @@
 //! |-------------|---------|
 //! | `add_demo_stealth` | Add stealth deposit without real BTC |
 
-// Core operations (Unified Stealth Model)
+// Core operations (JoinSplit Architecture)
 pub mod initialize;
 pub mod verify_stealth_deposit;
-pub mod spend_split;
-pub mod spend_partial_public;
-pub mod claim;
+pub mod transact;
 pub mod request_redemption;
+pub mod mark_processing;
+pub mod cancel_redemption;
 pub mod complete_redemption;
 
 // Demo/testing
@@ -39,13 +37,11 @@ pub mod init_vk_registry;
 // Re-exports
 pub use initialize::*;
 pub use verify_stealth_deposit::*;
-pub use spend_split::*;
-pub use spend_partial_public::*;
-pub use claim::*;
+pub use transact::*;
 pub use request_redemption::*;
+pub use mark_processing::*;
+pub use cancel_redemption::*;
 pub use complete_redemption::*;
 pub use add_demo_stealth::*;
 pub use register_name::*;
-
-// VK registry re-exports
 pub use init_vk_registry::*;

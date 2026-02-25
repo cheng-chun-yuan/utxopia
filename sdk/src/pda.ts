@@ -18,13 +18,13 @@ import {
 // Import program IDs from config for local use
 import {
   ZVAULT_PROGRAM_ID as _ZVAULT_PROGRAM_ID,
-  BTC_LIGHT_CLIENT_PROGRAM_ID as _BTC_LIGHT_CLIENT_PROGRAM_ID,
+  BTC_RELAY_PROGRAM_ID as _BTC_RELAY_PROGRAM_ID,
 } from "./config";
 
 // Re-export everything from config for backwards compatibility
 export {
   ZVAULT_PROGRAM_ID,
-  BTC_LIGHT_CLIENT_PROGRAM_ID,
+  BTC_RELAY_PROGRAM_ID,
   getConfig,
   setConfig,
   DEVNET_CONFIG,
@@ -36,7 +36,7 @@ export {
 
 // Local aliases for use in this file
 const ZVAULT_PROGRAM_ID = _ZVAULT_PROGRAM_ID;
-const BTC_LIGHT_CLIENT_PROGRAM_ID = _BTC_LIGHT_CLIENT_PROGRAM_ID;
+const BTC_RELAY_PROGRAM_ID = _BTC_RELAY_PROGRAM_ID;
 
 // =============================================================================
 // PDA Seeds
@@ -45,12 +45,13 @@ const BTC_LIGHT_CLIENT_PROGRAM_ID = _BTC_LIGHT_CLIENT_PROGRAM_ID;
 export const PDA_SEEDS = {
   POOL_STATE: "pool_state",
   COMMITMENT_TREE: "commitment_tree",
-  LIGHT_CLIENT: "light_client",
+  LIGHT_CLIENT: "btc_light_client",
   BLOCK_HEADER: "block_header",
   DEPOSIT: "deposit",
   NULLIFIER: "nullifier",
   STEALTH: "stealth",
   NAME_REGISTRY: "name",
+  VK_REGISTRY: "vk_registry",
 } as const;
 
 // =============================================================================
@@ -133,7 +134,7 @@ export async function deriveDepositRecordPDA(
  * Derive BTC Light Client PDA
  */
 export async function deriveLightClientPDA(
-  programId: Address = BTC_LIGHT_CLIENT_PROGRAM_ID
+  programId: Address = BTC_RELAY_PROGRAM_ID
 ): Promise<[Address, number]> {
   const result = await getProgramDerivedAddress({
     programAddress: programId,
@@ -147,7 +148,7 @@ export async function deriveLightClientPDA(
  */
 export async function deriveBlockHeaderPDA(
   height: number,
-  programId: Address = BTC_LIGHT_CLIENT_PROGRAM_ID
+  programId: Address = BTC_RELAY_PROGRAM_ID
 ): Promise<[Address, number]> {
   const heightBuffer = new Uint8Array(8);
   const view = new DataView(heightBuffer.buffer);
@@ -173,6 +174,31 @@ export async function deriveNameRegistryPDA(
   const result = await getProgramDerivedAddress({
     programAddress: programId,
     seeds: [new TextEncoder().encode(PDA_SEEDS.NAME_REGISTRY), nameHash],
+  });
+  return [result[0], result[1]];
+}
+
+// =============================================================================
+// VK Registry PDAs
+// =============================================================================
+
+/**
+ * Derive VK Registry PDA for a JoinSplit variant
+ *
+ * Seeds: ["vk_registry", &[n_inputs], &[n_outputs]]
+ */
+export async function deriveVkRegistryPDA(
+  nInputs: number,
+  nOutputs: number,
+  programId: Address = ZVAULT_PROGRAM_ID
+): Promise<[Address, number]> {
+  const result = await getProgramDerivedAddress({
+    programAddress: programId,
+    seeds: [
+      new TextEncoder().encode(PDA_SEEDS.VK_REGISTRY),
+      new Uint8Array([nInputs]),
+      new Uint8Array([nOutputs]),
+    ],
   });
   return [result[0], result[1]];
 }

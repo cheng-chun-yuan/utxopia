@@ -4,9 +4,13 @@
  * Supports mainnet, testnet, and signet networks.
  */
 
-export type BitcoinNetwork = 'mainnet' | 'testnet' | 'signet';
+export type BitcoinNetwork = 'mainnet' | 'testnet' | 'signet' | 'regtest';
 
 function getBaseUrl(network: BitcoinNetwork): string {
+  // Allow override via BITCOIN_API_URL (for regtest Esplora proxy)
+  const override = process.env.BITCOIN_API_URL;
+  if (override) return override;
+
   switch (network) {
     case 'mainnet':
       return 'https://mempool.space/api';
@@ -14,6 +18,8 @@ function getBaseUrl(network: BitcoinNetwork): string {
       return 'https://mempool.space/testnet/api';
     case 'signet':
       return 'https://mempool.space/signet/api';
+    case 'regtest':
+      return 'http://localhost:3002';
     default:
       throw new Error(`Unsupported network: ${network}`);
   }

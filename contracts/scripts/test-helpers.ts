@@ -42,6 +42,7 @@ export const Seeds = {
 
 export const BTCRelayDisc = {
   SUBMIT_HEADER: 1,
+  RESET_TIP: 2,
 } as const;
 
 // =============================================================================
@@ -273,6 +274,33 @@ export function buildSubmitHeaderIx(
       { pubkey: blockHeaderPda, isSigner: false, isWritable: true },
       { pubkey: submitter, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    programId: btcLightClientId,
+    data,
+  });
+}
+
+/**
+ * Reset light client tip (disc=2)
+ * Data: disc(1) + new_tip_height(8 LE) + new_tip_hash(32)
+ * Accounts: light_client (writable), authority (signer)
+ */
+export function buildResetTipIx(
+  lightClient: PublicKey,
+  authority: PublicKey,
+  newTipHeight: bigint,
+  newTipHash: Uint8Array,
+  btcLightClientId: PublicKey,
+): TransactionInstruction {
+  const data = Buffer.alloc(41);
+  data[0] = BTCRelayDisc.RESET_TIP;
+  data.writeBigUInt64LE(newTipHeight, 1);
+  Buffer.from(newTipHash).copy(data, 9);
+
+  return new TransactionInstruction({
+    keys: [
+      { pubkey: lightClient, isSigner: false, isWritable: true },
+      { pubkey: authority, isSigner: true, isWritable: false },
     ],
     programId: btcLightClientId,
     data,

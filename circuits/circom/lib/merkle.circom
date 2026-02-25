@@ -1,13 +1,13 @@
 pragma circom 2.1.0;
 
-include "../../node_modules/circomlib/circuits/poseidon.circom";
-include "../../node_modules/circomlib/circuits/mux1.circom";
+include "circomlib/circuits/poseidon.circom";
+include "circomlib/circuits/mux1.circom";
 
 /**
  * Merkle proof verifier using Poseidon hash
  * Verifies a leaf belongs to a Merkle tree with given root.
  *
- * @param levels - Tree depth (default 20 for zVault)
+ * @param levels - Tree depth (default 16 for zVault JoinSplit)
  */
 template MerkleProofVerifier(levels) {
     signal input leaf;

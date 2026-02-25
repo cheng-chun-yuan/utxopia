@@ -50,6 +50,7 @@ pub mod btc_spv;
 pub mod config;
 pub mod deposit_tracker;
 pub mod esplora;
+pub mod frost_client;
 pub mod logging;
 pub mod middleware;
 pub mod redemption;

@@ -2,8 +2,13 @@
 //!
 //! Implements the two-round FROST signing protocol for threshold Schnorr signatures.
 
-use crate::types::{Round1Request, Round1Response, Round2Request, Round2Response};
+use crate::crypto::compute_commitment_digest;
+use crate::types::{
+    Round1Request, Round1Response, Round2Request, Round2Response,
+    VerifyCommitmentsRequest, VerifyCommitmentsResponse,
+};
 use frost_secp256k1_tr as frost;
+use frost_secp256k1_tr::keys::Tweak;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
@@ -41,6 +46,8 @@ struct SigningSession {
     round2_completed: bool,
     /// Session creation time for cleanup
     created_at: std::time::Instant,
+    /// Optional merkle root for BIP-341 tweaked signing
+    merkle_root: Option<Vec<u8>>,
 }
 
 /// FROST signer state
@@ -127,21 +134,37 @@ impl FrostSigner {
             }
         }
 
+        // Parse merkle_root if present (for BIP-341 tweaked signing)
+        let merkle_root_bytes = match &request.merkle_root {
+            Some(hex_str) => Some(
+                hex::decode(hex_str).map_err(|e| SigningError::InvalidHex(e.to_string()))?,
+            ),
+            None => None,
+        };
+
+        // If merkle_root is provided, tweak the key package for BIP-341
+        let effective_key = if merkle_root_bytes.is_some() {
+            self.key_package.clone().tweak(merkle_root_bytes.as_deref())
+        } else {
+            self.key_package.clone()
+        };
+
         // Generate nonces and commitment
         let mut rng = rand::thread_rng();
-        let (nonces, commitments) = frost::round1::commit(self.key_package.signing_share(), &mut rng);
+        let (nonces, commitments) = frost::round1::commit(effective_key.signing_share(), &mut rng);
 
         // Serialize commitment
         let commitment_bytes = commitments
             .serialize()
             .map_err(|e| SigningError::FrostError(e.to_string()))?;
 
-        // Store session
+        // Store session (including merkle_root for round2)
         let session = SigningSession {
             nonces,
             commitment: commitments,
             round2_completed: false,
             created_at: std::time::Instant::now(),
+            merkle_root: merkle_root_bytes,
         };
 
         {
@@ -194,6 +217,7 @@ impl FrostSigner {
                 commitment: session.commitment,
                 round2_completed: true,
                 created_at: session.created_at,
+                merkle_root: session.merkle_root.clone(),
             }
         };
 
@@ -224,8 +248,15 @@ impl FrostSigner {
         // Create signing package
         let signing_package = frost::SigningPackage::new(commitments_map, &sighash);
 
+        // If merkle_root was provided in round1, apply BIP-341 tweak to key package
+        let effective_key = if session.merkle_root.is_some() {
+            self.key_package.clone().tweak(session.merkle_root.as_deref())
+        } else {
+            self.key_package.clone()
+        };
+
         // Generate signature share
-        let signature_share = frost::round2::sign(&signing_package, &session.nonces, &self.key_package)
+        let signature_share = frost::round2::sign(&signing_package, &session.nonces, &effective_key)
             .map_err(|e| SigningError::FrostError(e.to_string()))?;
 
         // Serialize signature share
@@ -240,6 +271,38 @@ impl FrostSigner {
         Ok(Round2Response {
             signature_share: hex::encode(share_bytes),
             signer_id: self.signer_id,
+        })
+    }
+
+    /// Verify broadcast channel: compute digest over all commitments
+    ///
+    /// Each signer independently computes a SHA-256 digest over the commitments
+    /// they received. The coordinator collects all digests and verifies they match.
+    /// If any differ, the coordinator aborted (equivocation detected).
+    pub fn verify_commitments(
+        &self,
+        request: &VerifyCommitmentsRequest,
+    ) -> Result<VerifyCommitmentsResponse, SigningError> {
+        // Verify session exists (ensures this signer participated in round 1)
+        {
+            let sessions = self.sessions.read().unwrap();
+            if !sessions.contains_key(&request.session_id) {
+                return Err(SigningError::SessionNotFound(request.session_id));
+            }
+        }
+
+        let digest = compute_commitment_digest(&request.commitments, &request.identifier_map);
+
+        tracing::debug!(
+            signer_id = self.signer_id,
+            session_id = %request.session_id,
+            digest = %hex::encode(digest),
+            "Computed commitment digest for broadcast verification"
+        );
+
+        Ok(VerifyCommitmentsResponse {
+            signer_id: self.signer_id,
+            digest: hex::encode(digest),
         })
     }
 
@@ -259,13 +322,30 @@ impl FrostSigner {
 /// Aggregate signature shares into final signature
 ///
 /// This is called by the coordinator (backend) after collecting shares from threshold signers.
+/// When `merkle_root` is provided, uses BIP-341 tweaked aggregation so the resulting
+/// signature verifies against the tweaked output key rather than the raw internal key.
 pub fn aggregate_signatures(
     signing_package: &frost::SigningPackage,
     signature_shares: &BTreeMap<frost::Identifier, frost::round2::SignatureShare>,
     public_key_package: &frost::keys::PublicKeyPackage,
 ) -> Result<[u8; 64], SigningError> {
-    let signature = frost::aggregate(signing_package, signature_shares, public_key_package)
-        .map_err(|e| SigningError::FrostError(e.to_string()))?;
+    aggregate_signatures_with_tweak(signing_package, signature_shares, public_key_package, None)
+}
+
+/// Aggregate with optional BIP-341 Taproot tweak (merkle root).
+pub fn aggregate_signatures_with_tweak(
+    signing_package: &frost::SigningPackage,
+    signature_shares: &BTreeMap<frost::Identifier, frost::round2::SignatureShare>,
+    public_key_package: &frost::keys::PublicKeyPackage,
+    merkle_root: Option<&[u8]>,
+) -> Result<[u8; 64], SigningError> {
+    let signature = if merkle_root.is_some() {
+        frost::aggregate_with_tweak(signing_package, signature_shares, public_key_package, merkle_root)
+            .map_err(|e| SigningError::FrostError(e.to_string()))?
+    } else {
+        frost::aggregate(signing_package, signature_shares, public_key_package)
+            .map_err(|e| SigningError::FrostError(e.to_string()))?
+    };
 
     let sig_bytes = signature
         .serialize()
@@ -321,6 +401,9 @@ mod tests {
             session_id: Uuid::new_v4(),
             sighash: hex::encode([0x42u8; 32]),
             tweak: None,
+            signing_context: None,
+            merkle_root: None,
+            solana_verification: None,
         };
 
         let response = signer.round1(&request).unwrap();
@@ -345,6 +428,9 @@ mod tests {
                 session_id,
                 sighash: hex::encode(sighash),
                 tweak: None,
+                signing_context: None,
+                merkle_root: None,
+                solana_verification: None,
             };
             let response = signer.round1(&request).unwrap();
             commitments_by_signer.insert(response.signer_id, response.commitment);
@@ -365,6 +451,7 @@ mod tests {
                 tweak: None,
                 commitments: commitments_by_signer.clone(),
                 identifier_map: identifier_map.clone(),
+                merkle_root: None,
             };
             let response = signer.round2(&request).unwrap();
             let share_bytes = hex::decode(&response.signature_share).unwrap();
@@ -397,6 +484,9 @@ mod tests {
             session_id,
             sighash: hex::encode([0x42u8; 32]),
             tweak: None,
+            signing_context: None,
+            merkle_root: None,
+            solana_verification: None,
         };
         let response1 = signer.round1(&request1).unwrap();
 
@@ -413,6 +503,7 @@ mod tests {
             tweak: None,
             commitments,
             identifier_map,
+            merkle_root: None,
         };
 
         // First round 2 should succeed

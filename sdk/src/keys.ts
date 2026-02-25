@@ -41,6 +41,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import { pbkdf2 } from "@noble/hashes/pbkdf2";
 import {
   scalarFromBytes,
+  bigintToBytes,
   babyJubMul,
   BABYJUB_BASE8,
   babyJubCompress,
@@ -50,6 +51,7 @@ import {
 import {
   ed25519GetPublicKey,
 } from "./crypto-ed25519";
+import { computeMPKSync } from "./poseidon";
 
 // ========== Types ==========
 
@@ -68,6 +70,9 @@ export interface ZVaultKeys {
   /** Baby Jubjub spending public key (point) - share publicly */
   spendingPubKey: BabyJubPoint;
 
+  /** Nullifying key (BN254 scalar) - for JoinSplit nullifier computation */
+  nullifyingKey: bigint;
+
   /** Ed25519 viewing private key (32 bytes) - for X25519 ECDH scanning */
   viewingPrivKey: Uint8Array;
 
@@ -78,7 +83,7 @@ export interface ZVaultKeys {
 /**
  * Stealth meta-address for receiving funds
  *
- * Total size: 64 bytes (32 BJJ compressed + 32 Ed25519)
+ * Total size: 96 bytes (32 BJJ compressed + 32 Ed25519 + 32 MPK)
  */
 export interface StealthMetaAddress {
   /** Baby Jubjub spending public key (32 bytes compressed) */
@@ -86,6 +91,9 @@ export interface StealthMetaAddress {
 
   /** Ed25519 viewing public key (32 bytes) */
   viewingPubKey: Uint8Array;
+
+  /** Master public key (32 bytes, Poseidon hash as BE bytes) */
+  mpk: Uint8Array;
 }
 
 /**
@@ -97,6 +105,9 @@ export interface SerializedStealthMetaAddress {
 
   /** Hex-encoded viewing public key */
   viewingPubKey: string;
+
+  /** Hex-encoded master public key (Poseidon hash) */
+  mpk: string;
 }
 
 /**
@@ -146,6 +157,9 @@ const SPENDING_KEY_DOMAIN = "spend";
 
 /** Domain separator for viewing key derivation */
 const VIEWING_KEY_DOMAIN = "view";
+
+/** Domain separator for nullifying key derivation */
+const NULLIFYING_KEY_DOMAIN = "nullify";
 
 // ========== Wallet Adapter Interface ==========
 
@@ -204,6 +218,13 @@ export function deriveKeysFromSignature(
   // Clear intermediate seed
   clearKey(spendingSeed);
 
+  // Derive nullifying key: SHA256(signature || "nullify") → BN254 scalar
+  const nullifyingSeed = sha256(
+    concatBytes(signature, new TextEncoder().encode(NULLIFYING_KEY_DOMAIN))
+  );
+  const nullifyingKey = scalarFromBytes(nullifyingSeed);
+  clearKey(nullifyingSeed);
+
   // Derive viewing key: SHA256(signature || "view") → Ed25519 private key
   const viewingPrivKey = sha256(
     concatBytes(signature, new TextEncoder().encode(VIEWING_KEY_DOMAIN))
@@ -214,6 +235,7 @@ export function deriveKeysFromSignature(
     solanaPublicKey,
     spendingPrivKey,
     spendingPubKey,
+    nullifyingKey,
     viewingPrivKey,
     viewingPubKey,
   };
@@ -237,12 +259,18 @@ export function deriveKeysFromSeed(seed: Uint8Array): ZVaultKeys {
 /**
  * Create a stealth meta-address from zVault keys
  *
- * Size: 64 bytes (32 BJJ compressed + 32 Ed25519)
+ * Size: 96 bytes (32 BJJ compressed + 32 Ed25519 + 32 MPK)
  */
 export function createStealthMetaAddress(keys: ZVaultKeys): StealthMetaAddress {
+  const mpk = computeMPKSync(
+    keys.spendingPubKey.x,
+    keys.spendingPubKey.y,
+    keys.nullifyingKey
+  );
   return {
     spendingPubKey: babyJubCompress(keys.spendingPubKey),
     viewingPubKey: new Uint8Array(keys.viewingPubKey),
+    mpk: bigintToBytes(mpk),
   };
 }
 
@@ -255,6 +283,7 @@ export function serializeStealthMetaAddress(
   return {
     spendingPubKey: bytesToHex(meta.spendingPubKey),
     viewingPubKey: bytesToHex(meta.viewingPubKey),
+    mpk: bytesToHex(meta.mpk),
   };
 }
 
@@ -267,6 +296,7 @@ export function deserializeStealthMetaAddress(
   return {
     spendingPubKey: hexToBytes(serialized.spendingPubKey),
     viewingPubKey: hexToBytes(serialized.viewingPubKey),
+    mpk: hexToBytes(serialized.mpk),
   };
 }
 
@@ -286,11 +316,11 @@ export function parseStealthMetaAddress(meta: StealthMetaAddress): {
 }
 
 /**
- * Encode stealth meta-address as a single string (64 bytes → hex)
- * Format: spendingPubKey (32 bytes) || viewingPubKey (32 bytes)
+ * Encode stealth meta-address as a single string (96 bytes → hex)
+ * Format: spendingPubKey (32 bytes) || viewingPubKey (32 bytes) || mpk (32 bytes)
  */
 export function encodeStealthMetaAddress(meta: StealthMetaAddress): string {
-  const combined = concatBytes(meta.spendingPubKey, meta.viewingPubKey);
+  const combined = concatBytes(meta.spendingPubKey, meta.viewingPubKey, meta.mpk);
   return bytesToHex(combined);
 }
 
@@ -299,12 +329,13 @@ export function encodeStealthMetaAddress(meta: StealthMetaAddress): string {
  */
 export function decodeStealthMetaAddress(encoded: string): StealthMetaAddress {
   const bytes = hexToBytes(encoded);
-  if (bytes.length !== 64) {
-    throw new Error("Invalid stealth meta-address length (expected 64 bytes)");
+  if (bytes.length !== 96) {
+    throw new Error("Invalid stealth meta-address length (expected 96 bytes)");
   }
   return {
     spendingPubKey: bytes.slice(0, 32),
     viewingPubKey: bytes.slice(32, 64),
+    mpk: bytes.slice(64, 96),
   };
 }
 
@@ -525,6 +556,7 @@ export function clearKey(key: Uint8Array): void {
  */
 export function clearZVaultKeys(keys: ZVaultKeys): void {
   (keys as { spendingPrivKey: bigint }).spendingPrivKey = 0n;
+  (keys as { nullifyingKey: bigint }).nullifyingKey = 0n;
   clearKey(keys.viewingPrivKey);
 }
 

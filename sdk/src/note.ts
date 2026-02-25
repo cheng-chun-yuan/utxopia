@@ -12,7 +12,7 @@
  */
 
 import { randomFieldElement, bigintToBytes, sha256Hash, bytesToBigint, BN254_FIELD_PRIME, babyJubMul, BABYJUB_BASE8 } from "./crypto";
-import { computeUnifiedCommitmentSync, computeNullifierSync, hashNullifierSync } from "./poseidon";
+import { computeUnifiedCommitmentSync, computeNullifierSync, hashNullifierSync, computeJoinSplitCommitmentSync, computeNPKSync, computeMPKSync, computeJoinSplitNullifierSync } from "./poseidon";
 
 /**
  * Note structure for shielded amounts
@@ -670,5 +670,102 @@ export function deserializeStealthNote(data: SerializedStealthNote): StealthNote
  */
 export function stealthNoteHasComputedHashes(note: StealthNote): boolean {
   return note.notePubKey !== 0n && note.commitment !== 0n;
+}
+
+// ============================================================================
+// JoinSplit Note (Railgun-aligned 3-key model)
+// ============================================================================
+
+/**
+ * ZBTC token identifier for JoinSplit commitments
+ */
+export const ZBTC_TOKEN_ID = 0x7a627463n; // "zbtc" as u32
+
+/**
+ * JoinSplit note structure
+ *
+ * Commitment = Poseidon(npk, token, amount)
+ * where npk = Poseidon(MPK, random)
+ * and MPK = Poseidon(pkX, pkY, nullifyingKey)
+ */
+export interface JoinSplitNote {
+  /** Note public key: Poseidon(MPK, random) */
+  npk: bigint;
+  /** Token identifier (ZBTC_TOKEN_ID) */
+  token: bigint;
+  /** Amount in satoshis */
+  amount: bigint;
+  /** Blinding factor (used in NPK derivation) */
+  random: bigint;
+  /** Merkle tree leaf position (-1 if not yet inserted) */
+  leafIndex: number;
+  /** Commitment: Poseidon(npk, token, amount) */
+  commitment: bigint;
+}
+
+/**
+ * Create a JoinSplit note from key components
+ */
+export function createJoinSplitNote(
+  mpk: bigint,
+  random: bigint,
+  amount: bigint,
+  leafIndex: number = -1,
+): JoinSplitNote {
+  const npk = computeNPKSync(mpk, random);
+  const commitment = computeJoinSplitCommitmentSync(npk, ZBTC_TOKEN_ID, amount);
+
+  return {
+    npk,
+    token: ZBTC_TOKEN_ID,
+    amount,
+    random,
+    leafIndex,
+    commitment,
+  };
+}
+
+/**
+ * Compute nullifier for a JoinSplit note
+ */
+export function computeJoinSplitNoteNullifier(
+  nullifyingKey: bigint,
+  leafIndex: number,
+): bigint {
+  return computeJoinSplitNullifierSync(nullifyingKey, BigInt(leafIndex));
+}
+
+/**
+ * Serialize a JoinSplit note for storage
+ */
+export interface SerializedJoinSplitNote {
+  npk: string;
+  token: string;
+  amount: string;
+  random: string;
+  leafIndex: number;
+  commitment: string;
+}
+
+export function serializeJoinSplitNote(note: JoinSplitNote): SerializedJoinSplitNote {
+  return {
+    npk: note.npk.toString(),
+    token: note.token.toString(),
+    amount: note.amount.toString(),
+    random: note.random.toString(),
+    leafIndex: note.leafIndex,
+    commitment: note.commitment.toString(),
+  };
+}
+
+export function deserializeJoinSplitNote(data: SerializedJoinSplitNote): JoinSplitNote {
+  return {
+    npk: BigInt(data.npk),
+    token: BigInt(data.token),
+    amount: BigInt(data.amount),
+    random: BigInt(data.random),
+    leafIndex: data.leafIndex,
+    commitment: BigInt(data.commitment),
+  };
 }
 

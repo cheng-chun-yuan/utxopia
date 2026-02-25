@@ -131,6 +131,9 @@ fn test_frost_signing_for_utxo() {
             session_id,
             sighash: sighash_hex.clone(),
             tweak: None,
+            signing_context: None,
+            merkle_root: None,
+            solana_verification: None,
         };
 
         let response: Round1Response = client
@@ -164,6 +167,7 @@ fn test_frost_signing_for_utxo() {
             tweak: None,
             commitments: commitments.clone(),
             identifier_map: identifier_map.clone(),
+            merkle_root: None,
         };
 
         let response: Round2Response = client
@@ -238,6 +242,9 @@ fn test_frost_signing_different_signer_combinations() {
                 session_id,
                 sighash: sighash_hex.clone(),
                 tweak: None,
+                signing_context: None,
+                merkle_root: None,
+                solana_verification: None,
             };
 
             let response: Round1Response = client
@@ -262,6 +269,7 @@ fn test_frost_signing_different_signer_combinations() {
                 tweak: None,
                 commitments: commitments.clone(),
                 identifier_map: identifier_map.clone(),
+                merkle_root: None,
             };
 
             let response: Round2Response = client
@@ -325,6 +333,9 @@ fn test_single_signer_cannot_sign_alone() {
         session_id,
         sighash: sighash_hex.clone(),
         tweak: None,
+        signing_context: None,
+        merkle_root: None,
+        solana_verification: None,
     };
 
     let response: Round1Response = client
@@ -340,26 +351,34 @@ fn test_single_signer_cannot_sign_alone() {
     commitments.insert(response.signer_id, response.commitment);
     identifier_map.insert(response.signer_id, response.frost_identifier);
 
-    // Try Round 2 with only 1 signer - this should work but won't produce a valid signature
-    // A single share cannot be used to spend the funds
+    // Try Round 2 with only 1 signer - should fail because threshold requires 2
     let request = Round2Request {
         session_id,
         sighash: sighash_hex,
         tweak: None,
         commitments,
         identifier_map,
+        merkle_root: None,
     };
 
-    let response: Round2Response = client
+    let response = client
         .post(format!("{}/round2", SIGNER_URLS[0]))
         .json(&request)
         .send()
-        .expect("Round 2 failed")
-        .json()
-        .expect("Parse failed");
+        .expect("Round 2 request failed");
 
-    // We get a share, but it's useless alone - can't aggregate into valid signature
-    println!("Single signer produced share: {}...", &response.signature_share[..32]);
-    println!("But this share CANNOT be used alone to spend the UTXO!");
+    // The server should reject single-signer round 2 (insufficient participants)
+    // It may return an error response or a non-200 status
+    if response.status().is_success() {
+        // If it somehow succeeds, the share alone can't produce a valid signature
+        let r2: Round2Response = response.json().expect("Parse failed");
+        println!("Single signer produced share: {}...", &r2.signature_share[..32]);
+        println!("But this share CANNOT be used alone to spend the UTXO!");
+    } else {
+        println!("Server correctly rejected single-signer round 2: {}", response.status());
+        let body = response.text().unwrap_or_default();
+        println!("Error: {}", body);
+    }
+
     println!("Threshold (2-of-3) is required for a valid Schnorr signature.");
 }

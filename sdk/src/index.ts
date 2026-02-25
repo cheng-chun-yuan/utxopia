@@ -1,38 +1,29 @@
 /**
- * ZVault SDK v2.0
+ * ZVault SDK v3.0 (JoinSplit Architecture)
  *
  * Complete client library for interacting with the ZVault protocol.
  * Privacy-preserving BTC to Solana bridge using ZK proofs.
  *
  * Networks: Solana Devnet + Bitcoin Testnet3
  *
- * ## Subpath Imports (Recommended for Tree-Shaking)
- *
- * ```typescript
- * import { generateClaimProof } from '@zvault/sdk/prover'
- * import { createStealthDeposit } from '@zvault/sdk/stealth'
- * import { deriveTaprootAddress } from '@zvault/sdk/bitcoin'
- * import { DEVNET_CONFIG } from '@zvault/sdk/solana'
- * ```
- *
  * ## Quick Start
  * ```typescript
- * import { depositToNote, claimNote, splitNote, formatBtc } from '@zvault/sdk';
+ * import { depositToNote, generateJoinSplitProof, buildTransactInstruction } from '@zvault/sdk';
  *
  * // 1. DEPOSIT: Generate credentials
  * const result = await depositToNote(100_000n); // 0.001 BTC
  * console.log('Send BTC to:', result.taprootAddress);
  *
- * // 2. CLAIM: After BTC is confirmed
- * const claimed = await claimNote(config, result.claimLink);
+ * // 2. TRANSACT: JoinSplit proof for private transfer
+ * const proof = await generateJoinSplitProof(inputs);
  *
- * // 3. SPLIT: Divide into two outputs
- * const { output1, output2 } = await splitNote(config, result.note, 50_000n);
+ * // 3. BUILD: Create Solana instruction
+ * const ix = buildTransactInstruction(options);
  * ```
  */
 
 // ==========================================================================
-// Cryptographic utilities (from merged crypto.ts)
+// Cryptographic utilities
 // ==========================================================================
 
 export {
@@ -132,6 +123,15 @@ export {
   computeNullifierSync,
   hashNullifierSync,
   BN254_SCALAR_FIELD,
+  // JoinSplit primitives
+  computeMPK,
+  computeMPKSync,
+  computeNPK,
+  computeNPKSync,
+  computeJoinSplitCommitment,
+  computeJoinSplitCommitmentSync,
+  computeJoinSplitNullifier,
+  computeJoinSplitNullifierSync,
 } from "./poseidon";
 
 // ==========================================================================
@@ -168,6 +168,13 @@ export {
   type NoteData,
   type StealthNote,
   type SerializedStealthNote,
+  // JoinSplit note types
+  createJoinSplitNote,
+  computeJoinSplitNoteNullifier,
+  serializeJoinSplitNote,
+  deserializeJoinSplitNote,
+  type JoinSplitNote,
+  type SerializedJoinSplitNote,
 } from "./note";
 
 // ==========================================================================
@@ -202,6 +209,13 @@ export {
   isValidBitcoinAddress,
   getInternalKey,
   createCustomInternalKey,
+  createOpReturnScript,
+  createOpReturnScriptFromPayload,
+  parseOpReturnCommitment,
+  buildMockBtcTransaction,
+  buildDepositOpReturn,
+  parseDepositOpReturn,
+  DEPOSIT_OP_RETURN_SIZE,
 } from "./taproot";
 
 // ==========================================================================
@@ -223,15 +237,12 @@ export {
 } from "./claim-link";
 
 // ==========================================================================
-// WASM Prover (Browser + Node.js)
+// WASM Prover (Browser + Node.js) — JoinSplit only
 // ==========================================================================
 
 export {
   initProver,
   isProverAvailable,
-  generateClaimProof,
-  generateSpendSplitProof,
-  generateSpendPartialPublicProof,
   setCircuitPath,
   getCircuitPath,
   proofToBytes,
@@ -241,9 +252,10 @@ export {
   type ProofData,
   type MerkleProofInput,
   type CircuitType,
-  type ClaimInputs,
-  type SpendSplitInputs,
-  type SpendPartialPublicInputs,
+  // JoinSplit prover
+  generateJoinSplitProof,
+  circuitExists,
+  type JoinSplitProofInputs,
 } from "./prover/web";
 
 // ==========================================================================
@@ -270,6 +282,17 @@ export {
 } from "./chadbuffer";
 
 // ==========================================================================
+// Bound Parameters (JoinSplit transaction binding)
+// ==========================================================================
+
+export {
+  computeBoundParamsHash,
+  createUnshieldBoundParams,
+  DEFAULT_BOUND_PARAMS,
+  type BoundParams,
+} from "./bound-params";
+
+// ==========================================================================
 // Configuration
 // ==========================================================================
 
@@ -284,6 +307,7 @@ export {
   ATA_PROGRAM_ID,
   SDK_VERSION,
   DEPLOYMENT_INFO,
+  JOINSPLIT_TREE_DEPTH,
   type NetworkConfig,
   type NetworkType,
 } from "./config";
@@ -294,7 +318,7 @@ export {
 
 export {
   ZVAULT_PROGRAM_ID,
-  BTC_LIGHT_CLIENT_PROGRAM_ID,
+  BTC_RELAY_PROGRAM_ID,
   PDA_SEEDS,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
@@ -304,6 +328,7 @@ export {
   deriveLightClientPDA,
   deriveBlockHeaderPDA,
   deriveNameRegistryPDA,
+  deriveVkRegistryPDA,
   commitmentToBytes,
 } from "./pda";
 
@@ -325,6 +350,8 @@ export {
   exportViewOnlyKeys,
   prepareClaimInputs,
   parseStealthAnnouncement,
+  parseDepositRecord,
+  scanDepositRecords,
   announcementToScanFormat,
   scanByZkeyName,
   resolveZkeyName,
@@ -343,6 +370,8 @@ export {
   type ConnectionAdapter,
   type ViewOnlyKeys,
   type ViewOnlyScannedNote,
+  createNonInteractiveDeposit,
+  type NonInteractiveDepositResult,
 } from "./stealth";
 
 // ==========================================================================
@@ -363,25 +392,29 @@ export {
 } from "./stealth-deposit";
 
 // ==========================================================================
+// PSBT builder for wallet-integrated deposits
+// ==========================================================================
+
+export {
+  buildDepositPsbt,
+  estimateDepositFee,
+  fetchUtxos,
+  selectUtxos,
+  type BuildDepositPsbtParams,
+  type BuildDepositPsbtResult,
+  type UtxoDescriptor,
+} from "./psbt";
+
+// ==========================================================================
 // Simplified API
 // ==========================================================================
 
 export {
   depositToNote,
-  claimNote,
-  claimPublic,
-  claimPublicStealth,
-  splitNote,
-  withdraw,
 } from "./api";
 
 export type {
   DepositResult,
-  WithdrawResult,
-  ClaimResult as ClaimNoteResult,
-  ClaimPublicResult,
-  ClaimPublicStealthResult,
-  SplitResult as SplitNoteResult,
   ApiClientConfig,
 } from "./api";
 
@@ -535,40 +568,31 @@ export {
 } from "./commitment-tree";
 
 // ==========================================================================
-// Low-level Instruction Builders
+// Low-level Instruction Builders (JoinSplit only)
 // ==========================================================================
 
 export {
   INSTRUCTION_DISCRIMINATORS,
-  buildClaimInstructionData,
-  buildClaimInstruction,
-  buildSplitInstructionData,
-  buildSplitInstruction,
-  buildSpendPartialPublicInstructionData,
-  buildSpendPartialPublicInstruction,
   buildRedemptionRequestInstructionData,
   buildRedemptionRequestInstruction,
   bigintTo32Bytes,
   bytes32ToBigint,
+  // JoinSplit transact instruction
+  buildTransactInstructionData,
+  buildTransactInstruction,
   type Instruction,
-  type ClaimInstructionOptions,
-  type SplitInstructionOptions,
-  type SpendPartialPublicInstructionOptions,
   type RedemptionRequestInstructionOptions,
+  type TransactInstructionOptions,
 } from "./instructions";
 
 // ==========================================================================
-// Proof Relay
+// ChadBuffer Relay
 // ==========================================================================
 
 export {
-  relaySpendPartialPublic,
-  relaySpendSplit,
   createChadBuffer as relayCreateChadBuffer,
   uploadProofToBuffer as relayUploadProofToBuffer,
   closeChadBuffer as relayCloseChadBuffer,
-  type RelaySpendPartialPublicParams,
-  type RelaySpendSplitParams,
   type RelayResult,
 } from "./relay";
 

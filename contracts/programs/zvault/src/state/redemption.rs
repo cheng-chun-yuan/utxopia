@@ -2,7 +2,7 @@
 
 use pinocchio::program_error::ProgramError;
 
-use crate::constants::{MAX_BTC_ADDRESS_LEN, MAX_BTC_TXID_LEN};
+use crate::constants::MAX_BTC_ADDRESS_LEN;
 
 /// Discriminator for RedemptionRequest account
 pub const REDEMPTION_REQUEST_DISCRIMINATOR: u8 = 0x04;
@@ -13,17 +13,24 @@ pub const REDEMPTION_REQUEST_DISCRIMINATOR: u8 = 0x04;
 pub enum RedemptionStatus {
     /// Request created, waiting for processing
     Pending = 0,
-    /// Being processed by relayer
+    /// Being processed by relayer (blocks cancel)
     Processing = 1,
-    /// BTC transaction broadcast, waiting confirmation
-    Broadcasting = 2,
-    /// Successfully completed
-    Completed = 3,
     /// Failed
-    Failed = 4,
+    Failed = 2,
 }
 
 /// Redemption request - pending BTC withdrawal (zero-copy layout)
+///
+/// Layout (118 bytes):
+/// - discriminator:     1 byte
+/// - status:            1 byte
+/// - btc_address_len:   1 byte
+/// - _padding1:         1 byte
+/// - processing_slot:   4 bytes (u32 LE, slot when mark_processing was called, 0 if Pending)
+/// - request_id:        8 bytes
+/// - requester:         32 bytes
+/// - amount_sats:       8 bytes
+/// - btc_address:       62 bytes
 #[repr(C)]
 pub struct RedemptionRequest {
     /// Account discriminator
@@ -35,11 +42,12 @@ pub struct RedemptionRequest {
     /// BTC address length
     pub btc_address_len: u8,
 
-    /// BTC txid length
-    pub btc_txid_len: u8,
-
     /// Padding for alignment
-    _padding: [u8; 4],
+    _padding1: u8,
+
+    /// Slot when mark_processing was called (0 = not yet processing).
+    /// Used for timeout: if current_slot - processing_slot > TIMEOUT_SLOTS, user can cancel.
+    processing_slot: [u8; 4],
 
     /// Unique request ID (incrementing)
     request_id: [u8; 8],
@@ -50,20 +58,8 @@ pub struct RedemptionRequest {
     /// Amount to withdraw (satoshis)
     amount_sats: [u8; 8],
 
-    /// Timestamp when request was created
-    created_at: [u8; 8],
-
-    /// Timestamp when request was completed
-    completed_at: [u8; 8],
-
     /// Bitcoin address for withdrawal (fixed buffer)
     pub btc_address: [u8; MAX_BTC_ADDRESS_LEN],
-
-    /// Bitcoin transaction ID (fixed buffer)
-    pub btc_txid: [u8; MAX_BTC_TXID_LEN],
-
-    /// Reserved for future use
-    _reserved: [u8; 32],
 }
 
 impl RedemptionRequest {
@@ -107,9 +103,7 @@ impl RedemptionRequest {
         match self.status {
             0 => RedemptionStatus::Pending,
             1 => RedemptionStatus::Processing,
-            2 => RedemptionStatus::Broadcasting,
-            3 => RedemptionStatus::Completed,
-            4 => RedemptionStatus::Failed,
+            2 => RedemptionStatus::Failed,
             _ => RedemptionStatus::Pending,
         }
     }
@@ -122,20 +116,12 @@ impl RedemptionRequest {
         u64::from_le_bytes(self.amount_sats)
     }
 
-    pub fn created_at(&self) -> i64 {
-        i64::from_le_bytes(self.created_at)
-    }
-
-    pub fn completed_at(&self) -> i64 {
-        i64::from_le_bytes(self.completed_at)
+    pub fn processing_slot(&self) -> u32 {
+        u32::from_le_bytes(self.processing_slot)
     }
 
     pub fn get_btc_address(&self) -> &[u8] {
         &self.btc_address[..self.btc_address_len as usize]
-    }
-
-    pub fn get_btc_txid(&self) -> &[u8] {
-        &self.btc_txid[..self.btc_txid_len as usize]
     }
 
     // Setters
@@ -151,12 +137,8 @@ impl RedemptionRequest {
         self.amount_sats = value.to_le_bytes();
     }
 
-    pub fn set_created_at(&mut self, value: i64) {
-        self.created_at = value.to_le_bytes();
-    }
-
-    pub fn set_completed_at(&mut self, value: i64) {
-        self.completed_at = value.to_le_bytes();
+    pub fn set_processing_slot(&mut self, value: u32) {
+        self.processing_slot = value.to_le_bytes();
     }
 
     pub fn set_btc_address(&mut self, address: &[u8]) -> Result<(), ProgramError> {
@@ -165,15 +147,6 @@ impl RedemptionRequest {
         }
         self.btc_address[..address.len()].copy_from_slice(address);
         self.btc_address_len = address.len() as u8;
-        Ok(())
-    }
-
-    pub fn set_btc_txid(&mut self, txid: &[u8]) -> Result<(), ProgramError> {
-        if txid.len() > MAX_BTC_TXID_LEN {
-            return Err(ProgramError::InvalidArgument);
-        }
-        self.btc_txid[..txid.len()].copy_from_slice(txid);
-        self.btc_txid_len = txid.len() as u8;
         Ok(())
     }
 }

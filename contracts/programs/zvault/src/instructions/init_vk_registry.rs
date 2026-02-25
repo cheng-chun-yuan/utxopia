@@ -1,11 +1,11 @@
-//! Initialize VK Registry instruction (Groth16)
+//! Initialize VK Registry instruction (Groth16 JoinSplit)
 //!
-//! Creates and initializes a verification key hash registry for a specific circuit type.
-//! The VK hash is used for CPI to the groth16 verifier program.
+//! Creates and initializes a verification key hash registry for a JoinSplit(N,M) variant.
+//! The VK hash is used for proof verification via BN254 pairing syscalls.
 //!
 //! # Security
 //! - Only the pool authority can initialize VK registries
-//! - Each circuit type has its own VK registry PDA
+//! - Each (N, M) variant has its own VK registry PDA
 //! - VK hashes can be updated by authority (for circuit upgrades)
 
 use pinocchio::{
@@ -17,45 +17,49 @@ use pinocchio::{
 };
 
 use crate::error::ZVaultError;
-use crate::state::{CircuitType, PoolState, VkRegistry, VK_REGISTRY_DISCRIMINATOR};
+use crate::state::{PoolState, VkRegistry, VK_REGISTRY_DISCRIMINATOR};
 use crate::utils::{create_pda_account, validate_program_owner, validate_system_program};
 
-/// Initialize VK Registry instruction data (Groth16)
+/// Initialize VK Registry instruction data
 ///
 /// Layout:
-/// - circuit_type: u8 (which circuit this VK hash is for)
+/// - n_inputs: u8 (JoinSplit N)
+/// - n_outputs: u8 (JoinSplit M)
 /// - vk_hash: [u8; 32] (Groth16 verification key hash)
 pub struct InitVkRegistryData {
-    pub circuit_type: u8,
+    pub n_inputs: u8,
+    pub n_outputs: u8,
     pub vk_hash: [u8; 32],
 }
 
 impl InitVkRegistryData {
-    pub const SIZE: usize = 1 + 32; // 33 bytes
+    pub const SIZE: usize = 2 + 32; // 34 bytes
 
     pub fn from_bytes(data: &[u8]) -> Result<Self, ProgramError> {
         if data.len() < Self::SIZE {
             return Err(ProgramError::InvalidInstructionData);
         }
 
-        let circuit_type = data[0];
+        let n_inputs = data[0];
+        let n_outputs = data[1];
 
-        // Validate circuit type
-        if CircuitType::from_u8(circuit_type).is_none() {
+        // Validate dimensions: N >= 1, M >= 1, N+M <= 14
+        if n_inputs == 0 || n_outputs == 0 || (n_inputs as usize + n_outputs as usize) > 14 {
             return Err(ProgramError::InvalidArgument);
         }
 
         let mut vk_hash = [0u8; 32];
-        vk_hash.copy_from_slice(&data[1..33]);
+        vk_hash.copy_from_slice(&data[2..34]);
 
         Ok(Self {
-            circuit_type,
+            n_inputs,
+            n_outputs,
             vk_hash,
         })
     }
 }
 
-/// Initialize a VK registry account
+/// Initialize a VK registry account for a JoinSplit(N,M) variant
 ///
 /// Accounts:
 /// 0. pool_state - Pool state PDA (to verify authority)
@@ -78,15 +82,11 @@ pub fn process_init_vk_registry(
 
     let ix_data = InitVkRegistryData::from_bytes(data)?;
 
-    // Validate authority is signer
     if !authority.is_signer() {
         return Err(ProgramError::MissingRequiredSignature);
     }
 
-    // Validate system program
     validate_system_program(system_program)?;
-
-    // Validate pool state
     validate_program_owner(pool_state, program_id)?;
 
     // Verify authority matches pool
@@ -99,9 +99,10 @@ pub fn process_init_vk_registry(
         }
     }
 
-    // Derive expected VK registry PDA
-    let circuit_type_bytes = [ix_data.circuit_type];
-    let seeds: &[&[u8]] = &[VkRegistry::SEED, &circuit_type_bytes];
+    // Derive expected VK registry PDA: ["vk_registry", &[n_inputs], &[n_outputs]]
+    let n_inputs_bytes = [ix_data.n_inputs];
+    let n_outputs_bytes = [ix_data.n_outputs];
+    let seeds: &[&[u8]] = &[VkRegistry::SEED, &n_inputs_bytes, &n_outputs_bytes];
     let (expected_pda, bump) = find_program_address(seeds, program_id);
 
     if vk_registry.key() != &expected_pda {
@@ -116,12 +117,11 @@ pub fn process_init_vk_registry(
             return Err(ProgramError::AccountAlreadyInitialized);
         }
     } else {
-        // Create the PDA account
         let rent = Rent::get()?;
         let lamports = rent.minimum_balance(VkRegistry::SIZE);
 
         let bump_bytes = [bump];
-        let signer_seeds: &[&[u8]] = &[VkRegistry::SEED, &circuit_type_bytes, &bump_bytes];
+        let signer_seeds: &[&[u8]] = &[VkRegistry::SEED, &n_inputs_bytes, &n_outputs_bytes, &bump_bytes];
 
         create_pda_account(
             authority,
@@ -138,13 +138,13 @@ pub fn process_init_vk_registry(
         let mut vk_data = vk_registry.try_borrow_mut_data()?;
         let registry = VkRegistry::init(&mut vk_data)?;
 
-        registry.circuit_type = ix_data.circuit_type;
-        registry.set_version(1);
+        registry.n_inputs = ix_data.n_inputs;
+        registry.n_outputs = ix_data.n_outputs;
         registry.authority.copy_from_slice(authority.key().as_ref());
         registry.vk_hash.copy_from_slice(&ix_data.vk_hash);
     }
 
-    crate::debug_msg!("VK registry initialized (Groth16)");
+    crate::debug_msg!("VK registry initialized");
 
     Ok(())
 }
@@ -168,36 +168,29 @@ pub fn process_update_vk_registry(
 
     let ix_data = InitVkRegistryData::from_bytes(data)?;
 
-    // Validate authority is signer
     if !authority.is_signer() {
         return Err(ProgramError::MissingRequiredSignature);
     }
 
-    // Validate VK registry
     validate_program_owner(vk_registry, program_id)?;
 
-    // Update VK registry
     {
         let mut vk_data = vk_registry.try_borrow_mut_data()?;
         let registry = VkRegistry::from_bytes_mut(&mut vk_data)?;
 
-        // Verify caller is authority
         if !registry.is_authority(authority.key().as_ref().try_into().unwrap()) {
             return Err(ZVaultError::Unauthorized.into());
         }
 
-        // Verify circuit type matches
-        if registry.circuit_type != ix_data.circuit_type {
+        // Verify variant matches
+        if registry.n_inputs != ix_data.n_inputs || registry.n_outputs != ix_data.n_outputs {
             return Err(ProgramError::InvalidArgument);
         }
 
-        // Update VK hash
-        let new_version = registry.version().saturating_add(1);
-        registry.set_version(new_version);
         registry.vk_hash.copy_from_slice(&ix_data.vk_hash);
     }
 
-    crate::debug_msg!("VK registry updated (Groth16)");
+    crate::debug_msg!("VK registry updated");
 
     Ok(())
 }

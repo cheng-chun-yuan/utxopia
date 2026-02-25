@@ -30,3 +30,9 @@ sdk/dist/
 test-ledger/
 .vercel
 .env*.local
+
+# Reference repos
+zeus-program-library/
+
+# Circom build artifacts
+circuits/build/

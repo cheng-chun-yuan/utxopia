@@ -13,28 +13,17 @@ import {
   TransactionInstruction,
   sendAndConfirmTransaction,
 } from '@solana/web3.js';
-import { createHash } from 'crypto';
+// PDA seeds (must match the btc-light-client Pinocchio program)
+const LIGHT_CLIENT_SEED = Buffer.from('btc_light_client');
+const BLOCK_SEED = Buffer.from('block_header');
 
-// PDA seeds (must match the btc-light-client program)
-const LIGHT_CLIENT_SEED = Buffer.from('light_client');
-const BLOCK_SEED = Buffer.from('block');
+// Account discriminator for BitcoinLightClient (Pinocchio: single byte, not Anchor SHA256)
+const BTC_LIGHT_CLIENT_DISCRIMINATOR: number = 0x06;
 
-// Account discriminator for LightClientState
-const LIGHT_CLIENT_DISCRIMINATOR = createHash('sha256')
-  .update('account:LightClientState')
-  .digest()
-  .subarray(0, 8);
-
-// Instruction discriminators
-const INITIALIZE_DISCRIMINATOR = createHash('sha256')
-  .update('global:initialize')
-  .digest()
-  .subarray(0, 8);
-
-const SUBMIT_HEADER_DISCRIMINATOR = createHash('sha256')
-  .update('global:submit_header')
-  .digest()
-  .subarray(0, 8);
+// Instruction discriminators (Pinocchio: single byte)
+const INITIALIZE_DISC: number = 0;
+const SUBMIT_HEADER_DISC: number = 1;
+const RESET_TIP_DISC: number = 2;
 
 /**
  * Derive the light client PDA
@@ -59,63 +48,66 @@ export function deriveBlockHeaderPda(
 }
 
 /**
- * LightClientState structure
+ * LightClientState structure (Pinocchio layout: 232 bytes)
+ *
+ * Offsets:
+ *   0: discriminator (u8 = 0x06)
+ *   1: bump (u8)
+ *   2: paused (u8)
+ *   3: network (u8)
+ *   4-7: _padding (4 bytes)
+ *   8-39: authority (32 bytes)
+ *  40-71: genesis_hash (32 bytes)
+ *  72-103: tip_hash (32 bytes)
+ * 104-135: total_chainwork (32 bytes)
+ * 136-143: tip_height (u64 LE)
+ * 144-151: finalized_height (u64 LE)
+ * 152-159: header_count (u64 LE)
+ * 160-167: last_update (i64 LE)
+ * 168-231: _reserved (64 bytes)
  */
 export interface LightClientState {
   bump: number;
-  tipHeight: bigint;
+  paused: boolean;
+  network: number;
+  authority: Uint8Array;
+  genesisHash: Uint8Array;
   tipHash: Uint8Array;
-  startHeight: bigint;
-  startHash: Uint8Array;
+  tipHeight: bigint;
   finalizedHeight: bigint;
   headerCount: bigint;
   lastUpdate: bigint;
-  network: number;
 }
 
 /**
  * Parse LightClientState account data
  */
 export function parseLightClientState(data: Buffer): LightClientState {
-  // Skip discriminator (8 bytes)
-  let offset = 8;
-
-  const bump = data.readUInt8(offset);
-  offset += 1;
-
-  const tipHeight = data.readBigUInt64LE(offset);
-  offset += 8;
-
-  const tipHash = new Uint8Array(data.subarray(offset, offset + 32));
-  offset += 32;
-
-  const startHeight = data.readBigUInt64LE(offset);
-  offset += 8;
-
-  const startHash = new Uint8Array(data.subarray(offset, offset + 32));
-  offset += 32;
-
-  const finalizedHeight = data.readBigUInt64LE(offset);
-  offset += 8;
-
-  const headerCount = data.readBigUInt64LE(offset);
-  offset += 8;
-
-  const lastUpdate = data.readBigInt64LE(offset);
-  offset += 8;
-
-  const network = data.readUInt8(offset);
+  // Byte 0: discriminator (already verified)
+  const bump = data.readUInt8(1);
+  const paused = data.readUInt8(2) !== 0;
+  const network = data.readUInt8(3);
+  // 4-7: padding
+  const authority = new Uint8Array(data.subarray(8, 40));
+  const genesisHash = new Uint8Array(data.subarray(40, 72));
+  const tipHash = new Uint8Array(data.subarray(72, 104));
+  // 104-135: total_chainwork (skip)
+  const tipHeight = data.readBigUInt64LE(136);
+  const finalizedHeight = data.readBigUInt64LE(144);
+  const headerCount = data.readBigUInt64LE(152);
+  const lastUpdate = data.readBigInt64LE(160);
 
   return {
     bump,
-    tipHeight,
+    paused,
+    network,
+    authority,
+    genesisHash,
     tipHash,
-    startHeight,
-    startHash,
+    tipHeight,
     finalizedHeight,
     headerCount,
     lastUpdate,
-    network,
   };
 }
 
@@ -133,10 +125,9 @@ export async function getLightClientState(
     return null;
   }
 
-  // Verify discriminator
-  const discriminator = accountInfo.data.subarray(0, 8);
-  if (!discriminator.equals(LIGHT_CLIENT_DISCRIMINATOR)) {
-    throw new Error('Invalid light client account discriminator');
+  // Verify discriminator (single byte for Pinocchio)
+  if (accountInfo.data[0] !== BTC_LIGHT_CLIENT_DISCRIMINATOR) {
+    throw new Error(`Invalid light client account discriminator: expected 0x${BTC_LIGHT_CLIENT_DISCRIMINATOR.toString(16)}, got 0x${accountInfo.data[0].toString(16)}`);
   }
 
   return parseLightClientState(accountInfo.data);
@@ -181,20 +172,20 @@ export function buildInitializeInstruction(
   startBlockHash: Uint8Array,
   network: number
 ): TransactionInstruction {
-  // Instruction data: discriminator (8) + start_height (8) + start_block_hash (32) + network (1)
-  const data = Buffer.alloc(8 + 8 + 32 + 1);
+  // Instruction data: discriminator (1) + start_height (8) + start_block_hash (32) + network (1) = 42 bytes
+  const data = Buffer.alloc(1 + 8 + 32 + 1);
 
-  // Write discriminator
-  INITIALIZE_DISCRIMINATOR.copy(data, 0);
+  // Write discriminator (single byte for Pinocchio)
+  data.writeUInt8(INITIALIZE_DISC, 0);
 
   // Write start_height (u64 LE)
-  data.writeBigUInt64LE(startHeight, 8);
+  data.writeBigUInt64LE(startHeight, 1);
 
   // Write start_block_hash (32 bytes)
-  Buffer.from(startBlockHash).copy(data, 16);
+  Buffer.from(startBlockHash).copy(data, 9);
 
   // Write network (u8)
-  data.writeUInt8(network, 48);
+  data.writeUInt8(network, 41);
 
   return new TransactionInstruction({
     keys: [
@@ -218,17 +209,17 @@ export function buildSubmitHeaderInstruction(
   rawHeader: Uint8Array,
   height: bigint
 ): TransactionInstruction {
-  // Instruction data: discriminator (8) + raw_header (80) + height (8)
-  const data = Buffer.alloc(8 + 80 + 8);
+  // Instruction data: discriminator (1) + raw_header (80) + height (8) = 89 bytes
+  const data = Buffer.alloc(1 + 80 + 8);
 
-  // Write discriminator
-  SUBMIT_HEADER_DISCRIMINATOR.copy(data, 0);
+  // Write discriminator (single byte for Pinocchio)
+  data.writeUInt8(SUBMIT_HEADER_DISC, 0);
 
   // Write raw_header (80 bytes)
-  Buffer.from(rawHeader).copy(data, 8);
+  Buffer.from(rawHeader).copy(data, 1);
 
   // Write height (u64 LE)
-  data.writeBigUInt64LE(height, 88);
+  data.writeBigUInt64LE(height, 81);
 
   return new TransactionInstruction({
     keys: [
@@ -299,6 +290,62 @@ export async function submitHeader(
 
   const signature = await sendAndConfirmTransaction(connection, transaction, [
     submitter,
+  ]);
+
+  return signature;
+}
+
+/**
+ * Build reset_tip instruction
+ */
+export function buildResetTipInstruction(
+  programId: PublicKey,
+  lightClientPda: PublicKey,
+  authority: PublicKey,
+  newTipHeight: bigint,
+  newTipHash: Uint8Array
+): TransactionInstruction {
+  // Instruction data: discriminator (1) + new_tip_height (8) + new_tip_hash (32) = 41 bytes
+  const data = Buffer.alloc(1 + 8 + 32);
+
+  data.writeUInt8(RESET_TIP_DISC, 0);
+  data.writeBigUInt64LE(newTipHeight, 1);
+  Buffer.from(newTipHash).copy(data, 9);
+
+  return new TransactionInstruction({
+    keys: [
+      { pubkey: lightClientPda, isSigner: false, isWritable: true },
+      { pubkey: authority, isSigner: true, isWritable: false },
+    ],
+    programId,
+    data,
+  });
+}
+
+/**
+ * Reset the light client tip to a new block hash and height
+ */
+export async function resetTip(
+  connection: Connection,
+  programId: PublicKey,
+  authority: Keypair,
+  newTipHeight: bigint,
+  newTipHash: Uint8Array
+): Promise<string> {
+  const [lightClientPda] = deriveLightClientPda(programId);
+
+  const instruction = buildResetTipInstruction(
+    programId,
+    lightClientPda,
+    authority.publicKey,
+    newTipHeight,
+    newTipHash
+  );
+
+  const transaction = new Transaction().add(instruction);
+
+  const signature = await sendAndConfirmTransaction(connection, transaction, [
+    authority,
   ]);
 
   return signature;

@@ -15,8 +15,9 @@
 //!   cargo run -- demo            - Run interactive demo
 
 use zbtc::api_server as api;
+use zbtc::config::ZVaultConfig;
 use zbtc::deposit_tracker::{self, TrackerConfig};
-use zbtc::redemption::{RedemptionConfig, RedemptionService, SingleKeySigner};
+use zbtc::redemption::{MpcSigner, RedemptionConfig, RedemptionService, SingleKeySigner};
 use zbtc::stealth::StealthDepositService;
 use zbtc::units;
 use std::env;
@@ -72,8 +73,23 @@ fn print_usage() {
     println!("  cd backend/header-relayer && bun run start");
 }
 
-/// Create redemption service from environment
+/// Create redemption service from environment, supporting both single-key and FROST modes
 fn create_service(config: RedemptionConfig) -> RedemptionService {
+    // Check for FROST signing mode first
+    if let Ok(mode) = env::var("ZVAULT_SIGNING_MODE") {
+        if mode.to_lowercase() == "frost" {
+            return match create_frost_service(config.clone()) {
+                Ok(service) => service,
+                Err(e) => {
+                    eprintln!("Warning: Failed to configure FROST signing: {}", e);
+                    eprintln!("Falling back to testnet single-key signer");
+                    RedemptionService::new_testnet()
+                }
+            };
+        }
+    }
+
+    // Single-key mode
     if let Ok(key_hex) = env::var("POOL_SIGNING_KEY") {
         match SingleKeySigner::from_hex(&key_hex) {
             Ok(signer) => RedemptionService::new_with_signer(config, signer),
@@ -85,6 +101,29 @@ fn create_service(config: RedemptionConfig) -> RedemptionService {
     } else {
         RedemptionService::new_testnet()
     }
+}
+
+/// Create redemption service with FROST threshold signing
+fn create_frost_service(config: RedemptionConfig) -> Result<RedemptionService, String> {
+    let zvault_config = ZVaultConfig::from_env().map_err(|e| e.to_string())?;
+
+    let frost_client = zvault_config
+        .signing
+        .frost_client()
+        .ok_or("signing mode is not FROST")?;
+
+    // Get group pubkey from ZVAULT_FROST_GROUP_PUBKEY env var
+    let group_pubkey_hex = env::var("ZVAULT_FROST_GROUP_PUBKEY")
+        .map_err(|_| "ZVAULT_FROST_GROUP_PUBKEY required for FROST mode".to_string())?;
+
+    let group_pubkey_bytes = hex::decode(&group_pubkey_hex)
+        .map_err(|e| format!("invalid group pubkey hex: {}", e))?;
+
+    let group_pubkey = bitcoin::XOnlyPublicKey::from_slice(&group_pubkey_bytes)
+        .map_err(|e| format!("invalid group pubkey: {}", e))?;
+
+    let signer = MpcSigner::new(frost_client, group_pubkey);
+    Ok(RedemptionService::new_with_signer(config, signer))
 }
 
 async fn run_api_server(args: &[String]) {
@@ -209,8 +248,35 @@ async fn run_tracker_service(args: &[String]) {
     // Create service with optional sweeper
     let service = deposit_tracker::DepositTrackerService::new_testnet(config.clone());
 
-    // Configure sweeper if signing key available
-    let service = if let Ok(key_hex) = env::var("POOL_SIGNING_KEY") {
+    // Configure sweeper based on signing mode
+    let service = if let Ok(mode) = env::var("ZVAULT_SIGNING_MODE") {
+        if mode.to_lowercase() == "frost" {
+            // FROST threshold signing
+            match configure_frost_sweeper(service, &config) {
+                Ok(s) => {
+                    println!("Sweeper configured with FROST threshold signing");
+                    s
+                }
+                Err(e) => {
+                    eprintln!("Warning: Failed to configure FROST sweeper: {}", e);
+                    deposit_tracker::DepositTrackerService::new_testnet(config.clone())
+                }
+            }
+        } else if let Ok(key_hex) = env::var("POOL_SIGNING_KEY") {
+            match service.with_sweeper(&key_hex) {
+                Ok(s) => {
+                    println!("Sweeper configured with pool signing key");
+                    s
+                }
+                Err(e) => {
+                    eprintln!("Warning: Failed to configure sweeper: {}", e);
+                    deposit_tracker::DepositTrackerService::new_testnet(config.clone())
+                }
+            }
+        } else {
+            service
+        }
+    } else if let Ok(key_hex) = env::var("POOL_SIGNING_KEY") {
         match service.with_sweeper(&key_hex) {
             Ok(s) => {
                 println!("Sweeper configured with pool signing key");
@@ -218,7 +284,6 @@ async fn run_tracker_service(args: &[String]) {
             }
             Err(e) => {
                 eprintln!("Warning: Failed to configure sweeper: {}", e);
-                // Recreate service without sweeper
                 deposit_tracker::DepositTrackerService::new_testnet(config.clone())
             }
         }
@@ -263,6 +328,32 @@ async fn run_tracker_service(args: &[String]) {
     if let Err(e) = service.run().await {
         eprintln!("Error: {}", e);
     }
+}
+
+/// Configure FROST sweeper for the tracker service
+fn configure_frost_sweeper(
+    service: deposit_tracker::DepositTrackerService,
+    _config: &TrackerConfig,
+) -> Result<deposit_tracker::DepositTrackerService, String> {
+    let zvault_config = ZVaultConfig::from_env().map_err(|e| e.to_string())?;
+
+    let frost_client = zvault_config
+        .signing
+        .frost_client()
+        .ok_or("signing mode is not FROST")?;
+
+    let group_pubkey_hex = env::var("ZVAULT_FROST_GROUP_PUBKEY")
+        .map_err(|_| "ZVAULT_FROST_GROUP_PUBKEY required for FROST mode".to_string())?;
+
+    let group_pubkey_bytes = hex::decode(&group_pubkey_hex)
+        .map_err(|e| format!("invalid group pubkey hex: {}", e))?;
+
+    let group_pubkey = bitcoin::XOnlyPublicKey::from_slice(&group_pubkey_bytes)
+        .map_err(|e| format!("invalid group pubkey: {}", e))?;
+
+    let network = zvault_config.network.bitcoin_network();
+
+    Ok(service.with_frost_sweeper(frost_client, group_pubkey, network))
 }
 
 async fn run_demo() {

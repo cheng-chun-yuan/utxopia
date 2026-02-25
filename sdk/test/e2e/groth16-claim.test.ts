@@ -1,6 +1,11 @@
 /**
  * E2E Test: Groth16 Claim Circuit Proof Generation & Verification
  *
+ * ⚠️  DEPRECATED: This test uses the legacy 'claim' circuit.
+ * The current zVault implementation uses JoinSplit circuits instead.
+ *
+ * This file is kept for reference only and tests will be skipped.
+ *
  * Tests the full flow:
  * 1. Generate Poseidon-based circuit inputs
  * 2. Generate Groth16 proof via snarkjs (Node.js subprocess - bun has issues with snarkjs WASM)
@@ -63,7 +68,7 @@ function serializeProof(proof: any): Uint8Array {
   return bytes;
 }
 
-describe("Groth16 Claim E2E", () => {
+describe.skip("Groth16 Claim E2E (DEPRECATED - uses legacy claim circuit)", () => {
   let proof: any;
   let publicSignals: string[];
   let merkleRoot: bigint;

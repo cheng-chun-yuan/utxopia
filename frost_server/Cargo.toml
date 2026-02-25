@@ -13,6 +13,10 @@ name = "spend_utxo"
 path = "src/bin/spend_utxo.rs"
 
 [[bin]]
+name = "test_solana_verifier"
+path = "src/bin/test_solana_verifier.rs"
+
+[[bin]]
 name = "generate_deposit_address"
 path = "src/bin/generate_deposit_address.rs"
 
@@ -40,6 +44,13 @@ rand = "0.8"
 hex = "0.4"
 sha2 = "0.10"
 getrandom = "0.2"
+x25519-dalek = { version = "2.0", features = ["static_secrets"] }
+hkdf = "0.12"
+
+# Solana verification
+bs58 = "0.5"
+base64 = "0.22"
+curve25519-dalek = "4"
 
 # Utilities
 thiserror = "2"

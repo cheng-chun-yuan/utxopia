@@ -62,6 +62,8 @@ pub mod instruction {
     // Core operations
     pub const INITIALIZE: u8 = 0;
     pub const VERIFY_STEALTH_DEPOSIT: u8 = 1;
+    pub const MARK_PROCESSING: u8 = 2;
+    pub const CANCEL_REDEMPTION: u8 = 3;
     pub const REQUEST_REDEMPTION: u8 = 5;
     pub const COMPLETE_REDEMPTION: u8 = 6;
     pub const SET_PAUSED: u8 = 7;
@@ -101,6 +103,12 @@ pub fn process_instruction(
         }
         instruction::VERIFY_STEALTH_DEPOSIT => {
             instructions::process_verify_stealth_deposit(program_id, accounts, data)
+        }
+        instruction::MARK_PROCESSING => {
+            instructions::process_mark_processing(program_id, accounts, data)
+        }
+        instruction::CANCEL_REDEMPTION => {
+            instructions::process_cancel_redemption(program_id, accounts, data)
         }
         instruction::REQUEST_REDEMPTION => {
             instructions::process_request_redemption(program_id, accounts, data)
@@ -194,6 +202,8 @@ mod tests {
         let discriminators: &[u8] = &[
             instruction::INITIALIZE,
             instruction::VERIFY_STEALTH_DEPOSIT,
+            instruction::MARK_PROCESSING,
+            instruction::CANCEL_REDEMPTION,
             instruction::REQUEST_REDEMPTION,
             instruction::COMPLETE_REDEMPTION,
             instruction::SET_PAUSED,

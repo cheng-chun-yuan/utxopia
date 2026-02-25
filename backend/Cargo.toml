@@ -62,3 +62,4 @@ r2d2_sqlite = "0.24"
 [dev-dependencies]
 mockall = "0.13"
 tower = "0.5"
+bitcoinconsensus = "0.106"

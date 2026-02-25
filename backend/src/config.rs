@@ -61,6 +61,7 @@ pub enum Network {
     Mainnet,
     Testnet,
     Devnet,
+    Regtest,
 }
 
 impl FromStr for Network {
@@ -71,6 +72,7 @@ impl FromStr for Network {
             "mainnet" | "main" => Ok(Network::Mainnet),
             "testnet" | "test" => Ok(Network::Testnet),
             "devnet" | "dev" => Ok(Network::Devnet),
+            "regtest" => Ok(Network::Regtest),
             _ => Err(ConfigError::InvalidValue(
                 "ZVAULT_NETWORK".to_string(),
                 format!("unknown network: {}", s),
@@ -82,7 +84,7 @@ impl FromStr for Network {
 impl Network {
     /// Check if demo mode is allowed on this network
     pub fn allows_demo_mode(&self) -> bool {
-        matches!(self, Network::Devnet | Network::Testnet)
+        matches!(self, Network::Devnet | Network::Testnet | Network::Regtest)
     }
 
     /// Get default Solana RPC for this network
@@ -91,6 +93,7 @@ impl Network {
             Network::Mainnet => "https://api.mainnet-beta.solana.com",
             Network::Testnet => "https://api.testnet.solana.com",
             Network::Devnet => "https://api.devnet.solana.com",
+            Network::Regtest => "http://127.0.0.1:8899",
         }
     }
 
@@ -100,6 +103,7 @@ impl Network {
             Network::Mainnet => "https://blockstream.info/api",
             Network::Testnet => "https://blockstream.info/testnet/api",
             Network::Devnet => "https://blockstream.info/testnet/api",
+            Network::Regtest => "http://localhost:3000/regtest/api",
         }
     }
 
@@ -108,6 +112,7 @@ impl Network {
         match self {
             Network::Mainnet => bitcoin::Network::Bitcoin,
             Network::Testnet | Network::Devnet => bitcoin::Network::Testnet,
+            Network::Regtest => bitcoin::Network::Regtest,
         }
     }
 }
@@ -128,7 +133,37 @@ pub enum SigningMode {
         participants: u8,
         /// This node's key share (encrypted)
         key_share: String,
+        /// URLs of FROST signer servers (e.g., ["http://localhost:4001", ...])
+        signer_urls: Vec<String>,
+        /// Optional API key for authenticating with FROST servers
+        api_key: Option<String>,
     },
+}
+
+impl SigningMode {
+    /// Create a FrostClient from FROST signing config.
+    /// Returns None if this is SingleKey mode.
+    pub fn frost_client(&self) -> Option<crate::frost_client::FrostClient> {
+        match self {
+            SigningMode::Frost { threshold, signer_urls, api_key, .. } => {
+                Some(crate::frost_client::FrostClient::new(
+                    signer_urls.clone(),
+                    *threshold as usize,
+                    api_key.clone(),
+                ))
+            }
+            SigningMode::Single { .. } => None,
+        }
+    }
+
+    /// Get the FROST group public key from the signer's /info endpoint.
+    /// Returns None if SingleKey mode.
+    pub fn frost_signer_urls(&self) -> Option<&[String]> {
+        match self {
+            SigningMode::Frost { signer_urls, .. } => Some(signer_urls),
+            SigningMode::Single { .. } => None,
+        }
+    }
 }
 
 /// Main configuration struct
@@ -186,25 +221,25 @@ impl ZVaultConfig {
         // Program IDs (required for non-devnet)
         let program_id = get_required_or_devnet_default(
             "ZVAULT_PROGRAM_ID",
-            "AtztELZfz3GHA8hFQCv7aT9Mt47Xhknv3ZCNb3fmXsgf",
+            "2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV",
             network,
         )?;
 
         let pool_state = get_required_or_devnet_default(
             "ZVAULT_POOL_STATE",
-            "8bbcVecB619HHsHn2TQMraJ8R8WjQjApdZY7h9JCJW7b",
+            "E6DVestxC5dn5ixvLa3FcYodcVtwUAyanpVPbs4y3p16",
             network,
         )?;
 
         let commitment_tree = get_required_or_devnet_default(
             "ZVAULT_COMMITMENT_TREE",
-            "HtfDXZ5mBQNBdZrDxJMbXCDkyUqFdTDj7zAqo3aqrqiA",
+            "JCiGqC1a1rjfqk2dqcybU2e3FQjAQ19x8ts9fQCtTFCq",
             network,
         )?;
 
         let zbtc_mint = get_required_or_devnet_default(
             "ZVAULT_ZBTC_MINT",
-            "HiDyAcEBTS7SRiLA49BZ5B6XMBAksgwLEAHpvteR8vbV",
+            "HthCYqDKyw11c2dUJz9s2dCnH314ktn6JTGEveZkT17N",
             network,
         )?;
 
@@ -215,7 +250,7 @@ impl ZVaultConfig {
         let default_limit = match network {
             Network::Mainnet => 1_000_000_000, // 10 BTC in sats ($10k at $100k/BTC)
             Network::Testnet => 10_000_000_000, // 100 BTC for testing
-            Network::Devnet => 100_000_000_000, // 1000 BTC for development
+            Network::Devnet | Network::Regtest => 100_000_000_000, // 1000 BTC for development
         };
         let deposit_limit_sats = env::var("ZVAULT_DEPOSIT_LIMIT_SATS")
             .ok()
@@ -279,8 +314,8 @@ impl ZVaultConfig {
         println!("Program ID: {}", self.program_id);
         let signing_mode = match &self.signing {
             SigningMode::Single { .. } => "Single Key (POC)".to_string(),
-            SigningMode::Frost { threshold, participants, .. } =>
-                format!("FROST {}-of-{}", threshold, participants),
+            SigningMode::Frost { threshold, participants, signer_urls, .. } =>
+                format!("FROST {}-of-{} ({} signer URLs)", threshold, participants, signer_urls.len()),
         };
         println!("Signing Mode: {}", signing_mode);
         println!("Deposit Limit: {} sats", self.deposit_limit_sats);
@@ -299,7 +334,7 @@ fn get_required_or_devnet_default(
     match env::var(var_name) {
         Ok(value) => Ok(value),
         Err(_) => {
-            if network == Network::Devnet {
+            if matches!(network, Network::Devnet | Network::Regtest) {
                 Ok(devnet_default.to_string())
             } else {
                 Err(ConfigError::MissingEnvVar(var_name.to_string()))
@@ -311,7 +346,7 @@ fn get_required_or_devnet_default(
 /// Load signing configuration from environment
 fn load_signing_config(network: Network) -> Result<SigningMode, ConfigError> {
     let mode = env::var("ZVAULT_SIGNING_MODE").unwrap_or_else(|_| {
-        if network == Network::Mainnet {
+        if matches!(network, Network::Mainnet) {
             "frost".to_string()
         } else {
             "single".to_string()
@@ -322,8 +357,8 @@ fn load_signing_config(network: Network) -> Result<SigningMode, ConfigError> {
         "single" => {
             // For devnet, we can use a derived key (with warning)
             let key = env::var("ZVAULT_BTC_SIGNER_KEY").unwrap_or_else(|_| {
-                if network == Network::Devnet {
-                    eprintln!("WARNING: Using derived POC key for devnet - DO NOT USE WITH REAL FUNDS");
+                if matches!(network, Network::Devnet | Network::Regtest) {
+                    eprintln!("WARNING: Using derived POC key for devnet/regtest - DO NOT USE WITH REAL FUNDS");
                     // Return empty string to indicate "use derived key"
                     String::new()
                 } else {
@@ -331,7 +366,7 @@ fn load_signing_config(network: Network) -> Result<SigningMode, ConfigError> {
                 }
             });
 
-            if key.is_empty() && network != Network::Devnet {
+            if key.is_empty() && !matches!(network, Network::Devnet | Network::Regtest) {
                 return Err(ConfigError::MissingEnvVar(
                     "ZVAULT_BTC_SIGNER_KEY".to_string(),
                 ));
@@ -377,10 +412,33 @@ fn load_signing_config(network: Network) -> Result<SigningMode, ConfigError> {
                 ));
             }
 
+            let signer_urls: Vec<String> = env::var("ZVAULT_FROST_SIGNER_URLS")
+                .map_err(|_| {
+                    ConfigError::FrostConfigIncomplete(
+                        "ZVAULT_FROST_SIGNER_URLS required (comma-separated URLs)".to_string(),
+                    )
+                })?
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+
+            if signer_urls.len() < participants as usize {
+                return Err(ConfigError::FrostConfigIncomplete(format!(
+                    "ZVAULT_FROST_SIGNER_URLS has {} URLs but {} participants configured",
+                    signer_urls.len(),
+                    participants,
+                )));
+            }
+
+            let api_key = env::var("ZVAULT_FROST_API_KEY").ok();
+
             Ok(SigningMode::Frost {
                 threshold,
                 participants,
                 key_share,
+                signer_urls,
+                api_key,
             })
         }
         _ => Err(ConfigError::InvalidValue(

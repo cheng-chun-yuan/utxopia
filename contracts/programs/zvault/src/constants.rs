@@ -6,15 +6,6 @@ pub const MIN_DEPOSIT_SATS: u64 = 10_000;
 /// Maximum deposit amount in satoshis (1000 BTC)
 pub const MAX_DEPOSIT_SATS: u64 = 100_000_000_000;
 
-/// Maximum stakeable amount in yield pool (100 BTC = 10B sats)
-/// This prevents overflow in yield calculations:
-/// max_principal * max_epochs * max_rate < u64::MAX
-/// 10_000_000_000 * 100_000 * 10_000 = 10^19 < 1.8*10^19 (u64::MAX)
-pub const MAX_POOL_PRINCIPAL: u64 = 10_000_000_000;
-
-/// Maximum epochs for yield calculation (prevents overflow)
-pub const MAX_YIELD_EPOCHS: u64 = 100_000;
-
 /// Required Bitcoin confirmations
 pub const REQUIRED_CONFIRMATIONS: u32 = 2;
 
@@ -24,8 +15,38 @@ pub const MAX_GROTH16_PROOF_SIZE: usize = 256;
 /// Maximum BTC address length (bech32m)
 pub const MAX_BTC_ADDRESS_LEN: usize = 62;
 
-/// Maximum Bitcoin txid length (hex string)
-pub const MAX_BTC_TXID_LEN: usize = 64;
+/// BTC Relay program ID — localnet override (DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS)
+#[cfg(feature = "localnet")]
+pub const BTC_LIGHT_CLIENT_PROGRAM_ID: [u8; 32] = [
+    0xbb, 0xd5, 0x55, 0x17, 0xb2, 0x8a, 0xc8, 0xd3,
+    0x07, 0xd9, 0x0b, 0xfe, 0x03, 0xbc, 0x51, 0x45,
+    0x4f, 0x88, 0x22, 0xe4, 0xa7, 0xb2, 0xdd, 0x09,
+    0x78, 0x3a, 0xf7, 0x38, 0x86, 0xbb, 0x0d, 0xbf,
+];
+
+/// BTC Relay program ID — devnet (DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS)
+#[cfg(not(feature = "localnet"))]
+pub const BTC_LIGHT_CLIENT_PROGRAM_ID: [u8; 32] = [
+    0xbb, 0xd5, 0x55, 0x17, 0xb2, 0x8a, 0xc8, 0xd3,
+    0x07, 0xd9, 0x0b, 0xfe, 0x03, 0xbc, 0x51, 0x45,
+    0x4f, 0x88, 0x22, 0xe4, 0xa7, 0xb2, 0xdd, 0x09,
+    0x78, 0x3a, 0xf7, 0x38, 0x86, 0xbb, 0x0d, 0xbf,
+];
+
+/// Maximum safe JoinSplit size (N + M).
+/// Larger variants exceed Solana's 1232-byte transaction limit.
+pub const MAX_SAFE_JOINSPLIT_SIZE: usize = 10;
+
+/// Chain ID for bound params hash verification (prevents cross-chain replay).
+#[cfg(not(feature = "mainnet"))]
+pub const CHAIN_ID: u64 = 103; // Solana devnet
+
+#[cfg(feature = "mainnet")]
+pub const CHAIN_ID: u64 = 101; // Solana mainnet
+
+/// Redemption processing timeout in slots (~1 hour at ~2.5 slots/sec).
+/// If a redemption stays in Processing longer than this, the user can cancel.
+pub const REDEMPTION_TIMEOUT_SLOTS: u64 = 9000;
 
 /// Token-2022 program ID (TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb)
 pub const TOKEN_2022_PROGRAM_ID: [u8; 32] = [

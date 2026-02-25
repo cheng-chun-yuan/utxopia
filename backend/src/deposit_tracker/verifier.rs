@@ -3,6 +3,7 @@
 //! Submits sweep transactions for SPV verification on Solana.
 //! Uses the BTC light client to verify transaction inclusion.
 
+use bitcoin::consensus::encode::deserialize as btc_deserialize;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
     commitment_config::CommitmentConfig,
@@ -14,13 +15,21 @@ use solana_sdk::{
 use std::str::FromStr;
 use thiserror::Error;
 
+use super::sweeper::extract_deposit_op_return_from_transaction;
 use super::watcher::{AddressWatcher, MerkleProofData, WatcherError};
 
-/// zVault program ID (devnet)
-pub const ZVAULT_PROGRAM_ID: &str = "BDH9iTYp2nBptboCcSmTn7GTkzYTzaMr7MMG5D5sXXRp";
+/// Get zVault program ID from env or use devnet default
+fn zvault_program_id() -> String {
+    std::env::var("ZVAULT_PROGRAM_ID")
+        .unwrap_or_else(|_| "2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV".to_string())
+}
 
-/// BTC Light Client program ID (devnet)
-pub const BTC_LIGHT_CLIENT_PROGRAM_ID: &str = "8qntLj65faXiqMKcQypyJ389Yq6MBU5X7AB5qsLnvKgy";
+/// Get BTC light client program ID from env or use devnet default
+fn btc_light_client_program_id() -> String {
+    std::env::var("BTC_LIGHT_CLIENT_PROGRAM_ID")
+        .or_else(|_| std::env::var("BTC_RELAY_PROGRAM_ID"))
+        .unwrap_or_else(|_| "DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS".to_string())
+}
 
 /// Verifier errors
 #[derive(Debug, Error)]
@@ -46,8 +55,8 @@ pub enum VerifierError {
     #[error("Verification failed: {0}")]
     VerificationFailed(String),
 
-    #[error("Invalid commitment: {0}")]
-    InvalidCommitment(String),
+    #[error("Invalid npk: {0}")]
+    InvalidNpk(String),
 }
 
 /// Result of successful verification
@@ -82,8 +91,8 @@ impl SpvVerifier {
             rpc: RpcClient::new_with_commitment(solana_rpc, CommitmentConfig::confirmed()),
             payer: None,
             watcher: AddressWatcher::testnet(),
-            program_id: Pubkey::from_str(ZVAULT_PROGRAM_ID).unwrap(),
-            light_client_program_id: Pubkey::from_str(BTC_LIGHT_CLIENT_PROGRAM_ID).unwrap(),
+            program_id: Pubkey::from_str(&zvault_program_id()).unwrap(),
+            light_client_program_id: Pubkey::from_str(&btc_light_client_program_id()).unwrap(),
         }
     }
 
@@ -95,7 +104,7 @@ impl SpvVerifier {
             watcher: AddressWatcher::new(esplora_url),
             program_id: Pubkey::from_str(program_id)
                 .map_err(|e| VerifierError::InvalidAddress(e.to_string()))?,
-            light_client_program_id: Pubkey::from_str(BTC_LIGHT_CLIENT_PROGRAM_ID)
+            light_client_program_id: Pubkey::from_str(&btc_light_client_program_id())
                 .map_err(|e| VerifierError::InvalidAddress(e.to_string()))?,
         })
     }
@@ -127,7 +136,8 @@ impl SpvVerifier {
     /// # Arguments
     /// * `sweep_txid` - The sweep transaction ID (NOT the original deposit)
     /// * `vout` - Output index in the sweep transaction
-    /// * `commitment` - The commitment (hex) to verify
+    /// * `npk` - The note public key (hex) for on-chain commitment computation
+    /// * `ephemeral_pub` - The ephemeral Ed25519 public key (hex) for stealth scanning
     /// * `amount_sats` - Expected amount in satoshis
     ///
     /// # Returns
@@ -136,22 +146,35 @@ impl SpvVerifier {
         &self,
         sweep_txid: &str,
         vout: u32,
-        commitment: &str,
+        npk: &str,
+        ephemeral_pub: &str,
         amount_sats: u64,
     ) -> Result<VerificationResult, VerifierError> {
         let payer = self.payer.as_ref().ok_or(VerifierError::NoPayerSet)?;
 
-        // Parse commitment
-        let commitment_bytes = hex::decode(commitment)
-            .map_err(|e| VerifierError::InvalidCommitment(format!("invalid hex: {}", e)))?;
-        if commitment_bytes.len() != 32 {
-            return Err(VerifierError::InvalidCommitment(format!(
+        // Parse npk
+        let npk_bytes = hex::decode(npk)
+            .map_err(|e| VerifierError::InvalidNpk(format!("invalid hex: {}", e)))?;
+        if npk_bytes.len() != 32 {
+            return Err(VerifierError::InvalidNpk(format!(
                 "wrong length: {}",
-                commitment_bytes.len()
+                npk_bytes.len()
             )));
         }
-        let mut commitment_arr = [0u8; 32];
-        commitment_arr.copy_from_slice(&commitment_bytes);
+        let mut npk_arr = [0u8; 32];
+        npk_arr.copy_from_slice(&npk_bytes);
+
+        // Parse ephemeral_pub
+        let eph_bytes = hex::decode(ephemeral_pub)
+            .map_err(|e| VerifierError::InvalidNpk(format!("invalid ephemeral_pub hex: {}", e)))?;
+        if eph_bytes.len() != 32 {
+            return Err(VerifierError::InvalidNpk(format!(
+                "wrong ephemeral_pub length: {}",
+                eph_bytes.len()
+            )));
+        }
+        let mut eph_arr = [0u8; 32];
+        eph_arr.copy_from_slice(&eph_bytes);
 
         // Get transaction confirmation status
         let tx_status = self.watcher.get_tx_confirmations(sweep_txid).await?;
@@ -196,7 +219,8 @@ impl SpvVerifier {
                 amount_sats,
                 &expected_pubkey,
                 vout,
-                &commitment_arr,
+                &eph_arr,
+                &npk_arr,
             )
             .await?;
 
@@ -208,6 +232,43 @@ impl SpvVerifier {
             leaf_index,
             block_height,
         })
+    }
+
+    /// Verify a Bitcoin deposit by extracting npk + ephemeral_pub from the sweep tx's OP_RETURN.
+    ///
+    /// This is the trustless version — the npk and ephemeral_pub are read directly
+    /// from the Bitcoin transaction's 64-byte OP_RETURN rather than passed as parameters.
+    /// The on-chain program computes the commitment from npk + amount.
+    ///
+    /// # Arguments
+    /// * `sweep_txid` - The sweep transaction ID
+    /// * `vout` - Output index of the P2TR payment (not the OP_RETURN)
+    /// * `amount_sats` - Expected amount in satoshis
+    pub async fn verify_deposit_from_tx(
+        &self,
+        sweep_txid: &str,
+        vout: u32,
+        amount_sats: u64,
+    ) -> Result<VerificationResult, VerifierError> {
+        // Fetch raw transaction hex from Esplora and decode
+        let tx_hex = self.watcher.get_tx_hex(sweep_txid).await?;
+        let raw_tx = hex::decode(tx_hex.trim())
+            .map_err(|e| VerifierError::VerificationFailed(format!("invalid tx hex: {}", e)))?;
+
+        // Parse raw transaction and extract OP_RETURN data (ephemeral_pub + npk)
+        let tx: bitcoin::Transaction = btc_deserialize(&raw_tx)
+            .map_err(|e| VerifierError::VerificationFailed(format!("invalid tx: {}", e)))?;
+
+        let op_return_data = extract_deposit_op_return_from_transaction(&tx).ok_or_else(|| {
+            VerifierError::InvalidNpk(
+                "no deposit OP_RETURN found in sweep transaction".to_string(),
+            )
+        })?;
+
+        let npk_hex = hex::encode(op_return_data.npk);
+        let eph_hex = hex::encode(op_return_data.ephemeral_pub);
+        self.verify_deposit(sweep_txid, vout, &npk_hex, &eph_hex, amount_sats)
+            .await
     }
 
     /// Check if block header is available in the BTC light client
@@ -268,24 +329,53 @@ impl SpvVerifier {
             .get_account(&deposit_record)
             .map_err(|e| VerifierError::RpcError(format!("Failed to get deposit record: {}", e)))?;
 
-        // Parse leaf index from account data
-        // The account layout depends on the program, but typically leaf_index is at a known offset
-        // For now, we'll use a placeholder that reads from a fixed offset
-        if account.data.len() >= 16 {
-            // Assuming leaf_index is a u64 at offset 8 (after discriminator)
-            let leaf_index = u64::from_le_bytes(
-                account.data[8..16]
-                    .try_into()
-                    .map_err(|_| VerifierError::VerificationFailed("Invalid account data".to_string()))?,
-            );
-            Ok(leaf_index)
-        } else {
-            // If we can't read it, return 0 as a placeholder
-            Ok(0)
+        // Parse leaf index from on-chain DepositRecord account layout (200 bytes):
+        //   discriminator: u8     (offset 0)
+        //   minted: u8            (offset 1)
+        //   _padding: [u8; 6]     (offset 2)
+        //   commitment: [u8; 32]  (offset 8)   — computed on-chain
+        //   amount_sats: [u8; 8]  (offset 40)
+        //   btc_txid: [u8; 32]    (offset 48)
+        //   block_height: [u8; 8] (offset 80)
+        //   leaf_index: [u8; 8]   (offset 88)
+        //   depositor: [u8; 32]   (offset 96)
+        //   timestamp: [u8; 8]    (offset 128)
+        //   ephemeral_pub: [u8;32](offset 136)
+        //   npk: [u8; 32]         (offset 168)
+        const LEAF_INDEX_OFFSET: usize = 88;
+        const LEAF_INDEX_END: usize = LEAF_INDEX_OFFSET + 8;
+
+        if account.data.len() < LEAF_INDEX_END {
+            return Err(VerifierError::VerificationFailed(format!(
+                "deposit record too small: {} bytes, need at least {}",
+                account.data.len(),
+                LEAF_INDEX_END
+            )));
         }
+
+        let leaf_index = u64::from_le_bytes(
+            account.data[LEAF_INDEX_OFFSET..LEAF_INDEX_END]
+                .try_into()
+                .map_err(|_| VerifierError::VerificationFailed("Invalid leaf_index bytes".to_string()))?,
+        );
+        Ok(leaf_index)
     }
 
     /// Send the verify_deposit transaction to Solana
+    ///
+    /// Instruction data layout (npk-based):
+    ///   [0]       discriminator (1)
+    ///   [1-32]    txid (32)
+    ///   [33-112]  block_header (80)
+    ///   [113-120] block_height (8)
+    ///   [121-124] merkle_proof_count (4)
+    ///   [...]     merkle_proof_siblings (32 * count)
+    ///   [...]     merkle_position (4)
+    ///   [...]     amount_sats (8)
+    ///   [...]     expected_pubkey (32)
+    ///   [...]     vout (4)
+    ///   [...]     ephemeral_pub (32) — Ed25519 for stealth scanning
+    ///   [...]     npk (32) — note public key for on-chain commitment computation
     async fn send_verify_deposit_tx(
         &self,
         payer: &Keypair,
@@ -296,7 +386,8 @@ impl SpvVerifier {
         amount_sats: u64,
         expected_pubkey: &[u8; 32],
         vout: u32,
-        commitment: &[u8; 32],
+        ephemeral_pub: &[u8; 32],
+        npk: &[u8; 32],
     ) -> Result<String, VerifierError> {
         // Derive PDAs
         let (pool_state, _) = Pubkey::find_program_address(&[b"pool_state"], &self.program_id);
@@ -318,8 +409,8 @@ impl SpvVerifier {
             Pubkey::find_program_address(&[b"commitment_tree"], &self.program_id);
 
         // Build instruction data
-        // Discriminator for VERIFY_DEPOSIT = 8
-        let discriminator: u8 = 8;
+        // Discriminator for VERIFY_STEALTH_DEPOSIT = 1
+        let discriminator: u8 = 1;
 
         let mut data = Vec::new();
         data.push(discriminator);
@@ -354,15 +445,26 @@ impl SpvVerifier {
         data.extend_from_slice(expected_pubkey);
         data.extend_from_slice(&vout.to_le_bytes());
 
-        // Commitment
-        data.extend_from_slice(commitment);
+        // Ephemeral public key (Ed25519, for stealth scanning)
+        data.extend_from_slice(ephemeral_pub);
 
+        // NPK (note public key, for on-chain commitment computation)
+        data.extend_from_slice(npk);
+
+        // 11 accounts (no StealthAnnouncement):
+        //   0. pool_state (writable)
+        //   1. light_client (readonly)
+        //   2. block_header (readonly)
+        //   3. commitment_tree (writable)
+        //   4. deposit_record (writable)
+        //   5. authority/payer (signer)
+        //   6. system_program (readonly)
         let accounts = vec![
             AccountMeta::new(pool_state, false),
             AccountMeta::new_readonly(light_client, false),
             AccountMeta::new_readonly(block_header_pda, false),
-            AccountMeta::new(deposit_record, false),
             AccountMeta::new(commitment_tree, false),
+            AccountMeta::new(deposit_record, false),
             AccountMeta::new(payer.pubkey(), true),
             AccountMeta::new_readonly(solana_sdk::system_program::ID, false),
         ];

@@ -70,6 +70,9 @@ pub struct WithdrawalRequest {
     pub updated_at: u64,
     /// Error message if failed
     pub error: Option<String>,
+    /// On-chain redemption nonce (from RedemptionRequest PDA) for FROST Solana verification
+    #[serde(default)]
+    pub redemption_nonce: Option<u64>,
 }
 
 impl WithdrawalRequest {
@@ -105,6 +108,7 @@ impl WithdrawalRequest {
             created_at: now,
             updated_at: now,
             error: None,
+            redemption_nonce: None,
         }
     }
 

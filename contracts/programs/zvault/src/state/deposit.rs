@@ -44,8 +44,11 @@ pub struct DepositRecord {
     /// Timestamp when deposit was verified
     timestamp: [u8; 8],
 
-    /// Reserved for future use
-    _reserved: [u8; 32],
+    /// Ed25519 ephemeral public key (for stealth scanning)
+    pub ephemeral_pub: [u8; 32],
+
+    /// Note public key: npk = Poseidon(MPK, stealthScalar)
+    pub npk: [u8; 32],
 }
 
 impl DepositRecord {

@@ -34,6 +34,9 @@ pub struct RedeemRequest {
     pub amount_sats: u64,
     pub btc_address: String,
     pub solana_address: String,
+    /// On-chain redemption nonce (from RedemptionRequest PDA) for FROST Solana verification
+    #[serde(default)]
+    pub redemption_nonce: Option<u64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -93,6 +96,7 @@ async fn handle_redeem(
             req.solana_address.clone(),
             req.amount_sats,
             req.btc_address.clone(),
+            req.redemption_nonce,
         )
         .await
     {

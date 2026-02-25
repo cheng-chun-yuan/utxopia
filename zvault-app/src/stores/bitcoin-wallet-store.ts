@@ -4,12 +4,21 @@ import { create } from "zustand";
 import {
   getAddress,
   sendBtcTransaction,
+  signTransaction,
   type GetAddressResponse,
   BitcoinNetworkType,
   AddressPurpose,
 } from "sats-connect";
 
 const NETWORK = BitcoinNetworkType.Testnet;
+
+/** UTXO descriptor for the connected wallet */
+export interface WalletUtxo {
+  txid: string;
+  vout: number;
+  value: number;
+  scriptPubkeyHex: string;
+}
 
 export interface BitcoinWalletState {
   // Connection state
@@ -27,6 +36,12 @@ export interface BitcoinWalletState {
   refreshBalance: () => Promise<void>;
   clearError: () => void;
   _hydrate: () => void;
+
+  /** Fetch confirmed UTXOs for the connected payment address */
+  getPaymentUtxos: () => Promise<WalletUtxo[]>;
+
+  /** Sign a PSBT via the connected wallet, then broadcast via mempool.space */
+  signAndBroadcastPsbt: (psbtBase64: string) => Promise<{ txid: string }>;
 }
 
 async function fetchBalance(addr: string): Promise<number | null> {
@@ -152,6 +167,108 @@ export const useBitcoinWalletStore = create<BitcoinWalletState>((set, get) => ({
         onCancel: () => reject(new Error("Transaction cancelled by user")),
       });
     });
+  },
+
+  getPaymentUtxos: async (): Promise<WalletUtxo[]> => {
+    const { address } = get();
+    if (!address) throw new Error("Wallet not connected");
+
+    // Fetch UTXOs from mempool.space
+    const res = await fetch(
+      `https://mempool.space/testnet/api/address/${address}/utxo`
+    );
+    if (!res.ok) throw new Error(`Failed to fetch UTXOs: ${res.statusText}`);
+
+    const utxos: Array<{
+      txid: string;
+      vout: number;
+      value: number;
+      status: { confirmed: boolean };
+    }> = await res.json();
+
+    // Filter to confirmed only, then fetch scriptPubkey for each tx
+    const confirmed = utxos.filter((u) => u.status.confirmed);
+    const txidSet = new Set(confirmed.map((u) => u.txid));
+    const txCache = new Map<string, any>();
+
+    await Promise.all(
+      [...txidSet].map(async (txid) => {
+        const txRes = await fetch(
+          `https://mempool.space/testnet/api/tx/${txid}`
+        );
+        if (txRes.ok) txCache.set(txid, await txRes.json());
+      })
+    );
+
+    return confirmed
+      .map((u) => {
+        const tx = txCache.get(u.txid);
+        const output = tx?.vout?.[u.vout];
+        return {
+          txid: u.txid,
+          vout: u.vout,
+          value: u.value,
+          scriptPubkeyHex: output?.scriptpubkey ?? "",
+        };
+      })
+      .filter((u) => u.scriptPubkeyHex.length > 0);
+  },
+
+  signAndBroadcastPsbt: async (psbtBase64: string): Promise<{ txid: string }> => {
+    const { connected, address } = get();
+    if (!connected || !address) throw new Error("Wallet not connected");
+
+    // Sign via sats-connect
+    const signedPsbtBase64 = await new Promise<string>((resolve, reject) => {
+      signTransaction({
+        payload: {
+          network: { type: NETWORK },
+          psbtBase64,
+          message: "Sign zVault deposit transaction",
+          broadcast: false,
+          inputsToSign: [
+            {
+              address,
+              signingIndexes: [0], // Sign all inputs from this address
+            },
+          ],
+        },
+        onFinish: (response: any) => {
+          resolve(response.psbtBase64);
+        },
+        onCancel: () => reject(new Error("PSBT signing cancelled by user")),
+      });
+    });
+
+    // Decode the signed PSBT to get raw tx hex for broadcast
+    // The wallet returns a signed PSBT; we need to finalize and extract
+    const { Transaction } = await import("@scure/btc-signer");
+    const psbtBytes = Uint8Array.from(atob(signedPsbtBase64), (c) =>
+      c.charCodeAt(0)
+    );
+    const tx = Transaction.fromPSBT(psbtBytes);
+    tx.finalize();
+    const rawTxHex = Array.from(tx.extract())
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    // Broadcast via mempool.space
+    const broadcastRes = await fetch(
+      "https://mempool.space/testnet/api/tx",
+      {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: rawTxHex,
+      }
+    );
+
+    if (!broadcastRes.ok) {
+      const errText = await broadcastRes.text();
+      throw new Error(`Broadcast failed: ${errText}`);
+    }
+
+    const txid = await broadcastRes.text();
+    return { txid: txid.trim() };
   },
 
   clearError: () => set({ error: null }),

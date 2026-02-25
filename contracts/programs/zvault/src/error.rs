@@ -100,6 +100,15 @@ pub enum ZVaultError {
     #[error("Insufficient funds in shielded pool")]
     InsufficientFunds = 6030,
 
+    #[error("Redemption cancel not allowed")]
+    RedemptionCancelNotAllowed = 6031,
+
+    #[error("Redemption SPV verification failed")]
+    RedemptionSpvFailed = 6033,
+
+    #[error("Redemption BTC output not found in transaction")]
+    RedemptionOutputNotFound = 6034,
+
     // Security validation errors (6060-6069)
     #[error("Account is not writable")]
     AccountNotWritable = 6060,
@@ -118,6 +127,24 @@ pub enum ZVaultError {
 
     #[error("Account is closed")]
     AccountClosed = 6065,
+
+    #[error("Invalid VK registry for circuit variant")]
+    InvalidVkRegistry = 6066,
+
+    #[error("Invalid bound parameters hash")]
+    InvalidBoundParams = 6067,
+
+    #[error("Redemption processing timeout exceeded")]
+    RedemptionTimeout = 6068,
+
+    #[error("JoinSplit dimensions exceed transaction size limit")]
+    JoinSplitTooLarge = 6069,
+
+    #[error("Redemption BTC output does not match expected address/amount")]
+    RedemptionOutputMismatch = 6070,
+
+    #[error("Block difficulty does not match expected value")]
+    DifficultyMismatch = 6071,
 }
 
 impl From<ZVaultError> for ProgramError {

@@ -136,8 +136,8 @@ Two on-chain programs:
 
 | Program | ID (devnet) | Purpose |
 |---------|-------------|---------|
-| zVault | `2qQPgW6LpzokD1Uemhy2Ng5Xjhr6VuHwJgC2GamUKzQB` | Main bridge logic (12 instructions) |
-| BTC Light Client | `S6rgPjCeBhkYBejWyDR1zzU3sYCMob36LAf8tjwj8pn` | Bitcoin header verification |
+| zVault | `2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV` | Main bridge logic (12 instructions) |
+| BTC Light Client | `DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS` | Bitcoin header verification |
 
 ```bash
 cd contracts
@@ -233,7 +233,7 @@ bun run start
 **Environment variables:**
 ```bash
 SOLANA_RPC_URL=https://api.devnet.solana.com
-PROGRAM_ID=S6rgPjCeBhkYBejWyDR1zzU3sYCMob36LAf8tjwj8pn
+PROGRAM_ID=DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS
 RELAYER_KEYPAIR='[1,2,3,...]'   # JSON array of keypair bytes
 POLL_INTERVAL_MS=30000           # 30 seconds
 BITCOIN_NETWORK=testnet          # mainnet, testnet, or signet

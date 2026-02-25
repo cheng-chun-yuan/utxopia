@@ -5,12 +5,17 @@
 zVault is a trustless bridge that enables Bitcoin holders to access Solana DeFi with full transaction privacy. Deposit BTC, receive shielded zkBTC, and transact without revealing amounts or linking identities.
 
 ```
-BTC Deposit → Taproot Address → SPV Verify → Shielded Pool → ZK Transfers → Withdraw BTC
-                                                   │
-                              ┌────────────────────┴─────────────────────┐
-                              │                                          │
-                    Amounts hidden in commitments          Unlinkable stealth addresses
-                    Nullifier-based double-spend prevention   .zkey.sol human-readable names
+BTC Deposit → Taproot Address → SPV Verify → On-Chain Commitment → ZK Transfers → Withdraw BTC
+        │          │                              │
+        │   OP_RETURN (64B):              Poseidon(npk, token, amount)
+        │   ephemeralPub + npk            computed on-chain from npk
+        │                                         │
+        └─── Send any BTC amount ──►  Shielded Pool (Merkle Tree)
+                                                  │
+                              ┌───────────────────┴────────────────────┐
+                              │                                        │
+                    Amounts hidden in commitments        Unlinkable stealth addresses
+                    Nullifier-based double-spend         .zkey.sol human-readable names
 ```
 
 ---
@@ -30,7 +35,7 @@ Bitcoin's transparent blockchain makes privacy challenging:
 
 | Layer | Technology | Purpose |
 |-------|------------|---------|
-| **ZK Circuits** | circom + Groth16 (BN254) | 6 specialized privacy circuits, client-side proving |
+| **ZK Circuits** | circom + Groth16 (BN254) | Parameterized JoinSplit(N,M) circuits, client-side proving |
 | **On-Chain Verifier** | BN254 alt_bn128 pairing syscalls | Inline Groth16 proof verification (~95k CU) |
 | **Smart Contracts** | Pinocchio (Solana) | Zero-copy state, CU-optimized with LTO |
 | **Bitcoin Integration** | Taproot + SPV light client | Permissionless deposit verification |
@@ -45,23 +50,22 @@ Bitcoin's transparent blockchain makes privacy challenging:
 
 ## Key Innovations
 
-### 1. Groth16 ZK Circuits (6 Circuits)
+### 1. JoinSplit(N,M) ZK Circuits
 
-Client-side proof generation via circom/snarkjs — no trusted backend:
+Single parameterized circuit for all private operations — no trusted backend:
 
-| Circuit | Purpose |
+| Variant | Purpose |
 |---------|---------|
-| `claim` | Mint zkBTC from BTC deposit |
-| `spend_split` | Split 1 note into 2 notes |
-| `spend_partial_public` | Partial public withdrawal + change |
-| `pool_deposit` | Enter yield pool |
-| `pool_withdraw` | Exit pool with yield |
-| `pool_claim_yield` | Compound yield rewards |
+| `joinsplit_1x2` | Deposit claim (1 input → 2 outputs) |
+| `joinsplit_2x2` | Standard private transfer |
+| `joinsplit_NxM` | General case (N+M ≤ 14, 91 total variants) |
 
-**Unified Commitment Model:**
+**Commitment Model (Railgun-aligned):**
 ```
-Commitment = Poseidon(pub_key_x, amount)
-Nullifier  = Poseidon(priv_key, leaf_index)
+MPK        = Poseidon(spendingPub.x, spendingPub.y, nullifyingKey)
+NPK        = Poseidon(MPK, random)
+Commitment = Poseidon(NPK, token, amount)
+Nullifier  = Poseidon(nullifyingKey, leafIndex)
 ```
 
 ### 2. Stealth Address Protocol (EIP-5564/DKSAP)
@@ -79,15 +83,17 @@ Sender:                              Recipient:
 └────────────────────┘               └────────────────────┘
 ```
 
-- **Viewing Key** (Ed25519): Detect and decrypt incoming transfers (cannot spend)
-- **Spending Key** (Baby Jubjub): Generate nullifier and claim funds
+- **Viewing Key** (Ed25519): Detect and decrypt incoming transfers via deposit records (cannot spend)
+- **Spending Key** (Baby Jubjub): Sign JoinSplit transactions (EdDSA-Poseidon)
 
-### 3. Key Separation
+### 3. Three-Key Model
 
 ```
-Spending Key (private) ─► Can spend funds, must keep secret
+Spending Key (Baby Jubjub) ─► Signs JoinSplit transactions (EdDSA-Poseidon)
        │
-       └─► Viewing Key (derived) ─► Can view balances/history, safe to share
+       ├─► Nullifying Key (BN254 scalar) ─► Generates nullifiers, prevents double-spend
+       │
+       └─► Viewing Key (Ed25519) ─► Scans deposit records, decrypts amounts
 ```
 
 Share viewing key with accountants, regulators, or compliance without risk of fund loss.
@@ -109,19 +115,18 @@ await sendPrivate(config, myNote, entry.stealthMetaAddress);
 ```
 zVault/
 ├── contracts/                  # Solana programs (Pinocchio)
-│   ├── programs/zvault/        # Main zVault program
-│   └── programs/btc-light-client/  # Bitcoin header tracking
+│   ├── programs/zvault/        # Main zVault program (14 instructions)
+│   └── programs/btc-relay/     # Bitcoin header tracking (standalone)
 ├── circuits/                   # Zero-knowledge circuits (circom)
-│   ├── circom/claim.circom
-│   ├── circom/spend_split.circom
-│   ├── circom/spend_partial_public.circom
-│   ├── circom/pool_*.circom
-│   └── circom/lib/             # Shared (commitment, nullifier, merkle)
+│   ├── circom/joinsplit.circom # Parameterized JoinSplit(N,M,16) template
+│   └── circom/lib/             # Shared (commitment, nullifier, merkle, mpk)
 ├── sdk/                        # @zvault/sdk TypeScript client
 ├── zvault-app/                 # Next.js web interface
-├── backend/                    # Rust API + redemption service
-│   └── header-relayer/         # Bitcoin header sync
-└── frost_server/               # FROST threshold signing (BTC redemption)
+├── mobile-app/                 # Expo React Native app
+├── backend/                    # Rust API + deposit tracker + redemption
+│   └── header-relayer/         # Bitcoin header sync (TypeScript)
+├── frost_server/               # FROST threshold signing (BTC redemption)
+└── docs/                       # Technical docs + operational guide
 ```
 
 ---
@@ -173,8 +178,8 @@ bash scripts/setup.sh
 
 | Program | Address |
 |---------|---------|
-| zVault | `GqdjVMBDmFEd6wSV4TzRsvnVWnE4pMMdhVo8U4iXvYUX` |
-| BTC Light Client | `S6rgPjCeBhkYBejWyDR1zzU3sYCMob36LAf8tjwj8pn` |
+| zVault | `2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV` |
+| BTC Light Client | `DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS` |
 | ChadBuffer | `C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF` |
 
 ---
@@ -184,8 +189,8 @@ bash scripts/setup.sh
 | Operation | Amount Visible | Linkable |
 |-----------|---------------|----------|
 | Deposit BTC | On Bitcoin chain | No (to claim) |
-| Claim zkBTC | No | No |
-| Split | No | No |
+| Claim (JoinSplit 1→2) | No | No |
+| Transfer (JoinSplit N→M) | No | No |
 | Stealth Send | No | Recipient only |
 | Withdraw BTC | On Bitcoin chain | No (to deposit) |
 
@@ -197,11 +202,12 @@ bash scripts/setup.sh
 |-----------|------------|
 | Proof System | Groth16 (BN254 curve) |
 | Hash Function | Poseidon (ZK-friendly) |
-| Commitment | `Poseidon(pub_key_x, amount)` |
-| Nullifier | `Poseidon(priv_key, leaf_index)` |
+| Commitment | `Poseidon(NPK, token, amount)` |
+| Nullifier | `Poseidon(nullifyingKey, leafIndex)` |
 | Stealth | Baby Jubjub + Ed25519 ECDH (EIP-5564) |
 | BTC Deposits | Taproot (BIP-341) |
-| Merkle Tree | Depth 20 (~1M leaves) |
+| BTC Redemption | FROST 2-of-3 threshold signing (secp256k1-tr) |
+| Merkle Tree | Depth 16 (65,536 leaves) |
 | Token | zkBTC (Token-2022) |
 
 ---

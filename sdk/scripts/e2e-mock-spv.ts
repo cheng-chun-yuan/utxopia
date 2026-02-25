@@ -28,7 +28,7 @@ import { bytesToHex, doubleSha256 } from "../src/crypto";
 // =============================================================================
 
 const ZVAULT = new PublicKey(process.env.ZVAULT_PROGRAM_ID || "zKeyrLmpT8W9o8iRvhizuSihLAFLhfAGBvfM638Pbw8");
-const BTC_RELAY = new PublicKey(process.env.BTC_RELAY_PROGRAM_ID || "3xAPsqgkUfivNgrJiC2gzCb7XQ9Y4prw8uhPWhVMjhnk");
+const BTC_RELAY = new PublicKey(process.env.BTC_RELAY_PROGRAM_ID || "DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS");
 const CHADBUFFER = new PublicKey(process.env.CHADBUFFER_PROGRAM_ID || "EgWyMVFZewHmjJ9GGvVBTyaC376Xp7qu7CAFjWYPYYDv");
 const TOKEN_2022 = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");

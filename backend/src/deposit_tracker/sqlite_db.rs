@@ -109,6 +109,30 @@ impl SqliteDepositStore {
             "#,
         )?;
 
+        // Migration: add OP_RETURN stealth fields if they don't exist
+        let has_ephemeral = conn
+            .prepare("SELECT ephemeral_pub FROM deposits LIMIT 0")
+            .is_ok();
+        if !has_ephemeral {
+            conn.execute_batch(
+                r#"
+                ALTER TABLE deposits ADD COLUMN ephemeral_pub TEXT;
+                ALTER TABLE deposits ADD COLUMN encrypted_amount_hex TEXT;
+                ALTER TABLE deposits ADD COLUMN auto_detected INTEGER DEFAULT 0;
+                "#,
+            ).ok(); // Ignore errors (columns may already exist)
+        }
+
+        // Migration: add npk column for npk-based deposits
+        let has_npk = conn
+            .prepare("SELECT npk FROM deposits LIMIT 0")
+            .is_ok();
+        if !has_npk {
+            conn.execute_batch(
+                "ALTER TABLE deposits ADD COLUMN npk TEXT;"
+            ).ok();
+        }
+
         Ok(())
     }
 
@@ -123,13 +147,15 @@ impl SqliteDepositStore {
                 confirmations, deposit_txid, deposit_vout, deposit_block_height,
                 sweep_txid, sweep_confirmations, sweep_block_height, pool_address,
                 solana_tx, leaf_index, created_at, updated_at, error,
-                retry_count, last_retry_at
+                retry_count, last_retry_at,
+                ephemeral_pub, encrypted_amount_hex, auto_detected, npk
             ) VALUES (
                 ?1, ?2, ?3, ?4, ?5,
                 ?6, ?7, ?8, ?9,
                 ?10, ?11, ?12, ?13,
                 ?14, ?15, ?16, ?17, ?18,
-                ?19, ?20
+                ?19, ?20,
+                ?21, ?22, ?23, ?24
             )
             "#,
             params![
@@ -153,6 +179,10 @@ impl SqliteDepositStore {
                 record.error,
                 record.retry_count as i64,
                 record.last_retry_at.map(|v| v as i64),
+                record.ephemeral_pub,
+                record.encrypted_amount_hex,
+                record.auto_detected as i64,
+                record.npk,
             ],
         ).map_err(|e| {
             if let rusqlite::Error::SqliteFailure(ref err, _) = e {
@@ -190,7 +220,11 @@ impl SqliteDepositStore {
                 updated_at = ?16,
                 error = ?17,
                 retry_count = ?18,
-                last_retry_at = ?19
+                last_retry_at = ?19,
+                ephemeral_pub = ?20,
+                encrypted_amount_hex = ?21,
+                auto_detected = ?22,
+                npk = ?23
             WHERE id = ?1
             "#,
             params![
@@ -213,6 +247,10 @@ impl SqliteDepositStore {
                 record.error,
                 record.retry_count as i64,
                 record.last_retry_at.map(|v| v as i64),
+                record.ephemeral_pub,
+                record.encrypted_amount_hex,
+                record.auto_detected as i64,
+                record.npk,
             ],
         )?;
 
@@ -382,6 +420,10 @@ impl SqliteDepositStore {
             pool_address: row.get("pool_address")?,
             solana_tx: row.get("solana_tx")?,
             leaf_index: row.get::<_, Option<i64>>("leaf_index")?.map(|v| v as u64),
+            ephemeral_pub: row.get("ephemeral_pub").unwrap_or(None),
+            encrypted_amount_hex: row.get("encrypted_amount_hex").unwrap_or(None),
+            npk: row.get("npk").unwrap_or(None),
+            auto_detected: row.get::<_, Option<i64>>("auto_detected").unwrap_or(Some(0)).unwrap_or(0) != 0,
             created_at: row.get::<_, i64>("created_at")? as u64,
             updated_at: row.get::<_, i64>("updated_at")? as u64,
             error: row.get("error")?,

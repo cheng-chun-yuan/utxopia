@@ -1,12 +1,15 @@
 /**
  * ChadBuffer Integration E2E Test
  *
- * Tests Groth16 proof upload via ChadBuffer and execution on devnet.
+ * DEPRECATED: Legacy test for old proof upload flow.
+ * ChadBuffer is now only used for SPV verification data, not ZK proofs.
+ * Groth16 proofs are 256 bytes and fit inline in Solana transactions.
  *
  * Run with: bun test test/chadbuffer-e2e.test.ts
  */
 
-import { describe, it, expect, beforeAll } from "bun:test";
+import { describe as _describe, it, expect, beforeAll } from "bun:test";
+const describe = _describe.skip;
 import {
   address,
   createSolanaRpc,
@@ -23,12 +26,12 @@ import {
   CHADBUFFER_PROGRAM_ID,
 } from "../src/chadbuffer";
 import {
-  buildClaimInstructionData,
-  buildSplitInstructionData,
-  needsBuffer,
   hexToBytes,
   bytesToHex,
 } from "../src/instructions";
+import {
+  needsBuffer,
+} from "../src/chadbuffer";
 import { getConfig, DEVNET_CONFIG, setConfig } from "../src/config";
 
 // =============================================================================

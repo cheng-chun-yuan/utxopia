@@ -162,7 +162,7 @@ interface ScannedNote {
 
 ```typescript
 // Program IDs (devnet)
-ZVAULT_PROGRAM_ID = '2qQPgW6LpzokD1Uemhy2Ng5Xjhr6VuHwJgC2GamUKzQB';
+ZVAULT_PROGRAM_ID = '2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV';
 CHADBUFFER_PROGRAM_ID = '6VrJmWbhN9WbEkg87JizunVMpL6CHKGVmzWCf3o3LRgy';
 
 // Merkle tree

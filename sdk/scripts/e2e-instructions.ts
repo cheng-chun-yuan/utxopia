@@ -6,12 +6,8 @@
  * 1. Demo Deposit - Build stealth commitment instruction
  * 2. Claim zkBTC - Build claim instruction with buffer mode
  * 3. Split Note - Build split instruction
- * 4. Pool Deposit - Build pool deposit instruction
- * 5. Pool Withdraw - Build pool withdraw instruction
- * 6. Pool Claim Yield - Build pool claim yield instruction
  *
  * This test validates instruction building without submitting transactions.
- * For on-chain tests, ensure pool is initialized first.
  *
  * Usage:
  *   bun run scripts/localnet-e2e.ts
@@ -61,13 +57,7 @@ import {
 } from "../src/chadbuffer";
 
 import {
-  buildClaimInstruction,
-  buildSplitInstruction,
-  buildSpendPartialPublicInstruction,
-  buildPoolDepositInstruction,
-  buildPoolWithdrawInstruction,
-  buildPoolClaimYieldInstruction,
-  needsBuffer,
+  buildTransactInstruction,
   bytesToHex,
   hexToBytes,
 } from "../src/instructions";
@@ -91,9 +81,6 @@ import {
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
   deriveStealthAnnouncementPDA,
-  deriveYieldPoolPDA,
-  derivePoolCommitmentTreePDA,
-  derivePoolNullifierPDA,
 } from "../src/pda";
 
 import {
@@ -135,12 +122,6 @@ const DEFAULT_KEYPAIR_PATH = path.join(
 
 // Mock proof size for Groth16
 const MOCK_PROOF_SIZE = 16 * 1024; // 16KB typical Groth16 proof
-
-// Pool ID for yield pool
-const DEFAULT_POOL_ID = new Uint8Array(32);
-new TextEncoder().encode("default_pool").forEach((b, i) => {
-  if (i < 32) DEFAULT_POOL_ID[i] = b;
-});
 
 // =============================================================================
 // Utilities
@@ -270,12 +251,6 @@ interface TestState {
   currentRoot: Uint8Array;
   nextLeafIndex: number;
   notes: UserNote[];
-  poolPositions: {
-    commitment: Uint8Array;
-    principal: bigint;
-    depositEpoch: bigint;
-    leafIndex: number;
-  }[];
 }
 
 const state: TestState = {
@@ -283,7 +258,6 @@ const state: TestState = {
   currentRoot: new Uint8Array(32),
   nextLeafIndex: 0,
   notes: [],
-  poolPositions: [],
 };
 
 // =============================================================================
@@ -543,216 +517,10 @@ async function testSplitNote(
 }
 
 /**
- * Test 4: Pool Deposit - Build pool deposit instruction
- */
-async function testPoolDeposit(
-  payer: KeyPairSigner,
-  config: NetworkConfig,
-  note: UserNote
-): Promise<void> {
-  log.step(4, "Pool Deposit - Building pool deposit instruction");
-
-  log.info("Depositing note into yield pool:");
-  log.data("Principal", formatSats(note.amount));
-  log.data("Pool ID", bytesToHex(DEFAULT_POOL_ID).slice(0, 20) + "...");
-
-  const depositEpoch = BigInt(Math.floor(Date.now() / 1000 / 3600));
-  const poolCommitment = createMock32Bytes(50);
-
-  log.data("Deposit Epoch", depositEpoch.toString());
-
-  // Generate mock proof
-  const proofBytes = createMockProof(MOCK_PROOF_SIZE);
-
-  // Derive PDAs using SDK
-  const [poolState] = await derivePoolStatePDA(config.zvaultProgramId);
-  const [commitmentTree] = await deriveCommitmentTreePDA(config.zvaultProgramId);
-  const nullifierHash = bigintToBytes32(computeNullifier(note.nullifier, BigInt(note.leafIndex)));
-  const [nullifierRecord] = await deriveNullifierRecordPDA(nullifierHash, config.zvaultProgramId);
-  const [yieldPool] = await deriveYieldPoolPDA(DEFAULT_POOL_ID, config.zvaultProgramId);
-  const [poolCommitmentTree] = await derivePoolCommitmentTreePDA(DEFAULT_POOL_ID, config.zvaultProgramId);
-
-  log.data("Yield Pool PDA", yieldPool.toString());
-  log.data("Pool Commitment Tree PDA", poolCommitmentTree.toString());
-
-  // Build pool deposit instruction using SDK
-  const poolDepositIx = buildPoolDepositInstruction({
-    proofSource: "buffer",
-    bufferAddress: address("11111111111111111111111111111111"),
-    root: state.currentRoot,
-    nullifierHash,
-    poolCommitment,
-    amountSats: note.amount,
-    vkHash: hexToBytes(config.vkHashes.poolDeposit),
-    accounts: {
-      poolState,
-      commitmentTree,
-      nullifierRecord,
-      yieldPool,
-      poolCommitmentTree,
-      user: payer.address,
-    },
-  });
-
-  log.info("Pool deposit instruction built:");
-  log.data("Instruction data size", `${poolDepositIx.data.length} bytes`);
-  log.data("Discriminator", `${poolDepositIx.data[0]} (DEPOSIT_TO_POOL = 31)`);
-
-  if (poolDepositIx.data[0] !== 31) {
-    throw new Error(`Invalid discriminator: ${poolDepositIx.data[0]}, expected 31`);
-  }
-
-  log.success("Pool deposit instruction built successfully");
-
-  state.poolPositions.push({
-    commitment: poolCommitment,
-    principal: note.amount,
-    depositEpoch,
-    leafIndex: 0,
-  });
-}
-
-/**
- * Test 5: Pool Withdraw - Build pool withdraw instruction
- */
-async function testPoolWithdraw(
-  payer: KeyPairSigner,
-  config: NetworkConfig
-): Promise<void> {
-  log.step(5, "Pool Withdraw - Building pool withdraw instruction");
-
-  if (state.poolPositions.length === 0) {
-    log.warn("No pool positions to withdraw from");
-    return;
-  }
-
-  const position = state.poolPositions[0];
-  const withdrawAmount = position.principal;
-
-  const currentEpoch = BigInt(Math.floor(Date.now() / 1000 / 3600));
-  const epochsStaked = currentEpoch - position.depositEpoch;
-  const yieldRateBps = 500n;
-  const yieldAmount = epochsStaked > 0n ? (withdrawAmount * epochsStaked * yieldRateBps) / 10000n / 365n / 24n : 0n;
-
-  log.info("Withdrawing from pool position:");
-  log.data("Principal", formatSats(withdrawAmount));
-  log.data("Epochs Staked", epochsStaked.toString());
-  log.data("Yield Earned", formatSats(yieldAmount));
-
-  const outputCommitment = createMock32Bytes(60);
-  const proofBytes = createMockProof(MOCK_PROOF_SIZE);
-
-  // Derive PDAs
-  const [poolState] = await derivePoolStatePDA(config.zvaultProgramId);
-  const [commitmentTree] = await deriveCommitmentTreePDA(config.zvaultProgramId);
-  const [yieldPool] = await deriveYieldPoolPDA(DEFAULT_POOL_ID, config.zvaultProgramId);
-  const [poolCommitmentTree] = await derivePoolCommitmentTreePDA(DEFAULT_POOL_ID, config.zvaultProgramId);
-  const poolNullifierHash = createMock32Bytes(100);
-  const [poolNullifierRecord] = await derivePoolNullifierPDA(DEFAULT_POOL_ID, poolNullifierHash, config.zvaultProgramId);
-
-  // Build pool withdraw instruction using SDK
-  const poolWithdrawIx = buildPoolWithdrawInstruction({
-    proofSource: "buffer",
-    bufferAddress: address("11111111111111111111111111111111"),
-    poolRoot: position.commitment,
-    poolNullifierHash,
-    amountSats: withdrawAmount + yieldAmount,
-    outputCommitment,
-    vkHash: hexToBytes(config.vkHashes.poolWithdraw),
-    accounts: {
-      poolState,
-      commitmentTree,
-      yieldPool,
-      poolCommitmentTree,
-      poolNullifierRecord,
-      user: payer.address,
-    },
-  });
-
-  log.info("Pool withdraw instruction built:");
-  log.data("Instruction data size", `${poolWithdrawIx.data.length} bytes`);
-  log.data("Discriminator", `${poolWithdrawIx.data[0]} (WITHDRAW_FROM_POOL = 32)`);
-
-  if (poolWithdrawIx.data[0] !== 32) {
-    throw new Error(`Invalid discriminator: ${poolWithdrawIx.data[0]}, expected 32`);
-  }
-
-  log.success("Pool withdraw instruction built successfully");
-}
-
-/**
- * Test 6: Pool Claim Yield - Build pool claim yield instruction
- */
-async function testPoolClaimYield(
-  payer: KeyPairSigner,
-  config: NetworkConfig
-): Promise<void> {
-  log.step(6, "Pool Claim Yield - Building pool claim yield instruction");
-
-  if (state.poolPositions.length === 0) {
-    log.warn("No pool positions to claim yield from");
-    return;
-  }
-
-  const position = state.poolPositions[0];
-  const currentEpoch = BigInt(Math.floor(Date.now() / 1000 / 3600));
-  const epochsStaked = currentEpoch - position.depositEpoch;
-  const yieldRateBps = 500n;
-  const yieldAmount = epochsStaked > 0n ? (position.principal * epochsStaked * yieldRateBps) / 10000n / 365n / 24n : 100n;
-
-  log.info("Claiming yield from pool position:");
-  log.data("Principal (remains staked)", formatSats(position.principal));
-  log.data("Yield to claim", formatSats(yieldAmount));
-
-  const newPoolCommitment = createMock32Bytes(70);
-  const proofBytes = createMockProof(MOCK_PROOF_SIZE);
-
-  // Derive PDAs
-  const [poolState] = await derivePoolStatePDA(config.zvaultProgramId);
-  const [yieldPool] = await deriveYieldPoolPDA(DEFAULT_POOL_ID, config.zvaultProgramId);
-  const [poolCommitmentTree] = await derivePoolCommitmentTreePDA(DEFAULT_POOL_ID, config.zvaultProgramId);
-  const poolNullifierHash = createMock32Bytes(200);
-  const [poolNullifierRecord] = await derivePoolNullifierPDA(DEFAULT_POOL_ID, poolNullifierHash, config.zvaultProgramId);
-  const recipientAta = await deriveATA(payer.address, config.zbtcMint);
-
-  // Build pool claim yield instruction using SDK
-  const claimYieldIx = buildPoolClaimYieldInstruction({
-    proofSource: "buffer",
-    bufferAddress: address("11111111111111111111111111111111"),
-    poolRoot: position.commitment,
-    poolNullifierHash,
-    newPoolCommitment,
-    yieldAmountSats: yieldAmount,
-    recipient: payer.address,
-    vkHash: hexToBytes(config.vkHashes.poolClaimYield),
-    accounts: {
-      poolState,
-      yieldPool,
-      poolCommitmentTree,
-      poolNullifierRecord,
-      zbtcMint: config.zbtcMint,
-      poolVault: config.poolVault,
-      recipientAta,
-      user: payer.address,
-    },
-  });
-
-  log.info("Pool claim yield instruction built:");
-  log.data("Instruction data size", `${claimYieldIx.data.length} bytes`);
-  log.data("Discriminator", `${claimYieldIx.data[0]} (CLAIM_POOL_YIELD = 33)`);
-
-  if (claimYieldIx.data[0] !== 33) {
-    throw new Error(`Invalid discriminator: ${claimYieldIx.data[0]}, expected 33`);
-  }
-
-  log.success("Pool claim yield instruction built successfully");
-}
-
-/**
- * Test 7: ChadBuffer utilities
+ * Test 4: ChadBuffer utilities
  */
 function testChadBufferUtilities(): void {
-  log.step(7, "ChadBuffer Utilities - Testing constants and functions");
+  log.step(4, "ChadBuffer Utilities - Testing constants and functions");
 
   log.info("Testing SDK exports:");
   log.data("CHADBUFFER_PROGRAM_ID", CHADBUFFER_PROGRAM_ID.toString());
@@ -847,16 +615,7 @@ async function main() {
     // Test 3: Split Note
     const { output1, output2 } = await testSplitNote(payer, config, depositedNote);
 
-    // Test 4: Pool Deposit
-    await testPoolDeposit(payer, config, output1);
-
-    // Test 5: Pool Withdraw
-    await testPoolWithdraw(payer, config);
-
-    // Test 6: Pool Claim Yield
-    await testPoolClaimYield(payer, config);
-
-    // Test 7: ChadBuffer utilities
+    // Test 4: ChadBuffer utilities
     testChadBufferUtilities();
 
   } catch (error: any) {
@@ -872,9 +631,6 @@ async function main() {
   log.success("buildAddDemoStealthData - Demo deposit instruction");
   log.success("buildClaimInstruction - Claim with buffer mode");
   log.success("buildSplitInstruction - Split note");
-  log.success("buildPoolDepositInstruction - Pool deposit");
-  log.success("buildPoolWithdrawInstruction - Pool withdraw");
-  log.success("buildPoolClaimYieldInstruction - Pool claim yield");
   log.success("needsBuffer / bufferNeedsBuffer - Buffer utilities");
   log.success("computeUnifiedCommitment - Poseidon2 commitment");
   log.success("computeNullifier - Nullifier derivation");
@@ -891,9 +647,6 @@ async function main() {
   log.success("DEMO_INSTRUCTION.ADD_DEMO_STEALTH = 13");
   log.success("CLAIM = 2");
   log.success("SPEND_SPLIT = 3");
-  log.success("DEPOSIT_TO_POOL = 31");
-  log.success("WITHDRAW_FROM_POOL = 32");
-  log.success("CLAIM_POOL_YIELD = 33");
 
   log.section("SDK E2E Test Complete - All Validations Passed!");
 }

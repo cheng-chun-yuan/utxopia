@@ -22,7 +22,10 @@ impl EsploraClient {
     /// Create a new client with custom URL
     pub fn new(base_url: &str) -> Self {
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .timeout(std::time::Duration::from_secs(15))
+                .build()
+                .unwrap_or_else(|_| Client::new()),
             base_url: base_url.trim_end_matches('/').to_string(),
         }
     }
@@ -267,9 +270,21 @@ mod tests {
     #[tokio::test]
     async fn test_get_block_height() {
         let client = EsploraClient::new_testnet();
-        let height = client.get_block_height().await;
-        assert!(height.is_ok());
-        assert!(height.unwrap() > 0);
+        // Retry up to 3 times to handle transient network issues
+        let mut last_err = None;
+        for _ in 0..3 {
+            match client.get_block_height().await {
+                Ok(height) => {
+                    assert!(height > 0);
+                    return;
+                }
+                Err(e) => {
+                    last_err = Some(e);
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                }
+            }
+        }
+        panic!("get_block_height failed after 3 retries: {:?}", last_err);
     }
 
     #[tokio::test]

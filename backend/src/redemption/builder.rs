@@ -9,6 +9,7 @@ use bitcoin::{
 };
 use std::str::FromStr;
 
+use crate::frost_client::SolanaVerification;
 use crate::redemption::types::{PoolUtxo, WithdrawalRequest};
 
 /// Builds unsigned BTC transactions
@@ -119,6 +120,7 @@ impl TxBuilder {
             utxos: utxos.to_vec(),
             fee,
             send_amount,
+            solana_verification: None,
         })
     }
 
@@ -148,6 +150,8 @@ pub struct UnsignedTx {
     pub fee: u64,
     /// Amount being sent
     pub send_amount: u64,
+    /// Optional Solana verification data for FROST signers
+    pub solana_verification: Option<SolanaVerification>,
 }
 
 impl UnsignedTx {

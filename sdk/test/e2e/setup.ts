@@ -238,9 +238,7 @@ export async function initializeTestEnvironment(): Promise<{
   poseidonReady: boolean;
   proverReady: boolean;
   circuitsAvailable: {
-    claim: boolean;
-    spend_split: boolean;
-    spend_partial_public: boolean;
+    joinsplit: boolean;
   };
 }> {
   // Set circuit path for prover
@@ -250,16 +248,14 @@ export async function initializeTestEnvironment(): Promise<{
   await initPoseidon();
   const poseidonReady = true;
 
-  // Check circuit availability
+  // Check circuit availability (JoinSplit circuits)
   const circuitsAvailable = {
-    claim: await circuitExists("claim"),
-    spend_split: await circuitExists("spend_split"),
-    spend_partial_public: await circuitExists("spend_partial_public"),
+    joinsplit: await circuitExists("joinsplit_1x1"),
   };
 
   // Initialize WASM prover if circuits are available
   let proverReady = false;
-  if (circuitsAvailable.claim || circuitsAvailable.spend_split || circuitsAvailable.spend_partial_public) {
+  if (circuitsAvailable.joinsplit) {
     try {
       await initProver();
       proverReady = await isProverAvailable();
@@ -270,7 +266,7 @@ export async function initializeTestEnvironment(): Promise<{
       console.warn("[Setup] Failed to initialize prover:", error);
     }
   } else {
-    console.warn("[Setup] No circuit artifacts found in ./circuits - proof tests will be skipped");
+    console.warn("[Setup] No JoinSplit circuit artifacts found in ./circuits - proof tests will be skipped");
     console.warn("[Setup] Run: cd circuits && bun run compile:all && bun run copy-to-sdk");
   }
 
@@ -312,7 +308,7 @@ export async function createTestContext(): Promise<E2ETestContext> {
       const customConfig = createConfig(LOCALNET_CONFIG, {
         // Override with actual deployed addresses
         zvaultProgramId: kitAddress(localnetConfig.programs.zVault),
-        btcLightClientProgramId: kitAddress(localnetConfig.programs.btcLightClient),
+        btcRelayProgramId: kitAddress(localnetConfig.programs.btcLightClient),
         chadbufferProgramId: localnetConfig.programs.chadbuffer
           ? kitAddress(localnetConfig.programs.chadbuffer)
           : LOCALNET_CONFIG.chadbufferProgramId,
@@ -405,7 +401,7 @@ export async function createTestContext(): Promise<E2ETestContext> {
     rpcUrl: RPC_URL,
     programs: {
       zVault: config.zvaultProgramId.toString(),
-      btcLightClient: config.btcLightClientProgramId.toString(),
+      btcLightClient: config.btcRelayProgramId.toString(),
       groth16Verifier: config.groth16VerifierProgramId.toString(),
       chadbuffer: config.chadbufferProgramId.toString(),
     },

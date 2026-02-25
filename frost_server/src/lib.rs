@@ -23,14 +23,20 @@
 //!     --signers http://localhost:9001,http://localhost:9002,http://localhost:9003
 //! ```
 
+pub mod audit;
+pub mod crypto;
 pub mod dkg;
 pub mod keystore;
+pub mod policy;
 pub mod server;
 pub mod signing;
+pub mod solana_verifier;
 pub mod types;
 
+pub use audit::AuditLog;
 pub use dkg::{DkgError, DkgParticipant};
 pub use keystore::{Keystore, KeystoreError};
+pub use policy::{PolicyError, SigningPolicy};
 pub use server::{create_router, AppState};
 pub use signing::{aggregate_signatures, FrostSigner, SigningError};
 pub use types::*;

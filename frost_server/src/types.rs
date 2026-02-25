@@ -19,6 +19,53 @@ pub struct SignerInfo {
     pub total_participants: u16,
 }
 
+/// Transaction context for signer-side verification.
+///
+/// When present, each FROST signer independently recomputes the BIP-341 sighash
+/// from this data and rejects if it doesn't match the claimed `sighash`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SigningContext {
+    /// Raw unsigned transaction (bitcoin consensus-encoded, hex)
+    pub raw_tx_hex: String,
+    /// Previous outputs being spent
+    pub prevouts: Vec<PrevoutInfo>,
+    /// Which input index this sighash is for
+    pub input_index: u32,
+}
+
+/// Information about a previous output (UTXO) being spent
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrevoutInfo {
+    /// UTXO txid (hex)
+    pub txid: String,
+    /// UTXO output index
+    pub vout: u32,
+    /// Amount in satoshis
+    pub amount_sats: u64,
+    /// Script pubkey (hex)
+    pub script_pubkey_hex: String,
+}
+
+/// Solana on-chain verification data.
+///
+/// When present in a signing request, each FROST signer independently queries
+/// Solana RPC to verify that the corresponding on-chain state exists before signing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum SolanaVerification {
+    /// Verify a RedemptionRequest PDA exists with matching data
+    Withdrawal {
+        /// Requester's Solana pubkey (base58)
+        requester: String,
+        /// Redemption request nonce
+        nonce: u64,
+        /// Expected withdrawal amount in satoshis
+        expected_amount_sats: u64,
+        /// Expected BTC destination address
+        expected_btc_address: String,
+    },
+}
+
 /// Round 1 request - generate commitment
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Round1Request {
@@ -29,6 +76,20 @@ pub struct Round1Request {
     /// Optional tweak for Taproot key-path spending (hex-encoded 32 bytes)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tweak: Option<String>,
+    /// Optional transaction context for signer-side verification.
+    /// When present, policy checks are enforced. When absent, behavior
+    /// depends on the signer's `require_context` setting.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signing_context: Option<SigningContext>,
+    /// Optional BIP-341 merkle root for Taproot tweaked signing (hex-encoded).
+    /// When present, the signer tweaks its key package with this merkle root
+    /// before generating commitments/shares (required for commitment-tweaked addresses).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merkle_root: Option<String>,
+    /// Optional Solana on-chain verification data.
+    /// When present, signer verifies the corresponding on-chain state via RPC.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub solana_verification: Option<SolanaVerification>,
 }
 
 /// Round 1 response - commitment
@@ -59,6 +120,10 @@ pub struct Round2Request {
     /// Required to properly reconstruct FROST identifiers
     #[serde(default)]
     pub identifier_map: BTreeMap<u16, String>,
+    /// Optional BIP-341 merkle root for Taproot tweaked signing (hex-encoded).
+    /// Must match the merkle_root from Round 1.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merkle_root: Option<String>,
 }
 
 /// Round 2 response - signature share
@@ -88,6 +153,8 @@ pub struct DkgRound1Response {
     pub package: String,
     /// Signer identifier
     pub signer_id: u16,
+    /// X25519 public key for E2E encrypted DKG round 2 (hex, 32 bytes)
+    pub x25519_public_key: String,
 }
 
 /// DKG Round 2 request
@@ -97,6 +164,8 @@ pub struct DkgRound2Request {
     pub ceremony_id: Uuid,
     /// Round 1 packages from all participants (signer_id -> package)
     pub round1_packages: BTreeMap<u16, String>,
+    /// X25519 public keys for E2E encryption (signer_id -> pubkey hex)
+    pub x25519_pubkeys: BTreeMap<u16, String>,
 }
 
 /// DKG Round 2 response
@@ -117,6 +186,8 @@ pub struct DkgFinalizeRequest {
     pub round1_packages: BTreeMap<u16, String>,
     /// Round 2 packages sent TO this signer (source_signer_id -> package)
     pub round2_packages: BTreeMap<u16, String>,
+    /// X25519 public keys of senders for decryption (signer_id -> pubkey hex)
+    pub x25519_pubkeys: BTreeMap<u16, String>,
 }
 
 /// DKG finalization response
@@ -128,6 +199,27 @@ pub struct DkgFinalizeResponse {
     pub saved: bool,
     /// Signer identifier
     pub signer_id: u16,
+}
+
+/// Broadcast channel: verify commitments request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerifyCommitmentsRequest {
+    /// Session identifier (must match round 1)
+    pub session_id: Uuid,
+    /// All commitments from participating signers (signer_id -> commitment hex)
+    pub commitments: BTreeMap<u16, String>,
+    /// Identifier mapping (signer_id -> FROST identifier hex)
+    #[serde(default)]
+    pub identifier_map: BTreeMap<u16, String>,
+}
+
+/// Broadcast channel: verify commitments response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VerifyCommitmentsResponse {
+    /// Signer identifier
+    pub signer_id: u16,
+    /// SHA-256 digest of the canonical commitment data (hex)
+    pub digest: String,
 }
 
 /// Generic error response
@@ -179,6 +271,11 @@ pub struct AggregateRequest {
     pub signature_shares: BTreeMap<u16, String>,
     /// The sighash that was signed (hex-encoded 32 bytes)
     pub sighash: String,
+    /// Optional Taproot merkle root for BIP-341 tweaked aggregation (hex-encoded).
+    /// When present, uses `aggregate_with_tweak` so the signature verifies against
+    /// the BIP-341 tweaked output key rather than the raw internal key.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merkle_root: Option<String>,
 }
 
 /// Aggregation response - final Schnorr signature
@@ -200,6 +297,9 @@ mod tests {
             session_id: Uuid::new_v4(),
             sighash: "a".repeat(64),
             tweak: None,
+            signing_context: None,
+            merkle_root: None,
+            solana_verification: None,
         };
         let json = serde_json::to_string(&req).unwrap();
         let parsed: Round1Request = serde_json::from_str(&json).unwrap();

@@ -1,5 +1,5 @@
 /**
- * Solana Subpath
+ * Solana Subpath (JoinSplit Architecture)
  *
  * Solana-related utilities for ZVault:
  * - PDA derivation
@@ -11,7 +11,7 @@
 // PDA derivation
 export {
   ZVAULT_PROGRAM_ID,
-  BTC_LIGHT_CLIENT_PROGRAM_ID,
+  BTC_RELAY_PROGRAM_ID,
   PDA_SEEDS,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
@@ -21,27 +21,22 @@ export {
   deriveLightClientPDA,
   deriveBlockHeaderPDA,
   deriveNameRegistryPDA,
+  deriveVkRegistryPDA,
   commitmentToBytes,
 } from "../pda";
 
-// Instruction builders
+// Instruction builders (JoinSplit only)
 export {
   INSTRUCTION_DISCRIMINATORS,
-  buildClaimInstructionData,
-  buildClaimInstruction,
-  buildSplitInstructionData,
-  buildSplitInstruction,
-  buildSpendPartialPublicInstructionData,
-  buildSpendPartialPublicInstruction,
   buildRedemptionRequestInstructionData,
   buildRedemptionRequestInstruction,
+  buildTransactInstructionData,
+  buildTransactInstruction,
   bigintTo32Bytes,
   bytes32ToBigint,
   type Instruction,
-  type ClaimInstructionOptions,
-  type SplitInstructionOptions,
-  type SpendPartialPublicInstructionOptions,
   type RedemptionRequestInstructionOptions,
+  type TransactInstructionOptions,
 } from "../instructions";
 
 // Network configuration
@@ -56,6 +51,7 @@ export {
   ATA_PROGRAM_ID,
   SDK_VERSION,
   DEPLOYMENT_INFO,
+  JOINSPLIT_TREE_DEPTH,
   type NetworkConfig,
   type NetworkType,
 } from "../config";
@@ -89,7 +85,6 @@ export {
   getCommitmentIndex,
   saveCommitmentIndex,
   CommitmentTreeIndex,
-  // On-chain fetch functions (Helius-compatible)
   buildCommitmentTreeFromChain,
   getLeafIndexForCommitment,
   fetchMerkleProofForCommitment,
@@ -99,15 +94,11 @@ export {
   type OnChainMerkleProof,
 } from "../commitment-tree";
 
-// Relay utilities
+// ChadBuffer relay utilities
 export {
-  relaySpendPartialPublic,
-  relaySpendSplit,
   createChadBuffer as relayCreateChadBuffer,
   uploadProofToBuffer as relayUploadProofToBuffer,
   closeChadBuffer as relayCloseChadBuffer,
-  type RelaySpendPartialPublicParams,
-  type RelaySpendSplitParams,
   type RelayResult,
 } from "../relay";
 

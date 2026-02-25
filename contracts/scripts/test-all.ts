@@ -3,8 +3,8 @@
  *
  * Tests all instructions:
  * - INITIALIZE (0): Setup pool state and commitment tree
- * - ADD_DEMO_NOTE (21): Add demo commitment to tree
- * - ADD_DEMO_STEALTH (13): Add demo stealth deposit
+ * - ADD_DEMO_STEALTH (13): Add demo stealth deposit with commitment
+ * - SET_PAUSED (7): Pause/unpause pool
  * - REGISTER_NAME (8): Register .zkey name
  * - UPDATE_NAME (9): Update .zkey keys
  * - TRANSFER_NAME (10): Transfer .zkey ownership
@@ -44,6 +44,19 @@ import {
   type SplitInputs,
 } from "@zvault/sdk/prover";
 
+// SDK imports for demo stealth instruction
+import {
+  buildAddDemoStealthData,
+  initPoseidon,
+  computeUnifiedCommitmentSync,
+  ed25519GenerateKeyPair,
+  x25519Ecdh,
+  encryptAmount,
+  babyJubMul,
+  BABYJUB_BASE8,
+  randomFieldElement,
+} from "@zvault/sdk";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -51,18 +64,28 @@ const __dirname = path.dirname(__filename);
 // Configuration
 // =============================================================================
 
-const RPC_URL = process.env.RPC_URL || "http://127.0.0.1:8899";
-const PROGRAM_ID = new PublicKey(
-  process.env.PROGRAM_ID || "3Df8Xv9hMtVVLRxagnbCsofvgn18yPzfCqTmbUEnx9KF"
-);
+const NETWORK = process.env.NETWORK || "localnet";
+const RPC_URL = process.env.RPC_URL || (NETWORK === "devnet" ? "https://api.devnet.solana.com" : "http://127.0.0.1:8899");
+// Load program ID from config or environment
+function loadProgramId(): PublicKey {
+  if (process.env.PROGRAM_ID) {
+    return new PublicKey(process.env.PROGRAM_ID);
+  }
+  try {
+    const configFile = NETWORK === "devnet" ? ".devnet-config.json" : ".localnet-config.json";
+    const configPath = path.join(__dirname, "..", configFile);
+    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    return new PublicKey(config.programs.zVault);
+  } catch {
+    return new PublicKey("3Df8Xv9hMtVVLRxagnbCsofvgn18yPzfCqTmbUEnx9KF");
+  }
+}
+const PROGRAM_ID = loadProgramId();
 
 // Instruction discriminators (must match lib.rs)
 const Instruction = {
   INITIALIZE: 0,
   VERIFY_STEALTH_DEPOSIT: 1,
-  CLAIM: 2,
-  SPLIT_COMMITMENT: 3,
-  SPEND_PARTIAL_PUBLIC: 4,
   REQUEST_REDEMPTION: 5,
   COMPLETE_REDEMPTION: 6,
   SET_PAUSED: 7,
@@ -72,7 +95,7 @@ const Instruction = {
   INIT_VK_REGISTRY: 11,
   UPDATE_VK_REGISTRY: 12,
   ADD_DEMO_STEALTH: 13,
-  ADD_DEMO_NOTE: 21,
+  TRANSACT: 14,
 } as const;
 
 // Seeds
@@ -80,6 +103,8 @@ const Seeds = {
   POOL_STATE: "pool_state",
   COMMITMENT_TREE: "commitment_tree",
   NAME_REGISTRY: "zkey",
+  STEALTH_ANNOUNCEMENT: "stealth",
+  REVERSE_REGISTRY: "reverse",
 };
 
 // Discriminators
@@ -155,14 +180,48 @@ function deriveNamePDA(name: string): [PublicKey, number] {
 }
 
 function generateMockKeys(): { spending: Uint8Array; viewing: Uint8Array } {
-  const spending = new Uint8Array(33);
-  spending[0] = 0x02;
-  crypto.getRandomValues(spending.subarray(1));
+  // Baby Jubjub compressed = 32 bytes, Ed25519 = 32 bytes
+  const spending = new Uint8Array(32);
+  crypto.getRandomValues(spending);
 
   const viewing = new Uint8Array(32);
   crypto.getRandomValues(viewing);
 
   return { spending, viewing };
+}
+
+function deriveStealthAnnouncementPDA(ephemeralPub: Uint8Array): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(Seeds.STEALTH_ANNOUNCEMENT), Buffer.from(ephemeralPub)],
+    PROGRAM_ID
+  );
+}
+
+function deriveReverseRegistryPDA(spendingPubkey: Uint8Array): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(Seeds.REVERSE_REGISTRY), Buffer.from(spendingPubkey)],
+    PROGRAM_ID
+  );
+}
+
+function bigintToBytes32(value: bigint): Uint8Array {
+  const bytes = new Uint8Array(32);
+  let v = value;
+  for (let i = 31; i >= 0; i--) {
+    bytes[i] = Number(v & 0xffn);
+    v >>= 8n;
+  }
+  return bytes;
+}
+
+function loadMintAndVault(): { zkbtcMint: PublicKey; poolVault: PublicKey } {
+  const configFile = NETWORK === "devnet" ? ".devnet-config.json" : ".localnet-config.json";
+  const configPath = path.join(__dirname, "..", configFile);
+  const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+  return {
+    zkbtcMint: new PublicKey(config.accounts.zkbtcMint),
+    poolVault: new PublicKey(config.accounts.poolVault),
+  };
 }
 
 function generateSecret(): Uint8Array {
@@ -231,24 +290,32 @@ function buildInitializeIx(
   });
 }
 
-function buildAddDemoNoteIx(
+function buildAddDemoStealthIx(
   poolState: PublicKey,
   commitmentTree: PublicKey,
+  stealthAnnouncement: PublicKey,
   authority: PublicKey,
-  secret: Uint8Array
+  zbtcMint: PublicKey,
+  poolVault: PublicKey,
+  ephemeralPub: Uint8Array,
+  commitment: Uint8Array,
+  encryptedAmountBytes: Uint8Array
 ): TransactionInstruction {
-  const data = Buffer.alloc(1 + 32);
-  data[0] = Instruction.ADD_DEMO_NOTE;
-  Buffer.from(secret).copy(data, 1);
+  const data = buildAddDemoStealthData(ephemeralPub, commitment, encryptedAmountBytes);
 
   return new TransactionInstruction({
     keys: [
       { pubkey: poolState, isSigner: false, isWritable: true },
       { pubkey: commitmentTree, isSigner: false, isWritable: true },
-      { pubkey: authority, isSigner: true, isWritable: false },
+      { pubkey: stealthAnnouncement, isSigner: false, isWritable: true },
+      { pubkey: authority, isSigner: true, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: zbtcMint, isSigner: false, isWritable: true },
+      { pubkey: poolVault, isSigner: false, isWritable: true },
+      { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
     ],
     programId: PROGRAM_ID,
-    data,
+    data: Buffer.from(data),
   });
 }
 
@@ -281,8 +348,10 @@ function buildRegisterNameIx(
   const nameBytes = Buffer.from(normalized);
   const nameHash = hashName(normalized);
   const [namePDA] = deriveNamePDA(name);
+  const [reversePDA] = deriveReverseRegistryPDA(spendingPubKey);
 
-  const data = Buffer.alloc(1 + 1 + nameBytes.length + 32 + 33 + 32);
+  // Layout: disc(1) + name_len(1) + name(var) + name_hash(32) + spending(32) + viewing(32)
+  const data = Buffer.alloc(1 + 1 + nameBytes.length + 32 + 32 + 32);
   let offset = 0;
 
   data[offset++] = Instruction.REGISTER_NAME;
@@ -292,12 +361,13 @@ function buildRegisterNameIx(
   Buffer.from(nameHash).copy(data, offset);
   offset += 32;
   Buffer.from(spendingPubKey).copy(data, offset);
-  offset += 33;
+  offset += 32;
   Buffer.from(viewingPubKey).copy(data, offset);
 
   return new TransactionInstruction({
     keys: [
       { pubkey: namePDA, isSigner: false, isWritable: true },
+      { pubkey: reversePDA, isSigner: false, isWritable: true },
       { pubkey: payer, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
@@ -315,14 +385,15 @@ function buildUpdateNameIx(
   const nameHash = hashName(name);
   const [namePDA] = deriveNamePDA(name);
 
-  const data = Buffer.alloc(1 + 32 + 33 + 32);
+  // Layout: disc(1) + name_hash(32) + spending(32) + viewing(32) = 97 bytes
+  const data = Buffer.alloc(1 + 32 + 32 + 32);
   let offset = 0;
 
   data[offset++] = Instruction.UPDATE_NAME;
   Buffer.from(nameHash).copy(data, offset);
   offset += 32;
   Buffer.from(spendingPubKey).copy(data, offset);
-  offset += 33;
+  offset += 32;
   Buffer.from(viewingPubKey).copy(data, offset);
 
   return new TransactionInstruction({
@@ -367,12 +438,32 @@ async function loadKeypair(path: string): Promise<Keypair> {
   return Keypair.fromSecretKey(Uint8Array.from(secretKey));
 }
 
-async function ensureFunded(connection: Connection, pubkey: PublicKey, amount = 2 * LAMPORTS_PER_SOL) {
+let _fundingAuthority: Keypair | null = null;
+function setFundingAuthority(kp: Keypair) { _fundingAuthority = kp; }
+
+async function ensureFunded(connection: Connection, pubkey: PublicKey, amount = NETWORK === "devnet" ? 0.2 * LAMPORTS_PER_SOL : 2 * LAMPORTS_PER_SOL) {
+  const minBalance = NETWORK === "devnet" ? 0.1 * LAMPORTS_PER_SOL : LAMPORTS_PER_SOL;
   const balance = await connection.getBalance(pubkey);
-  if (balance < LAMPORTS_PER_SOL) {
-    const sig = await connection.requestAirdrop(pubkey, amount);
-    await connection.confirmTransaction(sig);
+  if (balance < minBalance) {
+    if (NETWORK === "devnet" && _fundingAuthority && !pubkey.equals(_fundingAuthority.publicKey)) {
+      // On devnet, transfer from authority instead of airdrop
+      const tx = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: _fundingAuthority.publicKey,
+          toPubkey: pubkey,
+          lamports: amount,
+        })
+      );
+      const sig = await sendAndConfirmTransaction(connection, tx, [_fundingAuthority], { commitment: "confirmed" });
+    } else {
+      const sig = await connection.requestAirdrop(pubkey, amount);
+      await connection.confirmTransaction(sig);
+    }
   }
+}
+
+function explorerUrl(sig: string): string {
+  return `https://explorer.solana.com/tx/${sig}?cluster=devnet`;
 }
 
 async function sendTx(
@@ -397,6 +488,19 @@ async function testInitialize(
   try {
     const [poolState, poolBump] = derivePoolStatePDA();
     const [commitmentTree, treeBump] = deriveCommitmentTreePDA();
+
+    // Check if already initialized (e.g., by deploy-localnet.ts)
+    const existingPool = await connection.getAccountInfo(poolState);
+    if (existingPool) {
+      const pool = parsePoolState(Buffer.from(existingPool.data));
+      if (pool && pool.discriminator === Discriminators.POOL_STATE) {
+        const treeInfo = await connection.getAccountInfo(commitmentTree);
+        const tree = treeInfo ? parseCommitmentTree(Buffer.from(treeInfo.data)) : null;
+        if (tree && tree.discriminator === Discriminators.COMMITMENT_TREE) {
+          return { name: testName, passed: true, message: "Already initialized (via deploy-localnet)" };
+        }
+      }
+    }
 
     // Create Token-2022 mint for zkBTC
     const zkbtcMint = await createMint(
@@ -466,69 +570,88 @@ async function testInitialize(
       return { name: testName, passed: false, message: "Invalid commitment tree" };
     }
 
-    return { name: testName, passed: true, message: `TX: ${sig.slice(0, 16)}... mint: ${zkbtcMint.toBase58().slice(0, 8)}...` };
+    return { name: testName, passed: true, message: `TX: ${sig}\n    Explorer: ${explorerUrl(sig)}` };
   } catch (err: any) {
-    return { name: testName, passed: false, message: err.message.slice(0, 80) };
+    return { name: testName, passed: false, message: err.message.slice(0, 200) };
   }
 }
 
-async function testAddDemoNote(
+async function generateDemoStealthData() {
+  const demoAmount = 10_000n;
+  const spendingPrivKey = randomFieldElement();
+  const spendingPubKey = babyJubMul(spendingPrivKey, BABYJUB_BASE8);
+  const viewingKey = ed25519GenerateKeyPair();
+  const ephemeralKey = ed25519GenerateKeyPair();
+  const ephemeralPub = ephemeralKey.pubKey;
+  const sharedSecret = x25519Ecdh(ephemeralKey.privKey, viewingKey.pubKey);
+  const commitment = computeUnifiedCommitmentSync(spendingPubKey.x, demoAmount);
+  const commitmentBytes = bigintToBytes32(commitment);
+  const encryptedAmountBytes = encryptAmount(demoAmount, sharedSecret);
+  return { ephemeralPub, commitmentBytes, encryptedAmountBytes };
+}
+
+async function testAddDemoStealth(
   connection: Connection,
   authority: Keypair
 ): Promise<TestResult> {
-  const testName = "ADD_DEMO_NOTE: Add commitment to tree";
+  const testName = "ADD_DEMO_STEALTH: Add stealth deposit to tree";
 
   try {
     const [poolState] = derivePoolStatePDA();
     const [commitmentTree] = deriveCommitmentTreePDA();
+    const { zkbtcMint, poolVault } = loadMintAndVault();
 
-    // Get initial tree state
     const treeInfoBefore = await connection.getAccountInfo(commitmentTree);
     const treeBefore = treeInfoBefore ? parseCommitmentTree(Buffer.from(treeInfoBefore.data)) : null;
     const indexBefore = treeBefore?.nextIndex ?? 0n;
 
-    const secret = generateSecret();
-    const ix = buildAddDemoNoteIx(poolState, commitmentTree, authority.publicKey, secret);
+    const { ephemeralPub, commitmentBytes, encryptedAmountBytes } = await generateDemoStealthData();
+    const [stealthAnnouncement] = deriveStealthAnnouncementPDA(ephemeralPub);
+
+    const ix = buildAddDemoStealthIx(
+      poolState, commitmentTree, stealthAnnouncement,
+      authority.publicKey, zkbtcMint, poolVault,
+      ephemeralPub, commitmentBytes, encryptedAmountBytes
+    );
     const sig = await sendTx(connection, ix, [authority]);
 
-    // Verify tree was updated
     const treeInfoAfter = await connection.getAccountInfo(commitmentTree);
-    if (!treeInfoAfter) {
-      return { name: testName, passed: false, message: "Tree not found after add" };
-    }
-    const treeAfter = parseCommitmentTree(Buffer.from(treeInfoAfter.data));
-    if (!treeAfter) {
-      return { name: testName, passed: false, message: "Invalid tree data" };
+    const treeAfter = treeInfoAfter ? parseCommitmentTree(Buffer.from(treeInfoAfter.data)) : null;
+    if (!treeAfter || treeAfter.nextIndex !== indexBefore + 1n) {
+      return { name: testName, passed: false, message: `Index not incremented: ${treeAfter?.nextIndex}` };
     }
 
-    if (treeAfter.nextIndex !== indexBefore + 1n) {
-      return { name: testName, passed: false, message: `Index not incremented: ${treeAfter.nextIndex}` };
-    }
-
-    return { name: testName, passed: true, message: `TX: ${sig.slice(0, 16)}... leaf index: ${treeAfter.nextIndex - 1n}` };
+    return { name: testName, passed: true, message: `leaf index: ${treeAfter.nextIndex - 1n}\n    TX: ${sig}\n    Explorer: ${explorerUrl(sig)}` };
   } catch (err: any) {
-    return { name: testName, passed: false, message: err.message.slice(0, 80) };
+    return { name: testName, passed: false, message: err.message.slice(0, 200) };
   }
 }
 
-async function testAddMultipleDemoNotes(
+async function testAddMultipleDemoStealth(
   connection: Connection,
   authority: Keypair,
   count: number
 ): Promise<TestResult> {
-  const testName = `ADD_DEMO_NOTE x${count}: Multiple commitments`;
+  const testName = `ADD_DEMO_STEALTH x${count}: Multiple stealth deposits`;
 
   try {
     const [poolState] = derivePoolStatePDA();
     const [commitmentTree] = deriveCommitmentTreePDA();
+    const { zkbtcMint, poolVault } = loadMintAndVault();
 
     const treeInfoBefore = await connection.getAccountInfo(commitmentTree);
     const treeBefore = treeInfoBefore ? parseCommitmentTree(Buffer.from(treeInfoBefore.data)) : null;
     const indexBefore = treeBefore?.nextIndex ?? 0n;
 
     for (let i = 0; i < count; i++) {
-      const secret = generateSecret();
-      const ix = buildAddDemoNoteIx(poolState, commitmentTree, authority.publicKey, secret);
+      const { ephemeralPub, commitmentBytes, encryptedAmountBytes } = await generateDemoStealthData();
+      const [stealthAnnouncement] = deriveStealthAnnouncementPDA(ephemeralPub);
+
+      const ix = buildAddDemoStealthIx(
+        poolState, commitmentTree, stealthAnnouncement,
+        authority.publicKey, zkbtcMint, poolVault,
+        ephemeralPub, commitmentBytes, encryptedAmountBytes
+      );
       await sendTx(connection, ix, [authority]);
     }
 
@@ -540,9 +663,9 @@ async function testAddMultipleDemoNotes(
       return { name: testName, passed: false, message: `Expected ${indexBefore + BigInt(count)}, got ${indexAfter}` };
     }
 
-    return { name: testName, passed: true, message: `Added ${count} notes, final index: ${indexAfter}` };
+    return { name: testName, passed: true, message: `Added ${count} stealth notes, final index: ${indexAfter}` };
   } catch (err: any) {
-    return { name: testName, passed: false, message: err.message.slice(0, 80) };
+    return { name: testName, passed: false, message: err.message.slice(0, 200) };
   }
 }
 
@@ -577,7 +700,7 @@ async function testSetPaused(
 
     return { name: testName, passed: true, message: "Pause/unpause works" };
   } catch (err: any) {
-    return { name: testName, passed: false, message: err.message.slice(0, 80) };
+    return { name: testName, passed: false, message: err.message.slice(0, 200) };
   }
 }
 
@@ -616,9 +739,9 @@ async function testRegisterName(
       return { name: testName, passed: false, message: "Name not registered" };
     }
 
-    return { name: testName, passed: true, message: `TX: ${sig.slice(0, 16)}...` };
+    return { name: testName, passed: true, message: `TX: ${sig}\n    Explorer: ${explorerUrl(sig)}` };
   } catch (err: any) {
-    return { name: testName, passed: false, message: err.message.slice(0, 80) };
+    return { name: testName, passed: false, message: err.message.slice(0, 200) };
   }
 }
 
@@ -652,9 +775,9 @@ async function testUpdateName(
     const ix = buildUpdateNameIx(name, newKeys.spending, newKeys.viewing, owner.publicKey);
     const sig = await sendTx(connection, ix, [owner]);
 
-    return { name: testName, passed: true, message: `TX: ${sig.slice(0, 16)}...` };
+    return { name: testName, passed: true, message: `TX: ${sig}\n    Explorer: ${explorerUrl(sig)}` };
   } catch (err: any) {
-    return { name: testName, passed: false, message: err.message.slice(0, 80) };
+    return { name: testName, passed: false, message: err.message.slice(0, 200) };
   }
 }
 
@@ -680,9 +803,9 @@ async function testTransferName(
       return { name: testName, passed: false, message: "Owner not transferred" };
     }
 
-    return { name: testName, passed: true, message: `TX: ${sig.slice(0, 16)}...` };
+    return { name: testName, passed: true, message: `TX: ${sig}\n    Explorer: ${explorerUrl(sig)}` };
   } catch (err: any) {
-    return { name: testName, passed: false, message: err.message.slice(0, 80) };
+    return { name: testName, passed: false, message: err.message.slice(0, 200) };
   }
 }
 
@@ -707,7 +830,7 @@ async function testProverInitialization(): Promise<TestResult> {
 
     return { name: testName, passed: true, message: `Circuits loaded from: ${circuitPath}` };
   } catch (err: any) {
-    return { name: testName, passed: false, message: err.message.slice(0, 80) };
+    return { name: testName, passed: false, message: err.message.slice(0, 200) };
   }
 }
 
@@ -737,8 +860,17 @@ async function main() {
 
   const connection = new Connection(RPC_URL, "confirmed");
 
-  // Load or create keypairs
-  const keypairPath = process.env.KEYPAIR || `${process.env.HOME}/.config/solana/id.json`;
+  // Load keypair: use KEYPAIR env, or detect from solana config, or fallback to id.json
+  let keypairPath = process.env.KEYPAIR || "";
+  if (!keypairPath) {
+    try {
+      const { execSync } = await import("child_process");
+      const configOut = execSync("solana config get", { encoding: "utf-8" });
+      const match = configOut.match(/Keypair Path:\s*(.+)/);
+      if (match) keypairPath = match[1].trim();
+    } catch {}
+  }
+  if (!keypairPath) keypairPath = `${process.env.HOME}/.config/solana/id.json`;
   const authority = fs.existsSync(keypairPath)
     ? await loadKeypair(keypairPath)
     : Keypair.generate();
@@ -753,7 +885,8 @@ async function main() {
 
   // Fund accounts
   console.log(`\nFunding accounts...`);
-  await ensureFunded(connection, authority.publicKey, 10 * LAMPORTS_PER_SOL);
+  setFundingAuthority(authority);
+  await ensureFunded(connection, authority.publicKey, NETWORK === "devnet" ? 0.5 * LAMPORTS_PER_SOL : 10 * LAMPORTS_PER_SOL);
   await ensureFunded(connection, alice.publicKey);
   await ensureFunded(connection, bob.publicKey);
 
@@ -769,11 +902,14 @@ async function main() {
   results.push(await testInitialize(connection, authority));
 
   console.log(`\n${"=".repeat(60)}`);
-  console.log("DEMO NOTES (Commitment Tree)");
+  console.log("DEMO STEALTH (Commitment Tree)");
   console.log("=".repeat(60));
 
-  results.push(await testAddDemoNote(connection, authority));
-  results.push(await testAddMultipleDemoNotes(connection, authority, 3));
+  // Initialize Poseidon for stealth operations
+  await initPoseidon();
+
+  results.push(await testAddDemoStealth(connection, authority));
+  results.push(await testAddMultipleDemoStealth(connection, authority, 3));
 
   console.log(`\n${"=".repeat(60)}`);
   console.log("POOL ADMIN");

@@ -1,0 +1,148 @@
+# =============================================================================
+# zVault Devnet Integration Test — Docker Compose
+# =============================================================================
+# Orchestrates all 7 services for production-like testing.
+#
+# Usage:
+#   docker compose up -d              # Start all services
+#   docker compose logs -f            # Tail all logs
+#   docker compose down               # Stop everything
+#   docker compose up frost-signer-1  # Start single service
+#
+# Prerequisites:
+#   - FROST key packages generated (DKG completed)
+#   - .env file populated (from bootstrap.sh)
+
+services:
+  # ---------------------------------------------------------------------------
+  # Bitcoin Regtest (local mode only — `docker compose up bitcoin`)
+  # ---------------------------------------------------------------------------
+  bitcoin:
+    image: lncm/bitcoind:v28.0
+    ports:
+      - "18443:18443"
+    command: >
+      -regtest -server -txindex
+      -rpcuser=test -rpcpassword=test
+      -rpcallowip=0.0.0.0/0 -rpcbind=0.0.0.0
+      -fallbackfee=0.00001
+    volumes:
+      - bitcoin-data:/home/bitcoin/.bitcoin
+    healthcheck:
+      test: ["CMD", "bitcoin-cli", "-regtest", "-rpcuser=test", "-rpcpassword=test", "getblockchaininfo"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # FROST Signers (3 instances for 2-of-3 threshold)
+  # ---------------------------------------------------------------------------
+  frost-signer-1:
+    build:
+      context: ../frost_server
+      dockerfile: Dockerfile
+    command: ["--port", "8080", "--solana-rpc-url", "https://api.devnet.solana.com", "--zvault-program-id", "2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV"]
+    ports:
+      - "8081:8080"
+    environment:
+      - RUST_LOG=info
+      - SIGNER_ID=1
+    volumes:
+      - frost-keys-1:/app/keys
+      - frost-logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  frost-signer-2:
+    build:
+      context: ../frost_server
+      dockerfile: Dockerfile
+    command: ["--port", "8080", "--solana-rpc-url", "https://api.devnet.solana.com", "--zvault-program-id", "2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV"]
+    ports:
+      - "8082:8080"
+    environment:
+      - RUST_LOG=info
+      - SIGNER_ID=2
+    volumes:
+      - frost-keys-2:/app/keys
+      - frost-logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  frost-signer-3:
+    build:
+      context: ../frost_server
+      dockerfile: Dockerfile
+    command: ["--port", "8080", "--solana-rpc-url", "https://api.devnet.solana.com", "--zvault-program-id", "2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV"]
+    ports:
+      - "8083:8080"
+    environment:
+      - RUST_LOG=info
+      - SIGNER_ID=3
+    volumes:
+      - frost-keys-3:/app/keys
+      - frost-logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Backend API Server
+  # ---------------------------------------------------------------------------
+  backend-api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    env_file:
+      - .env
+    environment:
+      - RUST_LOG=info
+      - API_PORT=3001
+    depends_on:
+      frost-signer-1:
+        condition: service_healthy
+      frost-signer-2:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Header Relayer
+  # ---------------------------------------------------------------------------
+  header-relayer:
+    build:
+      context: ../backend/header-relayer
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      - SOLANA_RPC_URL=${SOLANA_RPC_URL:-https://api.devnet.solana.com}
+      - BITCOIN_NETWORK=${BITCOIN_NETWORK:-testnet}
+    depends_on:
+      backend-api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  bitcoin-data:
+  frost-keys-1:
+  frost-keys-2:
+  frost-keys-3:
+  frost-logs:

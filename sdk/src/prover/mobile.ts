@@ -1,5 +1,5 @@
 /**
- * Mobile Prover for React Native
+ * Mobile Prover for React Native (JoinSplit Architecture)
  *
  * Stub for Groth16 proof generation on iOS/Android.
  * Will use snarkjs or a native Groth16 prover when implemented.
@@ -10,15 +10,8 @@ export type {
   MerkleProofInput,
   ProofData,
   CircuitType,
-  ClaimInputs,
-  SpendSplitInputs,
-  SpendPartialPublicInputs,
+  JoinSplitProofInputs,
 } from "./web";
-
-// Note: This is a stub. Full implementation requires:
-// 1. Install: bun add snarkjs
-// 2. Add circuit WASM and zkey files to app assets
-// 3. Configure snarkjs for React Native environment
 
 /**
  * Initialize the mobile prover
@@ -50,20 +43,7 @@ export function getCircuitPath(): string {
   return "";
 }
 
-// Stub implementations that throw until properly configured
-export async function generateClaimProof(): Promise<never> {
-  throw new Error("Mobile Groth16 prover not configured");
-}
-
-export async function generateSpendSplitProof(): Promise<never> {
-  throw new Error("Mobile Groth16 prover not configured");
-}
-
-export async function generateSpendPartialPublicProof(): Promise<never> {
-  throw new Error("Mobile Groth16 prover not configured");
-}
-
-export async function verifyProof(): Promise<boolean> {
+export async function generateJoinSplitProof(): Promise<never> {
   throw new Error("Mobile Groth16 prover not configured");
 }
 
