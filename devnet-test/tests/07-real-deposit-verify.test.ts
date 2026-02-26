@@ -17,7 +17,6 @@
 import { describe, it, expect, beforeAll } from "bun:test";
 import {
   createTestContext,
-  pollUntil,
   type TestContext,
   IS_LOCAL,
   ESPLORA_URL,
@@ -369,10 +368,10 @@ function deriveHeightIndexPda(
 /**
  * Compute block hash from raw header (double SHA256)
  */
-async function computeBlockHash(rawHeader: Uint8Array): Promise<Uint8Array> {
-  const { createHash } = await import("crypto");
-  const h1 = createHash("sha256").update(rawHeader).digest();
-  const h2 = createHash("sha256").update(h1).digest();
+function computeBlockHash(rawHeader: Uint8Array): Uint8Array {
+  const crypto = require("crypto");
+  const h1 = crypto.createHash("sha256").update(rawHeader).digest();
+  const h2 = crypto.createHash("sha256").update(h1).digest();
   return new Uint8Array(h2);
 }
 
@@ -491,7 +490,7 @@ async function submitBlockHeaders(
 
     // Add BlockHeader PDAs
     for (let i = 0; i < n; i++) {
-      const hash = await computeBlockHash(rawHeaders[i]);
+      const hash = computeBlockHash(rawHeaders[i]);
       const [bhPda] = deriveBlockHeaderPda(BTC_LIGHT_CLIENT_PROGRAM_ID, hash);
       keys.push({ pubkey: bhPda, isSigner: false, isWritable: true });
     }
@@ -509,22 +508,8 @@ async function submitBlockHeaders(
       data: ixData,
     });
 
-    const { blockhash, lastValidBlockHeight } =
-      await connection.getLatestBlockhash();
-    const msg = new TransactionMessage({
-      payerKey: payer.publicKey,
-      recentBlockhash: blockhash,
-      instructions: [ix],
-    }).compileToV0Message();
-    const tx = new VersionedTransaction(msg);
-    tx.sign([payer]);
-
     try {
-      const sig = await connection.sendTransaction(tx);
-      await connection.confirmTransaction(
-        { signature: sig, blockhash, lastValidBlockHeight },
-        "confirmed"
-      );
+      const sig = await sendV0Tx(connection, payer, [ix]);
       console.log(`  Submitted batch ${height}-${height + n - 1}: ${sig}`);
     } catch (err: any) {
       console.error(`  Failed to submit batch at ${height}: ${err.message}`);
@@ -537,11 +522,13 @@ async function submitBlockHeaders(
     if (height % 5 === 0 || height === toHeight) {
       console.log(`  Submitted header ${height}/${toHeight}`);
     }
+
+    height += n;
   }
 }
 
 // =============================================================================
-// ChadBuffer upload using @solana/web3.js (legacy, simpler for tests)
+// Transaction helpers
 // =============================================================================
 
 const CHADBUFFER_PROGRAM_ID = new PublicKey(
@@ -549,22 +536,46 @@ const CHADBUFFER_PROGRAM_ID = new PublicKey(
 );
 
 /**
+ * Build, sign, send, and confirm a V0 transaction.
+ */
+async function sendV0Tx(
+  connection: Connection,
+  payer: Keypair,
+  instructions: TransactionInstruction[],
+  extraSigners: Keypair[] = []
+): Promise<string> {
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash();
+  const msg = new TransactionMessage({
+    payerKey: payer.publicKey,
+    recentBlockhash: blockhash,
+    instructions,
+  }).compileToV0Message();
+  const tx = new VersionedTransaction(msg);
+  tx.sign([payer, ...extraSigners]);
+  const sig = await connection.sendTransaction(tx);
+  await connection.confirmTransaction(
+    { signature: sig, blockhash, lastValidBlockHeight },
+    "confirmed"
+  );
+  return sig;
+}
+
+/**
  * Upload raw tx data to a ChadBuffer account.
  * Returns the buffer public key.
  */
 async function uploadToChadBufferSimple(
   connection: Connection,
-  payer: import("@solana/web3.js").Keypair,
+  payer: Keypair,
   rawTxData: Uint8Array
 ): Promise<PublicKey> {
-  const { Keypair: SolKeypair } = await import("@solana/web3.js");
-  const bufferKeypair = SolKeypair.generate();
+  const bufferKeypair = Keypair.generate();
   const space = 32 + rawTxData.length; // authority(32) + data
-
   const rentExemption =
     await connection.getMinimumBalanceForRentExemption(space);
 
-  // Step 1: Create account
+  // Step 1: Create account owned by ChadBuffer
   const createIx = SystemProgram.createAccount({
     fromPubkey: payer.publicKey,
     newAccountPubkey: bufferKeypair.publicKey,
@@ -572,65 +583,29 @@ async function uploadToChadBufferSimple(
     space,
     programId: CHADBUFFER_PROGRAM_ID,
   });
+  await sendV0Tx(connection, payer, [createIx], [bufferKeypair]);
 
-  {
-    const { blockhash, lastValidBlockHeight } =
-      await connection.getLatestBlockhash();
-    const msg = new TransactionMessage({
-      payerKey: payer.publicKey,
-      recentBlockhash: blockhash,
-      instructions: [createIx],
-    }).compileToV0Message();
-    const tx = new VersionedTransaction(msg);
-    tx.sign([payer, bufferKeypair]);
-    const sig = await connection.sendTransaction(tx);
-    await connection.confirmTransaction(
-      { signature: sig, blockhash, lastValidBlockHeight },
-      "confirmed"
-    );
-  }
-
-  // Step 2: ChadBuffer Init with first chunk (max ~1056 bytes per tx)
+  // Step 2: Init with first chunk
   const MAX_CHUNK = 900;
   const firstChunk = rawTxData.slice(0, MAX_CHUNK);
-
-  // Init instruction: disc(1) = 0 + data
   const initData = new Uint8Array(1 + firstChunk.length);
-  initData[0] = 0; // Create discriminator
+  initData[0] = 0; // Init discriminator
   initData.set(firstChunk, 1);
 
-  const initIx = new TransactionInstruction({
-    programId: CHADBUFFER_PROGRAM_ID,
-    keys: [
-      { pubkey: payer.publicKey, isSigner: true, isWritable: true },
-      { pubkey: bufferKeypair.publicKey, isSigner: false, isWritable: true },
-    ],
-    data: Buffer.from(initData),
-  });
-
-  {
-    const { blockhash, lastValidBlockHeight } =
-      await connection.getLatestBlockhash();
-    const msg = new TransactionMessage({
-      payerKey: payer.publicKey,
-      recentBlockhash: blockhash,
-      instructions: [initIx],
-    }).compileToV0Message();
-    const tx = new VersionedTransaction(msg);
-    tx.sign([payer]);
-    const sig = await connection.sendTransaction(tx);
-    await connection.confirmTransaction(
-      { signature: sig, blockhash, lastValidBlockHeight },
-      "confirmed"
-    );
-  }
+  const bufferKeys = [
+    { pubkey: payer.publicKey, isSigner: true, isWritable: true },
+    { pubkey: bufferKeypair.publicKey, isSigner: false, isWritable: true },
+  ];
+  await sendV0Tx(connection, payer, [
+    new TransactionInstruction({
+      programId: CHADBUFFER_PROGRAM_ID, keys: bufferKeys, data: Buffer.from(initData),
+    }),
+  ]);
 
   // Step 3: Write remaining chunks
   let offset = firstChunk.length;
   while (offset < rawTxData.length) {
     const chunk = rawTxData.slice(offset, offset + MAX_CHUNK);
-
-    // Write instruction: disc(1) = 2 + u24_offset(3) + data
     const writeData = new Uint8Array(1 + 3 + chunk.length);
     writeData[0] = 2; // Write discriminator
     writeData[1] = offset & 0xff;
@@ -638,29 +613,11 @@ async function uploadToChadBufferSimple(
     writeData[3] = (offset >> 16) & 0xff;
     writeData.set(chunk, 4);
 
-    const writeIx = new TransactionInstruction({
-      programId: CHADBUFFER_PROGRAM_ID,
-      keys: [
-        { pubkey: payer.publicKey, isSigner: true, isWritable: true },
-        { pubkey: bufferKeypair.publicKey, isSigner: false, isWritable: true },
-      ],
-      data: Buffer.from(writeData),
-    });
-
-    const { blockhash, lastValidBlockHeight } =
-      await connection.getLatestBlockhash();
-    const msg = new TransactionMessage({
-      payerKey: payer.publicKey,
-      recentBlockhash: blockhash,
-      instructions: [writeIx],
-    }).compileToV0Message();
-    const tx = new VersionedTransaction(msg);
-    tx.sign([payer]);
-    const sig = await connection.sendTransaction(tx);
-    await connection.confirmTransaction(
-      { signature: sig, blockhash, lastValidBlockHeight },
-      "confirmed"
-    );
+    await sendV0Tx(connection, payer, [
+      new TransactionInstruction({
+        programId: CHADBUFFER_PROGRAM_ID, keys: bufferKeys, data: Buffer.from(writeData),
+      }),
+    ]);
     offset += chunk.length;
   }
 
@@ -940,27 +897,9 @@ describe("Real E2E Deposit Verification", () => {
       data: Buffer.from(ixData),
     });
 
-    const { blockhash, lastValidBlockHeight } =
-      await connection.getLatestBlockhash();
-    const msg = new TransactionMessage({
-      payerKey: ctx.payer.publicKey,
-      recentBlockhash: blockhash,
-      instructions: [ix],
-    }).compileToV0Message();
-    const tx = new VersionedTransaction(msg);
-    tx.sign([ctx.payer]);
-
     console.log(`  Sending verify_stealth_deposit tx...`);
-    const sig = await connection.sendTransaction(tx, {
-      skipPreflight: false,
-    });
-    console.log(`  Tx signature: ${sig}`);
-
-    await connection.confirmTransaction(
-      { signature: sig, blockhash, lastValidBlockHeight },
-      "confirmed"
-    );
-    console.log(`  Transaction confirmed!`);
+    const sig = await sendV0Tx(connection, ctx.payer, [ix]);
+    console.log(`  Tx confirmed: ${sig}`);
 
     // ---- Verify: deposit record PDA exists ----
     const depositInfo = await connection.getAccountInfo(depositRecordPda);

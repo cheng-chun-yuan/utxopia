@@ -45,15 +45,12 @@ import {
   deriveNullifierPDA,
   deriveRedemptionPDA,
   deriveLightClientPDA,
-  deriveBlockHeaderPDA,
-  deriveHeightIndexPDA,
   parsePoolState,
   parseRedemptionRequest,
   parseCommitmentTreeNextIndex,
   createTxBufferAccount,
-  buildExtendBlockchainIx,
-  computeBlockHash,
   buildRequestRedemptionIx,
+  fetchAndSubmitHeaders,
   loadAuthorityKeypair,
   type PoolSnapshot,
   type RedemptionSnapshot,
@@ -445,41 +442,12 @@ async function testHappyPath(
 
     const newHeight = BigInt(txStatusResult.block_height);
 
-    // Compute block hash and derive hash-based PDA
-    const blockHashBytes = computeBlockHash(new Uint8Array(rawHeader));
-    const [blockHeaderPda] = deriveBlockHeaderPDA(BTC_LIGHT_CLIENT_ID, blockHashBytes);
-
-    // Fetch parent block header for extend_blockchain (min 2 headers)
-    const prevHeight = newHeight - 1n;
-    const parentBlockHashResp = await fetch(`${ESPLORA_URL}/block-height/${Number(prevHeight)}`);
-    if (!parentBlockHashResp.ok) throw new Error(`Failed to fetch parent block hash at height ${prevHeight}`);
-    const parentBlockHashHex = (await parentBlockHashResp.text()).trim();
-    const parentRawHeader = await fetchBlockHeader(parentBlockHashHex, ESPLORA_URL);
-    const parentHashBytes = computeBlockHash(new Uint8Array(parentRawHeader));
-
-    // Grandparent is the anchor
-    const gpHeight = prevHeight - 1n;
-    const gpResp = await fetch(`${ESPLORA_URL}/block-height/${Number(gpHeight)}`);
-    if (!gpResp.ok) throw new Error(`Failed to fetch grandparent block hash at height ${gpHeight}`);
-    const gpHashHex = (await gpResp.text()).trim();
-    const gpHashBuf = Buffer.from(gpHashHex, "hex");
-    gpHashBuf.reverse();
-    const [gpBlockHeaderPda] = deriveBlockHeaderPDA(BTC_LIGHT_CLIENT_ID, new Uint8Array(gpHashBuf));
-
-    const [parentBlockHeaderPda] = deriveBlockHeaderPDA(BTC_LIGHT_CLIENT_ID, parentHashBytes);
-    const [parentHeightIndexPda] = deriveHeightIndexPDA(BTC_LIGHT_CLIENT_ID, prevHeight);
-    const [targetHeightIndexPda] = deriveHeightIndexPDA(BTC_LIGHT_CLIENT_ID, newHeight);
-
-    const extendIx = buildExtendBlockchainIx(
-      lightClient,
-      authority.publicKey,
-      gpBlockHeaderPda,
-      [parentBlockHeaderPda, blockHeaderPda],
-      [parentHeightIndexPda, targetHeightIndexPda],
-      [new Uint8Array(parentRawHeader), new Uint8Array(rawHeader)],
-      BTC_LIGHT_CLIENT_ID,
+    // Submit grandparent + parent + target headers via shared helper
+    const blockHeaderPda = await fetchAndSubmitHeaders(
+      connection, authority, newHeight,
+      new Uint8Array(rawHeader), BTC_LIGHT_CLIENT_ID,
+      ESPLORA_URL, fetchBlockHeader,
     );
-    await sendTx(connection, extendIx, [authority]);
 
     // Create tx buffer account with witness-stripped raw tx data
     const bufferKeypair = await createTxBufferAccount(

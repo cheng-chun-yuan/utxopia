@@ -4,21 +4,19 @@
  * Submits block headers and verifies deposits on Solana
  */
 
-import { Connection, PublicKey, Transaction, SystemProgram } from "@solana/web3.js";
+import { Connection, PublicKey } from "@solana/web3.js";
 import type { WalletContextState } from "@solana/wallet-adapter-react";
 import {
   getSPVProofData,
-  getBlockHeader,
   hexToBytes,
   reverseBytes,
-  bytesToHex,
   type BlockHeader,
   type MerkleProof,
 } from "./mempool";
 
-// zVault Program ID (devnet)
-const ZVAULT_PROGRAM_ID = new PublicKey(
-  "E1ebNLd1cDUcw49bR6Ga527WyChWrY4NAPk7NxmcMgWg"
+// BTC Light Client Program ID (devnet) — light client PDAs live under this program
+const BTC_LIGHT_CLIENT_ID = new PublicKey(
+  "DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS"
 );
 
 // Minimum confirmations for SPV verification
@@ -42,7 +40,7 @@ export interface SPVVerifyResult {
  * Derive PDA for light client state
  */
 export function deriveLightClientPDA(
-  programId: PublicKey = ZVAULT_PROGRAM_ID
+  programId: PublicKey = BTC_LIGHT_CLIENT_ID
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("btc_light_client")],
@@ -51,11 +49,11 @@ export function deriveLightClientPDA(
 }
 
 /**
- * Derive PDA for block header
+ * Derive PDA for block header (keyed by block hash in internal byte order)
  */
 export function deriveBlockHeaderPDA(
   blockHash: Uint8Array,
-  programId: PublicKey = ZVAULT_PROGRAM_ID
+  programId: PublicKey = BTC_LIGHT_CLIENT_ID
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("block"), Buffer.from(blockHash)],
@@ -63,9 +61,12 @@ export function deriveBlockHeaderPDA(
   );
 }
 
+/**
+ * Derive PDA for height index (keyed by block height)
+ */
 export function deriveHeightIndexPDA(
   blockHeight: number,
-  programId: PublicKey = ZVAULT_PROGRAM_ID
+  programId: PublicKey = BTC_LIGHT_CLIENT_ID
 ): [PublicKey, number] {
   const heightBuffer = Buffer.alloc(8);
   heightBuffer.writeBigUInt64LE(BigInt(blockHeight));
@@ -76,11 +77,11 @@ export function deriveHeightIndexPDA(
 }
 
 /**
- * Derive PDA for deposit record
+ * Derive PDA for deposit record (lives under zVault program, not light client)
  */
 export function deriveDepositRecordPDA(
   txidBytes: Uint8Array,
-  programId: PublicKey = ZVAULT_PROGRAM_ID
+  programId: PublicKey
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("deposit"), txidBytes],
@@ -89,15 +90,15 @@ export function deriveDepositRecordPDA(
 }
 
 /**
- * Check if block header exists on-chain
+ * Check if a block header exists on-chain at the given height
  */
 export async function checkBlockHeaderExists(
   connection: Connection,
   blockHeight: number,
-  programId: PublicKey = ZVAULT_PROGRAM_ID
+  programId: PublicKey = BTC_LIGHT_CLIENT_ID
 ): Promise<boolean> {
-  const [headerPDA] = deriveBlockHeaderPDA(blockHeight, programId);
-  const accountInfo = await connection.getAccountInfo(headerPDA);
+  const [heightIndexPDA] = deriveHeightIndexPDA(blockHeight, programId);
+  const accountInfo = await connection.getAccountInfo(heightIndexPDA);
   return accountInfo !== null;
 }
 

@@ -64,16 +64,12 @@ import {
   deriveRedemptionPDA,
   deriveDepositRecordPDA,
   deriveLightClientPDA,
-  deriveBlockHeaderPDA,
-  deriveHeightIndexPDA,
   parseCommitmentTree,
   parsePoolState,
   parseRedemptionRequest,
-  parseLightClientTipHeight,
   createTxBufferAccount,
-  buildExtendBlockchainIx,
-  computeBlockHash,
   buildRequestRedemptionIx,
+  fetchAndSubmitHeaders,
   loadAuthorityKeypair,
 } from "./test-helpers.js";
 
@@ -837,60 +833,15 @@ async function main() {
 
     // 3. Handle block header sync — extend_blockchain (batch of 2+ headers)
     const [lightClient] = deriveLightClientPDA(BTC_LIGHT_CLIENT_ID);
-    const lcInfo = await connection.getAccountInfo(lightClient);
-    if (!lcInfo) throw new Error("Light client not initialized");
-    const tipHeight = parseLightClientTipHeight(Buffer.from(lcInfo.data));
-    if (tipHeight === null) throw new Error("Light client state invalid");
-
     const newBlockHeight = BigInt(blockHeight);
-    console.log(`  Light client tip: height=${tipHeight}`);
 
-    // Compute block hash from raw header
-    const blockHashBytes = computeBlockHash(new Uint8Array(rawHeader));
-    const [blockHeaderPda] = deriveBlockHeaderPDA(BTC_LIGHT_CLIENT_ID, blockHashBytes);
-    const existingHeader = await connection.getAccountInfo(blockHeaderPda);
-
-    if (existingHeader) {
-      console.log(`  Block header PDA already exists at height ${newBlockHeight}`);
-    } else {
-      // Fetch parent block header for extend_blockchain (min 2 headers)
-      const prevHeight = newBlockHeight - 1n;
-      const parentBlockHashResp = await fetch(`${btcApiUrl}/block-height/${Number(prevHeight)}`);
-      if (!parentBlockHashResp.ok) throw new Error(`Failed to fetch block hash at height ${prevHeight}: ${parentBlockHashResp.status}`);
-      const parentBlockHashHex = (await parentBlockHashResp.text()).trim();
-      const parentRawHeader = await fetchBlockHeader(parentBlockHashHex, btcApiUrl);
-
-      // Compute parent block hash and derive PDAs
-      const parentHashBytes = computeBlockHash(new Uint8Array(parentRawHeader));
-
-      // The grandparent block is the anchor (parent of parent)
-      const grandparentHeight = prevHeight - 1n;
-      const grandparentBlockHashResp = await fetch(`${btcApiUrl}/block-height/${Number(grandparentHeight)}`);
-      if (!grandparentBlockHashResp.ok) throw new Error(`Failed to fetch block hash at height ${grandparentHeight}`);
-      const grandparentBlockHashHex = (await grandparentBlockHashResp.text()).trim();
-      const grandparentHashBytes = Buffer.from(grandparentBlockHashHex, "hex");
-      grandparentHashBytes.reverse(); // internal byte order
-      const [grandparentBlockHeaderPda] = deriveBlockHeaderPDA(BTC_LIGHT_CLIENT_ID, new Uint8Array(grandparentHashBytes));
-
-      // Derive PDAs for the 2 new headers
-      const [parentBlockHeaderPda] = deriveBlockHeaderPDA(BTC_LIGHT_CLIENT_ID, parentHashBytes);
-      const [parentHeightIndexPda] = deriveHeightIndexPDA(BTC_LIGHT_CLIENT_ID, prevHeight);
-      const [targetHeightIndexPda] = deriveHeightIndexPDA(BTC_LIGHT_CLIENT_ID, newBlockHeight);
-
-      console.log(`  Submitting batch of 2 headers (heights ${prevHeight}, ${newBlockHeight})...`);
-      const extendIx = buildExtendBlockchainIx(
-        lightClient,
-        authority.publicKey,
-        grandparentBlockHeaderPda,
-        [parentBlockHeaderPda, blockHeaderPda],
-        [parentHeightIndexPda, targetHeightIndexPda],
-        [new Uint8Array(parentRawHeader), new Uint8Array(rawHeader)],
-        BTC_LIGHT_CLIENT_ID,
-      );
-      const extendTx = new Transaction().add(extendIx);
-      await sendAndConfirmTransaction(connection, extendTx, [authority], { commitment: "confirmed" });
-      console.log(`  Block headers submitted (heights ${prevHeight}-${newBlockHeight})`);
-    }
+    console.log(`  Submitting headers up to height ${newBlockHeight}...`);
+    const blockHeaderPda = await fetchAndSubmitHeaders(
+      connection, authority, newBlockHeight,
+      new Uint8Array(rawHeader), BTC_LIGHT_CLIENT_ID,
+      btcApiUrl, fetchBlockHeader,
+    );
+    console.log(`  Block headers submitted`);
 
     // 4. Upload stripped tx to ChadBuffer
     console.log("  Uploading sweep tx to ChadBuffer...");
@@ -988,52 +939,15 @@ async function main() {
     const merkleProofData = serializeMerkleProof(txid, esploraProof);
 
     const [lightClient] = deriveLightClientPDA(BTC_LIGHT_CLIENT_ID);
-    const lcInfo = await connection.getAccountInfo(lightClient);
-    if (!lcInfo) throw new Error("Light client not initialized");
-    const tipHeight = parseLightClientTipHeight(Buffer.from(lcInfo.data));
-    if (tipHeight === null) throw new Error("Light client state invalid");
-
     const newBlockHeight = BigInt(blockHeight);
-    console.log(`  Light client tip: height=${tipHeight}, submitting block ${newBlockHeight}`);
 
-    // Compute block hash from raw header and derive hash-based PDA
-    const blockHashBytes = computeBlockHash(new Uint8Array(rawHeader));
-    const [blockHeaderPda] = deriveBlockHeaderPDA(BTC_LIGHT_CLIENT_ID, blockHashBytes);
-
-    // Fetch parent block header for extend_blockchain (min 2 headers)
-    const prevHeight = newBlockHeight - 1n;
-    const parentBlockHashResp = await fetch(`${ESPLORA_URL}/block-height/${Number(prevHeight)}`);
-    if (!parentBlockHashResp.ok) throw new Error(`Failed to fetch parent block hash at height ${prevHeight}`);
-    const parentBlockHashHex = (await parentBlockHashResp.text()).trim();
-    const parentRawHeader = await fetchBlockHeader(parentBlockHashHex, ESPLORA_URL);
-    const parentHashBytes = computeBlockHash(new Uint8Array(parentRawHeader));
-
-    // Grandparent is the anchor
-    const grandparentHeight = prevHeight - 1n;
-    const gpResp = await fetch(`${ESPLORA_URL}/block-height/${Number(grandparentHeight)}`);
-    if (!gpResp.ok) throw new Error(`Failed to fetch grandparent block hash at height ${grandparentHeight}`);
-    const gpHashHex = (await gpResp.text()).trim();
-    const gpHashBytes = Buffer.from(gpHashHex, "hex");
-    gpHashBytes.reverse();
-    const [grandparentBlockHeaderPda] = deriveBlockHeaderPDA(BTC_LIGHT_CLIENT_ID, new Uint8Array(gpHashBytes));
-
-    const [parentBlockHeaderPda] = deriveBlockHeaderPDA(BTC_LIGHT_CLIENT_ID, parentHashBytes);
-    const [parentHeightIndexPda] = deriveHeightIndexPDA(BTC_LIGHT_CLIENT_ID, prevHeight);
-    const [targetHeightIndexPda] = deriveHeightIndexPDA(BTC_LIGHT_CLIENT_ID, newBlockHeight);
-
-    console.log(`  Submitting batch of 2 headers (heights ${prevHeight}, ${newBlockHeight})...`);
-    const extendIx = buildExtendBlockchainIx(
-      lightClient,
-      authority.publicKey,
-      grandparentBlockHeaderPda,
-      [parentBlockHeaderPda, blockHeaderPda],
-      [parentHeightIndexPda, targetHeightIndexPda],
-      [new Uint8Array(parentRawHeader), new Uint8Array(rawHeader)],
-      BTC_LIGHT_CLIENT_ID,
+    console.log(`  Submitting headers up to height ${newBlockHeight}...`);
+    const blockHeaderPda = await fetchAndSubmitHeaders(
+      connection, authority, newBlockHeight,
+      new Uint8Array(rawHeader), BTC_LIGHT_CLIENT_ID,
+      ESPLORA_URL, fetchBlockHeader,
     );
-    const extendTx = new Transaction().add(extendIx);
-    await sendAndConfirmTransaction(connection, extendTx, [authority], { commitment: "confirmed" });
-    console.log(`  Block headers submitted (heights ${prevHeight}-${newBlockHeight})`);
+    console.log(`  Block headers submitted`);
 
     console.log("  Uploading sweep tx to ChadBuffer...");
     const bufferKeypair = await createTxBufferAccount(connection, authority, rawSweepTx, CHADBUFFER_ID);

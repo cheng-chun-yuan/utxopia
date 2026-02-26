@@ -15,7 +15,13 @@ use solana_sdk::{
     signature::{Keypair, Signer as SolanaSigner},
     transaction::Transaction,
 };
+use sha2::{Sha256, Digest};
 use std::str::FromStr;
+
+fn double_sha256_header(data: &[u8]) -> [u8; 32] {
+    let first = Sha256::digest(data);
+    Sha256::digest(&first).into()
+}
 
 use crate::config::ZVaultConfig;
 
@@ -403,24 +409,32 @@ impl SolClient {
 
         // Derive block header PDA
         let (block_header, _) = Pubkey::find_program_address(
-            &[b"block_header", &height.to_le_bytes()],
+            &[b"block", &double_sha256_header(raw_header)],
             &self.program_id,
         );
 
-        // Build instruction data
-        // Anchor discriminator for "submit_header"
-        let discriminator: [u8; 8] = [0x9c, 0xe1, 0xf4, 0x6b, 0x22, 0xa7, 0x5d, 0x3c];
+        // Derive height index PDA
+        let (height_index, _) = Pubkey::find_program_address(
+            &[b"height_index", &height.to_le_bytes()],
+            &self.program_id,
+        );
 
-        let mut data = Vec::with_capacity(8 + 80 + 8);
-        data.extend_from_slice(&discriminator);
+        // NOTE: extend_blockchain requires min 2 headers and a parent anchor PDA.
+        // This single-header method is a simplified stub — production code should
+        // use the header-relayer TypeScript service for batch submission.
+        // Build instruction data: disc(1) + num_headers(1) + raw_header(80)
+        let mut data = Vec::with_capacity(1 + 1 + 80);
+        data.push(1); // disc = EXTEND_BLOCKCHAIN
+        data.push(1); // num_headers = 1 (will fail min=2 check on-chain)
         data.extend_from_slice(raw_header);
-        data.extend_from_slice(&height.to_le_bytes());
 
         let accounts = vec![
             AccountMeta::new(light_client, false),
-            AccountMeta::new(block_header, false),
             AccountMeta::new(payer.pubkey(), true),
             AccountMeta::new_readonly(solana_sdk::system_program::ID, false),
+            // TODO: parent block header PDA needed here as anchor
+            AccountMeta::new(block_header, false),
+            AccountMeta::new(height_index, false),
         ];
 
         let ix = Instruction {
@@ -437,6 +451,7 @@ impl SolClient {
         &self,
         txid: &[u8; 32],
         merkle_proof: &SpvMerkleProof,
+        block_hash: &[u8; 32],
         block_height: u64,
         amount_sats: u64,
         expected_pubkey: &[u8; 32],
@@ -452,7 +467,7 @@ impl SolClient {
         );
 
         let (block_header, _) = Pubkey::find_program_address(
-            &[b"block_header", &block_height.to_le_bytes()],
+            &[b"block", block_hash],
             &self.program_id,
         );
 
@@ -461,8 +476,9 @@ impl SolClient {
             &self.program_id,
         );
 
-        // Build instruction data
-        // Anchor discriminator for "verify_deposit"
+        // NOTE: This uses an old Anchor-style format that is no longer compatible
+        // with the Pinocchio-based program. The actual deposit verification is done
+        // by deposit_tracker/verifier.rs. This method is kept as a reference stub.
         let discriminator: [u8; 8] = [0x5a, 0x88, 0xd1, 0x4e, 0x7c, 0x32, 0xb9, 0x06];
 
         let mut data = Vec::new();

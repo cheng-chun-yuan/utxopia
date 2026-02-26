@@ -263,15 +263,14 @@ export async function createTxBufferAccount(
 // =============================================================================
 
 /**
- * Compute Bitcoin block hash from raw 80-byte header (double SHA-256, reversed)
+ * Compute Bitcoin block hash from raw 80-byte header (double SHA-256).
+ * Returns raw hash bytes matching the on-chain double_sha256 output.
+ * This is the same byte order as prev_block_hash in Bitcoin's wire format.
  */
 export function computeBlockHash(rawHeader: Uint8Array): Uint8Array {
   const hash1 = sha256(rawHeader);
   const hash2 = sha256(hash1);
-  // Reverse for internal byte order (Bitcoin convention)
-  const reversed = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) reversed[i] = hash2[31 - i];
-  return reversed;
+  return new Uint8Array(hash2);
 }
 
 /**
@@ -296,10 +295,11 @@ export function buildExtendBlockchainIx(
   btcLightClientId: PublicKey,
 ): TransactionInstruction {
   const numHeaders = rawHeaders.length;
-  const data = Buffer.alloc(1 + numHeaders * 80);
-  data[0] = numHeaders;
+  const data = Buffer.alloc(1 + 1 + numHeaders * 80);
+  data[0] = BTCRelayDisc.EXTEND_BLOCKCHAIN; // disc=1
+  data[1] = numHeaders;
   for (let i = 0; i < numHeaders; i++) {
-    Buffer.from(rawHeaders[i]).copy(data, 1 + i * 80);
+    Buffer.from(rawHeaders[i]).copy(data, 2 + i * 80);
   }
 
   const keys = [
@@ -373,6 +373,75 @@ export function buildRequestRedemptionIx(
     programId,
     data,
   });
+}
+
+// =============================================================================
+// Header Batch Submission
+// =============================================================================
+
+/**
+ * Fetch grandparent/parent/target headers from Esplora and submit them
+ * via extend_blockchain. This pattern is needed because extend_blockchain
+ * requires the grandparent block header PDA as an anchor.
+ *
+ * Returns the target block's BlockHeader PDA.
+ */
+export async function fetchAndSubmitHeaders(
+  connection: Connection,
+  submitter: Keypair,
+  targetBlockHeight: bigint,
+  targetRawHeader: Uint8Array,
+  btcLightClientId: PublicKey,
+  esploraUrl: string,
+  fetchBlockHeaderFn: (hash: string, url: string) => Promise<Buffer>,
+): Promise<PublicKey> {
+  const [lightClient] = deriveLightClientPDA(btcLightClientId);
+  const targetBlockHash = computeBlockHash(targetRawHeader);
+  const [targetBlockHeaderPda] = deriveBlockHeaderPDA(btcLightClientId, targetBlockHash);
+
+  // Check if already submitted
+  const existing = await connection.getAccountInfo(targetBlockHeaderPda);
+  if (existing) {
+    return targetBlockHeaderPda;
+  }
+
+  const prevHeight = targetBlockHeight - 1n;
+  const grandparentHeight = prevHeight - 1n;
+
+  // Fetch parent header
+  const parentHashResp = await fetch(`${esploraUrl}/block-height/${Number(prevHeight)}`);
+  if (!parentHashResp.ok) throw new Error(`Failed to fetch block hash at height ${prevHeight}`);
+  const parentHashHex = (await parentHashResp.text()).trim();
+  const parentRawHeader = await fetchBlockHeaderFn(parentHashHex, esploraUrl);
+  const parentHash = computeBlockHash(new Uint8Array(parentRawHeader));
+
+  // Fetch grandparent hash (anchor) -- only need the hash, not the raw header
+  const gpResp = await fetch(`${esploraUrl}/block-height/${Number(grandparentHeight)}`);
+  if (!gpResp.ok) throw new Error(`Failed to fetch block hash at height ${grandparentHeight}`);
+  const gpHashHex = (await gpResp.text()).trim();
+  const gpHashBytes = Buffer.from(gpHashHex, "hex");
+  gpHashBytes.reverse(); // display order -> internal byte order
+  const [anchorBlockHeaderPda] = deriveBlockHeaderPDA(btcLightClientId, new Uint8Array(gpHashBytes));
+
+  // Derive PDAs for the 2 new headers
+  const [parentBlockHeaderPda] = deriveBlockHeaderPDA(btcLightClientId, parentHash);
+  const [parentHeightIndexPda] = deriveHeightIndexPDA(btcLightClientId, prevHeight);
+  const [targetHeightIndexPda] = deriveHeightIndexPDA(btcLightClientId, targetBlockHeight);
+
+  const extendIx = buildExtendBlockchainIx(
+    lightClient,
+    submitter.publicKey,
+    anchorBlockHeaderPda,
+    [parentBlockHeaderPda, targetBlockHeaderPda],
+    [parentHeightIndexPda, targetHeightIndexPda],
+    [new Uint8Array(parentRawHeader), targetRawHeader],
+    btcLightClientId,
+  );
+
+  const tx = new Transaction().add(extendIx);
+  await sendAndConfirmTransaction(connection, tx, [submitter], { commitment: "confirmed" });
+
+  return targetBlockHeaderPda;
 }
 
 // =============================================================================

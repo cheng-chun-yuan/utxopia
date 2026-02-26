@@ -5,8 +5,8 @@ import { DEVNET_CONFIG } from "@zvault/sdk";
 
 export const runtime = "nodejs";
 
-// zVault Program ID from SDK (single source of truth)
-const PROGRAM_ID = DEVNET_CONFIG.zvaultProgramId;
+// Height index PDAs live under the BTC Light Client program, not zVault
+const BTC_LIGHT_CLIENT_ID = DEVNET_CONFIG.btcLightClientProgramId;
 
 // Derive height index PDA using @solana/kit (checks canonical block at height)
 async function deriveHeightIndexPDA(blockHeight: number): Promise<string> {
@@ -15,7 +15,7 @@ async function deriveHeightIndexPDA(blockHeight: number): Promise<string> {
   view.setBigUint64(0, BigInt(blockHeight), true);
 
   const [pda] = await getProgramDerivedAddress({
-    programAddress: address(PROGRAM_ID),
+    programAddress: address(BTC_LIGHT_CLIENT_ID),
     seeds: [new TextEncoder().encode("height_index"), heightBuffer],
   });
 

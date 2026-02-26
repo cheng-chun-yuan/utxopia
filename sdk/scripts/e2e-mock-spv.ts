@@ -299,44 +299,67 @@ async function main() {
   // 3. Init pool
   const { mint, poolVault, poolState, commitTree } = await initPoolIfNeeded(conn, auth);
 
-  // 4. Init BTC relay light client
-  const genesisHash = doubleSha256(new Uint8Array([0x00, 0x01, 0x02, 0x03]));
+  // 4. Init BTC relay light client (genesis at height 99)
+  const genesisRawHeader = new Uint8Array(80); // minimal genesis header
+  genesisRawHeader[0] = 0x01; // version = 1
+  const genesisHash = doubleSha256(genesisRawHeader);
   const [lcPDA] = pda(["btc_light_client"], BTC_LIGHT_CLIENT);
+  const [genesisBlockPDA] = pda(["block", genesisHash], BTC_LIGHT_CLIENT);
+  const [genesisHeightPDA] = pda(["height_index", heightBuf(99n)], BTC_LIGHT_CLIENT);
   if (!(await conn.getAccountInfo(lcPDA))) {
-    const d = Buffer.alloc(42);
-    d[0] = 0; d.writeBigUInt64LE(99n, 1); d.set(genesisHash, 9); d[41] = 1;
+    // Initialize: disc(1) + genesis_height(8 LE) + genesis_raw_header(80) + network(1)
+    const d = Buffer.alloc(1 + 8 + 80 + 1);
+    d[0] = 0; // disc = INITIALIZE
+    d.writeBigUInt64LE(99n, 1);
+    d.set(genesisRawHeader, 9);
+    d[89] = 1; // network = testnet
     await send(conn, auth, new TransactionInstruction({
       programId: BTC_LIGHT_CLIENT, data: d,
       keys: [
         { pubkey: lcPDA, isSigner: false, isWritable: true },
         { pubkey: auth.publicKey, isSigner: true, isWritable: true },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        { pubkey: genesisHeightPDA, isSigner: false, isWritable: true },
+        { pubkey: genesisBlockPDA, isSigner: false, isWritable: true },
       ],
     }));
     console.log("Light client initialized");
   }
 
-  // 5. Submit block headers (100 = tx block, 101 = confirmation)
-  async function submitHeader(raw: Uint8Array, height: bigint) {
-    const [hPDA] = pda(["block_header", heightBuf(height)], BTC_LIGHT_CLIENT);
-    if (await conn.getAccountInfo(hPDA)) return hPDA;
-    const d = Buffer.alloc(89);
-    d[0] = 1; d.set(raw, 1); d.writeBigUInt64LE(height, 81);
+  // 5. Submit block headers via extend_blockchain (batch of 2: height 100 + 101)
+  const header100 = buildMockHeader(genesisHash, txid);
+  const hash100 = doubleSha256(header100);
+  const header101 = buildMockHeader(hash100, new Uint8Array(32));
+  const hash101 = doubleSha256(header101);
+
+  const [blockPDA100] = pda(["block", hash100], BTC_LIGHT_CLIENT);
+  const [blockPDA101] = pda(["block", hash101], BTC_LIGHT_CLIENT);
+  const [hiPDA100] = pda(["height_index", heightBuf(100n)], BTC_LIGHT_CLIENT);
+  const [hiPDA101] = pda(["height_index", heightBuf(101n)], BTC_LIGHT_CLIENT);
+
+  const headerPDA = blockPDA100;
+
+  if (!(await conn.getAccountInfo(blockPDA100))) {
+    // extend_blockchain: disc(1) + num_headers(1) + N*80 raw headers
+    const d = Buffer.alloc(1 + 1 + 2 * 80);
+    d[0] = 1; // disc = EXTEND_BLOCKCHAIN
+    d[1] = 2; // num_headers
+    d.set(header100, 2);
+    d.set(header101, 82);
     await send(conn, auth, new TransactionInstruction({
       programId: BTC_LIGHT_CLIENT, data: d,
       keys: [
         { pubkey: lcPDA, isSigner: false, isWritable: true },
-        { pubkey: hPDA, isSigner: false, isWritable: true },
         { pubkey: auth.publicKey, isSigner: true, isWritable: true },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        { pubkey: genesisBlockPDA, isSigner: false, isWritable: false }, // parent anchor
+        { pubkey: blockPDA100, isSigner: false, isWritable: true },
+        { pubkey: blockPDA101, isSigner: false, isWritable: true },
+        { pubkey: hiPDA100, isSigner: false, isWritable: true },
+        { pubkey: hiPDA101, isSigner: false, isWritable: true },
       ],
     }));
-    return hPDA;
   }
-
-  const header100 = buildMockHeader(genesisHash, txid);
-  const headerPDA = await submitHeader(header100, 100n);
-  await submitHeader(buildMockHeader(doubleSha256(header100), new Uint8Array(32)), 101n);
   console.log("Block headers submitted (100, 101)");
 
   // 6. Upload tx to ChadBuffer
