@@ -9,8 +9,8 @@ use pinocchio::{
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::constants::{
-    BLOCK_HEADER_DISCRIMINATOR, REQUIRED_CONFIRMATIONS, VERIFIED_TX_DISCRIMINATOR,
-    VERIFIED_TX_SEED,
+    BLOCK_HEADER_DISCRIMINATOR, BLOCK_HEADER_SEED, REQUIRED_CONFIRMATIONS,
+    VERIFIED_TX_DISCRIMINATOR, VERIFIED_TX_SEED,
 };
 use crate::state::{BitcoinLightClient, BlockHeader, VerifiedTransaction};
 use crate::utils::{double_sha256, double_sha256_pair};
@@ -19,14 +19,14 @@ use crate::utils::{double_sha256, double_sha256_pair};
 ///
 /// Instruction data (after discriminator):
 ///   [0-31]   txid         ([u8; 32])
-///   [32-39]  block_height (u64 LE)
-///   [40-43]  tx_size      (u32 LE)
-///   [44+]    merkle_proof: [txid(32)][path_bits(4)][path_len(1)][tx_index(4)][siblings...]
+///   [32-63]  block_hash   ([u8; 32])    ← was block_height(8)
+///   [64-67]  tx_size      (u32 LE)
+///   [68+]    merkle_proof: [txid(32)][path_bits(4)][path_len(1)][tx_index(4)][siblings...]
 ///
 /// Accounts:
 ///   0. [writable, PDA] VerifiedTransaction (to create)
 ///   1. []              BitcoinLightClient
-///   2. []              BlockHeader at block_height
+///   2. []              BlockHeader (["block", block_hash])
 ///   3. []              ChadBuffer (raw tx)
 ///   4. [signer, writable] Payer
 ///   5. []              System program
@@ -35,7 +35,7 @@ pub fn process_verify_transaction(
     accounts: &[AccountInfo],
     data: &[u8],
 ) -> ProgramResult {
-    if data.len() < 44 {
+    if data.len() < 68 {
         return Err(ProgramError::InvalidInstructionData);
     }
     if accounts.len() < 6 {
@@ -64,11 +64,21 @@ pub fn process_verify_transaction(
     // Parse instruction data
     let mut txid = [0u8; 32];
     txid.copy_from_slice(&data[0..32]);
-    let block_height = u64::from_le_bytes(data[32..40].try_into().unwrap());
-    let tx_size = u32::from_le_bytes(data[40..44].try_into().unwrap());
+    let mut block_hash = [0u8; 32];
+    block_hash.copy_from_slice(&data[32..64]);
+    let tx_size = u32::from_le_bytes(data[64..68].try_into().unwrap());
+
+    // Verify BlockHeader PDA address: ["block", block_hash]
+    let (expected_header_pda, _) = pinocchio::pubkey::find_program_address(
+        &[BLOCK_HEADER_SEED, &block_hash],
+        program_id,
+    );
+    if block_header_info.key() != &expected_header_pda {
+        return Err(ProgramError::InvalidSeeds);
+    }
 
     // Parse merkle proof from remaining data
-    let proof_data = &data[44..];
+    let proof_data = &data[68..];
     if proof_data.len() < 41 {
         return Err(ProgramError::InvalidInstructionData);
     }
@@ -87,23 +97,22 @@ pub fn process_verify_transaction(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    // Verify block header matches block_height
-    let block_merkle_root = {
+    // Verify block header and get merkle_root + height
+    let (block_merkle_root, block_height) = {
         let header_data = block_header_info.try_borrow_data()?;
         if header_data.len() < BlockHeader::LEN || header_data[0] != BLOCK_HEADER_DISCRIMINATOR {
             return Err(ProgramError::InvalidAccountData);
         }
         let header = unsafe { &*(header_data.as_ptr() as *const BlockHeader) };
-        if header.height() != block_height {
+
+        // Verify the stored block_hash matches the one in instruction data
+        if header.block_hash != block_hash {
             return Err(ProgramError::InvalidArgument);
         }
 
-        // Also get block_hash for PDA derivation
         let mut merkle_root = [0u8; 32];
         merkle_root.copy_from_slice(&header.merkle_root);
-        let mut block_hash = [0u8; 32];
-        block_hash.copy_from_slice(&header.block_hash);
-        (merkle_root, block_hash)
+        (merkle_root, header.height())
     };
 
     // Verify sufficient confirmations
@@ -111,7 +120,11 @@ pub fn process_verify_transaction(
         let lc_data = light_client_info.try_borrow_data()?;
         let lc = BitcoinLightClient::from_bytes(&lc_data)?;
         let tip = lc.tip_height();
-        let confirmations = if block_height > tip { 0 } else { tip - block_height + 1 };
+        let confirmations = if block_height > tip {
+            0
+        } else {
+            tip - block_height + 1
+        };
         if confirmations < REQUIRED_CONFIRMATIONS {
             return Err(ProgramError::InvalidArgument);
         }
@@ -119,7 +132,8 @@ pub fn process_verify_transaction(
 
     // Read raw tx from ChadBuffer and verify hash
     {
-        let buffer_data = tx_buffer_info.try_borrow_data()
+        let buffer_data = tx_buffer_info
+            .try_borrow_data()
             .map_err(|_| ProgramError::InvalidAccountData)?;
         // ChadBuffer format: 32-byte authority pubkey header, then data
         if buffer_data.len() < 32 + tx_size as usize {
@@ -149,14 +163,14 @@ pub fn process_verify_transaction(
                 double_sha256_pair(&current, &sibling)
             };
         }
-        if current != block_merkle_root.0 {
+        if current != block_merkle_root {
             return Err(ProgramError::InvalidArgument);
         }
     }
 
-    // Derive VerifiedTransaction PDA
+    // Derive VerifiedTransaction PDA: ["verified_tx", block_hash, txid]
     let (expected_pda, bump) = pinocchio::pubkey::find_program_address(
-        &[VERIFIED_TX_SEED, &block_merkle_root.1, &txid],
+        &[VERIFIED_TX_SEED, &block_hash, &txid],
         program_id,
     );
     if verified_tx_info.key() != &expected_pda {
@@ -175,7 +189,7 @@ pub fn process_verify_transaction(
     let bump_bytes = [bump];
     let signer_seeds: [Seed; 4] = [
         Seed::from(VERIFIED_TX_SEED),
-        Seed::from(block_merkle_root.1.as_slice()),
+        Seed::from(block_hash.as_slice()),
         Seed::from(txid.as_slice()),
         Seed::from(&bump_bytes),
     ];
@@ -202,7 +216,7 @@ pub fn process_verify_transaction(
         let vt = unsafe { &mut *(vt_data.as_mut_ptr() as *mut VerifiedTransaction) };
         vt.bump = bump;
         vt.block_height = (block_height as u32).to_le_bytes();
-        vt.block_hash = block_merkle_root.1;
+        vt.block_hash = block_hash;
         vt.txid = txid;
         vt.tx_index = tx_index.to_le_bytes();
 

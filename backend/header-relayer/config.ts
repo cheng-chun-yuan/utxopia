@@ -106,6 +106,8 @@ export const START_BLOCK_HEIGHT: bigint | null = (() => {
   return val ? BigInt(val) : null;
 })();
 
+export const BATCH_SIZE = parseInt(env('BATCH_SIZE') || '5', 10);
+
 export const BITCOIN_API_URL = env('BITCOIN_API_URL');
 
 /**
@@ -137,13 +139,14 @@ export function getRelayerKeypair(): Keypair {
 
 /**
  * Get the on-chain network ID from the Bitcoin network name.
- * 0=mainnet, 1=testnet/testnet4/signet, 2=regtest
+ * 0=mainnet, 1=testnet3, 2=testnet4, 3=regtest
  */
 export function getNetworkId(): number {
   switch (BITCOIN_NETWORK) {
     case 'mainnet': return 0;
-    case 'regtest': return 2;
-    default: return 1; // testnet, testnet4, signet
+    case 'testnet4': return 2;
+    case 'regtest': return 3;
+    default: return 1; // testnet (testnet3), signet
   }
 }
 

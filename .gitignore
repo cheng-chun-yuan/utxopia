@@ -35,7 +35,7 @@ test-ledger/
 .env*.local
 
 # Reference repos
-zeus-program-library/
+bitcoin-spv/
 
 # Circom build artifacts
 circuits/build/

@@ -31,8 +31,8 @@ export interface NetworkConfig {
   /** zVault main program ID */
   zvaultProgramId: Address;
 
-  /** BTC Relay program ID (manages light client + block headers for SPV) */
-  btcRelayProgramId: Address;
+  /** BTC Light Client program ID (manages light client + block headers for SPV) */
+  btcLightClientProgramId: Address;
 
   /** ChadBuffer program ID (for SPV verification) */
   chadbufferProgramId: Address;
@@ -157,7 +157,7 @@ export const DEVNET_CONFIG: NetworkConfig = {
 
   // Program IDs (fresh deployment 2026-02-24)
   zvaultProgramId: address("2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV"),
-  btcRelayProgramId: address("DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS"),
+  btcLightClientProgramId: address("DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS"),
   chadbufferProgramId: CHADBUFFER_PROGRAM_ID,
   token2022ProgramId: TOKEN_2022_PROGRAM_ID,
   ataProgramId: ATA_PROGRAM_ID,
@@ -209,7 +209,7 @@ export const MAINNET_CONFIG: NetworkConfig = {
 
   // Program IDs (placeholder - update when deployed)
   zvaultProgramId: address("11111111111111111111111111111111"),
-  btcRelayProgramId: address("11111111111111111111111111111111"),
+  btcLightClientProgramId: address("11111111111111111111111111111111"),
   chadbufferProgramId: CHADBUFFER_PROGRAM_ID,
   token2022ProgramId: TOKEN_2022_PROGRAM_ID,
   ataProgramId: ATA_PROGRAM_ID,
@@ -256,7 +256,7 @@ export const LOCALNET_CONFIG: NetworkConfig = {
 
   // Program IDs
   zvaultProgramId: address("2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV"),
-  btcRelayProgramId: address("DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS"),
+  btcLightClientProgramId: address("DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS"),
   chadbufferProgramId: LOCALNET_CHADBUFFER_PROGRAM_ID,
   token2022ProgramId: TOKEN_2022_PROGRAM_ID,
   ataProgramId: ATA_PROGRAM_ID,
@@ -369,8 +369,8 @@ export function createConfig(
 /** Default zVault program ID (from current config) */
 export const ZVAULT_PROGRAM_ID: Address = DEVNET_CONFIG.zvaultProgramId;
 
-/** BTC Relay program ID (manages light client + block headers) */
-export const BTC_RELAY_PROGRAM_ID: Address = DEVNET_CONFIG.btcRelayProgramId;
+/** BTC Light Client program ID (manages light client + block headers) */
+export const BTC_LIGHT_CLIENT_PROGRAM_ID: Address = DEVNET_CONFIG.btcLightClientProgramId;
 
 // =============================================================================
 // Version Info

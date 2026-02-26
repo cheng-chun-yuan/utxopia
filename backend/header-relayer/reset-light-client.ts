@@ -1,24 +1,28 @@
 /**
- * Reset the BTC Light Client tip to a real Bitcoin block.
+ * Reset the BTC Light Client to a new block height.
  *
- * Fetches the current tip (or a specified height) from mempool.space,
- * then calls the reset_tip instruction.
+ * Uses the reinitialize instruction (authority-only emergency reset).
+ * In the new permissionless architecture, there is no reset_tip — use
+ * reinitialize to point to a new genesis block instead.
  *
  * Usage:
  *   DEPLOY_ENV=devnet bun run reset
  *   DEPLOY_ENV=devnet RESET_HEIGHT=75000 bun run reset
  */
 
-import { Connection, LAMPORTS_PER_SOL } from '@solana/web3.js';
-import { getLightClientState, resetTip, bytesToHex } from './solana';
+import { Connection, Transaction, TransactionInstruction, sendAndConfirmTransaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { getLightClientState, deriveLightClientPda, bytesToHex } from './solana';
 import { getTipHeight, getBlockHashByHeight } from './mempool';
 import {
   SOLANA_RPC_URL,
   PROGRAM_ID,
   BITCOIN_NETWORK,
   getRelayerKeypair,
+  getNetworkId,
   logConfig,
 } from './config';
+
+const REINITIALIZE_DISC = 4;
 
 function hexToBytesReversed(hex: string): Uint8Array {
   const bytes = new Uint8Array(32);
@@ -29,7 +33,7 @@ function hexToBytesReversed(hex: string): Uint8Array {
 }
 
 async function main() {
-  console.log('=== Reset BTC Light Client Tip ===\n');
+  console.log('=== Reset BTC Light Client (via Reinitialize) ===\n');
 
   const relayer = getRelayerKeypair();
   const connection = new Connection(SOLANA_RPC_URL, 'confirmed');
@@ -52,7 +56,6 @@ async function main() {
 
   // Determine target height
   let targetHeight: number;
-
   if (process.env.RESET_HEIGHT) {
     targetHeight = parseInt(process.env.RESET_HEIGHT, 10);
   } else {
@@ -67,21 +70,30 @@ async function main() {
   const blockHashHex = await getBlockHashByHeight(BITCOIN_NETWORK, targetHeight);
   console.log(`Block hash:    ${blockHashHex}`);
 
-  // Convert to internal byte order (reversed for Bitcoin)
   const blockHashBytes = hexToBytesReversed(blockHashHex);
-  console.log(`Internal LE:   ${bytesToHex(blockHashBytes).slice(0, 16)}...\n`);
+  const networkId = getNetworkId();
 
-  // Send reset_tip transaction
-  console.log('Sending reset_tip transaction...');
-  const signature = await resetTip(
-    connection,
-    PROGRAM_ID,
-    relayer,
-    BigInt(targetHeight),
-    blockHashBytes,
-    0, 0,
-  );
+  // Build reinitialize instruction (disc=4)
+  const data = Buffer.alloc(1 + 8 + 32 + 1);
+  data.writeUInt8(REINITIALIZE_DISC, 0);
+  data.writeBigUInt64LE(BigInt(targetHeight), 1);
+  Buffer.from(blockHashBytes).copy(data, 9);
+  data.writeUInt8(networkId, 41);
 
+  const [lightClientPda] = deriveLightClientPda(PROGRAM_ID);
+
+  const ix = new TransactionInstruction({
+    keys: [
+      { pubkey: lightClientPda, isSigner: false, isWritable: true },
+      { pubkey: relayer.publicKey, isSigner: true, isWritable: false },
+    ],
+    programId: PROGRAM_ID,
+    data,
+  });
+
+  console.log('\nSending reinitialize transaction...');
+  const tx = new Transaction().add(ix);
+  const signature = await sendAndConfirmTransaction(connection, tx, [relayer]);
   console.log(`\nSuccess! Transaction: ${signature}`);
 
   // Verify
@@ -92,7 +104,7 @@ async function main() {
     console.log(`  Tip hash:   ${bytesToHex(newState.tipHash)}`);
   }
 
-  console.log(`\nLight client tip reset to ${BITCOIN_NETWORK} block ${targetHeight}.`);
+  console.log(`\nLight client reinitialized at ${BITCOIN_NETWORK} block ${targetHeight}.`);
   console.log('You can now run the header relayer: bun run start');
 }
 

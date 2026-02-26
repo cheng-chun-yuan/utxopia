@@ -161,7 +161,7 @@ export function logContext(ctx: TestContext) {
   console.log(`  Solana RPC: ${SOLANA_RPC_URL}`);
   console.log(`  Payer: ${ctx.payer.publicKey.toBase58()}`);
   console.log(`  zVault: ${ctx.config.zvaultProgramId}`);
-  console.log(`  BTC Relay: ${ctx.config.btcRelayProgramId}`);
+  console.log(`  BTC Relay: ${ctx.config.btcLightClientProgramId}`);
   console.log(`  Backend: ${ctx.backendApiUrl}`);
   console.log(`  FROST signers: ${ctx.frostSignerUrls.length}`);
   console.log(`  Group pubkey: ${ctx.groupPubKey ? ctx.groupPubKey.slice(0, 16) + "..." : "(not set)"}`);

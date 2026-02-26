@@ -46,8 +46,8 @@ import {
 const DEPOSIT_AMOUNT_BTC = 0.0001; // 10,000 sats
 const DEPOSIT_AMOUNT_SATS = 10_000;
 
-// BTC relay program ID (localnet)
-const BTC_RELAY_PROGRAM_ID = new PublicKey(
+// BTC light client program ID (localnet)
+const BTC_LIGHT_CLIENT_PROGRAM_ID = new PublicKey(
   "DjZLbYWW7xp1xeHbRtAjUi4jxMThsykC9srXgB1NiMFx"
 );
 
@@ -337,18 +337,43 @@ function deriveLightClientPda(
 }
 
 /**
- * Derive block header PDA
+ * Derive block header PDA (hash-based)
+ * Seeds: ["block", blockHash(32)]
  */
 function deriveBlockHeaderPda(
+  programId: PublicKey,
+  blockHash: Uint8Array
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("block"), Buffer.from(blockHash)],
+    programId
+  );
+}
+
+/**
+ * Derive height index PDA
+ * Seeds: ["height_index", height_le(8)]
+ */
+function deriveHeightIndexPda(
   programId: PublicKey,
   height: number
 ): [PublicKey, number] {
   const buf = Buffer.alloc(8);
   buf.writeBigUInt64LE(BigInt(height));
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("block_header"), buf],
+    [Buffer.from("height_index"), buf],
     programId
   );
+}
+
+/**
+ * Compute block hash from raw header (double SHA256)
+ */
+async function computeBlockHash(rawHeader: Uint8Array): Promise<Uint8Array> {
+  const { createHash } = await import("crypto");
+  const h1 = createHash("sha256").update(rawHeader).digest();
+  const h2 = createHash("sha256").update(h1).digest();
+  return new Uint8Array(h2);
 }
 
 /**
@@ -370,7 +395,7 @@ function deriveDepositRecordPda(
 async function getLightClientTipHeight(
   connection: Connection
 ): Promise<number> {
-  const [lcPda] = deriveLightClientPda(BTC_RELAY_PROGRAM_ID);
+  const [lcPda] = deriveLightClientPda(BTC_LIGHT_CLIENT_PROGRAM_ID);
   const info = await connection.getAccountInfo(lcPda);
   if (!info || !info.data) return 0;
 
@@ -383,7 +408,7 @@ async function getLightClientTipHeight(
 }
 
 // =============================================================================
-// Direct header submission to btc-relay program
+// Direct header submission to btc-light-client program
 // =============================================================================
 
 /**
@@ -392,7 +417,7 @@ async function getLightClientTipHeight(
 async function getLightClientTipHash(
   connection: Connection
 ): Promise<Uint8Array> {
-  const [lcPda] = deriveLightClientPda(BTC_RELAY_PROGRAM_ID);
+  const [lcPda] = deriveLightClientPda(BTC_LIGHT_CLIENT_PROGRAM_ID);
   const info = await connection.getAccountInfo(lcPda);
   if (!info || !info.data) return new Uint8Array(32);
   // tip_hash is at offset 72 (after disc:1 + bump:1 + paused:1 + network:1 + padding:4 + authority:32 = 40, then genesis_hash:32 = 72)
@@ -400,8 +425,8 @@ async function getLightClientTipHash(
 }
 
 /**
- * Submit block headers directly to the btc-relay program.
- * This bypasses the header relayer service for faster testing.
+ * Submit block headers directly to the btc-light-client program via extend_blockchain.
+ * Sends batches of 2+ headers at a time.
  */
 async function submitBlockHeaders(
   connection: Connection,
@@ -409,90 +434,78 @@ async function submitBlockHeaders(
   fromHeight: number,
   toHeight: number
 ): Promise<void> {
-  const [lightClientPda] = deriveLightClientPda(BTC_RELAY_PROGRAM_ID);
+  const [lightClientPda] = deriveLightClientPda(BTC_LIGHT_CLIENT_PROGRAM_ID);
+  const BATCH_SIZE = 5;
 
-  for (let height = fromHeight; height <= toHeight; height++) {
-    // Check if block header already exists
-    const [blockHeaderPda] = deriveBlockHeaderPda(BTC_RELAY_PROGRAM_ID, height);
-    const existing = await connection.getAccountInfo(blockHeaderPda);
-    if (existing) {
-      continue; // Already submitted
+  let height = fromHeight;
+  while (height <= toHeight) {
+    // Get parent block hash (on-chain tip hash)
+    const parentHash = await getLightClientTipHash(connection);
+
+    // Collect batch of raw headers
+    const rawHeaders: Uint8Array[] = [];
+    const batchEnd = Math.min(height + BATCH_SIZE - 1, toHeight);
+    // Need at least 2 headers for extend_blockchain
+    const effectiveEnd = Math.max(batchEnd, height + 1);
+
+    for (let h = height; h <= effectiveEnd && h <= toHeight + 1; h++) {
+      // If we'd go past toHeight, we still need at least 2 to submit
+      if (h > toHeight && rawHeaders.length >= 2) break;
+      const bHash = await bitcoinRpc<string>("getblockhash", [h]);
+      const rawHeaderHex = await bitcoinRpc<string>("getblockheader", [bHash, false]);
+      rawHeaders.push(hexToBytes(rawHeaderHex));
     }
 
-    // Get block hash and raw header from bitcoind
-    const blockHash = await bitcoinRpc<string>("getblockhash", [height]);
-    const rawHeaderHex = await bitcoinRpc<string>("getblockheader", [
-      blockHash,
-      false,
-    ]);
-    const rawHeader = hexToBytes(rawHeaderHex);
-
-    // Debug: verify prev_block_hash alignment
-    if (height === fromHeight) {
-      const tipHash = await getLightClientTipHash(connection);
-      const prevHashInHeader = rawHeader.slice(4, 36);
-      console.log(
-        `  On-chain tip hash:     ${bytesToHex(tipHash)}`
-      );
-      console.log(
-        `  Block ${height} prev_hash: ${bytesToHex(prevHashInHeader)}`
-      );
-      if (bytesToHex(tipHash) !== bytesToHex(prevHashInHeader)) {
-        console.log(
-          `  MISMATCH! Need to find correct starting height.`
-        );
-        // Find the block whose hash matches the on-chain tip
-        const tipHashHex = bytesToHex(tipHash);
-        let foundHeight = -1;
-        for (let h = height - 1; h >= Math.max(0, height - 50); h--) {
-          const bHash = await bitcoinRpc<string>("getblockhash", [h]);
-          const bHeaderHex = await bitcoinRpc<string>("getblockheader", [bHash, false]);
-          const bHeader = hexToBytes(bHeaderHex);
-          // Compute double_sha256 of this header
-          const { createHash } = await import("crypto");
-          const h1 = createHash("sha256").update(bHeader).digest();
-          const h2 = createHash("sha256").update(h1).digest();
-          if (bytesToHex(new Uint8Array(h2)) === tipHashHex) {
-            foundHeight = h;
-            console.log(`  Found matching block at height ${h}`);
-            break;
-          }
-        }
-        if (foundHeight >= 0 && foundHeight + 1 < height) {
-          // Submit missing blocks from foundHeight+1
-          console.log(`  Backfilling from ${foundHeight + 1} to ${height - 1}...`);
-          await submitBlockHeaders(connection, payer, foundHeight + 1, height - 1);
-        }
-        // Re-check — now try again for this height
-        const newTipHash = await getLightClientTipHash(connection);
-        const newPrev = rawHeader.slice(4, 36);
-        if (bytesToHex(newTipHash) !== bytesToHex(newPrev)) {
-          throw new Error(
-            `Cannot align: tip=${bytesToHex(newTipHash)} vs prev=${bytesToHex(newPrev)}`
-          );
-        }
-      }
+    if (rawHeaders.length < 2) {
+      // Can't submit fewer than 2 headers; submit individually would require
+      // mining another block. For tests, mine one more block.
+      console.log(`  Only ${rawHeaders.length} header available, need 2+ for batch. Mining extra block...`);
+      await mineBlocks(1);
+      const bHash = await bitcoinRpc<string>("getblockhash", [toHeight + 1]);
+      const rawHeaderHex = await bitcoinRpc<string>("getblockheader", [bHash, false]);
+      rawHeaders.push(hexToBytes(rawHeaderHex));
     }
 
-    // Build submit_header instruction
-    // Format: disc(1) = 1 + raw_header(80) + height(u64 LE) = 89 bytes
-    const ixData = Buffer.alloc(89);
-    ixData.writeUInt8(1, 0); // SUBMIT_HEADER discriminator
-    Buffer.from(rawHeader).copy(ixData, 1);
-    ixData.writeBigUInt64LE(BigInt(height), 81);
+    const n = rawHeaders.length;
+    const parentHeight = BigInt(height - 1);
+
+    // Build extend_blockchain instruction
+    // Format: disc(1) + num_headers(1) + N*80 bytes
+    const ixData = Buffer.alloc(1 + 1 + n * 80);
+    ixData.writeUInt8(1, 0); // EXTEND_BLOCKCHAIN discriminator
+    ixData.writeUInt8(n, 1);
+    for (let i = 0; i < n; i++) {
+      Buffer.from(rawHeaders[i]).copy(ixData, 2 + i * 80);
+    }
+
+    // Derive parent BlockHeader PDA
+    const [parentPda] = deriveBlockHeaderPda(BTC_LIGHT_CLIENT_PROGRAM_ID, parentHash);
+
+    // Derive BlockHeader + HeightIndex PDAs
+    const keys: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[] = [
+      { pubkey: lightClientPda, isSigner: false, isWritable: true },
+      { pubkey: payer.publicKey, isSigner: true, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: parentPda, isSigner: false, isWritable: false },
+    ];
+
+    // Add BlockHeader PDAs
+    for (let i = 0; i < n; i++) {
+      const hash = await computeBlockHash(rawHeaders[i]);
+      const [bhPda] = deriveBlockHeaderPda(BTC_LIGHT_CLIENT_PROGRAM_ID, hash);
+      keys.push({ pubkey: bhPda, isSigner: false, isWritable: true });
+    }
+
+    // Add HeightIndex PDAs
+    for (let i = 0; i < n; i++) {
+      const h = height + i;
+      const [hiPda] = deriveHeightIndexPda(BTC_LIGHT_CLIENT_PROGRAM_ID, h);
+      keys.push({ pubkey: hiPda, isSigner: false, isWritable: true });
+    }
 
     const ix = new TransactionInstruction({
-      programId: BTC_RELAY_PROGRAM_ID,
-      keys: [
-        { pubkey: lightClientPda, isSigner: false, isWritable: true },
-        { pubkey: blockHeaderPda, isSigner: false, isWritable: true },
-        { pubkey: payer.publicKey, isSigner: true, isWritable: true },
-        {
-          pubkey: SystemProgram.programId,
-          isSigner: false,
-          isWritable: false,
-        },
-      ],
+      programId: BTC_LIGHT_CLIENT_PROGRAM_ID,
+      keys,
       data: ixData,
     });
 
@@ -512,8 +525,9 @@ async function submitBlockHeaders(
         { signature: sig, blockhash, lastValidBlockHeight },
         "confirmed"
       );
+      console.log(`  Submitted batch ${height}-${height + n - 1}: ${sig}`);
     } catch (err: any) {
-      console.error(`  Failed to submit header ${height}: ${err.message}`);
+      console.error(`  Failed to submit batch at ${height}: ${err.message}`);
       if (err.transactionLogs) {
         console.error(`  Logs: ${JSON.stringify(err.transactionLogs)}`);
       }
@@ -769,7 +783,7 @@ describe("Real E2E Deposit Verification", () => {
     console.log(`  Tx confirmed at block height: ${blockHeight}`);
   });
 
-  it("3. submit block headers directly to btc-relay", async () => {
+  it("3. submit block headers directly to btc-light-client", async () => {
     if (!IS_LOCAL || !depositTxid) return;
 
     const connection = new Connection(SOLANA_RPC_URL, "confirmed");
@@ -791,14 +805,14 @@ describe("Real E2E Deposit Verification", () => {
     expect(newTip).toBeGreaterThanOrEqual(blockHeight);
     console.log(`  Light client tip: ${newTip}`);
 
-    // Verify the block header PDA exists
-    const [blockHeaderPda] = deriveBlockHeaderPda(
-      BTC_RELAY_PROGRAM_ID,
+    // Verify the HeightIndex PDA exists at this height
+    const [heightIndexPda] = deriveHeightIndexPda(
+      BTC_LIGHT_CLIENT_PROGRAM_ID,
       blockHeight
     );
-    const headerInfo = await connection.getAccountInfo(blockHeaderPda);
-    expect(headerInfo).not.toBeNull();
-    console.log(`  Block header PDA exists: ${blockHeaderPda.toBase58()}`);
+    const hiInfo = await connection.getAccountInfo(heightIndexPda);
+    expect(hiInfo).not.toBeNull();
+    console.log(`  HeightIndex PDA exists: ${heightIndexPda.toBase58()}`);
   });
 
   it("4. upload non-witness tx to ChadBuffer and verify deposit on-chain", async () => {
@@ -876,10 +890,18 @@ describe("Real E2E Deposit Verification", () => {
 
     // ---- Derive all 11 account PDAs ----
     const poolStatePda = new PublicKey(ctx.config.poolStatePda);
-    const [lightClientPda] = deriveLightClientPda(BTC_RELAY_PROGRAM_ID);
+    const [lightClientPda] = deriveLightClientPda(BTC_LIGHT_CLIENT_PROGRAM_ID);
+
+    // Get block hash for this height from HeightIndex PDA
+    const [hiPda] = deriveHeightIndexPda(BTC_LIGHT_CLIENT_PROGRAM_ID, blockHeight);
+    const hiAccount = await connection.getAccountInfo(hiPda);
+    if (!hiAccount) throw new Error(`HeightIndex not found at height ${blockHeight}`);
+    // HeightIndex layout: disc(1) + bump(1) + padding(6) + block_hash(32) + height(8) = 48
+    const blockHashFromHi = new Uint8Array(hiAccount.data.slice(8, 40));
+
     const [blockHeaderPda] = deriveBlockHeaderPda(
-      BTC_RELAY_PROGRAM_ID,
-      blockHeight
+      BTC_LIGHT_CLIENT_PROGRAM_ID,
+      blockHashFromHi
     );
     const commitmentTreePda = new PublicKey(ctx.config.commitmentTreePda);
     const [depositRecordPda] = deriveDepositRecordPda(

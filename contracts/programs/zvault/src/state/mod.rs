@@ -11,12 +11,12 @@
 //! | `RedemptionRequest` | Pending BTC withdrawal request |
 //! | `StealthAnnouncement` | Stealth address announcement (dual-key ECDH) |
 //!
-//! ## External Account Readers (btc-relay)
+//! ## External Account Readers (btc-light-client)
 //!
 //! | Reader | Purpose |
 //! |--------|---------|
-//! | `VerifiedTransactionView` | Read-only view of btc-relay VerifiedTransaction PDA |
-//! | `light_client_tip_height` | Read tip height from btc-relay LightClient |
+//! | `VerifiedTransactionView` | Read-only view of btc-light-client VerifiedTransaction PDA |
+//! | `light_client_tip_height` | Read tip height from btc-light-client LightClient |
 
 // Core state
 pub mod commitment_tree;

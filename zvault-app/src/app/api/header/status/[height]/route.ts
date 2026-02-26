@@ -8,15 +8,15 @@ export const runtime = "nodejs";
 // zVault Program ID from SDK (single source of truth)
 const PROGRAM_ID = DEVNET_CONFIG.zvaultProgramId;
 
-// Derive block header PDA using @solana/kit
-async function deriveBlockHeaderPDA(blockHeight: number): Promise<string> {
+// Derive height index PDA using @solana/kit (checks canonical block at height)
+async function deriveHeightIndexPDA(blockHeight: number): Promise<string> {
   const heightBuffer = new Uint8Array(8);
   const view = new DataView(heightBuffer.buffer);
   view.setBigUint64(0, BigInt(blockHeight), true);
 
   const [pda] = await getProgramDerivedAddress({
     programAddress: address(PROGRAM_ID),
-    seeds: [new TextEncoder().encode("block_header"), heightBuffer],
+    seeds: [new TextEncoder().encode("height_index"), heightBuffer],
   });
 
   return pda;
@@ -50,7 +50,7 @@ export async function GET(
     }
 
     // Derive PDA and check if header exists using @solana/kit
-    const headerPDA = await deriveBlockHeaderPDA(blockHeight);
+    const headerPDA = await deriveHeightIndexPDA(blockHeight);
     const accountInfo = await fetchAccountInfo(headerPDA, "devnet");
 
     if (accountInfo) {

@@ -308,7 +308,7 @@ export async function createTestContext(): Promise<E2ETestContext> {
       const customConfig = createConfig(LOCALNET_CONFIG, {
         // Override with actual deployed addresses
         zvaultProgramId: kitAddress(localnetConfig.programs.zVault),
-        btcRelayProgramId: kitAddress(localnetConfig.programs.btcLightClient),
+        btcLightClientProgramId: kitAddress(localnetConfig.programs.btcLightClient),
         chadbufferProgramId: localnetConfig.programs.chadbuffer
           ? kitAddress(localnetConfig.programs.chadbuffer)
           : LOCALNET_CONFIG.chadbufferProgramId,
@@ -401,7 +401,7 @@ export async function createTestContext(): Promise<E2ETestContext> {
     rpcUrl: RPC_URL,
     programs: {
       zVault: config.zvaultProgramId.toString(),
-      btcLightClient: config.btcRelayProgramId.toString(),
+      btcLightClient: config.btcLightClientProgramId.toString(),
       groth16Verifier: config.groth16VerifierProgramId.toString(),
       chadbuffer: config.chadbufferProgramId.toString(),
     },

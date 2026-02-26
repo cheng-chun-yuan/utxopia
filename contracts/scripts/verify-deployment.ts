@@ -6,7 +6,7 @@
 import { Connection, PublicKey } from "@solana/web3.js";
 import {
   ZVAULT_PROGRAM_ID,
-  BTC_RELAY_PROGRAM_ID,
+  BTC_LIGHT_CLIENT_PROGRAM_ID,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
 } from "@zvault/sdk";
@@ -23,7 +23,7 @@ async function main() {
   // Check SDK program ID
   console.log("\n=== Program IDs from SDK ===");
   console.log(`zVault: ${ZVAULT_PROGRAM_ID}`);
-  console.log(`BTC Relay: ${BTC_RELAY_PROGRAM_ID}`);
+  console.log(`BTC Light Client: ${BTC_LIGHT_CLIENT_PROGRAM_ID}`);
 
   // Verify program is deployed
   console.log("\n=== Verifying on-chain ===");

@@ -88,7 +88,7 @@ solana-test-validator \
 ```bash
 cd contracts
 
-# Deploy both zvault and btc-relay programs
+# Deploy both zvault and btc-light-client programs
 bun run scripts/deploy-localnet.ts
 
 # Or deploy to devnet:

@@ -1,7 +1,7 @@
 /**
  * Solana submission client for Bitcoin block headers
  *
- * Uses the btc-light-client program for simple, transparent header relay.
+ * Hash-based PDAs, batch header submission via extend_blockchain.
  */
 
 import {
@@ -13,18 +13,23 @@ import {
   TransactionInstruction,
   sendAndConfirmTransaction,
 } from '@solana/web3.js';
+import { createHash } from 'crypto';
+
 // PDA seeds (must match the btc-light-client Pinocchio program)
 const LIGHT_CLIENT_SEED = Buffer.from('btc_light_client');
-const BLOCK_SEED = Buffer.from('block_header');
+const BLOCK_SEED = Buffer.from('block');
+const HEIGHT_INDEX_SEED = Buffer.from('height_index');
 
-// Account discriminator for BitcoinLightClient (Pinocchio: single byte, not Anchor SHA256)
+// Account discriminators
 const BTC_LIGHT_CLIENT_DISCRIMINATOR: number = 0x06;
+const BLOCK_HEADER_DISCRIMINATOR = 0x07;
+const HEIGHT_INDEX_DISCRIMINATOR = 0x09;
 
-// Instruction discriminators (Pinocchio: single byte)
+// Instruction discriminators
 const INITIALIZE_DISC: number = 0;
-const SUBMIT_HEADER_DISC: number = 1;
-const RESET_TIP_DISC: number = 2;
-const REORG_HEADER_DISC: number = 4;
+const EXTEND_BLOCKCHAIN_DISC: number = 1;
+const VERIFY_TRANSACTION_DISC: number = 2;
+const REINITIALIZE_DISC: number = 4;
 
 /**
  * Derive the light client PDA
@@ -34,38 +39,46 @@ export function deriveLightClientPda(programId: PublicKey): [PublicKey, number] 
 }
 
 /**
- * Derive block header PDA for a specific height
+ * Derive block header PDA for a specific block hash
+ * Seeds: ["block", block_hash(32)]
  */
 export function deriveBlockHeaderPda(
+  programId: PublicKey,
+  blockHash: Uint8Array
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [BLOCK_SEED, Buffer.from(blockHash)],
+    programId
+  );
+}
+
+/**
+ * Derive HeightIndex PDA for a specific height
+ * Seeds: ["height_index", height_le(8)]
+ */
+export function deriveHeightIndexPda(
   programId: PublicKey,
   height: bigint
 ): [PublicKey, number] {
   const heightBuffer = Buffer.alloc(8);
   heightBuffer.writeBigUInt64LE(height);
   return PublicKey.findProgramAddressSync(
-    [BLOCK_SEED, heightBuffer],
+    [HEIGHT_INDEX_SEED, heightBuffer],
     programId
   );
 }
 
 /**
+ * Compute double SHA-256 of raw block header (80 bytes) → block hash
+ */
+export function computeBlockHash(rawHeader: Uint8Array): Uint8Array {
+  const first = createHash('sha256').update(rawHeader).digest();
+  const second = createHash('sha256').update(first).digest();
+  return new Uint8Array(second);
+}
+
+/**
  * LightClientState structure (Pinocchio layout: 232 bytes)
- *
- * Offsets:
- *   0: discriminator (u8 = 0x06)
- *   1: bump (u8)
- *   2: paused (u8)
- *   3: network (u8)
- *   4-7: _padding (4 bytes)
- *   8-39: authority (32 bytes)
- *  40-71: genesis_hash (32 bytes)
- *  72-103: tip_hash (32 bytes)
- * 104-135: total_chainwork (32 bytes)
- * 136-143: tip_height (u64 LE)
- * 144-151: finalized_height (u64 LE)
- * 152-159: header_count (u64 LE)
- * 160-167: last_update (i64 LE)
- * 168-231: _reserved (64 bytes)
  */
 export interface LightClientState {
   bump: number;
@@ -84,15 +97,12 @@ export interface LightClientState {
  * Parse LightClientState account data
  */
 export function parseLightClientState(data: Buffer): LightClientState {
-  // Byte 0: discriminator (already verified)
   const bump = data.readUInt8(1);
   const paused = data.readUInt8(2) !== 0;
   const network = data.readUInt8(3);
-  // 4-7: padding
   const authority = new Uint8Array(data.subarray(8, 40));
   const genesisHash = new Uint8Array(data.subarray(40, 72));
   const tipHash = new Uint8Array(data.subarray(72, 104));
-  // 104-135: total_chainwork (skip)
   const tipHeight = data.readBigUInt64LE(136);
   const finalizedHeight = data.readBigUInt64LE(144);
   const headerCount = data.readBigUInt64LE(152);
@@ -126,7 +136,6 @@ export async function getLightClientState(
     return null;
   }
 
-  // Verify discriminator (single byte for Pinocchio)
   if (accountInfo.data[0] !== BTC_LIGHT_CLIENT_DISCRIMINATOR) {
     throw new Error(`Invalid light client account discriminator: expected 0x${BTC_LIGHT_CLIENT_DISCRIMINATOR.toString(16)}, got 0x${accountInfo.data[0].toString(16)}`);
   }
@@ -150,20 +159,30 @@ export async function getLightClientTipHeight(
 }
 
 /**
- * Check if a block header already exists on-chain
+ * Get the block hash from a HeightIndex PDA at a given height
  */
-export async function blockHeaderExists(
+export async function getBlockHashAtHeight(
   connection: Connection,
   programId: PublicKey,
   height: bigint
-): Promise<boolean> {
-  const [blockHeaderPda] = deriveBlockHeaderPda(programId, height);
-  const accountInfo = await connection.getAccountInfo(blockHeaderPda);
-  return accountInfo !== null;
+): Promise<Uint8Array | null> {
+  const [heightIndexPda] = deriveHeightIndexPda(programId, height);
+  const accountInfo = await connection.getAccountInfo(heightIndexPda);
+  if (!accountInfo) return null;
+  if (accountInfo.data[0] !== HEIGHT_INDEX_DISCRIMINATOR) return null;
+  // HeightIndex layout: disc(1) + bump(1) + padding(6) + block_hash(32) + height(8)
+  return new Uint8Array(accountInfo.data.subarray(8, 40));
 }
 
 /**
  * Build initialize instruction
+ *
+ * Accounts:
+ *   0. [writable] BitcoinLightClient PDA
+ *   1. [signer, writable] Payer
+ *   2. [] System program
+ *   3. [writable] HeightIndex PDA
+ *   4. [writable] BlockHeader PDA
  */
 export function buildInitializeInstruction(
   programId: PublicKey,
@@ -173,61 +192,22 @@ export function buildInitializeInstruction(
   startBlockHash: Uint8Array,
   network: number
 ): TransactionInstruction {
-  // Instruction data: discriminator (1) + start_height (8) + start_block_hash (32) + network (1) = 42 bytes
   const data = Buffer.alloc(1 + 8 + 32 + 1);
-
-  // Write discriminator (single byte for Pinocchio)
   data.writeUInt8(INITIALIZE_DISC, 0);
-
-  // Write start_height (u64 LE)
   data.writeBigUInt64LE(startHeight, 1);
-
-  // Write start_block_hash (32 bytes)
   Buffer.from(startBlockHash).copy(data, 9);
-
-  // Write network (u8)
   data.writeUInt8(network, 41);
+
+  const [heightIndexPda] = deriveHeightIndexPda(programId, startHeight);
+  const [blockHeaderPda] = deriveBlockHeaderPda(programId, startBlockHash);
 
   return new TransactionInstruction({
     keys: [
       { pubkey: lightClientPda, isSigner: false, isWritable: true },
       { pubkey: payer, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-    ],
-    programId,
-    data,
-  });
-}
-
-/**
- * Build submit_header instruction
- */
-export function buildSubmitHeaderInstruction(
-  programId: PublicKey,
-  lightClientPda: PublicKey,
-  blockHeaderPda: PublicKey,
-  submitter: PublicKey,
-  rawHeader: Uint8Array,
-  height: bigint
-): TransactionInstruction {
-  // Instruction data: discriminator (1) + raw_header (80) + height (8) = 89 bytes
-  const data = Buffer.alloc(1 + 80 + 8);
-
-  // Write discriminator (single byte for Pinocchio)
-  data.writeUInt8(SUBMIT_HEADER_DISC, 0);
-
-  // Write raw_header (80 bytes)
-  Buffer.from(rawHeader).copy(data, 1);
-
-  // Write height (u64 LE)
-  data.writeBigUInt64LE(height, 81);
-
-  return new TransactionInstruction({
-    keys: [
-      { pubkey: lightClientPda, isSigner: false, isWritable: true },
+      { pubkey: heightIndexPda, isSigner: false, isWritable: true },
       { pubkey: blockHeaderPda, isSigner: false, isWritable: true },
-      { pubkey: submitter, isSigner: true, isWritable: true },
-      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
     programId,
     data,
@@ -257,257 +237,113 @@ export async function initializeLightClient(
   );
 
   const transaction = new Transaction().add(instruction);
-
-  const signature = await sendAndConfirmTransaction(connection, transaction, [
-    payer,
-  ]);
-
-  return signature;
+  return await sendAndConfirmTransaction(connection, transaction, [payer]);
 }
 
 /**
- * Submit a Bitcoin block header to Solana
- */
-export async function submitHeader(
-  connection: Connection,
-  programId: PublicKey,
-  submitter: Keypair,
-  rawHeader: Uint8Array,
-  height: bigint
-): Promise<string> {
-  const [lightClientPda] = deriveLightClientPda(programId);
-  const [blockHeaderPda] = deriveBlockHeaderPda(programId, height);
-
-  const instruction = buildSubmitHeaderInstruction(
-    programId,
-    lightClientPda,
-    blockHeaderPda,
-    submitter.publicKey,
-    rawHeader,
-    height
-  );
-
-  const transaction = new Transaction().add(instruction);
-
-  const signature = await sendAndConfirmTransaction(connection, transaction, [
-    submitter,
-  ]);
-
-  return signature;
-}
-
-/**
- * Build reset_tip instruction
- *
- * On-chain expects 48 bytes: height(8) + hash(32) + expected_bits(4) + epoch_start_time(4)
- * Plus the BlockHeader PDA as the 3rd account.
- */
-export function buildResetTipInstruction(
-  programId: PublicKey,
-  lightClientPda: PublicKey,
-  authority: PublicKey,
-  blockHeaderPda: PublicKey,
-  newTipHeight: bigint,
-  newTipHash: Uint8Array,
-  newExpectedBits: number,
-  newEpochStartTime: number,
-): TransactionInstruction {
-  // Instruction data: discriminator (1) + height (8) + hash (32) + bits (4) + epoch_start (4) = 49 bytes
-  const data = Buffer.alloc(1 + 8 + 32 + 4 + 4);
-
-  data.writeUInt8(RESET_TIP_DISC, 0);
-  data.writeBigUInt64LE(newTipHeight, 1);
-  Buffer.from(newTipHash).copy(data, 9);
-  data.writeUInt32LE(newExpectedBits, 41);
-  data.writeUInt32LE(newEpochStartTime, 45);
-
-  return new TransactionInstruction({
-    keys: [
-      { pubkey: lightClientPda, isSigner: false, isWritable: true },
-      { pubkey: authority, isSigner: true, isWritable: false },
-      { pubkey: blockHeaderPda, isSigner: false, isWritable: false },
-    ],
-    programId,
-    data,
-  });
-}
-
-/**
- * Reset the light client tip to a new block hash and height
- */
-export async function resetTip(
-  connection: Connection,
-  programId: PublicKey,
-  authority: Keypair,
-  newTipHeight: bigint,
-  newTipHash: Uint8Array,
-  newExpectedBits: number = 0,
-  newEpochStartTime: number = 0,
-): Promise<string> {
-  const [lightClientPda] = deriveLightClientPda(programId);
-  const [blockHeaderPda] = deriveBlockHeaderPda(programId, newTipHeight);
-
-  const instruction = buildResetTipInstruction(
-    programId,
-    lightClientPda,
-    authority.publicKey,
-    blockHeaderPda,
-    newTipHeight,
-    newTipHash,
-    newExpectedBits,
-    newEpochStartTime,
-  );
-
-  const transaction = new Transaction().add(instruction);
-
-  const signature = await sendAndConfirmTransaction(connection, transaction, [
-    authority,
-  ]);
-
-  return signature;
-}
-
-/**
- * Build reorg_header instruction (disc=4)
- *
- * Overwrites an existing block at height H with a block from a heavier fork.
- */
-export function buildReorgHeaderInstruction(
-  programId: PublicKey,
-  lightClientPda: PublicKey,
-  blockHeaderPda: PublicKey,
-  parentHeaderPda: PublicKey,
-  submitter: PublicKey,
-  rawHeader: Uint8Array,
-  height: bigint
-): TransactionInstruction {
-  // Instruction data: discriminator (1) + raw_header (80) + height (8) = 89 bytes
-  const data = Buffer.alloc(1 + 80 + 8);
-
-  data.writeUInt8(REORG_HEADER_DISC, 0);
-  Buffer.from(rawHeader).copy(data, 1);
-  data.writeBigUInt64LE(height, 81);
-
-  return new TransactionInstruction({
-    keys: [
-      { pubkey: lightClientPda, isSigner: false, isWritable: true },
-      { pubkey: blockHeaderPda, isSigner: false, isWritable: true },
-      { pubkey: parentHeaderPda, isSigner: false, isWritable: false },
-      { pubkey: submitter, isSigner: true, isWritable: false },
-    ],
-    programId,
-    data,
-  });
-}
-
-/**
- * Submit a reorg header to Solana (overwrite existing block at height with heavier fork block)
- */
-export async function submitReorgHeader(
-  connection: Connection,
-  programId: PublicKey,
-  submitter: Keypair,
-  rawHeader: Uint8Array,
-  height: bigint
-): Promise<string> {
-  const [lightClientPda] = deriveLightClientPda(programId);
-  const [blockHeaderPda] = deriveBlockHeaderPda(programId, height);
-  const [parentHeaderPda] = deriveBlockHeaderPda(programId, height - 1n);
-
-  const instruction = buildReorgHeaderInstruction(
-    programId,
-    lightClientPda,
-    blockHeaderPda,
-    parentHeaderPda,
-    submitter.publicKey,
-    rawHeader,
-    height
-  );
-
-  const transaction = new Transaction().add(instruction);
-
-  const signature = await sendAndConfirmTransaction(connection, transaction, [
-    submitter,
-  ]);
-
-  return signature;
-}
-
-/**
- * BlockHeader account layout offsets (Pinocchio zero-copy)
- *
- *   0: discriminator (u8 = 0x07)
- *   1-3: _padding (3 bytes)
- *   4-7: version (4 bytes)
- *   8-39: prev_block_hash (32 bytes)
- *  40-71: merkle_root (32 bytes)
- *  72-75: timestamp (4 bytes)
- *  76-79: bits (4 bytes)
- *  80-83: nonce (4 bytes)
- *  84-115: block_hash (32 bytes)
- * 116-147: chainwork (32 bytes)
- * 148-155: height (8 bytes)
- * 156-163: submitted_at (8 bytes)
- * 164-195: _reserved (32 bytes)
- */
-const BLOCK_HEADER_HASH_OFFSET = 84;
-const BLOCK_HEADER_DISCRIMINATOR = 0x07;
-
-/**
- * Get the block hash stored on-chain for a given height
- */
-export async function getOnChainBlockHash(
-  connection: Connection,
-  programId: PublicKey,
-  height: bigint
-): Promise<Uint8Array | null> {
-  const [blockHeaderPda] = deriveBlockHeaderPda(programId, height);
-  const accountInfo = await connection.getAccountInfo(blockHeaderPda);
-  if (!accountInfo) return null;
-  if (accountInfo.data[0] !== BLOCK_HEADER_DISCRIMINATOR) return null;
-  return new Uint8Array(accountInfo.data.subarray(BLOCK_HEADER_HASH_OFFSET, BLOCK_HEADER_HASH_OFFSET + 32));
-}
-
-// Instruction discriminator for verify_transaction
-const VERIFY_TRANSACTION_DISC: number = 3;
-
-// PDA seed for VerifiedTransaction
-const VERIFIED_TX_SEED = Buffer.from('verified_tx');
-
-/**
- * Derive VerifiedTransaction PDA
- *
- * Seeds: ["verified_tx", blockHash(32), txid(32)]
- */
-export function deriveVerifiedTransactionPda(
-  programId: PublicKey,
-  blockHash: Uint8Array,
-  txid: Uint8Array
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [VERIFIED_TX_SEED, Buffer.from(blockHash), Buffer.from(txid)],
-    programId
-  );
-}
-
-/**
- * Build verify_transaction instruction (disc 3)
- *
- * Creates a VerifiedTransaction PDA proving tx inclusion in a confirmed block.
+ * Build extend_blockchain instruction
  *
  * Instruction data:
- *   [0-31]   txid (32 bytes)
- *   [32-39]  block_height (u64 LE)
- *   [40-43]  tx_size (u32 LE)
- *   [44+]    merkle_proof: [txid(32)][path_bits(4)][path_len(1)][tx_index(4)][siblings...]
+ *   [0]            disc (1)
+ *   [1]            num_headers (u8)
+ *   [2..2+N*80]    raw_headers (N × 80 bytes)
  *
  * Accounts:
- *   0. [writable, PDA] VerifiedTransaction
- *   1. []              BitcoinLightClient
- *   2. []              BlockHeader
- *   3. []              ChadBuffer (raw tx)
- *   4. [signer, writable] Payer
- *   5. []              System program
+ *   0. [writable]           BitcoinLightClient PDA
+ *   1. [signer, writable]   Submitter
+ *   2. []                   System program
+ *   3. []                   Parent BlockHeader PDA
+ *   4..4+N-1   [writable]   BlockHeader PDAs
+ *   4+N..4+2N-1 [writable]  HeightIndex PDAs
+ */
+export function buildExtendBlockchainInstruction(
+  programId: PublicKey,
+  lightClientPda: PublicKey,
+  submitter: PublicKey,
+  parentBlockHash: Uint8Array,
+  rawHeaders: Uint8Array[],
+  parentHeight: bigint,
+): TransactionInstruction {
+  const n = rawHeaders.length;
+  if (n < 2 || n > 10) {
+    throw new Error(`Batch size must be 2-10, got ${n}`);
+  }
+
+  // Build instruction data: disc(1) + num_headers(1) + N*80 bytes
+  const data = Buffer.alloc(1 + 1 + n * 80);
+  data.writeUInt8(EXTEND_BLOCKCHAIN_DISC, 0);
+  data.writeUInt8(n, 1);
+  for (let i = 0; i < n; i++) {
+    Buffer.from(rawHeaders[i]).copy(data, 2 + i * 80);
+  }
+
+  // Derive parent BlockHeader PDA
+  const [parentPda] = deriveBlockHeaderPda(programId, parentBlockHash);
+
+  // Derive BlockHeader + HeightIndex PDAs for each new header
+  const blockHeaderKeys: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[] = [];
+  const heightIndexKeys: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[] = [];
+
+  for (let i = 0; i < n; i++) {
+    const hash = computeBlockHash(rawHeaders[i]);
+    const height = parentHeight + BigInt(i + 1);
+
+    const [bhPda] = deriveBlockHeaderPda(programId, hash);
+    blockHeaderKeys.push({ pubkey: bhPda, isSigner: false, isWritable: true });
+
+    const [hiPda] = deriveHeightIndexPda(programId, height);
+    heightIndexKeys.push({ pubkey: hiPda, isSigner: false, isWritable: true });
+  }
+
+  return new TransactionInstruction({
+    keys: [
+      { pubkey: lightClientPda, isSigner: false, isWritable: true },
+      { pubkey: submitter, isSigner: true, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: parentPda, isSigner: false, isWritable: false },
+      ...blockHeaderKeys,
+      ...heightIndexKeys,
+    ],
+    programId,
+    data,
+  });
+}
+
+/**
+ * Submit a batch of headers via extend_blockchain
+ */
+export async function extendBlockchain(
+  connection: Connection,
+  programId: PublicKey,
+  submitter: Keypair,
+  parentBlockHash: Uint8Array,
+  rawHeaders: Uint8Array[],
+  parentHeight: bigint,
+): Promise<string> {
+  const [lightClientPda] = deriveLightClientPda(programId);
+
+  const instruction = buildExtendBlockchainInstruction(
+    programId,
+    lightClientPda,
+    submitter.publicKey,
+    parentBlockHash,
+    rawHeaders,
+    parentHeight,
+  );
+
+  const transaction = new Transaction().add(instruction);
+  return await sendAndConfirmTransaction(connection, transaction, [submitter]);
+}
+
+/**
+ * Build verify_transaction instruction (disc=2)
+ *
+ * Instruction data:
+ *   [0]      disc
+ *   [1-32]   txid (32)
+ *   [33-64]  block_hash (32)
+ *   [65-68]  tx_size (u32 LE)
+ *   [69+]    merkle_proof
  */
 export function buildVerifyTransactionInstruction(
   programId: PublicKey,
@@ -517,7 +353,7 @@ export function buildVerifyTransactionInstruction(
   txBufferAccount: PublicKey,
   payer: PublicKey,
   txid: Uint8Array,
-  blockHeight: bigint,
+  blockHash: Uint8Array,
   txSize: number,
   merkleProofTxid: Uint8Array,
   pathBits: number,
@@ -525,9 +361,8 @@ export function buildVerifyTransactionInstruction(
   txIndex: number,
   siblings: Uint8Array[],
 ): TransactionInstruction {
-  // Build instruction data
   const proofDataLen = 32 + 4 + 1 + 4 + (siblings.length * 32);
-  const data = Buffer.alloc(1 + 32 + 8 + 4 + proofDataLen);
+  const data = Buffer.alloc(1 + 32 + 32 + 4 + proofDataLen);
   let offset = 0;
 
   // Discriminator
@@ -538,9 +373,9 @@ export function buildVerifyTransactionInstruction(
   Buffer.from(txid).copy(data, offset);
   offset += 32;
 
-  // block_height (u64 LE)
-  data.writeBigUInt64LE(blockHeight, offset);
-  offset += 8;
+  // block_hash (32)
+  Buffer.from(blockHash).copy(data, offset);
+  offset += 32;
 
   // tx_size (u32 LE)
   data.writeUInt32LE(txSize, offset);
@@ -580,6 +415,24 @@ export function buildVerifyTransactionInstruction(
     programId,
     data,
   });
+}
+
+// PDA seed for VerifiedTransaction
+const VERIFIED_TX_SEED = Buffer.from('verified_tx');
+
+/**
+ * Derive VerifiedTransaction PDA
+ * Seeds: ["verified_tx", blockHash(32), txid(32)]
+ */
+export function deriveVerifiedTransactionPda(
+  programId: PublicKey,
+  blockHash: Uint8Array,
+  txid: Uint8Array
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [VERIFIED_TX_SEED, Buffer.from(blockHash), Buffer.from(txid)],
+    programId
+  );
 }
 
 /**

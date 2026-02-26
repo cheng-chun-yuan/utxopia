@@ -1,7 +1,7 @@
 //! SPV Verifier
 //!
 //! Submits sweep transactions for SPV verification on Solana.
-//! Uses btc-relay's verify_transaction to create a VerifiedTransaction PDA,
+//! Uses btc-light-client's verify_transaction to create a VerifiedTransaction PDA,
 //! then calls zvault's verify_stealth_deposit with that PDA.
 
 use bitcoin::consensus::encode::deserialize as btc_deserialize;
@@ -32,7 +32,6 @@ fn zvault_program_id() -> String {
 /// Get BTC light client program ID from env or use devnet default
 fn btc_light_client_program_id() -> String {
     std::env::var("BTC_LIGHT_CLIENT_PROGRAM_ID")
-        .or_else(|_| std::env::var("BTC_RELAY_PROGRAM_ID"))
         .unwrap_or_else(|_| "DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS".to_string())
 }
 
@@ -139,7 +138,7 @@ impl SpvVerifier {
     /// Verify a Bitcoin deposit via VerifiedTransaction PDA
     ///
     /// Two-step process:
-    /// 1. Call btc-relay's verify_transaction (disc 3) to create VerifiedTransaction PDA
+    /// 1. Call btc-light-client's verify_transaction (disc 3) to create VerifiedTransaction PDA
     /// 2. Call zvault's verify_stealth_deposit with VerifiedTransaction PDA
     ///
     /// # Arguments
@@ -277,21 +276,19 @@ impl SpvVerifier {
 
     /// Check if block header is available in the BTC light client
     ///
-    /// This verifies that the header-relayer has synced the required block
-    /// before attempting SPV verification.
+    /// Uses HeightIndex PDA to check if any canonical block exists at this height.
     pub async fn block_header_available(&self, height: u64) -> Result<bool, VerifierError> {
-        // Derive the block header PDA
-        let (block_header_pda, _) = Pubkey::find_program_address(
-            &[b"block_header", &height.to_le_bytes()],
+        // Derive the HeightIndex PDA
+        let (height_index_pda, _) = Pubkey::find_program_address(
+            &[b"height_index", &height.to_le_bytes()],
             &self.light_client_program_id,
         );
 
-        // Check if the account exists and has data
-        match self.rpc.get_account(&block_header_pda) {
+        // Check if the HeightIndex account exists
+        match self.rpc.get_account(&height_index_pda) {
             Ok(account) => {
-                // Account exists - check if it has sufficient data for a block header
-                // Block header account should have at least 80 bytes for the raw header
-                Ok(account.data.len() >= 80)
+                // HeightIndex is 48 bytes, discriminator 0x09
+                Ok(account.data.len() >= 48 && account.data[0] == 0x09)
             }
             Err(_) => Ok(false),
         }
@@ -367,7 +364,7 @@ impl SpvVerifier {
 
     /// Send the verify_deposit transaction to Solana (two instructions)
     ///
-    /// 1. btc-relay verify_transaction (disc 3) — creates VerifiedTransaction PDA
+    /// 1. btc-light-client verify_transaction (disc 3) — creates VerifiedTransaction PDA
     /// 2. zvault verify_stealth_deposit (disc 1) — uses VerifiedTransaction PDA
     async fn send_verify_deposit_tx(
         &self,
@@ -390,7 +387,7 @@ impl SpvVerifier {
         );
 
         let (block_header_pda, _) = Pubkey::find_program_address(
-            &[b"block_header", &block_height.to_le_bytes()],
+            &[b"block", block_hash],
             &self.light_client_program_id,
         );
 
@@ -405,7 +402,7 @@ impl SpvVerifier {
         let (commitment_tree, _) =
             Pubkey::find_program_address(&[b"commitment_tree"], &self.program_id);
 
-        // --- Instruction 1: btc-relay verify_transaction (disc 3) ---
+        // --- Instruction 1: btc-light-client verify_transaction (disc 3) ---
         let verify_tx_ix = self.build_verify_transaction_ix(
             payer,
             txid,
@@ -438,8 +435,8 @@ impl SpvVerifier {
 
         // 11 accounts for verify_stealth_deposit:
         //   0. pool_state (writable)
-        //   1. verified_tx (readonly, owned by btc-relay)
-        //   2. light_client (readonly, owned by btc-relay)
+        //   1. verified_tx (readonly, owned by btc-light-client)
+        //   2. light_client (readonly, owned by btc-light-client)
         //   3. commitment_tree (writable)
         //   4. deposit_record (writable)
         //   5. tx_buffer (readonly) — ChadBuffer
@@ -496,7 +493,7 @@ impl SpvVerifier {
         Ok(sig.to_string())
     }
 
-    /// Build btc-relay verify_transaction instruction (disc 3)
+    /// Build btc-light-client verify_transaction instruction (disc 2)
     fn build_verify_transaction_ix(
         &self,
         payer: &Keypair,
@@ -509,12 +506,12 @@ impl SpvVerifier {
         verified_tx_pda: &Pubkey,
     ) -> Result<Instruction, VerifierError> {
         let mut data = Vec::new();
-        data.push(3u8); // discriminator
+        data.push(2u8); // discriminator (verify_transaction = 2 in new dispatch)
 
         // txid (32)
         data.extend_from_slice(txid);
-        // block_height (8)
-        data.extend_from_slice(&block_height.to_le_bytes());
+        // block_hash (32) — was block_height(8) in old version
+        data.extend_from_slice(block_hash);
         // tx_size (4) — placeholder, validated on-chain from ChadBuffer
         data.extend_from_slice(&0u32.to_le_bytes());
 

@@ -49,12 +49,20 @@ function deriveLightClientPDA(): [PublicKey, number] {
   );
 }
 
-// Derive block header PDA
-function deriveBlockHeaderPDA(blockHeight: number): [PublicKey, number] {
+// Derive block header PDA (hash-based)
+function deriveBlockHeaderPDA(blockHash: Uint8Array): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("block"), Buffer.from(blockHash)],
+    PROGRAM_ID
+  );
+}
+
+// Derive height index PDA
+function deriveHeightIndexPDA(blockHeight: number): [PublicKey, number] {
   const heightBuffer = Buffer.alloc(8);
   heightBuffer.writeBigUInt64LE(BigInt(blockHeight));
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("block_header"), heightBuffer],
+    [Buffer.from("height_index"), heightBuffer],
     PROGRAM_ID
   );
 }

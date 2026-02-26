@@ -5,7 +5,7 @@
  * Pre-flight checks before running the test suite:
  * 1. Solana devnet reachable
  * 2. zVault program deployed
- * 3. BTC Relay program deployed
+ * 3. BTC Light Client program deployed
  * 4. Pool state PDA initialized
  * 5. Commitment tree PDA initialized
  * 6. VK registry populated (at least 1x2)
@@ -33,7 +33,7 @@ const FROST_SIGNER_URLS = [
   process.env.FROST_SIGNER_3_URL || "http://localhost:8083",
 ];
 const ZVAULT_PROGRAM_ID = process.env.ZVAULT_PROGRAM_ID || "2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV";
-const BTC_RELAY_PROGRAM_ID = process.env.BTC_RELAY_PROGRAM_ID || "DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS";
+const BTC_LIGHT_CLIENT_PROGRAM_ID = process.env.BTC_LIGHT_CLIENT_PROGRAM_ID || "DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS";
 const SIGNING_MODE = process.env.ZVAULT_SIGNING_MODE || "frost";
 const CIRCUITS_DIR = path.resolve(__dirname, "../circuits/build");
 
@@ -242,7 +242,7 @@ async function main() {
 
   await checkSolana();
   await checkProgramDeployed("zVault Program", ZVAULT_PROGRAM_ID);
-  await checkProgramDeployed("BTC Relay Program", BTC_RELAY_PROGRAM_ID);
+  await checkProgramDeployed("BTC Light Client Program", BTC_LIGHT_CLIENT_PROGRAM_ID);
 
   // Check PDAs (would need to derive — use known devnet addresses)
   // These are from sdk/src/config.ts DEVNET_CONFIG

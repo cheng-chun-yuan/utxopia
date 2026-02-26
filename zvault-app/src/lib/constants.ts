@@ -23,7 +23,7 @@ export const MIN_WITHDRAWAL_SATS = 1_000;
 export const BTC_ADDRESS_REGEX = /^(bc1|[13]|tb1)[a-zA-HJ-NP-Z0-9]{25,62}$/;
 
 // zVault Solana Program Configuration - ALL from SDK config (single source of truth)
-export const BTC_RELAY_ID = DEVNET_CONFIG.btcRelayProgramId;
+export const BTC_LIGHT_CLIENT_ID = DEVNET_CONFIG.btcLightClientProgramId;
 export const POOL_STATE_ADDRESS = DEVNET_CONFIG.poolStatePda;
 export const COMMITMENT_TREE_ADDRESS = DEVNET_CONFIG.commitmentTreePda;
 export const ZBTC_MINT_ADDRESS = DEVNET_CONFIG.zbtcMint;

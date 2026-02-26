@@ -318,7 +318,7 @@ export {
 
 export {
   ZVAULT_PROGRAM_ID,
-  BTC_RELAY_PROGRAM_ID,
+  BTC_LIGHT_CLIENT_PROGRAM_ID,
   PDA_SEEDS,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
@@ -327,6 +327,7 @@ export {
   deriveDepositRecordPDA,
   deriveLightClientPDA,
   deriveBlockHeaderPDA,
+  deriveHeightIndexPDA,
   deriveNameRegistryPDA,
   deriveVkRegistryPDA,
   commitmentToBytes,

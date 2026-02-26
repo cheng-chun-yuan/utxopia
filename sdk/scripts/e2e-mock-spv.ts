@@ -7,7 +7,7 @@
  *
  * Prerequisites:
  *   solana-test-validator --clone-feature-set --url devnet --reset
- *   Deploy: zvault, btc-relay, chadbuffer
+ *   Deploy: zvault, btc-light-client, chadbuffer
  *
  * Usage:
  *   bun run scripts/e2e-mock-spv.ts
@@ -28,7 +28,7 @@ import { bytesToHex, doubleSha256 } from "../src/crypto";
 // =============================================================================
 
 const ZVAULT = new PublicKey(process.env.ZVAULT_PROGRAM_ID || "zKeyrLmpT8W9o8iRvhizuSihLAFLhfAGBvfM638Pbw8");
-const BTC_RELAY = new PublicKey(process.env.BTC_RELAY_PROGRAM_ID || "DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS");
+const BTC_LIGHT_CLIENT = new PublicKey(process.env.BTC_LIGHT_CLIENT_PROGRAM_ID || "DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS");
 const CHADBUFFER = new PublicKey(process.env.CHADBUFFER_PROGRAM_ID || "EgWyMVFZewHmjJ9GGvVBTyaC376Xp7qu7CAFjWYPYYDv");
 const TOKEN_2022 = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
@@ -301,12 +301,12 @@ async function main() {
 
   // 4. Init BTC relay light client
   const genesisHash = doubleSha256(new Uint8Array([0x00, 0x01, 0x02, 0x03]));
-  const [lcPDA] = pda(["btc_light_client"], BTC_RELAY);
+  const [lcPDA] = pda(["btc_light_client"], BTC_LIGHT_CLIENT);
   if (!(await conn.getAccountInfo(lcPDA))) {
     const d = Buffer.alloc(42);
     d[0] = 0; d.writeBigUInt64LE(99n, 1); d.set(genesisHash, 9); d[41] = 1;
     await send(conn, auth, new TransactionInstruction({
-      programId: BTC_RELAY, data: d,
+      programId: BTC_LIGHT_CLIENT, data: d,
       keys: [
         { pubkey: lcPDA, isSigner: false, isWritable: true },
         { pubkey: auth.publicKey, isSigner: true, isWritable: true },
@@ -318,12 +318,12 @@ async function main() {
 
   // 5. Submit block headers (100 = tx block, 101 = confirmation)
   async function submitHeader(raw: Uint8Array, height: bigint) {
-    const [hPDA] = pda(["block_header", heightBuf(height)], BTC_RELAY);
+    const [hPDA] = pda(["block_header", heightBuf(height)], BTC_LIGHT_CLIENT);
     if (await conn.getAccountInfo(hPDA)) return hPDA;
     const d = Buffer.alloc(89);
     d[0] = 1; d.set(raw, 1); d.writeBigUInt64LE(height, 81);
     await send(conn, auth, new TransactionInstruction({
-      programId: BTC_RELAY, data: d,
+      programId: BTC_LIGHT_CLIENT, data: d,
       keys: [
         { pubkey: lcPDA, isSigner: false, isWritable: true },
         { pubkey: hPDA, isSigner: false, isWritable: true },

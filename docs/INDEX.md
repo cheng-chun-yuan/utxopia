@@ -50,7 +50,7 @@ Privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs.
 | Component | Directory | Documentation |
 |-----------|-----------|---------------|
 | Solana Programs (Pinocchio) | `contracts/` | [Technical Overview](./TECHNICAL.md) |
-| BTC Light Client | `contracts/programs/btc-relay/` | [Technical Overview](./TECHNICAL.md) |
+| BTC Light Client | `contracts/programs/btc-light-client/` | [Technical Overview](./TECHNICAL.md) |
 | ZK Circuits (circom) | `circuits/` | [Circuits](./CIRCUITS.md) |
 | TypeScript SDK | `sdk/` | [SDK Reference](../sdk/docs/SDK.md) |
 | FROST Signing Server | `frost_server/` | [FROST Server](./FROST.md) |

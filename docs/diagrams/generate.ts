@@ -355,9 +355,9 @@ function generateSystemOverview() {
     })
   );
 
-  // btc-relay Program (separate on-chain program)
+  // btc-light-client Program (separate on-chain program)
   els.push(
-    ...labeledRect(60, 340, 280, 80, "btc-relay Program\n(SPV Verification)\nS6rgPjCeBhk...", {
+    ...labeledRect(60, 340, 280, 80, "btc-light-client Program\n(SPV Verification)\nS6rgPjCeBhk...", {
       backgroundColor: "#ce93d8",
       fontSize: 14,
     })
@@ -673,7 +673,7 @@ function generateDepositWithdrawFlow() {
     })
   );
   els.push(
-    text(45, 405, "Phase 3: SPV Verification via btc-relay Program (verify_stealth_deposit instruction)", {
+    text(45, 405, "Phase 3: SPV Verification via btc-light-client Program (verify_stealth_deposit instruction)", {
       fontSize: 14,
       strokeColor: "#1b5e20",
       textAlign: "left",
@@ -706,7 +706,7 @@ function generateDepositWithdrawFlow() {
   );
   els.push(arrow(610, spvY + 27, [[0, 0], [20, 0]], { strokeColor: "#00695c" }));
   els.push(
-    ...labeledRect(630, spvY, 170, 55, "Check 2+\nConfirmations\n(btc-relay program)", {
+    ...labeledRect(630, spvY, 170, 55, "Check 2+\nConfirmations\n(btc-light-client program)", {
       backgroundColor: "#b2dfdb",
       strokeColor: "#00695c",
       fontSize: 11,
@@ -747,7 +747,7 @@ function generateDepositWithdrawFlow() {
 
   // SPV accounts annotation
   els.push(
-    text(50, spvY + 65, "Accounts: pool_state | light_client | block_header | commitment_tree | deposit_record | chadbuffer | authority | system | zbtc_mint | pool_vault | token-2022 | btc_relay_program", {
+    text(50, spvY + 65, "Accounts: pool_state | light_client | block_header | commitment_tree | deposit_record | chadbuffer | authority | system | zbtc_mint | pool_vault | token-2022 | btc_light_client_program", {
       fontSize: 10,
       strokeColor: "#666",
       textAlign: "left",
@@ -932,7 +932,7 @@ function generateDepositWithdrawFlow() {
     { label: "NPK", desc: "Poseidon(MPK, random)", color: "#6a1b9a" },
     { label: "MPK", desc: "Poseidon(spendPub.x, .y, nullKey)", color: "#6a1b9a" },
     { label: "Deposit Record", desc: "200 bytes PDA (seeded by txid)", color: "#1565c0" },
-    { label: "Block Header", desc: "PDA at btc-relay (80-byte header)", color: "#e65100" },
+    { label: "Block Header", desc: "PDA at btc-light-client (80-byte header)", color: "#e65100" },
     { label: "ChadBuffer", desc: "authority(32) + raw_tx_data", color: "#555" },
     { label: "Merkle Proof", desc: "txid + path_bits + siblings", color: "#555" },
     { label: "Stealth Data", desc: "Embedded in DepositRecord (not separate PDA)", color: "#6a1b9a" },

@@ -116,7 +116,7 @@ await sendPrivate(config, myNote, entry.stealthMetaAddress);
 zVault/
 ├── contracts/                  # Solana programs (Pinocchio)
 │   ├── programs/zvault/        # Main zVault program (14 instructions)
-│   └── programs/btc-relay/     # Bitcoin header tracking (standalone)
+│   └── programs/btc-light-client/ # Bitcoin header tracking (standalone)
 ├── circuits/                   # Zero-knowledge circuits (circom)
 │   ├── circom/joinsplit.circom # Parameterized JoinSplit(N,M,16) template
 │   └── circom/lib/             # Shared (commitment, nullifier, merkle, mpk)

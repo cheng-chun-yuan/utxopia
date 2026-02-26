@@ -15,7 +15,7 @@ use crate::state::BitcoinLightClient;
 /// Instruction data (after discriminator):
 ///   [0-7]   start_height       (u64 LE)
 ///   [8-39]  start_block_hash   ([u8; 32])
-///   [40]    network            (u8: 0=mainnet, 1=testnet, 2=regtest)
+///   [40]    network            (u8: 0=mainnet, 1=testnet3, 2=testnet4, 3=regtest)
 ///   [41-44] initial_bits       (u32 LE, optional — 0 to skip)
 ///   [45-48] epoch_start_time   (u32 LE, optional — 0 to skip)
 ///

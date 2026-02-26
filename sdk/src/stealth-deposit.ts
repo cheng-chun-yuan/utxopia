@@ -211,10 +211,10 @@ export async function deriveStealthAnnouncementPDA(
 /**
  * Verify a stealth deposit on Solana
  *
- * IMPORTANT: Before calling this, the caller must first call btc-relay's
+ * IMPORTANT: Before calling this, the caller must first call btc-light-client's
  * verify_transaction (disc 3) to create the VerifiedTransaction PDA.
  *
- * @param verifiedTransactionPda - Address of the btc-relay VerifiedTransaction PDA
+ * @param verifiedTransactionPda - Address of the btc-light-client VerifiedTransaction PDA
  * @param blockHash - Block hash (32 bytes) used to derive the VerifiedTransaction PDA
  */
 export async function verifyStealthDeposit(
@@ -251,9 +251,9 @@ export async function verifyStealthDeposit(
   }
   txidBytes.reverse(); // internal byte order
 
-  const { BTC_RELAY_PROGRAM_ID } = await import("./pda");
+  const { BTC_LIGHT_CLIENT_PROGRAM_ID } = await import("./pda");
   const [poolState] = await derivePoolStatePDA(programId);
-  const [lightClient] = await deriveLightClientPDA(BTC_RELAY_PROGRAM_ID);
+  const [lightClient] = await deriveLightClientPDA(BTC_LIGHT_CLIENT_PROGRAM_ID);
   const [commitmentTree] = await deriveCommitmentTreePDA(programId);
   const [depositRecord] = await deriveDepositRecordPDA(txidBytes, programId);
 

@@ -18,13 +18,13 @@ import {
 // Import program IDs from config for local use
 import {
   ZVAULT_PROGRAM_ID as _ZVAULT_PROGRAM_ID,
-  BTC_RELAY_PROGRAM_ID as _BTC_RELAY_PROGRAM_ID,
+  BTC_LIGHT_CLIENT_PROGRAM_ID as _BTC_LIGHT_CLIENT_PROGRAM_ID,
 } from "./config";
 
 // Re-export everything from config for backwards compatibility
 export {
   ZVAULT_PROGRAM_ID,
-  BTC_RELAY_PROGRAM_ID,
+  BTC_LIGHT_CLIENT_PROGRAM_ID,
   getConfig,
   setConfig,
   DEVNET_CONFIG,
@@ -36,7 +36,7 @@ export {
 
 // Local aliases for use in this file
 const ZVAULT_PROGRAM_ID = _ZVAULT_PROGRAM_ID;
-const BTC_RELAY_PROGRAM_ID = _BTC_RELAY_PROGRAM_ID;
+const BTC_LIGHT_CLIENT_PROGRAM_ID = _BTC_LIGHT_CLIENT_PROGRAM_ID;
 
 // =============================================================================
 // PDA Seeds
@@ -46,7 +46,8 @@ export const PDA_SEEDS = {
   POOL_STATE: "pool_state",
   COMMITMENT_TREE: "commitment_tree",
   LIGHT_CLIENT: "btc_light_client",
-  BLOCK_HEADER: "block_header",
+  BLOCK_HEADER: "block",
+  HEIGHT_INDEX: "height_index",
   VERIFIED_TX: "verified_tx",
   DEPOSIT: "deposit",
   NULLIFIER: "nullifier",
@@ -135,7 +136,7 @@ export async function deriveDepositRecordPDA(
  * Derive BTC Light Client PDA
  */
 export async function deriveLightClientPDA(
-  programId: Address = BTC_RELAY_PROGRAM_ID
+  programId: Address = BTC_LIGHT_CLIENT_PROGRAM_ID
 ): Promise<[Address, number]> {
   const result = await getProgramDerivedAddress({
     programAddress: programId,
@@ -145,31 +146,50 @@ export async function deriveLightClientPDA(
 }
 
 /**
- * Derive Block Header PDA
+ * Derive Block Header PDA (hash-based)
+ * Seeds: ["block", blockHash(32)]
  */
 export async function deriveBlockHeaderPDA(
-  height: number,
-  programId: Address = BTC_RELAY_PROGRAM_ID
+  blockHash: Uint8Array,
+  programId: Address = BTC_LIGHT_CLIENT_PROGRAM_ID
+): Promise<[Address, number]> {
+  if (blockHash.length !== 32) {
+    throw new Error(`blockHash must be 32 bytes, got ${blockHash.length}`);
+  }
+  const result = await getProgramDerivedAddress({
+    programAddress: programId,
+    seeds: [new TextEncoder().encode(PDA_SEEDS.BLOCK_HEADER), blockHash],
+  });
+  return [result[0], result[1]];
+}
+
+/**
+ * Derive HeightIndex PDA
+ * Seeds: ["height_index", height_le_bytes(8)]
+ */
+export async function deriveHeightIndexPDA(
+  height: number | bigint,
+  programId: Address = BTC_LIGHT_CLIENT_PROGRAM_ID
 ): Promise<[Address, number]> {
   const heightBuffer = new Uint8Array(8);
   const view = new DataView(heightBuffer.buffer);
   view.setBigUint64(0, BigInt(height), true);
   const result = await getProgramDerivedAddress({
     programAddress: programId,
-    seeds: [new TextEncoder().encode(PDA_SEEDS.BLOCK_HEADER), heightBuffer],
+    seeds: [new TextEncoder().encode(PDA_SEEDS.HEIGHT_INDEX), heightBuffer],
   });
   return [result[0], result[1]];
 }
 
 /**
- * Derive VerifiedTransaction PDA (btc-relay)
+ * Derive VerifiedTransaction PDA (btc-light-client)
  *
  * Seeds: ["verified_tx", blockHash(32), txid(32)]
  */
 export async function deriveVerifiedTransactionPDA(
   blockHash: Uint8Array,
   txid: Uint8Array,
-  programId: Address = BTC_RELAY_PROGRAM_ID
+  programId: Address = BTC_LIGHT_CLIENT_PROGRAM_ID
 ): Promise<[Address, number]> {
   const result = await getProgramDerivedAddress({
     programAddress: programId,

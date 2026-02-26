@@ -1,17 +1,17 @@
-//! Read-only reader for btc-relay's VerifiedTransaction and BitcoinLightClient accounts
+//! Read-only reader for btc-light-client's VerifiedTransaction and BitcoinLightClient accounts
 //!
-//! Lightweight module to read btc-relay accounts from zvault.
+//! Lightweight module to read btc-light-client accounts from zvault.
 //! No Borsh, just zero-copy byte reading.
 
 use pinocchio::program_error::ProgramError;
 
-/// Discriminator for VerifiedTransaction account (must match btc-relay)
+/// Discriminator for VerifiedTransaction account (must match btc-light-client)
 pub const VERIFIED_TX_DISCRIMINATOR: u8 = 0x08;
 
-/// PDA seed for VerifiedTransaction (must match btc-relay)
+/// PDA seed for VerifiedTransaction (must match btc-light-client)
 pub const VERIFIED_TX_SEED: &[u8] = b"verified_tx";
 
-/// Discriminator for BitcoinLightClient account (must match btc-relay)
+/// Discriminator for BitcoinLightClient account (must match btc-light-client)
 pub const BTC_LIGHT_CLIENT_DISCRIMINATOR: u8 = 0x06;
 
 /// Minimum size of VerifiedTransaction account
@@ -20,7 +20,7 @@ const VERIFIED_TX_MIN_LEN: usize = 120;
 /// Minimum size of BitcoinLightClient account for reading tip_height
 const LIGHT_CLIENT_MIN_LEN: usize = 144;
 
-/// Read-only view of btc-relay VerifiedTransaction PDA (120 bytes)
+/// Read-only view of btc-light-client VerifiedTransaction PDA (120 bytes)
 ///
 /// Layout:
 /// - disc(1) + bump(1) + _pad(2) + block_height(4) + block_hash(32) + txid(32) + verified_at(8) + tx_index(4) + _reserved(36)
@@ -66,7 +66,7 @@ impl<'a> VerifiedTransactionView<'a> {
     }
 }
 
-/// Read tip height from btc-relay BitcoinLightClient account
+/// Read tip height from btc-light-client BitcoinLightClient account
 ///
 /// Layout offset 136..144 is tip_height (u64 LE)
 pub fn light_client_tip_height(data: &[u8]) -> Result<u64, ProgramError> {

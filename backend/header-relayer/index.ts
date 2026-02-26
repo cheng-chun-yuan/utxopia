@@ -1,26 +1,26 @@
 /**
  * Bitcoin Block Header Relayer Service
  *
- * Continuously syncs Bitcoin block headers to Solana light client.
+ * Permissionless batch header submission via extend_blockchain.
+ * No reorg detection needed — competing forks create separate hash-based PDAs
+ * and the on-chain program picks the heaviest chain automatically.
  *
  * Configuration via DEPLOY_ENV-prefixed env vars (see config.ts).
- * Example: DEPLOY_ENV=devnet bun run start
  */
 
 import { Connection, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import {
   getTipHeight,
-  getBlockHashByHeight,
   getBlockHeaderByHeight,
   getBlockInfoByHeight,
+  getBlockHashByHeight,
 } from './mempool';
 import {
   getLightClientState,
   getLightClientTipHeight,
-  blockHeaderExists,
-  submitHeader,
-  getOnChainBlockHash,
-  resetTip,
+  getBlockHashAtHeight,
+  extendBlockchain,
+  computeBlockHash,
   bytesToHex,
   hexToBytes,
 } from './solana';
@@ -33,6 +33,7 @@ import {
   START_BLOCK_HEIGHT,
   getRelayerKeypair,
   logConfig,
+  BATCH_SIZE,
 } from './config';
 
 // Log with timestamp
@@ -47,89 +48,9 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Detect and handle reorgs by comparing on-chain tip hash with Bitcoin's hash at same height.
- * Returns true if a reorg was detected and handled (caller should re-sync).
+ * Sync headers in batches using extend_blockchain.
+ * Returns true if synced blocks, false if already at tip.
  */
-async function detectAndHandleReorg(
-  connection: Connection,
-  relayer: ReturnType<typeof getRelayerKeypair>,
-  startBlockHeight: bigint
-): Promise<boolean> {
-  const state = await getLightClientState(connection, PROGRAM_ID);
-  if (!state) return false;
-
-  const onChainTipHeight = state.tipHeight;
-  const onChainTipHash = state.tipHash;
-
-  // Get Bitcoin's block hash at the on-chain tip height
-  let btcHashHex: string;
-  try {
-    btcHashHex = await getBlockHashByHeight(BITCOIN_NETWORK, Number(onChainTipHeight));
-  } catch {
-    log(`Could not fetch Bitcoin hash at height ${onChainTipHeight}, skipping reorg check`);
-    return false;
-  }
-
-  // Convert Bitcoin hash (BE hex) to LE bytes for comparison
-  const btcHashLeBytes = hexToBytes(btcHashHex);
-  // Bitcoin block hashes from API are in display order (BE), reverse to LE for on-chain comparison
-  btcHashLeBytes.reverse();
-
-  // Compare
-  const match = onChainTipHash.every((b, i) => b === btcHashLeBytes[i]);
-  if (match) return false;
-
-  log(`REORG DETECTED at height ${onChainTipHeight}!`);
-  log(`  On-chain: ${bytesToHex(new Uint8Array(onChainTipHash))}`);
-  log(`  Bitcoin:  ${btcHashHex}`);
-
-  // Walk backward to find common ancestor
-  let ancestorHeight = onChainTipHeight;
-  const minHeight = startBlockHeight;
-
-  while (ancestorHeight > minHeight) {
-    ancestorHeight -= 1n;
-
-    const onChainHash = await getOnChainBlockHash(connection, PROGRAM_ID, ancestorHeight);
-    if (!onChainHash) {
-      log(`No on-chain block at height ${ancestorHeight}, stopping search`);
-      break;
-    }
-
-    let btcAncestorHex: string;
-    try {
-      btcAncestorHex = await getBlockHashByHeight(BITCOIN_NETWORK, Number(ancestorHeight));
-    } catch {
-      log(`Could not fetch Bitcoin hash at height ${ancestorHeight}`);
-      break;
-    }
-
-    const btcAncestorLe = hexToBytes(btcAncestorHex);
-    btcAncestorLe.reverse();
-
-    const ancestorMatch = onChainHash.every((b, i) => b === btcAncestorLe[i]);
-    if (ancestorMatch) {
-      log(`Common ancestor found at height ${ancestorHeight}: ${btcAncestorHex}`);
-
-      // Reset tip to common ancestor
-      log(`Resetting tip to height ${ancestorHeight}...`);
-      const sig = await resetTip(
-        connection,
-        PROGRAM_ID,
-        relayer,
-        ancestorHeight,
-        onChainHash,
-      );
-      log(`Reset tip complete: tx=${sig}`);
-      return true;
-    }
-  }
-
-  log(`ERROR: Could not find common ancestor above height ${minHeight}`);
-  return false;
-}
-
-// Main sync loop - returns true if synced blocks, false if already at tip
 async function syncHeaders(
   connection: Connection,
   relayer: ReturnType<typeof getRelayerKeypair>,
@@ -137,89 +58,126 @@ async function syncHeaders(
 ): Promise<boolean> {
   log('Syncing headers...');
 
-  // Get on-chain tip height
-  const onChainTip = await getLightClientTipHeight(connection, PROGRAM_ID, startBlockHeight);
+  // Get on-chain state
+  const state = await getLightClientState(connection, PROGRAM_ID);
+  const onChainTip = state ? state.tipHeight : startBlockHeight - 1n;
+  const tipHash = state ? state.tipHash : null;
   log(`On-chain tip height: ${onChainTip}`);
 
   // Get Bitcoin tip height
   const btcTip = await getTipHeight(BITCOIN_NETWORK);
   log(`Bitcoin ${BITCOIN_NETWORK} tip height: ${btcTip}`);
 
-  // Determine starting point
   const effectiveStart = onChainTip < startBlockHeight - 1n ? startBlockHeight : onChainTip + 1n;
-
-  // Calculate how many blocks to sync
   const blocksToSync = BigInt(btcTip) - effectiveStart + 1n;
 
   if (blocksToSync <= 0n) {
     log('Already synced to tip, nothing to do');
-    return false; // At tip
+    return false;
   }
 
   log(`Need to sync ${blocksToSync} blocks (${effectiveStart} -> ${btcTip})`);
 
-  // Sync blocks one by one
-  for (let height = effectiveStart; height <= BigInt(btcTip); height++) {
+  // Get the parent block hash (the current tip hash)
+  let parentHash: Uint8Array;
+  if (tipHash) {
+    parentHash = new Uint8Array(tipHash);
+  } else {
+    // If light client just initialized, get hash from HeightIndex at start height
+    const hashAtStart = await getBlockHashAtHeight(connection, PROGRAM_ID, onChainTip);
+    if (!hashAtStart) {
+      log('ERROR: Cannot find parent block hash on-chain');
+      return false;
+    }
+    parentHash = hashAtStart;
+  }
+
+  let parentHeight = onChainTip;
+  let height = effectiveStart;
+  let syncedAny = false;
+
+  while (height <= BigInt(btcTip)) {
+    // Determine batch size (min 2, max BATCH_SIZE, capped by remaining blocks)
+    const remaining = BigInt(btcTip) - height + 1n;
+    const batchSize = Math.max(2, Math.min(BATCH_SIZE, Number(remaining)));
+
+    // If only 1 block left, we can't submit (min batch = 2), wait for more
+    if (remaining < 2n) {
+      log(`Only ${remaining} block remaining, need at least 2 for a batch. Waiting...`);
+      break;
+    }
+
+    // Fetch batch of raw headers
+    const rawHeaders: Uint8Array[] = [];
+    for (let i = 0; i < batchSize; i++) {
+      const h = height + BigInt(i);
+      if (h > BigInt(btcTip)) break;
+
+      const rawHeader = await getBlockHeaderByHeight(BITCOIN_NETWORK, Number(h));
+      rawHeaders.push(rawHeader);
+
+      const blockInfo = await getBlockInfoByHeight(BITCOIN_NETWORK, Number(h));
+      log(`  Block ${h}: hash=${blockInfo.id.slice(0, 16)}...`);
+    }
+
+    if (rawHeaders.length < 2) {
+      log('Not enough headers for a batch, waiting...');
+      break;
+    }
+
     try {
-      // Check if block header already exists on-chain
-      const exists = await blockHeaderExists(connection, PROGRAM_ID, height);
-      if (exists) {
-        log(`Block ${height} already exists on-chain, skipping`);
-        continue;
-      }
+      log(`Submitting batch of ${rawHeaders.length} headers (${height} -> ${height + BigInt(rawHeaders.length - 1)})...`);
 
-      // Fetch block header from mempool.space
-      log(`Fetching block ${height} header...`);
-      const rawHeader = await getBlockHeaderByHeight(BITCOIN_NETWORK, Number(height));
-
-      // Get block info for logging
-      const blockInfo = await getBlockInfoByHeight(BITCOIN_NETWORK, Number(height));
-      log(`Block ${height}: hash=${blockInfo.id.slice(0, 16)}..., timestamp=${new Date(blockInfo.timestamp * 1000).toISOString()}`);
-
-      // Submit to Solana
-      log(`Submitting block ${height} to Solana...`);
-      const signature = await submitHeader(
+      const signature = await extendBlockchain(
         connection,
         PROGRAM_ID,
         relayer,
-        rawHeader,
-        height
+        parentHash,
+        rawHeaders,
+        parentHeight,
       );
 
-      log(`Submitted block ${height}: tx=${signature}`);
+      log(`Batch submitted: tx=${signature}`);
 
-      // Small delay between submissions to avoid rate limiting
+      // Update parent for next batch
+      const lastHeader = rawHeaders[rawHeaders.length - 1];
+      parentHash = computeBlockHash(lastHeader);
+      parentHeight = height + BigInt(rawHeaders.length - 1);
+      height = parentHeight + 1n;
+      syncedAny = true;
+
+      // Small delay between batches
       await sleep(500);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
-      // Check if it's a duplicate submission error (PDA already exists)
+      // Check if it's a duplicate (PDA already exists)
       if (errorMessage.includes('already in use') || errorMessage.includes('0x0')) {
-        log(`Block ${height} already submitted, skipping`);
+        log(`Batch starting at ${height} contains already-submitted headers, skipping...`);
+        // Try to advance past this batch
+        const lastHeader = rawHeaders[rawHeaders.length - 1];
+        parentHash = computeBlockHash(lastHeader);
+        parentHeight = height + BigInt(rawHeaders.length - 1);
+        height = parentHeight + 1n;
         continue;
       }
 
-      // Check if chain continuity error
-      if (errorMessage.includes('BlockNotConnected')) {
-        log(`Block ${height} not connected to tip - light client may need reinitialization`);
-        throw error;
-      }
-
-      log(`Error submitting block ${height}: ${errorMessage}`);
+      log(`Error submitting batch at height ${height}: ${errorMessage}`);
       throw error;
     }
   }
 
-  log('Sync complete!');
-  return true; // Synced blocks
+  if (syncedAny) {
+    log('Sync complete!');
+  }
+  return syncedAny;
 }
 
 // Main entry point
 async function main() {
-  log('Starting Bitcoin Block Header Relayer');
+  log('Starting Bitcoin Block Header Relayer (Permissionless Batch Mode)');
   logConfig();
 
-  // Validate start block height
   if (START_BLOCK_HEIGHT === null) {
     throw new Error(
       'START_BLOCK_HEIGHT is required.\n' +
@@ -228,39 +186,28 @@ async function main() {
     );
   }
 
-  // Initialize relayer keypair
   const relayer = getRelayerKeypair();
   log(`  Relayer: ${relayer.publicKey.toBase58()}`);
 
-  // Initialize Solana connection
   const connection = new Connection(SOLANA_RPC_URL, 'confirmed');
 
-  // Check relayer balance
   const balance = await connection.getBalance(relayer.publicKey);
   log(`  Relayer Balance: ${balance / LAMPORTS_PER_SOL} SOL`);
 
   if (balance < 0.01 * LAMPORTS_PER_SOL) {
-    log('WARNING: Relayer balance is low! Each header submission costs ~0.002 SOL');
+    log('WARNING: Relayer balance is low! Each batch costs ~0.01 SOL');
   }
 
   // Main loop with smart polling
   while (true) {
     let syncedBlocks = false;
     try {
-      // Check for reorgs before syncing
-      const reorgHandled = await detectAndHandleReorg(connection, relayer, START_BLOCK_HEIGHT);
-      if (reorgHandled) {
-        log('Reorg handled, re-syncing...');
-        syncedBlocks = true; // force fast poll
-      }
-
-      syncedBlocks = await syncHeaders(connection, relayer, START_BLOCK_HEIGHT) || syncedBlocks;
+      syncedBlocks = await syncHeaders(connection, relayer, START_BLOCK_HEIGHT);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log(`Sync error: ${errorMessage}`);
     }
 
-    // Smart polling: faster when catching up, slower when at tip
     const sleepTime = syncedBlocks ? POLL_INTERVAL_MS : POLL_AT_TIP_MS;
     log(`Sleeping for ${sleepTime / 1000}s (${syncedBlocks ? 'catching up' : 'at tip'})...`);
     await sleep(sleepTime);

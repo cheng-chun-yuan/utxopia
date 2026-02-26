@@ -54,13 +54,23 @@ export function deriveLightClientPDA(
  * Derive PDA for block header
  */
 export function deriveBlockHeaderPDA(
+  blockHash: Uint8Array,
+  programId: PublicKey = ZVAULT_PROGRAM_ID
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("block"), Buffer.from(blockHash)],
+    programId
+  );
+}
+
+export function deriveHeightIndexPDA(
   blockHeight: number,
   programId: PublicKey = ZVAULT_PROGRAM_ID
 ): [PublicKey, number] {
   const heightBuffer = Buffer.alloc(8);
   heightBuffer.writeBigUInt64LE(BigInt(blockHeight));
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("block_header"), heightBuffer],
+    [Buffer.from("height_index"), heightBuffer],
     programId
   );
 }

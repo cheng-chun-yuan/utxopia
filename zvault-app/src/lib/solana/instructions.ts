@@ -47,8 +47,8 @@ export { INSTRUCTION_DISCRIMINATORS, bigintTo32Bytes, hexToBytes, bytesToHex };
 /** zVault Program ID */
 export const ZVAULT_PROGRAM_ID = new PublicKey(DEVNET_CONFIG.zvaultProgramId);
 
-/** BTC Relay Program ID */
-export const BTC_RELAY_PROGRAM_ID = new PublicKey(DEVNET_CONFIG.btcRelayProgramId);
+/** BTC Light Client Program ID */
+export const BTC_LIGHT_CLIENT_PROGRAM_ID = new PublicKey(DEVNET_CONFIG.btcLightClientProgramId);
 
 /** Token-2022 Program ID */
 export const TOKEN_2022_PROGRAM_ID = new PublicKey(DEVNET_CONFIG.token2022ProgramId);
@@ -117,7 +117,7 @@ export function deriveDepositRecordPDA(
  * Derive Light Client PDA
  */
 export function deriveLightClientPDA(
-  programId: PublicKey = BTC_RELAY_PROGRAM_ID
+  programId: PublicKey = BTC_LIGHT_CLIENT_PROGRAM_ID
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from(PDA_SEEDS.LIGHT_CLIENT)],
@@ -130,7 +130,7 @@ export function deriveLightClientPDA(
  */
 export function deriveBlockHeaderPDA(
   blockHeight: number,
-  programId: PublicKey = BTC_RELAY_PROGRAM_ID
+  programId: PublicKey = BTC_LIGHT_CLIENT_PROGRAM_ID
 ): [PublicKey, number] {
   const heightBuffer = Buffer.alloc(8);
   heightBuffer.writeBigUInt64LE(BigInt(blockHeight));

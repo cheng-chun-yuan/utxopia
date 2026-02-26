@@ -3,8 +3,8 @@
  * Deploy and Initialize zVault on Localnet
  *
  * This script:
- * 1. Deploys both zVault and BTC Relay programs
- * 2. Initializes the BTC Relay with a test block
+ * 1. Deploys both zVault and BTC Light Client programs
+ * 2. Initializes the BTC Light Client with a test block
  * 3. Creates the zkBTC Token-2022 mint
  * 4. Initializes the zVault pool state and commitment tree
  * 5. Adds demo notes for testing
@@ -84,7 +84,7 @@ const ZVaultSeeds = {
   COMMITMENT_TREE: "commitment_tree",
 };
 
-// Seeds for BTC Relay PDAs
+// Seeds for BTC Light Client PDAs
 const BTCLCSeeds = {
   LIGHT_CLIENT: "btc_light_client",
 };
@@ -134,7 +134,7 @@ const TEST_BTC_BLOCK = {
 
 interface DeployResult {
   zvaultProgramId: PublicKey;
-  btcRelayProgramId: PublicKey;
+  btcLightClientProgramId: PublicKey;
   chadbufferProgramId: PublicKey;
   groth16VerifierProgramId: PublicKey;
 }
@@ -142,7 +142,7 @@ interface DeployResult {
 interface InitResult {
   poolStatePda: PublicKey;
   commitmentTreePda: PublicKey;
-  btcRelayPda: PublicKey;
+  btcLightClientPda: PublicKey;
   zkbtcMint: PublicKey;
   poolVault: PublicKey;
   authority: PublicKey;
@@ -187,7 +187,7 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
 
   // Get program IDs from keypairs
   const zvaultKeypairPath = path.join(TARGET_DIR, "zvault_pinocchio-keypair.json");
-  const btclcKeypairPath = path.join(TARGET_DIR, "btc_relay-keypair.json");
+  const btclcKeypairPath = path.join(TARGET_DIR, "btc_light_client-keypair.json");
   const chadbufferKeypairPath = path.join(CONTRACTS_DIR, "programs/chadbuffer/chadbuffer-keypair.json");
   const groth16KeypairPath = path.join(TARGET_DIR, "groth16_verifier-keypair.json");
   const chadbufferSoPath = path.join(CONTRACTS_DIR, "programs/chadbuffer/chadbuffer.so");
@@ -219,18 +219,18 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
   }
 
   const zvaultProgramId = zvaultKeypair.publicKey;
-  const btcRelayProgramId = btclcKeypair.publicKey;
+  const btcLightClientProgramId = btclcKeypair.publicKey;
   const chadbufferProgramId = chadbufferKeypair.publicKey;
   const groth16VerifierProgramId = groth16Keypair.publicKey;
 
   log(`zVault Program ID: ${zvaultProgramId.toBase58()}`);
-  log(`BTC Relay Program ID: ${btcRelayProgramId.toBase58()}`);
+  log(`BTC Light Client Program ID: ${btcLightClientProgramId.toBase58()}`);
   log(`ChadBuffer Program ID: ${chadbufferProgramId.toBase58()}`);
   log(`Groth16 Verifier Program ID: ${groth16VerifierProgramId.toBase58()}`);
 
   if (skipDeploy) {
     log("Skipping deployment (--skip-deploy flag)");
-    return { zvaultProgramId, btcRelayProgramId, chadbufferProgramId, groth16VerifierProgramId };
+    return { zvaultProgramId, btcLightClientProgramId, chadbufferProgramId, groth16VerifierProgramId };
   }
 
   // Deploy zVault
@@ -249,17 +249,17 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
     }
   }
 
-  // Deploy BTC Relay
-  log("Deploying BTC Relay program...");
+  // Deploy BTC Light Client
+  log("Deploying BTC Light Client program...");
   try {
     execSync(
-      `solana program deploy ${TARGET_DIR}/btc_relay.so --program-id ${btclcKeypairPath} -u localhost`,
+      `solana program deploy ${TARGET_DIR}/btc_light_client.so --program-id ${btclcKeypairPath} -u localhost`,
       { stdio: "inherit" }
     );
-    log("BTC Relay deployed successfully");
+    log("BTC Light Client deployed successfully");
   } catch (e: any) {
     if (e.message?.includes("already in use")) {
-      log("BTC Relay program already deployed");
+      log("BTC Light Client program already deployed");
     } else {
       throw e;
     }
@@ -314,7 +314,7 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
   log("Waiting for programs to be ready...");
   await sleep(3000);
 
-  return { zvaultProgramId, btcRelayProgramId, chadbufferProgramId, groth16VerifierProgramId };
+  return { zvaultProgramId, btcLightClientProgramId, chadbufferProgramId, groth16VerifierProgramId };
 }
 
 // =============================================================================
@@ -456,21 +456,21 @@ async function initializeBTCRelay(
   authority: Keypair,
   programId: PublicKey
 ): Promise<PublicKey> {
-  logSection("BTC Relay Initialization");
+  logSection("BTC Light Client Initialization");
 
   const [lightClientPda] = deriveBTCRelayPDA(programId);
-  log(`BTC Relay PDA: ${lightClientPda.toBase58()}`);
+  log(`BTC Light Client PDA: ${lightClientPda.toBase58()}`);
 
   // Check if already initialized
   const accountInfo = await connection.getAccountInfo(lightClientPda);
   if (accountInfo && accountInfo.data[0] === Discriminators.LIGHT_CLIENT) {
-    log("BTC Relay already initialized, skipping...");
+    log("BTC Light Client already initialized, skipping...");
     return lightClientPda;
   }
 
   log(`Initializing with block height: ${TEST_BTC_BLOCK.height}`);
   log(`Block hash: ${TEST_BTC_BLOCK.hash.toString("hex")}`);
-  log(`Network: ${TEST_BTC_BLOCK.network === 0 ? "mainnet" : "testnet"}`);
+  log(`Network: ${["mainnet", "testnet3", "testnet4", "regtest"][TEST_BTC_BLOCK.network]}`);
 
   const ix = buildBTCLCInitializeIx(
     lightClientPda,
@@ -486,7 +486,7 @@ async function initializeBTCRelay(
     commitment: "confirmed",
   });
 
-  log(`BTC Relay initialized: ${sig}`);
+  log(`BTC Light Client initialized: ${sig}`);
   return lightClientPda;
 }
 
@@ -520,7 +520,7 @@ async function initializeZVault(
     return {
       poolStatePda,
       commitmentTreePda,
-      btcRelayPda: PublicKey.default,
+      btcLightClientPda: PublicKey.default,
       zkbtcMint: mintPubkey,
       poolVault: poolVaultPubkey,
       authority: authority.publicKey,
@@ -608,7 +608,7 @@ async function initializeZVault(
   return {
     poolStatePda,
     commitmentTreePda,
-    btcRelayPda: PublicKey.default,
+    btcLightClientPda: PublicKey.default,
     zkbtcMint,
     poolVault: poolVault.address,
     authority: authority.publicKey,
@@ -710,7 +710,7 @@ function saveLocalnetConfig(
   // Update config.json with localnet values
   config.programs.localnet = {
     zVault: deployResult.zvaultProgramId.toBase58(),
-    btc_light_client: deployResult.btcRelayProgramId.toBase58(),
+    btc_light_client: deployResult.btcLightClientProgramId.toBase58(),
     chadbuffer: deployResult.chadbufferProgramId.toBase58(),
     groth16_verifier: deployResult.groth16VerifierProgramId.toBase58(),
   };
@@ -724,7 +724,7 @@ function saveLocalnetConfig(
     rpcUrl: RPC_URL,
     programs: {
       zVault: deployResult.zvaultProgramId.toBase58(),
-      btcLightClient: deployResult.btcRelayProgramId.toBase58(),
+      btcLightClient: deployResult.btcLightClientProgramId.toBase58(),
       chadbuffer: deployResult.chadbufferProgramId.toBase58(),
       groth16Verifier: deployResult.groth16VerifierProgramId.toBase58(),
     },
@@ -736,10 +736,10 @@ function saveLocalnetConfig(
       authority: initResult.authority.toBase58(),
     },
     btcLightClient: {
-      pda: initResult.btcRelayPda.toBase58(),
+      pda: initResult.btcLightClientPda.toBase58(),
       startHeight: TEST_BTC_BLOCK.height.toString(),
       startHash: TEST_BTC_BLOCK.hash.toString("hex"),
-      network: TEST_BTC_BLOCK.network === 0 ? "mainnet" : "testnet",
+      network: ["mainnet", "testnet3", "testnet4", "regtest"][TEST_BTC_BLOCK.network],
     },
     createdAt: new Date().toISOString(),
   };
@@ -810,11 +810,11 @@ async function main() {
   // Deploy programs
   const deployResult = await deployPrograms(skipDeploy);
 
-  // Initialize BTC Relay
-  const btcRelayPda = await initializeBTCRelay(
+  // Initialize BTC Light Client
+  const btcLightClientPda = await initializeBTCRelay(
     connection,
     authority,
-    deployResult.btcRelayProgramId
+    deployResult.btcLightClientProgramId
   );
 
   // Initialize zVault
@@ -823,7 +823,7 @@ async function main() {
     authority,
     deployResult.zvaultProgramId
   );
-  initResult.btcRelayPda = btcRelayPda;
+  initResult.btcLightClientPda = btcLightClientPda;
 
   // Add demo notes (now also mints zBTC to pool vault)
   if (!skipDemo) {
@@ -850,13 +850,13 @@ async function main() {
 
   console.log("Summary:");
   console.log(`  zVault Program:       ${deployResult.zvaultProgramId.toBase58()}`);
-  console.log(`  BTC Relay:     ${deployResult.btcRelayProgramId.toBase58()}`);
+  console.log(`  BTC Light Client:     ${deployResult.btcLightClientProgramId.toBase58()}`);
   console.log(`  ChadBuffer:           ${deployResult.chadbufferProgramId.toBase58()}`);
   console.log(`  Groth16 Verifier:   ${deployResult.groth16VerifierProgramId.toBase58()}`);
   console.log(`  Pool State PDA:       ${initResult.poolStatePda.toBase58()}`);
   console.log(`  Commitment Tree PDA:  ${initResult.commitmentTreePda.toBase58()}`);
   console.log(`  zkBTC Mint:           ${initResult.zkbtcMint.toBase58()}`);
-  console.log(`  BTC Relay PDA:           ${btcRelayPda.toBase58()}`);
+  console.log(`  BTC Light Client PDA:           ${btcLightClientPda.toBase58()}`);
   console.log("");
   console.log("Next steps:");
   console.log("  1. Build SDK: cd ../sdk && bun run build");

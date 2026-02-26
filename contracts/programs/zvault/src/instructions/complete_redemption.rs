@@ -1,7 +1,7 @@
 //! Complete redemption instruction — verify BTC delivery via VerifiedTransaction PDA, burn zBTC, close PDA
 //!
 //! ESCROW-BASED ARCHITECTURE:
-//! - Authority provides btc_txid matching a VerifiedTransaction PDA (btc-relay verified SPV)
+//! - Authority provides btc_txid matching a VerifiedTransaction PDA (btc-light-client verified SPV)
 //! - On-chain: parse raw tx from ChadBuffer, verify output pays correct address/amount
 //! - On success: burn zBTC from pool vault, close RedemptionRequest PDA
 //! - NullifierRecord is NOT closed — it must persist forever to prevent double-spend
@@ -69,8 +69,8 @@ impl CompleteRedemptionData {
 /// 1.  `[writable]` Redemption request
 /// 2.  `[signer]`   Authority (pool authority)
 /// 3.  `[]`         Rent recipient (receives lamports when PDA is closed)
-/// 4.  `[]`         VerifiedTransaction PDA (owned by btc-relay)
-/// 5.  `[]`         Light client (owned by btc-relay, for confirmation count)
+/// 4.  `[]`         VerifiedTransaction PDA (owned by btc-light-client)
+/// 5.  `[]`         Light client (owned by btc-light-client, for confirmation count)
 /// 6.  `[]`         Transaction buffer (ChadBuffer)
 /// 7.  `[writable]` zBTC mint
 /// 8.  `[writable]` Pool vault

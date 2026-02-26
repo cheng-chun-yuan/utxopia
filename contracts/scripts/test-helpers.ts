@@ -5,7 +5,7 @@
  *   - PDA derivation functions
  *   - On-chain state parsers
  *   - ChadBuffer upload
- *   - Instruction builders (submit_header, request_redemption)
+ *   - Instruction builders (extend_blockchain, request_redemption)
  *   - Authority keypair loading
  *   - Shared constants
  */
@@ -19,6 +19,7 @@ import {
   TransactionInstruction,
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 import * as fs from "fs";
 import { execSync } from "child_process";
 
@@ -37,12 +38,15 @@ export const Seeds = {
   REDEMPTION: "redemption",
   DEPOSIT: "deposit",
   BTC_LIGHT_CLIENT: "btc_light_client",
-  BLOCK_HEADER: "block_header",
+  BLOCK_HEADER: "block",
+  HEIGHT_INDEX: "height_index",
 } as const;
 
 export const BTCRelayDisc = {
-  SUBMIT_HEADER: 1,
-  RESET_TIP: 2,
+  EXTEND_BLOCKCHAIN: 1,
+  VERIFY_TRANSACTION: 2,
+  PRUNE_OBSOLETE_BLOCKS: 3,
+  REINITIALIZE: 4,
 } as const;
 
 // =============================================================================
@@ -107,11 +111,18 @@ export function deriveLightClientPDA(btcLightClientId: PublicKey): [PublicKey, n
   );
 }
 
-export function deriveBlockHeaderPDA(btcLightClientId: PublicKey, height: bigint): [PublicKey, number] {
+export function deriveBlockHeaderPDA(btcLightClientId: PublicKey, blockHash: Uint8Array): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(Seeds.BLOCK_HEADER), Buffer.from(blockHash)],
+    btcLightClientId,
+  );
+}
+
+export function deriveHeightIndexPDA(btcLightClientId: PublicKey, height: bigint): [PublicKey, number] {
   const heightBuf = Buffer.alloc(8);
   heightBuf.writeBigUInt64LE(height);
   return PublicKey.findProgramAddressSync(
-    [Buffer.from(Seeds.BLOCK_HEADER), heightBuf],
+    [Buffer.from(Seeds.HEIGHT_INDEX), heightBuf],
     btcLightClientId,
   );
 }
@@ -252,56 +263,61 @@ export async function createTxBufferAccount(
 // =============================================================================
 
 /**
- * Submit block header to BTC relay (disc=1)
- * Data: disc(1) + raw_header(80) + block_height(8)
+ * Compute Bitcoin block hash from raw 80-byte header (double SHA-256, reversed)
  */
-export function buildSubmitHeaderIx(
-  lightClient: PublicKey,
-  blockHeaderPda: PublicKey,
-  submitter: PublicKey,
-  rawHeader: Uint8Array,
-  blockHeight: bigint,
-  btcLightClientId: PublicKey,
-): TransactionInstruction {
-  const data = Buffer.alloc(89);
-  data[0] = BTCRelayDisc.SUBMIT_HEADER;
-  Buffer.from(rawHeader).copy(data, 1);
-  data.writeBigUInt64LE(blockHeight, 81);
-
-  return new TransactionInstruction({
-    keys: [
-      { pubkey: lightClient, isSigner: false, isWritable: true },
-      { pubkey: blockHeaderPda, isSigner: false, isWritable: true },
-      { pubkey: submitter, isSigner: true, isWritable: true },
-      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-    ],
-    programId: btcLightClientId,
-    data,
-  });
+export function computeBlockHash(rawHeader: Uint8Array): Uint8Array {
+  const hash1 = sha256(rawHeader);
+  const hash2 = sha256(hash1);
+  // Reverse for internal byte order (Bitcoin convention)
+  const reversed = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) reversed[i] = hash2[31 - i];
+  return reversed;
 }
 
 /**
- * Reset light client tip (disc=2)
- * Data: disc(1) + new_tip_height(8 LE) + new_tip_hash(32)
- * Accounts: light_client (writable), authority (signer)
+ * Build extend_blockchain instruction (disc=1)
+ * Data: num_headers(1) + N × raw_header(80)
+ *
+ * Accounts:
+ *   0. [writable] LightClient PDA
+ *   1. [signer, writable] Submitter (payer)
+ *   2. [] System program
+ *   3. [] Parent BlockHeader PDA (proves anchor exists)
+ *   4..4+N-1 [writable] BlockHeader PDAs (one per new header)
+ *   4+N..4+2N-1 [writable] HeightIndex PDAs (one per new header)
  */
-export function buildResetTipIx(
+export function buildExtendBlockchainIx(
   lightClient: PublicKey,
-  authority: PublicKey,
-  newTipHeight: bigint,
-  newTipHash: Uint8Array,
+  submitter: PublicKey,
+  parentBlockHeaderPda: PublicKey,
+  blockHeaderPdas: PublicKey[],
+  heightIndexPdas: PublicKey[],
+  rawHeaders: Uint8Array[],
   btcLightClientId: PublicKey,
 ): TransactionInstruction {
-  const data = Buffer.alloc(41);
-  data[0] = BTCRelayDisc.RESET_TIP;
-  data.writeBigUInt64LE(newTipHeight, 1);
-  Buffer.from(newTipHash).copy(data, 9);
+  const numHeaders = rawHeaders.length;
+  const data = Buffer.alloc(1 + numHeaders * 80);
+  data[0] = numHeaders;
+  for (let i = 0; i < numHeaders; i++) {
+    Buffer.from(rawHeaders[i]).copy(data, 1 + i * 80);
+  }
+
+  const keys = [
+    { pubkey: lightClient, isSigner: false, isWritable: true },
+    { pubkey: submitter, isSigner: true, isWritable: true },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: parentBlockHeaderPda, isSigner: false, isWritable: false },
+  ];
+
+  for (const pda of blockHeaderPdas) {
+    keys.push({ pubkey: pda, isSigner: false, isWritable: true });
+  }
+  for (const pda of heightIndexPdas) {
+    keys.push({ pubkey: pda, isSigner: false, isWritable: true });
+  }
 
   return new TransactionInstruction({
-    keys: [
-      { pubkey: lightClient, isSigner: false, isWritable: true },
-      { pubkey: authority, isSigner: true, isWritable: false },
-    ],
+    keys,
     programId: btcLightClientId,
     data,
   });

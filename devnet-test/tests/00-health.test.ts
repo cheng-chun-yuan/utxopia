@@ -4,7 +4,7 @@
  * Verifies all 7 services are reachable and healthy:
  * 1. Solana devnet RPC
  * 2. zVault program deployed
- * 3. BTC Relay program deployed
+ * 3. BTC Light Client program deployed
  * 4. FROST signers (x3) healthy
  * 5. Backend API healthy
  * 6. Esplora reachable
@@ -47,11 +47,11 @@ describe("Solana devnet", () => {
     expect(info!.executable).toBe(true);
   });
 
-  it("BTC Relay program is deployed", async () => {
+  it("BTC Light Client program is deployed", async () => {
     // Use env var or contracts/config.json value (SDK config may be stale)
-    const btcRelayId = process.env.BTC_RELAY_PROGRAM_ID || "DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS";
+    const btcLightClientId = process.env.BTC_LIGHT_CLIENT_PROGRAM_ID || "DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS";
     const info = await ctx.connection.getAccountInfo(
-      new PublicKey(btcRelayId)
+      new PublicKey(btcLightClientId)
     );
     expect(info).not.toBeNull();
     expect(info!.executable).toBe(true);

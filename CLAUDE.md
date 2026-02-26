@@ -89,7 +89,7 @@ BTC Deposit → Taproot Address (npk-tweaked) → Backend Sweep → SPV Verifica
 | Directory | Purpose | Language |
 |-----------|---------|----------|
 | `contracts/programs/zvault` | Main Solana program (14 instructions) | Rust (Pinocchio) |
-| `contracts/programs/btc-relay` | Bitcoin header tracking (standalone program) | Rust (Pinocchio) |
+| `contracts/programs/btc-light-client` | Bitcoin header tracking (standalone program) | Rust (Pinocchio) |
 | `circuits` | JoinSplit Groth16 ZK circuits | circom |
 | `sdk` | TypeScript SDK (@zvault/sdk) | TypeScript |
 | `frost_server` | FROST threshold signing + policy engine + audit log | Rust |

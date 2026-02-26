@@ -21,7 +21,7 @@ import {
   logConfig,
 } from './config';
 
-const REINITIALIZE_DISC = 6;
+const REINITIALIZE_DISC = 4;
 
 function hexToBytesReversed(hex: string): Uint8Array {
   const bytes = new Uint8Array(32);
@@ -95,7 +95,7 @@ async function main() {
     console.log('\nNew state:');
     console.log(`  Tip height: ${newState.tipHeight}`);
     console.log(`  Tip hash:   ${bytesToHex(newState.tipHash)}`);
-    console.log(`  Network:    ${newState.network} (${['mainnet','testnet','regtest'][newState.network]})`);
+    console.log(`  Network:    ${newState.network} (${['mainnet','testnet3','testnet4','regtest'][newState.network]})`);
     console.log(`  Headers:    ${newState.headerCount}`);
   }
 

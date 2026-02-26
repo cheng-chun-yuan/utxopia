@@ -2,7 +2,7 @@
 resolver = "2"
 members = [
     "programs/zvault",
-    "programs/btc-relay",
+    "programs/btc-light-client",
 ]
 exclude = [
     "programs/chadbuffer"

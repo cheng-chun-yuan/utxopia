@@ -3,11 +3,11 @@
 //! npk-based deposit flow:
 //! 1. User generates npk client-side, sends BTC with OP_RETURN(ephemeralPub || npk)
 //! 2. Backend detects deposit, sweeps UTXO to pool wallet
-//! 3. Backend calls btc-relay's verify_transaction to create VerifiedTransaction PDA
+//! 3. Backend calls btc-light-client's verify_transaction to create VerifiedTransaction PDA
 //! 4. Backend calls this instruction with npk + amount
 //!
 //! This instruction:
-//! - Checks VerifiedTransaction PDA exists (btc-relay already verified SPV)
+//! - Checks VerifiedTransaction PDA exists (btc-light-client already verified SPV)
 //! - Verifies sufficient confirmations via light client tip height
 //! - Computes commitment ON-CHAIN: Poseidon(npk, ZBTC_TOKEN_ID, amount)
 //! - Inserts commitment into Merkle tree
@@ -103,8 +103,8 @@ impl VerifyStealthDepositData {
 ///
 /// # Accounts
 /// 0.  `[writable]` Pool state
-/// 1.  `[]` VerifiedTransaction PDA (owned by btc-relay)
-/// 2.  `[]` Light client (owned by btc-relay, for confirmation count)
+/// 1.  `[]` VerifiedTransaction PDA (owned by btc-light-client)
+/// 2.  `[]` Light client (owned by btc-light-client, for confirmation count)
 /// 3.  `[writable]` Commitment tree
 /// 4.  `[writable]` Deposit record (PDA to be created, seeded by txid)
 /// 5.  `[]` Transaction buffer (ChadBuffer)
@@ -142,7 +142,7 @@ pub fn process_verify_stealth_deposit(
 
     // Validate account owners
     validate_program_owner(pool_state_info, program_id)?;
-    // VerifiedTransaction and Light client are owned by btc-relay program
+    // VerifiedTransaction and Light client are owned by btc-light-client program
     let btc_lc_id: &Pubkey = unsafe {
         &*(&crate::constants::BTC_LIGHT_CLIENT_PROGRAM_ID as *const [u8; 32] as *const Pubkey)
     };
