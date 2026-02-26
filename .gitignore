@@ -14,6 +14,9 @@ node_modules/
 .env
 .env.local
 
+# FROST key material (encrypted shares, group keys)
+frost_server/keys/
+
 # Anchor build artifacts (should be in contracts/ but ignore at root too)
 # Note: Root target/ should not exist - it's likely an IDE artifact
 target/
