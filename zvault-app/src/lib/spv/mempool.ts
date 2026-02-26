@@ -31,7 +31,7 @@ export interface MerkleProof {
 // Cache clients per network
 const clients: Record<string, MempoolClient> = {};
 
-function getClient(network: "mainnet" | "testnet"): MempoolClient {
+function getClient(network: "mainnet" | "testnet" | "testnet4" | "signet" | "regtest"): MempoolClient {
   if (!clients[network]) {
     clients[network] = new MempoolClient(network);
   }
@@ -43,7 +43,7 @@ function getClient(network: "mainnet" | "testnet"): MempoolClient {
  */
 export async function getTransactionInfo(
   txid: string,
-  network: "mainnet" | "testnet" = "testnet"
+  network: "mainnet" | "testnet" | "testnet4" | "signet" | "regtest" = "testnet"
 ): Promise<TransactionInfo> {
   const client = getClient(network);
   return client.getTransactionInfo(txid);
@@ -54,7 +54,7 @@ export async function getTransactionInfo(
  */
 export async function getBlockHeader(
   blockHash: string,
-  network: "mainnet" | "testnet" = "testnet"
+  network: "mainnet" | "testnet" | "testnet4" | "signet" | "regtest" = "testnet"
 ): Promise<BlockHeader> {
   const client = getClient(network);
   return client.getBlockHeaderFull(blockHash);
@@ -65,7 +65,7 @@ export async function getBlockHeader(
  */
 export async function getBlockHeaderByHeight(
   height: number,
-  network: "mainnet" | "testnet" = "testnet"
+  network: "mainnet" | "testnet" | "testnet4" | "signet" | "regtest" = "testnet"
 ): Promise<BlockHeader> {
   const client = getClient(network);
   return client.getBlockHeaderByHeight(height);
@@ -76,7 +76,7 @@ export async function getBlockHeaderByHeight(
  */
 export async function getMerkleProof(
   txid: string,
-  network: "mainnet" | "testnet" = "testnet"
+  network: "mainnet" | "testnet" | "testnet4" | "signet" | "regtest" = "testnet"
 ): Promise<MerkleProof> {
   const client = getClient(network);
   const proof = await client.getTxMerkleProof(txid);
@@ -92,7 +92,7 @@ export async function getMerkleProof(
  * Get current blockchain tip height
  */
 export async function getTipHeight(
-  network: "mainnet" | "testnet" = "testnet"
+  network: "mainnet" | "testnet" | "testnet4" | "signet" | "regtest" = "testnet"
 ): Promise<number> {
   const client = getClient(network);
   return client.getBlockHeight();
@@ -103,7 +103,7 @@ export async function getTipHeight(
  */
 export async function getSPVProofData(
   txid: string,
-  network: "mainnet" | "testnet" = "testnet"
+  network: "mainnet" | "testnet" | "testnet4" | "signet" | "regtest" = "testnet"
 ): Promise<{
   txInfo: TransactionInfo;
   blockHeader: BlockHeader;

@@ -74,13 +74,14 @@ export interface EsploraMerkleProof {
   pos: number;
 }
 
-export type EsploraNetwork = "mainnet" | "testnet" | "testnet4" | "signet";
+export type EsploraNetwork = "mainnet" | "testnet" | "testnet4" | "signet" | "regtest";
 
 const NETWORK_URLS: Record<EsploraNetwork, string> = {
   mainnet: "https://mempool.space/api",
   testnet: "https://mempool.space/testnet/api",
   testnet4: "https://mempool.space/testnet4/api",
   signet: "https://mempool.space/signet/api",
+  regtest: "http://localhost:2140",
 };
 
 export class EsploraClient {

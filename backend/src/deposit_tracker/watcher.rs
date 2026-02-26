@@ -7,9 +7,11 @@ use reqwest::Client;
 use serde::Deserialize;
 use thiserror::Error;
 
-/// Esplora API endpoints
-pub const MAINNET_URL: &str = "https://blockstream.info/api";
-pub const TESTNET_URL: &str = "https://blockstream.info/testnet/api";
+use crate::config::{Network, ZVaultConfig};
+
+/// Esplora API endpoints (mempool.space)
+pub const MAINNET_URL: &str = "https://mempool.space/api";
+pub const TESTNET_URL: &str = "https://mempool.space/testnet/api";
 
 /// Watcher errors
 #[derive(Debug, Error)]
@@ -81,6 +83,16 @@ impl AddressWatcher {
     /// Create watcher for testnet
     pub fn testnet() -> Self {
         Self::new(TESTNET_URL)
+    }
+
+    /// Create watcher from ZVaultConfig
+    pub fn from_config(config: &ZVaultConfig) -> Self {
+        Self::new(&config.bitcoin_api)
+    }
+
+    /// Create watcher from Network enum (uses default API URL for that network)
+    pub fn from_network(network: Network) -> Self {
+        Self::new(network.default_bitcoin_api())
     }
 
     /// Create with custom URL

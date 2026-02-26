@@ -6,9 +6,11 @@
 use reqwest::Client;
 use serde::Deserialize;
 
-/// Esplora API endpoints
-pub const MAINNET_URL: &str = "https://blockstream.info/api";
-pub const TESTNET_URL: &str = "https://blockstream.info/testnet/api";
+use crate::config::{Network, ZVaultConfig};
+
+/// Esplora API endpoints (mempool.space)
+pub const MAINNET_URL: &str = "https://mempool.space/api";
+pub const TESTNET_URL: &str = "https://mempool.space/testnet/api";
 
 /// Esplora HTTP client
 #[derive(Debug, Clone)]
@@ -34,6 +36,16 @@ impl EsploraClient {
     /// Create a client for Bitcoin testnet
     pub fn new_testnet() -> Self {
         Self::new(TESTNET_URL)
+    }
+
+    /// Create a client from ZVaultConfig
+    pub fn from_config(config: &ZVaultConfig) -> Self {
+        Self::new(&config.bitcoin_api)
+    }
+
+    /// Create a client from Network enum (uses default API URL for that network)
+    pub fn from_network(network: Network) -> Self {
+        Self::new(network.default_bitcoin_api())
     }
 
     /// Get the base URL
@@ -138,9 +150,9 @@ mod tests {
     #[tokio::test]
     async fn test_client_urls() {
         let mainnet = EsploraClient::new_mainnet();
-        assert_eq!(mainnet.base_url(), MAINNET_URL);
+        assert_eq!(mainnet.base_url(), "https://mempool.space/api");
 
         let testnet = EsploraClient::new_testnet();
-        assert_eq!(testnet.base_url(), TESTNET_URL);
+        assert_eq!(testnet.base_url(), "https://mempool.space/testnet/api");
     }
 }

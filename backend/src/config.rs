@@ -97,13 +97,13 @@ impl Network {
         }
     }
 
-    /// Get default Bitcoin/Esplora API for this network
+    /// Get default Bitcoin/Esplora API for this network (mempool.space)
     pub fn default_bitcoin_api(&self) -> &'static str {
         match self {
-            Network::Mainnet => "https://blockstream.info/api",
-            Network::Testnet => "https://blockstream.info/testnet/api",
-            Network::Devnet => "https://blockstream.info/testnet/api",
-            Network::Regtest => "http://localhost:3000/regtest/api",
+            Network::Mainnet => "https://mempool.space/api",
+            Network::Testnet => "https://mempool.space/testnet/api",
+            Network::Devnet => "https://mempool.space/testnet4/api",
+            Network::Regtest => "http://localhost:2140",
         }
     }
 

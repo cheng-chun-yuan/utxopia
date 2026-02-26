@@ -23,6 +23,7 @@ import type {
 } from "./types";
 import { ApiError } from "./errors";
 import { API_ENDPOINTS, DEFAULT_API_URL } from "./constants";
+import { getConfig } from "@zvault/sdk";
 
 /**
  * zVault API Client (Minimal - Redemption Only)
@@ -176,7 +177,10 @@ export { zBTCApiClient };
 
 // ============ Mempool.space Direct API (No Backend Needed) ============
 
-const MEMPOOL_API_TESTNET = "https://mempool.space/testnet/api";
+/** Get mempool API URL from SDK config (single source of truth) */
+function getMempoolApiUrl(): string {
+  return getConfig().esploraUrl;
+}
 const REQUIRED_CONFIRMATIONS = 2;
 
 interface MempoolAddressInfo {
@@ -224,7 +228,7 @@ export async function getDepositStatusFromMempool(
 ): Promise<DepositStatusResponse> {
   try {
     // Get address info
-    const addressRes = await fetch(`${MEMPOOL_API_TESTNET}/address/${taprootAddress}`);
+    const addressRes = await fetch(`${getMempoolApiUrl()}/address/${taprootAddress}`);
     if (!addressRes.ok) {
       return {
         found: false,
@@ -258,7 +262,7 @@ export async function getDepositStatusFromMempool(
     }
 
     // Get transactions to find the deposit
-    const txsRes = await fetch(`${MEMPOOL_API_TESTNET}/address/${taprootAddress}/txs`);
+    const txsRes = await fetch(`${getMempoolApiUrl()}/address/${taprootAddress}/txs`);
     const txs: MempoolTransaction[] = txsRes.ok ? await txsRes.json() : [];
 
     // Find the deposit transaction (first incoming tx to this address)
@@ -294,7 +298,7 @@ export async function getDepositStatusFromMempool(
     let confirmations = 0;
     if (depositTx.status.confirmed && depositTx.status.block_height) {
       // Get current block height
-      const tipRes = await fetch(`${MEMPOOL_API_TESTNET}/blocks/tip/height`);
+      const tipRes = await fetch(`${getMempoolApiUrl()}/blocks/tip/height`);
       if (tipRes.ok) {
         const tipHeight = parseInt(await tipRes.text(), 10);
         confirmations = tipHeight - depositTx.status.block_height + 1;

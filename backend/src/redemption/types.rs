@@ -217,7 +217,7 @@ impl Default for RedemptionConfig {
             required_confirmations: 1,      // For testnet, 1 is enough
             check_interval_secs: 30,
             solana_rpc: "https://api.devnet.solana.com".to_string(),
-            esplora_url: "https://blockstream.info/testnet/api".to_string(),
+            esplora_url: "https://mempool.space/testnet4/api".to_string(),
             auto_process: true,
         }
     }

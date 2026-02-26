@@ -190,6 +190,17 @@ async fn run_server(
         _ => bitcoin::Network::Testnet,
     };
 
+    // Default esplora URL to mempool.space based on network if not explicitly set
+    let esplora_url = esplora_url.or_else(|| {
+        let default_url = match network {
+            bitcoin::Network::Bitcoin => "https://mempool.space/api",
+            bitcoin::Network::Signet => "https://mempool.space/signet/api",
+            bitcoin::Network::Regtest => "http://localhost:2140",
+            _ => "https://mempool.space/testnet/api",
+        };
+        Some(default_url.to_string())
+    });
+
     tracing::info!(
         signer_id = signer_id,
         key_path = %key_path,

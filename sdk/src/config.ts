@@ -73,8 +73,8 @@ export interface NetworkConfig {
   // Bitcoin Network
   // -------------------------------------------------------------------------
 
-  /** Bitcoin network (testnet3, mainnet) */
-  bitcoinNetwork: "testnet" | "mainnet";
+  /** Bitcoin network */
+  bitcoinNetwork: "mainnet" | "testnet" | "testnet4" | "signet" | "regtest";
 
   /** Esplora API endpoint */
   esploraUrl: string;
@@ -173,8 +173,8 @@ export const DEVNET_CONFIG: NetworkConfig = {
   solanaWsUrl: "wss://api.devnet.solana.com",
 
   // Bitcoin Network
-  bitcoinNetwork: "testnet",
-  esploraUrl: "https://blockstream.info/testnet/api",
+  bitcoinNetwork: "testnet4",
+  esploraUrl: "https://mempool.space/testnet4/api",
 
   // Circuit CDN (Groth16 artifacts: .wasm, .zkey files)
   circuitCdnUrl: "https://circuits.amidoggy.xyz",
@@ -226,7 +226,7 @@ export const MAINNET_CONFIG: NetworkConfig = {
 
   // Bitcoin Network
   bitcoinNetwork: "mainnet",
-  esploraUrl: "https://blockstream.info/api",
+  esploraUrl: "https://mempool.space/api",
 
   // Circuit CDN
   circuitCdnUrl: "https://cdn.jsdelivr.net/npm/@zvault/sdk@latest/circuits",
@@ -271,9 +271,9 @@ export const LOCALNET_CONFIG: NetworkConfig = {
   solanaRpcUrl: "http://127.0.0.1:8899",
   solanaWsUrl: "ws://127.0.0.1:8900",
 
-  // Bitcoin Network (use testnet for local dev)
-  bitcoinNetwork: "testnet",
-  esploraUrl: "https://blockstream.info/testnet/api",
+  // Bitcoin Network (regtest for local dev)
+  bitcoinNetwork: "regtest",
+  esploraUrl: "http://localhost:2140",
 
   // Circuit CDN (use local files for development)
   circuitCdnUrl: "/circuits",
