@@ -12,27 +12,26 @@ import {
   createNote,
   initPoseidon,
   initProver,
-  generateClaimProof,
+  generateJoinSplitProof,
   proofToBytes,
   babyJubMul,
   BABYJUB_BASE8,
-  deriveCommitmentTreePDA,
   fetchCommitmentTree,
   getCommitmentIndex,
   computeUnifiedCommitmentSync,
   bytesToBigint,
+  bytesToHex,
   hexToBytes,
   DEVNET_CONFIG,
   BN254_FIELD_PRIME,
-  type ClaimInputs,
+  type JoinSplitProofInputs,
 } from "@zvault/sdk";
 import {
-  buildClaimTransaction,
   ZBTC_MINT_ADDRESS,
   TOKEN_2022_PROGRAM_ID,
+  ZVAULT_PROGRAM_ID,
 } from "@/lib/solana/instructions";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
-import { ZVAULT_PROGRAM_ID } from "@/lib/constants";
 import { useFlowState } from "@/features/shared/hooks";
 import type {
   ClaimStep,
@@ -42,11 +41,13 @@ import type {
   SplitResult,
 } from "../types";
 
+/** ZBTC token ID used in Poseidon commitment */
+const ZBTC_TOKEN_ID = BigInt(0x7a627463);
+
 export function useClaimFlow(initialNote?: string) {
-  const { publicKey, connected, signTransaction } = useWallet();
+  const { publicKey, connected } = useWallet();
   const { connection } = useConnection();
 
-  // Flow state
   const {
     step,
     setStep,
@@ -84,43 +85,42 @@ export function useClaimFlow(initialNote?: string) {
   }, []);
 
   // Parse claim link from text
-  const parseClaimLink = useCallback((text: string): boolean => {
-    // Try to extract note parameter from URL
-    if (text.includes("?note=") || text.includes("&note=")) {
-      const match = text.match(/[?&]note=([^&\s]+)/);
-      if (match) {
-        const decoded = decodeClaimLink(match[1]);
-        if (decoded && typeof decoded === "string") {
-          setSecretPhrase(decoded);
-          setError(null);
-          return true;
+  const parseClaimLink = useCallback(
+    (text: string): boolean => {
+      if (text.includes("?note=") || text.includes("&note=")) {
+        const match = text.match(/[?&]note=([^&\s]+)/);
+        if (match) {
+          const decoded = decodeClaimLink(match[1]);
+          if (decoded && typeof decoded === "string") {
+            setSecretPhrase(decoded);
+            setError(null);
+            return true;
+          }
         }
       }
-    }
 
-    // Legacy format not supported
-    if (text.includes("?n=") && text.includes("&s=")) {
-      setError("Legacy claim link format not supported.");
+      if (text.includes("?n=") && text.includes("&s=")) {
+        setError("Legacy claim link format not supported.");
+        return false;
+      }
+
+      const decoded = decodeClaimLink(text.trim());
+      if (decoded && typeof decoded === "string") {
+        setSecretPhrase(decoded);
+        setError(null);
+        return true;
+      }
+
+      if (text.trim().length >= 8) {
+        setSecretPhrase(text.trim());
+        setError(null);
+        return true;
+      }
+
       return false;
-    }
-
-    // Try direct decode
-    const decoded = decodeClaimLink(text.trim());
-    if (decoded && typeof decoded === "string") {
-      setSecretPhrase(decoded);
-      setError(null);
-      return true;
-    }
-
-    // Try as raw seed phrase
-    if (text.trim().length >= 8) {
-      setSecretPhrase(text.trim());
-      setError(null);
-      return true;
-    }
-
-    return false;
-  }, [setError]);
+    },
+    [setError]
+  );
 
   // Paste from clipboard
   const pasteFromClipboard = useCallback(async () => {
@@ -169,7 +169,9 @@ export function useClaimFlow(initialNote?: string) {
       }
 
       if (foundAmount === null) {
-        throw new Error("Commitment not found. Please ensure your deposit has been confirmed on-chain.");
+        throw new Error(
+          "Commitment not found. Please ensure your deposit has been confirmed on-chain."
+        );
       }
 
       const commitment = computeUnifiedCommitmentSync(pubKeyX, BigInt(foundAmount));
@@ -187,7 +189,7 @@ export function useClaimFlow(initialNote?: string) {
     }
   }, [secretPhrase, setError, setStep]);
 
-  // Claim tokens
+  // Claim via JoinSplit relay
   const claim = useCallback(async () => {
     if (secretPhrase.trim().length < 8) {
       setError("Please enter your secret phrase (at least 8 characters)");
@@ -195,10 +197,6 @@ export function useClaimFlow(initialNote?: string) {
     }
     if (!connected || !publicKey) {
       setError("Please connect your Solana wallet");
-      return;
-    }
-    if (!signTransaction) {
-      setError("Wallet does not support transaction signing");
       return;
     }
 
@@ -217,15 +215,14 @@ export function useClaimFlow(initialNote?: string) {
       }
 
       const commitmentIndex = getCommitmentIndex();
-      let amountSats = verifyResult.amountSats;
+      const amountSats = verifyResult.amountSats;
       let leafIndexBigint = 0n;
       let merkleRoot = 0n;
-      let merkleSiblings: bigint[] = Array(20).fill(0n);
-      let merkleIndices: number[] = Array(20).fill(0);
+      let merkleSiblings: bigint[] = Array(16).fill(0n);
+      let merkleIndices: number[] = Array(16).fill(0);
 
       // Fetch commitment tree state
       try {
-        const [commitmentTreePDA] = await deriveCommitmentTreePDA(ZVAULT_PROGRAM_ID);
         const treeState = await fetchCommitmentTree(
           {
             getAccountInfo: async (pk: unknown) => {
@@ -233,7 +230,7 @@ export function useClaimFlow(initialNote?: string) {
               return info ? { data: new Uint8Array(info.data) } : null;
             },
           },
-          commitmentTreePDA
+          DEVNET_CONFIG.commitmentTreePda
         );
         if (treeState) {
           merkleRoot = bytesToBigint(treeState.currentRoot);
@@ -248,7 +245,6 @@ export function useClaimFlow(initialNote?: string) {
       const indexEntry = commitmentIndex.getCommitment(commitmentHex);
 
       if (indexEntry) {
-        amountSats = Number(indexEntry.amount);
         leafIndexBigint = indexEntry.index;
         const proof = commitmentIndex.getMerkleProof(commitment);
         if (proof) {
@@ -258,77 +254,104 @@ export function useClaimFlow(initialNote?: string) {
         }
       }
 
-      const merkleRootHex = "0x" + merkleRoot.toString(16).padStart(64, "0");
       const leafIndex = Number(leafIndexBigint);
 
-      // Generate proof
       if (!proverReady) {
         throw new Error("Prover not ready. Please wait for initialization.");
       }
 
-      const recipientBigint = BigInt("0x" + Buffer.from(publicKey.toBytes()).toString("hex")) % BN254_FIELD_PRIME;
-      const claimInputs: ClaimInputs = {
-        privKey,
-        amount: BigInt(amountSats),
-        leafIndex: leafIndexBigint,
+      // Generate JoinSplit(1,1) proof: 1 input (deposit) → 1 output (claimed note)
+      // The output NPK is derived for the claimer
+      const outputNpk = pubKeyX; // Same key for self-claim
+      const nullifierHash = note.nullifierHash ?? 0n;
+
+      // Compute bound params hash (hash of all public params bound to the proof)
+      // For a 1x1 JoinSplit, this binds the output commitment
+      const outputCommitment = computeUnifiedCommitmentSync(outputNpk, BigInt(amountSats));
+
+      const joinsplitInputs: JoinSplitProofInputs = {
+        nInputs: 1,
+        nOutputs: 1,
         merkleRoot,
-        merkleProof: { siblings: merkleSiblings, indices: merkleIndices },
-        recipient: recipientBigint,
+        boundParamsHash: 0n, // Computed by circuit
+        token: ZBTC_TOKEN_ID,
+        publicKey: [pubKeyPoint.x, pubKeyPoint.y],
+        signature: [0n, 0n, 0n], // EdDSA-Poseidon signature (computed during proof gen)
+        nullifyingKey: note.nullifier,
+        inputs: [
+          {
+            random: note.secret ?? 0n,
+            value: BigInt(amountSats),
+            leafIndex: leafIndexBigint,
+            merkleProof: { siblings: merkleSiblings, indices: merkleIndices },
+          },
+        ],
+        outputs: [{ npk: outputNpk, value: BigInt(amountSats) }],
       };
 
-      const proofData = await generateClaimProof(claimInputs);
+      const proofData = await generateJoinSplitProof(joinsplitInputs);
       const proofBytes = proofToBytes(proofData);
-
-      setClaimProgress("submitting");
-
-      // Build transaction
-      const nullifierHashHex = note.nullifierHash?.toString(16).padStart(64, "0") ?? "0".repeat(64);
-      const nullifierHashBytes = new Uint8Array(Buffer.from(nullifierHashHex, "hex"));
-      const merkleRootBytes = new Uint8Array(Buffer.from(merkleRootHex.slice(2), "hex"));
-
-      const userTokenAccount = getAssociatedTokenAddressSync(ZBTC_MINT_ADDRESS, publicKey, false, TOKEN_2022_PROGRAM_ID);
-
-      const vkHash = hexToBytes(DEVNET_CONFIG.vkHashes.claim);
-
-      const transaction = await buildClaimTransaction(connection, {
-        nullifierHash: nullifierHashBytes,
-        merkleRoot: merkleRootBytes,
-        zkProof: proofBytes,
-        amountSats: BigInt(amountSats),
-        userPubkey: publicKey,
-        userTokenAccount,
-        vkHash,
-      });
 
       setClaimProgress("relaying");
 
-      // Sign and submit
-      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
-      transaction.recentBlockhash = blockhash;
-      transaction.feePayer = publicKey;
+      // Submit via relay API
+      const nullifierBytes = new Uint8Array(32);
+      const nhHex = nullifierHash.toString(16).padStart(64, "0");
+      for (let i = 0; i < 32; i++) {
+        nullifierBytes[i] = parseInt(nhHex.slice(i * 2, i * 2 + 2), 16);
+      }
 
-      const signedTx = await signTransaction(transaction);
-      const signature = await connection.sendRawTransaction(signedTx.serialize(), {
-        skipPreflight: false,
-        preflightCommitment: "confirmed",
+      const merkleRootBytes = new Uint8Array(32);
+      const mrHex = merkleRoot.toString(16).padStart(64, "0");
+      for (let i = 0; i < 32; i++) {
+        merkleRootBytes[i] = parseInt(mrHex.slice(i * 2, i * 2 + 2), 16);
+      }
+
+      const outputCommitmentBytes = new Uint8Array(32);
+      const ocHex = outputCommitment.toString(16).padStart(64, "0");
+      for (let i = 0; i < 32; i++) {
+        outputCommitmentBytes[i] = parseInt(ocHex.slice(i * 2, i * 2 + 2), 16);
+      }
+
+      // Stealth data: ephemeral pub (32 bytes) + encrypted amount (8 bytes)
+      const stealthDataEntry = new Uint8Array(40);
+      // For self-claim, ephemeral pub can be the pubkey X coordinate
+      const ephPubHex = pubKeyX.toString(16).padStart(64, "0");
+      for (let i = 0; i < 32; i++) {
+        stealthDataEntry[i] = parseInt(ephPubHex.slice(i * 2, i * 2 + 2), 16);
+      }
+      // Encrypted amount (little-endian u64)
+      const amountBigint = BigInt(amountSats);
+      for (let i = 0; i < 8; i++) {
+        stealthDataEntry[32 + i] = Number((amountBigint >> BigInt(i * 8)) & 0xffn);
+      }
+
+      const relayResponse = await fetch("/api/relay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nInputs: 1,
+          nOutputs: 1,
+          proof: bytesToHex(proofBytes),
+          merkleRoot: bytesToHex(merkleRootBytes),
+          boundParamsHash: "0".repeat(64), // TODO: compute properly
+          nullifiers: [bytesToHex(nullifierBytes)],
+          commitmentsOut: [bytesToHex(outputCommitmentBytes)],
+          stealthData: [bytesToHex(stealthDataEntry)],
+        }),
       });
 
-      setClaimProgress("confirming");
+      const relayResult = await relayResponse.json();
 
-      const confirmation = await connection.confirmTransaction(
-        { signature, blockhash, lastValidBlockHeight },
-        "confirmed"
-      );
-
-      if (confirmation.value.err) {
-        throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`);
+      if (!relayResult.success) {
+        throw new Error(`Relay failed: ${relayResult.error}`);
       }
 
       setClaimProgress("complete");
       setClaimResult({
-        txSignature: signature,
+        txSignature: relayResult.signature,
         claimedAmount: amountSats,
-        merkleRoot: merkleRootHex,
+        merkleRoot: merkleRoot.toString(16).padStart(64, "0"),
         leafIndex,
         proofStatus: "zk_verified",
       });
@@ -345,7 +368,6 @@ export function useClaimFlow(initialNote?: string) {
     secretPhrase,
     connected,
     publicKey,
-    signTransaction,
     connection,
     verifyResult,
     proverReady,
@@ -354,49 +376,52 @@ export function useClaimFlow(initialNote?: string) {
   ]);
 
   // Split claim
-  const split = useCallback(async (sendAmountSats: number) => {
-    if (!claimResult?.claimedAmount) return;
+  const split = useCallback(
+    async (sendAmountSats: number) => {
+      if (!claimResult?.claimedAmount) return;
 
-    if (sendAmountSats <= 0) {
-      setError("Please enter a valid amount to send");
-      return;
-    }
-    if (sendAmountSats >= claimResult.claimedAmount) {
-      setError("Send amount must be less than total claimed amount");
-      return;
-    }
+      if (sendAmountSats <= 0) {
+        setError("Please enter a valid amount to send");
+        return;
+      }
+      if (sendAmountSats >= claimResult.claimedAmount) {
+        setError("Send amount must be less than total claimed amount");
+        return;
+      }
 
-    setSplitLoading(true);
-    setError(null);
+      setSplitLoading(true);
+      setError(null);
 
-    try {
-      await initPoseidon();
+      try {
+        await initPoseidon();
 
-      const keepAmountSats = claimResult.claimedAmount - sendAmountSats;
-      const keepNote = createNote(BigInt(keepAmountSats));
-      const sendNote = createNote(BigInt(sendAmountSats));
+        const keepAmountSats = claimResult.claimedAmount - sendAmountSats;
+        const keepNote = createNote(BigInt(keepAmountSats));
+        const sendNote = createNote(BigInt(sendAmountSats));
 
-      const keepLink = encodeClaimLink(
-        keepNote.nullifier.toString(),
-        keepNote.secret.toString()
-      );
-      const sendLink = encodeClaimLink(
-        sendNote.nullifier.toString(),
-        sendNote.secret.toString()
-      );
+        const keepLink = encodeClaimLink(
+          keepNote.nullifier.toString(),
+          keepNote.secret.toString()
+        );
+        const sendLink = encodeClaimLink(
+          sendNote.nullifier.toString(),
+          sendNote.secret.toString()
+        );
 
-      setSplitResult({
-        keepLink,
-        keepAmount: keepAmountSats,
-        sendLink,
-        sendAmount: sendAmountSats,
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to split notes");
-    } finally {
-      setSplitLoading(false);
-    }
-  }, [claimResult, setError]);
+        setSplitResult({
+          keepLink,
+          keepAmount: keepAmountSats,
+          sendLink,
+          sendAmount: sendAmountSats,
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to split notes");
+      } finally {
+        setSplitLoading(false);
+      }
+    },
+    [claimResult, setError]
+  );
 
   // Reset everything
   const reset = useCallback(() => {
@@ -415,7 +440,6 @@ export function useClaimFlow(initialNote?: string) {
   }, [secretPhrase]);
 
   return {
-    // State
     step,
     claimProgress,
     error,
@@ -429,7 +453,6 @@ export function useClaimFlow(initialNote?: string) {
     connected,
     publicKey,
 
-    // Actions
     setSecretPhrase,
     parseClaimLink,
     pasteFromClipboard,

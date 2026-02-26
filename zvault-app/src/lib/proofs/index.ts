@@ -1,28 +1,23 @@
 /**
  * ZK Proof Generation for ZVault Frontend
  *
- * Re-exports SDK proof generation functions.
- * Uses circom circuits with Groth16 proofs via snarkjs.
+ * Re-exports SDK JoinSplit proof generation.
+ * All transfers (claim, split, send) use unified JoinSplit(N,M) proofs.
  */
 
-// Re-export SDK proof generation functions directly
 export {
-  generateClaimProof,
-  generateSpendSplitProof,
-  generateSpendPartialPublicProof,
+  generateJoinSplitProof,
   proofToBytes,
-  type ClaimInputs,
-  type SpendSplitInputs,
-  type SpendPartialPublicInputs,
-  type MerkleProofInput,
+  initProver,
+  isProverAvailable,
+  type JoinSplitProofInputs,
   type ProofData,
+  type MerkleProofInput,
 } from "@zvault/sdk";
 
-/** Merkle proof for local tree */
 export interface MerkleProof {
   siblings: bigint[];
   indices: number[];
 }
 
-// Re-export crypto utilities from SDK
 export { bigintToBytes, bytesToBigint } from "@zvault/sdk";

@@ -1,11 +1,20 @@
 /**
- * Prover Hook Stub (Groth16)
+ * Prover Hook (Groth16 JoinSplit)
  *
- * Placeholder hook for ZK proof generation.
- * Will be implemented with snarkjs Groth16 prover.
+ * Wraps SDK's JoinSplit proof generation with React state management.
+ * All private transfers (claim, split, send) use unified JoinSplit(N,M) proofs.
  */
 
+"use client";
+
 import { useState, useCallback } from "react";
+import {
+  initProver,
+  generateJoinSplitProof,
+  proofToBytes,
+  type JoinSplitProofInputs,
+  type ProofData,
+} from "@zvault/sdk";
 
 interface ProverState {
   isInitialized: boolean;
@@ -13,9 +22,10 @@ interface ProverState {
   progress: string | null;
   error: string | null;
   initialize: () => Promise<void>;
-  generatePartialPublicProof: (inputs: any) => Promise<any>;
-  generateSplitProof: (inputs: any) => Promise<any>;
-  generateClaimProof: (inputs: any) => Promise<any>;
+  generateProof: (inputs: JoinSplitProofInputs) => Promise<{
+    proof: ProofData;
+    proofBytes: Uint8Array;
+  }>;
 }
 
 export function useProver(): ProverState {
@@ -26,36 +36,40 @@ export function useProver(): ProverState {
 
   const initialize = useCallback(async () => {
     try {
-      // TODO: Initialize snarkjs Groth16 prover
+      setProgress("Initializing prover...");
+      await initProver();
       setIsInitialized(true);
+      setProgress(null);
     } catch (err) {
-      setError("Groth16 prover not yet implemented");
+      setError(err instanceof Error ? err.message : "Failed to initialize prover");
+      setProgress(null);
     }
   }, []);
 
-  const generatePartialPublicProof = useCallback(async (inputs: any) => {
-    setIsGenerating(true);
-    setProgress("Generating Groth16 proof...");
-    setError("Groth16 prover not yet implemented");
-    setIsGenerating(false);
-    throw new Error("Groth16 prover not yet implemented");
-  }, []);
-
-  const generateSplitProof = useCallback(async (inputs: any) => {
-    setIsGenerating(true);
-    setProgress("Generating Groth16 proof...");
-    setError("Groth16 prover not yet implemented");
-    setIsGenerating(false);
-    throw new Error("Groth16 prover not yet implemented");
-  }, []);
-
-  const generateClaimProof = useCallback(async (inputs: any) => {
-    setIsGenerating(true);
-    setProgress("Generating Groth16 proof...");
-    setError("Groth16 prover not yet implemented");
-    setIsGenerating(false);
-    throw new Error("Groth16 prover not yet implemented");
-  }, []);
+  const generateProof = useCallback(
+    async (inputs: JoinSplitProofInputs) => {
+      setIsGenerating(true);
+      setError(null);
+      setProgress(
+        `Generating JoinSplit(${inputs.nInputs}x${inputs.nOutputs}) proof...`
+      );
+      try {
+        const proof = await generateJoinSplitProof(inputs);
+        const bytes = proofToBytes(proof);
+        setProgress(null);
+        return { proof, proofBytes: bytes };
+      } catch (err) {
+        const msg =
+          err instanceof Error ? err.message : "Proof generation failed";
+        setError(msg);
+        throw err;
+      } finally {
+        setIsGenerating(false);
+        setProgress(null);
+      }
+    },
+    []
+  );
 
   return {
     isInitialized,
@@ -63,8 +77,6 @@ export function useProver(): ProverState {
     progress,
     error,
     initialize,
-    generatePartialPublicProof,
-    generateSplitProof,
-    generateClaimProof,
+    generateProof,
   };
 }
