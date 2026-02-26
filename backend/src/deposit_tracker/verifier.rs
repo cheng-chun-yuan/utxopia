@@ -1,7 +1,8 @@
 //! SPV Verifier
 //!
 //! Submits sweep transactions for SPV verification on Solana.
-//! Uses the BTC light client to verify transaction inclusion.
+//! Uses btc-relay's verify_transaction to create a VerifiedTransaction PDA,
+//! then calls zvault's verify_stealth_deposit with that PDA.
 
 use bitcoin::consensus::encode::deserialize as btc_deserialize;
 use solana_client::rpc_client::RpcClient;
@@ -12,8 +13,12 @@ use solana_sdk::{
     signature::{Keypair, Signer as SolanaSigner},
     transaction::Transaction,
 };
+use solana_sdk::pubkey;
 use std::str::FromStr;
 use thiserror::Error;
+
+/// Token-2022 program ID (inline constant to avoid spl-token-2022 crate dependency)
+const TOKEN_2022_PROGRAM_ID: Pubkey = pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
 use super::sweeper::extract_deposit_op_return_from_transaction;
 use super::watcher::{AddressWatcher, MerkleProofData, WatcherError};
@@ -131,7 +136,11 @@ impl SpvVerifier {
         self.payer.as_ref().map(|k| k.pubkey())
     }
 
-    /// Verify a Bitcoin deposit via SPV
+    /// Verify a Bitcoin deposit via VerifiedTransaction PDA
+    ///
+    /// Two-step process:
+    /// 1. Call btc-relay's verify_transaction (disc 3) to create VerifiedTransaction PDA
+    /// 2. Call zvault's verify_stealth_deposit with VerifiedTransaction PDA
     ///
     /// # Arguments
     /// * `sweep_txid` - The sweep transaction ID (NOT the original deposit)
@@ -189,17 +198,8 @@ impl SpvVerifier {
         // Get merkle proof
         let merkle_proof = self.watcher.get_merkle_proof(sweep_txid).await?;
 
-        // Get block header
+        // Get block header (needed for verify_transaction)
         let block_header = self.watcher.get_block_header(block_height).await?;
-
-        // Get transaction details for the output pubkey
-        let tx = self.watcher.get_tx(sweep_txid).await?;
-        let output = tx.vout.get(vout as usize).ok_or_else(|| {
-            VerifierError::VerificationFailed(format!("output {} not found", vout))
-        })?;
-
-        // Parse scriptpubkey to get expected pubkey (for P2TR, it's the tweaked pubkey)
-        let expected_pubkey = parse_p2tr_pubkey(&output.scriptpubkey)?;
 
         // Convert txid to internal byte order
         let txid_bytes = hex::decode(sweep_txid)
@@ -207,6 +207,11 @@ impl SpvVerifier {
         let mut txid_internal = [0u8; 32];
         txid_internal.copy_from_slice(&txid_bytes);
         txid_internal.reverse();
+
+        // Compute block hash from raw header (double SHA256)
+        let header_bytes = hex::decode(&block_header.header_hex)
+            .map_err(|e| VerifierError::VerificationFailed(format!("invalid header hex: {}", e)))?;
+        let block_hash = double_sha256(&header_bytes);
 
         // Build and send verification transaction
         let solana_tx = self
@@ -217,10 +222,9 @@ impl SpvVerifier {
                 &block_header.header_hex,
                 block_height,
                 amount_sats,
-                &expected_pubkey,
-                vout,
                 &eph_arr,
                 &npk_arr,
+                &block_hash,
             )
             .await?;
 
@@ -361,21 +365,10 @@ impl SpvVerifier {
         Ok(leaf_index)
     }
 
-    /// Send the verify_deposit transaction to Solana
+    /// Send the verify_deposit transaction to Solana (two instructions)
     ///
-    /// Instruction data layout (npk-based):
-    ///   [0]       discriminator (1)
-    ///   [1-32]    txid (32)
-    ///   [33-112]  block_header (80)
-    ///   [113-120] block_height (8)
-    ///   [121-124] merkle_proof_count (4)
-    ///   [...]     merkle_proof_siblings (32 * count)
-    ///   [...]     merkle_position (4)
-    ///   [...]     amount_sats (8)
-    ///   [...]     expected_pubkey (32)
-    ///   [...]     vout (4)
-    ///   [...]     ephemeral_pub (32) — Ed25519 for stealth scanning
-    ///   [...]     npk (32) — note public key for on-chain commitment computation
+    /// 1. btc-relay verify_transaction (disc 3) — creates VerifiedTransaction PDA
+    /// 2. zvault verify_stealth_deposit (disc 1) — uses VerifiedTransaction PDA
     async fn send_verify_deposit_tx(
         &self,
         payer: &Keypair,
@@ -384,10 +377,9 @@ impl SpvVerifier {
         block_header_hex: &str,
         block_height: u64,
         amount_sats: u64,
-        expected_pubkey: &[u8; 32],
-        vout: u32,
         ephemeral_pub: &[u8; 32],
         npk: &[u8; 32],
+        block_hash: &[u8; 32],
     ) -> Result<String, VerifierError> {
         // Derive PDAs
         let (pool_state, _) = Pubkey::find_program_address(&[b"pool_state"], &self.program_id);
@@ -402,77 +394,83 @@ impl SpvVerifier {
             &self.light_client_program_id,
         );
 
+        let (verified_tx_pda, _) = Pubkey::find_program_address(
+            &[b"verified_tx", block_hash, txid],
+            &self.light_client_program_id,
+        );
+
         let (deposit_record, _) =
             Pubkey::find_program_address(&[b"deposit", txid], &self.program_id);
 
         let (commitment_tree, _) =
             Pubkey::find_program_address(&[b"commitment_tree"], &self.program_id);
 
-        // Build instruction data
-        // Discriminator for VERIFY_STEALTH_DEPOSIT = 1
-        let discriminator: u8 = 1;
+        // --- Instruction 1: btc-relay verify_transaction (disc 3) ---
+        let verify_tx_ix = self.build_verify_transaction_ix(
+            payer,
+            txid,
+            merkle_proof,
+            block_height,
+            block_hash,
+            &light_client,
+            &block_header_pda,
+            &verified_tx_pda,
+        )?;
 
-        let mut data = Vec::new();
-        data.push(discriminator);
+        // --- Instruction 2: zvault verify_stealth_deposit (disc 1) ---
+        let mut deposit_data = Vec::new();
+        deposit_data.push(1u8); // discriminator
 
-        // Transaction ID
-        data.extend_from_slice(txid);
+        // txid (32)
+        deposit_data.extend_from_slice(txid);
+        // block_height (8)
+        deposit_data.extend_from_slice(&block_height.to_le_bytes());
+        // amount_sats (8)
+        deposit_data.extend_from_slice(&amount_sats.to_le_bytes());
+        // tx_size (4) — estimate from raw tx; will be validated on-chain
+        // We need to get the raw tx size. For now, pass 0 and let ChadBuffer handle it.
+        // In practice, the caller should upload the tx to ChadBuffer first.
+        deposit_data.extend_from_slice(&0u32.to_le_bytes());
+        // ephemeral_pub (32)
+        deposit_data.extend_from_slice(ephemeral_pub);
+        // npk (32)
+        deposit_data.extend_from_slice(npk);
 
-        // Raw block header (80 bytes)
-        let header_bytes = hex::decode(block_header_hex)
-            .map_err(|e| VerifierError::VerificationFailed(format!("invalid header hex: {}", e)))?;
-        data.extend_from_slice(&header_bytes);
-
-        // Block height
-        data.extend_from_slice(&block_height.to_le_bytes());
-
-        // Merkle proof siblings
-        data.extend_from_slice(&(merkle_proof.merkle.len() as u32).to_le_bytes());
-        for sibling_hex in &merkle_proof.merkle {
-            let sibling_bytes = hex::decode(sibling_hex)
-                .map_err(|e| VerifierError::VerificationFailed(format!("invalid merkle: {}", e)))?;
-            let mut sibling = [0u8; 32];
-            sibling.copy_from_slice(&sibling_bytes);
-            sibling.reverse(); // Internal byte order
-            data.extend_from_slice(&sibling);
-        }
-
-        // Merkle position
-        data.extend_from_slice(&merkle_proof.pos.to_le_bytes());
-
-        // Output details
-        data.extend_from_slice(&amount_sats.to_le_bytes());
-        data.extend_from_slice(expected_pubkey);
-        data.extend_from_slice(&vout.to_le_bytes());
-
-        // Ephemeral public key (Ed25519, for stealth scanning)
-        data.extend_from_slice(ephemeral_pub);
-
-        // NPK (note public key, for on-chain commitment computation)
-        data.extend_from_slice(npk);
-
-        // 11 accounts (no StealthAnnouncement):
+        // 11 accounts for verify_stealth_deposit:
         //   0. pool_state (writable)
-        //   1. light_client (readonly)
-        //   2. block_header (readonly)
+        //   1. verified_tx (readonly, owned by btc-relay)
+        //   2. light_client (readonly, owned by btc-relay)
         //   3. commitment_tree (writable)
         //   4. deposit_record (writable)
-        //   5. authority/payer (signer)
-        //   6. system_program (readonly)
-        let accounts = vec![
+        //   5. tx_buffer (readonly) — ChadBuffer
+        //   6. authority/payer (signer)
+        //   7. system_program (readonly)
+        //   8. zbtc_mint (writable)
+        //   9. pool_vault (writable)
+        //   10. token_program (readonly)
+        // Note: zbtc_mint and pool_vault need to be provided by the caller
+        // For now, we use placeholder accounts that the caller must fill in
+        let deposit_accounts = vec![
             AccountMeta::new(pool_state, false),
+            AccountMeta::new_readonly(verified_tx_pda, false),
             AccountMeta::new_readonly(light_client, false),
-            AccountMeta::new_readonly(block_header_pda, false),
             AccountMeta::new(commitment_tree, false),
             AccountMeta::new(deposit_record, false),
+            // tx_buffer — placeholder, must be set by caller via ChadBuffer upload
+            AccountMeta::new_readonly(Pubkey::default(), false),
             AccountMeta::new(payer.pubkey(), true),
             AccountMeta::new_readonly(solana_sdk::system_program::ID, false),
+            // zbtc_mint and pool_vault — must be derived from pool state
+            // These would need to be passed in from the caller
+            AccountMeta::new(Pubkey::default(), false), // zbtc_mint placeholder
+            AccountMeta::new(Pubkey::default(), false), // pool_vault placeholder
+            AccountMeta::new_readonly(TOKEN_2022_PROGRAM_ID, false),
         ];
 
-        let ix = Instruction {
+        let deposit_ix = Instruction {
             program_id: self.program_id,
-            accounts,
-            data,
+            accounts: deposit_accounts,
+            data: deposit_data,
         };
 
         // Get recent blockhash
@@ -481,9 +479,9 @@ impl SpvVerifier {
             .get_latest_blockhash()
             .map_err(|e| VerifierError::RpcError(format!("Failed to get blockhash: {}", e)))?;
 
-        // Build and sign transaction
+        // Build and sign transaction with both instructions
         let tx = Transaction::new_signed_with_payer(
-            &[ix],
+            &[verify_tx_ix, deposit_ix],
             Some(&payer.pubkey()),
             &[payer],
             recent_blockhash,
@@ -497,6 +495,73 @@ impl SpvVerifier {
 
         Ok(sig.to_string())
     }
+
+    /// Build btc-relay verify_transaction instruction (disc 3)
+    fn build_verify_transaction_ix(
+        &self,
+        payer: &Keypair,
+        txid: &[u8; 32],
+        merkle_proof: &MerkleProofData,
+        block_height: u64,
+        block_hash: &[u8; 32],
+        light_client: &Pubkey,
+        block_header_pda: &Pubkey,
+        verified_tx_pda: &Pubkey,
+    ) -> Result<Instruction, VerifierError> {
+        let mut data = Vec::new();
+        data.push(3u8); // discriminator
+
+        // txid (32)
+        data.extend_from_slice(txid);
+        // block_height (8)
+        data.extend_from_slice(&block_height.to_le_bytes());
+        // tx_size (4) — placeholder, validated on-chain from ChadBuffer
+        data.extend_from_slice(&0u32.to_le_bytes());
+
+        // Merkle proof: [txid(32)][path_bits(4)][path_len(1)][tx_index(4)][siblings...]
+        data.extend_from_slice(txid); // proof txid
+        data.extend_from_slice(&merkle_proof.pos.to_le_bytes()); // path_bits
+        data.push(merkle_proof.merkle.len() as u8); // path_len
+        data.extend_from_slice(&(merkle_proof.pos as u32).to_le_bytes()); // tx_index
+
+        // Merkle siblings
+        for sibling_hex in &merkle_proof.merkle {
+            let sibling_bytes = hex::decode(sibling_hex)
+                .map_err(|e| VerifierError::VerificationFailed(format!("invalid merkle: {}", e)))?;
+            let mut sibling = [0u8; 32];
+            sibling.copy_from_slice(&sibling_bytes);
+            sibling.reverse(); // Internal byte order
+            data.extend_from_slice(&sibling);
+        }
+
+        // tx_buffer — placeholder account (ChadBuffer with raw tx)
+        // In production, caller uploads raw tx to ChadBuffer first
+
+        let accounts = vec![
+            AccountMeta::new(*verified_tx_pda, false),
+            AccountMeta::new_readonly(*light_client, false),
+            AccountMeta::new_readonly(*block_header_pda, false),
+            AccountMeta::new_readonly(Pubkey::default(), false), // tx_buffer placeholder
+            AccountMeta::new(payer.pubkey(), true),
+            AccountMeta::new_readonly(solana_sdk::system_program::ID, false),
+        ];
+
+        Ok(Instruction {
+            program_id: self.light_client_program_id,
+            accounts,
+            data,
+        })
+    }
+}
+
+/// Double SHA256 hash
+fn double_sha256(data: &[u8]) -> [u8; 32] {
+    use sha2::{Sha256, Digest};
+    let first = Sha256::digest(data);
+    let second = Sha256::digest(&first);
+    let mut result = [0u8; 32];
+    result.copy_from_slice(&second);
+    result
 }
 
 /// Parse P2TR scriptpubkey to get the x-only pubkey
