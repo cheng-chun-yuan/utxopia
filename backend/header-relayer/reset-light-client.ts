@@ -1,38 +1,24 @@
 /**
- * Reset the BTC Light Client tip on devnet to a real testnet block.
+ * Reset the BTC Light Client tip to a real Bitcoin block.
  *
- * Fetches the current testnet tip (or a specified height) from mempool.space,
- * then calls the reset_tip instruction on the devnet btc-relay program.
+ * Fetches the current tip (or a specified height) from mempool.space,
+ * then calls the reset_tip instruction.
  *
  * Usage:
- *   bun run reset
- *   RESET_HEIGHT=2900000 bun run reset
- *
- * Environment (from .env):
- *   SOLANA_RPC_URL   — Solana RPC (default: devnet)
- *   PROGRAM_ID       — btc-relay program ID
- *   RELAYER_KEYPAIR  — JSON array of authority keypair bytes
- *   BITCOIN_NETWORK  — mainnet | testnet | signet
- *   RESET_HEIGHT     — optional: specific block height (default: current tip)
+ *   DEPLOY_ENV=devnet bun run reset
+ *   DEPLOY_ENV=devnet RESET_HEIGHT=75000 bun run reset
  */
 
-import { Connection, Keypair, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { Connection, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { getLightClientState, resetTip, bytesToHex } from './solana';
-import type { BitcoinNetwork } from './mempool';
-
-const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
-const PROGRAM_ID = new PublicKey(
-  process.env.PROGRAM_ID || 'DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS'
-);
-const BITCOIN_NETWORK = (process.env.BITCOIN_NETWORK || 'testnet') as BitcoinNetwork;
-
-function getRelayerKeypair(): Keypair {
-  const keypairJson = process.env.RELAYER_KEYPAIR;
-  if (!keypairJson) {
-    throw new Error('RELAYER_KEYPAIR environment variable is required');
-  }
-  return Keypair.fromSecretKey(new Uint8Array(JSON.parse(keypairJson)));
-}
+import { getTipHeight, getBlockHashByHeight } from './mempool';
+import {
+  SOLANA_RPC_URL,
+  PROGRAM_ID,
+  BITCOIN_NETWORK,
+  getRelayerKeypair,
+  logConfig,
+} from './config';
 
 function hexToBytesReversed(hex: string): Uint8Array {
   const bytes = new Uint8Array(32);
@@ -42,27 +28,17 @@ function hexToBytesReversed(hex: string): Uint8Array {
   return bytes;
 }
 
-function getMempoolBaseUrl(): string {
-  switch (BITCOIN_NETWORK) {
-    case 'mainnet': return 'https://mempool.space/api';
-    case 'testnet': return 'https://mempool.space/testnet/api';
-    case 'signet': return 'https://mempool.space/signet/api';
-    default: throw new Error(`Unsupported network for reset: ${BITCOIN_NETWORK}`);
-  }
-}
-
 async function main() {
   console.log('=== Reset BTC Light Client Tip ===\n');
 
   const relayer = getRelayerKeypair();
   const connection = new Connection(SOLANA_RPC_URL, 'confirmed');
 
-  console.log(`Solana RPC: ${SOLANA_RPC_URL}`);
-  console.log(`Program ID: ${PROGRAM_ID.toBase58()}`);
-  console.log(`Authority: ${relayer.publicKey.toBase58()}`);
+  logConfig();
+  console.log(`  Authority: ${relayer.publicKey.toBase58()}`);
 
   const balance = await connection.getBalance(relayer.publicKey);
-  console.log(`Balance: ${balance / LAMPORTS_PER_SOL} SOL\n`);
+  console.log(`  Balance: ${balance / LAMPORTS_PER_SOL} SOL\n`);
 
   // Show current on-chain state
   const state = await getLightClientState(connection, PROGRAM_ID);
@@ -75,25 +51,20 @@ async function main() {
   console.log(`  Headers:    ${state.headerCount}\n`);
 
   // Determine target height
-  const baseUrl = getMempoolBaseUrl();
   let targetHeight: number;
 
   if (process.env.RESET_HEIGHT) {
     targetHeight = parseInt(process.env.RESET_HEIGHT, 10);
   } else {
     console.log(`Fetching current ${BITCOIN_NETWORK} tip height...`);
-    const res = await fetch(`${baseUrl}/blocks/tip/height`);
-    if (!res.ok) throw new Error(`Failed to get tip height: ${res.status}`);
-    targetHeight = parseInt(await res.text(), 10);
+    targetHeight = await getTipHeight(BITCOIN_NETWORK);
   }
 
   console.log(`Target height: ${targetHeight}`);
 
   // Fetch real block hash
   console.log(`Fetching block hash for height ${targetHeight}...`);
-  const hashRes = await fetch(`${baseUrl}/block-height/${targetHeight}`);
-  if (!hashRes.ok) throw new Error(`Failed to get block hash: ${hashRes.status}`);
-  const blockHashHex = await hashRes.text();
+  const blockHashHex = await getBlockHashByHeight(BITCOIN_NETWORK, targetHeight);
   console.log(`Block hash:    ${blockHashHex}`);
 
   // Convert to internal byte order (reversed for Bitcoin)
@@ -107,7 +78,8 @@ async function main() {
     PROGRAM_ID,
     relayer,
     BigInt(targetHeight),
-    blockHashBytes
+    blockHashBytes,
+    0, 0,
   );
 
   console.log(`\nSuccess! Transaction: ${signature}`);

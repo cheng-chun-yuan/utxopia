@@ -2,59 +2,38 @@
  * Bitcoin Block Header Relayer Service
  *
  * Continuously syncs Bitcoin block headers to Solana light client.
- * Uses the btc-light-client program for simple, transparent header relay.
  *
- * Environment Variables:
- *   SOLANA_RPC_URL     - Solana RPC endpoint (default: devnet)
- *   PROGRAM_ID         - BTC Light Client program ID
- *   RELAYER_KEYPAIR    - JSON array of keypair bytes
- *   POLL_INTERVAL_MS   - Polling interval in milliseconds (default: 30000)
- *   BITCOIN_NETWORK    - mainnet, testnet, or signet (default: testnet)
- *   START_BLOCK_HEIGHT - Block height to start syncing from (required)
+ * Configuration via DEPLOY_ENV-prefixed env vars (see config.ts).
+ * Example: DEPLOY_ENV=devnet bun run start
  */
 
-import { Connection, Keypair, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { Connection, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import {
   getTipHeight,
+  getBlockHashByHeight,
   getBlockHeaderByHeight,
   getBlockInfoByHeight,
-  type BitcoinNetwork,
 } from './mempool';
 import {
+  getLightClientState,
   getLightClientTipHeight,
   blockHeaderExists,
   submitHeader,
+  getOnChainBlockHash,
+  resetTip,
   bytesToHex,
+  hexToBytes,
 } from './solana';
-
-// Configuration from environment
-const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
-const PROGRAM_ID = new PublicKey(
-  process.env.PROGRAM_ID || 'DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS'
-);
-const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS || '30000', 10);
-const POLL_AT_TIP_MS = parseInt(process.env.POLL_AT_TIP_MS || '300000', 10); // 5 min when at tip
-const BITCOIN_NETWORK = (process.env.BITCOIN_NETWORK || 'testnet') as BitcoinNetwork;
-
-// Required: START_BLOCK_HEIGHT to avoid syncing from genesis
-const START_BLOCK_HEIGHT = process.env.START_BLOCK_HEIGHT
-  ? BigInt(process.env.START_BLOCK_HEIGHT)
-  : null;
-
-// Parse relayer keypair from environment
-function getRelayerKeypair(): Keypair {
-  const keypairJson = process.env.RELAYER_KEYPAIR;
-  if (!keypairJson) {
-    throw new Error('RELAYER_KEYPAIR environment variable is required');
-  }
-
-  try {
-    const keypairArray = JSON.parse(keypairJson);
-    return Keypair.fromSecretKey(new Uint8Array(keypairArray));
-  } catch (e) {
-    throw new Error(`Failed to parse RELAYER_KEYPAIR: ${e}`);
-  }
-}
+import {
+  SOLANA_RPC_URL,
+  PROGRAM_ID,
+  BITCOIN_NETWORK,
+  POLL_INTERVAL_MS,
+  POLL_AT_TIP_MS,
+  START_BLOCK_HEIGHT,
+  getRelayerKeypair,
+  logConfig,
+} from './config';
 
 // Log with timestamp
 function log(message: string, ...args: unknown[]) {
@@ -67,10 +46,93 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Detect and handle reorgs by comparing on-chain tip hash with Bitcoin's hash at same height.
+ * Returns true if a reorg was detected and handled (caller should re-sync).
+ */
+async function detectAndHandleReorg(
+  connection: Connection,
+  relayer: ReturnType<typeof getRelayerKeypair>,
+  startBlockHeight: bigint
+): Promise<boolean> {
+  const state = await getLightClientState(connection, PROGRAM_ID);
+  if (!state) return false;
+
+  const onChainTipHeight = state.tipHeight;
+  const onChainTipHash = state.tipHash;
+
+  // Get Bitcoin's block hash at the on-chain tip height
+  let btcHashHex: string;
+  try {
+    btcHashHex = await getBlockHashByHeight(BITCOIN_NETWORK, Number(onChainTipHeight));
+  } catch {
+    log(`Could not fetch Bitcoin hash at height ${onChainTipHeight}, skipping reorg check`);
+    return false;
+  }
+
+  // Convert Bitcoin hash (BE hex) to LE bytes for comparison
+  const btcHashLeBytes = hexToBytes(btcHashHex);
+  // Bitcoin block hashes from API are in display order (BE), reverse to LE for on-chain comparison
+  btcHashLeBytes.reverse();
+
+  // Compare
+  const match = onChainTipHash.every((b, i) => b === btcHashLeBytes[i]);
+  if (match) return false;
+
+  log(`REORG DETECTED at height ${onChainTipHeight}!`);
+  log(`  On-chain: ${bytesToHex(new Uint8Array(onChainTipHash))}`);
+  log(`  Bitcoin:  ${btcHashHex}`);
+
+  // Walk backward to find common ancestor
+  let ancestorHeight = onChainTipHeight;
+  const minHeight = startBlockHeight;
+
+  while (ancestorHeight > minHeight) {
+    ancestorHeight -= 1n;
+
+    const onChainHash = await getOnChainBlockHash(connection, PROGRAM_ID, ancestorHeight);
+    if (!onChainHash) {
+      log(`No on-chain block at height ${ancestorHeight}, stopping search`);
+      break;
+    }
+
+    let btcAncestorHex: string;
+    try {
+      btcAncestorHex = await getBlockHashByHeight(BITCOIN_NETWORK, Number(ancestorHeight));
+    } catch {
+      log(`Could not fetch Bitcoin hash at height ${ancestorHeight}`);
+      break;
+    }
+
+    const btcAncestorLe = hexToBytes(btcAncestorHex);
+    btcAncestorLe.reverse();
+
+    const ancestorMatch = onChainHash.every((b, i) => b === btcAncestorLe[i]);
+    if (ancestorMatch) {
+      log(`Common ancestor found at height ${ancestorHeight}: ${btcAncestorHex}`);
+
+      // Reset tip to common ancestor
+      log(`Resetting tip to height ${ancestorHeight}...`);
+      const sig = await resetTip(
+        connection,
+        PROGRAM_ID,
+        relayer,
+        ancestorHeight,
+        onChainHash,
+      );
+      log(`Reset tip complete: tx=${sig}`);
+      return true;
+    }
+  }
+
+  log(`ERROR: Could not find common ancestor above height ${minHeight}`);
+  return false;
+}
+
 // Main sync loop - returns true if synced blocks, false if already at tip
 async function syncHeaders(
   connection: Connection,
-  relayer: Keypair,
+  relayer: ReturnType<typeof getRelayerKeypair>,
   startBlockHeight: bigint
 ): Promise<boolean> {
   log('Syncing headers...');
@@ -155,20 +217,16 @@ async function syncHeaders(
 // Main entry point
 async function main() {
   log('Starting Bitcoin Block Header Relayer');
-  log(`  Solana RPC: ${SOLANA_RPC_URL}`);
-  log(`  Program ID: ${PROGRAM_ID.toBase58()}`);
-  log(`  Bitcoin Network: ${BITCOIN_NETWORK}`);
-  log(`  Poll Interval: ${POLL_INTERVAL_MS}ms`);
+  logConfig();
 
   // Validate start block height
   if (START_BLOCK_HEIGHT === null) {
     throw new Error(
-      'START_BLOCK_HEIGHT environment variable is required.\n' +
+      'START_BLOCK_HEIGHT is required.\n' +
         'Set it to a recent block height to avoid syncing from genesis.\n' +
-        `Example: START_BLOCK_HEIGHT=2900000 for ${BITCOIN_NETWORK}`
+        `Example: START_BLOCK_HEIGHT=75000 for ${BITCOIN_NETWORK}`
     );
   }
-  log(`  Start Block Height: ${START_BLOCK_HEIGHT}`);
 
   // Initialize relayer keypair
   const relayer = getRelayerKeypair();
@@ -189,7 +247,14 @@ async function main() {
   while (true) {
     let syncedBlocks = false;
     try {
-      syncedBlocks = await syncHeaders(connection, relayer, START_BLOCK_HEIGHT);
+      // Check for reorgs before syncing
+      const reorgHandled = await detectAndHandleReorg(connection, relayer, START_BLOCK_HEIGHT);
+      if (reorgHandled) {
+        log('Reorg handled, re-syncing...');
+        syncedBlocks = true; // force fast poll
+      }
+
+      syncedBlocks = await syncHeaders(connection, relayer, START_BLOCK_HEIGHT) || syncedBlocks;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log(`Sync error: ${errorMessage}`);

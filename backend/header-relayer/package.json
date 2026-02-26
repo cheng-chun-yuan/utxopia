@@ -5,7 +5,9 @@
   "scripts": {
     "init": "bun run init-light-client.ts",
     "reset": "bun run reset-light-client.ts",
-    "start": "bun run index.ts"
+    "reinit": "bun run reinit-light-client.ts",
+    "start": "bun run index.ts",
+    "test:reorg": "bun run test-reorg.ts"
   },
   "dependencies": {
     "@solana/web3.js": "^1.95.0"
