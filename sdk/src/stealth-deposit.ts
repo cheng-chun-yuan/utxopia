@@ -48,20 +48,15 @@ import { parseStealthMetaAddress } from "./keys";
 import { deriveTaprootAddress } from "./taproot";
 import { poseidonHashSync } from "./poseidon";
 import {
-  prepareVerifyDeposit,
   bytesToHex,
-  fetchRawTransaction,
-  fetchMerkleProof,
-  uploadTransactionToBuffer,
 } from "./chadbuffer";
 import {
   derivePoolStatePDA,
   deriveLightClientPDA,
-  deriveBlockHeaderPDA,
   deriveCommitmentTreePDA,
   deriveDepositRecordPDA,
+  deriveVerifiedTransactionPDA,
 } from "./pda";
-import { buildMerkleProof } from "./chadbuffer";
 
 // ========== Constants ==========
 
@@ -215,6 +210,12 @@ export async function deriveStealthAnnouncementPDA(
 
 /**
  * Verify a stealth deposit on Solana
+ *
+ * IMPORTANT: Before calling this, the caller must first call btc-relay's
+ * verify_transaction (disc 3) to create the VerifiedTransaction PDA.
+ *
+ * @param verifiedTransactionPda - Address of the btc-relay VerifiedTransaction PDA
+ * @param blockHash - Block hash (32 bytes) used to derive the VerifiedTransaction PDA
  */
 export async function verifyStealthDeposit(
   rpc: Rpc<SolanaRpcApi>,
@@ -223,6 +224,11 @@ export async function verifyStealthDeposit(
   btcTxid: string,
   expectedValue: bigint,
   ephemeralPub: Uint8Array,
+  npk: Uint8Array,
+  blockHeight: number,
+  bufferAddress: Address,
+  transactionSize: number,
+  verifiedTransactionPda: Address,
   network: "mainnet" | "testnet" = "testnet",
   programId: Address = ZVAULT_PROGRAM_ID
 ): Promise<string> {
@@ -233,63 +239,57 @@ export async function verifyStealthDeposit(
   if (ephemeralPub.length !== 32) {
     throw new Error("ephemeralPub must be 32 bytes (Ed25519)");
   }
-
-  const {
-    bufferAddress,
-    transactionSize,
-    merkleProof,
-    blockHeight,
-    txIndex,
-    txidBytes,
-  } = await prepareVerifyDeposit(rpc, rpcSubscriptions, payer, btcTxid, network);
-
-  const rawTx = await fetchRawTransaction(btcTxid, network);
-  const stealthData = extractStealthDataFromRawTx(rawTx);
-  if (!stealthData) {
-    throw new Error("Could not find stealth OP_RETURN in transaction");
+  if (npk.length !== 32) {
+    throw new Error("npk must be 32 bytes");
   }
 
+  // Convert txid to internal byte order
+  const txidHex = btcTxid.replace(/^0x/, "");
+  const txidBytes = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) {
+    txidBytes[i] = parseInt(txidHex.slice(i * 2, i * 2 + 2), 16);
+  }
+  txidBytes.reverse(); // internal byte order
+
+  const { BTC_RELAY_PROGRAM_ID } = await import("./pda");
   const [poolState] = await derivePoolStatePDA(programId);
-  const [lightClient] = await deriveLightClientPDA(programId);
-  const [blockHeader] = await deriveBlockHeaderPDA(blockHeight, programId);
+  const [lightClient] = await deriveLightClientPDA(BTC_RELAY_PROGRAM_ID);
   const [commitmentTree] = await deriveCommitmentTreePDA(programId);
   const [depositRecord] = await deriveDepositRecordPDA(txidBytes, programId);
-  const [stealthAnnouncement] = await deriveStealthAnnouncementPDA(
-    programId,
-    ephemeralPub
-  );
 
   console.log("PDAs derived:");
   console.log(`  Pool: ${poolState}`);
+  console.log(`  VerifiedTx: ${verifiedTransactionPda}`);
   console.log(`  Light Client: ${lightClient}`);
-  console.log(`  Block Header: ${blockHeader}`);
   console.log(`  Commitment Tree: ${commitmentTree}`);
   console.log(`  Deposit Record: ${depositRecord}`);
-  console.log(`  Stealth Announcement: ${stealthAnnouncement}`);
-
-  const merkleProofData = buildMerkleProof(txidBytes, merkleProof, txIndex);
 
   const instructionData = buildVerifyStealthDepositData({
     txid: txidBytes,
     blockHeight: BigInt(blockHeight),
     expectedValue,
     transactionSize,
-    merkleProof: merkleProofData,
     ephemeralPub,
+    npk,
   });
+
+  // Token-2022 program ID
+  const TOKEN_2022_PROGRAM: Address = address(
+    "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+  );
 
   const instruction = {
     programAddress: programId,
     accounts: [
-      { address: poolState, role: AccountRole.WRITABLE },
-      { address: lightClient, role: AccountRole.READONLY },
-      { address: blockHeader, role: AccountRole.READONLY },
-      { address: commitmentTree, role: AccountRole.WRITABLE },
-      { address: depositRecord, role: AccountRole.WRITABLE },
-      { address: stealthAnnouncement, role: AccountRole.WRITABLE },
-      { address: bufferAddress, role: AccountRole.READONLY },
-      { address: payer.address, role: AccountRole.WRITABLE_SIGNER },
-      { address: SYSTEM_PROGRAM_ID, role: AccountRole.READONLY },
+      { address: poolState, role: AccountRole.WRITABLE },          // 0
+      { address: verifiedTransactionPda, role: AccountRole.READONLY }, // 1
+      { address: lightClient, role: AccountRole.READONLY },         // 2
+      { address: commitmentTree, role: AccountRole.WRITABLE },      // 3
+      { address: depositRecord, role: AccountRole.WRITABLE },       // 4
+      { address: bufferAddress, role: AccountRole.READONLY },       // 5
+      { address: payer.address, role: AccountRole.WRITABLE_SIGNER }, // 6
+      { address: SYSTEM_PROGRAM_ID, role: AccountRole.READONLY },   // 7
+      // zBTC mint and pool vault would be added by the caller
     ],
     data: new Uint8Array(instructionData),
   };
@@ -315,18 +315,25 @@ export async function verifyStealthDeposit(
 /**
  * Build instruction data for verify_stealth_deposit
  *
- * Ephemeral key is now 32 bytes (Ed25519).
+ * Layout (117 bytes = 1 disc + 116 data):
+ * - discriminator: 1 byte
+ * - txid: 32 bytes
+ * - block_height: 8 bytes
+ * - amount_sats: 8 bytes
+ * - tx_size: 4 bytes
+ * - ephemeral_pub: 32 bytes (Ed25519)
+ * - npk: 32 bytes
  */
 function buildVerifyStealthDepositData(params: {
   txid: Uint8Array;
   blockHeight: bigint;
   expectedValue: bigint;
   transactionSize: number;
-  merkleProof: Uint8Array;
   ephemeralPub: Uint8Array;
+  npk: Uint8Array;
 }): Uint8Array {
-  // discriminator + txid + block_height + expected_value + tx_size + ephemeral_pub(32) + merkle_proof
-  const data = new Uint8Array(1 + 32 + 8 + 8 + 4 + 32 + params.merkleProof.length);
+  // discriminator + txid + block_height + amount_sats + tx_size + ephemeral_pub(32) + npk(32)
+  const data = new Uint8Array(1 + 32 + 8 + 8 + 4 + 32 + 32);
   let offset = 0;
 
   data[offset++] = VERIFY_STEALTH_DEPOSIT_DISCRIMINATOR;
@@ -352,7 +359,7 @@ function buildVerifyStealthDepositData(params: {
   data.set(params.ephemeralPub, offset);
   offset += 32;
 
-  data.set(params.merkleProof, offset);
+  data.set(params.npk, offset);
 
   return data;
 }

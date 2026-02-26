@@ -119,29 +119,27 @@ function addressToBytes(addr: Address): Uint8Array {
 /**
  * Build instruction data for REQUEST_REDEMPTION
  *
- * Burns zBTC and creates a RedemptionRequest PDA that the
- * backend redemption processor will pick up.
+ * Creates a RedemptionRequest PDA with the scriptPubKey for BTC withdrawal.
  *
  * Layout:
  * - discriminator (1 byte) = 5
  * - amount_sats (8 bytes, LE)
- * - btc_address_len (1 byte)
- * - btc_address (variable, max 62 bytes)
+ * - btc_script_len (1 byte)
+ * - btc_script (variable, max 62 bytes - scriptPubKey)
  *
  * @param amountSats - Amount to redeem in satoshis
- * @param btcAddress - Bitcoin address for withdrawal (max 62 bytes)
+ * @param btcScript - Bitcoin scriptPubKey for withdrawal (raw bytes, max 62 bytes)
  */
 export function buildRedemptionRequestInstructionData(
   amountSats: bigint,
-  btcAddress: string
+  btcScript: Uint8Array
 ): Uint8Array {
-  const btcAddrBytes = new TextEncoder().encode(btcAddress);
-  if (btcAddrBytes.length > 62) {
-    throw new Error("BTC address too long (max 62 bytes)");
+  if (btcScript.length > 62) {
+    throw new Error("BTC scriptPubKey too long (max 62 bytes)");
   }
 
-  // Layout: discriminator(1) + amount(8) + addr_len(1) + addr
-  const totalLen = 1 + 8 + 1 + btcAddrBytes.length;
+  // Layout: discriminator(1) + amount(8) + script_len(1) + script
+  const totalLen = 1 + 8 + 1 + btcScript.length;
   const data = new Uint8Array(totalLen);
   const view = new DataView(data.buffer);
 
@@ -151,8 +149,8 @@ export function buildRedemptionRequestInstructionData(
   view.setBigUint64(offset, amountSats, true);
   offset += 8;
 
-  data[offset++] = btcAddrBytes.length;
-  data.set(btcAddrBytes, offset);
+  data[offset++] = btcScript.length;
+  data.set(btcScript, offset);
 
   return data;
 }
@@ -161,8 +159,8 @@ export function buildRedemptionRequestInstructionData(
 export interface RedemptionRequestInstructionOptions {
   /** Amount to redeem in satoshis */
   amountSats: bigint;
-  /** Bitcoin address for withdrawal */
-  btcAddress: string;
+  /** Bitcoin scriptPubKey for withdrawal (raw bytes) */
+  btcScript: Uint8Array;
   /** Account addresses */
   accounts: {
     poolState: Address;
@@ -182,7 +180,7 @@ export function buildRedemptionRequestInstruction(
 
   const data = buildRedemptionRequestInstructionData(
     options.amountSats,
-    options.btcAddress
+    options.btcScript
   );
 
   const accounts: Instruction["accounts"] = [
@@ -191,6 +189,89 @@ export function buildRedemptionRequestInstruction(
     { address: options.accounts.userTokenAccount, role: AccountRole.WRITABLE },
     { address: options.accounts.user, role: AccountRole.WRITABLE_SIGNER },
     { address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY },
+    { address: TOKEN_2022_PROGRAM_ID, role: AccountRole.READONLY },
+  ];
+
+  return {
+    programAddress: config.zvaultProgramId,
+    accounts,
+    data,
+  };
+}
+
+// =============================================================================
+// Complete Redemption Instruction Builder
+// =============================================================================
+
+/** Complete redemption instruction options */
+export interface CompleteRedemptionInstructionOptions {
+  /** BTC transaction ID (internal byte order, 32 bytes) */
+  btcTxid: Uint8Array;
+  /** Raw tx size in ChadBuffer */
+  txSize: number;
+  /** Account addresses */
+  accounts: {
+    poolState: Address;
+    redemptionRequest: Address;
+    authority: Address;
+    rentRecipient: Address;
+    verifiedTransaction: Address;
+    lightClient: Address;
+    txBuffer: Address;
+    zbtcMint: Address;
+    poolVault: Address;
+  };
+}
+
+/**
+ * Build instruction data for COMPLETE_REDEMPTION
+ *
+ * Layout:
+ * - discriminator (1 byte) = 6
+ * - btc_txid (32 bytes)
+ * - tx_size (4 bytes, LE)
+ */
+export function buildCompleteRedemptionInstructionData(
+  btcTxid: Uint8Array,
+  txSize: number,
+): Uint8Array {
+  const data = new Uint8Array(1 + 32 + 4);
+  const view = new DataView(data.buffer);
+
+  let offset = 0;
+  data[offset++] = INSTRUCTION.COMPLETE_REDEMPTION;
+
+  data.set(btcTxid, offset);
+  offset += 32;
+
+  view.setUint32(offset, txSize, true);
+
+  return data;
+}
+
+/**
+ * Build a complete redemption instruction
+ */
+export function buildCompleteRedemptionInstruction(
+  options: CompleteRedemptionInstructionOptions
+): Instruction {
+  const config = getConfig();
+
+  const data = buildCompleteRedemptionInstructionData(
+    options.btcTxid,
+    options.txSize,
+  );
+
+  const accounts: Instruction["accounts"] = [
+    { address: options.accounts.poolState, role: AccountRole.WRITABLE },
+    { address: options.accounts.redemptionRequest, role: AccountRole.WRITABLE },
+    { address: options.accounts.authority, role: AccountRole.WRITABLE_SIGNER },
+    { address: options.accounts.rentRecipient, role: AccountRole.READONLY },
+    { address: options.accounts.verifiedTransaction, role: AccountRole.READONLY },
+    { address: options.accounts.lightClient, role: AccountRole.READONLY },
+    { address: options.accounts.txBuffer, role: AccountRole.READONLY },
+    { address: options.accounts.zbtcMint, role: AccountRole.WRITABLE },
+    { address: options.accounts.poolVault, role: AccountRole.WRITABLE },
     { address: TOKEN_2022_PROGRAM_ID, role: AccountRole.READONLY },
   ];
 

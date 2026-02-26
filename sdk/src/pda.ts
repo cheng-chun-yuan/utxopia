@@ -47,6 +47,7 @@ export const PDA_SEEDS = {
   COMMITMENT_TREE: "commitment_tree",
   LIGHT_CLIENT: "btc_light_client",
   BLOCK_HEADER: "block_header",
+  VERIFIED_TX: "verified_tx",
   DEPOSIT: "deposit",
   NULLIFIER: "nullifier",
   STEALTH: "stealth",
@@ -156,6 +157,23 @@ export async function deriveBlockHeaderPDA(
   const result = await getProgramDerivedAddress({
     programAddress: programId,
     seeds: [new TextEncoder().encode(PDA_SEEDS.BLOCK_HEADER), heightBuffer],
+  });
+  return [result[0], result[1]];
+}
+
+/**
+ * Derive VerifiedTransaction PDA (btc-relay)
+ *
+ * Seeds: ["verified_tx", blockHash(32), txid(32)]
+ */
+export async function deriveVerifiedTransactionPDA(
+  blockHash: Uint8Array,
+  txid: Uint8Array,
+  programId: Address = BTC_RELAY_PROGRAM_ID
+): Promise<[Address, number]> {
+  const result = await getProgramDerivedAddress({
+    programAddress: programId,
+    seeds: [new TextEncoder().encode(PDA_SEEDS.VERIFIED_TX), blockHash, txid],
   });
   return [result[0], result[1]];
 }
