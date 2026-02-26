@@ -170,26 +170,153 @@ pub fn hash_meets_target(hash: &[u8; 32], target: &[u8; 32]) -> bool {
     true // Equal
 }
 
-/// Calculate chainwork from difficulty bits
-pub fn calculate_chainwork(bits: u32) -> [u8; 32] {
-    let mut work = [0u8; 32];
+/// Get difficulty target from compact bits format
+pub fn target_from_bits(bits: u32) -> [u8; 32] {
+    let mut target = [0u8; 32];
     let exponent = ((bits >> 24) & 0xff) as usize;
     let mantissa = bits & 0x007fffff;
 
-    if exponent > 0 && exponent < 32 {
-        let pos = 32 - exponent;
-        if pos < 32 {
-            work[pos] = (mantissa >> 16) as u8;
-            if pos + 1 < 32 {
-                work[pos + 1] = (mantissa >> 8) as u8;
-            }
-            if pos + 2 < 32 {
-                work[pos + 2] = mantissa as u8;
-            }
+    if exponent <= 3 {
+        let shift = 8 * (3 - exponent);
+        let value = mantissa >> shift;
+        target[0..4].copy_from_slice(&value.to_le_bytes());
+    } else {
+        let byte_offset = exponent - 3;
+        if byte_offset < 29 {
+            target[byte_offset..byte_offset + 3].copy_from_slice(&mantissa.to_le_bytes()[0..3]);
         }
     }
 
-    work
+    target
+}
+
+/// Calculate chainwork from difficulty bits: work = 2^256 / (target + 1)
+pub fn calculate_chainwork(bits: u32) -> [u8; 32] {
+    let target = target_from_bits(bits);
+
+    // target_plus_one = target + 1
+    let mut target_plus_one = [0u8; 32];
+    let mut carry: u16 = 1;
+    for i in 0..32 {
+        let sum = target[i] as u16 + carry;
+        target_plus_one[i] = sum as u8;
+        carry = sum >> 8;
+    }
+
+    if target_plus_one == [0u8; 32] {
+        return [0u8; 32];
+    }
+
+    // (~target) / (target+1) + 1 = 2^256 / (target+1)
+    let mut not_target = [0u8; 32];
+    for i in 0..32 {
+        not_target[i] = !target[i];
+    }
+
+    let dividend = u256_from_le_bytes(&not_target);
+    let divisor = u256_from_le_bytes(&target_plus_one);
+    let quotient = u256_div(dividend, divisor);
+    let result = u256_add(quotient, [1, 0, 0, 0]);
+    u256_to_le_bytes(result)
+}
+
+// --- 256-bit arithmetic helpers ---
+
+fn u256_from_le_bytes(bytes: &[u8; 32]) -> [u64; 4] {
+    [
+        u64::from_le_bytes(bytes[0..8].try_into().unwrap()),
+        u64::from_le_bytes(bytes[8..16].try_into().unwrap()),
+        u64::from_le_bytes(bytes[16..24].try_into().unwrap()),
+        u64::from_le_bytes(bytes[24..32].try_into().unwrap()),
+    ]
+}
+
+fn u256_to_le_bytes(v: [u64; 4]) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    out[0..8].copy_from_slice(&v[0].to_le_bytes());
+    out[8..16].copy_from_slice(&v[1].to_le_bytes());
+    out[16..24].copy_from_slice(&v[2].to_le_bytes());
+    out[24..32].copy_from_slice(&v[3].to_le_bytes());
+    out
+}
+
+fn u256_add(a: [u64; 4], b: [u64; 4]) -> [u64; 4] {
+    let mut result = [0u64; 4];
+    let mut carry = 0u64;
+    for i in 0..4 {
+        let (s1, c1) = a[i].overflowing_add(b[i]);
+        let (s2, c2) = s1.overflowing_add(carry);
+        result[i] = s2;
+        carry = (c1 as u64) + (c2 as u64);
+    }
+    result
+}
+
+fn u256_gte(a: [u64; 4], b: [u64; 4]) -> bool {
+    for i in (0..4).rev() {
+        if a[i] > b[i] { return true; }
+        if a[i] < b[i] { return false; }
+    }
+    true
+}
+
+fn u256_sub(a: [u64; 4], b: [u64; 4]) -> [u64; 4] {
+    let mut result = [0u64; 4];
+    let mut borrow = 0u64;
+    for i in 0..4 {
+        let (s1, c1) = a[i].overflowing_sub(b[i]);
+        let (s2, c2) = s1.overflowing_sub(borrow);
+        result[i] = s2;
+        borrow = (c1 as u64) + (c2 as u64);
+    }
+    result
+}
+
+fn u256_shl(v: [u64; 4], shift: u32) -> [u64; 4] {
+    if shift >= 256 { return [0; 4]; }
+    let limb_shift = (shift / 64) as usize;
+    let bit_shift = shift % 64;
+    let mut result = [0u64; 4];
+    for i in limb_shift..4 {
+        result[i] = v[i - limb_shift] << bit_shift;
+        if bit_shift > 0 && i > limb_shift {
+            result[i] |= v[i - limb_shift - 1] >> (64 - bit_shift);
+        }
+    }
+    result
+}
+
+fn u256_clz(v: [u64; 4]) -> u32 {
+    for i in (0..4).rev() {
+        if v[i] != 0 {
+            return (3 - i as u32) * 64 + v[i].leading_zeros();
+        }
+    }
+    256
+}
+
+fn u256_div(a: [u64; 4], b: [u64; 4]) -> [u64; 4] {
+    if b == [0, 0, 0, 0] { return [0; 4]; }
+    if !u256_gte(a, b) { return [0; 4]; }
+
+    let a_clz = u256_clz(a);
+    let b_clz = u256_clz(b);
+    if b_clz < a_clz { return [0; 4]; }
+
+    let shift_max = b_clz - a_clz;
+    let mut remainder = a;
+    let mut quotient = [0u64; 4];
+
+    for s in (0..=shift_max).rev() {
+        let shifted = u256_shl(b, s);
+        if u256_gte(remainder, shifted) {
+            remainder = u256_sub(remainder, shifted);
+            let limb = (s / 64) as usize;
+            let bit = s % 64;
+            quotient[limb] |= 1u64 << bit;
+        }
+    }
+    quotient
 }
 
 /// Add two chainwork values (256-bit addition)

@@ -3,23 +3,24 @@
 //! npk-based deposit flow:
 //! 1. User generates npk client-side, sends BTC with OP_RETURN(ephemeralPub || npk)
 //! 2. Backend detects deposit, sweeps UTXO to pool wallet
-//! 3. Backend calls this instruction with npk + amount
+//! 3. Backend calls btc-relay's verify_transaction to create VerifiedTransaction PDA
+//! 4. Backend calls this instruction with npk + amount
 //!
 //! This instruction:
-//! - SPV verifies the sweep transaction
+//! - Checks VerifiedTransaction PDA exists (btc-relay already verified SPV)
+//! - Verifies sufficient confirmations via light client tip height
 //! - Computes commitment ON-CHAIN: Poseidon(npk, ZBTC_TOKEN_ID, amount)
 //! - Inserts commitment into Merkle tree
 //! - Stores stealth data in DepositRecord (no separate StealthAnnouncement)
 //! - Mints zBTC to pool vault
 //!
-//! Instruction Data (116 bytes + merkle proof):
-//! - [0-31]   txid              (32 bytes) - Sweep tx ID (reversed)
-//! - [32-39]  block_height      (8 bytes)  - Block containing tx
+//! Instruction Data (116 bytes, fixed):
+//! - [0-31]   txid              (32 bytes) - Sweep tx ID (internal byte order)
+//! - [32-39]  block_height      (8 bytes)  - Block containing tx (cross-check)
 //! - [40-47]  amount_sats       (8 bytes)  - Amount in satoshis
 //! - [48-51]  tx_size           (4 bytes)  - Raw tx size in ChadBuffer
 //! - [52-83]  ephemeral_pub     (32 bytes) - Ed25519
 //! - [84-115] npk               (32 bytes) - Note public key
-//! - [116+]   merkle_proof      (variable) - SPV merkle siblings
 
 use pinocchio::{
     account_info::AccountInfo,
@@ -33,8 +34,8 @@ use pinocchio_system::instructions::CreateAccount;
 
 use crate::error::ZVaultError;
 use crate::state::{
-    BitcoinLightClient, BlockHeader, CommitmentTree, DepositRecord,
-    PoolState, TxMerkleProof,
+    CommitmentTree, DepositRecord, PoolState,
+    VerifiedTransactionView, light_client_tip_height,
 };
 use crate::utils::crypto::compute_deposit_commitment;
 use crate::utils::bitcoin::compute_tx_hash;
@@ -44,8 +45,12 @@ use crate::utils::{
     validate_token_program_key, validate_account_writable,
 };
 
-/// Required confirmations for demo mode (reduced from 6)
+/// Required confirmations for deposits
+#[cfg(feature = "devnet")]
 pub const DEMO_REQUIRED_CONFIRMATIONS: u64 = 1;
+
+#[cfg(not(feature = "devnet"))]
+pub const DEMO_REQUIRED_CONFIRMATIONS: u64 = 6;
 
 /// Instruction data for verify_stealth_deposit
 ///
@@ -92,14 +97,14 @@ impl VerifyStealthDepositData {
     }
 }
 
-/// Verify an npk-based stealth deposit via SPV proof
+/// Verify an npk-based stealth deposit using VerifiedTransaction PDA
 ///
 /// Computes commitment on-chain, inserts into Merkle tree, stores stealth data in DepositRecord.
 ///
 /// # Accounts
 /// 0.  `[writable]` Pool state
-/// 1.  `[]` Light client
-/// 2.  `[]` Block header (at block_height)
+/// 1.  `[]` VerifiedTransaction PDA (owned by btc-relay)
+/// 2.  `[]` Light client (owned by btc-relay, for confirmation count)
 /// 3.  `[writable]` Commitment tree
 /// 4.  `[writable]` Deposit record (PDA to be created, seeded by txid)
 /// 5.  `[]` Transaction buffer (ChadBuffer)
@@ -110,8 +115,7 @@ impl VerifyStealthDepositData {
 /// 10. `[]` Token-2022 program
 ///
 /// # Instruction data
-/// - Header: VerifyStealthDepositData (116 bytes)
-/// - merkle_proof: TxMerkleProof (variable length)
+/// - VerifyStealthDepositData (116 bytes, fixed — no trailing merkle proof)
 pub fn process_verify_stealth_deposit(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -122,8 +126,8 @@ pub fn process_verify_stealth_deposit(
     }
 
     let pool_state_info = &accounts[0];
-    let light_client_info = &accounts[1];
-    let block_header_info = &accounts[2];
+    let verified_tx_info = &accounts[1];
+    let light_client_info = &accounts[2];
     let commitment_tree_info = &accounts[3];
     let deposit_record_info = &accounts[4];
     let tx_buffer_info = &accounts[5];
@@ -133,18 +137,17 @@ pub fn process_verify_stealth_deposit(
     let pool_vault = &accounts[9];
     let token_program = &accounts[10];
 
-    // Parse instruction data
+    // Parse instruction data (no trailing merkle proof)
     let ix_data = VerifyStealthDepositData::from_bytes(data)?;
-    let merkle_proof = TxMerkleProof::parse(&data[VerifyStealthDepositData::HEADER_SIZE..])?;
 
     // Validate account owners
     validate_program_owner(pool_state_info, program_id)?;
-    // Light client and block header are owned by btc_light_client program
+    // VerifiedTransaction and Light client are owned by btc-relay program
     let btc_lc_id: &Pubkey = unsafe {
         &*(&crate::constants::BTC_LIGHT_CLIENT_PROGRAM_ID as *const [u8; 32] as *const Pubkey)
     };
+    validate_program_owner(verified_tx_info, btc_lc_id)?;
     validate_program_owner(light_client_info, btc_lc_id)?;
-    validate_program_owner(block_header_info, btc_lc_id)?;
     validate_program_owner(commitment_tree_info, program_id)?;
     validate_token_2022_owner(zbtc_mint)?;
     validate_token_2022_owner(pool_vault)?;
@@ -187,24 +190,32 @@ pub fn process_verify_stealth_deposit(
         return Err(ZVaultError::AmountTooLarge.into());
     }
 
-    // Verify block height matches the stored header
-    let merkle_root = {
-        let header_data = block_header_info.try_borrow_data()?;
-        let header = BlockHeader::from_bytes(&header_data)?;
+    // --- VerifiedTransaction PDA check ---
+    // Parse the VerifiedTransaction PDA and verify txid matches
+    {
+        let vt_data = verified_tx_info.try_borrow_data()?;
+        let vt = VerifiedTransactionView::from_bytes(&vt_data)?;
 
-        if header.height() != ix_data.block_height {
-            return Err(ZVaultError::InvalidBlockHeader.into());
+        // Verify txid matches (both in internal byte order)
+        if *vt.txid() != ix_data.txid {
+            return Err(ZVaultError::InvalidSpvProof.into());
         }
 
-        header.merkle_root
-    };
+        // Cross-check block height
+        if vt.block_height() as u64 != ix_data.block_height {
+            return Err(ZVaultError::InvalidBlockHeader.into());
+        }
+    }
 
-    // Verify block has sufficient confirmations (1 for demo mode)
+    // Verify sufficient confirmations via light client tip height
     {
         let lc_data = light_client_info.try_borrow_data()?;
-        let lc = BitcoinLightClient::from_bytes(&lc_data)?;
-
-        let confirmations = lc.confirmations(ix_data.block_height);
+        let tip = light_client_tip_height(&lc_data)?;
+        let confirmations = if ix_data.block_height > tip {
+            0
+        } else {
+            tip - ix_data.block_height + 1
+        };
         if confirmations < DEMO_REQUIRED_CONFIRMATIONS {
             return Err(ZVaultError::InsufficientConfirmations.into());
         }
@@ -219,18 +230,9 @@ pub fn process_verify_stealth_deposit(
 
     // Verify transaction hash matches txid
     // Note: ix_data.txid is in internal byte order (raw double_sha256 output)
-    // This matches SDK convention: txidBytes = hexToBytes(txid); txidBytes.reverse();
     let computed_hash = compute_tx_hash(raw_tx);
 
     if computed_hash != ix_data.txid {
-        return Err(ZVaultError::InvalidSpvProof.into());
-    }
-
-    // Verify the merkle proof
-    if merkle_proof.txid != ix_data.txid {
-        return Err(ZVaultError::InvalidSpvProof.into());
-    }
-    if !merkle_proof.verify(&merkle_root) {
         return Err(ZVaultError::InvalidSpvProof.into());
     }
 

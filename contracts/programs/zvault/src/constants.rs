@@ -12,8 +12,8 @@ pub const REQUIRED_CONFIRMATIONS: u32 = 2;
 /// Maximum Groth16 proof size in bytes (256 bytes = 2 G1 + 1 G2)
 pub const MAX_GROTH16_PROOF_SIZE: usize = 256;
 
-/// Maximum BTC address length (bech32m)
-pub const MAX_BTC_ADDRESS_LEN: usize = 62;
+/// Maximum BTC scriptPubKey length
+pub const MAX_BTC_SCRIPT_LEN: usize = 62;
 
 /// BTC Relay program ID — localnet override (DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS)
 #[cfg(feature = "localnet")]

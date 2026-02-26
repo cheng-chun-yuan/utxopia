@@ -2,7 +2,7 @@
 
 use pinocchio::program_error::ProgramError;
 
-use crate::constants::MAX_BTC_ADDRESS_LEN;
+use crate::constants::MAX_BTC_SCRIPT_LEN;
 
 /// Discriminator for RedemptionRequest account
 pub const REDEMPTION_REQUEST_DISCRIMINATOR: u8 = 0x04;
@@ -24,13 +24,13 @@ pub enum RedemptionStatus {
 /// Layout (118 bytes):
 /// - discriminator:     1 byte
 /// - status:            1 byte
-/// - btc_address_len:   1 byte
+/// - btc_script_len:    1 byte
 /// - _padding1:         1 byte
 /// - processing_slot:   4 bytes (u32 LE, slot when mark_processing was called, 0 if Pending)
 /// - request_id:        8 bytes
 /// - requester:         32 bytes
 /// - amount_sats:       8 bytes
-/// - btc_address:       62 bytes
+/// - btc_script:        62 bytes (scriptPubKey for BTC withdrawal)
 #[repr(C)]
 pub struct RedemptionRequest {
     /// Account discriminator
@@ -39,8 +39,8 @@ pub struct RedemptionRequest {
     /// Current status
     pub status: u8,
 
-    /// BTC address length
-    pub btc_address_len: u8,
+    /// BTC scriptPubKey length
+    pub btc_script_len: u8,
 
     /// Padding for alignment
     _padding1: u8,
@@ -58,8 +58,8 @@ pub struct RedemptionRequest {
     /// Amount to withdraw (satoshis)
     amount_sats: [u8; 8],
 
-    /// Bitcoin address for withdrawal (fixed buffer)
-    pub btc_address: [u8; MAX_BTC_ADDRESS_LEN],
+    /// Bitcoin scriptPubKey for withdrawal (fixed buffer)
+    pub btc_script: [u8; MAX_BTC_SCRIPT_LEN],
 }
 
 impl RedemptionRequest {
@@ -120,8 +120,8 @@ impl RedemptionRequest {
         u32::from_le_bytes(self.processing_slot)
     }
 
-    pub fn get_btc_address(&self) -> &[u8] {
-        &self.btc_address[..self.btc_address_len as usize]
+    pub fn get_btc_script(&self) -> &[u8] {
+        &self.btc_script[..self.btc_script_len as usize]
     }
 
     // Setters
@@ -141,12 +141,12 @@ impl RedemptionRequest {
         self.processing_slot = value.to_le_bytes();
     }
 
-    pub fn set_btc_address(&mut self, address: &[u8]) -> Result<(), ProgramError> {
-        if address.len() > MAX_BTC_ADDRESS_LEN {
+    pub fn set_btc_script(&mut self, script: &[u8]) -> Result<(), ProgramError> {
+        if script.len() > MAX_BTC_SCRIPT_LEN {
             return Err(ProgramError::InvalidArgument);
         }
-        self.btc_address[..address.len()].copy_from_slice(address);
-        self.btc_address_len = address.len() as u8;
+        self.btc_script[..script.len()].copy_from_slice(script);
+        self.btc_script_len = script.len() as u8;
         Ok(())
     }
 }

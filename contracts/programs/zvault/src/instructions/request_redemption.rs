@@ -32,8 +32,8 @@ use crate::utils::{validate_program_owner, validate_system_program, validate_acc
 /// - nullifier_hash: [u8; 32] - Nullifier to prevent double-spend
 /// - amount_sats: u64 - Amount to redeem (revealed - unavoidable)
 /// - vk_hash: [u8; 32] - Verification key hash (all zeros = demo mode)
-/// - btc_address_len: u8
-/// - btc_address: [u8; 62] - BTC withdrawal address
+/// - btc_script_len: u8
+/// - btc_script: [u8; 62] - BTC withdrawal address
 /// - request_nonce: u64 - Unique nonce for this request
 pub struct RequestRedemptionData {
     pub proof_hash: [u8; 32],
@@ -41,15 +41,15 @@ pub struct RequestRedemptionData {
     pub nullifier_hash: [u8; 32],
     pub amount_sats: u64,
     pub vk_hash: [u8; 32],
-    pub btc_address: [u8; 62],
-    pub btc_address_len: u8,
+    pub btc_script: [u8; 62],
+    pub btc_script_len: u8,
     pub request_nonce: u64,
 }
 
 impl RequestRedemptionData {
     pub fn from_bytes(data: &[u8]) -> Result<Self, ProgramError> {
         // proof_hash(32) + merkle_root(32) + nullifier_hash(32) + amount(8) + vk_hash(32)
-        // + btc_address_len(1) + btc_address(variable) + request_nonce(8)
+        // + btc_script_len(1) + btc_script(variable) + request_nonce(8)
         if data.len() < 145 {
             return Err(ProgramError::InvalidInstructionData);
         }
@@ -68,18 +68,18 @@ impl RequestRedemptionData {
         let mut vk_hash = [0u8; 32];
         vk_hash.copy_from_slice(&data[104..136]);
 
-        let btc_address_len = data[136];
-        if btc_address_len as usize > 62 {
+        let btc_script_len = data[136];
+        if btc_script_len as usize > 62 {
             return Err(ZVaultError::InvalidBtcAddress.into());
         }
 
-        let addr_end = 137 + btc_address_len as usize;
+        let addr_end = 137 + btc_script_len as usize;
         if data.len() < addr_end + 8 {
             return Err(ProgramError::InvalidInstructionData);
         }
 
-        let mut btc_address = [0u8; 62];
-        btc_address[..btc_address_len as usize].copy_from_slice(&data[137..addr_end]);
+        let mut btc_script = [0u8; 62];
+        btc_script[..btc_script_len as usize].copy_from_slice(&data[137..addr_end]);
 
         let request_nonce = u64::from_le_bytes(data[addr_end..addr_end + 8].try_into().unwrap());
 
@@ -89,8 +89,8 @@ impl RequestRedemptionData {
             nullifier_hash,
             amount_sats,
             vk_hash,
-            btc_address,
-            btc_address_len,
+            btc_script,
+            btc_script_len,
             request_nonce,
         })
     }
@@ -184,7 +184,7 @@ pub fn process_request_redemption(
     }
 
     // Validate BTC address
-    if ix_data.btc_address_len == 0 {
+    if ix_data.btc_script_len == 0 {
         return Err(ZVaultError::InvalidBtcAddress.into());
     }
 
@@ -296,7 +296,7 @@ pub fn process_request_redemption(
         redemption.set_request_id(ix_data.request_nonce);
         redemption.requester.copy_from_slice(accounts.user.key().as_ref());
         redemption.set_amount_sats(ix_data.amount_sats);
-        redemption.set_btc_address(&ix_data.btc_address[..ix_data.btc_address_len as usize])?;
+        redemption.set_btc_script(&ix_data.btc_script[..ix_data.btc_script_len as usize])?;
         redemption.set_status(RedemptionStatus::Pending);
     }
 
