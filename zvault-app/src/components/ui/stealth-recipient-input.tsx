@@ -65,7 +65,14 @@ export function StealthRecipientInput({
           onError(`"${name}.zkey.sol" not found`);
           return;
         }
-        onResolved(result, name);
+        // Convert ZkeyStealthAddress → StealthMetaAddress
+        try {
+          const meta = decodeStealthMetaAddress(result.stealthMetaAddressHex);
+          onResolved(meta, name);
+        } catch {
+          onError(`"${name}.zkey.sol" does not include full stealth meta-address.`);
+          return;
+        }
       } else {
         // Parse raw stealth address (hex encoded)
         const meta = decodeStealthMetaAddress(trimmed);

@@ -137,9 +137,16 @@ export function StealthSendFlow() {
         const connectionAdapter = getConnectionAdapter();
         const result = await lookupZkeyName(connectionAdapter as any, name);
         if (result) {
-          setResolvedMeta(result);
-          setResolvedName(name);
-          return;
+          // Convert ZkeyStealthAddress → StealthMetaAddress
+          try {
+            const meta = decodeStealthMetaAddress(result.stealthMetaAddressHex);
+            setResolvedMeta(meta);
+            setResolvedName(name);
+            return;
+          } catch {
+            setError(`Name "${name}.zkey.sol" does not include full stealth meta-address. Use hex address instead.`);
+            return;
+          }
         }
         // If zkey lookup fails, try as hex one more time
         const meta = decodeStealthMetaAddress(input);

@@ -27,8 +27,8 @@ import {
 import { Tooltip } from "@/components/ui/tooltip";
 import { useBitcoinWalletStore } from "@/stores/bitcoin-wallet-store";
 
-// Network: "testnet" for tb1p... addresses, "mainnet" for bc1p... addresses
-const BITCOIN_NETWORK: "mainnet" | "testnet" = "testnet";
+// Network from SDK config
+const BITCOIN_NETWORK = getConfig().bitcoinNetwork === "mainnet" ? "mainnet" as const : "testnet" as const;
 
 export function DepositFlow() {
   // Demo mode state (default ON for hackathon)
@@ -163,8 +163,16 @@ export function DepositFlow() {
           setError(`Name "${name}.zkey.sol" not found`);
           return;
         }
-        // Use resolved stealth address directly
-        setResolvedMeta(result);
+        // Convert ZkeyStealthAddress → StealthMetaAddress
+        // The name registry stores spending + viewing (64 bytes).
+        // Try decoding the full stealthMetaAddressHex as 96 bytes (if MPK is included).
+        try {
+          const meta = decodeStealthMetaAddress(result.stealthMetaAddressHex);
+          setResolvedMeta(meta);
+        } catch {
+          setError(`Name "${name}.zkey.sol" does not include MPK. Please use the full stealth address instead.`);
+          return;
+        }
       } else {
         // Parse raw stealth address (hex encoded)
         // Try to decode as hex stealth meta-address
