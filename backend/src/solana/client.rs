@@ -17,7 +17,7 @@ use solana_sdk::{
 };
 use std::str::FromStr;
 
-use crate::common::config::ZVaultConfig;
+use crate::config::ZVaultConfig;
 
 // ============================================================================
 // Constants

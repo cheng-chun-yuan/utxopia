@@ -27,7 +27,7 @@ use tracing_subscriber::{
     EnvFilter, Layer,
 };
 
-use super::config::{Network, ZVaultConfig};
+use crate::config::{Network, ZVaultConfig};
 
 // ============================================================================
 // Log Levels

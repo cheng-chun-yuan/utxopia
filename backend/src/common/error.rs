@@ -9,7 +9,7 @@ use thiserror::Error;
 pub enum ZVaultError {
     /// Configuration errors
     #[error("configuration error: {0}")]
-    Config(#[from] super::config::ConfigError),
+    Config(#[from] crate::config::ConfigError),
 
     /// Logging errors
     #[error("logging error: {0}")]
