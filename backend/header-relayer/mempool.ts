@@ -1,14 +1,14 @@
 /**
  * Bitcoin API client using mempool.space
  *
- * Supports mainnet, testnet, and signet networks.
+ * Supports mainnet, testnet3, testnet4, signet, and regtest networks.
  */
 
-export type BitcoinNetwork = 'mainnet' | 'testnet' | 'signet' | 'regtest';
+export type BitcoinNetwork = 'mainnet' | 'testnet' | 'testnet4' | 'signet' | 'regtest';
 
-function getBaseUrl(network: BitcoinNetwork): string {
+function getBaseUrl(network: BitcoinNetwork, apiUrlOverride?: string): string {
   // Allow override via BITCOIN_API_URL (for regtest Esplora proxy)
-  const override = process.env.BITCOIN_API_URL;
+  const override = apiUrlOverride || process.env.BITCOIN_API_URL;
   if (override) return override;
 
   switch (network) {
@@ -16,10 +16,12 @@ function getBaseUrl(network: BitcoinNetwork): string {
       return 'https://mempool.space/api';
     case 'testnet':
       return 'https://mempool.space/testnet/api';
+    case 'testnet4':
+      return 'https://mempool.space/testnet4/api';
     case 'signet':
       return 'https://mempool.space/signet/api';
     case 'regtest':
-      return 'http://localhost:3002';
+      return 'http://localhost:2140';
     default:
       throw new Error(`Unsupported network: ${network}`);
   }
