@@ -15,10 +15,10 @@ The zVault backend provides server-side services for the privacy-preserving Bitc
 │  (Next.js)   │                   │  │  (Axum)     │──│  (Domain)   │──│  (SQLite)   │    │
 └──────────────┘                   │  └─────────────┘  └─────────────┘  └─────────────┘    │
                                     │         │               │                             │
-┌──────────────┐                   │         ▼               ▼                             │
-│  Mobile App  │───HTTP/WS────────▶│  ┌─────────────┐  ┌─────────────┐                    │
-│   (Expo)     │                   │  │   Bitcoin   │  │   Solana    │                    │
-└──────────────┘                   │  │   Layer     │  │   Layer     │                    │
+                                    │         ▼               ▼                             │
+                                    │  ┌─────────────┐  ┌─────────────┐                    │
+                                    │  │   Bitcoin   │  │   Solana    │                    │
+                                    │  │   Layer     │  │   Layer     │                    │
                                     │  └─────────────┘  └─────────────┘                    │
                                     │         │               │                             │
                                     └─────────┼───────────────┼─────────────────────────────┘
@@ -140,7 +140,7 @@ User                    Frontend/SDK              Backend                 Bitcoi
  │                           │                       │  Watch Address         │
  │                           │                       │◀────────────────────────│
  │                           │                       │                         │
- │                           │                       │  Sweep + OP_RETURN     │
+ │                           │                       │  Sweep (P2TR, no OP_R) │
  │                           │                       │────────────────────────▶│
  │                           │                       │                         │
  │                           │                       │  Submit SPV Proof      │
@@ -151,7 +151,7 @@ User                    Frontend/SDK              Backend                 Bitcoi
  │                           │                       │  Poseidon(npk, token,  │
  │                           │                       │  amount) → commitment  │
  │                           │                       │  → Merkle tree insert  │
- │                           │                       │  → DepositRecord PDA   │
+ │                           │                       │  → StealthAnnouncement │
  │                           │                       │                         │
  │                           │  WebSocket: Ready    │                         │
  │                           │◀──────────────────────│                         │

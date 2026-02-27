@@ -163,7 +163,7 @@ bun run scripts/verify-deployment.ts
 
 ### 3.2 Backend API Server
 
-REST API for the frontend and mobile app.
+REST API for the frontend.
 
 ```bash
 cd backend
@@ -371,7 +371,7 @@ node scripts/export-vk-rust.js joinsplit_2x2
 
 ### 3.8 SDK
 
-TypeScript SDK used by frontend, mobile app, and E2E tests.
+TypeScript SDK used by frontend and E2E tests.
 
 ```bash
 cd sdk
@@ -396,18 +396,6 @@ bun run dev       # Development (port 3000)
 bun run build     # Production build
 bun run lint      # ESLint
 bun run test      # Vitest tests
-```
-
----
-
-### 3.10 Mobile App (Expo)
-
-```bash
-cd mobile-app
-bun install
-bun run start     # Expo dev server
-bun run ios       # iOS simulator
-bun run android   # Android emulator
 ```
 
 ---
@@ -556,8 +544,8 @@ Full deposit → claim flow with real Groth16 proof generation. Requires compile
 │  - Pool info     │  │  - PoolState PDA     │  │    withdrawals │
 │  - Deposit scan  │  │  - CommitmentTree    │  │                │
 └──────────────────┘  │  - Nullifiers        │  └───────┬────────┘
-                      │  - DepositRecords    │          │
-                      │    (npk + stealth)   │          │
+                      │  - StealthAnnounce-  │          │
+                      │    ments (npk+type)  │          │
                       │  - BlockHeaders      │          │
                       └──────────────────────┘          │
                                ▲                        │
@@ -586,7 +574,7 @@ Full deposit → claim flow with real Groth16 proof generation. Requires compile
 4. **Header Relayer** syncs the block header to Solana light client
 5. **Deposit Tracker** detects the deposit, waits for confirmations
 6. **Deposit Tracker** sweeps funds to pool wallet and submits SPV proof to Solana
-7. **On-chain**: `verify_stealth_deposit` validates SPV proof, computes commitment on-chain (`Poseidon(npk, ZBTC_TOKEN_ID, amount)`), creates DepositRecord PDA, adds commitment to Merkle tree
+7. **On-chain**: `verify_stealth_deposit` validates SPV proof, computes commitment on-chain (`Poseidon(npk, ZBTC_TOKEN_ID, amount)`), creates StealthAnnouncement PDA (90 bytes, type=deposit), adds commitment to Merkle tree
 8. **SDK** generates JoinSplit(1,2) Groth16 claim proof (client-side, in browser)
 9. **On-chain**: `transact` verifies JoinSplit proof, inserts output commitments
 
@@ -615,5 +603,4 @@ Full deposit → claim flow with real Groth16 proof generation. Requires compile
 | SDK | Fully implemented | 400+ functions, all crypto primitives |
 | Circuits (JoinSplit) | Fully implemented | Parameterized JoinSplit(N,M), 91 possible variants |
 | Frontend (Next.js) | Working scaffold | Wallet connect, basic UI |
-| Mobile App (Expo) | Scaffold | Phantom wallet integration |
 | Mainnet Config | Not ready | SDK has placeholder addresses |

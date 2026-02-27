@@ -5,7 +5,7 @@ Rust backend for the privacy-preserving BTC-to-Solana bridge.
 ## Overview
 
 The backend provides server-side services that cannot run on the client:
-- **API Server** — REST + WebSocket endpoints for frontend/mobile
+- **API Server** — REST + WebSocket endpoints for frontend
 - **Deposit Tracker** — Monitors BTC deposits, sweeps UTXOs, submits SPV proofs
 - **Redemption Processor** — Processes zkBTC burns and sends BTC via FROST signing
 - **Header Relayer** — Syncs Bitcoin block headers to Solana light client (TypeScript)
@@ -19,7 +19,7 @@ The backend provides server-side services that cannot run on the client:
 4. Sweeper moves funds to pool wallet (single-key or FROST signing)
 5. SPV Verifier submits proof to Solana with npk + ephemeral_pub
 6. On-chain: commitment = Poseidon(npk, ZBTC_TOKEN_ID, amount) → Merkle tree
-7. Recipient scans DepositRecord PDAs using viewing key
+7. Recipient scans StealthAnnouncement PDAs using viewing key
 ```
 
 ## Quick Start

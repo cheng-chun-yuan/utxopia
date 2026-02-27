@@ -6,7 +6,7 @@ The zVault backend consists of three main services that run as background proces
 
 | Service | Purpose | Command |
 |---------|---------|---------|
-| **API Server** | REST API for frontend/mobile | `cargo run -- api` |
+| **API Server** | REST API for frontend | `cargo run -- api` |
 | **Deposit Tracker** | Monitor deposits, sweep, verify | `cargo run -- tracker` |
 | **Redemption Processor** | Process zkBTC burns, send BTC | `cargo run -- redemption` |
 | **Header Relayer** | Sync Bitcoin headers to Solana | `bun run start` (TypeScript) |
@@ -109,7 +109,7 @@ loop {
 - Builds sweep transactions from deposit addresses to pool wallet
 - Parses 64-byte OP_RETURN from deposit tx: `ephemeral_pub(32) + npk(32)`
 - Signs with single key or FROST threshold signing
-- Creates sweep tx with OP_RETURN carrying commitment data
+- Creates sweep tx (single P2TR output to pool wallet, no OP_RETURN)
 - Broadcasts to Bitcoin network
 
 ```
@@ -135,7 +135,7 @@ for deposit in confirmed_deposits.filter(|d| d.can_sweep()) {
 - Generates Merkle proofs for sweep transactions
 - Submits proofs to Solana light client with `npk` and `ephemeral_pub`
 - On-chain: commitment computed as `Poseidon(npk, ZBTC_TOKEN_ID, amount)`
-- Creates DepositRecord PDA (200 bytes) on Solana
+- Creates StealthAnnouncement PDA (90 bytes, type=deposit) on Solana
 
 ```rust
 // Verify swept deposits (passes npk + ephemeral_pub to on-chain program)

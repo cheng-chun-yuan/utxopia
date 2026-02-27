@@ -122,7 +122,6 @@ zVault/
 │   └── circom/lib/             # Shared (commitment, nullifier, merkle, mpk)
 ├── sdk/                        # @zvault/sdk TypeScript client
 ├── zvault-app/                 # Next.js web interface
-├── mobile-app/                 # Expo React Native app
 ├── backend/                    # Rust API + deposit tracker + redemption
 │   └── header-relayer/         # Bitcoin header sync (TypeScript)
 ├── frost_server/               # FROST threshold signing (BTC redemption)

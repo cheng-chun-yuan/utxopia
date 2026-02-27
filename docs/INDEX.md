@@ -57,7 +57,6 @@ Privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs.
 | Backend API + Tracker | `backend/` | [Architecture](../backend/docs/ARCHITECTURE.md), [Services](../backend/docs/SERVICES.md), [API](../backend/docs/API.md) |
 | Header Relayer | `backend/header-relayer/` | [Services](../backend/docs/SERVICES.md), [How to Run](./RUNNING.md) |
 | Web Frontend | `zvault-app/` | [How to Run](./RUNNING.md) |
-| Mobile App | `mobile-app/` | [How to Run](./RUNNING.md) |
 
 ---
 
@@ -67,7 +66,7 @@ Privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs.
 |----------|-------|---------|
 | `ZBTC_TOKEN_ID` | `0x7a627463` ("zbtc" as u32) | Commitment computation |
 | `DEPOSIT_OP_RETURN_SIZE` | 64 bytes | `ephemeralPub(32) + npk(32)` |
-| `DepositRecord` size | 200 bytes | On-chain PDA layout |
+| `StealthAnnouncement` size | 90 bytes | Unified on-chain PDA (type: 0=deposit, 1=transfer) |
 | Merkle tree depth | 16 (65,536 leaves) | Commitment storage |
 | Groth16 proof size | 256 bytes | 2 G1 + 1 G2 on BN254 |
 | FROST threshold | 2-of-3 | BTC custody signing |

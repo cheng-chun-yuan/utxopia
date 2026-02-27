@@ -390,7 +390,7 @@ function generateSystemOverview() {
   const innerY = 375;
   els.push(...labeledRect(460, innerY, 200, 55, "Commitment Tree\n(depth 16)", { backgroundColor: "#f3e5f5", fontSize: 13 }));
   els.push(...labeledRect(680, innerY, 180, 55, "Nullifier Registry", { backgroundColor: "#f3e5f5", fontSize: 13 }));
-  els.push(...labeledRect(880, innerY, 200, 55, "Deposit Records\n(200B, stealth data)", { backgroundColor: "#f3e5f5", fontSize: 13 }));
+  els.push(...labeledRect(880, innerY, 200, 55, "Stealth Announcements\n(90B, type flag)", { backgroundColor: "#f3e5f5", fontSize: 13 }));
   els.push(...labeledRect(460, innerY + 70, 200, 55, "Name Registry\n(.zkey)", { backgroundColor: "#f3e5f5", fontSize: 13 }));
   els.push(...labeledRect(680, innerY + 70, 180, 55, "VK Registry", { backgroundColor: "#f3e5f5", fontSize: 13 }));
 
@@ -428,52 +428,50 @@ function generateSystemOverview() {
   // Client boxes (simple)
   const clientY = 770;
   els.push(...labeledRect(60, clientY, 200, 55, "Web App\n(Next.js)", { backgroundColor: "#bbdefb", fontSize: 14 }));
-  els.push(...labeledRect(280, clientY, 200, 55, "Mobile App\n(Expo)", { backgroundColor: "#bbdefb", fontSize: 14 }));
 
   // Backend container (expanded)
   els.push(
-    rect(510, clientY, 280, 100, {
+    rect(290, clientY, 280, 100, {
       backgroundColor: "#bbdefb",
       strokeColor: "#1565c0",
       strokeWidth: 2,
     })
   );
   els.push(
-    text(520, clientY + 5, "Backend (Rust)", {
+    text(300, clientY + 5, "Backend (Rust)", {
       fontSize: 14,
       strokeColor: "#1565c0",
       textAlign: "left",
     })
   );
-  els.push(...labeledRect(520, clientY + 28, 80, 28, "Deposit\nTracker", { backgroundColor: "#90caf9", strokeColor: "#1565c0", fontSize: 9 }));
-  els.push(...labeledRect(608, clientY + 28, 80, 28, "Redemption\nService", { backgroundColor: "#90caf9", strokeColor: "#1565c0", fontSize: 9 }));
-  els.push(...labeledRect(696, clientY + 28, 80, 28, "Header\nRelayer (TS)", { backgroundColor: "#90caf9", strokeColor: "#1565c0", fontSize: 9 }));
+  els.push(...labeledRect(300, clientY + 28, 80, 28, "Deposit\nTracker", { backgroundColor: "#90caf9", strokeColor: "#1565c0", fontSize: 9 }));
+  els.push(...labeledRect(388, clientY + 28, 80, 28, "Redemption\nService", { backgroundColor: "#90caf9", strokeColor: "#1565c0", fontSize: 9 }));
+  els.push(...labeledRect(476, clientY + 28, 80, 28, "Header\nRelayer (TS)", { backgroundColor: "#90caf9", strokeColor: "#1565c0", fontSize: 9 }));
 
   // FROST Server container (expanded)
   els.push(
-    rect(820, clientY, 280, 100, {
+    rect(600, clientY, 280, 100, {
       backgroundColor: "#bbdefb",
       strokeColor: "#1565c0",
       strokeWidth: 2,
     })
   );
   els.push(
-    text(830, clientY + 5, "FROST Server", {
+    text(610, clientY + 5, "FROST Server", {
       fontSize: 14,
       strokeColor: "#1565c0",
       textAlign: "left",
     })
   );
-  els.push(...labeledRect(830, clientY + 28, 75, 28, "Policy\nEngine", { backgroundColor: "#90caf9", strokeColor: "#1565c0", fontSize: 9 }));
-  els.push(...labeledRect(913, clientY + 28, 75, 28, "Audit\nLog", { backgroundColor: "#90caf9", strokeColor: "#1565c0", fontSize: 9 }));
-  els.push(...labeledRect(996, clientY + 28, 75, 28, "Crypto", { backgroundColor: "#90caf9", strokeColor: "#1565c0", fontSize: 9 }));
-  els.push(...labeledRect(830, clientY + 64, 241, 28, "DKG + Signing (secp256k1-tr)", { backgroundColor: "#90caf9", strokeColor: "#1565c0", fontSize: 9 }));
+  els.push(...labeledRect(610, clientY + 28, 75, 28, "Policy\nEngine", { backgroundColor: "#90caf9", strokeColor: "#1565c0", fontSize: 9 }));
+  els.push(...labeledRect(693, clientY + 28, 75, 28, "Audit\nLog", { backgroundColor: "#90caf9", strokeColor: "#1565c0", fontSize: 9 }));
+  els.push(...labeledRect(776, clientY + 28, 75, 28, "Crypto", { backgroundColor: "#90caf9", strokeColor: "#1565c0", fontSize: 9 }));
+  els.push(...labeledRect(610, clientY + 64, 241, 28, "DKG + Signing (secp256k1-tr)", { backgroundColor: "#90caf9", strokeColor: "#1565c0", fontSize: 9 }));
 
   // Arrows from SDK to clients
   els.push(arrow(500, 730, [[0, 0], [-340, 40]], { strokeColor: "#1565c0" }));
-  els.push(arrow(600, 730, [[0, 0], [-220, 40]], { strokeColor: "#1565c0" }));
-  els.push(arrow(800, 730, [[0, 0], [-150, 40]], { strokeColor: "#1565c0" }));
-  els.push(arrow(900, 730, [[0, 0], [60, 40]], { strokeColor: "#1565c0" }));
+  els.push(arrow(600, 730, [[0, 0], [-170, 40]], { strokeColor: "#1565c0" }));
+  els.push(arrow(800, 730, [[0, 0], [-60, 40]], { strokeColor: "#1565c0" }));
 
   writeExcalidraw("system-overview", els);
 }
@@ -640,7 +638,7 @@ function generateDepositWithdrawFlow() {
   );
   els.push(arrow(520, sweepY + 27, [[0, 0], [30, 0]], { strokeColor: "#388e3c" }));
   els.push(
-    ...labeledRect(550, sweepY, 250, 55, "FROST Sweep Tx\n(taproot addr → pool wallet)\n+ OP_RETURN: commitment", {
+    ...labeledRect(550, sweepY, 250, 55, "FROST Sweep Tx\n(taproot addr → pool wallet)\n(no OP_RETURN)", {
       backgroundColor: "#ffe0b2",
       strokeColor: "#e65100",
       fontSize: 11,
@@ -730,7 +728,7 @@ function generateDepositWithdrawFlow() {
   );
   els.push(arrow(1200, spvY + 27, [[0, 0], [20, 0]], { strokeColor: "#1b5e20" }));
   els.push(
-    ...labeledRect(1220, spvY, 170, 55, "Create Deposit\nRecord PDA\n(200 bytes)", {
+    ...labeledRect(1220, spvY, 170, 55, "Create Stealth\nAnnouncement PDA\n(90 bytes)", {
       backgroundColor: "#a5d6a7",
       strokeColor: "#1b5e20",
       fontSize: 11,
@@ -837,7 +835,7 @@ function generateDepositWithdrawFlow() {
     "Transact\nInstruction",
     "Old Nullifiers\nPublished",
     "New Commitments\nInserted",
-    "Stealth Data\n(in DepositRecord)",
+    "Stealth Data\n(in Announcement)",
   ];
   els.push(...stepBoxes(transferSteps, 50, 765, "#1565c0", "#bbdefb", 190, 55, 30));
   // Annotation
@@ -926,16 +924,16 @@ function generateDepositWithdrawFlow() {
   const legendY = 92;
   const legendItems = [
     { label: "OP_RETURN (deposit)", desc: "ephemeralPub(32) + npk(32)", color: "#2e7d32" },
-    { label: "OP_RETURN (sweep)", desc: "commitment(32)", color: "#e65100" },
+    { label: "Sweep Tx", desc: "single P2TR output (no OP_RETURN)", color: "#e65100" },
     { label: "Commitment", desc: "Poseidon(npk, token, amount)", color: "#00695c" },
     { label: "Nullifier", desc: "Poseidon(nullKey, leafIndex)", color: "#c62828" },
     { label: "NPK", desc: "Poseidon(MPK, random)", color: "#6a1b9a" },
     { label: "MPK", desc: "Poseidon(spendPub.x, .y, nullKey)", color: "#6a1b9a" },
-    { label: "Deposit Record", desc: "200 bytes PDA (seeded by txid)", color: "#1565c0" },
+    { label: "Stealth Announcement", desc: "90 bytes PDA ([\"stealth\", txid])", color: "#1565c0" },
     { label: "Block Header", desc: "PDA at btc-light-client (80-byte header)", color: "#e65100" },
     { label: "ChadBuffer", desc: "authority(32) + raw_tx_data", color: "#555" },
     { label: "Merkle Proof", desc: "txid + path_bits + siblings", color: "#555" },
-    { label: "Stealth Data", desc: "Embedded in DepositRecord (not separate PDA)", color: "#6a1b9a" },
+    { label: "Stealth Data", desc: "Unified in StealthAnnouncement (type: 0=deposit, 1=transfer)", color: "#6a1b9a" },
   ];
   for (let i = 0; i < legendItems.length; i++) {
     const item = legendItems[i];
@@ -1098,7 +1096,7 @@ function generateCryptoKeyModel() {
 
   // On-chain announcement (center)
   els.push(
-    ...labeledRect(sx + 120, 240, 280, 45, "On-Chain: DepositRecord\n(200B, includes stealth data)", {
+    ...labeledRect(sx + 120, 240, 280, 45, "On-Chain: StealthAnnouncement\n(90B, unified deposit+transfer)", {
       backgroundColor: "#fff9c4",
       strokeColor: "#f57f17",
       strokeStyle: "dashed",
@@ -1649,6 +1647,796 @@ function generateFrostSigning() {
   writeExcalidraw("frost-signing", els);
 }
 
+// =====================================================================
+// DIAGRAM 6: STEALTH ANNOUNCEMENT — Unified 90-byte layout
+// =====================================================================
+
+function generateStealthAnnouncement() {
+  const els: any[] = [];
+
+  // Title
+  els.push(
+    text(40, 20, "StealthAnnouncement — Unified 90-Byte On-Chain Layout", {
+      fontSize: 24,
+      strokeColor: "#1565c0",
+      textAlign: "left",
+    })
+  );
+
+  // --- Byte layout visualization ---
+  const byteY = 80;
+  const fieldH = 50;
+  const gapY = 4;
+  const labelW = 150;
+  const fieldX = 180;
+
+  const fields = [
+    { name: "discriminator", size: 1, offset: 0, value: "0x08", color: "#e8eaf6", border: "#3f51b5" },
+    { name: "announcement_type", size: 1, offset: 1, value: "0=deposit, 1=transfer", color: "#fff3e0", border: "#e65100" },
+    { name: "ephemeral_pub", size: 32, offset: 2, value: "Ed25519 ephemeral public key (ECDH scanning)", color: "#e8f5e9", border: "#2e7d32" },
+    { name: "amount_bytes", size: 8, offset: 34, value: "plaintext u64 LE (type=0) | XOR-encrypted (type=1)", color: "#fff9c4", border: "#f57f17" },
+    { name: "commitment", size: 32, offset: 42, value: "Poseidon(npk, ZBTC_TOKEN_ID, amount)", color: "#f3e5f5", border: "#6a1b9a" },
+    { name: "leaf_index", size: 8, offset: 74, value: "Merkle tree position (u64 LE)", color: "#e3f2fd", border: "#1565c0" },
+    { name: "created_at", size: 8, offset: 82, value: "Unix timestamp (i64 LE)", color: "#efebe9", border: "#795548" },
+  ];
+
+  for (let i = 0; i < fields.length; i++) {
+    const f = fields[i];
+    const y = byteY + i * (fieldH + gapY);
+    // Width proportional to byte size (min 80, scale 32 → 640)
+    const fieldW = Math.max(80, f.size * 20);
+
+    // Offset label
+    els.push(
+      text(20, y + 8, `[${f.offset}]`, {
+        fontSize: 12,
+        strokeColor: "#666",
+        textAlign: "left",
+      })
+    );
+
+    // Size label
+    els.push(
+      text(60, y + 8, `${f.size}B`, {
+        fontSize: 12,
+        strokeColor: "#999",
+        textAlign: "left",
+      })
+    );
+
+    // Field name
+    els.push(
+      text(100, y + 8, f.name, {
+        fontSize: 13,
+        strokeColor: f.border,
+        textAlign: "left",
+      })
+    );
+
+    // Field box
+    els.push(
+      ...labeledRect(fieldX, y, fieldW, fieldH - 4, f.value, {
+        backgroundColor: f.color,
+        strokeColor: f.border,
+        fontSize: 10,
+      })
+    );
+  }
+
+  // Total size annotation
+  const totalY = byteY + fields.length * (fieldH + gapY) + 10;
+  els.push(
+    ...labeledRect(fieldX, totalY, 200, 30, "Total: 90 bytes", {
+      backgroundColor: "#e0e0e0",
+      strokeColor: "#333",
+      fontSize: 14,
+    })
+  );
+
+  // --- PDA Seeds section ---
+  const seedsY = totalY + 60;
+  els.push(
+    text(40, seedsY, "PDA Seeds", {
+      fontSize: 18,
+      strokeColor: "#1565c0",
+      textAlign: "left",
+    })
+  );
+
+  // Deposit PDA
+  els.push(
+    ...labeledRect(40, seedsY + 35, 300, 45, 'Deposits: ["stealth", txid]\nPrevents double-verification of same BTC txid', {
+      backgroundColor: "#c8e6c9",
+      strokeColor: "#2e7d32",
+      fontSize: 11,
+    })
+  );
+
+  // Transfer PDA
+  els.push(
+    ...labeledRect(360, seedsY + 35, 320, 45, 'Transfers: ["stealth", ephemeral_pub]\nPrevents replay of JoinSplit outputs', {
+      backgroundColor: "#bbdefb",
+      strokeColor: "#1565c0",
+      fontSize: 11,
+    })
+  );
+
+  // --- Deposit vs Transfer comparison ---
+  const compY = seedsY + 110;
+  els.push(
+    text(40, compY, "Deposit (type=0) vs Transfer (type=1)", {
+      fontSize: 18,
+      strokeColor: "#1565c0",
+      textAlign: "left",
+    })
+  );
+
+  // Deposit example
+  els.push(
+    rect(40, compY + 35, 330, 140, {
+      backgroundColor: "#e8f5e9",
+      strokeColor: "#2e7d32",
+      strokeWidth: 2,
+    })
+  );
+  els.push(
+    text(50, compY + 40, "DEPOSIT (type=0)", {
+      fontSize: 14,
+      strokeColor: "#2e7d32",
+      textAlign: "left",
+    })
+  );
+  els.push(
+    text(50, compY + 65, "• Created by: verify_stealth_deposit\n• amount_bytes: plaintext u64 LE\n• PDA seed: [\"stealth\", btc_txid]\n• Scanning: read amount directly\n• Source: SPV-verified BTC deposit", {
+      fontSize: 10,
+      strokeColor: "#333",
+      textAlign: "left",
+    })
+  );
+
+  // Transfer example
+  els.push(
+    rect(390, compY + 35, 330, 140, {
+      backgroundColor: "#e3f2fd",
+      strokeColor: "#1565c0",
+      strokeWidth: 2,
+    })
+  );
+  els.push(
+    text(400, compY + 40, "TRANSFER (type=1)", {
+      fontSize: 14,
+      strokeColor: "#1565c0",
+      textAlign: "left",
+    })
+  );
+  els.push(
+    text(400, compY + 65, "• Created by: transact (JoinSplit)\n• amount_bytes: XOR-encrypted\n• PDA seed: [\"stealth\", ephemeral_pub]\n• Scanning: XOR decrypt with shared secret\n• Source: JoinSplit N→M proof output", {
+      fontSize: 10,
+      strokeColor: "#333",
+      textAlign: "left",
+    })
+  );
+
+  writeExcalidraw("stealth-announcement", els);
+}
+
+// =====================================================================
+// DIAGRAM 7: DEPOSIT LIFECYCLE EXAMPLE — Concrete values walkthrough
+// =====================================================================
+
+function generateDepositLifecycleExample() {
+  const els: any[] = [];
+
+  els.push(
+    text(40, 20, "Deposit Lifecycle — Concrete Example", {
+      fontSize: 24,
+      strokeColor: "#2e7d32",
+      textAlign: "left",
+    })
+  );
+
+  const phases = [
+    {
+      title: "1. Key Generation (Client)",
+      color: "#6a1b9a",
+      bg: "#f3e5f5",
+      y: 70,
+      items: [
+        "spendingKey (BJJ): 0x1a2b3c...",
+        "nullifyingKey (BN254): 0x4d5e6f...",
+        "viewingKey (Ed25519): 0x7a8b9c...",
+        "MPK = Poseidon(spendPub.x, .y, nullKey)",
+        "random = SHA256(ECDH(eph, viewPub) || \"random\")",
+        "NPK = Poseidon(MPK, random) → 0x0105484d...",
+      ],
+    },
+    {
+      title: "2. BTC Transaction",
+      color: "#e65100",
+      bg: "#fff3e0",
+      y: 240,
+      items: [
+        "Taproot address: bcrt1pg9m38jg7vh...",
+        "Amount: 0.0001 BTC (10,000 sats)",
+        "OP_RETURN (64 bytes):",
+        "  ephemeralPub: 602421547c9d68f4... (32B)",
+        "  npk: 0105484de40efa36... (32B)",
+        "Txid: 8fe301035...",
+      ],
+    },
+    {
+      title: "3. Backend Processing",
+      color: "#e65100",
+      bg: "#ffe0b2",
+      y: 420,
+      items: [
+        "Deposit Tracker: detects tx at block 370",
+        "Wait 6+ confirmations (block 376)",
+        "Sweep: single P2TR output to pool wallet",
+        "  (NO OP_RETURN in sweep tx)",
+        "Header Relayer: submits headers 370→376",
+      ],
+    },
+    {
+      title: "4. SPV Verification (On-Chain)",
+      color: "#00695c",
+      bg: "#e0f2f1",
+      y: 590,
+      items: [
+        "Upload non-witness tx to ChadBuffer (212 bytes)",
+        "Merkle proof: 1 sibling, tx_index: 1",
+        "verify_transaction: validates in btc-light-client",
+        "verify_stealth_deposit:",
+        "  commitment = Poseidon(npk, 0x7a627463, 10000)",
+        "  → 0x09310e6e53c316...",
+      ],
+    },
+    {
+      title: "5. On-Chain Result",
+      color: "#1565c0",
+      bg: "#e3f2fd",
+      y: 770,
+      items: [
+        "StealthAnnouncement PDA (90 bytes):",
+        "  discriminator: 0x08",
+        "  announcement_type: 0 (deposit)",
+        "  ephemeral_pub: 602421547c9d68f4...",
+        "  amount_bytes: 10000 (plaintext)",
+        "  commitment: 09310e6e53c316...",
+        "  leaf_index: 0",
+      ],
+    },
+  ];
+
+  for (const phase of phases) {
+    // Phase background
+    els.push(
+      rect(30, phase.y, 720, 155, {
+        backgroundColor: phase.bg,
+        strokeColor: phase.color,
+        strokeWidth: 2,
+      })
+    );
+    // Title
+    els.push(
+      text(45, phase.y + 8, phase.title, {
+        fontSize: 15,
+        strokeColor: phase.color,
+        textAlign: "left",
+      })
+    );
+    // Items
+    els.push(
+      text(50, phase.y + 32, phase.items.join("\n"), {
+        fontSize: 10,
+        strokeColor: "#333",
+        textAlign: "left",
+      })
+    );
+  }
+
+  // Arrows between phases
+  for (let i = 0; i < phases.length - 1; i++) {
+    const fromY = phases[i].y + 155;
+    const toY = phases[i + 1].y;
+    const midX = 390;
+    els.push(
+      arrow(midX, fromY, [[0, 0], [0, toY - fromY]], {
+        strokeColor: "#666",
+      })
+    );
+  }
+
+  writeExcalidraw("deposit-lifecycle-example", els);
+}
+
+// =====================================================================
+// DIAGRAM 8: COMMITMENT TREE — Merkle tree visualization
+// =====================================================================
+
+function generateCommitmentTree() {
+  const els: any[] = [];
+
+  els.push(
+    text(40, 20, "Commitment Tree — Incremental Poseidon Merkle Tree (depth 16)", {
+      fontSize: 22,
+      strokeColor: "#6a1b9a",
+      textAlign: "left",
+    })
+  );
+
+  // --- Tree visual (showing top 4 levels of depth-16 tree) ---
+  const treeX = 400;
+  const treeY = 80;
+  const nodeW = 80;
+  const nodeH = 35;
+  const levelGap = 70;
+
+  // Root (level 0)
+  els.push(
+    ...labeledRect(treeX, treeY, 120, 40, "Root\n(current_root)", {
+      backgroundColor: "#f3e5f5",
+      strokeColor: "#6a1b9a",
+      fontSize: 10,
+    })
+  );
+
+  // Level 1
+  const l1Left = treeX - 150;
+  const l1Right = treeX + 150;
+  const l1Y = treeY + levelGap;
+  els.push(
+    ...labeledRect(l1Left, l1Y, nodeW, nodeH, "H(L, R)", {
+      backgroundColor: "#e8eaf6",
+      strokeColor: "#3f51b5",
+      fontSize: 10,
+    })
+  );
+  els.push(
+    ...labeledRect(l1Right, l1Y, nodeW, nodeH, "H(L, R)", {
+      backgroundColor: "#e8eaf6",
+      strokeColor: "#3f51b5",
+      fontSize: 10,
+    })
+  );
+  // Arrows from root to level 1
+  els.push(arrow(treeX + 30, treeY + 40, [[0, 0], [l1Left - treeX - 30 + 40, levelGap - 40]], { strokeColor: "#6a1b9a" }));
+  els.push(arrow(treeX + 90, treeY + 40, [[0, 0], [l1Right - treeX - 90 + 40, levelGap - 40]], { strokeColor: "#6a1b9a" }));
+
+  // Level 2
+  const l2Y = l1Y + levelGap;
+  const l2Positions = [l1Left - 80, l1Left + 80, l1Right - 80, l1Right + 80];
+  for (const x of l2Positions) {
+    els.push(
+      ...labeledRect(x, l2Y, nodeW, nodeH, "H(L, R)", {
+        backgroundColor: "#e8eaf6",
+        strokeColor: "#3f51b5",
+        fontSize: 10,
+      })
+    );
+  }
+  // Arrows from level 1 to level 2
+  els.push(arrow(l1Left + 20, l1Y + nodeH, [[0, 0], [-60, levelGap - nodeH]], { strokeColor: "#3f51b5" }));
+  els.push(arrow(l1Left + 60, l1Y + nodeH, [[0, 0], [60, levelGap - nodeH]], { strokeColor: "#3f51b5" }));
+  els.push(arrow(l1Right + 20, l1Y + nodeH, [[0, 0], [-60, levelGap - nodeH]], { strokeColor: "#3f51b5" }));
+  els.push(arrow(l1Right + 60, l1Y + nodeH, [[0, 0], [60, levelGap - nodeH]], { strokeColor: "#3f51b5" }));
+
+  // Ellipsis for middle levels
+  const ellY = l2Y + levelGap;
+  els.push(
+    text(treeX + 20, ellY, "···  depth 16 (12 more levels)  ···", {
+      fontSize: 14,
+      strokeColor: "#999",
+      textAlign: "center",
+    })
+  );
+
+  // Leaf level
+  const leafY = ellY + 50;
+  const leafW = 65;
+  const leafGap = 8;
+  const leafStart = 100;
+  const leaves = ["C₀", "C₁", "C₂", "C₃", "...", "...", "...", "C₆₅₅₃₅"];
+  for (let i = 0; i < leaves.length; i++) {
+    const isActive = i < 4;
+    els.push(
+      ...labeledRect(leafStart + i * (leafW + leafGap), leafY, leafW, 30, leaves[i], {
+        backgroundColor: isActive ? "#c8e6c9" : "#f5f5f5",
+        strokeColor: isActive ? "#2e7d32" : "#bbb",
+        fontSize: 11,
+      })
+    );
+  }
+  els.push(
+    text(leafStart, leafY + 38, "Commitments = Poseidon(npk, token, amount)", {
+      fontSize: 10,
+      strokeColor: "#666",
+      textAlign: "left",
+    })
+  );
+
+  // --- On-chain account layout ---
+  const accY = leafY + 80;
+  els.push(
+    text(40, accY, "CommitmentTree Account (3824 bytes)", {
+      fontSize: 18,
+      strokeColor: "#6a1b9a",
+      textAlign: "left",
+    })
+  );
+
+  const accFields = [
+    { name: "discriminator", size: "1B", offset: "0", desc: "0x05" },
+    { name: "bump", size: "1B", offset: "1", desc: "PDA bump" },
+    { name: "current_root", size: "32B", offset: "8", desc: "Latest Merkle root" },
+    { name: "next_index", size: "8B", offset: "40", desc: "Next leaf index (u64)" },
+    { name: "frontier", size: "512B", offset: "48", desc: "16 × 32B rightmost filled nodes" },
+    { name: "root_history", size: "3200B", offset: "560", desc: "100 × 32B circular buffer" },
+    { name: "root_history_index", size: "4B", offset: "3760", desc: "Current position (u32)" },
+  ];
+
+  for (let i = 0; i < accFields.length; i++) {
+    const f = accFields[i];
+    const y = accY + 30 + i * 26;
+    els.push(
+      text(50, y, `[${f.offset}] ${f.name} (${f.size})`, {
+        fontSize: 11,
+        strokeColor: "#6a1b9a",
+        textAlign: "left",
+      })
+    );
+    els.push(
+      text(340, y, f.desc, {
+        fontSize: 11,
+        strokeColor: "#666",
+        textAlign: "left",
+      })
+    );
+  }
+
+  // --- Properties box ---
+  const propY = accY + 30 + accFields.length * 26 + 15;
+  els.push(
+    rect(40, propY, 500, 100, {
+      backgroundColor: "#fff9c4",
+      strokeColor: "#f57f17",
+      strokeWidth: 1,
+      strokeStyle: "dashed",
+    })
+  );
+  els.push(
+    text(50, propY + 10, "Properties:\n• Hash: Poseidon2 (BN254 scalar field)\n• Root history: 100 entries (front-running protection)\n• Zero hash: Pre-computed per level (matching circomlib)\n• Capacity: 65,536 leaves (2¹⁶)", {
+      fontSize: 11,
+      strokeColor: "#333",
+      textAlign: "left",
+    })
+  );
+
+  writeExcalidraw("commitment-tree", els);
+}
+
+// =====================================================================
+// DIAGRAM 9: SCANNING FLOW — Unified deposit + transfer scanning
+// =====================================================================
+
+function generateScanningFlow() {
+  const els: any[] = [];
+
+  els.push(
+    text(40, 20, "Unified Scanning Flow — Detecting Incoming Notes", {
+      fontSize: 22,
+      strokeColor: "#1565c0",
+      textAlign: "left",
+    })
+  );
+
+  // --- Step 1: Fetch all announcements ---
+  const s1Y = 70;
+  els.push(
+    ...labeledRect(40, s1Y, 260, 50, "1. Fetch all StealthAnnouncement\naccounts (disc = 0x08)", {
+      backgroundColor: "#e3f2fd",
+      strokeColor: "#1565c0",
+      fontSize: 11,
+    })
+  );
+  els.push(arrow(300, s1Y + 25, [[0, 0], [40, 0]], { strokeColor: "#1565c0" }));
+
+  // --- Step 2: For each announcement ---
+  els.push(
+    ...labeledRect(340, s1Y, 200, 50, "2. For each announcement:\nread ephemeral_pub (32B)", {
+      backgroundColor: "#e3f2fd",
+      strokeColor: "#1565c0",
+      fontSize: 11,
+    })
+  );
+  els.push(arrow(540, s1Y + 25, [[0, 0], [40, 0]], { strokeColor: "#1565c0" }));
+
+  // --- Step 3: ECDH ---
+  els.push(
+    ...labeledRect(580, s1Y, 250, 50, "3. ECDH shared secret:\nX25519(viewingPriv, ephemeralPub)", {
+      backgroundColor: "#e8f5e9",
+      strokeColor: "#2e7d32",
+      fontSize: 11,
+    })
+  );
+
+  // --- Step 4: Derive stealth scalar ---
+  const s4Y = s1Y + 75;
+  els.push(
+    ...labeledRect(40, s4Y, 250, 50, "4. Derive stealthScalar from\nshared secret + spending pub", {
+      backgroundColor: "#e8f5e9",
+      strokeColor: "#2e7d32",
+      fontSize: 11,
+    })
+  );
+  els.push(arrow(290, s4Y + 25, [[0, 0], [40, 0]], { strokeColor: "#2e7d32" }));
+
+  // --- Step 5: Compute NPK ---
+  els.push(
+    ...labeledRect(330, s4Y, 220, 50, "5. Compute NPK:\nPoseidon(MPK, random)", {
+      backgroundColor: "#f3e5f5",
+      strokeColor: "#6a1b9a",
+      fontSize: 11,
+    })
+  );
+  els.push(arrow(550, s4Y + 25, [[0, 0], [40, 0]], { strokeColor: "#6a1b9a" }));
+
+  // --- Step 6: Get amount ---
+  const branchX = 590;
+  els.push(
+    rect(branchX, s4Y - 5, 260, 60, {
+      backgroundColor: "#fff9c4",
+      strokeColor: "#f57f17",
+      strokeWidth: 2,
+    })
+  );
+  els.push(
+    text(branchX + 10, s4Y, "6. Get amount by type:", {
+      fontSize: 12,
+      strokeColor: "#f57f17",
+      textAlign: "left",
+    })
+  );
+
+  // Type 0 branch
+  const branchY = s4Y + 70;
+  els.push(
+    ...labeledRect(branchX - 80, branchY, 200, 45, "type=0 (deposit):\namount = read u64 LE directly", {
+      backgroundColor: "#c8e6c9",
+      strokeColor: "#2e7d32",
+      fontSize: 10,
+    })
+  );
+  // Type 1 branch
+  els.push(
+    ...labeledRect(branchX + 140, branchY, 200, 45, "type=1 (transfer):\namount = XOR decrypt with\nSHA256(sharedSecret)", {
+      backgroundColor: "#bbdefb",
+      strokeColor: "#1565c0",
+      fontSize: 10,
+    })
+  );
+  // Arrows from branch
+  els.push(arrow(branchX + 80, s4Y + 55, [[0, 0], [-60, branchY - s4Y - 55]], { strokeColor: "#f57f17" }));
+  els.push(arrow(branchX + 180, s4Y + 55, [[0, 0], [60, branchY - s4Y - 55]], { strokeColor: "#f57f17" }));
+
+  // --- Step 7: Verify commitment ---
+  const s7Y = branchY + 65;
+  els.push(
+    ...labeledRect(branchX - 40, s7Y, 340, 50, "7. Verify: Poseidon(npk, ZBTC_TOKEN_ID, amount)\n== stored commitment → MATCH = mine!", {
+      backgroundColor: "#c8e6c9",
+      strokeColor: "#2e7d32",
+      fontSize: 12,
+    })
+  );
+  // Arrows from both branches to verify
+  els.push(arrow(branchX + 20, branchY + 45, [[0, 0], [90, s7Y - branchY - 45]], { strokeColor: "#2e7d32" }));
+  els.push(arrow(branchX + 240, branchY + 45, [[0, 0], [-70, s7Y - branchY - 45]], { strokeColor: "#2e7d32" }));
+
+  // --- Result box ---
+  const resY = s7Y + 70;
+  els.push(
+    rect(40, resY, 810, 100, {
+      backgroundColor: "#f5f5f5",
+      strokeColor: "#666",
+      strokeWidth: 1,
+      strokeStyle: "dashed",
+    })
+  );
+  els.push(
+    text(50, resY + 10, "Result: ScannedNote { amount, ephemeralPub, stealthPub, leafIndex, commitment }\n\n• Unified: ONE scan loop handles both deposits and transfers\n• No separate DepositRecord parsing (removed)\n• Amount decryption is transparent based on type byte", {
+      fontSize: 11,
+      strokeColor: "#333",
+      textAlign: "left",
+    })
+  );
+
+  writeExcalidraw("scanning-flow", els);
+}
+
+// =====================================================================
+// DIAGRAM 10: SWEEP TRANSACTION — Simplified sweep (no OP_RETURN)
+// =====================================================================
+
+function generateSweepTransaction() {
+  const els: any[] = [];
+
+  els.push(
+    text(40, 20, "Sweep Transaction — Simplified (No OP_RETURN)", {
+      fontSize: 22,
+      strokeColor: "#e65100",
+      textAlign: "left",
+    })
+  );
+
+  // --- Before: Old sweep ---
+  els.push(
+    rect(40, 70, 400, 200, {
+      backgroundColor: "#ffebee",
+      strokeColor: "#c62828",
+      strokeWidth: 2,
+      strokeStyle: "dashed",
+    })
+  );
+  els.push(
+    text(50, 78, "BEFORE (deprecated)", {
+      fontSize: 14,
+      strokeColor: "#c62828",
+      textAlign: "left",
+    })
+  );
+
+  els.push(
+    ...labeledRect(60, 110, 160, 40, "Input: Deposit UTXO\n(Taproot P2TR)", {
+      backgroundColor: "#ffcdd2",
+      strokeColor: "#c62828",
+      fontSize: 10,
+    })
+  );
+  els.push(arrow(220, 130, [[0, 0], [30, 0]], { strokeColor: "#c62828" }));
+  els.push(
+    ...labeledRect(250, 100, 170, 35, "Output 0: P2TR\nto pool wallet", {
+      backgroundColor: "#ffcdd2",
+      strokeColor: "#c62828",
+      fontSize: 10,
+    })
+  );
+  els.push(
+    ...labeledRect(250, 145, 170, 35, "Output 1: OP_RETURN\ncommitment (32 bytes)", {
+      backgroundColor: "#ffcdd2",
+      strokeColor: "#c62828",
+      fontSize: 10,
+    })
+  );
+  els.push(
+    text(60, 195, "~156 vbytes, 2 outputs", {
+      fontSize: 11,
+      strokeColor: "#c62828",
+      textAlign: "left",
+    })
+  );
+  els.push(
+    text(60, 215, "OP_RETURN was redundant — Solana verifies\nvia VerifiedTransaction PDA", {
+      fontSize: 10,
+      strokeColor: "#999",
+      textAlign: "left",
+    })
+  );
+
+  // --- After: New sweep ---
+  els.push(
+    rect(480, 70, 400, 200, {
+      backgroundColor: "#e8f5e9",
+      strokeColor: "#2e7d32",
+      strokeWidth: 2,
+    })
+  );
+  els.push(
+    text(490, 78, "AFTER (current)", {
+      fontSize: 14,
+      strokeColor: "#2e7d32",
+      textAlign: "left",
+    })
+  );
+
+  els.push(
+    ...labeledRect(500, 110, 160, 40, "Input: Deposit UTXO\n(Taproot P2TR)", {
+      backgroundColor: "#c8e6c9",
+      strokeColor: "#2e7d32",
+      fontSize: 10,
+    })
+  );
+  els.push(arrow(660, 130, [[0, 0], [30, 0]], { strokeColor: "#2e7d32" }));
+  els.push(
+    ...labeledRect(690, 110, 170, 40, "Output 0: P2TR\nto pool wallet", {
+      backgroundColor: "#c8e6c9",
+      strokeColor: "#2e7d32",
+      fontSize: 10,
+    })
+  );
+  els.push(
+    text(500, 170, "~111 vbytes, 1 output", {
+      fontSize: 11,
+      strokeColor: "#2e7d32",
+      textAlign: "left",
+    })
+  );
+  els.push(
+    text(500, 190, "Smaller tx = lower fees\nCommitment computed on-chain from\nnpk + amount in deposit OP_RETURN", {
+      fontSize: 10,
+      strokeColor: "#555",
+      textAlign: "left",
+    })
+  );
+
+  // Arrow from old to new
+  els.push(arrow(440, 170, [[0, 0], [40, 0]], { strokeColor: "#333" }));
+
+  // --- SPV Verification flow ---
+  const spvY = 300;
+  els.push(
+    text(40, spvY, "SPV Verification: How Sweep Gets Verified On-Chain", {
+      fontSize: 18,
+      strokeColor: "#00695c",
+      textAlign: "left",
+    })
+  );
+
+  const steps = [
+    { label: "Deposit Tx\n(user → taproot)\nOP_RETURN: eph+npk", bg: "#fff3e0", border: "#e65100" },
+    { label: "Mine 1+ blocks\n(confirmation)", bg: "#fff3e0", border: "#e65100" },
+    { label: "Sweep Tx\n(taproot → pool)\nP2TR only", bg: "#ffe0b2", border: "#e65100" },
+    { label: "Mine 6+ blocks\n(SPV requirement)", bg: "#ffe0b2", border: "#e65100" },
+    { label: "Upload sweep tx\nto ChadBuffer\n(non-witness)", bg: "#b2dfdb", border: "#00695c" },
+    { label: "verify_transaction\n(btc-light-client)\nMerkle + headers", bg: "#b2dfdb", border: "#00695c" },
+    { label: "verify_stealth_\ndeposit (zVault)\ncompute commitment", bg: "#c8e6c9", border: "#2e7d32" },
+    { label: "StealthAnnounce-\nment PDA created\n(90 bytes, type=0)", bg: "#a5d6a7", border: "#1b5e20" },
+  ];
+
+  const stepW = 100;
+  const stepH = 55;
+  const stepGap = 10;
+  const startX = 40;
+  const stepY = spvY + 35;
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i];
+    const x = startX + i * (stepW + stepGap);
+    els.push(
+      ...labeledRect(x, stepY, stepW, stepH, s.label, {
+        backgroundColor: s.bg,
+        strokeColor: s.border,
+        fontSize: 8,
+      })
+    );
+    if (i < steps.length - 1) {
+      els.push(
+        arrow(x + stepW, stepY + stepH / 2, [[0, 0], [stepGap, 0]], {
+          strokeColor: "#666",
+        })
+      );
+    }
+  }
+
+  // --- Fee comparison ---
+  const feeY = stepY + 90;
+  els.push(
+    rect(40, feeY, 400, 70, {
+      backgroundColor: "#fff9c4",
+      strokeColor: "#f57f17",
+      strokeWidth: 1,
+      strokeStyle: "dashed",
+    })
+  );
+  els.push(
+    text(50, feeY + 8, "Fee Savings:\n• Old: 10 (overhead) + 58 (input) + 43 (P2TR) + 45 (OP_RETURN) ≈ 156 vbytes\n• New: 10 (overhead) + 58 (input) + 43 (P2TR) ≈ 111 vbytes\n• Savings: ~29% smaller transaction", {
+      fontSize: 10,
+      strokeColor: "#333",
+      textAlign: "left",
+    })
+  );
+
+  writeExcalidraw("sweep-transaction", els);
+}
+
 // ─── CLI ─────────────────────────────────────────────────────────────
 const generators: Record<string, () => void> = {
   "system-overview": generateSystemOverview,
@@ -1656,6 +2444,11 @@ const generators: Record<string, () => void> = {
   "crypto-key-model": generateCryptoKeyModel,
   "joinsplit-circuit": generateJoinSplitCircuit,
   "frost-signing": generateFrostSigning,
+  "stealth-announcement": generateStealthAnnouncement,
+  "deposit-lifecycle-example": generateDepositLifecycleExample,
+  "commitment-tree": generateCommitmentTree,
+  "scanning-flow": generateScanningFlow,
+  "sweep-transaction": generateSweepTransaction,
 };
 
 const cmd = process.argv[2];

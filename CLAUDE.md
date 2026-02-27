@@ -48,13 +48,6 @@ cargo run                # Start API server
 cargo test               # Run tests
 ```
 
-### Mobile App (Expo) - `/mobile-app`
-```bash
-bun run start        # Start Expo dev server
-bun run ios          # Run on iOS simulator
-bun run android      # Run on Android emulator
-```
-
 ### circom Circuits - `/circuits`
 ```bash
 bun install                          # Install dependencies
@@ -95,7 +88,6 @@ BTC Deposit → Taproot Address (npk-tweaked) → Backend Sweep → SPV Verifica
 | `frost_server` | FROST threshold signing + policy engine + audit log | Rust |
 | `backend` | API server + deposit tracker + redemption + header relayer | Rust + TypeScript |
 | `zvault-app` | Web interface | Next.js + React |
-| `mobile-app` | Mobile app | Expo + React Native |
 
 ### JoinSplit Circuit Architecture
 
@@ -126,7 +118,7 @@ Spending Key (Baby Jubjub) ─► Signs JoinSplit transactions (EdDSA-Poseidon)
        │
        ├─► Nullifying Key (BN254 scalar) ─► Generates nullifiers, prevents double-spend
        │
-       └─► Viewing Key (Ed25519) ─► Scans deposit records via npk matching
+       └─► Viewing Key (Ed25519) ─► Scans stealth announcements via npk matching
 ```
 
 - **MPK** = `Poseidon(spendingPub.x, spendingPub.y, nullifyingKey)`
@@ -182,7 +174,7 @@ import {
   createNonInteractiveDeposit,
   generateJoinSplitProof,
   buildTransactInstruction,
-  scanDepositRecords,
+  scanUnifiedNotes,
 } from '@zvault/sdk';
 
 // 1. DEPOSIT: Generate npk-based deposit (user sends any amount)
@@ -206,12 +198,16 @@ const ix = buildTransactInstruction(options);
 
 npk-based deposits: user sends BTC with OP_RETURN containing `ephemeralPub(32) + npk(32)` = 64 bytes.
 Commitment is computed ON-CHAIN: `Poseidon(npk, ZBTC_TOKEN_ID, amount)`.
-Stealth data stored in `DepositRecord` (200 bytes) — no separate `StealthAnnouncement` PDA.
+Both deposits and transfers use a unified `StealthAnnouncement` PDA (90 bytes) with a `type` field:
+- `type = 0` (deposit): `amount_bytes` is plaintext u64 LE
+- `type = 1` (transfer): `amount_bytes` is XOR-encrypted
+
+Sweep transactions have no OP_RETURN — Solana verifies everything via the VerifiedTransaction PDA.
 
 Key constants:
 - `ZBTC_TOKEN_ID = 0x7a627463` ("zbtc" as u32)
-- `DEPOSIT_OP_RETURN_SIZE = 64` (was 72)
-- `DepositRecord::LEN = 200` (was 168)
+- `DEPOSIT_OP_RETURN_SIZE = 64`
+- `StealthAnnouncement::SIZE = 90`
 
 ## Development Notes
 

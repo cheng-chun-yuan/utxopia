@@ -58,8 +58,8 @@ BTC Deposit ─► Taproot Address ─► SPV Verify ─► Shielded Pool ─►
 │   ┌────────────────────────────────────────────────────────────────────────┐    │
 │   │                    zVault Program (Pinocchio)                          │    │
 │   │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌───────────┐│    │
-│   │   │ Commitment   │  │  Nullifier   │  │   Deposit    │  │   Name    ││    │
-│   │   │    Tree      │  │  Registry    │  │   Records    │  │ Registry  ││    │
+│   │   │ Commitment   │  │  Nullifier   │  │   Stealth    │  │   Name    ││    │
+│   │   │    Tree      │  │  Registry    │  │Announcements │  │ Registry  ││    │
 │   │   │ (depth 16)   │  │(double-spend)│  │(npk+stealth) │  │ (.zkey)   ││    │
 │   │   └──────────────┘  └──────────────┘  └──────────────┘  └───────────┘│    │
 │   └────────────────────────────────────────────────────────────────────────┘    │
@@ -86,7 +86,7 @@ BTC Deposit ─► Taproot Address ─► SPV Verify ─► Shielded Pool ─►
 | Component | Responsibility |
 |-----------|---------------|
 | **BTC Light Client** | Maintains Bitcoin header chain, validates SPV proofs |
-| **zVault Program** | Manages commitments, nullifiers, deposit records (npk-based), names |
+| **zVault Program** | Manages commitments, nullifiers, stealth announcements (npk-based), names |
 | **Header Relayer** | Syncs Bitcoin headers to Solana (permissionless) |
 | **SDK** | Client-side proof generation, key derivation, transaction building |
 | **FROST Server** | BTC redemption signing (2-of-3 threshold) |
@@ -249,7 +249,7 @@ SENDER (Wallet)                                      SOLANA (On-Chain)
                                                               │
                                                               ▼
                                                     Backend sweeps UTXO
-                                                    with OP_RETURN intact
+                                                    (no OP_RETURN in sweep)
                                                               │
                                                               ▼
                                             ┌─────────────────────────────────┐
@@ -261,41 +261,41 @@ SENDER (Wallet)                                      SOLANA (On-Chain)
                                             │    Poseidon(npk, 0x7a627463,    │
                                             │            amount_sats)         │
                                             │ 4. Insert into Merkle tree      │
-                                            │ 5. Create DepositRecord PDA     │
+                                            │ 5. Create StealthAnnouncement   │
+                                            │    PDA (90 bytes, type=deposit) │
                                             └─────────────────────────────────┘
 
 RECIPIENT (Viewing Key)
 
-1. Scan DepositRecord PDAs
+1. Scan StealthAnnouncement PDAs (unified: both deposits and transfers)
 2. ECDH: shared_secret = X25519(viewing_priv, ephemeral_pub)
 3. Derive random = SHA256(shared_secret || "random")
 4. Compute expected_NPK = Poseidon(own_MPK, random)
-5. If expected_NPK == record.npk → this deposit is mine
-6. Amount is plaintext in record (no decryption needed)
+5. type=0 (deposit): amount is plaintext; type=1 (transfer): XOR decrypt amount
+6. Verify: Poseidon(npk, ZBTC_TOKEN_ID, amount) == stored commitment → mine
 ```
 
 **Key constant**: `ZBTC_TOKEN_ID = 0x7a627463` ("zbtc" as u32, used in commitment computation)
 
-### On-Chain DepositRecord (200 bytes)
+### On-Chain StealthAnnouncement (90 bytes, unified)
 
-Each verified deposit creates a `DepositRecord` PDA on Solana:
+Both deposits and transfers create a single `StealthAnnouncement` PDA on Solana. A `type` field distinguishes them:
 
 ```
 Offset   Field              Size    Description
 ──────   ──────             ────    ────────────
-0        discriminator       1      Account type (0x02)
-1        minted              1      Whether deposit has been claimed
-2-7      _padding            6      Reserved
-8-39     commitment         32      Poseidon(npk, token, amount) — computed on-chain
-40-47    amount_sats         8      BTC amount (u64 LE)
-48-79    btc_txid           32      Bitcoin transaction hash
-80-87    block_height        8      Bitcoin block height (u64 LE)
-88-95    leaf_index          8      Position in commitment Merkle tree (u64 LE)
-96-127   depositor          32      Solana pubkey of verifier
-128-135  timestamp           8      Unix timestamp (i64 LE)
-136-167  ephemeral_pub      32      Ed25519 ephemeral public key (for scanning)
-168-199  npk                32      Note public key (for commitment verification)
+0        discriminator       1      Account type (0x08)
+1        announcement_type   1      0 = deposit (plaintext amount), 1 = transfer (XOR-encrypted)
+2-33     ephemeral_pub      32      Ed25519 ephemeral public key (for ECDH scanning)
+34-41    amount_bytes        8      Plaintext u64 LE (type=0) or XOR-encrypted (type=1)
+42-73    commitment         32      Poseidon(npk, token, amount)
+74-81    leaf_index          8      Position in commitment Merkle tree (u64 LE)
+82-89    created_at          8      Unix timestamp (i64 LE)
 ```
+
+**PDA seeds**:
+- Deposits: `["stealth", txid]` — prevents double-verification of same Bitcoin txid
+- Transfers: `["stealth", ephemeral_pub]` — prevents replay of JoinSplit outputs
 
 ### Key Properties
 
@@ -313,7 +313,7 @@ Offset   Field              Size    Description
 | Disc | Name | Purpose |
 |------|------|---------|
 | 0 | `INITIALIZE` | Initialize pool state and commitment tree |
-| 1 | `VERIFY_STEALTH_DEPOSIT` | Verify BTC via SPV, compute commitment on-chain, create DepositRecord |
+| 1 | `VERIFY_STEALTH_DEPOSIT` | Verify BTC via SPV, compute commitment on-chain, create StealthAnnouncement (type=deposit) |
 | 5 | `REQUEST_REDEMPTION` | Burn zkBTC, request BTC withdrawal |
 | 6 | `COMPLETE_REDEMPTION` | Relayer marks redemption complete |
 | 7 | `SET_PAUSED` | Admin pause/unpause |
