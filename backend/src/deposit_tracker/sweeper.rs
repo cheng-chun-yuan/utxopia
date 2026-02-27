@@ -106,7 +106,7 @@ impl UtxoSweeper {
             pool_public_key,
             signing: SigningMode::SingleKey { secret_key: pool_secret_key },
             network: Network::Testnet,
-            watcher: AddressWatcher::testnet(),
+            watcher: AddressWatcher::from_network(crate::config::Network::Devnet),
             pool_receive_address,
             fee_rate: 2, // Low fee rate for testnet
         }
@@ -128,11 +128,12 @@ impl UtxoSweeper {
         let keypair = Keypair::from_secret_key(&secp, &pool_secret_key);
         let (pool_public_key, _parity) = keypair.x_only_public_key();
 
-        let watcher = if network == Network::Bitcoin {
-            AddressWatcher::mainnet()
+        let zvault_network = if network == Network::Bitcoin {
+            crate::config::Network::Mainnet
         } else {
-            AddressWatcher::testnet()
+            crate::config::Network::Devnet
         };
+        let watcher = AddressWatcher::from_network(zvault_network);
 
         Ok(Self {
             secp,
@@ -172,10 +173,13 @@ impl UtxoSweeper {
         let secp = Secp256k1::new();
         let watcher = match esplora_url {
             Some(url) => AddressWatcher::new(url),
-            None => if network == Network::Bitcoin {
-                AddressWatcher::mainnet()
-            } else {
-                AddressWatcher::testnet()
+            None => {
+                let zvault_network = if network == Network::Bitcoin {
+                    crate::config::Network::Mainnet
+                } else {
+                    crate::config::Network::Devnet
+                };
+                AddressWatcher::from_network(zvault_network)
             },
         };
 
@@ -283,8 +287,9 @@ impl UtxoSweeper {
         let prev_txid = Txid::from_str(&utxo.txid)
             .map_err(|e| SweeperError::InvalidTxid(e.to_string()))?;
 
-        // Estimate fee (P2TR input ~58 vbytes, P2TR output ~43 vbytes, OP_RETURN ~45 vbytes)
-        let vsize = 10 + 58 + 43 + 45; // ~156 vbytes for 1-in 2-out (P2TR + OP_RETURN)
+        // Estimate fee (P2TR input ~58 vbytes, P2TR output ~43 vbytes)
+        // No OP_RETURN — Solana verifies everything via VerifiedTransaction PDA
+        let vsize = 10 + 58 + 43; // ~111 vbytes for 1-in 1-out P2TR
         let fee = (vsize as u64) * self.fee_rate;
 
         let send_amount = utxo.value.saturating_sub(fee);
@@ -292,13 +297,7 @@ impl UtxoSweeper {
             return Err(SweeperError::InvalidCommitment("amount too small after fees".to_string()));
         }
 
-        // Build OP_RETURN script embedding the commitment
-        // Format: OP_RETURN (0x6a) + OP_PUSHBYTES_32 (0x20) + <32-byte commitment>
-        let mut op_return_bytes = vec![0x6a, 0x20];
-        op_return_bytes.extend_from_slice(commitment);
-        let op_return_script = ScriptBuf::from_bytes(op_return_bytes);
-
-        // Build unsigned transaction
+        // Build unsigned transaction (single output to pool address, no OP_RETURN)
         let unsigned_tx = Transaction {
             version: Version::TWO,
             lock_time: LockTime::ZERO,
@@ -315,10 +314,6 @@ impl UtxoSweeper {
                 TxOut {
                     value: Amount::from_sat(send_amount),
                     script_pubkey: to_address.script_pubkey(),
-                },
-                TxOut {
-                    value: Amount::ZERO,
-                    script_pubkey: op_return_script,
                 },
             ],
         };

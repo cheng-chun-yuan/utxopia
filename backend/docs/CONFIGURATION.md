@@ -37,7 +37,7 @@ Priority: CLI args > Environment variables > `.env` file > Defaults
 | `POOL_RECEIVE_ADDRESS` | No | testnet faucet | Pool wallet address for swept funds |
 | `ESPLORA_URL` | No | `https://mempool.space/testnet/api` | Esplora API endpoint (tracker) |
 
-*Bitcoin API defaults: mainnet=`https://blockstream.info/api`, testnet/devnet=`https://blockstream.info/testnet/api`.
+*Bitcoin API defaults: mainnet=`https://mempool.space/api`, testnet=`https://mempool.space/testnet/api`, devnet=`https://mempool.space/testnet4/api`.
 
 **Required for redemption service, optional for deposit tracker (uses simulated mode). Prefer `ZVAULT_BTC_SIGNER_KEY` in FROST config.
 

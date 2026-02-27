@@ -94,7 +94,7 @@ impl SpvVerifier {
         Self {
             rpc: RpcClient::new_with_commitment(solana_rpc, CommitmentConfig::confirmed()),
             payer: None,
-            watcher: AddressWatcher::testnet(),
+            watcher: AddressWatcher::from_network(crate::config::Network::Devnet),
             program_id: Pubkey::from_str(&zvault_program_id()).unwrap(),
             light_client_program_id: Pubkey::from_str(&btc_light_client_program_id()).unwrap(),
         }
@@ -303,9 +303,9 @@ impl SpvVerifier {
         txid_internal.copy_from_slice(&txid_bytes);
         txid_internal.reverse();
 
-        // Derive deposit record PDA
+        // Derive stealth announcement PDA (unified: ["stealth", txid])
         let (deposit_record, _) = Pubkey::find_program_address(
-            &[b"deposit", &txid_internal],
+            &[b"stealth", &txid_internal],
             &self.program_id,
         );
 
@@ -318,37 +318,32 @@ impl SpvVerifier {
 
     /// Get leaf index for a verified deposit
     async fn get_leaf_index(&self, txid: &[u8; 32]) -> Result<u64, VerifierError> {
-        // Derive deposit record PDA
-        let (deposit_record, _) = Pubkey::find_program_address(
-            &[b"deposit", txid],
+        // Derive stealth announcement PDA (unified: ["stealth", txid])
+        let (stealth_pda, _) = Pubkey::find_program_address(
+            &[b"stealth", txid],
             &self.program_id,
         );
 
         // Get account data
         let account = self
             .rpc
-            .get_account(&deposit_record)
-            .map_err(|e| VerifierError::RpcError(format!("Failed to get deposit record: {}", e)))?;
+            .get_account(&stealth_pda)
+            .map_err(|e| VerifierError::RpcError(format!("Failed to get stealth announcement: {}", e)))?;
 
-        // Parse leaf index from on-chain DepositRecord account layout (200 bytes):
-        //   discriminator: u8     (offset 0)
-        //   minted: u8            (offset 1)
-        //   _padding: [u8; 6]     (offset 2)
-        //   commitment: [u8; 32]  (offset 8)   — computed on-chain
-        //   amount_sats: [u8; 8]  (offset 40)
-        //   btc_txid: [u8; 32]    (offset 48)
-        //   block_height: [u8; 8] (offset 80)
-        //   leaf_index: [u8; 8]   (offset 88)
-        //   depositor: [u8; 32]   (offset 96)
-        //   timestamp: [u8; 8]    (offset 128)
-        //   ephemeral_pub: [u8;32](offset 136)
-        //   npk: [u8; 32]         (offset 168)
-        const LEAF_INDEX_OFFSET: usize = 88;
+        // Parse leaf index from on-chain StealthAnnouncement layout (90 bytes):
+        //   discriminator: u8          (offset 0)
+        //   announcement_type: u8      (offset 1)
+        //   ephemeral_pub: [u8; 32]    (offset 2)
+        //   amount_bytes: [u8; 8]      (offset 34)
+        //   commitment: [u8; 32]       (offset 42)
+        //   leaf_index: [u8; 8]        (offset 74)
+        //   created_at: [u8; 8]        (offset 82)
+        const LEAF_INDEX_OFFSET: usize = 74;
         const LEAF_INDEX_END: usize = LEAF_INDEX_OFFSET + 8;
 
         if account.data.len() < LEAF_INDEX_END {
             return Err(VerifierError::VerificationFailed(format!(
-                "deposit record too small: {} bytes, need at least {}",
+                "stealth announcement too small: {} bytes, need at least {}",
                 account.data.len(),
                 LEAF_INDEX_END
             )));
@@ -397,7 +392,7 @@ impl SpvVerifier {
         );
 
         let (deposit_record, _) =
-            Pubkey::find_program_address(&[b"deposit", txid], &self.program_id);
+            Pubkey::find_program_address(&[b"stealth", txid], &self.program_id);
 
         let (commitment_tree, _) =
             Pubkey::find_program_address(&[b"commitment_tree"], &self.program_id);

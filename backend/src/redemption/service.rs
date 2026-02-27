@@ -50,7 +50,7 @@ impl RedemptionService {
             queue: WithdrawalQueue::default(),
             builder: TxBuilder::new_testnet(),
             signer: Arc::new(signer),
-            esplora: EsploraClient::new_testnet(),
+            esplora: EsploraClient::from_network(crate::config::Network::Devnet),
             pool_utxos: Arc::new(RwLock::new(Vec::new())),
             stats: Arc::new(RwLock::new(RedemptionStats::default())),
             running: Arc::new(RwLock::new(false)),

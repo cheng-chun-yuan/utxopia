@@ -51,7 +51,7 @@ USER appuser
 # Environment variables (can be overridden in Railway)
 ENV RUST_LOG=info
 ENV SOLANA_RPC_URL=https://api.devnet.solana.com
-ENV ESPLORA_URL=https://blockstream.info/testnet/api
+## ESPLORA_URL resolved from ZVAULT_BITCOIN_RPC at runtime (see config.rs defaults)
 
 # Run the redemption service
 CMD ["/app/zbtc-api", "redemption", "--interval", "30"]

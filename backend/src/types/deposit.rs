@@ -402,7 +402,7 @@ impl Default for TrackerConfig {
             poll_interval_secs: 30,
             required_confirmations: 1, // Devnet: fast testing (use 3+ for production)
             required_sweep_confirmations: 1,
-            esplora_url: "https://blockstream.info/testnet/api".to_string(),
+            esplora_url: String::new(),
             solana_rpc: "https://api.devnet.solana.com".to_string(),
             pool_receive_address: String::new(), // Must be set via env
             db_path: "data/deposits.db".to_string(),
