@@ -97,9 +97,9 @@ export function deriveRedemptionPDA(programId: PublicKey, user: PublicKey, nonce
   );
 }
 
-export function deriveDepositRecordPDA(programId: PublicKey, txid: Uint8Array): [PublicKey, number] {
+export function deriveDepositStealthPDA(programId: PublicKey, txid: Uint8Array): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from(Seeds.DEPOSIT), Buffer.from(txid)],
+    [Buffer.from(Seeds.STEALTH_ANNOUNCEMENT), Buffer.from(txid)],
     programId,
   );
 }

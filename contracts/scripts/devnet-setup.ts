@@ -49,6 +49,7 @@ const Seeds = {
   POOL_STATE: Buffer.from("pool_state"),
   COMMITMENT_TREE: Buffer.from("commitment_tree"),
   DEPOSIT: Buffer.from("deposit"),
+  STEALTH: Buffer.from("stealth"),
 };
 
 // Instruction discriminators
@@ -100,9 +101,9 @@ function deriveCommitmentTreePda(): [PublicKey, number] {
   return PublicKey.findProgramAddressSync([Seeds.COMMITMENT_TREE], PROGRAM_ID);
 }
 
-function deriveDepositRecordPda(commitment: Uint8Array): [PublicKey, number] {
+function deriveDepositStealthPda(txid: Uint8Array): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Seeds.DEPOSIT, commitment],
+    [Seeds.STEALTH, txid],
     PROGRAM_ID,
   );
 }
@@ -401,7 +402,7 @@ async function main() {
 
     const note = await generateTestNote(poseidon, amount);
     const commitmentBytes = Buffer.from(note.commitmentBytes, "hex");
-    const [depositPda] = deriveDepositRecordPda(commitmentBytes);
+    const [depositPda] = deriveDepositStealthPda(commitmentBytes);
 
     // Check if deposit already exists
     const depositAccount = await connection.getAccountInfo(depositPda);

@@ -62,7 +62,7 @@ import {
   deriveNullifierPDA,
   deriveStealthAnnouncementPDA,
   deriveRedemptionPDA,
-  deriveDepositRecordPDA,
+  deriveDepositStealthPDA,
   deriveLightClientPDA,
   parseCommitmentTree,
   parsePoolState,
@@ -849,7 +849,7 @@ async function main() {
     console.log(`  ChadBuffer: ${bufferKeypair.publicKey.toBase58().slice(0, 20)}...`);
 
     // 5. Call verify_stealth_deposit
-    const [depositRecord] = deriveDepositRecordPDA(PROGRAM_ID, txHash);
+    const [depositRecord] = deriveDepositStealthPDA(PROGRAM_ID, txHash);
     console.log(`  Deposit record PDA: ${depositRecord.toBase58().slice(0, 20)}...`);
 
     const verifyDepositIx = buildVerifyStealthDepositIx(
@@ -953,7 +953,7 @@ async function main() {
     const bufferKeypair = await createTxBufferAccount(connection, authority, rawSweepTx, CHADBUFFER_ID);
     console.log(`  ChadBuffer: ${bufferKeypair.publicKey.toBase58().slice(0, 20)}...`);
 
-    const [depositRecord] = deriveDepositRecordPDA(PROGRAM_ID, txHash);
+    const [depositRecord] = deriveDepositStealthPDA(PROGRAM_ID, txHash);
     console.log(`  Deposit record PDA: ${depositRecord.toBase58().slice(0, 20)}...`);
 
     const verifyDepositIx = buildVerifyStealthDepositIx(

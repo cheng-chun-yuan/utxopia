@@ -70,6 +70,7 @@ export const Seeds = {
   POOL_STATE: Buffer.from("pool_state"),
   COMMITMENT_TREE: Buffer.from("commitment_tree"),
   DEPOSIT: Buffer.from("deposit"),
+  STEALTH: Buffer.from("stealth"),
   NULLIFIER: Buffer.from("nullifier"),
   REDEMPTION: Buffer.from("redemption"),
 };
@@ -518,14 +519,14 @@ export function deriveCommitmentTreePda(programId: PublicKey): [PublicKey, numbe
 }
 
 /**
- * Derive DepositRecord PDA
+ * Derive Deposit Stealth Announcement PDA (unified: ["stealth", txid])
  */
-export function deriveDepositRecordPda(
+export function deriveDepositStealthPda(
   programId: PublicKey,
-  commitment: Uint8Array,
+  txid: Uint8Array,
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Seeds.DEPOSIT, commitment],
+    [Seeds.STEALTH, txid],
     programId,
   );
 }
@@ -957,7 +958,7 @@ describe("zVault Pinocchio Program", function() {
       const commitment = new Uint8Array(32).fill(0xab);
       const amount = 100_000n;
 
-      const [depositPda] = deriveDepositRecordPda(PROGRAM_ID, commitment);
+      const [depositPda] = deriveDepositStealthPda(PROGRAM_ID, commitment);
       const ix = buildRecordDepositInstruction(
         PROGRAM_ID,
         poolStatePda,
@@ -1179,7 +1180,7 @@ describe("zVault Pinocchio Program", function() {
       console.log("\n2. User sends BTC to taproot address (off-chain)");
 
       // 3. Relayer records deposit on-chain
-      const [depositPda] = deriveDepositRecordPda(PROGRAM_ID, note.commitmentBytes);
+      const [depositPda] = deriveDepositStealthPda(PROGRAM_ID, note.commitmentBytes);
       const recordDepositIx = buildRecordDepositInstruction(
         PROGRAM_ID,
         poolStatePda,

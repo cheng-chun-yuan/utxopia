@@ -194,10 +194,10 @@ pub fn process_add_demo_stealth(
         let mut ann_data = stealth_announcement.try_borrow_mut_data()?;
         let announcement = StealthAnnouncement::init(&mut ann_data)?;
 
-        announcement.bump = bump;
+        announcement.announcement_type = crate::state::ANNOUNCEMENT_TYPE_TRANSFER;
         announcement.ephemeral_pub = ix_data.ephemeral_pub;
         // Store encrypted amount bytes (only recipient can decrypt with shared secret)
-        announcement.set_encrypted_amount(ix_data.encrypted_amount);
+        announcement.set_amount_bytes(ix_data.encrypted_amount);
         announcement.commitment = ix_data.commitment;
         announcement.set_leaf_index(leaf_index);
         announcement.set_created_at(clock.unix_timestamp);

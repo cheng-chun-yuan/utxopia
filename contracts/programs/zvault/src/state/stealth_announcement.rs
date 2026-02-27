@@ -26,66 +26,67 @@ use pinocchio::program_error::ProgramError;
 /// Account discriminator for StealthAnnouncement
 pub const STEALTH_ANNOUNCEMENT_DISCRIMINATOR: u8 = 0x08;
 
+/// Announcement type: deposit (plaintext amount from BTC deposit verification)
+pub const ANNOUNCEMENT_TYPE_DEPOSIT: u8 = 0;
+
+/// Announcement type: transfer (XOR-encrypted amount from JoinSplit transact)
+pub const ANNOUNCEMENT_TYPE_TRANSFER: u8 = 1;
+
 /// Stealth announcement account size (single ephemeral key)
 ///
 /// Layout (90 bytes):
 /// - discriminator (1 byte)
-/// - bump (1 byte)
+/// - announcement_type (1 byte): 0=deposit (plaintext amount), 1=transfer (encrypted amount)
 /// - ephemeral_pub (32 bytes, Ed25519 compressed)
-/// - encrypted_amount (8 bytes, XOR encrypted with shared secret)
+/// - amount_bytes (8 bytes, plaintext if type=0, XOR encrypted if type=1)
 /// - commitment (32 bytes)
 /// - leaf_index (8 bytes, position in Merkle tree)
 /// - created_at (8 bytes)
 pub const STEALTH_ANNOUNCEMENT_SIZE: usize = 1 + // discriminator
-    1 + // bump
+    1 + // announcement_type
     32 + // ephemeral_pub (Ed25519 key, 32 bytes)
-    8 + // encrypted_amount (XOR with SHA256(shared_secret || "amount")[0..8])
+    8 + // amount_bytes (plaintext if deposit, XOR encrypted if transfer)
     32 + // commitment
     8 + // leaf_index (position in Merkle tree)
     8; // created_at = 90 bytes
 
-/// Stealth address announcement with single ephemeral key
+/// Unified stealth announcement with type flag
 ///
 /// Uses EIP-5564/DKSAP pattern with Ed25519 ephemeral key:
 /// - sharedSecret = X25519(ephemeralPriv, viewingPubX25519) [sender]
 /// - sharedSecret = X25519(viewingPriv, ephemeralPub) [recipient]
 /// - stealthPub = spendingPub + hash(sharedSecret) * BASE8 (Baby Jubjub)
 ///
-/// Key Separation:
-/// - Viewing key can detect deposits but CANNOT derive stealthPriv
-/// - Spending key required for stealthPriv and nullifier derivation
+/// Unified for both deposits and transfers:
+/// - type=0 (deposit): amount_bytes is plaintext u64 LE
+/// - type=1 (transfer): amount_bytes is XOR-encrypted
 ///
-/// Security Properties:
-/// - Amount is ENCRYPTED (only recipient can decrypt with viewing key)
-/// - Commitment = Poseidon2(stealthPub.x, amount) binds the actual amount
-/// - ZK proof guarantees amount conservation without revealing value
-///
-/// PDA: [b"stealth", ephemeral_pub]
+/// PDA seeds:
+/// - Deposits: [b"stealth", txid] — prevents double-verification of same txid
+/// - Transfers: [b"stealth", ephemeral_pub] — prevents replay
 #[repr(C)]
 pub struct StealthAnnouncement {
     /// Discriminator (0x08)
     pub discriminator: u8,
 
-    /// Bump seed
-    pub bump: u8,
+    /// Announcement type: 0=deposit (plaintext amount), 1=transfer (encrypted amount)
+    pub announcement_type: u8,
 
     /// Ed25519 ephemeral public key (32 bytes)
     /// Recipient: sharedSecret = X25519(viewingPriv, ephemeral_pub)
     /// Then: stealthPub = spendingPub + hash(sharedSecret) * BASE8
     pub ephemeral_pub: [u8; 32],
 
-    /// Encrypted amount in satoshis
-    /// encryption_key = SHA256(shared_secret || "amount")[0..8]
-    /// encrypted_amount = amount_sats XOR encryption_key
-    /// Only recipient with viewing key can decrypt
-    encrypted_amount_bytes: [u8; 8],
+    /// Amount in satoshis (interpretation depends on announcement_type)
+    /// type=0: plaintext u64 LE (deposit)
+    /// type=1: XOR encrypted with SHA256(shared_secret || "amount")[0..8] (transfer)
+    amount_bytes: [u8; 8],
 
     /// Commitment for Merkle tree verification
-    /// commitment = Poseidon2(stealthPub.x, amount)
+    /// commitment = Poseidon(npk, ZBTC_TOKEN_ID, amount)
     pub commitment: [u8; 32],
 
-    /// Leaf index in Merkle tree (0 if not from direct deposit)
-    /// Set by verify_stealth_deposit instruction
+    /// Leaf index in Merkle tree
     leaf_index_bytes: [u8; 8],
 
     /// Timestamp (stored as bytes for alignment)
@@ -96,20 +97,19 @@ impl StealthAnnouncement {
     pub const SEED: &'static [u8] = b"stealth";
     pub const SIZE: usize = STEALTH_ANNOUNCEMENT_SIZE;
 
-    /// Get encrypted_amount bytes (caller must decrypt with shared secret)
-    pub fn encrypted_amount(&self) -> [u8; 8] {
-        self.encrypted_amount_bytes
+    /// Get amount bytes (plaintext if type=0, encrypted if type=1)
+    pub fn amount_bytes(&self) -> [u8; 8] {
+        self.amount_bytes
     }
 
-    /// Set encrypted_amount bytes (caller must encrypt with shared secret first)
-    pub fn set_encrypted_amount(&mut self, value: [u8; 8]) {
-        self.encrypted_amount_bytes = value;
+    /// Set amount bytes (raw — caller handles encryption for type=1)
+    pub fn set_amount_bytes(&mut self, value: [u8; 8]) {
+        self.amount_bytes = value;
     }
 
-    /// Set amount as u64 (converts to le_bytes)
-    /// Note: For privacy, prefer set_encrypted_amount with pre-encrypted bytes
+    /// Set amount as u64 plaintext (for type=0 deposits)
     pub fn set_amount_sats(&mut self, value: u64) {
-        self.encrypted_amount_bytes = value.to_le_bytes();
+        self.amount_bytes = value.to_le_bytes();
     }
 
     /// Get leaf_index as u64

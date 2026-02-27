@@ -312,9 +312,9 @@ pub fn process_transact(
             {
                 let mut ann_data = announcement_info.try_borrow_mut_data()?;
                 let announcement = StealthAnnouncement::init(&mut ann_data)?;
-                announcement.bump = ann_bump;
+                announcement.announcement_type = crate::state::ANNOUNCEMENT_TYPE_TRANSFER;
                 announcement.ephemeral_pub = *ephemeral_pub;
-                announcement.set_encrypted_amount(encrypted_amount);
+                announcement.set_amount_bytes(encrypted_amount);
                 announcement.commitment = *commitments_out[i];
                 announcement.set_leaf_index(leaf_index);
                 announcement.set_created_at(clock.unix_timestamp);
