@@ -101,14 +101,14 @@ export function deriveNullifierPDA(
 }
 
 /**
- * Derive Deposit Record PDA
+ * Derive Deposit Stealth Announcement PDA (unified: ["stealth", txid])
  */
-export function deriveDepositRecordPDA(
+export function deriveDepositStealthPDA(
   txidBytes: Uint8Array,
   programId: PublicKey = ZVAULT_PROGRAM_ID
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from(PDA_SEEDS.DEPOSIT), txidBytes],
+    [Buffer.from(PDA_SEEDS.STEALTH), txidBytes],
     programId
   );
 }

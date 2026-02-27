@@ -8,7 +8,7 @@ const mockCreateStealthMetaAddress = vi.fn();
 const mockEncodeStealthMetaAddress = vi.fn();
 const mockScanAnnouncements = vi.fn();
 const mockParseStealthAnnouncement = vi.fn();
-const mockAnnouncementToScanFormat = vi.fn();
+const mockScanUnifiedNotes = vi.fn();
 
 vi.mock("@zvault/sdk", () => ({
   initPoseidon: () => mockInitPoseidon(),
@@ -17,8 +17,8 @@ vi.mock("@zvault/sdk", () => ({
   encodeStealthMetaAddress: (meta: unknown) => mockEncodeStealthMetaAddress(meta),
   scanAnnouncements: (keys: unknown, announcements: unknown) => mockScanAnnouncements(keys, announcements),
   parseStealthAnnouncement: (data: unknown) => mockParseStealthAnnouncement(data),
-  announcementToScanFormat: (parsed: unknown) => mockAnnouncementToScanFormat(parsed),
-  STEALTH_ANNOUNCEMENT_SIZE: 105,
+  scanUnifiedNotes: (keys: unknown, announcements: unknown) => mockScanUnifiedNotes(keys, announcements),
+  STEALTH_ANNOUNCEMENT_SIZE: 90,
 }));
 
 vi.mock("@/lib/constants", () => ({

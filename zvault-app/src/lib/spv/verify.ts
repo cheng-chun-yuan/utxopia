@@ -77,14 +77,14 @@ export function deriveHeightIndexPDA(
 }
 
 /**
- * Derive PDA for deposit record (lives under zVault program, not light client)
+ * Derive PDA for deposit stealth announcement (unified: ["stealth", txid])
  */
-export function deriveDepositRecordPDA(
+export function deriveDepositStealthPDA(
   txidBytes: Uint8Array,
   programId: PublicKey
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("deposit"), txidBytes],
+    [Buffer.from("stealth"), txidBytes],
     programId
   );
 }
