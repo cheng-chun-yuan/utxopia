@@ -18,7 +18,7 @@ export {
   exportViewOnlyKeys,
   prepareClaimInputs,
   parseStealthAnnouncement,
-  announcementToScanFormat,
+  scanUnifiedNotes,
   scanByZkeyName,
   resolveZkeyName,
   // Amount encryption utilities
@@ -27,6 +27,8 @@ export {
   // Constants
   STEALTH_ANNOUNCEMENT_SIZE,
   STEALTH_ANNOUNCEMENT_DISCRIMINATOR,
+  ANNOUNCEMENT_TYPE_DEPOSIT,
+  ANNOUNCEMENT_TYPE_TRANSFER,
   // Types
   type ScannedNote,
   type ClaimInputs as StealthClaimInputs,

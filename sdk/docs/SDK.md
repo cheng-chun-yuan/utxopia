@@ -15,7 +15,7 @@ import {
   createNonInteractiveDeposit,
   generateJoinSplitProof,
   buildTransactInstruction,
-  scanDepositRecords,
+  scanUnifiedNotes,
   formatBtc,
 } from '@zvault/sdk';
 
@@ -23,8 +23,8 @@ import {
 const deposit = await createNonInteractiveDeposit(recipientMeta, groupPubKey);
 console.log('Send BTC to:', deposit.btcAddress);
 
-// 2. SCAN: Detect incoming deposits via viewing key
-const notes = await scanDepositRecords(myKeys, depositRecords);
+// 2. SCAN: Detect incoming deposits/transfers via viewing key
+const notes = await scanUnifiedNotes(myKeys, announcements);
 for (const note of notes) {
   console.log(`Received ${formatBtc(note.amount)} at index ${note.leafIndex}`);
 }
@@ -65,8 +65,8 @@ const ix = buildTransactInstruction({
                                                  │  Poseidon(npk,   │
 ┌──────────────┐                                │  token, amount)  │
 │  Recipient   │                                │       │          │
-│              │◀──── scanDepositRecords ───────│  DepositRecord   │
-│  Viewing key │      (match npk via ECDH)      │  PDA (200 bytes) │
+│              │◀──── scanUnifiedNotes ────────│  StealthAnnounce │
+│  Viewing key │      (match npk via ECDH)      │  ment (90 bytes) │
 │  detects     │                                └──────────────────┘
 │  deposit     │
 └──────────────┘
@@ -139,15 +139,15 @@ import {
 
   // === Stealth & Scanning ===
   createStealthDeposit,             // Create stealth deposit (interactive)
-  scanDepositRecords,               // Scan DepositRecord PDAs for owned notes (npk-based)
+  scanUnifiedNotes,                 // Scan StealthAnnouncement PDAs (unified: deposits + transfers)
   scanAnnouncements,                // Scan stealth announcements (legacy)
-  parseDepositRecord,               // Parse on-chain DepositRecord (200 bytes)
+  parseStealthAnnouncement,         // Parse on-chain StealthAnnouncement (90 bytes)
 
   // === PDA ===
   deriveVkRegistryPDA,              // VK registry for JoinSplit(N,M)
   derivePoolStatePDA,               // Pool state
   deriveCommitmentTreePDA,          // Commitment tree
-  deriveDepositRecordPDA,           // Deposit record by txid + vout
+  deriveDepositStealthPDA,          // Deposit stealth announcement by txid (["stealth", txid])
 
   // === Types ===
   type JoinSplitProofInputs,
@@ -273,21 +273,21 @@ console.log('OP_RETURN payload (64 bytes):', deposit.opReturnPayload);
 // User can send ANY amount to this address
 ```
 
-### 2. Scan for Incoming Deposits
+### 2. Scan for Incoming Deposits & Transfers
 
 ```typescript
-import { scanDepositRecords, parseDepositRecord } from '@zvault/sdk';
+import { scanUnifiedNotes, parseStealthAnnouncement } from '@zvault/sdk';
 
-// Fetch DepositRecord PDAs from Solana
-const rawRecords = await fetchDepositRecordAccounts(connection);
+// Fetch StealthAnnouncement PDAs from Solana (disc 0x08, 90 bytes)
+const rawAnnouncements = await fetchStealthAnnouncementAccounts(connection);
 
-// Parse on-chain data (200 bytes each)
-const records = rawRecords
-  .map(r => parseDepositRecord(r.data))
+// Parse on-chain data (90 bytes each)
+const announcements = rawAnnouncements
+  .map(r => parseStealthAnnouncement(r.data))
   .filter(Boolean);
 
-// Scan with viewing key (no amount decryption needed)
-const myNotes = await scanDepositRecords(myKeys, records);
+// Unified scan: handles both deposits (type=0, plaintext amount) and transfers (type=1, encrypted)
+const myNotes = await scanUnifiedNotes(myKeys, announcements);
 for (const note of myNotes) {
   console.log(`Received ${note.amount} sats at leaf ${note.leafIndex}`);
 }
@@ -357,33 +357,32 @@ for (const note of notes) {
 
 ## On-Chain Data Parsing
 
-### parseDepositRecord (200 bytes)
+### parseStealthAnnouncement (90 bytes, unified)
 
-Parses an on-chain `DepositRecord` PDA into structured data:
+Parses an on-chain `StealthAnnouncement` PDA into structured data. Both deposits and transfers use the same 90-byte layout:
 
 ```typescript
-import { parseDepositRecord } from '@zvault/sdk';
+import { parseStealthAnnouncement } from '@zvault/sdk';
 
-const record = parseDepositRecord(accountData);
-// Returns: { ephemeralPub, npk, commitment, amount, leafIndex, timestamp }
+const ann = parseStealthAnnouncement(accountData);
+// Returns: { announcementType, ephemeralPub, amountBytes, commitment, leafIndex, createdAt }
+// announcementType: 0 = deposit (plaintext amount), 1 = transfer (XOR-encrypted)
 ```
 
 **Layout:**
 
 ```
 Offset   Field              Size
-0        discriminator       1     (0x02)
-1        minted              1
-8        commitment         32     Poseidon(npk, token, amount)
-40       amount_sats         8     u64 LE
-48       btc_txid           32
-80       block_height        8
-88       leaf_index          8     u64 LE
-96       depositor          32
-128      timestamp           8     i64 LE
-136      ephemeral_pub      32     Ed25519 key (for scanning)
-168      npk                32     Note public key
+0        discriminator       1     (0x08)
+1        announcement_type   1     0=deposit (plaintext), 1=transfer (encrypted)
+2        ephemeral_pub      32     Ed25519 ephemeral key (for ECDH scanning)
+34       amount_bytes        8     Plaintext u64 LE (type=0) or XOR-encrypted (type=1)
+42       commitment         32     Poseidon(npk, token, amount)
+74       leaf_index          8     u64 LE
+82       created_at          8     i64 LE
 ```
+
+**PDA seeds**: Deposits use `["stealth", txid]`, transfers use `["stealth", ephemeral_pub]`.
 
 ---
 

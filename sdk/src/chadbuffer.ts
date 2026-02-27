@@ -364,8 +364,8 @@ export async function fetchRawTransaction(
 ): Promise<Uint8Array> {
   const baseUrl =
     network === "testnet"
-      ? "https://blockstream.info/testnet/api"
-      : "https://blockstream.info/api";
+      ? "https://mempool.space/testnet4/api"
+      : "https://mempool.space/api";
 
   const response = await fetch(`${baseUrl}/tx/${txid}/raw`);
   if (!response.ok) {
@@ -389,8 +389,8 @@ export async function fetchMerkleProof(
 }> {
   const baseUrl =
     network === "testnet"
-      ? "https://blockstream.info/testnet/api"
-      : "https://blockstream.info/api";
+      ? "https://mempool.space/testnet4/api"
+      : "https://mempool.space/api";
 
   const response = await fetch(`${baseUrl}/tx/${txid}/merkle-proof`);
   if (!response.ok) {

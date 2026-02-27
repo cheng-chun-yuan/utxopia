@@ -54,7 +54,7 @@ import {
   derivePoolStatePDA,
   deriveLightClientPDA,
   deriveCommitmentTreePDA,
-  deriveDepositRecordPDA,
+  deriveDepositStealthPDA,
   deriveVerifiedTransactionPDA,
 } from "./pda";
 
@@ -255,7 +255,7 @@ export async function verifyStealthDeposit(
   const [poolState] = await derivePoolStatePDA(programId);
   const [lightClient] = await deriveLightClientPDA(BTC_LIGHT_CLIENT_PROGRAM_ID);
   const [commitmentTree] = await deriveCommitmentTreePDA(programId);
-  const [depositRecord] = await deriveDepositRecordPDA(txidBytes, programId);
+  const [depositRecord] = await deriveDepositStealthPDA(txidBytes, programId);
 
   console.log("PDAs derived:");
   console.log(`  Pool: ${poolState}`);

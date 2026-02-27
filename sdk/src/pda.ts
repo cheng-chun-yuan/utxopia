@@ -115,15 +115,18 @@ export async function deriveStealthAnnouncementPDA(
 }
 
 /**
- * Derive Deposit Record PDA
+ * Derive Deposit Stealth Announcement PDA (unified: ["stealth", txid])
+ *
+ * For deposits, the PDA is seeded by txid to prevent double-verification.
+ * For transfers, use deriveStealthAnnouncementPDA(ephemeralPub) instead.
  */
-export async function deriveDepositRecordPDA(
+export async function deriveDepositStealthPDA(
   txid: Uint8Array,
   programId: Address = ZVAULT_PROGRAM_ID
 ): Promise<[Address, number]> {
   const result = await getProgramDerivedAddress({
     programAddress: programId,
-    seeds: [new TextEncoder().encode(PDA_SEEDS.DEPOSIT), txid],
+    seeds: [new TextEncoder().encode(PDA_SEEDS.STEALTH), txid],
   });
   return [result[0], result[1]];
 }

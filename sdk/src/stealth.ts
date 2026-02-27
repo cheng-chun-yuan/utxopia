@@ -35,11 +35,17 @@
 // ========== Constants (defined before imports to ensure availability) ==========
 
 /** StealthAnnouncement account size (90 bytes - Ed25519 ephemeral key)
- * Layout: 1 (disc) + 1 (bump) + 32 (ephemeral) + 8 (encrypted_amount) + 32 (commitment) + 8 (leaf_idx) + 8 (created_at) */
+ * Layout: 1 (disc) + 1 (type) + 32 (ephemeral) + 8 (amount_bytes) + 32 (commitment) + 8 (leaf_idx) + 8 (created_at) */
 export const STEALTH_ANNOUNCEMENT_SIZE = 90;
 
 /** Discriminator for StealthAnnouncement */
 export const STEALTH_ANNOUNCEMENT_DISCRIMINATOR = 0x08;
+
+/** Announcement type: deposit (plaintext amount) */
+export const ANNOUNCEMENT_TYPE_DEPOSIT = 0;
+
+/** Announcement type: transfer (XOR-encrypted amount) */
+export const ANNOUNCEMENT_TYPE_TRANSFER = 1;
 
 // ========== Imports ==========
 
@@ -166,7 +172,10 @@ export interface ClaimInputs {
  * Parsed stealth announcement from on-chain data
  */
 export interface OnChainStealthAnnouncement {
+  /** 0 = deposit (plaintext amount), 1 = transfer (encrypted amount) */
+  announcementType: number;
   ephemeralPub: Uint8Array;
+  /** Raw amount bytes: plaintext if type=0, encrypted if type=1 */
   encryptedAmount: Uint8Array;
   commitment: Uint8Array;
   leafIndex: number;
@@ -599,78 +608,13 @@ export async function prepareClaimInputs(
 // ========== On-chain Parsing ==========
 
 /**
- * Parse a DepositRecord account data (on-chain, 200 bytes)
- *
- * Layout (200 bytes):
- * - discriminator (1 byte)        offset 0
- * - minted (1 byte)               offset 1
- * - _padding (6 bytes)            offset 2
- * - commitment (32 bytes)         offset 8   — computed on-chain
- * - amount_sats (8 bytes LE)      offset 40  — plaintext
- * - btc_txid (32 bytes)           offset 48
- * - block_height (8 bytes LE)     offset 80
- * - leaf_index (8 bytes LE)       offset 88
- * - depositor (32 bytes)          offset 96
- * - timestamp (8 bytes LE)        offset 128
- * - ephemeral_pub (32 bytes)      offset 136
- * - npk (32 bytes)                offset 168
- */
-export function parseDepositRecord(data: Uint8Array): {
-  ephemeralPub: Uint8Array;
-  npk: Uint8Array;
-  commitment: Uint8Array;
-  amount: bigint;
-  leafIndex: number;
-  timestamp: number;
-} | null {
-  if (data.length < 200) return null;
-
-  // Discriminator check (0x02 for DepositRecord)
-  if (data[0] !== 0x02) return null;
-
-  const commitment = data.slice(8, 40);
-
-  const amountView = new DataView(data.buffer, data.byteOffset + 40, 8);
-  const amount = amountView.getBigUint64(0, true);
-
-  const leafIndexView = new DataView(data.buffer, data.byteOffset + 88, 8);
-  const leafIndexBigInt = leafIndexView.getBigUint64(0, true);
-  if (leafIndexBigInt > BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new Error("Leaf index overflow");
-  }
-  const leafIndex = Number(leafIndexBigInt);
-
-  const timestampView = new DataView(data.buffer, data.byteOffset + 128, 8);
-  const timestampBigInt = timestampView.getBigInt64(0, true);
-  const timestamp = timestampBigInt < 0n ? 0 :
-    timestampBigInt > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER :
-    Number(timestampBigInt);
-
-  const ephemeralPub = data.slice(136, 168);
-  const npk = data.slice(168, 200);
-
-  return {
-    ephemeralPub,
-    npk,
-    commitment,
-    amount,
-    leafIndex,
-    timestamp,
-  };
-}
-
-/**
- * Parse a StealthAnnouncement account data (Ed25519 ephemeral key)
- *
- * @deprecated Use parseDepositRecord() instead. Stealth data is now stored
- * in DepositRecord. This function is kept for backwards compatibility with
- * existing on-chain StealthAnnouncement accounts.
+ * Parse a StealthAnnouncement account data (unified format)
  *
  * Layout (90 bytes):
- * - discriminator (1 byte)
- * - bump (1 byte)
+ * - discriminator (1 byte) = 0x08
+ * - announcement_type (1 byte): 0=deposit (plaintext), 1=transfer (encrypted)
  * - ephemeral_pub (32 bytes) - Ed25519 key
- * - encrypted_amount (8 bytes)
+ * - amount_bytes (8 bytes) - plaintext if type=0, encrypted if type=1
  * - commitment (32 bytes)
  * - leaf_index (8 bytes)
  * - created_at (8 bytes)
@@ -686,7 +630,9 @@ export function parseStealthAnnouncement(
     return null;
   }
 
-  let offset = 2; // Skip discriminator and bump
+  const announcementType = data[1];
+
+  let offset = 2; // Skip discriminator and announcement_type
 
   const ephemeralPub = data.slice(offset, offset + 32);
   offset += 32;
@@ -721,6 +667,7 @@ export function parseStealthAnnouncement(
     Number(createdAtBigInt);
 
   return {
+    announcementType,
     ephemeralPub,
     encryptedAmount,
     commitment,
@@ -729,71 +676,67 @@ export function parseStealthAnnouncement(
   };
 }
 
-/**
- * Convert on-chain announcement to format expected by scanAnnouncements
- * @deprecated Use scanDepositRecords() instead for npk-based deposits.
- */
-export function announcementToScanFormat(
-  announcement: OnChainStealthAnnouncement
-): {
-  ephemeralPub: Uint8Array;
-  encryptedAmount: Uint8Array;
-  commitment: Uint8Array;
-  leafIndex: number;
-} {
-  return {
-    ephemeralPub: announcement.ephemeralPub,
-    encryptedAmount: announcement.encryptedAmount,
-    commitment: announcement.commitment,
-    leafIndex: announcement.leafIndex,
-  };
-}
+// ========== Unified Note Scanning ==========
 
 /**
- * Scan deposit records using npk matching (more efficient than scanning announcements).
+ * Scan unified StealthAnnouncement notes (both deposits and transfers).
  *
- * For each DepositRecord, computes expected npk from the viewing key and checks
- * if it matches. Since the amount is stored in plaintext in the DepositRecord,
- * no decryption is needed.
+ * For each announcement:
+ * - type=0 (deposit): amount is plaintext u64 LE in amount_bytes
+ * - type=1 (transfer): amount is XOR-encrypted in amount_bytes
+ *
+ * Both are verified with: Poseidon(npk, ZBTC_TOKEN_ID, amount) == commitment
  */
-export async function scanDepositRecords(
+export async function scanUnifiedNotes(
   source: WalletSignerAdapter | ZVaultKeys,
-  records: {
-    ephemeralPub: Uint8Array;
-    npk: Uint8Array;
-    commitment: Uint8Array;
-    amount: bigint;
-    leafIndex: number;
-  }[]
+  announcements: OnChainStealthAnnouncement[]
 ): Promise<ScannedNote[]> {
   const keys = isWalletAdapter(source) ? await deriveKeysFromWallet(source) : source;
 
   const found: ScannedNote[] = [];
+  const MAX_SATS = 21_000_000n * 100_000_000n;
+
   const mpk = computeMPKSync(keys.spendingPubKey.x, keys.spendingPubKey.y, keys.nullifyingKey);
 
-  for (const record of records) {
+  for (const ann of announcements) {
     try {
-      // X25519 ECDH with viewing key to get shared secret
-      const sharedSecret = x25519Ecdh(keys.viewingPrivKey, record.ephemeralPub);
+      // X25519 ECDH with viewing key
+      const sharedSecret = x25519Ecdh(keys.viewingPrivKey, ann.ephemeralPub);
 
-      // Derive stealth scalar and expected npk
+      // Get amount based on type
+      let amount: bigint;
+      if (ann.announcementType === ANNOUNCEMENT_TYPE_DEPOSIT) {
+        // Plaintext u64 LE
+        const view = new DataView(ann.encryptedAmount.buffer, ann.encryptedAmount.byteOffset, 8);
+        amount = view.getBigUint64(0, true);
+      } else {
+        // XOR-encrypted
+        amount = decryptAmount(ann.encryptedAmount, sharedSecret);
+      }
+
+      if (amount <= 0n || amount > MAX_SATS) {
+        continue;
+      }
+
+      // Derive stealth scalar and expected NPK + commitment
       const stealthScalar = deriveStealthScalar(sharedSecret);
-      const expectedNpk = computeNPKSync(mpk, stealthScalar);
-      const actualNpk = bytesToBigint(record.npk);
+      const npk = computeNPKSync(mpk, stealthScalar);
+      const expectedCommitment = computeJoinSplitCommitmentSync(npk, ZBTC_TOKEN_ID, amount);
+      const actualCommitment = bytesToBigint(ann.commitment);
 
-      if (expectedNpk !== actualNpk) {
-        continue; // Not ours
+      if (expectedCommitment !== actualCommitment) {
+        continue;
       }
 
       // Derive stealth public key (for spending)
       const stealthPub = deriveStealthPubKey(keys.spendingPubKey, sharedSecret);
 
       found.push({
-        amount: record.amount,
-        ephemeralPub: record.ephemeralPub,
+        amount,
+        ephemeralPub: ann.ephemeralPub,
         stealthPub,
-        leafIndex: record.leafIndex,
-        commitment: record.commitment,
+        leafIndex: ann.leafIndex,
+        commitment: ann.commitment,
       });
     } catch (error) {
       if (error instanceof TypeError || error instanceof RangeError) {
