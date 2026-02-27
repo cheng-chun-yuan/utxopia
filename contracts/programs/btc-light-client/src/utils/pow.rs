@@ -25,7 +25,7 @@ pub fn target_from_bits(bits: u32) -> [u8; 32] {
         target[0..4].copy_from_slice(&value.to_le_bytes());
     } else {
         let byte_offset = exponent - 3;
-        if byte_offset < 29 {
+        if byte_offset + 3 <= 32 {
             target[byte_offset..byte_offset + 3].copy_from_slice(&mantissa.to_le_bytes()[0..3]);
         }
     }

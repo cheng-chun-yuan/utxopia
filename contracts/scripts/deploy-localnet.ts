@@ -111,7 +111,7 @@ const Discriminators = {
 // Bitcoin block for light client initialization
 // For regtest: use a recent regtest block hash
 // For testnet: use a known testnet block
-const BTC_NETWORK = process.env.BTC_NETWORK === "regtest" ? 2 : 1;
+const BTC_NETWORK = { mainnet: 0, testnet: 1, testnet4: 2, regtest: 3 }[process.env.BTC_NETWORK || "testnet"] ?? 1;
 const BTC_START_HEIGHT = process.env.BTC_START_HEIGHT
   ? BigInt(process.env.BTC_START_HEIGHT)
   : 2500000n;

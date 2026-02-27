@@ -8,7 +8,7 @@
  * Requires:
  *   - solana-test-validator (port 8899, programs deployed)
  *   - bitcoind regtest Docker (port 18443)
- *   - Esplora proxy (port 3002)
+ *   - Esplora proxy (port 2140)
  *   - Header relayer (syncing blocks to Solana)
  *
  * Run: TEST_MODE=local bun test tests/07-real-deposit-verify.test.ts --timeout 300000
@@ -456,13 +456,16 @@ async function submitBlockHeaders(
     }
 
     if (rawHeaders.length < 2) {
-      // Can't submit fewer than 2 headers; submit individually would require
-      // mining another block. For tests, mine one more block.
-      console.log(`  Only ${rawHeaders.length} header available, need 2+ for batch. Mining extra block...`);
-      await mineBlocks(1);
-      const bHash = await bitcoinRpc<string>("getblockhash", [toHeight + 1]);
-      const rawHeaderHex = await bitcoinRpc<string>("getblockheader", [bHash, false]);
-      rawHeaders.push(hexToBytes(rawHeaderHex));
+      // Can't submit fewer than 2 headers; mine extra blocks to ensure we have enough.
+      const needed = 2 - rawHeaders.length;
+      console.log(`  Only ${rawHeaders.length} header(s) available, need 2+ for batch. Mining ${needed + 1} extra block(s)...`);
+      await mineBlocks(needed + 1);
+      for (let extra = 0; extra < needed; extra++) {
+        const h = height + rawHeaders.length;
+        const bHash = await bitcoinRpc<string>("getblockhash", [h]);
+        const rawHeaderHex = await bitcoinRpc<string>("getblockheader", [bHash, false]);
+        rawHeaders.push(hexToBytes(rawHeaderHex));
+      }
     }
 
     const n = rawHeaders.length;
@@ -635,6 +638,27 @@ let ctx: TestContext;
 
 beforeAll(async () => {
   ctx = await createTestContext();
+
+  // In local mode, override config with actual deployed addresses from .localnet-config.json
+  if (IS_LOCAL) {
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+      const configPath = path.resolve(__dirname, "../../contracts/.localnet-config.json");
+      if (fs.existsSync(configPath)) {
+        const localConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+        if (localConfig.accounts?.zkbtcMint) {
+          (ctx.config as any).zbtcMint = localConfig.accounts.zkbtcMint;
+        }
+        if (localConfig.accounts?.poolVault) {
+          (ctx.config as any).poolVault = localConfig.accounts.poolVault;
+        }
+        if (localConfig.programs?.btcLightClient) {
+          (ctx.config as any).btcLightClientProgramId = localConfig.programs.btcLightClient;
+        }
+      }
+    } catch {}
+  }
 });
 
 describe("Real E2E Deposit Verification", () => {
@@ -728,8 +752,9 @@ describe("Real E2E Deposit Verification", () => {
     console.log(`  Raw tx hex length: ${depositRawHex.length}`);
 
     // Mine blocks so the header relayer can pick them up
-    const blockHashes = await mineBlocks(6);
-    console.log(`  Mined 6 blocks, last: ${blockHashes[blockHashes.length - 1]}`);
+    // Need enough blocks for REQUIRED_CONFIRMATIONS (6) AFTER the deposit block
+    const blockHashes = await mineBlocks(10);
+    console.log(`  Mined 10 blocks, last: ${blockHashes[blockHashes.length - 1]}`);
 
     // Fetch the block height of our transaction
     const txStatus = await (
@@ -748,19 +773,23 @@ describe("Real E2E Deposit Verification", () => {
     // Get current light client tip
     const currentTip = await getLightClientTipHeight(connection);
     console.log(`  Current light client tip: ${currentTip}`);
-    console.log(`  Need to reach block: ${blockHeight}`);
+
+    // Need enough headers past the deposit block for confirmation requirements (6 confirmations)
+    const REQUIRED_CONFS = 6;
+    const targetHeight = blockHeight + REQUIRED_CONFS - 1;
+    console.log(`  Need to reach block: ${targetHeight} (deposit at ${blockHeight}, need ${REQUIRED_CONFS} confs)`);
 
     // Submit missing headers directly (faster than waiting for relayer)
-    if (currentTip < blockHeight) {
+    if (currentTip < targetHeight) {
       const fromHeight = currentTip + 1;
-      console.log(`  Submitting headers ${fromHeight} → ${blockHeight}...`);
-      await submitBlockHeaders(connection, ctx.payer, fromHeight, blockHeight);
+      console.log(`  Submitting headers ${fromHeight} → ${targetHeight}...`);
+      await submitBlockHeaders(connection, ctx.payer, fromHeight, targetHeight);
     }
 
-    // Verify tip is now at or above our block
+    // Verify tip is now at or above our target
     const newTip = await getLightClientTipHeight(connection);
-    expect(newTip).toBeGreaterThanOrEqual(blockHeight);
-    console.log(`  Light client tip: ${newTip}`);
+    expect(newTip).toBeGreaterThanOrEqual(targetHeight);
+    console.log(`  Light client tip: ${newTip} (${newTip - blockHeight + 1} confirmations for deposit block)`);
 
     // Verify the HeightIndex PDA exists at this height
     const [heightIndexPda] = deriveHeightIndexPda(
@@ -827,25 +856,7 @@ describe("Real E2E Deposit Verification", () => {
     const txidInternal = hexToBytes(depositTxid);
     txidInternal.reverse();
 
-    // ---- Build on-chain merkle proof ----
-    const merkleProofData = buildOnChainMerkleProof(
-      txidInternal,
-      siblings,
-      txIndex
-    );
-
-    // ---- Build verify_stealth_deposit instruction ----
-    const ixData = buildVerifyStealthDepositIxData({
-      txid: txidInternal,
-      blockHeight,
-      amountSats: DEPOSIT_AMOUNT_SATS,
-      txSize: nonWitnessTx.length,
-      ephemeralPub,
-      npk,
-      merkleProofData,
-    });
-
-    // ---- Derive all 11 account PDAs ----
+    // ---- Derive account PDAs ----
     const poolStatePda = new PublicKey(ctx.config.poolStatePda);
     const [lightClientPda] = deriveLightClientPda(BTC_LIGHT_CLIENT_PROGRAM_ID);
 
@@ -860,6 +871,55 @@ describe("Real E2E Deposit Verification", () => {
       BTC_LIGHT_CLIENT_PROGRAM_ID,
       blockHashFromHi
     );
+
+    // ---- Step 1: Call btc-light-client verify_transaction ----
+    // Derive VerifiedTransaction PDA: ["verified_tx", blockHash, txid]
+    const [verifiedTxPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("verified_tx"), Buffer.from(blockHashFromHi), Buffer.from(txidInternal)],
+      BTC_LIGHT_CLIENT_PROGRAM_ID
+    );
+
+    // Build on-chain merkle proof format
+    const merkleProofData = buildOnChainMerkleProof(
+      txidInternal,
+      siblings,
+      txIndex
+    );
+    const verifyTxData = Buffer.alloc(1 + 32 + 32 + 4 + merkleProofData.length);
+    verifyTxData.writeUInt8(2, 0); // disc = verify_transaction
+    Buffer.from(txidInternal).copy(verifyTxData, 1);
+    Buffer.from(blockHashFromHi).copy(verifyTxData, 33);
+    verifyTxData.writeUInt32LE(nonWitnessTx.length, 65);
+    Buffer.from(merkleProofData).copy(verifyTxData, 69);
+
+    const verifyTxIx = new TransactionInstruction({
+      programId: BTC_LIGHT_CLIENT_PROGRAM_ID,
+      keys: [
+        { pubkey: verifiedTxPda, isSigner: false, isWritable: true },
+        { pubkey: lightClientPda, isSigner: false, isWritable: false },
+        { pubkey: blockHeaderPda, isSigner: false, isWritable: false },
+        { pubkey: bufferPubkey, isSigner: false, isWritable: false },
+        { pubkey: ctx.payer.publicKey, isSigner: true, isWritable: true },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      ],
+      data: verifyTxData,
+    });
+
+    console.log(`  Sending verify_transaction (btc-light-client)...`);
+    const verifySig = await sendV0Tx(connection, ctx.payer, [verifyTxIx]);
+    console.log(`  verify_transaction confirmed: ${verifySig}`);
+
+    // ---- Step 2: Call zvault verify_stealth_deposit ----
+    const ixData = buildVerifyStealthDepositIxData({
+      txid: txidInternal,
+      blockHeight,
+      amountSats: DEPOSIT_AMOUNT_SATS,
+      txSize: nonWitnessTx.length,
+      ephemeralPub,
+      npk,
+      merkleProofData: new Uint8Array(0), // no merkle proof needed in verify_stealth_deposit
+    });
+
     const commitmentTreePda = new PublicKey(ctx.config.commitmentTreePda);
     const [depositRecordPda] = deriveDepositRecordPda(
       zvaultProgramId,
@@ -872,19 +932,22 @@ describe("Real E2E Deposit Verification", () => {
     );
 
     console.log(`  Pool state: ${poolStatePda.toBase58()}`);
+    console.log(`  Verified tx: ${verifiedTxPda.toBase58()}`);
     console.log(`  Light client: ${lightClientPda.toBase58()}`);
     console.log(`  Block header: ${blockHeaderPda.toBase58()}`);
     console.log(`  Commitment tree: ${commitmentTreePda.toBase58()}`);
     console.log(`  Deposit record: ${depositRecordPda.toBase58()}`);
     console.log(`  ChadBuffer: ${bufferPubkey.toBase58()}`);
 
-    // ---- Build and send transaction ----
+    // Account ordering per verify_stealth_deposit.rs:
+    // 0=pool_state, 1=verified_tx, 2=light_client, 3=commitment_tree,
+    // 4=deposit_record, 5=tx_buffer, 6=authority, 7=system, 8=mint, 9=vault, 10=token
     const ix = new TransactionInstruction({
       programId: zvaultProgramId,
       keys: [
         { pubkey: poolStatePda, isSigner: false, isWritable: true },
+        { pubkey: verifiedTxPda, isSigner: false, isWritable: false },
         { pubkey: lightClientPda, isSigner: false, isWritable: false },
-        { pubkey: blockHeaderPda, isSigner: false, isWritable: false },
         { pubkey: commitmentTreePda, isSigner: false, isWritable: true },
         { pubkey: depositRecordPda, isSigner: false, isWritable: true },
         { pubkey: bufferPubkey, isSigner: false, isWritable: false },

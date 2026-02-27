@@ -6,15 +6,15 @@
  *
  * Usage:
  *   bun run esplora-proxy.ts
- *   # Listens on port 3002, proxies to bitcoind at localhost:18443
+ *   # Listens on port 2140, proxies to bitcoind at localhost:18443
  *
  * Environment:
  *   BITCOIN_RPC_URL  - bitcoind URL (default: http://test:test@localhost:18443)
- *   ESPLORA_PORT     - Listen port (default: 3002)
+ *   ESPLORA_PORT     - Listen port (default: 2140)
  */
 
 const BITCOIN_RPC_URL = process.env.BITCOIN_RPC_URL || "http://test:test@localhost:18443";
-const ESPLORA_PORT = parseInt(process.env.ESPLORA_PORT || "3002");
+const ESPLORA_PORT = parseInt(process.env.ESPLORA_PORT || "2140");
 
 // =============================================================================
 // Bitcoin JSON-RPC helper

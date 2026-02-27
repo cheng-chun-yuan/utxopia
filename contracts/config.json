@@ -6,9 +6,9 @@
     },
     "localnet": {
       "zVault": "2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV",
-      "btc_light_client": "DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS",
+      "btc_light_client": "EU5ZyFqRuUHHJcarRWPmKxezhsFKBVjcc5M2L3sobmd7",
       "chadbuffer": "6VrJmWbhN9WbEkg87JizunVMpL6CHKGVmzWCf3o3LRgy",
-      "groth16_verifier": "2Lz4zT294KDzMU4Agioz5R33iPScUALum65dJdAG8Bab"
+      "groth16_verifier": "DU2fJ7M3tvBEd3cZ32Txcqq84j6dDdD6D7QDQHCF4UBD"
     },
     "mainnet": {
       "zVault": "",

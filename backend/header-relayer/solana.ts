@@ -6,6 +6,7 @@
 
 import {
   Connection,
+  ComputeBudgetProgram,
   Keypair,
   PublicKey,
   SystemProgram,
@@ -331,7 +332,11 @@ export async function extendBlockchain(
     parentHeight,
   );
 
-  const transaction = new Transaction().add(instruction);
+  // Each header creates 2 PDAs (BlockHeader + HeightIndex), so request more CUs
+  const cuLimit = ComputeBudgetProgram.setComputeUnitLimit({
+    units: 400_000,
+  });
+  const transaction = new Transaction().add(cuLimit, instruction);
   return await sendAndConfirmTransaction(connection, transaction, [submitter]);
 }
 
