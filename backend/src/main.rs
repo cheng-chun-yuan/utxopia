@@ -237,6 +237,9 @@ async fn run_tracker_service(args: &[String]) {
     if let Ok(max_retries) = env::var("DEPOSIT_MAX_RETRIES") {
         config.max_retries = max_retries.parse().unwrap_or(5);
     }
+    if let Ok(esplora) = env::var("ESPLORA_URL") {
+        config.esplora_url = esplora;
+    }
 
     // Create data directory if using default path
     if config.db_path.starts_with("data/") {
@@ -245,8 +248,13 @@ async fn run_tracker_service(args: &[String]) {
         }
     }
 
-    // Create service with optional sweeper
-    let service = deposit_tracker::DepositTrackerService::new_testnet(config.clone());
+    // Create service — use custom esplora_url if set, otherwise default testnet
+    let has_custom_esplora = env::var("ESPLORA_URL").is_ok();
+    let service = if has_custom_esplora {
+        deposit_tracker::DepositTrackerService::new(config.clone())
+    } else {
+        deposit_tracker::DepositTrackerService::new_testnet(config.clone())
+    };
 
     // Configure sweeper based on signing mode
     let service = if let Ok(mode) = env::var("ZVAULT_SIGNING_MODE") {

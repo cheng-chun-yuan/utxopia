@@ -376,14 +376,14 @@ function computeBlockHash(rawHeader: Uint8Array): Uint8Array {
 }
 
 /**
- * Derive deposit record PDA
+ * Derive deposit stealth announcement PDA (unified: ["stealth", txid])
  */
-function deriveDepositRecordPda(
+function deriveDepositStealthPda(
   programId: PublicKey,
   txid: Uint8Array
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from("deposit"), Buffer.from(txid)],
+    [Buffer.from("stealth"), Buffer.from(txid)],
     programId
   );
 }
@@ -921,7 +921,7 @@ describe("Real E2E Deposit Verification", () => {
     });
 
     const commitmentTreePda = new PublicKey(ctx.config.commitmentTreePda);
-    const [depositRecordPda] = deriveDepositRecordPda(
+    const [depositRecordPda] = deriveDepositStealthPda(
       zvaultProgramId,
       txidInternal
     );
@@ -964,31 +964,35 @@ describe("Real E2E Deposit Verification", () => {
     const sig = await sendV0Tx(connection, ctx.payer, [ix]);
     console.log(`  Tx confirmed: ${sig}`);
 
-    // ---- Verify: deposit record PDA exists ----
+    // ---- Verify: stealth announcement PDA exists (90 bytes) ----
     const depositInfo = await connection.getAccountInfo(depositRecordPda);
     expect(depositInfo).not.toBeNull();
-    expect(depositInfo!.data.length).toBeGreaterThanOrEqual(200);
+    expect(depositInfo!.data.length).toBeGreaterThanOrEqual(90);
     console.log(
-      `  Deposit record created: ${depositRecordPda.toBase58()} (${depositInfo!.data.length} bytes)`
+      `  Stealth announcement created: ${depositRecordPda.toBase58()} (${depositInfo!.data.length} bytes)`
     );
 
-    // Verify deposit record fields
+    // Verify stealth announcement fields (90-byte unified format)
     const drData = depositInfo!.data;
-    // discriminator should be 0x02
-    expect(drData[0]).toBe(0x02);
-    // minted should be 1
-    expect(drData[1]).toBe(1);
-    // commitment starts at offset 8 (disc:1 + minted:1 + padding:6)
-    const commitmentBytes = drData.slice(8, 40);
+    // discriminator should be 0x08 (StealthAnnouncement)
+    expect(drData[0]).toBe(0x08);
+    // announcement_type should be 0 (deposit)
+    expect(drData[1]).toBe(0);
+    // ephemeral_pub at offset 2 (32 bytes) — should match what we sent
+    const storedEphemeralPub = drData.slice(2, 34);
+    expect(Buffer.from(storedEphemeralPub)).toEqual(Buffer.from(ephemeralPub));
+    console.log(`  Stored ephemeral_pub matches: OK`);
+    // amount_bytes at offset 34 (8 bytes) — plaintext for deposits
+    const amountView = new DataView(drData.buffer, drData.byteOffset + 34, 8);
+    const storedAmount = amountView.getBigUint64(0, true);
+    expect(storedAmount).toBe(BigInt(DEPOSIT_AMOUNT_SATS));
+    console.log(`  Stored amount (plaintext): ${storedAmount} sats`);
+    // commitment at offset 42 (32 bytes)
+    const commitmentBytes = drData.slice(42, 74);
     expect(commitmentBytes.some((b: number) => b !== 0)).toBe(true);
     console.log(
       `  Commitment: ${bytesToHex(new Uint8Array(commitmentBytes)).slice(0, 16)}...`
     );
-
-    // npk starts at offset 168 (based on struct layout)
-    const storedNpk = drData.slice(168, 200);
-    expect(Buffer.from(storedNpk)).toEqual(Buffer.from(npk));
-    console.log(`  Stored NPK matches: OK`);
 
     console.log(`\n  === DEPOSIT VERIFICATION COMPLETE ===`);
     console.log(`  Txid: ${depositTxid}`);

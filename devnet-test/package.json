@@ -23,7 +23,8 @@
     "docker:regtest:up": "docker compose up -d bitcoin",
     "docker:regtest:down": "docker compose down bitcoin",
     "esplora-proxy": "bun run esplora-proxy.ts",
-    "test:local:lifecycle": "TEST_MODE=local bun test tests/03-tracker-lifecycle.test.ts --timeout 300000"
+    "test:local:lifecycle": "TEST_MODE=local bun test tests/03-tracker-lifecycle.test.ts --timeout 300000",
+    "test:local:frost-sweep": "TEST_MODE=local bun test tests/08-frost-sweep.test.ts --timeout 300000"
   },
   "dependencies": {
     "@solana/kit": "^2.1.0",
