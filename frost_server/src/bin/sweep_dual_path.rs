@@ -35,8 +35,11 @@ const SIGNER_URLS: [&str; 3] = [
 // FROST group public key from DKG
 const FROST_GROUP_PUBKEY: &str = "92a9fbe6a99d2f3ebdead240d6c4e5f0e30668459c79bc6d080a5746202de2db";
 
-// Esplora API
-const ESPLORA_API: &str = "https://blockstream.info/testnet/api";
+// Esplora API — override with ESPLORA_URL env var
+fn esplora_api() -> String {
+    std::env::var("ESPLORA_URL")
+        .unwrap_or_else(|_| "https://mempool.space/testnet/api".to_string())
+}
 
 #[derive(Parser)]
 #[command(name = "sweep_dual_path")]
@@ -319,7 +322,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Broadcast
     let broadcast_response = client
-        .post(format!("{}/tx", ESPLORA_API))
+        .post(format!("{}/tx", &esplora_api()))
         .body(signed_tx_hex.clone())
         .send()?;
 

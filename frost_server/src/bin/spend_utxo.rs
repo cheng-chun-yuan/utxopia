@@ -10,7 +10,7 @@
 //!   --signer-urls http://localhost:9001,http://localhost:9002,http://localhost:9003 \
 //!   --utxo-txid b548a007... --utxo-vout 0 --utxo-amount 10000 \
 //!   --group-pubkey e1b157... --destination tb1p3e44... \
-//!   --fee 200 --esplora-api https://blockstream.info/testnet/api
+//!   --fee 200 --esplora-api https://mempool.space/testnet/api
 
 use bitcoin::consensus::encode::serialize_hex;
 use bitcoin::hashes::Hash;
@@ -61,7 +61,7 @@ struct Cli {
     fee: u64,
 
     /// Esplora API base URL
-    #[arg(long, default_value = "https://blockstream.info/testnet/api")]
+    #[arg(long, env = "ESPLORA_URL", default_value = "https://mempool.space/testnet/api")]
     esplora_api: String,
 
     /// Bitcoin network (bitcoin, testnet, signet, regtest)

@@ -62,7 +62,7 @@ enum Commands {
         #[arg(long, env = "FROST_AUDIT_LOG")]
         audit_log: Option<String>,
 
-        /// Bitcoin network: bitcoin, testnet, signet, regtest
+        /// Bitcoin network: bitcoin, testnet, testnet4, signet, regtest
         #[arg(long, env = "FROST_NETWORK", default_value = "testnet")]
         network: String,
 
@@ -185,17 +185,19 @@ async fn run_server(
 
     let network = match network_str.as_str() {
         "bitcoin" | "mainnet" => bitcoin::Network::Bitcoin,
+        "testnet4" => bitcoin::Network::Testnet,
         "signet" => bitcoin::Network::Signet,
         "regtest" => bitcoin::Network::Regtest,
         _ => bitcoin::Network::Testnet,
     };
 
-    // Default esplora URL to mempool.space based on network if not explicitly set
+    // Default esplora URL to mempool.space based on network string if not explicitly set
     let esplora_url = esplora_url.or_else(|| {
-        let default_url = match network {
-            bitcoin::Network::Bitcoin => "https://mempool.space/api",
-            bitcoin::Network::Signet => "https://mempool.space/signet/api",
-            bitcoin::Network::Regtest => "http://localhost:2140",
+        let default_url = match network_str.as_str() {
+            "bitcoin" | "mainnet" => "https://mempool.space/api",
+            "testnet4" => "https://mempool.space/testnet4/api",
+            "signet" => "https://mempool.space/signet/api",
+            "regtest" => "http://localhost:2140",
             _ => "https://mempool.space/testnet/api",
         };
         Some(default_url.to_string())

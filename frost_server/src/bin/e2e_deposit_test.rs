@@ -43,8 +43,11 @@ const FROST_GROUP_PUBKEY: &str = "e1b15704047c53ed8f40778789d997e79294ae368f5332
 // Timelock for refund path
 const TIMELOCK_BLOCKS: u16 = 6;
 
-// Esplora API for Bitcoin testnet
-const ESPLORA_API: &str = "https://blockstream.info/testnet/api";
+// Esplora API — override with ESPLORA_URL env var
+fn esplora_api() -> String {
+    std::env::var("ESPLORA_URL")
+        .unwrap_or_else(|_| "https://mempool.space/testnet/api".to_string())
+}
 
 #[derive(Parser)]
 #[command(name = "e2e_deposit_test")]
@@ -248,7 +251,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("\nPolling for deposit... (Press Ctrl+C to cancel)");
 
         loop {
-            let url = format!("{}/address/{}/utxo", ESPLORA_API, deposit_address);
+            let url = format!("{}/address/{}/utxo", &esplora_api(), deposit_address);
             let utxos: Vec<EsploraUtxo> = client.get(&url).send()?.json()?;
 
             if let Some(utxo) = utxos.first() {
@@ -456,7 +459,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Broadcast
     let broadcast_response = client
-        .post(format!("{}/tx", ESPLORA_API))
+        .post(format!("{}/tx", &esplora_api()))
         .body(signed_tx_hex.clone())
         .send()?;
 
@@ -475,7 +478,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  Output Index: 0");
         println!("\nTo verify on Solana:");
         println!("  1. Ensure BTC light client has the block header");
-        println!("  2. Fetch merkle proof from Esplora: GET {}/tx/{}/merkle-proof", ESPLORA_API, new_txid);
+        println!("  2. Fetch merkle proof from Esplora: GET {}/tx/{}/merkle-proof", &esplora_api(), new_txid);
         println!("  3. Call verify_deposit instruction with proof data");
     } else {
         let error_text = broadcast_response.text()?;
