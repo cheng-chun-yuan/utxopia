@@ -71,7 +71,7 @@ export interface TestContext {
 
 export const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
 export const SOLANA_WS_URL = process.env.SOLANA_WS_URL || "wss://api.devnet.solana.com";
-export const ESPLORA_URL = process.env.ESPLORA_URL || "https://blockstream.info/testnet/api";
+export const ESPLORA_URL = process.env.ESPLORA_URL || "https://mempool.space/testnet4/api";
 export const BACKEND_API_URL = process.env.BACKEND_API_URL || "http://localhost:3001";
 export const FROST_SIGNER_URLS = [
   process.env.FROST_SIGNER_1_URL || "http://localhost:8081",

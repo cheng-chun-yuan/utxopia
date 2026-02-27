@@ -87,6 +87,8 @@ const ZVaultSeeds = {
 // Seeds for BTC Light Client PDAs
 const BTCLCSeeds = {
   LIGHT_CLIENT: "btc_light_client",
+  BLOCK: "block",
+  HEIGHT_INDEX: "height_index",
 };
 
 // Instruction discriminators
@@ -103,7 +105,7 @@ const BTCLCInstruction = {
 const Discriminators = {
   POOL_STATE: 0x01,
   COMMITMENT_TREE: 0x05,
-  LIGHT_CLIENT: 0x01,
+  LIGHT_CLIENT: 0x06,
 };
 
 // Bitcoin block for light client initialization
@@ -346,9 +348,27 @@ function deriveBTCRelayPDA(programId: PublicKey): [PublicKey, number] {
 // Instruction Builders
 // =============================================================================
 
+function deriveHeightIndexPDA(height: bigint, programId: PublicKey): [PublicKey, number] {
+  const buf = Buffer.alloc(8);
+  buf.writeBigUInt64LE(height);
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(BTCLCSeeds.HEIGHT_INDEX), buf],
+    programId
+  );
+}
+
+function deriveBlockHeaderPDA(blockHash: Buffer, programId: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(BTCLCSeeds.BLOCK), blockHash],
+    programId
+  );
+}
+
 function buildBTCLCInitializeIx(
   lightClientPda: PublicKey,
   payer: PublicKey,
+  heightIndexPda: PublicKey,
+  blockHeaderPda: PublicKey,
   programId: PublicKey,
   startHeight: bigint,
   startBlockHash: Buffer,
@@ -366,6 +386,8 @@ function buildBTCLCInitializeIx(
       { pubkey: lightClientPda, isSigner: false, isWritable: true },
       { pubkey: payer, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: heightIndexPda, isSigner: false, isWritable: true },
+      { pubkey: blockHeaderPda, isSigner: false, isWritable: true },
     ],
     programId,
     data,
@@ -472,9 +494,14 @@ async function initializeBTCRelay(
   log(`Block hash: ${TEST_BTC_BLOCK.hash.toString("hex")}`);
   log(`Network: ${["mainnet", "testnet3", "testnet4", "regtest"][TEST_BTC_BLOCK.network]}`);
 
+  const [heightIndexPda] = deriveHeightIndexPDA(TEST_BTC_BLOCK.height, programId);
+  const [blockHeaderPda] = deriveBlockHeaderPDA(TEST_BTC_BLOCK.hash, programId);
+
   const ix = buildBTCLCInitializeIx(
     lightClientPda,
     authority.publicKey,
+    heightIndexPda,
+    blockHeaderPda,
     programId,
     TEST_BTC_BLOCK.height,
     TEST_BTC_BLOCK.hash,

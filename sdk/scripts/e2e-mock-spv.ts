@@ -307,12 +307,12 @@ async function main() {
   const [genesisBlockPDA] = pda(["block", genesisHash], BTC_LIGHT_CLIENT);
   const [genesisHeightPDA] = pda(["height_index", heightBuf(99n)], BTC_LIGHT_CLIENT);
   if (!(await conn.getAccountInfo(lcPDA))) {
-    // Initialize: disc(1) + genesis_height(8 LE) + genesis_raw_header(80) + network(1)
-    const d = Buffer.alloc(1 + 8 + 80 + 1);
+    // Initialize: disc(1) + genesis_height(8 LE) + genesis_block_hash(32) + network(1)
+    const d = Buffer.alloc(1 + 8 + 32 + 1);
     d[0] = 0; // disc = INITIALIZE
     d.writeBigUInt64LE(99n, 1);
-    d.set(genesisRawHeader, 9);
-    d[89] = 1; // network = testnet
+    d.set(genesisHash, 9);
+    d[41] = 1; // network = testnet
     await send(conn, auth, new TransactionInstruction({
       programId: BTC_LIGHT_CLIENT, data: d,
       keys: [

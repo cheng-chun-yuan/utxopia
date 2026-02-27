@@ -45,9 +45,9 @@ import {
 const DEPOSIT_AMOUNT_BTC = 0.0001; // 10,000 sats
 const DEPOSIT_AMOUNT_SATS = 10_000;
 
-// BTC light client program ID (localnet)
+// BTC light client program ID (from env or devnet default)
 const BTC_LIGHT_CLIENT_PROGRAM_ID = new PublicKey(
-  "DjZLbYWW7xp1xeHbRtAjUi4jxMThsykC9srXgB1NiMFx"
+  process.env.BTC_LIGHT_CLIENT_PROGRAM_ID || "DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS"
 );
 
 // =============================================================================
@@ -532,7 +532,7 @@ async function submitBlockHeaders(
 // =============================================================================
 
 const CHADBUFFER_PROGRAM_ID = new PublicKey(
-  "6VrJmWbhN9WbEkg87JizunVMpL6CHKGVmzWCf3o3LRgy"
+  process.env.CHADBUFFER_PROGRAM_ID || "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF"
 );
 
 /**
