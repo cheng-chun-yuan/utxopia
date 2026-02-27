@@ -15,7 +15,6 @@ pub mod taproot;
 // Re-exports for convenience
 pub use client::{
     BlockHeaderInfo, EsploraClient, EsploraError, EsploraTxStatus, MerkleProofInfo, UtxoInfo,
-    MAINNET_URL, TESTNET_URL,
 };
 pub use frost_client::{derive_frost_taproot_address, FrostClient, FrostClientError};
 pub use signer::{FrostConfig, Signer, SignerError, SingleKeySigner};

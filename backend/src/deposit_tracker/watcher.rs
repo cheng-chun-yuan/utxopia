@@ -9,10 +9,6 @@ use thiserror::Error;
 
 use crate::config::{Network, ZVaultConfig};
 
-/// Esplora API endpoints (mempool.space)
-pub const MAINNET_URL: &str = "https://mempool.space/api";
-pub const TESTNET_URL: &str = "https://mempool.space/testnet/api";
-
 /// Watcher errors
 #[derive(Debug, Error)]
 pub enum WatcherError {
@@ -75,16 +71,6 @@ pub struct AddressWatcher {
 }
 
 impl AddressWatcher {
-    /// Create watcher for mainnet
-    pub fn mainnet() -> Self {
-        Self::new(MAINNET_URL)
-    }
-
-    /// Create watcher for testnet
-    pub fn testnet() -> Self {
-        Self::new(TESTNET_URL)
-    }
-
     /// Create watcher from ZVaultConfig
     pub fn from_config(config: &ZVaultConfig) -> Self {
         Self::new(&config.bitcoin_api)
@@ -386,7 +372,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_tip_height() {
-        let watcher = AddressWatcher::testnet();
+        let watcher = AddressWatcher::from_network(Network::Testnet);
         let height = watcher.get_tip_height().await;
         assert!(height.is_ok());
         assert!(height.unwrap() > 0);
@@ -394,7 +380,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_check_invalid_address() {
-        let watcher = AddressWatcher::testnet();
+        let watcher = AddressWatcher::from_network(Network::Testnet);
         let result = watcher.check_address("invalid_address").await;
         // Should return an error for invalid address
         assert!(result.is_err());

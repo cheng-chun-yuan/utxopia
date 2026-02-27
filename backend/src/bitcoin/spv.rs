@@ -134,16 +134,6 @@ pub struct SpvProofGenerator {
 }
 
 impl SpvProofGenerator {
-    /// Create for mainnet
-    pub fn mainnet() -> Self {
-        Self::new("https://blockstream.info/api")
-    }
-
-    /// Create for testnet
-    pub fn testnet() -> Self {
-        Self::new("https://blockstream.info/testnet/api")
-    }
-
     /// Create with custom URL
     pub fn new(base_url: &str) -> Self {
         Self {
@@ -454,7 +444,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_tip_height() {
-        let generator = SpvProofGenerator::testnet();
+        let generator = SpvProofGenerator::new(
+            crate::config::Network::Testnet.default_bitcoin_api(),
+        );
         let height = generator.get_tip_height().await;
         assert!(height.is_ok());
         assert!(height.unwrap() > 0);

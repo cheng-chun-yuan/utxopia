@@ -71,7 +71,7 @@ impl FromStr for Network {
         match s.to_lowercase().as_str() {
             "mainnet" | "main" => Ok(Network::Mainnet),
             "testnet" | "test" => Ok(Network::Testnet),
-            "devnet" | "dev" => Ok(Network::Devnet),
+            "devnet" | "dev" | "testnet4" => Ok(Network::Devnet),
             "regtest" => Ok(Network::Regtest),
             _ => Err(ConfigError::InvalidValue(
                 "ZVAULT_NETWORK".to_string(),

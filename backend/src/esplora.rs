@@ -8,10 +8,6 @@ use serde::Deserialize;
 
 use crate::config::{Network, ZVaultConfig};
 
-/// Esplora API endpoints (mempool.space)
-pub const MAINNET_URL: &str = "https://mempool.space/api";
-pub const TESTNET_URL: &str = "https://mempool.space/testnet/api";
-
 /// Esplora HTTP client
 #[derive(Debug, Clone)]
 pub struct EsploraClient {
@@ -26,16 +22,6 @@ impl EsploraClient {
             client: Client::new(),
             base_url: base_url.trim_end_matches('/').to_string(),
         }
-    }
-
-    /// Create a client for Bitcoin mainnet
-    pub fn new_mainnet() -> Self {
-        Self::new(MAINNET_URL)
-    }
-
-    /// Create a client for Bitcoin testnet
-    pub fn new_testnet() -> Self {
-        Self::new(TESTNET_URL)
     }
 
     /// Create a client from ZVaultConfig
@@ -141,7 +127,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_block_height() {
-        let client = EsploraClient::new_testnet();
+        let client = EsploraClient::from_network(Network::Testnet);
         let height = client.get_block_height().await;
         assert!(height.is_ok());
         assert!(height.unwrap() > 0);
@@ -149,10 +135,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_client_urls() {
-        let mainnet = EsploraClient::new_mainnet();
+        let mainnet = EsploraClient::from_network(Network::Mainnet);
         assert_eq!(mainnet.base_url(), "https://mempool.space/api");
 
-        let testnet = EsploraClient::new_testnet();
+        let testnet = EsploraClient::from_network(Network::Testnet);
         assert_eq!(testnet.base_url(), "https://mempool.space/testnet/api");
     }
 }
