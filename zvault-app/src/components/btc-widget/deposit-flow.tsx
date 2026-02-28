@@ -400,11 +400,11 @@ export function DepositFlow() {
             </div>
           </div>
 
-          {/* Not found error */}
-          {error && !resolvedMeta && (
+          {/* Error alert */}
+          {error && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-[12px]">
               <div className="flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-red-400" />
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
                 <span className="text-body2 text-red-400">{error}</span>
               </div>
             </div>
