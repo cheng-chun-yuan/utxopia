@@ -231,7 +231,7 @@ export default function ActivityPage() {
               GitHub
             </a>
           </div>
-          <p className="text-caption">Powered by zVault</p>
+          <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption hover:text-gray-light transition-colors">Powered by Zeus Network</a>
         </div>
       </div>
     </main>

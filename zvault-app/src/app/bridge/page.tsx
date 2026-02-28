@@ -515,7 +515,7 @@ export default function BridgePage() {
                 <ExternalLink className="w-3 h-3 opacity-50" />
               </a>
             </div>
-            <p className="text-caption text-gray/50">Powered by zVault</p>
+            <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption text-gray/50 hover:text-gray-light transition-colors">Powered by Zeus Network</a>
           </div>
         </div>
       </div>

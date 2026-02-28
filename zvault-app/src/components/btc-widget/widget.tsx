@@ -58,7 +58,7 @@ const Footer = memo(function Footer() {
           GitHub
         </a>
       </div>
-      <span>Powered by zVault</span>
+      <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-light">Powered by Zeus Network</a>
     </div>
   );
 });

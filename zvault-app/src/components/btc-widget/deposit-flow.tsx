@@ -52,16 +52,12 @@ export function DepositFlow() {
     depositAddress: string;
     opReturnHex: string;
   } | null>(null);
-  const [txPreview, setTxPreview] = useState<{
-    psbtBase64: string;
+  // Lightweight preview: just deposit address + OP_RETURN (no UTXO fetch)
+  const [depositPreview, setDepositPreview] = useState<{
     depositAddress: string;
     depositAmountSats: number;
     opReturnHex: string;
-    changeAddress: string;
-    changeAmount: number;
-    estimatedFee: number;
-    totalInput: number;
-    numInputs: number;
+    opReturnPayload: Uint8Array;
   } | null>(null);
   const [buildingPreview, setBuildingPreview] = useState(false);
   const btcWallet = useBitcoinWalletStore();
@@ -77,7 +73,7 @@ export function DepositFlow() {
     // Wallet deposit reset
     setWalletDepositAmount("10000");
     setWalletDepositResult(null);
-    setTxPreview(null);
+    setDepositPreview(null);
   };
 
   // Demo mode: Submit mock stealth deposit via backend relayer (keeps user anonymous)
@@ -197,7 +193,7 @@ export function DepositFlow() {
     }
   };
 
-  // Step 1: Build PSBT and show preview
+  // Step 1: Generate deposit info instantly (pure crypto, no network calls)
   const buildTxPreview = async () => {
     if (!resolvedMeta || !btcWallet.connected) return;
 
@@ -209,7 +205,7 @@ export function DepositFlow() {
 
     setBuildingPreview(true);
     setError(null);
-    setTxPreview(null);
+    setDepositPreview(null);
 
     try {
       const config = getConfig();
@@ -221,6 +217,28 @@ export function DepositFlow() {
         getBtcSignerNetwork(),
       );
 
+      setDepositPreview({
+        depositAddress: deposit.btcAddress,
+        depositAmountSats: amountSats,
+        opReturnHex: bytesToHex(deposit.opReturnPayload),
+        opReturnPayload: deposit.opReturnPayload,
+      });
+    } catch (err) {
+      console.error("Preview build error:", err);
+      setError(err instanceof Error ? err.message : "Failed to generate deposit");
+    } finally {
+      setBuildingPreview(false);
+    }
+  };
+
+  // Step 2: Fetch UTXOs, build PSBT, sign, and broadcast
+  const confirmAndSign = async () => {
+    if (!depositPreview) return;
+
+    setWalletDepositing(true);
+    setError(null);
+
+    try {
       const utxos = await btcWallet.getPaymentUtxos();
       if (utxos.length === 0) {
         throw new Error("No confirmed UTXOs available in wallet");
@@ -233,55 +251,28 @@ export function DepositFlow() {
           value: u.value,
           scriptPubkeyHex: u.scriptPubkeyHex,
         })),
-        amountSats,
+        depositPreview.depositAmountSats,
         2,
       );
 
       const psbtResult = buildDepositPsbt({
         senderUtxos: selected,
-        depositAddress: deposit.btcAddress,
-        depositAmountSats: amountSats,
-        opReturnPayload: deposit.opReturnPayload,
+        depositAddress: depositPreview.depositAddress,
+        depositAmountSats: depositPreview.depositAmountSats,
+        opReturnPayload: depositPreview.opReturnPayload,
         changeAddress: btcWallet.address!,
         feeRate: 2,
         network: getBtcSignerNetwork(),
       });
 
-      setTxPreview({
-        psbtBase64: psbtResult.psbtBase64,
-        depositAddress: deposit.btcAddress,
-        depositAmountSats: amountSats,
-        opReturnHex: bytesToHex(deposit.opReturnPayload),
-        changeAddress: btcWallet.address!,
-        changeAmount: psbtResult.changeAmount,
-        estimatedFee: psbtResult.estimatedFee,
-        totalInput: psbtResult.totalInput,
-        numInputs: selected.length,
-      });
-    } catch (err) {
-      console.error("Preview build error:", err);
-      setError(err instanceof Error ? err.message : "Failed to build transaction");
-    } finally {
-      setBuildingPreview(false);
-    }
-  };
-
-  // Step 2: Sign and broadcast the previewed PSBT
-  const confirmAndSign = async () => {
-    if (!txPreview) return;
-
-    setWalletDepositing(true);
-    setError(null);
-
-    try {
-      const { txid } = await btcWallet.signAndBroadcastPsbt(txPreview.psbtBase64);
+      const { txid } = await btcWallet.signAndBroadcastPsbt(psbtResult.psbtBase64);
 
       setWalletDepositResult({
         txid,
-        depositAddress: txPreview.depositAddress,
-        opReturnHex: txPreview.opReturnHex,
+        depositAddress: depositPreview.depositAddress,
+        opReturnHex: depositPreview.opReturnHex,
       });
-      setTxPreview(null);
+      setDepositPreview(null);
       notifySuccess(`Deposit broadcast! TxID: ${txid.slice(0, 12)}...`);
       btcWallet.refreshBalance();
     } catch (err) {
@@ -511,7 +502,7 @@ export function DepositFlow() {
               {btcWallet.connected ? (
                 <div className="mb-4">
                   {/* Amount input (hidden once preview is built) */}
-                  {!txPreview && (
+                  {!depositPreview && (
                     <>
                       <label className="text-body2 text-gray-light pl-2 mb-2 block">Amount (satoshis)</label>
                       <input
@@ -543,7 +534,7 @@ export function DepositFlow() {
                         {buildingPreview ? (
                           <>
                             <Loader2 className="w-4 h-4 animate-spin" />
-                            Building Transaction...
+                            Generating...
                           </>
                         ) : (
                           <>
@@ -555,23 +546,10 @@ export function DepositFlow() {
                     </>
                   )}
 
-                  {/* Transaction Preview — simulated outputs */}
-                  {txPreview && (
+                  {/* Transaction Preview — outputs only (instant, no UTXO fetch) */}
+                  {depositPreview && (
                     <div className="flex flex-col gap-3">
-                      <p className="text-body2-semibold text-foreground pl-1">Transaction Preview</p>
-
-                      {/* Inputs summary */}
-                      <div className="p-3 bg-muted border border-gray/15 rounded-[12px]">
-                        <p className="text-caption text-gray mb-1">Inputs ({txPreview.numInputs} UTXO{txPreview.numInputs > 1 ? "s" : ""})</p>
-                        <p className="text-body2 font-mono text-foreground">
-                          {(txPreview.totalInput / 1e8).toFixed(8)} BTC
-                          <span className="text-caption text-gray ml-1">({txPreview.totalInput.toLocaleString()} sats)</span>
-                        </p>
-                      </div>
-
-                      <div className="flex justify-center">
-                        <ArrowRight className="w-4 h-4 text-gray" />
-                      </div>
+                      <p className="text-body2-semibold text-foreground pl-1">Transaction Outputs</p>
 
                       {/* Output 1: P2TR Deposit */}
                       <div className="p-3 bg-btc/5 border border-btc/20 rounded-[12px]">
@@ -580,11 +558,11 @@ export function DepositFlow() {
                           <span className="text-caption text-btc">P2TR Deposit</span>
                         </div>
                         <p className="text-body2 font-mono text-foreground mb-1">
-                          {(txPreview.depositAmountSats / 1e8).toFixed(8)} BTC
-                          <span className="text-caption text-gray ml-1">({txPreview.depositAmountSats.toLocaleString()} sats)</span>
+                          {(depositPreview.depositAmountSats / 1e8).toFixed(8)} BTC
+                          <span className="text-caption text-gray ml-1">({depositPreview.depositAmountSats.toLocaleString()} sats)</span>
                         </p>
                         <code className="block text-[10px] font-mono text-btc/70 break-all">
-                          {txPreview.depositAddress}
+                          {depositPreview.depositAddress}
                         </code>
                       </div>
 
@@ -599,48 +577,22 @@ export function DepositFlow() {
                           <div>
                             <p className="text-[10px] text-gray">ephemeralPub (32 bytes):</p>
                             <code className="block text-[10px] font-mono text-sol/70 break-all">
-                              {txPreview.opReturnHex.slice(0, 64)}
+                              {depositPreview.opReturnHex.slice(0, 64)}
                             </code>
                           </div>
                           <div>
                             <p className="text-[10px] text-gray">npk (32 bytes):</p>
                             <code className="block text-[10px] font-mono text-sol/70 break-all">
-                              {txPreview.opReturnHex.slice(64)}
+                              {depositPreview.opReturnHex.slice(64)}
                             </code>
                           </div>
                         </div>
                       </div>
 
-                      {/* Output 3: Change (conditional) */}
-                      {txPreview.changeAmount > 0 && (
-                        <div className="p-3 bg-muted border border-gray/20 rounded-[12px]">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-[10px] font-mono bg-gray/15 text-gray px-1.5 py-0.5 rounded">Output #3</span>
-                            <span className="text-caption text-gray-light">Change</span>
-                          </div>
-                          <p className="text-body2 font-mono text-foreground mb-1">
-                            {(txPreview.changeAmount / 1e8).toFixed(8)} BTC
-                            <span className="text-caption text-gray ml-1">({txPreview.changeAmount.toLocaleString()} sats)</span>
-                          </p>
-                          <code className="block text-[10px] font-mono text-gray break-all">
-                            {txPreview.changeAddress}
-                          </code>
-                        </div>
-                      )}
-
-                      {/* Fee */}
-                      <div className="flex items-center justify-between px-2 py-2 border-t border-gray/10">
-                        <span className="text-caption text-gray">Estimated Fee</span>
-                        <span className="text-caption font-mono text-foreground">
-                          {txPreview.estimatedFee.toLocaleString()} sats
-                          <span className="text-gray ml-1">({(txPreview.estimatedFee / 1e8).toFixed(8)} BTC)</span>
-                        </span>
-                      </div>
-
                       {/* Action buttons */}
                       <div className="flex gap-2">
                         <button
-                          onClick={() => setTxPreview(null)}
+                          onClick={() => setDepositPreview(null)}
                           disabled={walletDepositing}
                           className={cn(
                             "flex-1 py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2",
