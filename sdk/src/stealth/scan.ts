@@ -11,8 +11,6 @@ export {
   prepareClaimInputs,
   parseStealthAnnouncement,
   scanUnifiedNotes,
-  scanByZkeyName,
-  resolveZkeyName,
   encryptAmount,
   decryptAmount,
   isWalletAdapter,

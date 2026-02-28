@@ -489,18 +489,6 @@ On-chain Merkle tree interaction:
 | `isValidRoot(tree, root)` | Check if root is in history |
 | `parseCommitmentTreeData(data)` | Parse raw account data |
 
-### Name Registry (`./name-registry`)
-
-`.zkey` human-readable stealth address registry:
-
-| Export | Description |
-|--------|-------------|
-| `lookupZkeyName(connection, name)` | Resolve name to stealth address |
-| `reverseLookupZkeyName(connection, pubkey)` | Find name for a pubkey |
-| `isValidName/normalizeName/formatZkeyName` | Name validation and formatting |
-| `buildRegisterNameData/buildUpdateNameData/buildTransferNameData` | Instruction data builders |
-| Constants | `MAX_NAME_LENGTH`, `NAME_REGISTRY_SIZE` (256 bytes) |
-
 ### Deposit Watcher (`./watcher`)
 
 Real-time deposit monitoring (web + mobile):

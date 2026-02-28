@@ -115,6 +115,28 @@ export interface NetworkConfig {
    *  Used as the Taproot internal key for deriving deposit addresses client-side.
    *  Fetched once from GET /api/pool/info and cached. */
   groupPubKey: string;
+
+  // -------------------------------------------------------------------------
+  // SNS Subdomain Resolution (stealth address via .sol names)
+  // -------------------------------------------------------------------------
+
+  /** SPL Name Service program ID (stores name records / PDAs) */
+  snsNameServiceProgramId: string;
+
+  /** SNS Registrar program ID (for domain registration) */
+  snsRegistrarProgramId: string;
+
+  /** SNS Sub-Registrar program ID (for subdomain registration) */
+  snsSubRegistrarProgramId: string;
+
+  /** SNS root domain account (.sol TLD — differs per network) */
+  snsRootDomain: string;
+
+  /** Parent domain for stealth address subdomains (e.g., "btcpro" for *.btcpro.sol) */
+  snsParentDomain: string;
+
+  /** Stealth data version expected in SNS records */
+  snsStealthDataVersion: number;
 }
 
 // =============================================================================
@@ -146,27 +168,27 @@ export const LOCALNET_CHADBUFFER_PROGRAM_ID: Address = address(
 // =============================================================================
 
 /**
- * Devnet Configuration (v3.1.0)
+ * Devnet Configuration (v3.2.0)
  *
- * Fresh deployment 2026-02-24:
+ * Fresh deployment 2026-02-28:
  * - JoinSplit circuit architecture
- * - Program ID: 2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV
+ * - Program ID: B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq
  */
 export const DEVNET_CONFIG: NetworkConfig = {
   network: "devnet",
 
-  // Program IDs (fresh deployment 2026-02-24)
-  zvaultProgramId: address("2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV"),
-  btcLightClientProgramId: address("DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS"),
+  // Program IDs (fresh deployment 2026-02-28)
+  zvaultProgramId: address("B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq"),
+  btcLightClientProgramId: address("Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"),
   chadbufferProgramId: CHADBUFFER_PROGRAM_ID,
   token2022ProgramId: TOKEN_2022_PROGRAM_ID,
   ataProgramId: ATA_PROGRAM_ID,
 
-  // Deployed Accounts (fresh deployment 2026-02-24)
-  poolStatePda: address("E6DVestxC5dn5ixvLa3FcYodcVtwUAyanpVPbs4y3p16"),
-  commitmentTreePda: address("JCiGqC1a1rjfqk2dqcybU2e3FQjAQ19x8ts9fQCtTFCq"),
-  zbtcMint: address("HthCYqDKyw11c2dUJz9s2dCnH314ktn6JTGEveZkT17N"),
-  poolVault: address("DQizWHKHMhXsLF6712immeEKFpT93cCgF2qzdDTZqVRn"),
+  // Deployed Accounts (fresh deployment 2026-02-28)
+  poolStatePda: address("D2fPWueWrn5H3fazLz7QYydxpBMnL7iqkaxEpFPion5i"),
+  commitmentTreePda: address("3t2wuqAE2mDa5du64Edfie5PYh22eQXqSVvxboPr1kLs"),
+  zbtcMint: address("4pLu3qTY3kNWvvftPG22XzXxWuRPkg7GHWW8hcnoUPgd"),
+  poolVault: address("BXEwCHkUttWopX93jTTik4fYn3kxsgWKqneyoFZRxAUo"),
 
   // RPC Endpoints
   solanaRpcUrl: "https://api.devnet.solana.com",
@@ -180,7 +202,7 @@ export const DEVNET_CONFIG: NetworkConfig = {
   circuitCdnUrl: "https://circuits.amidoggy.xyz",
 
   // Groth16 Verifier: verification is inline in the zVault program (no separate verifier program)
-  groth16VerifierProgramId: address("2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV"),
+  groth16VerifierProgramId: address("B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq"),
 
   // VK Hashes (SHA256 of serialized VK bytes, generated from circom trusted setup)
   vkHashes: {
@@ -197,8 +219,16 @@ export const DEVNET_CONFIG: NetworkConfig = {
     "2x2": "7b237cfb5493f7a96bde50ab869f82d632e14fde310328d356c45e4529b96f29",
   },
 
-  // Pool group key (POC — secp256k1 generator x-coord; replace with FROST group key)
-  groupPubKey: "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+  // Pool group key (FROST 2-of-3 DKG output, x-only secp256k1)
+  groupPubKey: "d857a067bec0ae2027a6026ef73d2905f108b1a66de6d12d23a3feb42013b1dd",
+
+  // SNS Subdomain Resolution (devnet)
+  snsNameServiceProgramId: "namesLPneVptA9Z5rqUDD9tMTWEJwofgaYwp8cawRkX",  // SPL Name Service (devnet)
+  snsRegistrarProgramId: "snshBoEQ9jx4QoHBpZDQPYdNCtw7RMxJvYrKFEhwaPJ",    // SNS Registrar (devnet)
+  snsSubRegistrarProgramId: "31tT5CmpphAtRL3mstu962zeYH7C6TEkJWLB5nYxciBB", // Sub-Registrar (devnet)
+  snsRootDomain: "5eoDkP6vCQBXqDV9YN2NdUs3nmML3dMRNmEYpiyVNBm2",           // .sol TLD (devnet)
+  snsParentDomain: "btcpro",
+  snsStealthDataVersion: 1,
 };
 
 /**
@@ -245,6 +275,14 @@ export const MAINNET_CONFIG: NetworkConfig = {
 
   // Pool group key (placeholder — not yet deployed)
   groupPubKey: "0000000000000000000000000000000000000000000000000000000000000000",
+
+  // SNS Subdomain Resolution (mainnet)
+  snsNameServiceProgramId: "namesLPneVptA9Z5rqUDD9tMTWEJwofgaYwp8cawRkX",  // SPL Name Service (mainnet)
+  snsRegistrarProgramId: "jCebN34bUfdeUYJT13J1yG16XWQpt5PDx6Mse9GUqhR",    // SNS Registrar (mainnet)
+  snsSubRegistrarProgramId: "2KkyPzjaAYaz2ojQZ9P3xYakLd96B5UH6a2isLaZ4Cgs", // Sub-Registrar (mainnet)
+  snsRootDomain: "58PwtjSDuFHuUkYjH9BYod9SZaELfsvdrNMryy9iYNvo",           // .sol TLD (mainnet)
+  snsParentDomain: "btcpro",
+  snsStealthDataVersion: 1,
 };
 
 /**
@@ -256,7 +294,7 @@ export const LOCALNET_CONFIG: NetworkConfig = {
 
   // Program IDs
   zvaultProgramId: address("2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV"),
-  btcLightClientProgramId: address("DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS"),
+  btcLightClientProgramId: address("Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"),
   chadbufferProgramId: LOCALNET_CHADBUFFER_PROGRAM_ID,
   token2022ProgramId: TOKEN_2022_PROGRAM_ID,
   ataProgramId: ATA_PROGRAM_ID,
@@ -297,6 +335,14 @@ export const LOCALNET_CONFIG: NetworkConfig = {
 
   // Pool group key (POC — same as devnet for local dev)
   groupPubKey: "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+
+  // SNS Subdomain Resolution (not available on localnet)
+  snsNameServiceProgramId: "",
+  snsRegistrarProgramId: "",
+  snsSubRegistrarProgramId: "",
+  snsRootDomain: "",
+  snsParentDomain: "",
+  snsStealthDataVersion: 1,
 };
 
 // =============================================================================
@@ -376,20 +422,18 @@ export const BTC_LIGHT_CLIENT_PROGRAM_ID: Address = DEVNET_CONFIG.btcLightClient
 // Version Info
 // =============================================================================
 
-export const SDK_VERSION = "3.1.0";
+export const SDK_VERSION = "3.2.0";
 
 /** JoinSplit Merkle tree depth */
 export const JOINSPLIT_TREE_DEPTH = 16;
 
 export const DEPLOYMENT_INFO = {
   version: SDK_VERSION,
-  deployedAt: "2026-02-24",
+  deployedAt: "2026-02-28",
   network: "devnet" as NetworkType,
   features: [
     "demo-stealth",
-    "name-registry",
     "stealth-addresses",
-    "reverse-lookup",
     "groth16-browser-proving",
   ],
   notes: "Client-side Groth16 proof generation via snarkjs",

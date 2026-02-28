@@ -328,7 +328,6 @@ export {
   deriveLightClientPDA,
   deriveBlockHeaderPDA,
   deriveHeightIndexPDA,
-  deriveNameRegistryPDA,
   deriveVkRegistryPDA,
   commitmentToBytes,
 } from "./pda";
@@ -352,8 +351,6 @@ export {
   prepareClaimInputs,
   parseStealthAnnouncement,
   scanUnifiedNotes,
-  scanByZkeyName,
-  resolveZkeyName,
   encryptAmount,
   decryptAmount,
   computeNullifierHashForNote,
@@ -517,34 +514,18 @@ export {
 } from "./react";
 
 // ==========================================================================
-// Name Registry (.zkey.sol names)
+// SNS Subdomain Resolver (*.btcpro.sol stealth addresses)
 // ==========================================================================
 
 export {
-  lookupZkeyName,
-  lookupZkeyNameWithPDA,
-  parseNameRegistry,
-  reverseLookupZkeyName,
-  deriveReverseRegistryPDA,
-  parseReverseRegistry,
-  isValidName,
-  normalizeName,
-  formatZkeyName,
-  getNameValidationError,
-  hashName,
-  buildRegisterNameData,
-  buildUpdateNameData,
-  buildTransferNameData,
-  MAX_NAME_LENGTH,
-  NAME_REGISTRY_SEED,
-  REVERSE_REGISTRY_SEED,
-  NAME_REGISTRY_DISCRIMINATOR,
-  REVERSE_REGISTRY_DISCRIMINATOR,
-  NAME_REGISTRY_SIZE,
-  REVERSE_REGISTRY_SIZE,
-  type NameRegistryEntry,
-  type ZkeyStealthAddress,
-} from "./name-registry";
+  resolveSnsName,
+  resolveStealthName,
+  parseSnsStealthData,
+  isSnsStealthAddress,
+  deriveParentDomainKey,
+  SNS_STEALTH_DATA_SIZE,
+  type SnsStealthAddress,
+} from "./sns-resolver";
 
 // ==========================================================================
 // Commitment Tree
@@ -596,6 +577,26 @@ export {
   closeChadBuffer as relayCloseChadBuffer,
   type RelayResult,
 } from "./relay";
+
+// ==========================================================================
+// Explorer (on-chain account fetchers & parsers)
+// ==========================================================================
+
+export {
+  fetchExplorerDeposits,
+  fetchExplorerTransfers,
+  fetchExplorerRedemptions,
+  parseNullifierRecord,
+  parseRedemptionRequest,
+  NULLIFIER_RECORD_SIZE,
+  REDEMPTION_REQUEST_SIZE,
+  NULLIFIER_RECORD_DISCRIMINATOR,
+  REDEMPTION_REQUEST_DISCRIMINATOR,
+  OPERATION_TYPE_LABELS,
+  type ExplorerDeposit,
+  type ExplorerTransferEvent,
+  type ExplorerRedemption,
+} from "./explorer";
 
 // ==========================================================================
 // Demo Instructions (devnet/localnet only)

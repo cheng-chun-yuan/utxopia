@@ -893,7 +893,7 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
             </>
           )}
 
-          {/* Stealth Mode - .zkey.sol or hex address */}
+          {/* Stealth Mode - .btcpro.sol or hex address */}
           {recipientMode === "stealth" && (
             <div className="space-y-2">
               <StealthRecipientInput

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -11,11 +11,11 @@ import {
   Copy,
   Check,
   Send,
-  Tag,
   Loader2,
   LogOut,
   TrendingUp,
   ExternalLink,
+  Globe,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FeatureCard, type FeatureCardColor } from "@/components/ui/feature-card";
@@ -24,8 +24,9 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useZVaultKeys } from "@/hooks/use-zvault";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
-import { useZkeyName } from "@/hooks/use-zkey-name";
+import { useSnsName } from "@/hooks/use-sns-name";
 import { useStealthInbox } from "@/hooks/use-zvault";
+import { getConfig } from "@zvault/sdk";
 import { notifyCopied } from "@/lib/notifications";
 import { TooltipText } from "@/components/ui/tooltip";
 import { OnboardingModal } from "@/components/onboarding-modal";
@@ -91,57 +92,32 @@ export default function BridgePage() {
   } = useZVaultKeys();
   const { copied, copy } = useCopyToClipboard();
   const {
-    registeredName,
-    hasRegisteredName,
-    isLoading: isLoadingName,
-    isRegistering,
-    isCheckingAvailability,
-    isNameTaken,
-    error: nameError,
-    registerName,
-    verifyMyName,
-    formatName,
-    validateName,
-    checkAvailability,
-  } = useZkeyName();
+    registeredSnsName,
+    hasRegisteredSnsName,
+    isLoading: isLoadingSnsName,
+    isRegistering: isRegisteringSns,
+    error: snsError,
+    registerSnsSubdomain,
+  } = useSnsName();
   const {
     totalAmountSats,
     depositCount,
     isLoading: isLoadingInbox,
   } = useStealthInbox();
 
-  // Name registration state
-  const [showNameInput, setShowNameInput] = useState(false);
-  const [nameInput, setNameInput] = useState("");
-  const nameValidationError = nameInput ? validateName(nameInput) : null;
+  const snsConfig = getConfig();
+  const parentDomain = snsConfig.snsParentDomain || "btcpro";
 
-  // Debounced availability check
-  useEffect(() => {
-    if (!nameInput || nameValidationError) return;
+  // SNS registration state
+  const [showSnsInput, setShowSnsInput] = useState(false);
+  const [snsNameInput, setSnsNameInput] = useState("");
 
-    const timer = setTimeout(() => {
-      checkAvailability(nameInput);
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [nameInput, nameValidationError, checkAvailability]);
-
-  const handleRegisterName = async () => {
-    if (!nameInput || nameValidationError) return;
-
-    if (hasRegisteredName && !registeredName) {
-      const verified = await verifyMyName(nameInput);
-      if (verified) {
-        setShowNameInput(false);
-        setNameInput("");
-        return;
-      }
-    }
-
-    const success = await registerName(nameInput);
+  const handleRegisterSnsName = async () => {
+    if (!snsNameInput) return;
+    const success = await registerSnsSubdomain(snsNameInput);
     if (success) {
-      setShowNameInput(false);
-      setNameInput("");
+      setShowSnsInput(false);
+      setSnsNameInput("");
     }
   };
 
@@ -282,22 +258,22 @@ export default function BridgePage() {
               </div>
             ) : (
               <div>
-                {/* Show registered name if available */}
-                {registeredName && (
-                  <div className="flex items-center gap-2 p-3 bg-privacy/10 border border-privacy/30 rounded-[10px] mb-3">
-                    <Tag className="w-4 h-4 text-privacy" />
-                    <span className="text-body2-semibold text-privacy">
-                      {formatName(registeredName)}
+                {/* SNS name badge */}
+                {registeredSnsName && (
+                  <div className="flex items-center gap-2 p-3 bg-btc/10 border border-btc/30 rounded-[10px] mb-3">
+                    <Globe className="w-4 h-4 text-btc" />
+                    <span className="text-body2-semibold text-btc">
+                      {registeredSnsName}.{parentDomain}.sol
                     </span>
                     <button
-                      onClick={() => { copy(formatName(registeredName)); notifyCopied(".zkey.sol name"); }}
-                      className="ml-auto p-1.5 rounded-[6px] bg-privacy/10 hover:bg-privacy/20 transition-colors cursor-pointer"
-                      title="Copy .zkey.sol name"
+                      onClick={() => { copy(`${registeredSnsName}.${parentDomain}.sol`); notifyCopied(`.${parentDomain}.sol name`); }}
+                      className="ml-auto p-1.5 rounded-[6px] bg-btc/10 hover:bg-btc/20 transition-colors cursor-pointer"
+                      title={`Copy .${parentDomain}.sol name`}
                     >
                       {copied ? (
                         <Check className="w-3 h-3 text-green-400" />
                       ) : (
-                        <Copy className="w-3 h-3 text-privacy" />
+                        <Copy className="w-3 h-3 text-btc" />
                       )}
                     </button>
                   </div>
@@ -324,99 +300,72 @@ export default function BridgePage() {
                   </button>
                 </div>
 
-                {/* Name registration/verification */}
-                {!registeredName && !showNameInput && !isLoadingName && (
+                {/* SNS name registration */}
+                {!registeredSnsName && !showSnsInput && !isLoadingSnsName && keys && (
                   <button
-                    onClick={() => setShowNameInput(true)}
-                    className="flex items-center gap-2 text-caption text-privacy hover:text-privacy/80 transition-colors mt-2 cursor-pointer"
+                    onClick={() => setShowSnsInput(true)}
+                    className="flex items-center gap-2 text-caption text-btc hover:text-btc/80 transition-colors mt-2 cursor-pointer"
                   >
-                    <Tag className="w-3 h-3" />
-                    {hasRegisteredName ? (
-                      <>Verify your .zkey.sol name</>
-                    ) : (
-                      <>
-                        Register a{" "}
-                        <TooltipText
-                          text=".zkey.sol name"
-                          tooltip="A human-readable name (like alice.zkey.sol) that makes it easy for others to send you private payments."
-                          className="text-privacy"
-                        />
-                      </>
-                    )}
+                    <Globe className="w-3 h-3" />
+                    Register a .{parentDomain}.sol name
                   </button>
                 )}
-                {isLoadingName && (
+                {isLoadingSnsName && (
                   <div className="flex items-center gap-2 text-caption text-gray mt-2">
                     <Loader2 className="w-3 h-3 animate-spin" />
-                    Checking for registered name...
+                    Checking for .{parentDomain}.sol name...
                   </div>
                 )}
 
-                {showNameInput && (
-                  <div className="mt-3 p-3 bg-background/50 rounded-[10px] border border-gray/20">
+                {showSnsInput && (
+                  <div className="mt-3 p-3 bg-background/50 rounded-[10px] border border-btc/20">
                     <div className="flex items-center gap-2 mb-2">
                       <div className="flex-1 relative">
                         <input
                           type="text"
-                          value={nameInput}
-                          onChange={(e) => setNameInput(e.target.value.toLowerCase())}
+                          value={snsNameInput}
+                          onChange={(e) => setSnsNameInput(e.target.value.toLowerCase())}
                           placeholder="yourname"
                           className={cn(
                             "w-full px-3 py-2 bg-muted border rounded-[8px]",
                             "text-body2 text-foreground placeholder:text-gray",
                             "outline-none transition-colors",
-                            nameValidationError || isNameTaken
-                              ? "border-red-500/50"
-                              : "border-gray/30 focus:border-privacy/50"
+                            "border-gray/30 focus:border-btc/50"
                           )}
                         />
-                        {isCheckingAvailability && (
-                          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3 h-3 text-gray animate-spin" />
-                        )}
                       </div>
-                      <span className="text-body2 text-gray">.zkey.sol</span>
+                      <span className="text-body2 text-gray">.{parentDomain}.sol</span>
                     </div>
-                    {nameValidationError && (
-                      <p className="text-caption text-red-400 mb-2">{nameValidationError}</p>
-                    )}
-                    {!nameValidationError && isNameTaken && nameInput && (
-                      <p className="text-caption text-red-400 mb-2">This name is already taken</p>
-                    )}
-                    {nameError && (
-                      <p className="text-caption text-red-400 mb-2">{nameError}</p>
+                    {snsError && (
+                      <p className="text-caption text-red-400 mb-2">{snsError}</p>
                     )}
                     <div className="flex gap-2">
                       <button
-                        onClick={handleRegisterName}
-                        disabled={isRegistering || isCheckingAvailability || (isNameTaken && !hasRegisteredName) || !nameInput || !!nameValidationError}
+                        onClick={handleRegisterSnsName}
+                        disabled={isRegisteringSns || !snsNameInput}
                         className={cn(
                           "flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-[8px]",
-                          "bg-privacy hover:bg-privacy/80 text-background",
+                          "bg-btc hover:bg-btc/80 text-background",
                           "disabled:bg-gray/30 disabled:text-gray disabled:cursor-not-allowed",
                           "transition-colors text-caption cursor-pointer"
                         )}
                       >
-                        {isRegistering ? (
+                        {isRegisteringSns ? (
                           <>
                             <Loader2 className="w-3 h-3 animate-spin" />
-                            {hasRegisteredName ? "Verifying..." : "Registering..."}
-                          </>
-                        ) : isCheckingAvailability ? (
-                          <>
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                            Checking...
+                            Registering (3 txns)...
                           </>
                         ) : (
                           <>
-                            <Tag className="w-3 h-3" />
-                            {hasRegisteredName && !registeredName ? "Verify" : "Register"}
+                            <Globe className="w-3 h-3" />
+                            Register
                           </>
                         )}
                       </button>
                       <button
                         onClick={() => {
-                          setShowNameInput(false);
-                          setNameInput("");
+                          setShowSnsInput(false);
+                          setSnsNameInput("");
                         }}
                         className="px-3 py-2 rounded-[8px] bg-gray/20 hover:bg-gray/30 text-gray-light text-caption transition-colors cursor-pointer"
                       >

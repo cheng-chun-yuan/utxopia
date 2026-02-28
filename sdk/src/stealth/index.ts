@@ -19,8 +19,6 @@ export {
   prepareClaimInputs,
   parseStealthAnnouncement,
   scanUnifiedNotes,
-  scanByZkeyName,
-  resolveZkeyName,
   // Amount encryption utilities
   encryptAmount,
   decryptAmount,

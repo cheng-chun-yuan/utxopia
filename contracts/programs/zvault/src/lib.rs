@@ -68,11 +68,6 @@ pub mod instruction {
     pub const COMPLETE_REDEMPTION: u8 = 6;
     pub const SET_PAUSED: u8 = 7;
 
-    // Name registry
-    pub const REGISTER_NAME: u8 = 8;
-    pub const UPDATE_NAME: u8 = 9;
-    pub const TRANSFER_NAME: u8 = 10;
-
     // VK Registry (admin)
     pub const INIT_VK_REGISTRY: u8 = 11;
     pub const UPDATE_VK_REGISTRY: u8 = 12;
@@ -118,16 +113,6 @@ pub fn process_instruction(
         }
         instruction::SET_PAUSED => {
             process_set_paused(program_id, accounts, data)
-        }
-        // Name registry
-        instruction::REGISTER_NAME => {
-            instructions::process_register_name(program_id, accounts, data)
-        }
-        instruction::UPDATE_NAME => {
-            instructions::process_update_name(program_id, accounts, data)
-        }
-        instruction::TRANSFER_NAME => {
-            instructions::process_transfer_name(program_id, accounts, data)
         }
         // Demo/testing - DISABLED IN PRODUCTION
         #[cfg(feature = "devnet")]
@@ -207,9 +192,6 @@ mod tests {
             instruction::REQUEST_REDEMPTION,
             instruction::COMPLETE_REDEMPTION,
             instruction::SET_PAUSED,
-            instruction::REGISTER_NAME,
-            instruction::UPDATE_NAME,
-            instruction::TRANSFER_NAME,
             instruction::INIT_VK_REGISTRY,
             instruction::UPDATE_VK_REGISTRY,
             instruction::TRANSACT,

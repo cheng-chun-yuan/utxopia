@@ -21,11 +21,9 @@
 // Core state
 pub mod commitment_tree;
 pub mod deposit;
-pub mod name_registry;
 pub mod nullifier;
 pub mod pool;
 pub mod redemption;
-pub mod reverse_registry;
 pub mod stealth_announcement;
 pub mod verified_tx_reader;
 pub mod vk_registry;
@@ -34,11 +32,9 @@ pub mod vk_registry;
 // Re-exports
 pub use commitment_tree::*;
 pub use deposit::*;
-pub use name_registry::*;
 pub use nullifier::*;
 pub use pool::*;
 pub use redemption::*;
-pub use reverse_registry::*;
 pub use stealth_announcement::*;
 pub use verified_tx_reader::*;
 pub use vk_registry::*;

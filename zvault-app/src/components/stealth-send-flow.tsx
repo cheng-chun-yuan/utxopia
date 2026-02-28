@@ -32,7 +32,8 @@ import {
   decodeStealthMetaAddress,
   createStealthDeposit,
   deriveTaprootAddress,
-  lookupZkeyName,
+  resolveSnsName,
+  getConfig,
   formatBtc,
   type StealthMetaAddress,
   type StealthDeposit,
@@ -109,7 +110,7 @@ export function StealthSendFlow() {
     }
   }, [searchParams, ownedNotes.length]); // Re-run when notes load
 
-  // Resolve recipient - supports both zkey names and raw hex addresses
+  // Resolve recipient - supports both .btcpro.sol names and raw hex addresses
   const resolveRecipient = useCallback(async () => {
     const input = recipientInput.trim();
     if (!input) return;
@@ -132,29 +133,32 @@ export function StealthSendFlow() {
         }
         setError("Invalid stealth address format (expected 130 hex characters)");
       } else {
-        // Try as .zkey.sol name (custom name registry)
-        const name = input.replace(/\.zkey\.sol$/i, "").replace(/\.zkey$/i, "");
+        // Try as .btcpro.sol name (SNS subdomain)
+        const config = getConfig();
+        const parentDomain = config.snsParentDomain || "btcpro";
+        const name = input
+          .replace(new RegExp(`\\.${parentDomain}\\.sol$`, "i"), "")
+          .replace(new RegExp(`\\.${parentDomain}$`, "i"), "")
+          .toLowerCase();
         const connectionAdapter = getConnectionAdapter();
-        const result = await lookupZkeyName(connectionAdapter as any, name);
-        if (result) {
-          // Convert ZkeyStealthAddress → StealthMetaAddress
-          try {
-            const meta = decodeStealthMetaAddress(result.stealthMetaAddressHex);
-            setResolvedMeta(meta);
-            setResolvedName(name);
-            return;
-          } catch {
-            setError(`Name "${name}.zkey.sol" does not include full stealth meta-address. Use hex address instead.`);
-            return;
-          }
+        const snsResult = await resolveSnsName(connectionAdapter as any, name);
+        if (snsResult) {
+          const meta: StealthMetaAddress = {
+            spendingPubKey: snsResult.spendingPubKey,
+            viewingPubKey: snsResult.viewingPubKey,
+            mpk: new Uint8Array(32),
+          };
+          setResolvedMeta(meta);
+          setResolvedName(name);
+          return;
         }
-        // If zkey lookup fails, try as hex one more time
+        // If SNS lookup fails, try as hex
         const meta = decodeStealthMetaAddress(input);
         if (meta) {
           setResolvedMeta(meta);
           return;
         }
-        setError(`"${name}.zkey.sol" not found`);
+        setError(`"${name}.${parentDomain}.sol" not found`);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to resolve recipient");
@@ -291,7 +295,7 @@ export function StealthSendFlow() {
           <div className="flex items-center justify-between">
             <span className="text-caption text-gray">Recipient</span>
             <span className="text-caption text-gray-light font-mono">
-              {resolvedName ? `${resolvedName}.zkey.sol` : "Stealth Address"}
+              {resolvedName ? `${resolvedName}.btcpro.sol` : "Stealth Address"}
             </span>
           </div>
           <div className="flex items-center justify-between">
@@ -358,10 +362,10 @@ export function StealthSendFlow() {
         </div>
       )}
 
-      {/* Recipient input - supports zkey or hex */}
+      {/* Recipient input - supports .btcpro.sol or hex */}
       <div>
         <label className="text-body2 text-gray-light pl-2 mb-2 block">
-          Recipient (.zkey.sol or stealth address)
+          Recipient (.btcpro.sol or stealth address)
         </label>
         <div className="flex gap-2">
           <input
@@ -372,7 +376,7 @@ export function StealthSendFlow() {
               setResolvedName(null);
               setError(null);
             }}
-            placeholder="alice.zkey.sol or 130 hex chars"
+            placeholder="alice.btcpro.sol or 130 hex chars"
             className={cn(
               "flex-1 p-3 bg-muted border rounded-[10px]",
               "text-body2 font-mono text-foreground placeholder:text-gray",
@@ -398,7 +402,7 @@ export function StealthSendFlow() {
             {resolvedName ? (
               <>
                 <Tag className="w-3 h-3" />
-                {resolvedName}.zkey.sol resolved
+                {resolvedName}.btcpro.sol resolved
               </>
             ) : (
               "Valid stealth address"

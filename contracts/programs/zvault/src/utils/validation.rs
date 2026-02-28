@@ -22,7 +22,7 @@ use crate::error::ZVaultError;
 ///
 /// This is a shared helper to eliminate duplication across instruction files.
 /// Previously duplicated in: announce_stealth, transfer_stealth, add_demo_stealth,
-/// initialize, register_name (5 files, ~100 lines saved)
+/// initialize (shared across instruction files, ~100 lines saved)
 #[inline]
 pub fn create_pda_account<'a>(
     payer: &'a AccountInfo,

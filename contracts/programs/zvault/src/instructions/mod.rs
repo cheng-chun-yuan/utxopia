@@ -28,9 +28,6 @@ pub mod complete_redemption;
 // Demo/testing
 pub mod add_demo_stealth;
 
-// Name registry
-pub mod register_name;
-
 // VK registry (deployment)
 pub mod init_vk_registry;
 
@@ -43,5 +40,4 @@ pub use mark_processing::*;
 pub use cancel_redemption::*;
 pub use complete_redemption::*;
 pub use add_demo_stealth::*;
-pub use register_name::*;
 pub use init_vk_registry::*;

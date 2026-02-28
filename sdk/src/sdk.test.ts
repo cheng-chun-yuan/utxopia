@@ -5,7 +5,6 @@
  * - DEPOSIT: depositToNote
  * - TRANSFER: createClaimLink
  * - KEYS: deriveKeysFromSeed, createStealthMetaAddress
- * - NAME REGISTRY: registerName utilities
  */
 
 import { expect, test, describe } from "bun:test";
@@ -20,8 +19,6 @@ import { createStealthDeposit, scanAnnouncements } from "./stealth";
 import { createEmptyMerkleProof, TREE_DEPTH } from "./merkle";
 import { poseidonHashSync, initPoseidon } from "./poseidon";
 import { generateBabyJubKeyPair, babyJubMul, BABYJUB_BASE8, isOnBabyJubCurve } from "./crypto";
-import { buildRegisterNameData, hashName, isValidName, NAME_REGISTRY_SEED, ZVAULT_PROGRAM_ID } from "./name-registry";
-
 // Test constants
 const TEST_SEED = new Uint8Array(32).fill(0x42);
 // ============================================================================
@@ -161,48 +158,7 @@ describe("KEY & STEALTH", () => {
 });
 
 // ============================================================================
-// 4. NAME REGISTRY (.zkey.sol)
-// ============================================================================
-
-describe("NAME REGISTRY", () => {
-  test("isValidName() validates correctly", () => {
-    expect(isValidName("alice")).toBe(true);
-    expect(isValidName("bob123")).toBe(true);
-    expect(isValidName("Alice")).toBe(false); // uppercase
-    expect(isValidName("test-name")).toBe(false); // hyphen
-    expect(isValidName("")).toBe(false);
-  });
-
-  test("hashName() is deterministic", () => {
-    expect(hashName("alice")).toEqual(hashName("alice"));
-    expect(hashName("alice")).not.toEqual(hashName("bob"));
-    expect(hashName("alice")).toEqual(hashName("Alice.zkey.sol")); // normalizes
-  });
-
-  test("buildRegisterNameData() creates valid instruction", () => {
-    const keys = deriveKeysFromSeed(TEST_SEED);
-    const meta = createStealthMetaAddress(keys);
-
-    const data = buildRegisterNameData("test", meta.spendingPubKey, meta.viewingPubKey);
-
-    expect(data[0]).toBe(8); // REGISTER_NAME discriminator
-    expect(data[1]).toBe(4);  // name length
-  });
-
-  test("PDA derivation works", async () => {
-    const nameHash = hashName("alice");
-    const [pda, bump] = await getProgramDerivedAddress({
-      seeds: [new TextEncoder().encode(NAME_REGISTRY_SEED), nameHash],
-      programAddress: address(ZVAULT_PROGRAM_ID),
-    });
-
-    expect(typeof pda).toBe("string");
-    expect(bump).toBeGreaterThanOrEqual(0);
-  });
-});
-
-// ============================================================================
-// 6. CRYPTOGRAPHY
+// 4. CRYPTOGRAPHY
 // ============================================================================
 
 describe("CRYPTOGRAPHY", () => {

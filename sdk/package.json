@@ -61,11 +61,6 @@
       "types": "./dist/react/index.d.ts",
       "import": "./dist/react/index.js",
       "default": "./dist/react/index.js"
-    },
-    "./registry": {
-      "types": "./dist/registry/index.d.ts",
-      "import": "./dist/registry/index.js",
-      "default": "./dist/registry/index.js"
     }
   },
   "files": [

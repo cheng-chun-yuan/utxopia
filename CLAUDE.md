@@ -81,7 +81,7 @@ BTC Deposit → Taproot Address (npk-tweaked) → Backend Sweep → SPV Verifica
 
 | Directory | Purpose | Language |
 |-----------|---------|----------|
-| `contracts/programs/zvault` | Main Solana program (14 instructions) | Rust (Pinocchio) |
+| `contracts/programs/zvault` | Main Solana program (11 instructions) | Rust (Pinocchio) |
 | `contracts/programs/btc-light-client` | Bitcoin header tracking (standalone program) | Rust (Pinocchio) |
 | `circuits` | JoinSplit Groth16 ZK circuits | circom |
 | `sdk` | TypeScript SDK (@zvault/sdk) | TypeScript |
@@ -108,7 +108,7 @@ Single parameterized `JoinSplit(N, M, 16)` template producing circuit variants:
 | **JoinSplit Proofs** | Groth16 (~256 byte proofs) for all transfers |
 | **3-Key Model** | Spending (BJJ) + Nullifying (BN254) + Viewing (Ed25519) |
 | **Stealth Addresses** | Unlinkable one-time addresses via DKSAP (EIP-5564) |
-| **.zkey Names** | Human-readable stealth addresses (SNS-style registry) |
+| **.btcpro.sol Names** | Human-readable stealth addresses (SNS subdomains) |
 | **Merkle Tree depth 16** | 65,536 leaf capacity with Poseidon hashing |
 
 ### Key Model
@@ -151,8 +151,8 @@ Spending Key (Baby Jubjub) ─► Signs JoinSplit transactions (EdDSA-Poseidon)
 
 ## Key Program IDs
 
-- **zVault (devnet)**: `2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV`
-- **BTC Light Client**: `DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS`
+- **zVault (devnet)**: `B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq`
+- **BTC Light Client**: `Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq`
 
 ## On-Chain Instructions
 
@@ -163,7 +163,6 @@ Spending Key (Baby Jubjub) ─► Signs JoinSplit transactions (EdDSA-Poseidon)
 | 5 | `request_redemption` | Burn zBTC, queue BTC withdrawal |
 | 6 | `complete_redemption` | Relayer marks redemption complete |
 | 7 | `set_paused` | Admin pause/unpause |
-| 8-10 | Name registry | Register/update/transfer .zkey names |
 | 11-12 | VK registry | Init/update verification key hashes |
 | 14 | `transact` | JoinSplit N-to-M private transfer (Groth16) |
 

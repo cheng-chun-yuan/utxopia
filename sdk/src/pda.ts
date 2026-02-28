@@ -52,7 +52,6 @@ export const PDA_SEEDS = {
   DEPOSIT: "deposit",
   NULLIFIER: "nullifier",
   STEALTH: "stealth",
-  NAME_REGISTRY: "name",
   VK_REGISTRY: "vk_registry",
 } as const;
 
@@ -197,24 +196,6 @@ export async function deriveVerifiedTransactionPDA(
   const result = await getProgramDerivedAddress({
     programAddress: programId,
     seeds: [new TextEncoder().encode(PDA_SEEDS.VERIFIED_TX), blockHash, txid],
-  });
-  return [result[0], result[1]];
-}
-
-// =============================================================================
-// Name Registry PDAs
-// =============================================================================
-
-/**
- * Derive Name Registry PDA
- */
-export async function deriveNameRegistryPDA(
-  nameHash: Uint8Array,
-  programId: Address = ZVAULT_PROGRAM_ID
-): Promise<[Address, number]> {
-  const result = await getProgramDerivedAddress({
-    programAddress: programId,
-    seeds: [new TextEncoder().encode(PDA_SEEDS.NAME_REGISTRY), nameHash],
   });
   return [result[0], result[1]];
 }

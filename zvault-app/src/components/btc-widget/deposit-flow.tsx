@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { notifyCopied, notifySuccess, notifyError } from "@/lib/notifications";
 import {
   prepareStealthDeposit,
-  lookupZkeyName,
+  resolveSnsName,
   decodeStealthMetaAddress,
   bytesToHex,
   hexToBytes,
@@ -46,7 +46,7 @@ export function DepositFlow() {
   const [loading, setLoading] = useState(false);
   const [addressCopied, setAddressCopied] = useState(false);
   const [recipient, setRecipient] = useState("");
-  const [recipientType, setRecipientType] = useState<"zkey" | "address">("zkey");
+  const [recipientType, setRecipientType] = useState<"btcpro" | "address">("btcpro");
   const [resolvedMeta, setResolvedMeta] = useState<StealthMetaAddress | null>(null);
   const [stealthDeposit, setStealthDeposit] = useState<PreparedStealthDeposit | null>(null);
   const [resolvingRecipient, setResolvingRecipient] = useState(false);
@@ -127,7 +127,7 @@ export function DepositFlow() {
     }
   };
 
-  // Resolve recipient (zkey name or stealth address - auto-detect)
+  // Resolve recipient (.btcpro.sol name or stealth address - auto-detect)
   const resolveRecipient = async () => {
     if (!recipient.trim()) {
       setError("Please enter a recipient");
@@ -142,15 +142,19 @@ export function DepositFlow() {
 
     try {
       // Auto-detect: if it looks like hex (long, only hex chars), try as address first
-      // Otherwise try as zkey name
+      // Otherwise try as .btcpro.sol name
       const isLikelyHex = /^[0-9a-fA-F]{100,}$/.test(trimmed);
 
-      if (recipientType === "zkey" || (!isLikelyHex && recipientType === "address")) {
-        // Lookup .zkey.sol name on custom name registry
-        // Remove .zkey.sol or .zkey suffix if user included it
-        const name = trimmed.replace(/\.zkey\.sol$/i, "").replace(/\.zkey$/i, "");
+      if (recipientType === "btcpro" || (!isLikelyHex && recipientType === "address")) {
+        // Lookup via SNS subdomain (.btcpro.sol)
+        const config = getConfig();
+        const parentDomain = config.snsParentDomain || "btcpro";
+        const name = trimmed
+          .replace(new RegExp(`\\.${parentDomain}\\.sol$`, "i"), "")
+          .replace(new RegExp(`\\.${parentDomain}$`, "i"), "")
+          .toLowerCase();
         const connectionAdapter = getConnectionAdapter();
-        const result = await lookupZkeyName(connectionAdapter as any, name);
+        const result = await resolveSnsName(connectionAdapter as any, name);
         if (!result) {
           // If in address mode, also try as hex
           if (recipientType === "address") {
@@ -160,19 +164,16 @@ export function DepositFlow() {
               return;
             }
           }
-          setError(`Name "${name}.zkey.sol" not found`);
+          setError(`Name "${name}.${parentDomain}.sol" not found`);
           return;
         }
-        // Convert ZkeyStealthAddress → StealthMetaAddress
-        // The name registry stores spending + viewing (64 bytes).
-        // Try decoding the full stealthMetaAddressHex as 96 bytes (if MPK is included).
-        try {
-          const meta = decodeStealthMetaAddress(result.stealthMetaAddressHex);
-          setResolvedMeta(meta);
-        } catch {
-          setError(`Name "${name}.zkey.sol" does not include MPK. Please use the full stealth address instead.`);
-          return;
-        }
+        // Convert SnsStealthAddress → StealthMetaAddress
+        const meta: StealthMetaAddress = {
+          spendingPubKey: result.spendingPubKey,
+          viewingPubKey: result.viewingPubKey,
+          mpk: new Uint8Array(32),
+        };
+        setResolvedMeta(meta);
       } else {
         // Parse raw stealth address (hex encoded)
         // Try to decode as hex stealth meta-address
@@ -322,17 +323,17 @@ export function DepositFlow() {
           {/* Recipient Type Toggle */}
           <div className="flex gap-2 mb-3">
             <button
-              onClick={() => { setRecipientType("zkey"); setRecipient(""); setResolvedMeta(null); }}
+              onClick={() => { setRecipientType("btcpro"); setRecipient(""); setResolvedMeta(null); }}
               className={cn(
                 "flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-[8px] text-caption transition-colors",
-                recipientType === "zkey"
+                recipientType === "btcpro"
                   ? "bg-sol/12 text-sol border border-sol/25"
                   : "bg-muted text-gray border border-gray/15 hover:text-gray-light"
               )}
             >
               <Tag className="w-3.5 h-3.5" />
-              .zkey.sol Name
-              <Tooltip content="A human-readable name (like alice.zkey.sol) that maps to a stealth address via Solana Name Service.">
+              .btcpro.sol Name
+              <Tooltip content="A human-readable name (like alice.btcpro.sol) that maps to a stealth address via Solana Name Service.">
                 <Info className="w-3 h-3 opacity-60" />
               </Tooltip>
             </button>
@@ -353,7 +354,7 @@ export function DepositFlow() {
           {/* Recipient Input */}
           <div className="mb-4">
             <label className="text-body2 text-gray-light pl-2 mb-2 block">
-              {recipientType === "zkey" ? "Recipient .zkey.sol Name" : "Recipient Stealth Address"}
+              {recipientType === "btcpro" ? "Recipient .btcpro.sol Name" : "Recipient Stealth Address"}
             </label>
             <div className="flex gap-2">
               <div className="flex-1 relative">
@@ -361,16 +362,16 @@ export function DepositFlow() {
                   type="text"
                   value={recipient}
                   onChange={(e) => { setRecipient(e.target.value); setResolvedMeta(null); setStealthDeposit(null); }}
-                  placeholder={recipientType === "zkey" ? "alice" : "alice.zkey.sol or 130 hex chars"}
+                  placeholder={recipientType === "btcpro" ? "alice" : "alice.btcpro.sol or 130 hex chars"}
                   className={cn(
                     "w-full p-3 bg-muted border border-gray/15 rounded-[12px]",
                     "text-body2 font-mono text-foreground placeholder:text-gray",
                     "outline-none focus:border-sol/40 transition-colors",
-                    recipientType === "zkey" ? "pr-20" : ""
+                    recipientType === "btcpro" ? "pr-20" : ""
                   )}
                 />
-                {recipientType === "zkey" && (
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-body2 text-gray">.zkey.sol</span>
+                {recipientType === "btcpro" && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-body2 text-gray">.btcpro.sol</span>
                 )}
               </div>
               <button

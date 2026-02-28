@@ -17,14 +17,14 @@ import {
   deriveKeysFromWallet,
   createStealthDeposit,
   scanAnnouncements,
-  lookupZkeyName,
+  resolveSnsName,
 } from '@zvault/sdk';
 
 // 1. Derive keys from wallet
 const keys = await deriveKeysFromWallet(walletAdapter);
 
-// 2. Look up recipient by .zkey name
-const recipient = await lookupZkeyName(connection, 'alice');
+// 2. Look up recipient by .btcpro.sol name
+const recipient = await resolveSnsName(connection, 'alice');
 
 // 3. Create stealth deposit
 const deposit = await createStealthDeposit(recipient, 100000n);
@@ -71,38 +71,6 @@ const notes = await scanAnnouncements(keys, onChainAnnouncements);
 
 // Recipient: Prepare claim inputs for ZK proof
 const claimInputs = await prepareClaimInputs(keys, note, merkleProof);
-```
-
-### .zkey Name Registry
-
-Human-readable stealth addresses (like ENS for privacy):
-
-```typescript
-import {
-  lookupZkeyName,
-  scanByZkeyName,
-  isValidName,
-  buildRegisterNameData,
-} from '@zvault/sdk';
-
-// Look up a .zkey name
-const address = await lookupZkeyName(connection, 'alice');
-// address.spendingPubKey
-// address.viewingPubKey
-// address.stealthMetaAddress
-
-// Scan deposits for a .zkey name (with ownership verification)
-const notes = await scanByZkeyName(
-  keys,           // Your full ZVaultKeys
-  'alice',        // Name to verify you own
-  connection,     // Solana connection
-  announcements   // On-chain announcements
-);
-
-// Validate name format
-if (isValidName('alice')) {
-  const data = buildRegisterNameData('alice', spendingPub, viewingPub);
-}
 ```
 
 ### Demo Instructions (Testing/Development)
@@ -195,23 +163,9 @@ const noirProof = proofToNoirFormat(proof);
 |----------|-------------|
 | `createStealthDeposit(recipient, amount)` | Create stealth deposit for recipient |
 | `scanAnnouncements(keys, announcements)` | Scan for deposits using viewing key |
-| `scanByZkeyName(keys, name, conn, announcements)` | Scan with .zkey name verification |
 | `prepareClaimInputs(keys, note, proof)` | Prepare inputs for ZK claim proof |
 | `parseStealthAnnouncement(data)` | Parse on-chain announcement data |
-| `resolveZkeyName(conn, name)` | Look up .zkey name (send-only) |
-
-### Name Registry Module
-
-| Function | Description |
-|----------|-------------|
-| `lookupZkeyName(conn, name)` | Look up .zkey name to stealth address |
-| `lookupZkeyNameWithPDA(getAccountInfo, name)` | Look up with pre-computed PDA |
-| `isValidName(name)` | Check if name is valid format |
-| `normalizeName(name)` | Normalize name (lowercase, trim) |
-| `hashName(name)` | SHA256 hash of name |
-| `buildRegisterNameData(name, spending, viewing)` | Build register instruction |
-| `buildUpdateNameData(name, spending, viewing)` | Build update instruction |
-| `buildTransferNameData(name)` | Build transfer instruction |
+| `resolveSnsName(conn, name)` | Look up .btcpro.sol name to stealth address |
 
 ### Demo Module
 
@@ -248,8 +202,7 @@ MAX_LEAVES              // 2^20
 ZERO_VALUE              // Empty leaf value
 
 // Account Sizes
-STEALTH_ANNOUNCEMENT_SIZE         // 98 bytes
-NAME_REGISTRY_SIZE                // 180 bytes
+STEALTH_ANNOUNCEMENT_SIZE         // 90 bytes
 
 // Demo Instructions
 DEMO_INSTRUCTION.ADD_DEMO_NOTE    // 21
@@ -289,18 +242,6 @@ interface ScannedNote {
   stealthPub: GrumpkinPoint;
   leafIndex: number;
   commitment: Uint8Array;
-}
-```
-
-### ZkeyStealthAddress
-
-```typescript
-interface ZkeyStealthAddress {
-  name: string;
-  spendingPubKey: Uint8Array;
-  viewingPubKey: Uint8Array;
-  stealthMetaAddress: Uint8Array;
-  stealthMetaAddressHex: string;
 }
 ```
 

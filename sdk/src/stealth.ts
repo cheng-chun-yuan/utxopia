@@ -71,7 +71,6 @@ import {
 } from "./crypto-ed25519";
 import type { StealthMetaAddress, ZVaultKeys, WalletSignerAdapter } from "./keys";
 import { deriveKeysFromWallet, parseStealthMetaAddress, constantTimeCompare } from "./keys";
-import { lookupZkeyName, type ZkeyStealthAddress } from "./name-registry";
 import {
   poseidonHashSync,
   computeNullifierSync as poseidonComputeNullifier,
@@ -749,7 +748,7 @@ export async function scanUnifiedNotes(
   return found;
 }
 
-// ========== Connection Adapter for .zkey Name Lookup ==========
+// ========== Connection Adapter ==========
 
 import type { Address } from "@solana/kit";
 
@@ -757,52 +756,6 @@ export interface ConnectionAdapter {
   getAccountInfo: (
     pubkey: Address
   ) => Promise<{ data: Uint8Array } | null>;
-}
-
-// ========== Scan by .zkey.sol Name ==========
-
-export async function scanByZkeyName(
-  keys: ZVaultKeys,
-  expectedName: string,
-  connection: ConnectionAdapter,
-  announcements: {
-    ephemeralPub: Uint8Array;
-    encryptedAmount: Uint8Array;
-    commitment: Uint8Array;
-    leafIndex: number;
-  }[],
-  programId?: string
-): Promise<ScannedNote[]> {
-  const zkeyAddress = await lookupZkeyName(connection, expectedName, programId);
-  if (!zkeyAddress) {
-    throw new Error(`Name "${expectedName}.zkey.sol" not found`);
-  }
-
-  const userSpendingPub = babyJubCompress(keys.spendingPubKey);
-  if (!constantTimeCompare(userSpendingPub, zkeyAddress.spendingPubKey)) {
-    throw new Error(
-      `Keys do not match "${expectedName}.zkey.sol" registration. ` +
-      `The provided spending key does not match the registered spending key.`
-    );
-  }
-
-  const userViewingPub = new Uint8Array(keys.viewingPubKey);
-  if (!constantTimeCompare(userViewingPub, zkeyAddress.viewingPubKey)) {
-    throw new Error(
-      `Keys do not match "${expectedName}.zkey.sol" registration. ` +
-      `The provided viewing key does not match the registered viewing key.`
-    );
-  }
-
-  return scanAnnouncements(keys, announcements);
-}
-
-export async function resolveZkeyName(
-  connection: ConnectionAdapter,
-  name: string,
-  programId?: string
-): Promise<ZkeyStealthAddress | null> {
-  return lookupZkeyName(connection, name, programId);
 }
 
 // ========== Stealth Output Creation ==========

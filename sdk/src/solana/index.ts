@@ -21,7 +21,6 @@ export {
   deriveLightClientPDA,
   deriveBlockHeaderPDA,
   deriveHeightIndexPDA,
-  deriveNameRegistryPDA,
   deriveVkRegistryPDA,
   commitmentToBytes,
 } from "../pda";
@@ -117,6 +116,23 @@ export {
   type PriorityFeeEstimate,
   type PriorityFeeInstructions,
 } from "./priority-fee";
+
+// Explorer (on-chain account fetchers & parsers)
+export {
+  fetchExplorerDeposits,
+  fetchExplorerTransfers,
+  fetchExplorerRedemptions,
+  parseNullifierRecord,
+  parseRedemptionRequest,
+  NULLIFIER_RECORD_SIZE,
+  REDEMPTION_REQUEST_SIZE,
+  NULLIFIER_RECORD_DISCRIMINATOR,
+  REDEMPTION_REQUEST_DISCRIMINATOR,
+  OPERATION_TYPE_LABELS,
+  type ExplorerDeposit,
+  type ExplorerTransferEvent,
+  type ExplorerRedemption,
+} from "../explorer";
 
 // Connection adapter factory
 export {
