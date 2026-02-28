@@ -517,13 +517,17 @@ export function DepositFlow() {
                   </button>
                 </div>
               ) : (
-                <div className="mb-4 p-3 bg-btc/10 border border-btc/20 rounded-[12px]">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 text-btc shrink-0 mt-0.5" />
-                    <p className="text-caption text-gray">
-                      Connect a Bitcoin wallet to deposit. Wallet-integrated deposits automatically embed the required OP_RETURN data.
-                    </p>
-                  </div>
+                <div className="mb-4">
+                  <button
+                    onClick={() => btcWallet.connect()}
+                    className={cn(
+                      "w-full py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2",
+                      "bg-btc hover:bg-btc/90 text-background"
+                    )}
+                  >
+                    <Wallet className="w-4 h-4" />
+                    Connect Bitcoin Wallet
+                  </button>
                 </div>
               )}
             </>
