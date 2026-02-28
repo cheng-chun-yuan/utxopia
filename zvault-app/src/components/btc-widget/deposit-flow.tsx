@@ -52,12 +52,13 @@ export function DepositFlow() {
     depositAddress: string;
     opReturnHex: string;
   } | null>(null);
-  // Lightweight preview: just deposit address + OP_RETURN (no UTXO fetch)
+  // Preview: deposit outputs + pre-fetched UTXOs (both fetched in parallel)
   const [depositPreview, setDepositPreview] = useState<{
     depositAddress: string;
     depositAmountSats: number;
     opReturnHex: string;
     opReturnPayload: Uint8Array;
+    cachedUtxos: import("@/stores/bitcoin-wallet-store").WalletUtxo[];
   } | null>(null);
   const [buildingPreview, setBuildingPreview] = useState(false);
   const btcWallet = useBitcoinWalletStore();
@@ -193,7 +194,7 @@ export function DepositFlow() {
     }
   };
 
-  // Step 1: Generate deposit info instantly (pure crypto, no network calls)
+  // Step 1: Generate deposit info + fetch UTXOs in parallel
   const buildTxPreview = async () => {
     if (!resolvedMeta || !btcWallet.connected) return;
 
@@ -211,17 +212,22 @@ export function DepositFlow() {
       const config = getConfig();
       const groupPubKey = hexToBytes(config.groupPubKey);
 
-      const deposit = await createNonInteractiveDeposit(
-        resolvedMeta,
-        groupPubKey,
-        getBtcSignerNetwork(),
-      );
+      // Run crypto + UTXO fetch in parallel
+      const [deposit, utxos] = await Promise.all([
+        createNonInteractiveDeposit(resolvedMeta, groupPubKey, getBtcSignerNetwork()),
+        btcWallet.getPaymentUtxos(),
+      ]);
+
+      if (utxos.length === 0) {
+        throw new Error("No confirmed UTXOs available in wallet");
+      }
 
       setDepositPreview({
         depositAddress: deposit.btcAddress,
         depositAmountSats: amountSats,
         opReturnHex: bytesToHex(deposit.opReturnPayload),
         opReturnPayload: deposit.opReturnPayload,
+        cachedUtxos: utxos,
       });
     } catch (err) {
       console.error("Preview build error:", err);
@@ -231,7 +237,7 @@ export function DepositFlow() {
     }
   };
 
-  // Step 2: Fetch UTXOs, build PSBT, sign, and broadcast
+  // Step 2: Build PSBT from cached UTXOs, sign, and broadcast
   const confirmAndSign = async () => {
     if (!depositPreview) return;
 
@@ -239,13 +245,8 @@ export function DepositFlow() {
     setError(null);
 
     try {
-      const utxos = await btcWallet.getPaymentUtxos();
-      if (utxos.length === 0) {
-        throw new Error("No confirmed UTXOs available in wallet");
-      }
-
       const selected = selectUtxos(
-        utxos.map((u) => ({
+        depositPreview.cachedUtxos.map((u) => ({
           txid: u.txid,
           vout: u.vout,
           value: u.value,
