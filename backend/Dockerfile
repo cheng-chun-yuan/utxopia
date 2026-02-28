@@ -44,14 +44,14 @@ RUN apt-get update && apt-get install -y \
 # Copy the binary from builder
 COPY --from=builder /app/target/release/zbtc-api /app/zbtc-api
 
-# Create non-root user for security
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+# Create data directory and non-root user
+RUN mkdir -p /app/data && \
+    useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
-# Environment variables (can be overridden in Railway)
 ENV RUST_LOG=info
-ENV SOLANA_RPC_URL=https://api.devnet.solana.com
-## ESPLORA_URL resolved from ZVAULT_BITCOIN_RPC at runtime (see config.rs defaults)
 
-# Run the redemption service
-CMD ["/app/zbtc-api", "redemption", "--interval", "30"]
+EXPOSE 3001
+
+# Default: start API server
+CMD ["/app/zbtc-api", "api", "--port", "3001"]

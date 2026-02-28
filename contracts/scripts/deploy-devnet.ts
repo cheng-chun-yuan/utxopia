@@ -97,17 +97,51 @@ const Discriminators = {
   LIGHT_CLIENT: 0x01,
 };
 
-// Bitcoin testnet block (recent block ~2,900,000)
-// Using a real testnet block hash for better testing
-const TEST_BTC_BLOCK = {
-  height: 2900000n,
-  // Block hash in little-endian (as stored on Bitcoin)
-  hash: Buffer.from(
-    "00000000000000159e0b9c9c8f5a5e6d7c8b9a0123456789abcdef0123456789",
-    "hex"
-  ),
-  network: 2, // 0=mainnet, 1=testnet3, 2=testnet4, 3=regtest
-};
+// =============================================================================
+// Testnet4 Block Fetcher
+// =============================================================================
+
+interface BtcBlock {
+  height: bigint;
+  hash: Buffer;
+  network: number;
+}
+
+function hexToBytesReversed(hex: string): Buffer {
+  const buf = Buffer.alloc(32);
+  for (let i = 0; i < 32; i++) {
+    buf[31 - i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return buf;
+}
+
+async function fetchTestnet4Block(): Promise<BtcBlock> {
+  const baseUrl = "https://mempool.space/testnet4/api";
+
+  // Fetch tip height
+  const tipRes = await fetch(`${baseUrl}/blocks/tip/height`);
+  if (!tipRes.ok) throw new Error(`Failed to fetch tip height: ${tipRes.statusText}`);
+  const tipHeight = parseInt(await tipRes.text(), 10);
+
+  // Use tip - 10 for safe confirmation buffer
+  const startHeight = tipHeight - 10;
+
+  // Fetch block hash at that height
+  const hashRes = await fetch(`${baseUrl}/block-height/${startHeight}`);
+  if (!hashRes.ok) throw new Error(`Failed to fetch block hash: ${hashRes.statusText}`);
+  const blockHashHex = await hashRes.text();
+
+  // Convert to little-endian bytes (same as reinit-light-client.ts)
+  const hash = hexToBytesReversed(blockHashHex);
+
+  log(`Fetched testnet4 block: height=${startHeight}, hash=${blockHashHex.slice(0, 16)}...`);
+
+  return {
+    height: BigInt(startHeight),
+    hash,
+    network: 2, // 0=mainnet, 1=testnet3, 2=testnet4, 3=regtest
+  };
+}
 
 // =============================================================================
 // Types
@@ -254,6 +288,22 @@ function deriveBTCRelayPDA(programId: PublicKey): [PublicKey, number] {
 // Instruction Builders
 // =============================================================================
 
+function deriveHeightIndexPDA(programId: PublicKey, height: bigint): [PublicKey, number] {
+  const heightBuf = Buffer.alloc(8);
+  heightBuf.writeBigUInt64LE(height);
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("height_index"), heightBuf],
+    programId
+  );
+}
+
+function deriveBlockHeaderPDA(programId: PublicKey, blockHash: Buffer): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("block"), blockHash],
+    programId
+  );
+}
+
 function buildBTCLCInitializeIx(
   lightClientPda: PublicKey,
   payer: PublicKey,
@@ -269,11 +319,16 @@ function buildBTCLCInitializeIx(
   startBlockHash.copy(data, 9);
   data[41] = network;
 
+  const [heightIndexPda] = deriveHeightIndexPDA(programId, startHeight);
+  const [blockHeaderPda] = deriveBlockHeaderPDA(programId, startBlockHash);
+
   return new TransactionInstruction({
     keys: [
       { pubkey: lightClientPda, isSigner: false, isWritable: true },
       { pubkey: payer, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: heightIndexPda, isSigner: false, isWritable: true },
+      { pubkey: blockHeaderPda, isSigner: false, isWritable: true },
     ],
     programId,
     data,
@@ -373,7 +428,8 @@ function bigintToBytes32(value: bigint): Uint8Array {
 async function initializeBTCRelay(
   connection: Connection,
   authority: Keypair,
-  programId: PublicKey
+  programId: PublicKey,
+  block: BtcBlock
 ): Promise<PublicKey> {
   logSection("BTC Light Client Initialization");
 
@@ -387,17 +443,17 @@ async function initializeBTCRelay(
     return lightClientPda;
   }
 
-  log(`Initializing with block height: ${TEST_BTC_BLOCK.height}`);
-  log(`Block hash: ${TEST_BTC_BLOCK.hash.toString("hex")}`);
-  log(`Network: ${["mainnet", "testnet3", "testnet4", "regtest"][TEST_BTC_BLOCK.network]}`);
+  log(`Initializing with block height: ${block.height}`);
+  log(`Block hash: ${block.hash.toString("hex")}`);
+  log(`Network: ${["mainnet", "testnet3", "testnet4", "regtest"][block.network]}`);
 
   const ix = buildBTCLCInitializeIx(
     lightClientPda,
     authority.publicKey,
     programId,
-    TEST_BTC_BLOCK.height,
-    TEST_BTC_BLOCK.hash,
-    TEST_BTC_BLOCK.network
+    block.height,
+    block.hash,
+    block.network
   );
 
   const tx = new Transaction().add(ix);
@@ -615,7 +671,8 @@ async function addDemoNotes(
 
 function saveDevnetConfig(
   deployResult: DeployResult,
-  initResult: InitResult
+  initResult: InitResult,
+  btcBlock: BtcBlock
 ): void {
   logSection("Saving Configuration");
 
@@ -645,9 +702,9 @@ function saveDevnetConfig(
     },
     btcLightClient: {
       pda: initResult.btcLightClientPda.toBase58(),
-      startHeight: TEST_BTC_BLOCK.height.toString(),
-      startHash: TEST_BTC_BLOCK.hash.toString("hex"),
-      network: ["mainnet", "testnet3", "testnet4", "regtest"][TEST_BTC_BLOCK.network],
+      startHeight: btcBlock.height.toString(),
+      startHash: btcBlock.hash.toString("hex"),
+      network: ["mainnet", "testnet3", "testnet4", "regtest"][btcBlock.network],
     },
     createdAt: new Date().toISOString(),
   };
@@ -721,11 +778,16 @@ async function main() {
   // Deploy programs (or skip)
   const deployResult = await deployPrograms(skipDeploy);
 
+  // Fetch real testnet4 block
+  log("Fetching real testnet4 block...");
+  const btcBlock = await fetchTestnet4Block();
+
   // Initialize BTC Light Client
   const btcLightClientPda = await initializeBTCRelay(
     connection,
     authority,
-    deployResult.btcLightClientProgramId
+    deployResult.btcLightClientProgramId,
+    btcBlock
   );
 
   // Initialize zVault
@@ -749,7 +811,7 @@ async function main() {
   );
 
   // Save configuration
-  saveDevnetConfig(deployResult, initResult);
+  saveDevnetConfig(deployResult, initResult, btcBlock);
 
   logSection("Deployment Complete!");
 

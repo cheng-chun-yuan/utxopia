@@ -5,82 +5,105 @@
  *
  * Fetches zVault pool statistics using @solana/kit for efficient RPC calls.
  * Uses SWR for automatic caching, deduplication, and stale-while-revalidate.
+ *
+ * PoolState layout (repr(C), 268 bytes):
+ *   offset 0:   discriminator (u8, 0x01)
+ *   offset 132: deposit_count (u64 LE)
+ *   offset 140: total_minted (u64 LE)
+ *   offset 148: total_burned (u64 LE)
+ *   offset 156: pending_redemptions (u64 LE)
+ *   offset 188: total_shielded (u64 LE)
  */
 
 import useSWR from "swr";
 import { DEVNET_CONFIG } from "@zvault/sdk";
-import { fetchAccountInfo } from "@/lib/adapters/connection-adapter";
+import { fetchAccountInfo, getRpc } from "@/lib/adapters/connection-adapter";
+import { address } from "@solana/kit";
 
 export interface PoolStats {
-  depositCount: number;
-  vaultBalance: bigint;
-  pendingRedemptions: number;
+  /** Total zBTC currently in shielded commitments (sats) — "Vault" */
+  totalShielded: bigint;
+  /** Number of stealth announcement PDAs on-chain — "Deposits" */
+  stealthAnnouncementCount: number;
+  /** Total transaction volume: deposit_count + total_minted + total_burned (sats) — "Volume" */
+  volume: bigint;
 }
 
-/**
- * Pre-computed static addresses from SDK config.
- * Avoids recalculating on every poll.
- */
 const POOL_STATE_ADDRESS = DEVNET_CONFIG.poolStatePda;
-const POOL_VAULT_ADDRESS = DEVNET_CONFIG.poolVault;
+const ZVAULT_PROGRAM_ID = DEVNET_CONFIG.zvaultProgramId;
+const STEALTH_ANNOUNCEMENT_SIZE = 90;
 
 /**
- * Fetch pool stats using @solana/kit RPC.
- * Extracted as a standalone function for SWR.
+ * Fetch pool stats from on-chain data.
  */
 async function fetchPoolStats(): Promise<PoolStats> {
-  let depositCount = 0;
-  let pendingRedemptions = 0;
-  let vaultBalance = 0n;
+  let totalShielded = 0n;
+  let depositCount = 0n;
+  let totalMinted = 0n;
+  let totalBurned = 0n;
+  let stealthAnnouncementCount = 0;
 
-  // Fetch pool state for counts
+  // Fetch pool state for counters
   const poolInfo = await fetchAccountInfo(POOL_STATE_ADDRESS);
 
   if (poolInfo && poolInfo.data.length >= 196 && poolInfo.data[0] === 0x01) {
-    const view = new DataView(poolInfo.data.buffer, poolInfo.data.byteOffset, poolInfo.data.byteLength);
-    depositCount = Number(view.getBigUint64(164, true));
-    pendingRedemptions = Number(view.getBigUint64(188, true));
+    const view = new DataView(
+      poolInfo.data.buffer,
+      poolInfo.data.byteOffset,
+      poolInfo.data.byteLength
+    );
+    depositCount = view.getBigUint64(132, true);
+    totalMinted = view.getBigUint64(140, true);
+    totalBurned = view.getBigUint64(148, true);
+    totalShielded = view.getBigUint64(188, true);
   }
 
-  // Fetch vault balance
+  // Count stealth announcements (deposits + transfers) via getProgramAccounts
   try {
-    const vaultInfo = await fetchAccountInfo(POOL_VAULT_ADDRESS);
-
-    if (vaultInfo && vaultInfo.data.length >= 72) {
-      const view = new DataView(vaultInfo.data.buffer, vaultInfo.data.byteOffset, vaultInfo.data.byteLength);
-      vaultBalance = view.getBigUint64(64, true);
-    }
+    const rpc = getRpc();
+    const accounts = await rpc
+      .getProgramAccounts(address(ZVAULT_PROGRAM_ID), {
+        dataSlice: { offset: 0, length: 1 },
+        filters: [{ dataSize: BigInt(STEALTH_ANNOUNCEMENT_SIZE) }],
+        encoding: "base64",
+      })
+      .send();
+    stealthAnnouncementCount = accounts.length;
   } catch {
-    // Vault may not exist yet
+    // Fall back to deposit_count if getProgramAccounts fails
+    stealthAnnouncementCount = Number(depositCount);
   }
 
-  return { depositCount, vaultBalance, pendingRedemptions };
+  // Volume = total minted + total burned (represents all BTC flow through the bridge)
+  const volume = totalMinted + totalBurned;
+
+  return { totalShielded, stealthAnnouncementCount, volume };
 }
 
 /**
  * Hook to fetch pool statistics with automatic caching and deduplication.
- * Uses SWR for:
- * - Request deduplication (multiple components share one request)
- * - Stale-while-revalidate (show cached data while fetching fresh)
- * - Automatic polling every 30 seconds
- * - Error retry with exponential backoff
  */
 export function usePoolStats() {
-  const { data: stats, error, isLoading, mutate } = useSWR<PoolStats>(
-    "pool-stats",
-    fetchPoolStats,
-    {
-      refreshInterval: 30000, // Poll every 30 seconds
-      dedupingInterval: 5000, // Dedupe requests within 5 seconds
-      revalidateOnFocus: false, // Don't refetch on tab focus
-      errorRetryCount: 3, // Retry 3 times on error
-    }
-  );
+  const {
+    data: stats,
+    error,
+    isLoading,
+    mutate,
+  } = useSWR<PoolStats>("pool-stats", fetchPoolStats, {
+    refreshInterval: 30000,
+    dedupingInterval: 5000,
+    revalidateOnFocus: false,
+    errorRetryCount: 3,
+  });
 
   return {
     stats: stats ?? null,
     isLoading,
-    error: error ? (error instanceof Error ? error.message : "Failed to fetch stats") : null,
+    error: error
+      ? error instanceof Error
+        ? error.message
+        : "Failed to fetch stats"
+      : null,
     refresh: () => mutate(),
   };
 }

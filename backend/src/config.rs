@@ -221,25 +221,25 @@ impl ZVaultConfig {
         // Program IDs (required for non-devnet)
         let program_id = get_required_or_devnet_default(
             "ZVAULT_PROGRAM_ID",
-            "2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV",
+            "B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq",
             network,
         )?;
 
         let pool_state = get_required_or_devnet_default(
             "ZVAULT_POOL_STATE",
-            "E6DVestxC5dn5ixvLa3FcYodcVtwUAyanpVPbs4y3p16",
+            "D2fPWueWrn5H3fazLz7QYydxpBMnL7iqkaxEpFPion5i",
             network,
         )?;
 
         let commitment_tree = get_required_or_devnet_default(
             "ZVAULT_COMMITMENT_TREE",
-            "JCiGqC1a1rjfqk2dqcybU2e3FQjAQ19x8ts9fQCtTFCq",
+            "3t2wuqAE2mDa5du64Edfie5PYh22eQXqSVvxboPr1kLs",
             network,
         )?;
 
         let zbtc_mint = get_required_or_devnet_default(
             "ZVAULT_ZBTC_MINT",
-            "HthCYqDKyw11c2dUJz9s2dCnH314ktn6JTGEveZkT17N",
+            "4pLu3qTY3kNWvvftPG22XzXxWuRPkg7GHWW8hcnoUPgd",
             network,
         )?;
 

@@ -49,7 +49,7 @@ describe("Solana devnet", () => {
 
   it("BTC Light Client program is deployed", async () => {
     // Use env var or contracts/config.json value (SDK config may be stale)
-    const btcLightClientId = process.env.BTC_LIGHT_CLIENT_PROGRAM_ID || "DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS";
+    const btcLightClientId = process.env.BTC_LIGHT_CLIENT_PROGRAM_ID || "Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq";
     const info = await ctx.connection.getAccountInfo(
       new PublicKey(btcLightClientId)
     );

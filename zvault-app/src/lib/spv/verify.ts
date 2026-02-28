@@ -16,7 +16,7 @@ import {
 
 // BTC Light Client Program ID (devnet) — light client PDAs live under this program
 const BTC_LIGHT_CLIENT_ID = new PublicKey(
-  "DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS"
+  "Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"
 );
 
 // Minimum confirmations for SPV verification

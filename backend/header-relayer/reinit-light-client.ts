@@ -8,9 +8,9 @@
  *   DEPLOY_ENV=devnet bun run reinit
  */
 
-import { Connection, Transaction, TransactionInstruction, sendAndConfirmTransaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { Connection, Transaction, TransactionInstruction, SystemProgram, sendAndConfirmTransaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { getBlockHashByHeight } from './mempool';
-import { deriveLightClientPda, getLightClientState, bytesToHex } from './solana';
+import { deriveLightClientPda, deriveBlockHeaderPda, deriveHeightIndexPda, getLightClientState, bytesToHex } from './solana';
 import {
   SOLANA_RPC_URL,
   PROGRAM_ID,
@@ -66,7 +66,7 @@ async function main() {
   const blockHash = hexToBytesReversed(blockHashHex);
   const networkId = getNetworkId();
 
-  // Build reinitialize instruction (disc=6)
+  // Build reinitialize instruction (disc=4)
   const data = Buffer.alloc(1 + 8 + 32 + 1);
   data.writeUInt8(REINITIALIZE_DISC, 0);
   data.writeBigUInt64LE(START_BLOCK_HEIGHT, 1);
@@ -74,11 +74,16 @@ async function main() {
   data.writeUInt8(networkId, 41);
 
   const [lightClientPda] = deriveLightClientPda(PROGRAM_ID);
+  const [heightIndexPda] = deriveHeightIndexPda(PROGRAM_ID, START_BLOCK_HEIGHT);
+  const [blockHeaderPda] = deriveBlockHeaderPda(PROGRAM_ID, blockHash);
 
   const ix = new TransactionInstruction({
     keys: [
       { pubkey: lightClientPda, isSigner: false, isWritable: true },
-      { pubkey: relayer.publicKey, isSigner: true, isWritable: false },
+      { pubkey: relayer.publicKey, isSigner: true, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: heightIndexPda, isSigner: false, isWritable: true },
+      { pubkey: blockHeaderPda, isSigner: false, isWritable: true },
     ],
     programId: PROGRAM_ID,
     data,

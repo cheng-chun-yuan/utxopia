@@ -1,16 +1,22 @@
 use pinocchio::{
     account_info::AccountInfo,
+    instruction::{Seed, Signer},
     program_error::ProgramError,
     pubkey::Pubkey,
     ProgramResult,
     sysvars::{clock::Clock, Sysvar},
 };
+use pinocchio_system::instructions::CreateAccount;
 
-use crate::constants::REQUIRED_CONFIRMATIONS;
-use crate::state::BitcoinLightClient;
+use crate::constants::{
+    BLOCK_HEADER_DISCRIMINATOR, BLOCK_HEADER_SEED, HEIGHT_INDEX_DISCRIMINATOR, HEIGHT_INDEX_SEED,
+    REQUIRED_CONFIRMATIONS,
+};
+use crate::state::{BitcoinLightClient, BlockHeader, HeightIndex};
 
 /// Reinitialize the light client to track a different chain/height.
 /// Authority-only. Resets all state fields without closing/recreating the PDA.
+/// Also creates genesis BlockHeader and HeightIndex PDAs for the new start block.
 ///
 /// Instruction data (after discriminator):
 ///   [0-7]   start_height       (u64 LE)
@@ -20,8 +26,11 @@ use crate::state::BitcoinLightClient;
 ///   [45-48] epoch_start_time   (u32 LE, optional — 0 to skip)
 ///
 /// Accounts:
-///   0. [writable]  BitcoinLightClient
-///   1. [signer]    Authority (must match current authority)
+///   0. [writable]        BitcoinLightClient
+///   1. [signer, writable] Authority (must match current authority)
+///   2. []                System program
+///   3. [writable]        HeightIndex PDA (["height_index", start_height])
+///   4. [writable]        BlockHeader PDA (["block", start_block_hash])
 pub fn process_reinitialize(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -30,12 +39,15 @@ pub fn process_reinitialize(
     if data.len() < 41 {
         return Err(ProgramError::InvalidInstructionData);
     }
-    if accounts.len() < 2 {
+    if accounts.len() < 5 {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
     let light_client_info = &accounts[0];
     let authority_info = &accounts[1];
+    let _system_program = &accounts[2];
+    let height_index_info = &accounts[3];
+    let block_header_info = &accounts[4];
 
     if !authority_info.is_signer() {
         return Err(ProgramError::MissingRequiredSignature);
@@ -92,6 +104,90 @@ pub fn process_reinitialize(
 
     let clock = Clock::get()?;
     lc.set_last_update(clock.unix_timestamp);
+
+    // Drop the borrow before creating more accounts
+    drop(lc_data);
+
+    let rent = pinocchio::sysvars::rent::Rent::get()?;
+
+    // Create genesis BlockHeader PDA: ["block", start_block_hash]
+    // Only create if not already existing (lamports == 0)
+    if block_header_info.lamports() == 0 {
+        let (expected_bh_pda, bh_bump) = pinocchio::pubkey::find_program_address(
+            &[BLOCK_HEADER_SEED, &start_block_hash],
+            program_id,
+        );
+        if block_header_info.key() != &expected_bh_pda {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        let bh_bump_bytes = [bh_bump];
+        let bh_signer_seeds: [Seed; 3] = [
+            Seed::from(BLOCK_HEADER_SEED),
+            Seed::from(start_block_hash.as_slice()),
+            Seed::from(&bh_bump_bytes),
+        ];
+        let bh_signer = [Signer::from(&bh_signer_seeds)];
+
+        let bh_lamports = rent.minimum_balance(BlockHeader::LEN);
+        CreateAccount {
+            from: authority_info,
+            to: block_header_info,
+            lamports: bh_lamports,
+            space: BlockHeader::LEN as u64,
+            owner: program_id,
+        }
+        .invoke_signed(&bh_signer)?;
+
+        let mut bh_data = block_header_info.try_borrow_mut_data()?;
+        bh_data[..BlockHeader::LEN].fill(0);
+        bh_data[0] = BLOCK_HEADER_DISCRIMINATOR;
+
+        let bh = unsafe { &mut *(bh_data.as_mut_ptr() as *mut BlockHeader) };
+        bh.block_hash = start_block_hash;
+        bh.height = start_height.to_le_bytes();
+        bh.submitted_at = clock.unix_timestamp.to_le_bytes();
+    }
+
+    // Create genesis HeightIndex PDA: ["height_index", start_height]
+    // Only create if not already existing (lamports == 0)
+    if height_index_info.lamports() == 0 {
+        let height_le = start_height.to_le_bytes();
+        let (expected_hi_pda, hi_bump) = pinocchio::pubkey::find_program_address(
+            &[HEIGHT_INDEX_SEED, &height_le],
+            program_id,
+        );
+        if height_index_info.key() != &expected_hi_pda {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        let hi_bump_bytes = [hi_bump];
+        let hi_signer_seeds: [Seed; 3] = [
+            Seed::from(HEIGHT_INDEX_SEED),
+            Seed::from(height_le.as_slice()),
+            Seed::from(&hi_bump_bytes),
+        ];
+        let hi_signer = [Signer::from(&hi_signer_seeds)];
+
+        let hi_lamports = rent.minimum_balance(HeightIndex::LEN);
+        CreateAccount {
+            from: authority_info,
+            to: height_index_info,
+            lamports: hi_lamports,
+            space: HeightIndex::LEN as u64,
+            owner: program_id,
+        }
+        .invoke_signed(&hi_signer)?;
+
+        let mut hi_data = height_index_info.try_borrow_mut_data()?;
+        hi_data[0] = HEIGHT_INDEX_DISCRIMINATOR;
+
+        let hi = unsafe { &mut *(hi_data.as_mut_ptr() as *mut HeightIndex) };
+        hi.bump = hi_bump;
+        hi._padding = [0u8; 6];
+        hi.block_hash = start_block_hash;
+        hi.height = height_le;
+    }
 
     Ok(())
 }

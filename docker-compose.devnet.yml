@@ -1,0 +1,90 @@
+# zVault Devnet Stack — Backend + FROST Signers + Header Relayer
+#
+# Usage:
+#   docker compose -f docker-compose.devnet.yml up --build -d
+#   docker compose -f docker-compose.devnet.yml logs -f
+#   docker compose -f docker-compose.devnet.yml down
+
+x-frost-common: &frost-common
+  build:
+    context: ./frost_server
+    dockerfile: Dockerfile
+  volumes:
+    - ./frost_server/config:/app/config
+    - ./frost_server/logs:/app/logs
+  environment: &frost-env
+    RUST_LOG: info,frost_server=debug
+    FROST_KEY_PASSWORD: test
+  restart: unless-stopped
+
+services:
+  # ─── FROST Threshold Signers (2-of-3) ──────────────────────────────
+  frost-signer-1:
+    <<: *frost-common
+    container_name: zvault-frost-1
+    ports:
+      - "9001:9001"
+    command: >
+      run --bind 0.0.0.0:9001 --id 1
+      --password test --network testnet4
+
+  frost-signer-2:
+    <<: *frost-common
+    container_name: zvault-frost-2
+    ports:
+      - "9002:9002"
+    command: >
+      run --bind 0.0.0.0:9002 --id 2
+      --password test --network testnet4
+
+  frost-signer-3:
+    <<: *frost-common
+    container_name: zvault-frost-3
+    ports:
+      - "9003:9003"
+    command: >
+      run --bind 0.0.0.0:9003 --id 3
+      --password test --network testnet4
+
+  # ─── Backend API ───────────────────────────────────────────────────
+  backend-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: zvault-backend
+    ports:
+      - "3001:3001"
+    environment:
+      RUST_LOG: info
+      ZVAULT_NETWORK: devnet
+      ZVAULT_SOLANA_RPC: https://api.devnet.solana.com
+      ZVAULT_BITCOIN_RPC: https://mempool.space/testnet4/api
+      ZVAULT_SIGNING_MODE: frost
+      ZVAULT_FROST_THRESHOLD: "2"
+      ZVAULT_FROST_PARTICIPANTS: "3"
+      ZVAULT_FROST_SIGNER_URLS: http://frost-signer-1:9001,http://frost-signer-2:9002,http://frost-signer-3:9003
+      ZVAULT_FROST_KEY_SHARE: placeholder
+      ZVAULT_FROST_GROUP_PUBKEY: d857a067bec0ae2027a6026ef73d2905f108b1a66de6d12d23a3feb42013b1dd
+      ZVAULT_DEMO_MODE: "1"
+      API_PORT: "3001"
+    depends_on:
+      - frost-signer-1
+      - frost-signer-2
+      - frost-signer-3
+    restart: unless-stopped
+
+  # ─── Header Relayer (testnet4 → Solana devnet) ─────────────────────
+  header-relayer:
+    build:
+      context: ./backend/header-relayer
+      dockerfile: Dockerfile
+    container_name: zvault-header-relayer
+    environment:
+      DEPLOY_ENV: devnet
+      DEVNET_SOLANA_RPC_URL: https://api.devnet.solana.com
+      DEVNET_PROGRAM_ID: Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq
+      DEVNET_RELAYER_KEYPAIR: "[50,128,114,217,238,93,48,208,84,69,168,140,72,35,173,128,57,239,14,139,145,69,241,221,89,52,36,156,104,238,166,101,13,98,59,211,107,90,137,69,248,31,168,162,72,104,198,209,65,164,43,83,227,202,213,91,45,163,238,203,91,107,68,170]"
+      DEVNET_BITCOIN_NETWORK: testnet4
+      DEVNET_START_BLOCK_HEIGHT: "124088"
+      DEVNET_POLL_INTERVAL_MS: "30000"
+    restart: unless-stopped

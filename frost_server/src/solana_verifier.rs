@@ -330,8 +330,8 @@ mod tests {
     #[test]
     fn test_pda_derivation_known_vector() {
         // Test with a known program ID and seeds
-        // Using the zVault program ID: 2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV
-        let program_id_bytes = bs58::decode("2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV")
+        // Using the zVault program ID: B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq
+        let program_id_bytes = bs58::decode("B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq")
             .into_vec()
             .unwrap();
         let mut program_id = [0u8; 32];
@@ -354,7 +354,7 @@ mod tests {
     #[test]
     fn test_pda_with_redemption_seeds() {
         // Simulate a real redemption PDA derivation
-        let program_id_bytes = bs58::decode("2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV")
+        let program_id_bytes = bs58::decode("B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq")
             .into_vec()
             .unwrap();
         let mut program_id = [0u8; 32];

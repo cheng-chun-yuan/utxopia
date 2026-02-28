@@ -2,7 +2,7 @@
 
 import React, { memo } from "react";
 import Link from "next/link";
-import { Bitcoin, Shield, Zap, Lock, ExternalLink, ArrowRight, EyeOff, Fingerprint, ShieldCheck, Loader2 } from "lucide-react";
+import { Bitcoin, Shield, Zap, Lock, ExternalLink, ArrowRight, EyeOff, Fingerprint, ShieldCheck, Loader2, Search } from "lucide-react";
 import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
 import { usePoolStats, PoolStats } from "@/hooks/use-pool-stats";
 
@@ -72,9 +72,9 @@ const StatsDisplay = memo(function StatsDisplay({
     );
   }
 
-  const vaultBtc = (Number(stats?.vaultBalance ?? 0n) / 100_000_000).toFixed(4);
-  const deposits = (stats?.depositCount ?? 0).toLocaleString();
-  const pending = (stats?.pendingRedemptions ?? 0).toLocaleString();
+  const vaultBtc = (Number(stats?.totalShielded ?? 0n) / 100_000_000).toFixed(4);
+  const deposits = (stats?.stealthAnnouncementCount ?? 0).toLocaleString();
+  const volumeBtc = (Number(stats?.volume ?? 0n) / 100_000_000).toFixed(4);
 
   return (
     <div className="grid grid-cols-3 gap-6">
@@ -90,8 +90,8 @@ const StatsDisplay = memo(function StatsDisplay({
         <div className="text-caption text-gray">Deposits</div>
       </div>
       <div className="space-y-2 text-center">
-        <div className="text-heading5 text-foreground">{pending}</div>
-        <div className="text-caption text-gray">Pending</div>
+        <div className="text-heading5 text-foreground">{volumeBtc}</div>
+        <div className="text-caption text-gray">Volume (BTC)</div>
       </div>
     </div>
   );
@@ -118,6 +118,13 @@ export default function Home() {
             <span className="text-heading6 text-foreground">zVault</span>
           </div>
           <div className="flex items-center gap-4">
+            <Link
+              href="/explorer"
+              className="text-body2 text-gray hover:text-gray-light transition-colors flex items-center gap-1"
+            >
+              Explorer
+              <Search className="w-3 h-3" />
+            </Link>
             <a
               href="https://docs.zVault.xyz"
               target="_blank"

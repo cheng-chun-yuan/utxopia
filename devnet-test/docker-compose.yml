@@ -41,7 +41,7 @@ services:
     build:
       context: ../frost_server
       dockerfile: Dockerfile
-    command: ["--port", "8080", "--solana-rpc-url", "https://api.devnet.solana.com", "--zvault-program-id", "2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV"]
+    command: ["--port", "8080", "--solana-rpc-url", "https://api.devnet.solana.com", "--zvault-program-id", "B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq"]
     ports:
       - "8081:8080"
     environment:
@@ -61,7 +61,7 @@ services:
     build:
       context: ../frost_server
       dockerfile: Dockerfile
-    command: ["--port", "8080", "--solana-rpc-url", "https://api.devnet.solana.com", "--zvault-program-id", "2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV"]
+    command: ["--port", "8080", "--solana-rpc-url", "https://api.devnet.solana.com", "--zvault-program-id", "B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq"]
     ports:
       - "8082:8080"
     environment:
@@ -81,7 +81,7 @@ services:
     build:
       context: ../frost_server
       dockerfile: Dockerfile
-    command: ["--port", "8080", "--solana-rpc-url", "https://api.devnet.solana.com", "--zvault-program-id", "2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV"]
+    command: ["--port", "8080", "--solana-rpc-url", "https://api.devnet.solana.com", "--zvault-program-id", "B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq"]
     ports:
       - "8083:8080"
     environment:

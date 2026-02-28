@@ -47,7 +47,7 @@ const DEPOSIT_AMOUNT_SATS = 10_000;
 
 // BTC light client program ID (from env or devnet default)
 const BTC_LIGHT_CLIENT_PROGRAM_ID = new PublicKey(
-  process.env.BTC_LIGHT_CLIENT_PROGRAM_ID || "DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS"
+  process.env.BTC_LIGHT_CLIENT_PROGRAM_ID || "Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"
 );
 
 // =============================================================================

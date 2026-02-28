@@ -136,7 +136,7 @@ impl DepositTrackerService {
     /// Set up verifier with Solana keypair
     pub fn with_verifier(mut self, keypair: Keypair) -> Self {
         let program_id = std::env::var("ZVAULT_PROGRAM_ID")
-            .unwrap_or_else(|_| "2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV".to_string());
+            .unwrap_or_else(|_| "B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq".to_string());
         let mut verifier = if self.config.esplora_url.contains("localhost") || self.config.esplora_url.contains("127.0.0.1") {
             // Custom esplora URL (e.g., regtest) — use it for the verifier too
             match SpvVerifier::new(&self.config.solana_rpc, &self.config.esplora_url, &program_id) {

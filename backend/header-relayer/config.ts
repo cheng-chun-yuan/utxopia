@@ -13,7 +13,7 @@
  *   DEPLOY_ENV=devnet
  *
  *   DEVNET_SOLANA_RPC_URL=https://api.devnet.solana.com
- *   DEVNET_PROGRAM_ID=DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS
+ *   DEVNET_PROGRAM_ID=Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq
  *   DEVNET_RELAYER_KEYPAIR=[50,128,114,...]
  *   DEVNET_BITCOIN_NETWORK=testnet4
  *   DEVNET_START_BLOCK_HEIGHT=75000
@@ -92,7 +92,7 @@ function envRequired(name: string): string {
 export const SOLANA_RPC_URL = env('SOLANA_RPC_URL') || 'https://api.devnet.solana.com';
 
 export const PROGRAM_ID = new PublicKey(
-  env('PROGRAM_ID') || 'DeDut4fkjbWBPY4FRUU3q9BUcvwTisHczj1EQmqX5avS'
+  env('PROGRAM_ID') || 'Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq'
 );
 
 export const BITCOIN_NETWORK = (env('BITCOIN_NETWORK') || 'testnet4') as BitcoinNetwork;
