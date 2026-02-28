@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { PublicKey, Transaction, TransactionInstruction, SystemProgram } from "@solana/web3.js";
+import { PublicKey, Transaction, TransactionInstruction, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
+import { TOKEN_PROGRAM_ID, NATIVE_MINT, getAssociatedTokenAddressSync, createAssociatedTokenAccountIdempotentInstruction, createSyncNativeInstruction, createCloseAccountInstruction } from "@solana/spl-token";
 import { useZVaultKeys } from "./use-zvault";
 import { getConnectionAdapter } from "@/lib/adapters/connection-adapter";
 import {
@@ -20,6 +21,12 @@ const SNS_DISC_REALLOC = 4;
 
 /** Stealth data: version(1) + spendingPubKey(32) + viewingPubKey(32) = 65 bytes */
 const STEALTH_DATA_SIZE = 65;
+
+/** Bonfida fee owner (constant across networks) */
+const BONFIDA_FEE_OWNER = new PublicKey("5D2zKog251d6KPCyFyLMt3KroWwXXPWSgTPyhV22K2gR");
+
+/** SNS hash prefix used for PDA derivation */
+const HASH_PREFIX = "SPL Name Service";
 
 interface UseSnsNameReturn {
   registeredSnsName: string | null;
@@ -86,19 +93,34 @@ export function useSnsName(): UseSnsNameReturn {
       for (const account of accounts) {
         const parsed = parseSnsStealthData(new Uint8Array(account.account.data));
         if (parsed) {
-          // Found a subdomain with stealth data - we need to figure out the name
-          // Try common approach: check if the stealth keys match ours
           const ourSpending = Buffer.from(stealthAddress.spendingPubKey).toString("hex");
           const foundSpending = Buffer.from(parsed.spendingPubKey).toString("hex");
 
           if (ourSpending === foundSpending) {
-            // This is our subdomain. We don't know the name from the account data alone,
-            // so we store the account key and mark as found.
-            // The name can be discovered by trying known names or storing it.
             setHasRegisteredSnsName(true);
-            // For now, we can't reverse-lookup the name from SNS accounts.
-            // We'll set it when registration happens or if we find it.
-            setRegisteredSnsName(null); // Name unknown from reverse lookup
+
+            // Reverse lookup: derive reverse key from subdomain account key
+            const reverseLookupClass = new PublicKey(config.snsReverseLookupClass);
+            const parentPubkey = new PublicKey(parentKey);
+            const reverseHash = sha256Hash(
+              new TextEncoder().encode(HASH_PREFIX + account.pubkey.toBase58())
+            );
+            const [reverseKey] = PublicKey.findProgramAddressSync(
+              [reverseHash, reverseLookupClass.toBytes(), parentPubkey.toBytes()],
+              nameServiceProgramId,
+            );
+            const reverseAcct = await connection.getAccountInfo(reverseKey);
+            if (reverseAcct && reverseAcct.data.length > 100) {
+              // SNS header(96) + borsh string(u32 len + bytes)
+              const nameLen = reverseAcct.data.readUInt32LE(96);
+              const rawName = reverseAcct.data.slice(100, 100 + nameLen).toString().replace(/\0/g, "").trim();
+              if (rawName) {
+                setRegisteredSnsName(rawName);
+                setIsLoading(false);
+                return;
+              }
+            }
+            setRegisteredSnsName(null);
             setIsLoading(false);
             return;
           }
@@ -115,7 +137,9 @@ export function useSnsName(): UseSnsNameReturn {
     }
   }, [wallet.publicKey, stealthAddress, connection]);
 
-  // Register a new subdomain + write stealth data (3-transaction flow)
+  // Register a new subdomain + write stealth data (2-transaction flow)
+  // TX1: Register via Bonfida sub-registrar (creates subdomain + reverse lookup)
+  // TX2: Realloc + write stealth data (combined into one TX)
   const registerSnsSubdomain = useCallback(async (name: string): Promise<boolean> => {
     if (!wallet.publicKey || !wallet.signTransaction || !stealthAddress) {
       setError("Wallet not connected or keys not derived");
@@ -147,68 +171,140 @@ export function useSnsName(): UseSnsNameReturn {
 
       const nameServiceProgramId = new PublicKey(config.snsNameServiceProgramId);
       const subRegistrarProgramId = new PublicKey(config.snsSubRegistrarProgramId);
+      const snsRegistrarProgramId = new PublicKey(config.snsRegistrarProgramId);
+      const rootDomain = new PublicKey(config.snsRootDomain);
 
       // Derive parent domain key
       const parentKey = await deriveParentDomainKey(config.snsParentDomain);
       const parentPubkey = new PublicKey(parentKey);
 
-      // Derive subdomain key using SNS hashing
-      const HASH_PREFIX = "SPL Name Service";
+      // Derive subdomain key: hash("\0" + name) under parent
       const hashedSub = sha256Hash(new TextEncoder().encode(HASH_PREFIX + "\0" + subdomain));
-
-      // Derive subdomain PDA
       const [subdomainKey] = PublicKey.findProgramAddressSync(
         [hashedSub, new Uint8Array(32), parentPubkey.toBytes()],
         nameServiceProgramId,
       );
 
-      // Derive sub-registrar state PDA
-      const [subRegistrarState] = PublicKey.findProgramAddressSync(
-        [parentPubkey.toBytes()],
+      // Derive reverse lookup key: hash(subdomainKey.base58) under [reverseLookupClass, parent]
+      const reverseLookupClass = new PublicKey(config.snsReverseLookupClass);
+      const reverseHash = sha256Hash(new TextEncoder().encode(HASH_PREFIX + subdomainKey.toBase58()));
+      const [reverseKey] = PublicKey.findProgramAddressSync(
+        [reverseHash, reverseLookupClass.toBytes(), parentPubkey.toBytes()],
+        nameServiceProgramId,
+      );
+
+      // Derive registrar PDA: ["registrar", parentDomainKey]
+      const [registrar] = PublicKey.findProgramAddressSync(
+        [new TextEncoder().encode("registrar"), parentPubkey.toBytes()],
         subRegistrarProgramId,
       );
 
-      // === TX1: Register subdomain via sub-registrar ===
-      // Sub-registrar register instruction: disc(1)=0 + nameLen(u32 LE) + name
-      const nameBytes = new TextEncoder().encode(subdomain);
-      const registerData = new Uint8Array(1 + 4 + nameBytes.length);
-      registerData[0] = 0; // discriminator: register
-      new DataView(registerData.buffer).setUint32(1, nameBytes.length, true);
-      registerData.set(nameBytes, 5);
+      // Derive sub-record PDA: ["subrecord", subdomainKey]
+      const [subRecord] = PublicKey.findProgramAddressSync(
+        [new TextEncoder().encode("subrecord"), subdomainKey.toBytes()],
+        subRegistrarProgramId,
+      );
 
-      const registerIx = new TransactionInstruction({
+      // Fetch registrar state to get mint and fee account
+      const registrarAcct = await connection.getAccountInfo(registrar);
+      if (!registrarAcct) {
+        setError("Sub-registrar not initialized for this domain");
+        return false;
+      }
+      // Registrar layout: tag(1) + nonce(1) + authority(32) + feeAccount(32) + mint(32) + domain(32) + ...
+      const feeAccount = new PublicKey(registrarAcct.data.slice(34, 66));
+      const mint = new PublicKey(registrarAcct.data.slice(66, 98));
+
+      // Buyer's token account for the registration fee (wSOL)
+      const feeSource = getAssociatedTokenAddressSync(mint, wallet.publicKey, true);
+
+      // Bonfida fee account
+      const bonfidaFee = getAssociatedTokenAddressSync(mint, BONFIDA_FEE_OWNER, true);
+
+      // === TX1: Register subdomain via Bonfida sub-registrar ===
+      const ixs: TransactionInstruction[] = [];
+
+      // Ensure buyer's wSOL ATA exists and has enough balance for registration fee
+      const WSOL_WRAP_AMOUNT = 10_000_000; // 0.01 SOL — enough for any registration fee
+      const feeSourceAcct = await connection.getAccountInfo(feeSource);
+      let needsWrap = true;
+      if (feeSourceAcct && feeSourceAcct.data.length >= 72) {
+        // SPL Token account: amount is u64 LE at offset 64
+        const balance = new DataView(feeSourceAcct.data.buffer, feeSourceAcct.data.byteOffset).getBigUint64(64, true);
+        if (balance >= BigInt(WSOL_WRAP_AMOUNT)) {
+          needsWrap = false;
+        }
+      }
+
+      if (needsWrap) {
+        ixs.push(createAssociatedTokenAccountIdempotentInstruction(
+          wallet.publicKey,
+          feeSource,
+          wallet.publicKey,
+          NATIVE_MINT,
+        ));
+        ixs.push(SystemProgram.transfer({
+          fromPubkey: wallet.publicKey,
+          toPubkey: feeSource,
+          lamports: WSOL_WRAP_AMOUNT,
+        }));
+        ixs.push(createSyncNativeInstruction(feeSource));
+      }
+
+      // Ensure Bonfida fee ATA exists
+      ixs.push(createAssociatedTokenAccountIdempotentInstruction(
+        wallet.publicKey,
+        bonfidaFee,
+        BONFIDA_FEE_OWNER,
+        mint,
+      ));
+
+      // Sub-registrar register instruction: tag(1=2) + domain(borsh string: len_u32 + "\0" + name)
+      const domainStr = "\0" + subdomain;
+      const domainBytes = new TextEncoder().encode(domainStr);
+      const registerData = new Uint8Array(1 + 4 + domainBytes.length);
+      registerData[0] = 2; // discriminator: register
+      new DataView(registerData.buffer).setUint32(1, domainBytes.length, true);
+      registerData.set(domainBytes, 5);
+
+      ixs.push(new TransactionInstruction({
         programId: subRegistrarProgramId,
         keys: [
-          { pubkey: nameServiceProgramId, isSigner: false, isWritable: false },
-          { pubkey: subdomainKey, isSigner: false, isWritable: true },
-          { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
-          { pubkey: parentPubkey, isSigner: false, isWritable: false },
-          { pubkey: subRegistrarState, isSigner: false, isWritable: false },
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+          { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+          { pubkey: nameServiceProgramId, isSigner: false, isWritable: false },
+          { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
+          { pubkey: snsRegistrarProgramId, isSigner: false, isWritable: false },
+          { pubkey: rootDomain, isSigner: false, isWritable: false },
+          { pubkey: reverseLookupClass, isSigner: false, isWritable: false },
+          { pubkey: feeAccount, isSigner: false, isWritable: true },
+          { pubkey: feeSource, isSigner: false, isWritable: true },
+          { pubkey: registrar, isSigner: false, isWritable: true },
+          { pubkey: parentPubkey, isSigner: false, isWritable: true },
+          { pubkey: subdomainKey, isSigner: false, isWritable: true },
+          { pubkey: reverseKey, isSigner: false, isWritable: true },
+          { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
+          { pubkey: bonfidaFee, isSigner: false, isWritable: true },
+          { pubkey: subRecord, isSigner: false, isWritable: true },
         ],
         data: Buffer.from(registerData),
-      });
+      }));
 
-      const tx1 = new Transaction().add(registerIx);
-      tx1.feePayer = wallet.publicKey;
-      const { blockhash: bh1, lastValidBlockHeight: lvbh1 } = await connection.getLatestBlockhash();
-      tx1.recentBlockhash = bh1;
+      // Close wSOL ATA after registration to reclaim rent + unused wSOL (only if we created it)
+      if (needsWrap) {
+        ixs.push(createCloseAccountInstruction(
+          feeSource,
+          wallet.publicKey,
+          wallet.publicKey,
+        ));
+      }
 
-      const signed1 = await wallet.signTransaction(tx1);
-      const txid1 = await connection.sendRawTransaction(signed1.serialize(), {
-        skipPreflight: false,
-        preflightCommitment: "confirmed",
-      });
-      await connection.confirmTransaction({ signature: txid1, blockhash: bh1, lastValidBlockHeight: lvbh1 }, "confirmed");
-      console.log(`[SNS] Subdomain registered: ${subdomain} (tx: ${txid1})`);
-
-      // === TX2: Realloc name account to hold stealth data ===
-      // Realloc instruction: disc(1)=4 + space(u32 LE)
+      // === Realloc + Write stealth data (appended to same TX) ===
       const reallocData = new Uint8Array(5);
       reallocData[0] = SNS_DISC_REALLOC;
       new DataView(reallocData.buffer).setUint32(1, STEALTH_DATA_SIZE, true);
 
-      const reallocIx = new TransactionInstruction({
+      ixs.push(new TransactionInstruction({
         programId: nameServiceProgramId,
         keys: [
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
@@ -217,55 +313,40 @@ export function useSnsName(): UseSnsNameReturn {
           { pubkey: wallet.publicKey, isSigner: true, isWritable: false },
         ],
         data: Buffer.from(reallocData),
-      });
+      }));
 
-      const tx2 = new Transaction().add(reallocIx);
-      tx2.feePayer = wallet.publicKey;
-      const { blockhash: bh2, lastValidBlockHeight: lvbh2 } = await connection.getLatestBlockhash();
-      tx2.recentBlockhash = bh2;
-
-      const signed2 = await wallet.signTransaction(tx2);
-      const txid2 = await connection.sendRawTransaction(signed2.serialize(), {
-        skipPreflight: false,
-        preflightCommitment: "confirmed",
-      });
-      await connection.confirmTransaction({ signature: txid2, blockhash: bh2, lastValidBlockHeight: lvbh2 }, "confirmed");
-      console.log(`[SNS] Realloc to ${STEALTH_DATA_SIZE} bytes (tx: ${txid2})`);
-
-      // === TX3: Write stealth data ===
-      // Update instruction: disc(1)=1 + offset(u32 LE) + dataLen(u32 LE) + data
       const stealthData = new Uint8Array(STEALTH_DATA_SIZE);
-      stealthData[0] = config.snsStealthDataVersion; // version
+      stealthData[0] = config.snsStealthDataVersion;
       stealthData.set(stealthAddress.spendingPubKey, 1);
       stealthData.set(stealthAddress.viewingPubKey, 33);
 
       const updateData = new Uint8Array(1 + 4 + 4 + stealthData.length);
       updateData[0] = SNS_DISC_UPDATE;
-      new DataView(updateData.buffer).setUint32(1, 0, true); // offset = 0
-      new DataView(updateData.buffer).setUint32(5, stealthData.length, true); // data length
+      new DataView(updateData.buffer).setUint32(1, 0, true);
+      new DataView(updateData.buffer).setUint32(5, stealthData.length, true);
       updateData.set(stealthData, 9);
 
-      const updateIx = new TransactionInstruction({
+      ixs.push(new TransactionInstruction({
         programId: nameServiceProgramId,
         keys: [
           { pubkey: subdomainKey, isSigner: false, isWritable: true },
           { pubkey: wallet.publicKey, isSigner: true, isWritable: false },
         ],
         data: Buffer.from(updateData),
-      });
+      }));
 
-      const tx3 = new Transaction().add(updateIx);
-      tx3.feePayer = wallet.publicKey;
-      const { blockhash: bh3, lastValidBlockHeight: lvbh3 } = await connection.getLatestBlockhash();
-      tx3.recentBlockhash = bh3;
+      const tx = new Transaction().add(...ixs);
+      tx.feePayer = wallet.publicKey;
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+      tx.recentBlockhash = blockhash;
 
-      const signed3 = await wallet.signTransaction(tx3);
-      const txid3 = await connection.sendRawTransaction(signed3.serialize(), {
+      const signed = await wallet.signTransaction(tx);
+      const txid = await connection.sendRawTransaction(signed.serialize(), {
         skipPreflight: false,
         preflightCommitment: "confirmed",
       });
-      await connection.confirmTransaction({ signature: txid3, blockhash: bh3, lastValidBlockHeight: lvbh3 }, "confirmed");
-      console.log(`[SNS] Stealth data written (tx: ${txid3})`);
+      await connection.confirmTransaction({ signature: txid, blockhash, lastValidBlockHeight }, "confirmed");
+      console.log(`[SNS] Subdomain registered with stealth data (tx: ${txid})`);
 
       setRegisteredSnsName(subdomain);
       setHasRegisteredSnsName(true);

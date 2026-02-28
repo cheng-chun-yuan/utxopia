@@ -135,6 +135,9 @@ export interface NetworkConfig {
   /** Parent domain for stealth address subdomains (e.g., "btcpro" for *.btcpro.sol) */
   snsParentDomain: string;
 
+  /** SNS reverse lookup class key (used for reverse name resolution) */
+  snsReverseLookupClass: string;
+
   /** Stealth data version expected in SNS records */
   snsStealthDataVersion: number;
 }
@@ -228,6 +231,7 @@ export const DEVNET_CONFIG: NetworkConfig = {
   snsSubRegistrarProgramId: "31tT5CmpphAtRL3mstu962zeYH7C6TEkJWLB5nYxciBB", // Sub-Registrar (devnet)
   snsRootDomain: "5eoDkP6vCQBXqDV9YN2NdUs3nmML3dMRNmEYpiyVNBm2",           // .sol TLD (devnet)
   snsParentDomain: "btcpro",
+  snsReverseLookupClass: "7NbD1vprif6apthEZAqhRfYuhrqnuderB8qpnfXGCc8H",   // Reverse lookup class (devnet)
   snsStealthDataVersion: 1,
 };
 
@@ -282,6 +286,7 @@ export const MAINNET_CONFIG: NetworkConfig = {
   snsSubRegistrarProgramId: "2KkyPzjaAYaz2ojQZ9P3xYakLd96B5UH6a2isLaZ4Cgs", // Sub-Registrar (mainnet)
   snsRootDomain: "58PwtjSDuFHuUkYjH9BYod9SZaELfsvdrNMryy9iYNvo",           // .sol TLD (mainnet)
   snsParentDomain: "btcpro",
+  snsReverseLookupClass: "33m47vH6Eav6jr5Ry86XjhRft2jRBLDnDgPSHoquXi2Z",   // Reverse lookup class (mainnet)
   snsStealthDataVersion: 1,
 };
 
@@ -342,6 +347,7 @@ export const LOCALNET_CONFIG: NetworkConfig = {
   snsSubRegistrarProgramId: "",
   snsRootDomain: "",
   snsParentDomain: "",
+  snsReverseLookupClass: "",
   snsStealthDataVersion: 1,
 };
 

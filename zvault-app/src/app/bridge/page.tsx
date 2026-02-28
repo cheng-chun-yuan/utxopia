@@ -353,7 +353,7 @@ export default function BridgePage() {
                         {isRegisteringSns ? (
                           <>
                             <Loader2 className="w-3 h-3 animate-spin" />
-                            Registering (3 txns)...
+                            Registering...
                           </>
                         ) : (
                           <>
