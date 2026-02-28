@@ -4,6 +4,7 @@ import { ExternalLink, RefreshCw, CheckCircle, AlertCircle } from "lucide-react"
 import { useDepositStatus } from "@/hooks/use-deposit-status";
 import { DepositProgress } from "./DepositProgress";
 import { type DepositStatus as DepositStatusType } from "@/lib/api/deposits";
+import { getMempoolExplorerUrl } from "@/lib/btc-network";
 
 interface DepositStatusProps {
   depositId: string;
@@ -161,7 +162,7 @@ function TransactionLink({
 
   const explorerUrl =
     type === "bitcoin"
-      ? `https://mempool.space/testnet/tx/${txid}`
+      ? `${getMempoolExplorerUrl()}/tx/${txid}`
       : `https://orbmarkets.io/tx/${txid}?cluster=devnet`;
 
   return (

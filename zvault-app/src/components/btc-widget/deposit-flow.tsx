@@ -5,7 +5,8 @@ import { getConnectionAdapter } from "@/lib/adapters/connection-adapter";
 import {
   Check, AlertCircle, Key, Wallet,
   RefreshCw, ExternalLink, Tag, Info,
-  Zap, Loader2, CheckCircle2
+  Zap, Loader2, CheckCircle2, ArrowRight,
+  Hash, FileText, ArrowLeftRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { notifySuccess, notifyError } from "@/lib/notifications";
@@ -20,12 +21,11 @@ import {
   selectUtxos,
   getConfig,
   type StealthMetaAddress,
+  type BuildDepositPsbtResult,
 } from "@zvault/sdk";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useBitcoinWalletStore } from "@/stores/bitcoin-wallet-store";
-
-// Network from SDK config
-const BITCOIN_NETWORK = getConfig().bitcoinNetwork === "mainnet" ? "mainnet" as const : "testnet" as const;
+import { getBtcSignerNetwork } from "@/lib/btc-network";
 
 export function DepositFlow() {
   // Demo mode state (default ON for hackathon)
@@ -52,6 +52,18 @@ export function DepositFlow() {
     depositAddress: string;
     opReturnHex: string;
   } | null>(null);
+  const [txPreview, setTxPreview] = useState<{
+    psbtBase64: string;
+    depositAddress: string;
+    depositAmountSats: number;
+    opReturnHex: string;
+    changeAddress: string;
+    changeAmount: number;
+    estimatedFee: number;
+    totalInput: number;
+    numInputs: number;
+  } | null>(null);
+  const [buildingPreview, setBuildingPreview] = useState(false);
   const btcWallet = useBitcoinWalletStore();
 
   const resetFlow = () => {
@@ -65,6 +77,7 @@ export function DepositFlow() {
     // Wallet deposit reset
     setWalletDepositAmount("10000");
     setWalletDepositResult(null);
+    setTxPreview(null);
   };
 
   // Demo mode: Submit mock stealth deposit via backend relayer (keeps user anonymous)
@@ -184,8 +197,8 @@ export function DepositFlow() {
     }
   };
 
-  // Wallet-integrated PSBT deposit
-  const submitWalletDeposit = async () => {
+  // Step 1: Build PSBT and show preview
+  const buildTxPreview = async () => {
     if (!resolvedMeta || !btcWallet.connected) return;
 
     const amountSats = parseInt(walletDepositAmount);
@@ -194,28 +207,25 @@ export function DepositFlow() {
       return;
     }
 
-    setWalletDepositing(true);
+    setBuildingPreview(true);
     setError(null);
-    setWalletDepositResult(null);
+    setTxPreview(null);
 
     try {
       const config = getConfig();
       const groupPubKey = hexToBytes(config.groupPubKey);
 
-      // 1. Create non-interactive deposit (client-side only, npk-based)
       const deposit = await createNonInteractiveDeposit(
         resolvedMeta,
         groupPubKey,
-        BITCOIN_NETWORK,
+        getBtcSignerNetwork(),
       );
 
-      // 2. Fetch wallet UTXOs
       const utxos = await btcWallet.getPaymentUtxos();
       if (utxos.length === 0) {
         throw new Error("No confirmed UTXOs available in wallet");
       }
 
-      // 3. Select UTXOs
       const selected = selectUtxos(
         utxos.map((u) => ({
           txid: u.txid,
@@ -224,10 +234,9 @@ export function DepositFlow() {
           scriptPubkeyHex: u.scriptPubkeyHex,
         })),
         amountSats,
-        2, // fee rate: 2 sat/vB for testnet
+        2,
       );
 
-      // 4. Build PSBT
       const psbtResult = buildDepositPsbt({
         senderUtxos: selected,
         depositAddress: deposit.btcAddress,
@@ -235,20 +244,45 @@ export function DepositFlow() {
         opReturnPayload: deposit.opReturnPayload,
         changeAddress: btcWallet.address!,
         feeRate: 2,
-        network: BITCOIN_NETWORK === "testnet" ? "testnet" : "mainnet",
+        network: getBtcSignerNetwork(),
       });
 
-      // 5. Sign & broadcast via wallet
-      const { txid } = await btcWallet.signAndBroadcastPsbt(psbtResult.psbtBase64);
+      setTxPreview({
+        psbtBase64: psbtResult.psbtBase64,
+        depositAddress: deposit.btcAddress,
+        depositAmountSats: amountSats,
+        opReturnHex: bytesToHex(deposit.opReturnPayload),
+        changeAddress: btcWallet.address!,
+        changeAmount: psbtResult.changeAmount,
+        estimatedFee: psbtResult.estimatedFee,
+        totalInput: psbtResult.totalInput,
+        numInputs: selected.length,
+      });
+    } catch (err) {
+      console.error("Preview build error:", err);
+      setError(err instanceof Error ? err.message : "Failed to build transaction");
+    } finally {
+      setBuildingPreview(false);
+    }
+  };
+
+  // Step 2: Sign and broadcast the previewed PSBT
+  const confirmAndSign = async () => {
+    if (!txPreview) return;
+
+    setWalletDepositing(true);
+    setError(null);
+
+    try {
+      const { txid } = await btcWallet.signAndBroadcastPsbt(txPreview.psbtBase64);
 
       setWalletDepositResult({
         txid,
-        depositAddress: deposit.btcAddress,
-        opReturnHex: bytesToHex(deposit.opReturnPayload),
+        depositAddress: txPreview.depositAddress,
+        opReturnHex: txPreview.opReturnHex,
       });
+      setTxPreview(null);
       notifySuccess(`Deposit broadcast! TxID: ${txid.slice(0, 12)}...`);
-
-      // Refresh balance
       btcWallet.refreshBalance();
     } catch (err) {
       console.error("Wallet deposit error:", err);
@@ -476,57 +510,205 @@ export function DepositFlow() {
             <>
               {btcWallet.connected ? (
                 <div className="mb-4">
-                  <label className="text-body2 text-gray-light pl-2 mb-2 block">Amount (satoshis)</label>
-                  <input
-                    type="number"
-                    value={walletDepositAmount}
-                    onChange={(e) => setWalletDepositAmount(e.target.value)}
-                    placeholder="10000"
-                    min="546"
-                    className={cn(
-                      "w-full p-3 bg-muted border border-gray/15 rounded-[12px] mb-1",
-                      "text-body2 font-mono text-foreground placeholder:text-gray",
-                      "outline-none focus:border-btc/40 transition-colors"
-                    )}
-                  />
-                  <p className="text-caption text-gray pl-2 mb-3">
-                    {walletDepositAmount ? `${(parseInt(walletDepositAmount) / 100_000_000).toFixed(8)} BTC` : ""}
-                    {btcWallet.balance !== null && ` · Balance: ${(btcWallet.balance / 100_000_000).toFixed(8)} BTC`}
-                  </p>
+                  {/* Amount input (hidden once preview is built) */}
+                  {!txPreview && (
+                    <>
+                      <label className="text-body2 text-gray-light pl-2 mb-2 block">Amount (satoshis)</label>
+                      <input
+                        type="number"
+                        value={walletDepositAmount}
+                        onChange={(e) => setWalletDepositAmount(e.target.value)}
+                        placeholder="10000"
+                        min="546"
+                        className={cn(
+                          "w-full p-3 bg-muted border border-gray/15 rounded-[12px] mb-1",
+                          "text-body2 font-mono text-foreground placeholder:text-gray",
+                          "outline-none focus:border-btc/40 transition-colors"
+                        )}
+                      />
+                      <p className="text-caption text-gray pl-2 mb-3">
+                        {walletDepositAmount ? `${(parseInt(walletDepositAmount) / 100_000_000).toFixed(8)} BTC` : ""}
+                        {btcWallet.balance !== null && ` · Balance: ${(btcWallet.balance / 100_000_000).toFixed(8)} BTC`}
+                      </p>
 
+                      <button
+                        onClick={buildTxPreview}
+                        disabled={buildingPreview || !walletDepositAmount || parseInt(walletDepositAmount) < 546}
+                        className={cn(
+                          "w-full py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2",
+                          "bg-btc hover:bg-btc/90 text-background",
+                          "disabled:bg-gray/20 disabled:text-gray disabled:cursor-not-allowed"
+                        )}
+                      >
+                        {buildingPreview ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Building Transaction...
+                          </>
+                        ) : (
+                          <>
+                            <FileText className="w-4 h-4" />
+                            Preview Transaction
+                          </>
+                        )}
+                      </button>
+                    </>
+                  )}
+
+                  {/* Transaction Preview — simulated outputs */}
+                  {txPreview && (
+                    <div className="flex flex-col gap-3">
+                      <p className="text-body2-semibold text-foreground pl-1">Transaction Preview</p>
+
+                      {/* Inputs summary */}
+                      <div className="p-3 bg-muted border border-gray/15 rounded-[12px]">
+                        <p className="text-caption text-gray mb-1">Inputs ({txPreview.numInputs} UTXO{txPreview.numInputs > 1 ? "s" : ""})</p>
+                        <p className="text-body2 font-mono text-foreground">
+                          {(txPreview.totalInput / 1e8).toFixed(8)} BTC
+                          <span className="text-caption text-gray ml-1">({txPreview.totalInput.toLocaleString()} sats)</span>
+                        </p>
+                      </div>
+
+                      <div className="flex justify-center">
+                        <ArrowRight className="w-4 h-4 text-gray" />
+                      </div>
+
+                      {/* Output 1: P2TR Deposit */}
+                      <div className="p-3 bg-btc/5 border border-btc/20 rounded-[12px]">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] font-mono bg-btc/15 text-btc px-1.5 py-0.5 rounded">Output #1</span>
+                          <span className="text-caption text-btc">P2TR Deposit</span>
+                        </div>
+                        <p className="text-body2 font-mono text-foreground mb-1">
+                          {(txPreview.depositAmountSats / 1e8).toFixed(8)} BTC
+                          <span className="text-caption text-gray ml-1">({txPreview.depositAmountSats.toLocaleString()} sats)</span>
+                        </p>
+                        <code className="block text-[10px] font-mono text-btc/70 break-all">
+                          {txPreview.depositAddress}
+                        </code>
+                      </div>
+
+                      {/* Output 2: OP_RETURN */}
+                      <div className="p-3 bg-sol/5 border border-sol/20 rounded-[12px]">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] font-mono bg-sol/15 text-sol px-1.5 py-0.5 rounded">Output #2</span>
+                          <span className="text-caption text-sol">OP_RETURN (64 bytes)</span>
+                        </div>
+                        <p className="text-body2 font-mono text-foreground mb-1">0.00000000 BTC</p>
+                        <div className="space-y-1">
+                          <div>
+                            <p className="text-[10px] text-gray">ephemeralPub (32 bytes):</p>
+                            <code className="block text-[10px] font-mono text-sol/70 break-all">
+                              {txPreview.opReturnHex.slice(0, 64)}
+                            </code>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-gray">npk (32 bytes):</p>
+                            <code className="block text-[10px] font-mono text-sol/70 break-all">
+                              {txPreview.opReturnHex.slice(64)}
+                            </code>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Output 3: Change (conditional) */}
+                      {txPreview.changeAmount > 0 && (
+                        <div className="p-3 bg-muted border border-gray/20 rounded-[12px]">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-mono bg-gray/15 text-gray px-1.5 py-0.5 rounded">Output #3</span>
+                            <span className="text-caption text-gray-light">Change</span>
+                          </div>
+                          <p className="text-body2 font-mono text-foreground mb-1">
+                            {(txPreview.changeAmount / 1e8).toFixed(8)} BTC
+                            <span className="text-caption text-gray ml-1">({txPreview.changeAmount.toLocaleString()} sats)</span>
+                          </p>
+                          <code className="block text-[10px] font-mono text-gray break-all">
+                            {txPreview.changeAddress}
+                          </code>
+                        </div>
+                      )}
+
+                      {/* Fee */}
+                      <div className="flex items-center justify-between px-2 py-2 border-t border-gray/10">
+                        <span className="text-caption text-gray">Estimated Fee</span>
+                        <span className="text-caption font-mono text-foreground">
+                          {txPreview.estimatedFee.toLocaleString()} sats
+                          <span className="text-gray ml-1">({(txPreview.estimatedFee / 1e8).toFixed(8)} BTC)</span>
+                        </span>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setTxPreview(null)}
+                          disabled={walletDepositing}
+                          className={cn(
+                            "flex-1 py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2",
+                            "bg-muted hover:bg-gray/20 text-foreground border border-gray/20",
+                            "disabled:opacity-50 disabled:cursor-not-allowed"
+                          )}
+                        >
+                          Back
+                        </button>
+                        <button
+                          onClick={confirmAndSign}
+                          disabled={walletDepositing}
+                          className={cn(
+                            "flex-[2] py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2",
+                            "bg-btc hover:bg-btc/90 text-background",
+                            "disabled:bg-gray/20 disabled:text-gray disabled:cursor-not-allowed"
+                          )}
+                        >
+                          {walletDepositing ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Signing...
+                            </>
+                          ) : (
+                            <>
+                              <Wallet className="w-4 h-4" />
+                              Confirm & Sign
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="mb-4 flex flex-col gap-2">
+                  <p className="text-body2 text-gray-light pl-2 mb-1">Connect Bitcoin Wallet</p>
                   <button
-                    onClick={submitWalletDeposit}
-                    disabled={walletDepositing || !walletDepositAmount || parseInt(walletDepositAmount) < 546}
+                    onClick={() => btcWallet.connect("sats-connect")}
+                    disabled={btcWallet.connecting}
                     className={cn(
                       "w-full py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2",
                       "bg-btc hover:bg-btc/90 text-background",
                       "disabled:bg-gray/20 disabled:text-gray disabled:cursor-not-allowed"
                     )}
                   >
-                    {walletDepositing ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Building & Signing...
-                      </>
+                    {btcWallet.connecting ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
-                      <>
-                        <Wallet className="w-4 h-4" />
-                        Deposit via Wallet
-                      </>
+                      <Wallet className="w-4 h-4" />
                     )}
+                    Xverse / Leather
                   </button>
-                </div>
-              ) : (
-                <div className="mb-4">
                   <button
-                    onClick={() => btcWallet.connect()}
+                    onClick={() => btcWallet.connect("unisat")}
+                    disabled={btcWallet.connecting}
                     className={cn(
                       "w-full py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2",
-                      "bg-btc hover:bg-btc/90 text-background"
+                      "bg-[#eb4b13] hover:bg-[#d44311] text-white",
+                      "disabled:bg-gray/20 disabled:text-gray disabled:cursor-not-allowed"
                     )}
                   >
-                    <Wallet className="w-4 h-4" />
-                    Connect Bitcoin Wallet
+                    {btcWallet.connecting ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Wallet className="w-4 h-4" />
+                    )}
+                    UniSat
                   </button>
                 </div>
               )}

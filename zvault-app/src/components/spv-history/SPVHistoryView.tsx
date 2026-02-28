@@ -21,6 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { formatBtc, truncateMiddle } from "@/lib/utils/formatting";
+import { getMempoolExplorerUrl } from "@/lib/btc-network";
 
 // Activity types
 type ActivityType = "deposit" | "transfer" | "withdraw";
@@ -307,7 +308,7 @@ function ActivityCard({
             </a>
             {record.btcTxid && (
               <a
-                href={`https://mempool.space/testnet/tx/${record.btcTxid}`}
+                href={`${getMempoolExplorerUrl()}/tx/${record.btcTxid}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 px-2 py-1 rounded bg-orange-500/10 text-orange-400 text-[10px] hover:bg-orange-500/20"

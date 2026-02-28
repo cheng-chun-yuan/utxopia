@@ -6,11 +6,31 @@ import {
   sendBtcTransaction,
   signTransaction,
   type GetAddressResponse,
-  BitcoinNetworkType,
   AddressPurpose,
 } from "sats-connect";
+import {
+  getSatsConnectNetwork,
+  getUnisatChain,
+  getUnisatFallbackNetwork,
+  getEsploraApiUrl,
+} from "@/lib/btc-network";
 
-const NETWORK = BitcoinNetworkType.Testnet;
+export type BtcWalletType = "sats-connect" | "unisat";
+
+declare global {
+  interface Window {
+    unisat?: {
+      requestAccounts(): Promise<string[]>;
+      getAccounts(): Promise<string[]>;
+      getPublicKey(): Promise<string>;
+      switchNetwork(network: string): Promise<void>;
+      switchChain(chain: string): Promise<void>;
+      signPsbt(psbtHex: string, options?: any): Promise<string>;
+      getNetwork(): Promise<string>;
+      getChain(): Promise<{ enum: string; name: string; network: string }>;
+    };
+  }
+}
 
 /** UTXO descriptor for the connected wallet */
 export interface WalletUtxo {
@@ -28,9 +48,10 @@ export interface BitcoinWalletState {
   publicKey: string | null;
   balance: number | null;
   error: string | null;
+  walletType: BtcWalletType | null;
 
   // Actions
-  connect: () => Promise<void>;
+  connect: (type: BtcWalletType) => Promise<void>;
   disconnect: () => void;
   sendBtc: (toAddress: string, amountSats: number) => Promise<string>;
   refreshBalance: () => Promise<void>;
@@ -47,7 +68,7 @@ export interface BitcoinWalletState {
 async function fetchBalance(addr: string): Promise<number | null> {
   try {
     const response = await fetch(
-      `https://mempool.space/testnet/api/address/${addr}`
+      `${getEsploraApiUrl()}/address/${addr}`
     );
     if (response.ok) {
       const data = await response.json();
@@ -72,15 +93,18 @@ export const useBitcoinWalletStore = create<BitcoinWalletState>((set, get) => ({
   publicKey: null,
   balance: null,
   error: null,
+  walletType: null,
 
   _hydrate: () => {
     if (typeof window === "undefined") return;
     const savedAddress = localStorage.getItem("btc_wallet_address");
     const savedPubKey = localStorage.getItem("btc_wallet_pubkey");
+    const savedType = localStorage.getItem("btc_wallet_type") as BtcWalletType | null;
     if (savedAddress && savedPubKey) {
       set({
         address: savedAddress,
         publicKey: savedPubKey,
+        walletType: savedType,
         connected: true,
       });
       fetchBalance(savedAddress).then((balance) => {
@@ -89,40 +113,75 @@ export const useBitcoinWalletStore = create<BitcoinWalletState>((set, get) => ({
     }
   },
 
-  connect: async () => {
+  connect: async (type: BtcWalletType) => {
     set({ connecting: true, error: null });
 
     try {
-      await getAddress({
-        payload: {
-          purposes: [AddressPurpose.Payment, AddressPurpose.Ordinals],
-          message: "Connect to zVault for BTC deposits",
-          network: { type: NETWORK },
-        },
-        onFinish: async (response: GetAddressResponse) => {
-          const paymentAddr = response.addresses.find(
-            (a) => a.purpose === AddressPurpose.Payment
-          );
+      if (type === "unisat") {
+        if (!window.unisat) {
+          throw new Error("UniSat wallet not installed");
+        }
 
-          if (paymentAddr) {
-            localStorage.setItem("btc_wallet_address", paymentAddr.address);
-            localStorage.setItem("btc_wallet_pubkey", paymentAddr.publicKey);
+        // Use switchChain for testnet4 support (switchNetwork only supports testnet3)
+        if (window.unisat.switchChain) {
+          await window.unisat.switchChain(getUnisatChain());
+        } else {
+          await window.unisat.switchNetwork(getUnisatFallbackNetwork());
+        }
+        const accounts = await window.unisat.requestAccounts();
+        const address = accounts[0];
+        if (!address) throw new Error("No accounts returned from UniSat");
 
-            const balance = await fetchBalance(paymentAddr.address);
+        const publicKey = await window.unisat.getPublicKey();
+        const balance = await fetchBalance(address);
 
-            set({
-              address: paymentAddr.address,
-              publicKey: paymentAddr.publicKey,
-              connected: true,
-              connecting: false,
-              balance,
-            });
-          }
-        },
-        onCancel: () => {
-          set({ error: "Connection cancelled by user", connecting: false });
-        },
-      });
+        localStorage.setItem("btc_wallet_address", address);
+        localStorage.setItem("btc_wallet_pubkey", publicKey);
+        localStorage.setItem("btc_wallet_type", "unisat");
+
+        set({
+          address,
+          publicKey,
+          connected: true,
+          connecting: false,
+          walletType: "unisat",
+          balance,
+        });
+      } else {
+        // sats-connect (Xverse / Leather)
+        await getAddress({
+          payload: {
+            purposes: [AddressPurpose.Payment, AddressPurpose.Ordinals],
+            message: "Connect to zVault for BTC deposits",
+            network: { type: getSatsConnectNetwork() },
+          },
+          onFinish: async (response: GetAddressResponse) => {
+            const paymentAddr = response.addresses.find(
+              (a) => a.purpose === AddressPurpose.Payment
+            );
+
+            if (paymentAddr) {
+              localStorage.setItem("btc_wallet_address", paymentAddr.address);
+              localStorage.setItem("btc_wallet_pubkey", paymentAddr.publicKey);
+              localStorage.setItem("btc_wallet_type", "sats-connect");
+
+              const balance = await fetchBalance(paymentAddr.address);
+
+              set({
+                address: paymentAddr.address,
+                publicKey: paymentAddr.publicKey,
+                connected: true,
+                connecting: false,
+                walletType: "sats-connect",
+                balance,
+              });
+            }
+          },
+          onCancel: () => {
+            set({ error: "Connection cancelled by user", connecting: false });
+          },
+        });
+      }
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to connect wallet";
@@ -134,11 +193,13 @@ export const useBitcoinWalletStore = create<BitcoinWalletState>((set, get) => ({
   disconnect: () => {
     localStorage.removeItem("btc_wallet_address");
     localStorage.removeItem("btc_wallet_pubkey");
+    localStorage.removeItem("btc_wallet_type");
     set({
       connected: false,
       address: null,
       publicKey: null,
       balance: null,
+      walletType: null,
     });
   },
 
@@ -159,7 +220,7 @@ export const useBitcoinWalletStore = create<BitcoinWalletState>((set, get) => ({
     return new Promise((resolve, reject) => {
       sendBtcTransaction({
         payload: {
-          network: { type: NETWORK },
+          network: { type: getSatsConnectNetwork() },
           recipients: [{ address: toAddress, amountSats: BigInt(amountSats) }],
           senderAddress: address,
         },
@@ -175,7 +236,7 @@ export const useBitcoinWalletStore = create<BitcoinWalletState>((set, get) => ({
 
     // Fetch UTXOs from mempool.space
     const res = await fetch(
-      `https://mempool.space/testnet/api/address/${address}/utxo`
+      `${getEsploraApiUrl()}/address/${address}/utxo`
     );
     if (!res.ok) throw new Error(`Failed to fetch UTXOs: ${res.statusText}`);
 
@@ -194,7 +255,7 @@ export const useBitcoinWalletStore = create<BitcoinWalletState>((set, get) => ({
     await Promise.all(
       [...txidSet].map(async (txid) => {
         const txRes = await fetch(
-          `https://mempool.space/testnet/api/tx/${txid}`
+          `${getEsploraApiUrl()}/tx/${txid}`
         );
         if (txRes.ok) txCache.set(txid, await txRes.json());
       })
@@ -215,46 +276,73 @@ export const useBitcoinWalletStore = create<BitcoinWalletState>((set, get) => ({
   },
 
   signAndBroadcastPsbt: async (psbtBase64: string): Promise<{ txid: string }> => {
-    const { connected, address } = get();
+    const { connected, address, walletType } = get();
     if (!connected || !address) throw new Error("Wallet not connected");
 
-    // Sign via sats-connect
-    const signedPsbtBase64 = await new Promise<string>((resolve, reject) => {
-      signTransaction({
-        payload: {
-          network: { type: NETWORK },
-          psbtBase64,
-          message: "Sign zVault deposit transaction",
-          broadcast: false,
-          inputsToSign: [
-            {
-              address,
-              signingIndexes: [0], // Sign all inputs from this address
-            },
-          ],
-        },
-        onFinish: (response: any) => {
-          resolve(response.psbtBase64);
-        },
-        onCancel: () => reject(new Error("PSBT signing cancelled by user")),
-      });
-    });
+    let rawTxHex: string;
 
-    // Decode the signed PSBT to get raw tx hex for broadcast
-    // The wallet returns a signed PSBT; we need to finalize and extract
-    const { Transaction } = await import("@scure/btc-signer");
-    const psbtBytes = Uint8Array.from(atob(signedPsbtBase64), (c) =>
-      c.charCodeAt(0)
-    );
-    const tx = Transaction.fromPSBT(psbtBytes);
-    tx.finalize();
-    const rawTxHex = Array.from(tx.extract())
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+    if (walletType === "unisat") {
+      if (!window.unisat) throw new Error("UniSat wallet not available");
+
+      // Convert base64 PSBT to hex for UniSat
+      const psbtBytes = Uint8Array.from(atob(psbtBase64), (c) =>
+        c.charCodeAt(0)
+      );
+      const psbtHex = Array.from(psbtBytes)
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+
+      // Sign via UniSat
+      const signedPsbtHex = await window.unisat.signPsbt(psbtHex);
+
+      // Convert signed hex back to bytes, finalize, extract raw tx
+      const { Transaction } = await import("@scure/btc-signer");
+      const signedBytes = new Uint8Array(
+        signedPsbtHex.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16))
+      );
+      const tx = Transaction.fromPSBT(signedBytes);
+      tx.finalize();
+      rawTxHex = Array.from(tx.extract())
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+    } else {
+      // Sign via sats-connect
+      const signedPsbtBase64 = await new Promise<string>((resolve, reject) => {
+        signTransaction({
+          payload: {
+            network: { type: getSatsConnectNetwork() },
+            psbtBase64,
+            message: "Sign zVault deposit transaction",
+            broadcast: false,
+            inputsToSign: [
+              {
+                address,
+                signingIndexes: [0],
+              },
+            ],
+          },
+          onFinish: (response: any) => {
+            resolve(response.psbtBase64);
+          },
+          onCancel: () => reject(new Error("PSBT signing cancelled by user")),
+        });
+      });
+
+      // Decode the signed PSBT to get raw tx hex for broadcast
+      const { Transaction } = await import("@scure/btc-signer");
+      const psbtBytes = Uint8Array.from(atob(signedPsbtBase64), (c) =>
+        c.charCodeAt(0)
+      );
+      const tx = Transaction.fromPSBT(psbtBytes);
+      tx.finalize();
+      rawTxHex = Array.from(tx.extract())
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+    }
 
     // Broadcast via mempool.space
     const broadcastRes = await fetch(
-      "https://mempool.space/testnet/api/tx",
+      `${getEsploraApiUrl()}/tx`,
       {
         method: "POST",
         headers: { "Content-Type": "text/plain" },

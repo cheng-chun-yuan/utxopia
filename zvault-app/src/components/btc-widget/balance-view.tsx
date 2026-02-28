@@ -13,6 +13,7 @@ import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
 import { useNoteStorage, type StoredNote } from "@/hooks/use-note-storage";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import type { DepositStatusResponse, EscrowStatus } from "@/lib/api/types";
+import { getMempoolExplorerUrl } from "@/lib/btc-network";
 
 // Status badge config
 const STATUS_CONFIG: Record<EscrowStatus | "unknown", { label: string; color: string; bg: string; spinning?: boolean }> = {
@@ -105,7 +106,7 @@ const DepositCard = memo(({ note, status, onRefresh, isRefreshing }: {
           </div>
           <ProgressBar current={status.confirmations} total={status.required_confirmations} />
           <a
-            href={`https://mempool.space/testnet/tx/${status.btc_txid}`}
+            href={`${getMempoolExplorerUrl()}/tx/${status.btc_txid}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 text-xs text-orange-500 hover:text-orange-400"
@@ -117,7 +118,7 @@ const DepositCard = memo(({ note, status, onRefresh, isRefreshing }: {
 
       {/* Mempool link */}
       <a
-        href={`https://mempool.space/testnet/address/${note.taprootAddress}`}
+        href={`${getMempoolExplorerUrl()}/address/${note.taprootAddress}`}
         target="_blank"
         rel="noopener noreferrer"
         className="flex items-center justify-center gap-2 text-xs text-gray hover:text-gray-light pt-2"
@@ -286,7 +287,7 @@ export function BalanceView() {
                 )}
                 {lookupResult.btc_txid && (
                   <a
-                    href={`https://mempool.space/testnet/tx/${lookupResult.btc_txid}`}
+                    href={`${getMempoolExplorerUrl()}/tx/${lookupResult.btc_txid}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1 text-xs text-orange-500"

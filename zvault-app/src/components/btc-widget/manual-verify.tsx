@@ -22,6 +22,8 @@ import {
 } from "@/lib/spv/mempool";
 import { formatBlockHeaderForChain, formatMerkleProofForChain } from "@/lib/spv/verify";
 import { zBTCApi } from "@/lib/api/client";
+import { getEsploraApiUrl, getMempoolExplorerUrl } from "@/lib/btc-network";
+import { getConfig } from "@zvault/sdk";
 
 interface VerificationData {
   txInfo: TransactionInfo;
@@ -63,7 +65,7 @@ export function ManualVerify() {
     try {
       // Fetch transactions for address from mempool.space
       const response = await fetch(
-        `https://mempool.space/testnet/api/address/${taprootAddress}/txs`
+        `${getEsploraApiUrl()}/address/${taprootAddress}/txs`
       );
 
       if (!response.ok) {
@@ -122,7 +124,8 @@ export function ManualVerify() {
       console.log("[Verify] Fetching data for txid:", transactionId);
 
       // Get transaction info
-      const txInfo = await getTransactionInfo(transactionId, "testnet");
+      const btcNetwork = getConfig().bitcoinNetwork;
+      const txInfo = await getTransactionInfo(transactionId, btcNetwork);
 
       if (!txInfo.confirmed || !txInfo.blockHash) {
         setError("Transaction not confirmed yet");
@@ -130,14 +133,14 @@ export function ManualVerify() {
       }
 
       // Get block header
-      const blockHeader = await getBlockHeader(txInfo.blockHash, "testnet");
+      const blockHeader = await getBlockHeader(txInfo.blockHash, btcNetwork);
 
       // Get merkle proof
-      const merkleProof = await getMerkleProof(transactionId, "testnet");
+      const merkleProof = await getMerkleProof(transactionId, btcNetwork);
       merkleProof.blockHash = txInfo.blockHash;
 
       // Get confirmations
-      const tipHeight = await getTipHeight("testnet");
+      const tipHeight = await getTipHeight(btcNetwork);
       const confirmations = tipHeight - txInfo.blockHeight! + 1;
 
       setVerificationData({
@@ -474,7 +477,7 @@ export function ManualVerify() {
           {/* View on Explorer */}
           <div className="flex gap-2">
             <a
-              href={`https://mempool.space/testnet/tx/${txid}`}
+              href={`${getMempoolExplorerUrl()}/tx/${txid}`}
               target="_blank"
               rel="noopener noreferrer"
               className="btn-tertiary flex-1 justify-center"
@@ -482,7 +485,7 @@ export function ManualVerify() {
               View TX <ExternalLink className="w-3 h-3" />
             </a>
             <a
-              href={`https://mempool.space/testnet/block/${verificationData.blockHeader.hash}`}
+              href={`${getMempoolExplorerUrl()}/block/${verificationData.blockHeader.hash}`}
               target="_blank"
               rel="noopener noreferrer"
               className="btn-tertiary flex-1 justify-center"
