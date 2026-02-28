@@ -279,84 +279,75 @@ export const useBitcoinWalletStore = create<BitcoinWalletState>((set, get) => ({
     const { connected, address, walletType } = get();
     if (!connected || !address) throw new Error("Wallet not connected");
 
-    let rawTxHex: string;
+    // Parse PSBT to count inputs for signing all of them
+    const { Transaction } = await import("@scure/btc-signer");
+    const parsedPsbtBytes = Uint8Array.from(atob(psbtBase64), (c) => c.charCodeAt(0));
+    const parsedTx = Transaction.fromPSBT(parsedPsbtBytes, { allowUnknownOutputs: true });
+    const inputCount = parsedTx.inputsLength;
+    const signingIndexes = Array.from({ length: inputCount }, (_, i) => i);
 
     if (walletType === "unisat") {
       if (!window.unisat) throw new Error("UniSat wallet not available");
 
       // Convert base64 PSBT to hex for UniSat
-      const psbtBytes = Uint8Array.from(atob(psbtBase64), (c) =>
-        c.charCodeAt(0)
-      );
-      const psbtHex = Array.from(psbtBytes)
+      const psbtHex = Array.from(parsedPsbtBytes)
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("");
 
-      // Sign via UniSat
-      const signedPsbtHex = await window.unisat.signPsbt(psbtHex);
+      // Sign via UniSat with autoFinalized — wallet handles finalization
+      const signedPsbtHex = await window.unisat.signPsbt(psbtHex, {
+        autoFinalized: true,
+      });
 
-      // Convert signed hex back to bytes, finalize, extract raw tx
-      const { Transaction } = await import("@scure/btc-signer");
+      // Extract raw tx from finalized PSBT (no need to call finalize())
       const signedBytes = new Uint8Array(
         signedPsbtHex.match(/.{1,2}/g)!.map((byte) => parseInt(byte, 16))
       );
-      const tx = Transaction.fromPSBT(signedBytes);
-      tx.finalize();
-      rawTxHex = Array.from(tx.extract())
+      const tx = Transaction.fromPSBT(signedBytes, { allowUnknownOutputs: true, allowUnknownInputs: true });
+      const rawTxHex = Array.from(tx.extract())
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("");
+
+      // Broadcast via mempool.space
+      const broadcastRes = await fetch(`${getEsploraApiUrl()}/tx`, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: rawTxHex,
+      });
+
+      if (!broadcastRes.ok) {
+        const errText = await broadcastRes.text();
+        throw new Error(`Broadcast failed: ${errText}`);
+      }
+
+      const txid = await broadcastRes.text();
+      return { txid: txid.trim() };
     } else {
-      // Sign via sats-connect
-      const signedPsbtBase64 = await new Promise<string>((resolve, reject) => {
+      // sats-connect (Xverse / Leather): let wallet broadcast directly
+      const txid = await new Promise<string>((resolve, reject) => {
         signTransaction({
           payload: {
             network: { type: getSatsConnectNetwork() },
             psbtBase64,
             message: "Sign zVault deposit transaction",
-            broadcast: false,
+            broadcast: true,
             inputsToSign: [
               {
                 address,
-                signingIndexes: [0],
+                signingIndexes,
               },
             ],
           },
           onFinish: (response: any) => {
-            resolve(response.psbtBase64);
+            // With broadcast: true, response contains txid
+            resolve(typeof response === "string" ? response : response.txid || response);
           },
           onCancel: () => reject(new Error("PSBT signing cancelled by user")),
         });
       });
 
-      // Decode the signed PSBT to get raw tx hex for broadcast
-      const { Transaction } = await import("@scure/btc-signer");
-      const psbtBytes = Uint8Array.from(atob(signedPsbtBase64), (c) =>
-        c.charCodeAt(0)
-      );
-      const tx = Transaction.fromPSBT(psbtBytes);
-      tx.finalize();
-      rawTxHex = Array.from(tx.extract())
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
+      return { txid: txid.trim() };
     }
-
-    // Broadcast via mempool.space
-    const broadcastRes = await fetch(
-      `${getEsploraApiUrl()}/tx`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "text/plain" },
-        body: rawTxHex,
-      }
-    );
-
-    if (!broadcastRes.ok) {
-      const errText = await broadcastRes.text();
-      throw new Error(`Broadcast failed: ${errText}`);
-    }
-
-    const txid = await broadcastRes.text();
-    return { txid: txid.trim() };
   },
 
   clearError: () => set({ error: null }),
