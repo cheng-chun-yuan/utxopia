@@ -42,17 +42,15 @@ export { DEMO_INSTRUCTION };
 /**
  * Derive Stealth Announcement PDA
  *
- * Note: Uses bytes 1-32 of ephemeral_pub (skips prefix byte) to stay within
- * Solana's 32-byte max seed length. Must match on-chain derivation.
+ * Ed25519 ephemeral pub is 32 bytes — use directly as PDA seed.
+ * Must match on-chain derivation: seeds = ["stealth", ephemeral_pub]
  */
 export function deriveStealthAnnouncementPDA(
   ephemeralPub: Uint8Array,
   programId: PublicKey = ZVAULT_PROGRAM_ID
 ): [PublicKey, number] {
-  // On-chain uses ephemeral_pub[1..33] (skip prefix byte, use x-coordinate only)
-  const ephemeralPubTruncated = ephemeralPub.slice(1, 33);
   return PublicKey.findProgramAddressSync(
-    [Buffer.from(PDA_SEEDS.STEALTH), ephemeralPubTruncated],
+    [Buffer.from(PDA_SEEDS.STEALTH), ephemeralPub],
     programId
   );
 }
@@ -64,17 +62,17 @@ export function deriveStealthAnnouncementPDA(
 export interface AddDemoStealthParams {
   payer: PublicKey;
   ephemeralPub: Uint8Array;
-  commitment: Uint8Array;
-  encryptedAmount: Uint8Array;
+  npk: Uint8Array;
+  amountSats: bigint;
 }
 
 /**
- * Build ADD_DEMO_STEALTH instruction
+ * Build ADD_DEMO_STEALTH instruction (npk-based, matches real deposits)
  */
 export function buildAddDemoStealthInstruction(
   params: AddDemoStealthParams
 ): TransactionInstruction {
-  const { payer, ephemeralPub, commitment, encryptedAmount } = params;
+  const { payer, ephemeralPub, npk, amountSats } = params;
 
   const [poolState] = derivePoolStatePDA();
   const [commitmentTree] = deriveCommitmentTreePDA();
@@ -82,7 +80,7 @@ export function buildAddDemoStealthInstruction(
   const poolVault = derivePoolVaultATA();
 
   // Use SDK's data builder
-  const data = buildAddDemoStealthData(ephemeralPub, commitment, encryptedAmount);
+  const data = buildAddDemoStealthData(ephemeralPub, npk, amountSats);
 
   return new TransactionInstruction({
     keys: [

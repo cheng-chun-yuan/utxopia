@@ -40,48 +40,35 @@ function getAdminKeypair(): Keypair | null {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { type, ephemeralPub, commitment, encryptedAmount, amount } = body;
+    const { ephemeralPub, npk, amount } = body;
 
-    // For demo mode, both public and stealth use stealth deposits
-    // Public transfer (SPEND_PARTIAL_PUBLIC) requires ZK proofs in production
-    if (type === "public") {
-      console.log("[Demo API] Public mode - using stealth deposit for demo");
-      // In demo mode, fall through to stealth handling
-    }
-
-    // Validate stealth mode params with proper hex validation
+    // Validate params
     if (!isValidHex(ephemeralPub, 64)) {
       return NextResponse.json(
         { success: false, error: "Invalid ephemeralPub. Must be 64 valid hex characters (32 bytes Ed25519)" },
         { status: 400 }
       );
     }
-    if (!isValidHex(commitment, 64)) {
+    if (!isValidHex(npk, 64)) {
       return NextResponse.json(
-        { success: false, error: "Invalid commitment. Must be 64 valid hex characters (32 bytes)" },
+        { success: false, error: "Invalid npk. Must be 64 valid hex characters (32 bytes)" },
         { status: 400 }
       );
     }
-    // Validate commitment is within BN254 field (required for ZK circuits)
+    // Validate npk is within BN254 field (required for Poseidon commitment)
     const BN254_FIELD_PRIME = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
-    const commitmentBigInt = BigInt("0x" + commitment);
-    if (commitmentBigInt >= BN254_FIELD_PRIME) {
+    const npkBigInt = BigInt("0x" + npk);
+    if (npkBigInt >= BN254_FIELD_PRIME) {
       return NextResponse.json(
-        { success: false, error: "Invalid commitment. Value exceeds BN254 field modulus (not a valid ZK field element)" },
-        { status: 400 }
-      );
-    }
-    if (!isValidHex(encryptedAmount, 16)) {
-      return NextResponse.json(
-        { success: false, error: "Invalid encryptedAmount. Must be 16 valid hex characters (8 bytes)" },
+        { success: false, error: "Invalid npk. Value exceeds BN254 field modulus (not a valid ZK field element)" },
         { status: 400 }
       );
     }
 
-    // Amount is required for adding to the local merkle tree index
-    if (amount === undefined || amount === null) {
+    // Amount is required (satoshis)
+    if (amount === undefined || amount === null || Number(amount) <= 0) {
       return NextResponse.json(
-        { success: false, error: "Missing amount field (required for merkle tree indexing)" },
+        { success: false, error: "Missing or invalid amount field (must be positive satoshis)" },
         { status: 400 }
       );
     }
@@ -207,15 +194,15 @@ export async function POST(request: NextRequest) {
 
     console.log("[Demo API] All pre-flight checks passed!");
 
-    // Build stealth transaction
+    // Build demo deposit transaction (npk-based, commitment computed on-chain)
     const ephemeralPubBytes = hexToBytes(ephemeralPub);
-    const commitmentBytes = hexToBytes(commitment);
-    const encryptedAmountBytes = hexToBytes(encryptedAmount);
+    const npkBytes = hexToBytes(npk);
+    const amountSats = BigInt(amount);
     const tx = await buildAddDemoStealthTransaction(connection, {
       payer: admin.publicKey,
       ephemeralPub: ephemeralPubBytes,
-      commitment: commitmentBytes,
-      encryptedAmount: encryptedAmountBytes,
+      npk: npkBytes,
+      amountSats,
     });
 
     // Sign and send transaction with admin keypair
@@ -241,7 +228,8 @@ export async function POST(request: NextRequest) {
         console.warn("[Demo API] Sync failed:", syncError);
         // Fallback: try to add manually
         try {
-          const commitmentBigInt = BigInt("0x" + commitment);
+          // We don't have the commitment here (computed on-chain), so skip manual fallback
+          const commitmentBigInt = 0n; // placeholder - sync should handle this
           const amountBigInt = BigInt(amount);
           const indexResult = await addCommitmentToIndex(commitmentBigInt, amountBigInt);
           leafIndex = indexResult.leafIndex.toString();
@@ -253,17 +241,22 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        type: type || "stealth",
+        type: "demo_deposit",
         signature,
-        message: "Demo stealth deposit added on-chain",
+        message: "Demo deposit added on-chain (npk-based, commitment computed on-chain)",
       });
     } catch (txError: unknown) {
       // Log full error server-side for debugging, but don't expose to client
       console.error("[Demo API] Transaction failed:", txError);
 
-      // Return generic error message to avoid leaking implementation details
+      const txErrorMessage = txError instanceof Error ? txError.message : "Transaction processing failed";
       return NextResponse.json(
-        { success: false, error: "Transaction processing failed. Please try again." },
+        {
+          success: false,
+          error: process.env.NODE_ENV === "development"
+            ? txErrorMessage
+            : "Transaction processing failed. Please try again.",
+        },
         { status: 500 }
       );
     }

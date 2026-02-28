@@ -209,6 +209,8 @@ interface MempoolTransaction {
     block_time?: number;
   };
   vout: Array<{
+    scriptpubkey: string;
+    scriptpubkey_type: string;
     scriptpubkey_address?: string;
     value: number;
   }>;
@@ -294,6 +296,17 @@ export async function getDepositStatusFromMempool(
       };
     }
 
+    // Extract OP_RETURN data (scriptpubkey_type === "op_return")
+    // Format: 6a40<64 bytes hex> where 6a=OP_RETURN, 40=OP_PUSHBYTES_64
+    let opReturnHex: string | undefined;
+    for (const vout of depositTx.vout) {
+      if (vout.scriptpubkey_type === "op_return" && vout.scriptpubkey.length >= 132) {
+        // Strip prefix: 6a (OP_RETURN) + 40 (PUSHBYTES_64) = 4 hex chars
+        opReturnHex = vout.scriptpubkey.slice(4);
+        break;
+      }
+    }
+
     // Calculate confirmations
     let confirmations = 0;
     if (depositTx.status.confirmed && depositTx.status.block_height) {
@@ -331,6 +344,7 @@ export async function getDepositStatusFromMempool(
       can_claim: canClaim,
       claimed: false,
       refund_available: false,
+      op_return_hex: opReturnHex,
     };
   } catch (error) {
     console.error("Failed to fetch from mempool.space:", error);

@@ -80,8 +80,8 @@ async function fetchBalance(addr: string): Promise<number | null> {
         (data.mempool_stats?.spent_txo_sum || 0);
       return confirmed + unconfirmed;
     }
-  } catch (err) {
-    console.error("Failed to fetch balance:", err);
+  } catch {
+    // Network errors are expected when mempool API is unreachable
   }
   return null;
 }

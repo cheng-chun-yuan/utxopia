@@ -166,7 +166,8 @@ export function buildDepositPsbt(params: BuildDepositPsbtParams): BuildDepositPs
   const actualFee = hasChange ? feeWithChange : totalInput - depositAmountSats;
 
   // Build the transaction using @scure/btc-signer
-  const tx = new btc.Transaction();
+  // allowUnknownOutputs is required for the OP_RETURN output script
+  const tx = new btc.Transaction({ allowUnknownOutputs: true });
 
   // Add inputs
   for (const utxo of senderUtxos) {

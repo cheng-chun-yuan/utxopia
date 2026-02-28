@@ -4,10 +4,11 @@ import React, { useState, useEffect, useCallback, useMemo, memo } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import {
   AlertCircle, RefreshCw, Clock, CheckCircle2, XCircle,
-  ExternalLink, Key, Copy, Check, ArrowDownToLine, Loader2, Search, ChevronDown
+  ExternalLink, Key, Copy, Check, ArrowDownToLine, Loader2, Search, ChevronDown, Radio
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getDepositStatusFromMempool } from "@/lib/api/client";
+import { registerDeposit } from "@/lib/api/deposits";
 import { formatBtc, truncateMiddle } from "@/lib/utils/formatting";
 import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
 import { useNoteStorage, type StoredNote } from "@/hooks/use-note-storage";
@@ -51,6 +52,74 @@ const ProgressBar = memo(({ current, total }: { current: number; total: number }
   </div>
 ));
 ProgressBar.displayName = "ProgressBar";
+
+// OP_RETURN data display (ephemeralPub + npk)
+const OpReturnData = memo(({ hex }: { hex: string }) => {
+  if (hex.length < 128) return null;
+  return (
+    <div className="space-y-1.5 pt-2 border-t border-gray/15">
+      <span className="text-xs text-gray">OP_RETURN (64 bytes)</span>
+      <div className="bg-background rounded-lg p-2 space-y-1.5">
+        <div>
+          <p className="text-[10px] text-gray">ephemeralPub (32 bytes):</p>
+          <code className="block text-[10px] font-mono text-purple-400 break-all">{hex.slice(0, 64)}</code>
+        </div>
+        <div>
+          <p className="text-[10px] text-gray">npk (32 bytes):</p>
+          <code className="block text-[10px] font-mono text-purple-400 break-all">{hex.slice(64, 128)}</code>
+        </div>
+      </div>
+    </div>
+  );
+});
+OpReturnData.displayName = "OpReturnData";
+
+// Track deposit button — registers with backend tracker
+const TrackDepositButton = memo(({ taprootAddress, amountSats, opReturnHex }: {
+  taprootAddress: string;
+  amountSats: number;
+  opReturnHex?: string;
+}) => {
+  const [tracking, setTracking] = useState(false);
+  const [tracked, setTracked] = useState(false);
+  const [trackError, setTrackError] = useState<string | null>(null);
+
+  const handleTrack = async () => {
+    setTracking(true);
+    setTrackError(null);
+    try {
+      await registerDeposit(taprootAddress, opReturnHex || "", amountSats);
+      setTracked(true);
+    } catch (err) {
+      setTrackError(err instanceof Error ? err.message : "Failed to register");
+    } finally {
+      setTracking(false);
+    }
+  };
+
+  if (tracked) {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+        <Check className="w-3 h-3" /> Registered with tracker
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      <button
+        onClick={handleTrack}
+        disabled={tracking}
+        className="w-full flex items-center justify-center gap-2 p-2 rounded-lg text-xs font-medium bg-purple-500/10 border border-purple-500/30 text-purple-400 hover:bg-purple-500/20 disabled:opacity-50"
+      >
+        {tracking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Radio className="w-3.5 h-3.5" />}
+        {tracking ? "Registering..." : "Track Deposit"}
+      </button>
+      {trackError && <p className="text-[10px] text-red-400">{trackError}</p>}
+    </div>
+  );
+});
+TrackDepositButton.displayName = "TrackDepositButton";
 
 // Deposit card
 const DepositCard = memo(({ note, status, onRefresh, isRefreshing }: {
@@ -115,6 +184,9 @@ const DepositCard = memo(({ note, status, onRefresh, isRefreshing }: {
           </a>
         </div>
       )}
+
+      {/* OP_RETURN data */}
+      {status?.op_return_hex && <OpReturnData hex={status.op_return_hex} />}
 
       {/* Mempool link */}
       <a
@@ -294,6 +366,15 @@ export function BalanceView() {
                   >
                     View tx <ExternalLink className="w-3 h-3" />
                   </a>
+                )}
+                {lookupResult.op_return_hex && <OpReturnData hex={lookupResult.op_return_hex} />}
+                {/* Track deposit button — register with backend */}
+                {lookupResult.found && lookupResult.amount_sats && (
+                  <TrackDepositButton
+                    taprootAddress={lookupAddress.trim()}
+                    amountSats={lookupResult.amount_sats}
+                    opReturnHex={lookupResult.op_return_hex}
+                  />
                 )}
                 <button onClick={() => { setLookupResult(null); setLookupAddress(""); }} className="text-xs text-gray hover:text-gray-light">
                   Clear

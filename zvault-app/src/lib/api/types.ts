@@ -55,6 +55,8 @@ export interface DepositStatusResponse {
   claimed: boolean;
   refund_available: boolean;
   refund_available_at?: number;
+  /** OP_RETURN data hex (64 bytes = 128 hex chars): ephemeralPub(32) + npk(32) */
+  op_return_hex?: string;
 }
 
 // Blocklist management types (demo mode)

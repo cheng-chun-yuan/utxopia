@@ -1,6 +1,7 @@
 "use client";
 
 import { useBitcoinWallet } from "@/contexts/bitcoin-wallet-context";
+import type { BtcWalletType } from "@/stores/bitcoin-wallet-store";
 import { Spinner } from "@/components/ui/spinner";
 import { truncateMiddle } from "@/lib/utils/formatting";
 
@@ -18,9 +19,9 @@ export function BitcoinWalletSelector({
   const { connected, connecting, address, connect, disconnect, error } =
     useBitcoinWallet();
 
-  const handleConnect = async () => {
+  const handleConnect = async (type: BtcWalletType) => {
     try {
-      await connect();
+      await connect(type);
       onConnect?.();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Connection failed";
@@ -49,23 +50,43 @@ export function BitcoinWalletSelector({
 
   return (
     <div className={className}>
-      <button
-        onClick={handleConnect}
-        disabled={connecting}
-        className="btn-primary w-full"
-      >
-        {connecting ? (
-          <>
-            <Spinner />
-            <span>Connecting...</span>
-          </>
-        ) : (
-          <>
-            <BitcoinIcon className="w-5 h-5" />
-            <span>Connect Bitcoin Wallet</span>
-          </>
-        )}
-      </button>
+      <div className="flex gap-2">
+        <button
+          onClick={() => handleConnect("sats-connect")}
+          disabled={connecting}
+          className="btn-primary flex-1"
+        >
+          {connecting ? (
+            <>
+              <Spinner />
+              <span>Connecting...</span>
+            </>
+          ) : (
+            <>
+              <BitcoinIcon className="w-5 h-5" />
+              <span>Xverse / Leather</span>
+            </>
+          )}
+        </button>
+        <button
+          onClick={() => handleConnect("unisat")}
+          disabled={connecting}
+          className="btn-primary flex-1"
+          style={{ backgroundColor: "#eb4b13" }}
+        >
+          {connecting ? (
+            <>
+              <Spinner />
+              <span>Connecting...</span>
+            </>
+          ) : (
+            <>
+              <BitcoinIcon className="w-5 h-5" />
+              <span>UniSat</span>
+            </>
+          )}
+        </button>
+      </div>
       {error && (
         <div className="warning-box mt-2">
           <span>⚠</span>

@@ -24,33 +24,30 @@ export const DEMO_INSTRUCTION = {
 // =============================================================================
 
 /**
- * Build instruction data for ADD_DEMO_STEALTH
+ * Build instruction data for ADD_DEMO_STEALTH (npk-based, matches real deposits)
  *
  * Layout:
  * - discriminator: 1 byte (13)
  * - ephemeral_pub: 32 bytes (Ed25519 public key)
- * - commitment: 32 bytes
- * - encrypted_amount: 8 bytes
+ * - npk: 32 bytes (note public key, big-endian BN254 field element)
+ * - amount_sats: 8 bytes (u64 little-endian)
  * Total: 73 bytes
  *
  * @param ephemeralPub - Ed25519 ephemeral public key (32 bytes)
- * @param commitment - Commitment hash (32 bytes)
- * @param encryptedAmount - Encrypted amount (8 bytes)
+ * @param npk - Note public key (32 bytes, big-endian)
+ * @param amountSats - Amount in satoshis
  * @returns Instruction data buffer
  */
 export function buildAddDemoStealthData(
   ephemeralPub: Uint8Array,
-  commitment: Uint8Array,
-  encryptedAmount: Uint8Array
+  npk: Uint8Array,
+  amountSats: bigint
 ): Uint8Array {
   if (ephemeralPub.length !== 32) {
     throw new Error(`Ephemeral pub must be 32 bytes, got ${ephemeralPub.length}`);
   }
-  if (commitment.length !== 32) {
-    throw new Error(`Commitment must be 32 bytes, got ${commitment.length}`);
-  }
-  if (encryptedAmount.length !== 8) {
-    throw new Error(`Encrypted amount must be 8 bytes, got ${encryptedAmount.length}`);
+  if (npk.length !== 32) {
+    throw new Error(`NPK must be 32 bytes, got ${npk.length}`);
   }
 
   // Total size: 1 + 32 + 32 + 8 = 73 bytes
@@ -62,10 +59,12 @@ export function buildAddDemoStealthData(
   data.set(ephemeralPub, offset);
   offset += 32;
 
-  data.set(commitment, offset);
+  data.set(npk, offset);
   offset += 32;
 
-  data.set(encryptedAmount, offset);
+  // Write amount_sats as u64 little-endian
+  const view = new DataView(data.buffer, data.byteOffset + offset, 8);
+  view.setBigUint64(0, amountSats, true); // little-endian
 
   return data;
 }
@@ -75,8 +74,8 @@ export function buildAddDemoStealthData(
  */
 export function parseAddDemoStealthData(data: Uint8Array): {
   ephemeralPub: Uint8Array;
-  commitment: Uint8Array;
-  encryptedAmount: Uint8Array;
+  npk: Uint8Array;
+  amountSats: bigint;
 } {
   if (data.length !== 73) {
     throw new Error(`Invalid data length: expected 73, got ${data.length}`);
@@ -88,9 +87,11 @@ export function parseAddDemoStealthData(data: Uint8Array): {
     );
   }
 
+  const view = new DataView(data.buffer, data.byteOffset + 65, 8);
+
   return {
     ephemeralPub: data.slice(1, 33),
-    commitment: data.slice(33, 65),
-    encryptedAmount: data.slice(65, 73),
+    npk: data.slice(33, 65),
+    amountSats: view.getBigUint64(0, true),
   };
 }

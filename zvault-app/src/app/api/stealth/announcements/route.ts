@@ -20,6 +20,7 @@ import { getHeliusConnection } from "@/lib/helius-server";
 
 interface CachedAnnouncement {
   pubkey: string;
+  announcementType: number; // 0=deposit, 1=transfer
   ephemeralPub: string; // hex
   encryptedAmount: string; // hex
   commitment: string; // hex
@@ -70,6 +71,7 @@ async function fetchAnnouncements(): Promise<CacheData> {
         console.log(`[StealthAPI] Announcement: leafIndex=${parsed.leafIndex}, commitment=${commitmentHex.slice(0, 16)}...`);
         announcements.push({
           pubkey: account.pubkey.toBase58(),
+          announcementType: parsed.announcementType,
           ephemeralPub: Buffer.from(parsed.ephemeralPub).toString("hex"),
           encryptedAmount: Buffer.from(parsed.encryptedAmount).toString("hex"),
           commitment: commitmentHex,

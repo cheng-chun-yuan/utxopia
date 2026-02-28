@@ -3,6 +3,7 @@ export {
   useBitcoinWalletStore,
   useBitcoinWallet,
   type BitcoinWalletState,
+  type BtcWalletType,
 } from "./bitcoin-wallet-store";
 
 export {

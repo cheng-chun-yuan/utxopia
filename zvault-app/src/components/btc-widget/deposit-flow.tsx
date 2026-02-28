@@ -15,8 +15,9 @@ import {
   decodeStealthMetaAddress,
   bytesToHex,
   hexToBytes,
-  createStealthDeposit,
+  createStealthDepositWithKeys,
   createNonInteractiveDeposit,
+  bigintToBytes,
   buildDepositPsbt,
   selectUtxos,
   getConfig,
@@ -25,6 +26,8 @@ import {
 } from "@zvault/sdk";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useBitcoinWalletStore } from "@/stores/bitcoin-wallet-store";
+import { useNotesStore } from "@/stores/notes-store";
+import { registerDeposit } from "@/lib/api/deposits";
 import { getBtcSignerNetwork } from "@/lib/btc-network";
 
 export function DepositFlow() {
@@ -68,14 +71,11 @@ export function DepositFlow() {
   const btcWallet = useBitcoinWalletStore();
 
   const resetFlow = () => {
-    // Stealth mode reset
     setError(null);
     setRecipient("");
     setResolvedMeta(null);
-    // Demo mode reset
     setDemoAmount("10000");
     setDemoResult(null);
-    // Wallet deposit reset
     setWalletDepositAmount("10000");
     setWalletDepositResult(null);
     setDepositPreview(null);
@@ -99,33 +99,33 @@ export function DepositFlow() {
     setError(null);
 
     try {
-      // Create stealth deposit (single ephemeral key pattern)
-      const stealthDepositData = await createStealthDeposit(resolvedMeta, amount);
+      // Create stealth deposit with keys to get npk (note public key)
+      const stealthData = await createStealthDepositWithKeys(resolvedMeta, amount);
+
+      // Convert npk (bigint) to 32-byte big-endian
+      const npkBytes = bigintToBytes(stealthData.stealthPubKeyX);
 
       // Call API - relayer submits transaction (keeps user anonymous)
+      // Send ephemeralPub + npk + amount (commitment computed on-chain)
       const response = await fetch("/api/demo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          type: "stealth",
-          ephemeralPub: bytesToHex(stealthDepositData.ephemeralPub),
-          commitment: bytesToHex(stealthDepositData.commitment),
-          encryptedAmount: bytesToHex(stealthDepositData.encryptedAmount),
-          amount: amount.toString(), // For merkle tree indexing
+          ephemeralPub: bytesToHex(stealthData.ephemeralPub),
+          npk: bytesToHex(npkBytes),
+          amount: amount.toString(),
         }),
       });
 
       const result = await response.json();
       if (!result.success) {
-        throw new Error(result.error || "Failed to submit demo stealth deposit");
+        throw new Error(result.error || "Failed to submit demo deposit");
       }
 
       setDemoResult({
         signature: result.signature,
-        ephemeralPubKey: bytesToHex(stealthDepositData.ephemeralPub),
+        ephemeralPubKey: bytesToHex(stealthData.ephemeralPub),
       });
-
-      notifySuccess("Mock stealth deposit added on-chain!");
     } catch (err) {
       console.error("Demo deposit error:", err);
       setError(err instanceof Error ? err.message : "Failed to submit demo deposit");
@@ -285,13 +285,31 @@ export function DepositFlow() {
 
       const { txid } = await btcWallet.signAndBroadcastPsbt(psbtResult.psbtBase64);
 
+      // Save to local notes store so it appears in "Bitcoin Deposits" view
+      const commitment = depositPreview.opReturnHex; // ephemeralPub + npk
+      useNotesStore.getState().saveNote({
+        commitment,
+        noteExport: txid,
+        amountSats: depositPreview.depositAmountSats,
+        taprootAddress: depositPreview.depositAddress,
+        expiresAt: Math.floor(Date.now() / 1000) + 86400 * 30, // 30 days
+      });
+
+      // Register with backend tracker (fire-and-forget)
+      registerDeposit(
+        depositPreview.depositAddress,
+        commitment,
+        depositPreview.depositAmountSats,
+      ).catch((err) => {
+        console.warn("Failed to register deposit with tracker:", err);
+      });
+
       setWalletDepositResult({
         txid,
         depositAddress: depositPreview.depositAddress,
         opReturnHex: depositPreview.opReturnHex,
       });
       setDepositPreview(null);
-      notifySuccess(`Deposit broadcast! TxID: ${txid.slice(0, 12)}...`);
       btcWallet.refreshBalance();
     } catch (err) {
       console.error("Wallet deposit error:", err);
@@ -838,11 +856,22 @@ export function DepositFlow() {
                   </code>
                 </div>
 
-                <div>
-                  <p className="text-caption text-gray mb-1">OP_RETURN (ephemeralPub + npk):</p>
-                  <code className="block text-[10px] font-mono text-sol bg-muted p-2 rounded-[8px] break-all">
-                    {walletDepositResult.opReturnHex}
-                  </code>
+                <div className="space-y-2">
+                  <p className="text-caption text-gray">OP_RETURN Data (64 bytes):</p>
+                  <div className="bg-muted p-2 rounded-[8px] space-y-1.5">
+                    <div>
+                      <p className="text-[10px] text-gray">ephemeralPub (32 bytes):</p>
+                      <code className="block text-[10px] font-mono text-sol break-all">
+                        {walletDepositResult.opReturnHex.slice(0, 64)}
+                      </code>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-gray">npk (32 bytes):</p>
+                      <code className="block text-[10px] font-mono text-sol break-all">
+                        {walletDepositResult.opReturnHex.slice(64)}
+                      </code>
+                    </div>
+                  </div>
                 </div>
               </div>
 

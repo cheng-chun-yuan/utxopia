@@ -1,24 +1,15 @@
 //! Add Demo Stealth instruction (Admin only)
 //!
 //! Creates a stealth deposit for demo purposes without requiring real BTC.
-//! Adds a user-owned commitment to the Merkle tree and publishes ephemeral
-//! public key so user can find their balance with viewing key and spend
-//! with spending key.
+//! Works exactly like verify_stealth_deposit but skips SPV verification.
 //!
-//! Demo flow (EIP-5564/DKSAP pattern):
-//! 1. SDK generates Ed25519 ephemeral keypair
-//! 2. SDK computes sharedSecret = X25519(ephemeral.priv, viewingPubX25519)
-//! 3. SDK derives stealthPub = spendingPub + hash(sharedSecret) * G
-//! 4. SDK computes commitment = Poseidon2(stealthPub.x, amount)
-//! 5. This instruction adds commitment to Merkle tree
-//! 6. This instruction creates stealth announcement with ephemeral pubkey
-//! 7. User scans announcements with viewing key to detect deposits
-//! 8. User generates ZK proof with spending key to claim
-//!
-//! NOTE: The `amount` field is encrypted (XOR with shared secret) for privacy.
-//! The announcement stores the encrypted amount so only the recipient can
-//! decrypt it. For minting zBTC, we use a fixed demo amount since the
-//! encrypted value is not the real amount.
+//! npk-based flow (matches real deposits):
+//! 1. SDK generates Ed25519 ephemeral keypair + derives npk
+//! 2. Client sends ephemeralPub(32) + npk(32) + amount_sats(u64)
+//! 3. This instruction computes commitment ON-CHAIN: Poseidon(npk, token, amount)
+//! 4. Commitment is inserted into Merkle tree
+//! 5. StealthAnnouncement created with type=DEPOSIT (plaintext amount)
+//! 6. User scans announcements with viewing key to detect deposits
 
 use pinocchio::{
     account_info::AccountInfo,
@@ -30,27 +21,20 @@ use pinocchio::{
 
 use crate::error::ZVaultError;
 use crate::state::{CommitmentTree, PoolState, StealthAnnouncement, STEALTH_ANNOUNCEMENT_DISCRIMINATOR};
-use crate::utils::{mint_zbtc, validate_program_owner, validate_system_program, validate_token_2022_owner, validate_token_program_key, create_pda_account};
+use crate::utils::{mint_zbtc, validate_program_owner, validate_system_program, validate_token_2022_owner, validate_token_program_key, create_pda_account, compute_deposit_commitment};
 
-/// Fixed demo amount in satoshis for minting zBTC (0.0001 BTC = 10,000 sats)
-/// The encrypted_amount in the instruction is only used for the announcement,
-/// not for actual minting, since it's XOR-encrypted garbage.
-const DEMO_MINT_AMOUNT_SATS: u64 = 10_000;
-
-/// Add demo stealth instruction data (single ephemeral key)
+/// Add demo stealth instruction data (npk-based, matches real deposits)
 ///
 /// Layout:
 /// - ephemeral_pub: [u8; 32] (Ed25519)
-/// - commitment: [u8; 32] (pre-computed by SDK)
-/// - encrypted_amount: [u8; 8] (XOR encrypted, stored as-is for announcement)
+/// - npk: [u8; 32] (note public key, big-endian BN254 field element)
+/// - amount_sats: u64 (little-endian)
 ///
 /// Total: 72 bytes
 pub struct AddDemoStealthData {
     pub ephemeral_pub: [u8; 32],
-    pub commitment: [u8; 32],
-    /// Encrypted amount bytes - NOT decoded as u64 since it's XOR garbage
-    /// Stored on-chain for privacy; recipient decrypts with shared secret
-    pub encrypted_amount: [u8; 8],
+    pub npk: [u8; 32],
+    pub amount_sats: u64,
 }
 
 impl AddDemoStealthData {
@@ -62,17 +46,17 @@ impl AddDemoStealthData {
         let mut ephemeral_pub = [0u8; 32];
         ephemeral_pub.copy_from_slice(&data[0..32]);
 
-        let mut commitment = [0u8; 32];
-        commitment.copy_from_slice(&data[32..64]);
+        let mut npk = [0u8; 32];
+        npk.copy_from_slice(&data[32..64]);
 
-        // Keep encrypted amount as raw bytes (don't decode as u64)
-        let mut encrypted_amount = [0u8; 8];
-        encrypted_amount.copy_from_slice(&data[64..72]);
+        let amount_sats = u64::from_le_bytes(
+            data[64..72].try_into().map_err(|_| ProgramError::InvalidInstructionData)?
+        );
 
         Ok(Self {
             ephemeral_pub,
-            commitment,
-            encrypted_amount,
+            npk,
+            amount_sats,
         })
     }
 }
@@ -117,8 +101,13 @@ pub fn process_add_demo_stealth(
         return Err(ProgramError::MissingRequiredSignature);
     }
 
-    // Note: We don't validate encrypted_amount since it's XOR garbage
-    // The actual mint amount is fixed at DEMO_MINT_AMOUNT_SATS
+    // Validate amount is positive
+    if ix_data.amount_sats == 0 {
+        return Err(ProgramError::InvalidInstructionData);
+    }
+
+    // Compute commitment on-chain: Poseidon(npk, ZBTC_TOKEN_ID, amount_sats)
+    let commitment = compute_deposit_commitment(&ix_data.npk, ix_data.amount_sats)?;
 
     // Validate account owners
     validate_program_owner(pool_state, program_id)?;
@@ -158,7 +147,7 @@ pub fn process_add_demo_stealth(
             return Err(ZVaultError::TreeFull.into());
         }
 
-        tree.insert_leaf(&ix_data.commitment)?
+        tree.insert_leaf(&commitment)?
     };
 
     // Create stealth announcement PDA if it doesn't exist
@@ -194,17 +183,16 @@ pub fn process_add_demo_stealth(
         let mut ann_data = stealth_announcement.try_borrow_mut_data()?;
         let announcement = StealthAnnouncement::init(&mut ann_data)?;
 
-        announcement.announcement_type = crate::state::ANNOUNCEMENT_TYPE_TRANSFER;
+        announcement.announcement_type = crate::state::ANNOUNCEMENT_TYPE_DEPOSIT;
         announcement.ephemeral_pub = ix_data.ephemeral_pub;
-        // Store encrypted amount bytes (only recipient can decrypt with shared secret)
-        announcement.set_amount_bytes(ix_data.encrypted_amount);
-        announcement.commitment = ix_data.commitment;
+        // Store plaintext amount (type=0 deposit, not XOR-encrypted)
+        announcement.set_amount_sats(ix_data.amount_sats);
+        announcement.commitment = commitment;
         announcement.set_leaf_index(leaf_index);
         announcement.set_created_at(clock.unix_timestamp);
     }
 
     // Mint zBTC to pool vault so users can claim
-    // NOTE: Use fixed demo amount, NOT encrypted_amount (which is XOR garbage)
     let bump_bytes = [pool_bump];
     let pool_signer_seeds: &[&[u8]] = &[PoolState::SEED, &bump_bytes];
 
@@ -213,18 +201,18 @@ pub fn process_add_demo_stealth(
         zbtc_mint,
         pool_vault,
         pool_state,
-        DEMO_MINT_AMOUNT_SATS,
+        ix_data.amount_sats,
         pool_signer_seeds,
     )?;
 
-    // Update pool statistics with fixed demo amount
+    // Update pool statistics
     {
         let mut pool_data = pool_state.try_borrow_mut_data()?;
         let pool = PoolState::from_bytes_mut(&mut pool_data)?;
 
         pool.increment_deposit_count()?;
-        pool.add_minted(DEMO_MINT_AMOUNT_SATS)?;
-        pool.add_shielded(DEMO_MINT_AMOUNT_SATS)?;
+        pool.add_minted(ix_data.amount_sats)?;
+        pool.add_shielded(ix_data.amount_sats)?;
         pool.set_last_update(clock.unix_timestamp);
     }
 

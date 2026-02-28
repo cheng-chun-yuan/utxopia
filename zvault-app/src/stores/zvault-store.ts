@@ -7,7 +7,7 @@ import {
   deriveKeysFromWallet,
   createStealthMetaAddress,
   encodeStealthMetaAddress,
-  scanAnnouncements,
+  scanUnifiedNotes,
   hexToBytes,
   computeNullifierHashForNote,
   deriveNullifierRecordPDA,
@@ -169,23 +169,25 @@ export const useZVaultStore = create<ZVaultState>((set, get) => ({
           throw new Error(data.error || "Failed to fetch announcements");
         }
 
-        // Convert API response to scan format
+        // Convert API response to scan format (includes announcementType for unified scanning)
         const announcements = data.announcements.map((ann: {
+          announcementType: number;
           ephemeralPub: string;
           encryptedAmount: string;
           commitment: string;
           leafIndex: number;
           createdAt: string;
         }) => ({
+          announcementType: ann.announcementType,
           ephemeralPub: hexToBytes(ann.ephemeralPub),
           encryptedAmount: hexToBytes(ann.encryptedAmount),
           commitment: hexToBytes(ann.commitment),
           leafIndex: ann.leafIndex,
-          createdAt: BigInt(ann.createdAt),
+          createdAt: Number(ann.createdAt),
         }));
 
         // Scan locally for privacy (server doesn't know which are ours)
-        const scanned = await scanAnnouncements(keys, announcements);
+        const scanned = await scanUnifiedNotes(keys, announcements);
 
         // Check which notes are spent by looking up nullifier records on-chain
         const rpcUrl = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.devnet.solana.com";
@@ -241,7 +243,7 @@ export const useZVaultStore = create<ZVaultState>((set, get) => ({
             ...note,
             id: `${commitmentHex.slice(0, 16)}-${index}`,
             createdAt: originalAnn?.createdAt
-              ? Number(originalAnn.createdAt) * 1000
+              ? originalAnn.createdAt * 1000
               : Date.now(),
             commitmentHex,
           };
