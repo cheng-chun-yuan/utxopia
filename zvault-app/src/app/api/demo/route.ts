@@ -50,9 +50,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate stealth mode params with proper hex validation
-    if (!isValidHex(ephemeralPub, 66)) {
+    if (!isValidHex(ephemeralPub, 64)) {
       return NextResponse.json(
-        { success: false, error: "Invalid ephemeralPub. Must be 66 valid hex characters (33 bytes)" },
+        { success: false, error: "Invalid ephemeralPub. Must be 64 valid hex characters (32 bytes Ed25519)" },
         { status: 400 }
       );
     }

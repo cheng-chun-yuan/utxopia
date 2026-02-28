@@ -61,6 +61,9 @@ export function DepositFlow() {
     cachedUtxos: import("@/stores/bitcoin-wallet-store").WalletUtxo[];
   } | null>(null);
   const [buildingPreview, setBuildingPreview] = useState(false);
+  // Coin control: which UTXOs are selected (by "txid:vout" key)
+  const [selectedUtxoKeys, setSelectedUtxoKeys] = useState<Set<string>>(new Set());
+  const [showCoinControl, setShowCoinControl] = useState(false);
   const btcWallet = useBitcoinWalletStore();
 
   const resetFlow = () => {
@@ -222,6 +225,15 @@ export function DepositFlow() {
         throw new Error("No confirmed UTXOs available in wallet");
       }
 
+      // Auto-select UTXOs
+      const autoSelected = selectUtxos(
+        utxos.map((u) => ({ txid: u.txid, vout: u.vout, value: u.value, scriptPubkeyHex: u.scriptPubkeyHex })),
+        amountSats,
+        2,
+      );
+      setSelectedUtxoKeys(new Set(autoSelected.map((u) => `${u.txid}:${u.vout}`)));
+      setShowCoinControl(false);
+
       setDepositPreview({
         depositAddress: deposit.btcAddress,
         depositAmountSats: amountSats,
@@ -245,16 +257,19 @@ export function DepositFlow() {
     setError(null);
 
     try {
-      const selected = selectUtxos(
-        depositPreview.cachedUtxos.map((u) => ({
-          txid: u.txid,
-          vout: u.vout,
-          value: u.value,
-          scriptPubkeyHex: u.scriptPubkeyHex,
-        })),
-        depositPreview.depositAmountSats,
-        2,
-      );
+      // Use user-selected UTXOs (from coin control)
+      const selected = depositPreview.cachedUtxos
+        .filter((u) => selectedUtxoKeys.has(`${u.txid}:${u.vout}`))
+        .map((u) => ({ txid: u.txid, vout: u.vout, value: u.value, scriptPubkeyHex: u.scriptPubkeyHex }));
+
+      if (selected.length === 0) {
+        throw new Error("No UTXOs selected");
+      }
+
+      const totalSelected = selected.reduce((sum, u) => sum + u.value, 0);
+      if (totalSelected < depositPreview.depositAmountSats) {
+        throw new Error(`Selected UTXOs (${totalSelected} sats) insufficient for deposit (${depositPreview.depositAmountSats} sats)`);
+      }
 
       const psbtResult = buildDepositPsbt({
         senderUtxos: selected,
@@ -547,10 +562,78 @@ export function DepositFlow() {
                     </>
                   )}
 
-                  {/* Transaction Preview — outputs only (instant, no UTXO fetch) */}
-                  {depositPreview && (
+                  {/* Transaction Preview */}
+                  {depositPreview && (() => {
+                    const totalInput = depositPreview.cachedUtxos
+                      .filter((u) => selectedUtxoKeys.has(`${u.txid}:${u.vout}`))
+                      .reduce((sum, u) => sum + u.value, 0);
+                    // Estimate: ~148 bytes per input + ~78 bytes overhead + outputs
+                    const estimatedVsize = selectedUtxoKeys.size * 68 + 78 + 43 + 43 + 12;
+                    const estimatedFee = estimatedVsize * 2; // 2 sat/vB
+                    const changeAmount = totalInput - depositPreview.depositAmountSats - estimatedFee;
+                    const insufficientFunds = totalInput < depositPreview.depositAmountSats + estimatedFee;
+
+                    return (
                     <div className="flex flex-col gap-3">
-                      <p className="text-body2-semibold text-foreground pl-1">Transaction Outputs</p>
+                      {/* Inputs: UTXO selector */}
+                      <div className="p-3 bg-muted border border-gray/15 rounded-[12px]">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-caption text-gray">
+                            Inputs ({selectedUtxoKeys.size} UTXO{selectedUtxoKeys.size !== 1 ? "s" : ""})
+                            <span className="text-foreground ml-1">{(totalInput / 1e8).toFixed(8)} BTC</span>
+                          </p>
+                          <button
+                            onClick={() => setShowCoinControl(!showCoinControl)}
+                            className="text-[10px] text-sol hover:text-sol-light transition-colors"
+                          >
+                            {showCoinControl ? "Hide UTXOs" : "Select UTXOs"}
+                          </button>
+                        </div>
+
+                        {showCoinControl && (
+                          <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                            {depositPreview.cachedUtxos.map((utxo) => {
+                              const key = `${utxo.txid}:${utxo.vout}`;
+                              const isSelected = selectedUtxoKeys.has(key);
+                              return (
+                                <label
+                                  key={key}
+                                  className={cn(
+                                    "flex items-center gap-2 p-2 rounded-[8px] cursor-pointer transition-colors",
+                                    isSelected ? "bg-btc/10 border border-btc/20" : "bg-background border border-gray/10 hover:border-gray/25"
+                                  )}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => {
+                                      setSelectedUtxoKeys((prev) => {
+                                        const next = new Set(prev);
+                                        if (next.has(key)) next.delete(key);
+                                        else next.add(key);
+                                        return next;
+                                      });
+                                    }}
+                                    className="accent-btc w-3.5 h-3.5"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <code className="text-[10px] font-mono text-gray-light block truncate">
+                                      {utxo.txid.slice(0, 8)}...:{utxo.vout}
+                                    </code>
+                                  </div>
+                                  <span className="text-[11px] font-mono text-btc whitespace-nowrap">
+                                    {(utxo.value / 1e8).toFixed(8)}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex justify-center">
+                        <ArrowRight className="w-4 h-4 text-gray" />
+                      </div>
 
                       {/* Output 1: P2TR Deposit */}
                       <div className="p-3 bg-btc/5 border border-btc/20 rounded-[12px]">
@@ -590,6 +673,44 @@ export function DepositFlow() {
                         </div>
                       </div>
 
+                      {/* Output 3: Change (if any) */}
+                      {changeAmount > 0 && (
+                        <div className="p-3 bg-muted border border-gray/20 rounded-[12px]">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-mono bg-gray/15 text-gray px-1.5 py-0.5 rounded">Output #3</span>
+                            <span className="text-caption text-gray-light">Change</span>
+                          </div>
+                          <p className="text-body2 font-mono text-foreground mb-1">
+                            {(changeAmount / 1e8).toFixed(8)} BTC
+                            <span className="text-caption text-gray ml-1">({changeAmount.toLocaleString()} sats)</span>
+                          </p>
+                          <code className="block text-[10px] font-mono text-gray break-all">
+                            {btcWallet.address}
+                          </code>
+                        </div>
+                      )}
+
+                      {/* Fee */}
+                      <div className="flex items-center justify-between px-2 py-2 border-t border-gray/10">
+                        <span className="text-caption text-gray">Estimated Fee</span>
+                        <span className="text-caption font-mono text-foreground">
+                          {estimatedFee.toLocaleString()} sats
+                          <span className="text-gray ml-1">({(estimatedFee / 1e8).toFixed(8)} BTC)</span>
+                        </span>
+                      </div>
+
+                      {/* Insufficient funds warning */}
+                      {insufficientFunds && (
+                        <div className="p-2 bg-red-500/10 border border-red-500/20 rounded-[8px]">
+                          <div className="flex items-center gap-2">
+                            <AlertCircle className="w-3.5 h-3.5 text-red-400" />
+                            <span className="text-caption text-red-400">
+                              Insufficient funds. Select more UTXOs or reduce amount.
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Action buttons */}
                       <div className="flex gap-2">
                         <button
@@ -605,7 +726,7 @@ export function DepositFlow() {
                         </button>
                         <button
                           onClick={confirmAndSign}
-                          disabled={walletDepositing}
+                          disabled={walletDepositing || insufficientFunds || selectedUtxoKeys.size === 0}
                           className={cn(
                             "flex-[2] py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2",
                             "bg-btc hover:bg-btc/90 text-background",
@@ -626,7 +747,8 @@ export function DepositFlow() {
                         </button>
                       </div>
                     </div>
-                  )}
+                    );
+                  })()}
                 </div>
               ) : (
                 <div className="mb-4 flex flex-col gap-2">
