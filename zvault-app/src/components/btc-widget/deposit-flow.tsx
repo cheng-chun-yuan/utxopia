@@ -63,7 +63,8 @@ export function DepositFlow() {
   const [buildingPreview, setBuildingPreview] = useState(false);
   // Coin control: which UTXOs are selected (by "txid:vout" key)
   const [selectedUtxoKeys, setSelectedUtxoKeys] = useState<Set<string>>(new Set());
-  const [showCoinControl, setShowCoinControl] = useState(false);
+  const [showUtxoList, setShowUtxoList] = useState(false);
+  const [editingUtxos, setEditingUtxos] = useState(false);
   const btcWallet = useBitcoinWalletStore();
 
   const resetFlow = () => {
@@ -232,7 +233,8 @@ export function DepositFlow() {
         2,
       );
       setSelectedUtxoKeys(new Set(autoSelected.map((u) => `${u.txid}:${u.vout}`)));
-      setShowCoinControl(false);
+      setShowUtxoList(false);
+      setEditingUtxos(false);
 
       setDepositPreview({
         depositAddress: deposit.btcAddress,
@@ -575,47 +577,67 @@ export function DepositFlow() {
 
                     return (
                     <div className="flex flex-col gap-3">
-                      {/* Inputs: UTXO selector */}
+                      {/* Inputs: UTXO list */}
                       <div className="p-3 bg-muted border border-gray/15 rounded-[12px]">
-                        <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center justify-between">
                           <p className="text-caption text-gray">
                             Inputs ({selectedUtxoKeys.size} UTXO{selectedUtxoKeys.size !== 1 ? "s" : ""})
                             <span className="text-foreground ml-1">{(totalInput / 1e8).toFixed(8)} BTC</span>
                           </p>
-                          <button
-                            onClick={() => setShowCoinControl(!showCoinControl)}
-                            className="text-[10px] text-sol hover:text-sol-light transition-colors"
-                          >
-                            {showCoinControl ? "Hide UTXOs" : "Select UTXOs"}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            {showUtxoList && (
+                              <button
+                                onClick={() => setEditingUtxos(!editingUtxos)}
+                                className={cn(
+                                  "text-[10px] transition-colors",
+                                  editingUtxos ? "text-warning hover:text-warning/80" : "text-sol hover:text-sol-light"
+                                )}
+                              >
+                                {editingUtxos ? "Done" : "Edit"}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => { setShowUtxoList(!showUtxoList); if (showUtxoList) setEditingUtxos(false); }}
+                              className="text-[10px] text-gray hover:text-gray-light transition-colors"
+                            >
+                              {showUtxoList ? "Hide" : "Show UTXOs"}
+                            </button>
+                          </div>
                         </div>
 
-                        {showCoinControl && (
-                          <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                        {showUtxoList && (
+                          <div className="space-y-1.5 max-h-36 overflow-y-auto mt-2">
                             {depositPreview.cachedUtxos.map((utxo) => {
                               const key = `${utxo.txid}:${utxo.vout}`;
                               const isSelected = selectedUtxoKeys.has(key);
+
+                              if (!editingUtxos && !isSelected) return null;
+
                               return (
-                                <label
+                                <div
                                   key={key}
                                   className={cn(
-                                    "flex items-center gap-2 p-2 rounded-[8px] cursor-pointer transition-colors",
+                                    "flex items-center gap-2 p-2 rounded-[8px] transition-colors",
+                                    editingUtxos ? "cursor-pointer" : "",
                                     isSelected ? "bg-btc/10 border border-btc/20" : "bg-background border border-gray/10 hover:border-gray/25"
                                   )}
+                                  onClick={editingUtxos ? () => {
+                                    setSelectedUtxoKeys((prev) => {
+                                      const next = new Set(prev);
+                                      if (next.has(key)) next.delete(key);
+                                      else next.add(key);
+                                      return next;
+                                    });
+                                  } : undefined}
                                 >
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    onChange={() => {
-                                      setSelectedUtxoKeys((prev) => {
-                                        const next = new Set(prev);
-                                        if (next.has(key)) next.delete(key);
-                                        else next.add(key);
-                                        return next;
-                                      });
-                                    }}
-                                    className="accent-btc w-3.5 h-3.5"
-                                  />
+                                  {editingUtxos && (
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      readOnly
+                                      className="accent-btc w-3.5 h-3.5 pointer-events-none"
+                                    />
+                                  )}
                                   <div className="flex-1 min-w-0">
                                     <code className="text-[10px] font-mono text-gray-light block truncate">
                                       {utxo.txid.slice(0, 8)}...:{utxo.vout}
@@ -624,7 +646,7 @@ export function DepositFlow() {
                                   <span className="text-[11px] font-mono text-btc whitespace-nowrap">
                                     {(utxo.value / 1e8).toFixed(8)}
                                   </span>
-                                </label>
+                                </div>
                               );
                             })}
                           </div>
