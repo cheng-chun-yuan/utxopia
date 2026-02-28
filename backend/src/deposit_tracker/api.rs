@@ -330,31 +330,31 @@ async fn handle_prepare_stealth_deposit(
         return stealth_error_response("Invalid ephemeral public key format (expected 66 hex chars)");
     }
 
-    // Validate commitment (64 hex chars = 32 bytes)
-    if req.commitment.len() != 64 || !req.commitment.chars().all(|c| c.is_ascii_hexdigit()) {
-        return stealth_error_response("Invalid commitment format (expected 64 hex chars)");
+    // Validate npk (64 hex chars = 32 bytes)
+    if req.npk.len() != 64 || !req.npk.chars().all(|c| c.is_ascii_hexdigit()) {
+        return stealth_error_response("Invalid npk format (expected 64 hex chars)");
     }
 
-    // Parse commitment bytes for address derivation
-    let commitment_bytes = match hex::decode(&req.commitment) {
+    // Parse npk bytes for address derivation
+    let npk_bytes = match hex::decode(&req.npk) {
         Ok(bytes) if bytes.len() == 32 => {
             let mut arr = [0u8; 32];
             arr.copy_from_slice(&bytes);
             arr
         }
-        _ => return stealth_error_response("Invalid commitment: must be 32 bytes hex"),
+        _ => return stealth_error_response("Invalid npk: must be 32 bytes hex"),
     };
 
-    // Derive BTC Taproot address from pool keys + commitment
+    // Derive BTC Taproot address from pool keys + npk
     let pool_keys = crate::taproot::PoolKeys::new();
     let network = bitcoin::Network::Testnet; // TODO: derive from config
-    let btc_address = match crate::taproot::generate_deposit_address(&pool_keys, &commitment_bytes, network) {
+    let btc_address = match crate::taproot::generate_deposit_address(&pool_keys, &npk_bytes, network) {
         Ok(deposit) => deposit.address,
         Err(e) => return stealth_error_response(&format!("Failed to derive BTC address: {}", e)),
     };
 
     let ephemeral_pub = req.ephemeral_pub.clone();
-    let commitment = req.commitment.clone();
+    let commitment = req.npk.clone(); // npk used as commitment identifier
 
     // Create record (ephemeral private key is held client-side in stealth flow)
     let record = StealthDepositRecord::new(
