@@ -39,6 +39,7 @@ bitcoin-spv/
 
 # Circom build artifacts
 circuits/build/
+sdk/circuits/
 
 # Unused programs
 contracts/programs/chadbuffer/
