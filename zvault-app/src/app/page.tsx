@@ -307,7 +307,7 @@ export default function Home() {
               <span className="text-caption text-foreground">zVault</span>
             </div>
             <p className="text-caption text-gray">
-              Demo Version - Testnet Only
+              Private Bitcoin Bridge
             </p>
           </div>
         </footer>

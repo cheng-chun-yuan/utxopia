@@ -52,6 +52,7 @@ import {
   ed25519GetPublicKey,
 } from "./crypto-ed25519";
 import { computeMPKSync } from "./poseidon";
+import { buildEddsa, type Eddsa } from "circomlibjs";
 
 // ========== Types ==========
 
@@ -78,6 +79,9 @@ export interface ZVaultKeys {
 
   /** Ed25519 viewing public key (32 bytes) - share publicly */
   viewingPubKey: Uint8Array;
+
+  /** Raw EdDSA seed bytes (32 bytes) - for circomlibjs EdDSA-Poseidon signing */
+  eddsaSeed: Uint8Array;
 }
 
 /**
@@ -161,6 +165,100 @@ const VIEWING_KEY_DOMAIN = "view";
 /** Domain separator for nullifying key derivation */
 const NULLIFYING_KEY_DOMAIN = "nullify";
 
+// ========== EdDSA-Poseidon Helpers ==========
+
+let eddsaInstance: Eddsa | null = null;
+
+async function getEddsa(): Promise<Eddsa> {
+  if (!eddsaInstance) {
+    eddsaInstance = await buildEddsa();
+  }
+  return eddsaInstance;
+}
+
+/**
+ * Derive Baby Jubjub public key from raw seed using circomlibjs EdDSA.
+ *
+ * circomlibjs internally hashes the seed (like standard EdDSA key derivation),
+ * producing keys compatible with the EdDSAPoseidonVerifier circuit.
+ * This is NOT the same as `babyJubMul(scalarFromBytes(seed), BASE8)`.
+ */
+export async function eddsaGetPubKey(seed: Uint8Array): Promise<BabyJubPoint> {
+  const eddsa = await getEddsa();
+  const F = eddsa.babyJub.F;
+  const pubKey = eddsa.prv2pub(Buffer.from(seed));
+  return {
+    x: F.toObject(pubKey[0]) as bigint,
+    y: F.toObject(pubKey[1]) as bigint,
+  };
+}
+
+/**
+ * Extract the internal EdDSA private scalar from a seed.
+ *
+ * circomlibjs does: BLAKE-512(seed) → pruneBuffer → fromRprLE(32 bytes) → shr(3)
+ * This scalar × BASE8 = the public key from `eddsaGetPubKey(seed)`.
+ *
+ * We intercept circomlibjs's `pruneBuffer` call during `prv2pub` to capture
+ * the intermediate buffer, then replicate the LE→bigint→shr(3) conversion.
+ * This avoids directly importing ffjavascript/blake-hash which aren't bundled by webpack.
+ */
+export async function eddsaGetPrivScalar(seed: Uint8Array): Promise<bigint> {
+  const eddsa = await getEddsa();
+  const F = eddsa.babyJub.F;
+
+  // Intercept the pruneBuffer call to capture the raw scalar.
+  // circomlibjs prv2pub does: sBuff = pruneBuffer(blake512(seed)); s = fromRprLE(sBuff); A = Base8 * (s >> 3)
+  // We temporarily replace pruneBuffer to capture sBuff.
+  let capturedBuff: Buffer | null = null;
+  const origPrune = eddsa.pruneBuffer.bind(eddsa);
+  (eddsa as any).pruneBuffer = (buff: Buffer) => {
+    const result = origPrune(buff);
+    capturedBuff = Buffer.from(result);
+    return result;
+  };
+
+  try {
+    // Call prv2pub which triggers pruneBuffer internally
+    eddsa.prv2pub(Buffer.from(seed));
+  } finally {
+    // Restore original
+    (eddsa as any).pruneBuffer = origPrune;
+  }
+
+  if (!capturedBuff) {
+    throw new Error("Failed to capture EdDSA scalar buffer");
+  }
+
+  // Convert first 32 bytes from little-endian to bigint (same as Scalar.fromRprLE)
+  let s = 0n;
+  for (let i = 31; i >= 0; i--) {
+    s = (s << 8n) | BigInt(capturedBuff[i]);
+  }
+
+  // Right-shift by 3 (same as Scalar.shr(s, 3) in circomlibjs)
+  return s >> 3n;
+}
+
+/**
+ * Sign a message hash with EdDSA-Poseidon (circomlibjs).
+ *
+ * Returns [R8.x, R8.y, S] compatible with the EdDSAPoseidonVerifier circuit.
+ */
+export async function eddsaPoseidonSign(
+  seed: Uint8Array,
+  msgHash: bigint,
+): Promise<[bigint, bigint, bigint]> {
+  const eddsa = await getEddsa();
+  const F = eddsa.babyJub.F;
+  const msgF = F.e(msgHash);
+  const signature = eddsa.signPoseidon(Buffer.from(seed), msgF);
+  const R8x = F.toObject(signature.R8[0]) as bigint;
+  const R8y = F.toObject(signature.R8[1]) as bigint;
+  const S = signature.S;
+  return [R8x, R8y, S];
+}
+
 // ========== Wallet Adapter Interface ==========
 
 /**
@@ -175,7 +273,10 @@ export interface WalletSignerAdapter {
 // ========== Key Derivation ==========
 
 /**
- * Derive zVault keys from Solana wallet signature
+ * Derive zVault keys from Solana wallet signature.
+ *
+ * Uses circomlibjs EdDSA for spendingPubKey derivation so keys are
+ * compatible with the EdDSAPoseidonVerifier circuit.
  */
 export async function deriveKeysFromWallet(
   wallet: WalletSignerAdapter
@@ -187,7 +288,21 @@ export async function deriveKeysFromWallet(
   const message = new TextEncoder().encode(SPENDING_KEY_DERIVATION_MESSAGE);
   const signature = await wallet.signMessage(message);
 
-  return deriveKeysFromSignature(signature, wallet.publicKey.toBytes());
+  // Start with sync key derivation (babyJubMul-based)
+  const baseKeys = deriveKeysFromSignature(signature, wallet.publicKey.toBytes());
+
+  // Override spending keys with circomlibjs-derived versions for circuit compatibility.
+  // circomlibjs does: blake512(seed) → prune → fromRprLE → shr(3) → mulPointEscalar(Base8, scalar)
+  // Both spendingPrivKey and spendingPubKey must correspond so that:
+  //   stealthPriv = spendingPrivKey + stealthScalar → babyJubMul(stealthPriv, BASE8) = stealthPub
+  const spendingPubKey = await eddsaGetPubKey(baseKeys.eddsaSeed);
+  const spendingPrivKey = await eddsaGetPrivScalar(baseKeys.eddsaSeed);
+
+  return {
+    ...baseKeys,
+    spendingPubKey,
+    spendingPrivKey,
+  };
 }
 
 /**
@@ -212,6 +327,8 @@ export function deriveKeysFromSignature(
   const spendingSeed = sha256(
     concatBytes(signature, new TextEncoder().encode(SPENDING_KEY_DOMAIN))
   );
+  // Store raw seed for circomlibjs EdDSA signing (used by deriveKeysFromWallet to override pubkey)
+  const eddsaSeed = new Uint8Array(spendingSeed);
   const spendingPrivKey = scalarFromBytes(spendingSeed);
   const spendingPubKey = babyJubMul(spendingPrivKey, BABYJUB_BASE8);
 
@@ -238,6 +355,7 @@ export function deriveKeysFromSignature(
     nullifyingKey,
     viewingPrivKey,
     viewingPubKey,
+    eddsaSeed,
   };
 }
 
@@ -558,6 +676,7 @@ export function clearZVaultKeys(keys: ZVaultKeys): void {
   (keys as { spendingPrivKey: bigint }).spendingPrivKey = 0n;
   (keys as { nullifyingKey: bigint }).nullifyingKey = 0n;
   clearKey(keys.viewingPrivKey);
+  clearKey(keys.eddsaSeed);
 }
 
 /**

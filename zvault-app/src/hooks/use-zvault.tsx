@@ -37,11 +37,12 @@ export function useZVault() {
   }, [connection, store.refreshInbox]);
 
   // Clear keys when wallet disconnects
+  // Note: wallet.publicKey may still be available briefly during disconnect
   useEffect(() => {
     if (!wallet.connected) {
-      store.clearKeys();
+      store.clearKeys(wallet.publicKey?.toBase58());
     }
-  }, [wallet.connected, store.clearKeys]);
+  }, [wallet.connected, wallet.publicKey, store.clearKeys]);
 
   return {
     // Poseidon
@@ -100,9 +101,4 @@ export function useStealthInbox() {
     refresh: ctx.refreshInbox,
     hasKeys: ctx.hasKeys,
   };
-}
-
-// Legacy provider - now a no-op, kept for backwards compatibility
-export function ZVaultProvider({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
 }

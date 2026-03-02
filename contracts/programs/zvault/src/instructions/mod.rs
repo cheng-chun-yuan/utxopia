@@ -25,8 +25,15 @@ pub mod mark_processing;
 pub mod cancel_redemption;
 pub mod complete_redemption;
 
+// Public unshield (zkBTC → SPL token)
+pub mod unshield;
+
 // Demo/testing
 pub mod add_demo_stealth;
+
+// Admin utilities
+pub mod admin_close_pda;
+pub mod admin_update_pool;
 
 // VK registry (deployment)
 pub mod init_vk_registry;
@@ -39,5 +46,8 @@ pub use request_redemption::*;
 pub use mark_processing::*;
 pub use cancel_redemption::*;
 pub use complete_redemption::*;
+pub use unshield::*;
 pub use add_demo_stealth::*;
+pub use admin_close_pda::*;
+pub use admin_update_pool::*;
 pub use init_vk_registry::*;

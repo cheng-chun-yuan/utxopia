@@ -1,7 +1,7 @@
 //! Program constants
 
-/// Minimum deposit amount in satoshis (0.0001 BTC)
-pub const MIN_DEPOSIT_SATS: u64 = 10_000;
+/// Minimum deposit amount in satoshis (0.00005 BTC)
+pub const MIN_DEPOSIT_SATS: u64 = 5_000;
 
 /// Maximum deposit amount in satoshis (1000 BTC)
 pub const MAX_DEPOSIT_SATS: u64 = 100_000_000_000;

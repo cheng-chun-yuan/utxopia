@@ -19,8 +19,11 @@ import {
 const SNS_DISC_UPDATE = 1;
 const SNS_DISC_REALLOC = 4;
 
-/** Stealth data: version(1) + spendingPubKey(32) + viewingPubKey(32) = 65 bytes */
+/** Stealth data: version(1) + viewingPubKey(32) + mpk(32) = 65 bytes */
 const STEALTH_DATA_SIZE = 65;
+
+/** Current stealth data version */
+const STEALTH_DATA_VERSION = 2;
 
 /** Bonfida fee owner (constant across networks) */
 const BONFIDA_FEE_OWNER = new PublicKey("5D2zKog251d6KPCyFyLMt3KroWwXXPWSgTPyhV22K2gR");
@@ -31,12 +34,14 @@ const HASH_PREFIX = "SPL Name Service";
 interface UseSnsNameReturn {
   registeredSnsName: string | null;
   hasRegisteredSnsName: boolean;
+  needsUpdate: boolean;
   isLoading: boolean;
   isRegistering: boolean;
   error: string | null;
   lookupMySnsName: () => Promise<void>;
   lookupSnsName: (name: string) => Promise<SnsStealthAddress | null>;
   registerSnsSubdomain: (name: string) => Promise<boolean>;
+  updateSnsStealthData: () => Promise<boolean>;
 }
 
 /**
@@ -54,6 +59,8 @@ export function useSnsName(): UseSnsNameReturn {
 
   const [registeredSnsName, setRegisteredSnsName] = useState<string | null>(null);
   const [hasRegisteredSnsName, setHasRegisteredSnsName] = useState(false);
+  const [needsUpdate, setNeedsUpdate] = useState(false);
+  const [registeredSubdomainKey, setRegisteredSubdomainKey] = useState<PublicKey | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,11 +100,20 @@ export function useSnsName(): UseSnsNameReturn {
       for (const account of accounts) {
         const parsed = parseSnsStealthData(new Uint8Array(account.account.data));
         if (parsed) {
-          const ourSpending = Buffer.from(stealthAddress.spendingPubKey).toString("hex");
-          const foundSpending = Buffer.from(parsed.spendingPubKey).toString("hex");
+          const ourViewing = Buffer.from(stealthAddress.viewingPubKey).toString("hex");
+          const foundViewing = Buffer.from(parsed.viewingPubKey).toString("hex");
 
-          if (ourSpending === foundSpending) {
+          if (ourViewing === foundViewing) {
             setHasRegisteredSnsName(true);
+            setRegisteredSubdomainKey(account.pubkey);
+
+            // Detect if record needs update (legacy format, zero mpk, or stale mpk)
+            const mpkAllZero = parsed.mpk.every((b: number) => b === 0);
+            const isOldVersion = parsed.version !== STEALTH_DATA_VERSION;
+            const ourMpk = Buffer.from(stealthAddress.mpk).toString("hex");
+            const foundMpk = Buffer.from(parsed.mpk).toString("hex");
+            const mpkMismatch = ourMpk !== foundMpk;
+            setNeedsUpdate(mpkAllZero || isOldVersion || mpkMismatch);
 
             // Reverse lookup: derive reverse key from subdomain account key
             const reverseLookupClass = new PublicKey(config.snsReverseLookupClass);
@@ -128,6 +144,8 @@ export function useSnsName(): UseSnsNameReturn {
       }
 
       setHasRegisteredSnsName(false);
+      setNeedsUpdate(false);
+      setRegisteredSubdomainKey(null);
       setRegisteredSnsName(null);
     } catch (err) {
       console.error("Failed to lookup SNS name:", err);
@@ -316,9 +334,9 @@ export function useSnsName(): UseSnsNameReturn {
       }));
 
       const stealthData = new Uint8Array(STEALTH_DATA_SIZE);
-      stealthData[0] = config.snsStealthDataVersion;
-      stealthData.set(stealthAddress.spendingPubKey, 1);
-      stealthData.set(stealthAddress.viewingPubKey, 33);
+      stealthData[0] = STEALTH_DATA_VERSION;
+      stealthData.set(stealthAddress.viewingPubKey, 1);
+      stealthData.set(stealthAddress.mpk, 33);
 
       const updateData = new Uint8Array(1 + 4 + 4 + stealthData.length);
       updateData[0] = SNS_DISC_UPDATE;
@@ -361,6 +379,88 @@ export function useSnsName(): UseSnsNameReturn {
     }
   }, [wallet, stealthAddress, connection, lookupSnsName]);
 
+  // Update existing SNS record with new stealth data format
+  const updateSnsStealthData = useCallback(async (): Promise<boolean> => {
+    if (!wallet.publicKey || !wallet.signTransaction || !stealthAddress || !registeredSubdomainKey) {
+      setError("Wallet not connected or no existing registration found");
+      return false;
+    }
+
+    const config = getConfig();
+    if (!config.snsNameServiceProgramId) {
+      setError("SNS not configured");
+      return false;
+    }
+
+    setIsRegistering(true);
+    setError(null);
+
+    try {
+      const nameServiceProgramId = new PublicKey(config.snsNameServiceProgramId);
+      const ixs: TransactionInstruction[] = [];
+
+      // Realloc to new size (65 bytes — may shrink from 97)
+      const reallocData = new Uint8Array(5);
+      reallocData[0] = SNS_DISC_REALLOC;
+      new DataView(reallocData.buffer).setUint32(1, STEALTH_DATA_SIZE, true);
+
+      ixs.push(new TransactionInstruction({
+        programId: nameServiceProgramId,
+        keys: [
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+          { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
+          { pubkey: registeredSubdomainKey, isSigner: false, isWritable: true },
+          { pubkey: wallet.publicKey, isSigner: true, isWritable: false },
+        ],
+        data: Buffer.from(reallocData),
+      }));
+
+      // Write new stealth data: version(2) + viewingPubKey(32) + mpk(32)
+      const stealthData = new Uint8Array(STEALTH_DATA_SIZE);
+      stealthData[0] = STEALTH_DATA_VERSION;
+      stealthData.set(stealthAddress.viewingPubKey, 1);
+      stealthData.set(stealthAddress.mpk, 33);
+
+      const updateData = new Uint8Array(1 + 4 + 4 + stealthData.length);
+      updateData[0] = SNS_DISC_UPDATE;
+      new DataView(updateData.buffer).setUint32(1, 0, true);
+      new DataView(updateData.buffer).setUint32(5, stealthData.length, true);
+      updateData.set(stealthData, 9);
+
+      ixs.push(new TransactionInstruction({
+        programId: nameServiceProgramId,
+        keys: [
+          { pubkey: registeredSubdomainKey, isSigner: false, isWritable: true },
+          { pubkey: wallet.publicKey, isSigner: true, isWritable: false },
+        ],
+        data: Buffer.from(updateData),
+      }));
+
+      const tx = new Transaction().add(...ixs);
+      tx.feePayer = wallet.publicKey;
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+      tx.recentBlockhash = blockhash;
+
+      const signed = await wallet.signTransaction(tx);
+      const txid = await connection.sendRawTransaction(signed.serialize(), {
+        skipPreflight: false,
+        preflightCommitment: "confirmed",
+      });
+      await connection.confirmTransaction({ signature: txid, blockhash, lastValidBlockHeight }, "confirmed");
+      console.log(`[SNS] Stealth data updated to v2 format (tx: ${txid})`);
+
+      setNeedsUpdate(false);
+      return true;
+    } catch (err) {
+      console.error("Failed to update SNS stealth data:", err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(errorMessage || "Failed to update stealth data");
+      return false;
+    } finally {
+      setIsRegistering(false);
+    }
+  }, [wallet, stealthAddress, connection, registeredSubdomainKey]);
+
   // Auto-check on mount when wallet connected
   useEffect(() => {
     if (wallet.publicKey && stealthAddress) {
@@ -374,11 +474,13 @@ export function useSnsName(): UseSnsNameReturn {
   return {
     registeredSnsName,
     hasRegisteredSnsName,
+    needsUpdate,
     isLoading,
     isRegistering,
     error,
     lookupMySnsName,
     lookupSnsName,
     registerSnsSubdomain,
+    updateSnsStealthData,
   };
 }

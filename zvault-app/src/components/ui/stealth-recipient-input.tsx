@@ -67,11 +67,11 @@ export function StealthRecipientInput({
         }
 
         // Convert SnsStealthAddress → StealthMetaAddress
-        // mpk is zero because senders don't need it
+        // spendingPubKey not stored in SNS (senders don't need it)
         const meta: StealthMetaAddress = {
-          spendingPubKey: result.spendingPubKey,
+          spendingPubKey: new Uint8Array(32),
           viewingPubKey: result.viewingPubKey,
-          mpk: new Uint8Array(32),
+          mpk: result.mpk,
         };
         onResolved(meta, `${subdomain}.${parentDomain}.sol`);
       } else {

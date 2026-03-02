@@ -122,8 +122,8 @@ function ActivityContent() {
   const [activeTab, setActiveTab] = useState<TabType>(tabParam || "notes");
   const { notes } = useStealthInbox();
 
-  // Badge shows total notes count
-  const notesCount = notes.length;
+  // Badge shows spendable notes only (exclude spent)
+  const notesCount = notes.filter((n) => !n.isSpent).length;
 
   // Update URL when tab changes
   const handleTabChange = (tab: TabType) => {

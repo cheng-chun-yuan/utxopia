@@ -33,6 +33,7 @@
 
 pub mod api;
 pub mod db;
+pub mod header_relayer;
 pub mod service;
 pub mod sqlite_db;
 pub mod sweeper;
@@ -40,6 +41,7 @@ pub mod types;
 pub mod verifier;
 pub mod watcher;
 pub mod websocket;
+pub mod ws_listener;
 
 // Re-exports
 pub use api::{create_deposit_router, start_tracker_server, AppState, SharedAppState};
@@ -62,4 +64,6 @@ pub use websocket::{
     SharedWebSocketState, WebSocketState,
 };
 pub use db::{DbError, StealthDepositStats, StealthDepositStore};
+pub use header_relayer::HeaderRelayer;
 pub use sqlite_db::{SqliteDepositStore, SqliteError};
+pub use ws_listener::{MempoolWsListener, WsEvent};

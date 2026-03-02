@@ -35,7 +35,7 @@ export interface RegisterDepositRequest {
   taproot_address: string;
   commitment: string;
   amount_sats: number;
-  claim_link?: string;
+  ephemeral_pub?: string;
 }
 
 export interface RegisterDepositResponse {
@@ -141,13 +141,13 @@ export async function registerDeposit(
   taprootAddress: string,
   commitment: string,
   amountSats: number,
-  claimLink?: string
+  ephemeralPub?: string,
 ): Promise<RegisterDepositResponse> {
   const body: RegisterDepositRequest = {
     taproot_address: taprootAddress,
     commitment,
     amount_sats: amountSats,
-    claim_link: claimLink,
+    ephemeral_pub: ephemeralPub,
   };
 
   const response = await fetch(`${getTrackerApiUrl()}/api/deposits`, {

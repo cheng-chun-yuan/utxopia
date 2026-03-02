@@ -216,10 +216,16 @@ export const DEVNET_CONFIG: NetworkConfig = {
 
   // JoinSplit VK hashes (populated after trusted setup for new circuits)
   joinSplitVkHashes: {
-    "1x1": "da5c0e76c63f93dbf7a0f8caef8f811c07ffe0c1aa9c00fae32a2d8de8028ae3",
-    "1x2": "077a63a672f8b2fa329f4aa0a758e8072f8d4548c7691e4183940e4403631b3f",
-    "2x1": "31593b7345a0494e634c93650242245c249893085542435a3bb7521a609c7f48",
-    "2x2": "7b237cfb5493f7a96bde50ab869f82d632e14fde310328d356c45e4529b96f29",
+    "1x1": "2c21bba8396f58db95396b43591edcb724d19c75aecd20a385a6e1eeddc93272",
+    "1x2": "b95add145fed1900bbca2cf44b0826c24c8b13ad6441fe6950dadd6e862e5701",
+    "2x1": "81513149f518bbf6de31bc59349d48685bb08b3ef56f0f3eed4e2587d5ba1458",
+    "2x2": "303bdc51d561ff0986e56e59129eeca42a929f0387e638902be00570ee1ab0c1",
+    "1x3": "f30e533c1851b8e8e36fd0dd57bb4e08da0196fb28fa443405eac67ee912c4a6",
+    "3x1": "ba42d39886cee0ef7542ce81fc7199f27f0fd18cd86ff1eecdefab2a1de553d7",
+    "2x3": "9f88ace5197649135e22ec474caf0a67e3946e0c28f680e5815e0105c21e6645",
+    "3x2": "04c156047b42c736a841154bae3f4df3e5afaef62aebf6df5394ee6aca7439c4",
+    "1x4": "37edd144d5b938dba99f7a2d75e47a2770302860822f1fb724bdc6285da57678",
+    "4x1": "4c17064df6986482d837a7815ac68b015901b6cec92730c4441d4c8c0b238d63",
   },
 
   // Pool group key (FROST 2-of-3 DKG output, x-only secp256k1)
@@ -332,10 +338,10 @@ export const LOCALNET_CONFIG: NetworkConfig = {
   },
 
   joinSplitVkHashes: {
-    "1x1": "da5c0e76c63f93dbf7a0f8caef8f811c07ffe0c1aa9c00fae32a2d8de8028ae3",
-    "1x2": "077a63a672f8b2fa329f4aa0a758e8072f8d4548c7691e4183940e4403631b3f",
-    "2x1": "31593b7345a0494e634c93650242245c249893085542435a3bb7521a609c7f48",
-    "2x2": "7b237cfb5493f7a96bde50ab869f82d632e14fde310328d356c45e4529b96f29",
+    "1x1": "2c21bba8396f58db95396b43591edcb724d19c75aecd20a385a6e1eeddc93272",
+    "1x2": "b95add145fed1900bbca2cf44b0826c24c8b13ad6441fe6950dadd6e862e5701",
+    "2x1": "81513149f518bbf6de31bc59349d48685bb08b3ef56f0f3eed4e2587d5ba1458",
+    "2x2": "303bdc51d561ff0986e56e59129eeca42a929f0387e638902be00570ee1ab0c1",
   },
 
   // Pool group key (POC — same as devnet for local dev)

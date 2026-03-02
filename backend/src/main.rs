@@ -66,6 +66,12 @@ fn print_usage() {
     println!("  DEPOSIT_POLL_INTERVAL_SECS    Poll interval in seconds");
     println!("  DEPOSIT_REQUIRED_CONFIRMATIONS Required BTC confirmations");
     println!("  DEPOSIT_MAX_RETRIES           Max retry attempts");
+    println!("  MEMPOOL_WS_ENABLED            Enable mempool.space WebSocket (default: true)");
+    println!("  MEMPOOL_WS_URL                WebSocket URL (default: wss://mempool.space/testnet4/api/v1/ws)");
+    println!("  HEADER_RELAY_ENABLED          Enable integrated block header relay (default: false)");
+    println!("  BTC_LIGHT_CLIENT_PROGRAM_ID   BTC light client program ID on Solana");
+    println!("  RELAYER_KEYPAIR               Solana keypair JSON for header relay submissions");
+    println!("  HEADER_BATCH_SIZE             Headers per batch (2-10, default: 5)");
     println!();
     println!("Note: Most functionality is handled by the SDK on the client side.");
     println!();
@@ -239,6 +245,28 @@ async fn run_tracker_service(args: &[String]) {
     }
     if let Ok(esplora) = env::var("ESPLORA_URL") {
         config.esplora_url = esplora;
+    }
+
+    // WebSocket config
+    if let Ok(ws_enabled) = env::var("MEMPOOL_WS_ENABLED") {
+        config.ws_enabled = ws_enabled == "1" || ws_enabled.to_lowercase() == "true";
+    }
+    if let Ok(ws_url) = env::var("MEMPOOL_WS_URL") {
+        config.ws_url = ws_url;
+    }
+
+    // Header relay config (integrated into deposit tracker)
+    if let Ok(hr_enabled) = env::var("HEADER_RELAY_ENABLED") {
+        config.header_relay_enabled = hr_enabled == "1" || hr_enabled.to_lowercase() == "true";
+    }
+    if let Ok(program_id) = env::var("BTC_LIGHT_CLIENT_PROGRAM_ID") {
+        config.btc_light_client_program_id = program_id;
+    }
+    if let Ok(keypair) = env::var("RELAYER_KEYPAIR") {
+        config.relayer_keypair = keypair;
+    }
+    if let Ok(batch_size) = env::var("HEADER_BATCH_SIZE") {
+        config.header_batch_size = batch_size.parse().unwrap_or(5);
     }
 
     // Create data directory if using default path

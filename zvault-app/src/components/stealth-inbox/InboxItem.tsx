@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Clock, Shield, Send, Wallet } from "lucide-react";
+import { Clock, Shield, Send, Bitcoin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBtc } from "@/lib/utils/formatting";
 import type { InboxNote } from "@/hooks/use-zvault";
@@ -31,22 +31,21 @@ export function InboxItem({ note }: InboxItemProps) {
   const router = useRouter();
 
   // Navigate to pay page with note data
-  const handleSendPublic = () => {
+  const handleSend = () => {
     const params = new URLSearchParams({
       commitment: note.commitmentHex,
       leafIndex: note.leafIndex.toString(),
       amount: note.amount.toString(),
-      mode: "public",
     });
     router.push(`/bridge/pay?${params.toString()}`);
   };
 
-  const handleSendPrivate = () => {
+  const handleWithdrawBtc = () => {
     const params = new URLSearchParams({
       commitment: note.commitmentHex,
       leafIndex: note.leafIndex.toString(),
       amount: note.amount.toString(),
-      mode: "stealth",
+      mode: "btc_withdraw",
     });
     router.push(`/bridge/pay?${params.toString()}`);
   };
@@ -110,18 +109,18 @@ export function InboxItem({ note }: InboxItemProps) {
       {!note.isSpent && (
         <div className="flex gap-2">
           <button
-            onClick={handleSendPublic}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-[10px] bg-privacy/10 hover:bg-privacy/20 text-privacy transition-colors"
-          >
-            <Wallet className="w-4 h-4" />
-            To Wallet
-          </button>
-          <button
-            onClick={handleSendPrivate}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-[10px] bg-purple/10 hover:bg-purple/20 text-purple transition-colors"
+            onClick={handleSend}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px] bg-privacy/10 hover:bg-privacy/20 text-privacy transition-colors text-body2"
           >
             <Send className="w-4 h-4" />
-            Send Private
+            Send
+          </button>
+          <button
+            onClick={handleWithdrawBtc}
+            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px] bg-btc/10 hover:bg-btc/20 text-btc transition-colors text-body2"
+          >
+            <Bitcoin className="w-4 h-4" />
+            Withdraw BTC
           </button>
         </div>
       )}

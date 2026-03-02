@@ -284,7 +284,7 @@ impl SigningPolicy {
         };
 
         for prevout in &ctx.prevouts {
-            let url = format!("{}/api/tx/{}", base_url, prevout.txid);
+            let url = format!("{}/tx/{}", base_url, prevout.txid);
 
             let response = self
                 .http

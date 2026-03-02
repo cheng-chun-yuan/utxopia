@@ -132,7 +132,7 @@ describe("On-Chain Commitment Tree", () => {
 
       expect(tree.size()).toBe(0);
       expect(tree.getRoot()).toBe(
-        0x2134e76ac5d21aab186c2be1dd8f84ee880a1e46eaf712f9d371b6df22191f3en,
+        0x2a7c7c9b6ce5880b9f6f228d72bf6a575a526f29c66ecceef8b753d38bba7323n,
       );
     });
   });

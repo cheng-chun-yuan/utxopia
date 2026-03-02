@@ -17,8 +17,82 @@ import {
   type ScannedNote,
 } from "@zvault/sdk";
 
+// ============================================================================
+// localStorage Key Persistence (devnet only)
+// ============================================================================
+
+const KEYS_STORAGE_PREFIX = "zvault:keys_v2:";
+
+function bytesToHexLocal(bytes: Uint8Array): string {
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function hexToBytesLocal(hex: string): Uint8Array {
+  const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
+  const bytes = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < clean.length; i += 2) {
+    bytes[i / 2] = parseInt(clean.substring(i, i + 2), 16);
+  }
+  return bytes;
+}
+
+function persistKeys(walletPubkey: string, keys: ZVaultKeys): void {
+  try {
+    const data = {
+      eddsaSeedHex: bytesToHexLocal(keys.eddsaSeed),
+      spendingPrivKeyHex: keys.spendingPrivKey.toString(16),
+      nullifyingKeyHex: keys.nullifyingKey.toString(16),
+      viewingPrivKeyHex: bytesToHexLocal(keys.viewingPrivKey),
+      viewingPubKeyHex: bytesToHexLocal(keys.viewingPubKey),
+      spendingPubKeyX: keys.spendingPubKey.x.toString(),
+      spendingPubKeyY: keys.spendingPubKey.y.toString(),
+    };
+    localStorage.setItem(KEYS_STORAGE_PREFIX + walletPubkey, JSON.stringify(data));
+  } catch {
+    // localStorage may be unavailable
+  }
+}
+
+function loadKeys(walletPubkey: string, solanaPublicKey: Uint8Array): ZVaultKeys | null {
+  try {
+    const raw = localStorage.getItem(KEYS_STORAGE_PREFIX + walletPubkey);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+
+    // Restore spendingPubKey from stored coordinates (avoids calling circomlibjs WASM)
+    const spendingPubKey = {
+      x: BigInt(data.spendingPubKeyX),
+      y: BigInt(data.spendingPubKeyY),
+    };
+
+    return {
+      solanaPublicKey,
+      spendingPrivKey: BigInt("0x" + data.spendingPrivKeyHex),
+      spendingPubKey,
+      nullifyingKey: BigInt("0x" + data.nullifyingKeyHex),
+      viewingPrivKey: hexToBytesLocal(data.viewingPrivKeyHex),
+      viewingPubKey: hexToBytesLocal(data.viewingPubKeyHex),
+      eddsaSeed: hexToBytesLocal(data.eddsaSeedHex),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function removeKeys(walletPubkey: string): void {
+  try {
+    localStorage.removeItem(KEYS_STORAGE_PREFIX + walletPubkey);
+  } catch {
+    // ignore
+  }
+}
+
 // Module-level deduplication for inbox fetch
 let inboxFetchPromise: Promise<void> | null = null;
+
+// Cache last announcement count to skip re-scan when nothing changed
+let lastAnnouncementCount = -1;
+let lastAnnouncementCachedAt = 0;
 
 // ============================================================================
 // Types
@@ -30,6 +104,19 @@ export interface InboxNote extends ScannedNote {
   commitmentHex: string;
   /** True if nullifier exists on-chain (note has been spent) */
   isSpent?: boolean;
+}
+
+export type WithdrawalStatus = "pending" | "processing" | "broadcasting" | "confirmed" | "failed";
+
+export interface ActiveWithdrawal {
+  id: string;
+  amountSats: bigint;
+  btcAddress: string;
+  status: WithdrawalStatus;
+  solanaSignature?: string;
+  btcTxid?: string;
+  createdAt: number;
+  updatedAt: number;
 }
 
 interface ZVaultState {
@@ -51,14 +138,20 @@ interface ZVaultState {
   inboxLoading: boolean;
   inboxError: string | null;
 
+  // Withdrawals
+  activeWithdrawals: ActiveWithdrawal[];
+
   // Actions
   initPoseidon: () => Promise<void>;
   deriveKeys: (wallet: {
     publicKey: PublicKey;
     signMessage: (message: Uint8Array) => Promise<Uint8Array>;
   }) => Promise<void>;
-  clearKeys: () => void;
+  hydrateKeys: (walletPubkey: PublicKey) => boolean;
+  clearKeys: (walletPubkey?: string) => void;
   refreshInbox: (connection?: Connection) => Promise<void>;
+  submitWithdrawal: (withdrawal: Omit<ActiveWithdrawal, "id" | "createdAt" | "updatedAt">) => string;
+  updateWithdrawal: (id: string, update: Partial<ActiveWithdrawal>) => void;
 }
 
 // ============================================================================
@@ -79,6 +172,7 @@ export const useZVaultStore = create<ZVaultState>((set, get) => ({
   inboxDepositCount: 0,
   inboxLoading: false,
   inboxError: null,
+  activeWithdrawals: [],
 
   initPoseidon: async () => {
     try {
@@ -100,6 +194,9 @@ export const useZVaultStore = create<ZVaultState>((set, get) => ({
 
       const meta = createStealthMetaAddress(derivedKeys);
       const encoded = encodeStealthMetaAddress(meta);
+
+      // Persist to localStorage for session hydration
+      persistKeys(wallet.publicKey.toBase58(), derivedKeys);
 
       set({
         keys: derivedKeys,
@@ -131,7 +228,27 @@ export const useZVaultStore = create<ZVaultState>((set, get) => ({
     }
   },
 
-  clearKeys: () => {
+  hydrateKeys: (walletPubkey: PublicKey) => {
+    const pubkeyStr = walletPubkey.toBase58();
+    const restored = loadKeys(pubkeyStr, walletPubkey.toBytes());
+    if (!restored) return false;
+
+    const meta = createStealthMetaAddress(restored);
+    const encoded = encodeStealthMetaAddress(meta);
+
+    set({
+      keys: restored,
+      stealthAddress: meta,
+      stealthAddressEncoded: encoded,
+      hasKeys: true,
+    });
+    return true;
+  },
+
+  clearKeys: (walletPubkey?: string) => {
+    if (walletPubkey) {
+      removeKeys(walletPubkey);
+    }
     set({
       keys: null,
       stealthAddress: null,
@@ -169,6 +286,19 @@ export const useZVaultStore = create<ZVaultState>((set, get) => ({
           throw new Error(data.error || "Failed to fetch announcements");
         }
 
+        // Skip re-scan if announcements haven't changed (same count + same cache timestamp)
+        const currentNotes = get().inboxNotes;
+        if (
+          data.count === lastAnnouncementCount &&
+          data.cachedAt === lastAnnouncementCachedAt &&
+          currentNotes.length > 0
+        ) {
+          set({ inboxLoading: false });
+          return;
+        }
+        lastAnnouncementCount = data.count;
+        lastAnnouncementCachedAt = data.cachedAt;
+
         // Convert API response to scan format (includes announcementType for unified scanning)
         const announcements = data.announcements.map((ann: {
           announcementType: number;
@@ -189,44 +319,52 @@ export const useZVaultStore = create<ZVaultState>((set, get) => ({
         // Scan locally for privacy (server doesn't know which are ours)
         const scanned = await scanUnifiedNotes(keys, announcements);
 
-        // Check which notes are spent by looking up nullifier records on-chain
+        // Check which notes are spent — batch all nullifier PDAs into a single getMultipleAccounts RPC call
         const rpcUrl = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.devnet.solana.com";
-        const notesWithSpentStatus = await Promise.all(
+
+        // Pre-compute all nullifier PDAs
+        const nullifierData = await Promise.all(
           scanned.map(async (note) => {
-            try {
-              // Compute nullifier hash (requires spending key)
-              const nullifierHashBytes = computeNullifierHashForNote(keys, note);
-              const nullifierHex = Buffer.from(nullifierHashBytes).toString("hex");
-
-              // Derive nullifier PDA
-              const [nullifierPda] = await deriveNullifierRecordPDA(
-                nullifierHashBytes,
-                DEVNET_CONFIG.zvaultProgramId
-              );
-
-              // Check if PDA exists (note was spent)
-              const response = await fetch(rpcUrl, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  jsonrpc: "2.0",
-                  id: 1,
-                  method: "getAccountInfo",
-                  params: [nullifierPda, { encoding: "base64" }],
-                }),
-              });
-              const result = await response.json();
-              const isSpent = result?.result?.value !== null;
-
-              console.log(`[ZVault] Nullifier check for leafIndex=${note.leafIndex}: PDA=${nullifierPda}, isSpent=${isSpent}, nullifierHash=${nullifierHex.slice(0, 16)}...`);
-
-              return { ...note, isSpent };
-            } catch (err) {
-              console.error("[ZVault] Failed to check nullifier for note:", err, "leafIndex:", note.leafIndex);
-              return { ...note, isSpent: false };
-            }
+            const nullifierHashBytes = computeNullifierHashForNote(keys, note);
+            const [nullifierPda] = await deriveNullifierRecordPDA(
+              nullifierHashBytes,
+              DEVNET_CONFIG.zvaultProgramId
+            );
+            return { note, nullifierPda: nullifierPda.toString() };
           })
         );
+
+        // Single batched RPC call for all nullifier checks
+        let notesWithSpentStatus: (ScannedNote & { isSpent: boolean })[];
+        if (nullifierData.length === 0) {
+          notesWithSpentStatus = [];
+        } else {
+          try {
+            const response = await fetch(rpcUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                jsonrpc: "2.0",
+                id: 1,
+                method: "getMultipleAccounts",
+                params: [
+                  nullifierData.map(d => d.nullifierPda),
+                  { encoding: "base64" },
+                ],
+              }),
+            });
+            const result = await response.json();
+            const accountValues: (null | object)[] = result?.result?.value || [];
+
+            notesWithSpentStatus = nullifierData.map((d, i) => ({
+              ...d.note,
+              isSpent: accountValues[i] !== null,
+            }));
+          } catch (err) {
+            console.error("[ZVault] Batch nullifier check failed, falling back:", err);
+            notesWithSpentStatus = scanned.map(note => ({ ...note, isSpent: false }));
+          }
+        }
 
         const notes: InboxNote[] = notesWithSpentStatus.map((note, index) => {
           const originalAnn = announcements.find((a: { commitment: Uint8Array }) =>
@@ -277,6 +415,29 @@ export const useZVaultStore = create<ZVaultState>((set, get) => ({
 
     inboxFetchPromise = doFetch();
     return inboxFetchPromise;
+  },
+
+  submitWithdrawal: (withdrawal) => {
+    const id = crypto.randomUUID();
+    const now = Date.now();
+    const newWithdrawal: ActiveWithdrawal = {
+      ...withdrawal,
+      id,
+      createdAt: now,
+      updatedAt: now,
+    };
+    set((state) => ({
+      activeWithdrawals: [...state.activeWithdrawals, newWithdrawal],
+    }));
+    return id;
+  },
+
+  updateWithdrawal: (id, update) => {
+    set((state) => ({
+      activeWithdrawals: state.activeWithdrawals.map((w) =>
+        w.id === id ? { ...w, ...update, updatedAt: Date.now() } : w
+      ),
+    }));
   },
 }));
 

@@ -112,8 +112,15 @@ async fn handle_register_deposit(
 ) -> impl IntoResponse {
     let tracker = state.tracker.write().await;
 
-    match tracker.register_deposit(req.taproot_address, req.commitment, req.amount_sats) {
+    match tracker.register_deposit(req.taproot_address, req.commitment.clone(), req.amount_sats) {
         Ok(id) => {
+            // Set npk and ephemeral_pub for SPV verification
+            // commitment IS the npk (used as Taproot tweak)
+            if let Some(mut record) = tracker.get_deposit(&id) {
+                record.npk = Some(req.commitment.clone());
+                record.ephemeral_pub = req.ephemeral_pub.clone();
+                let _ = tracker.update_deposit(&record);
+            }
             let response = RegisterDepositResponse {
                 success: true,
                 deposit_id: Some(id),

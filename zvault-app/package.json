@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest --coverage"
+    "test:coverage": "vitest --coverage",
+    "copy-circuits": "mkdir -p public/circuits/groth16 && for c in ../sdk/circuits/joinsplit_*; do n=$(basename $c); mkdir -p public/circuits/groth16/$n/${n}_js && cp $c/${n}_js/${n}.wasm public/circuits/groth16/$n/${n}_js/ && cp $c/${n}.zkey public/circuits/groth16/$n/; done"
   },
   "dependencies": {
     "@noble/curves": "^1.8.2",

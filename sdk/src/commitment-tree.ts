@@ -25,8 +25,8 @@ function bytesToBigintLE(bytes: Uint8Array): bigint {
   return result;
 }
 
-// Tree constants (must match on-chain)
-export const TREE_DEPTH = 20;
+// Tree constants (must match on-chain — depth 16 = 65,536 leaves)
+export const TREE_DEPTH = 16;
 export const ROOT_HISTORY_SIZE = 100;
 export const MAX_LEAVES = 1n << BigInt(TREE_DEPTH);
 
@@ -708,7 +708,8 @@ function toBase58(bytes: Uint8Array): string {
  */
 export async function buildCommitmentTreeFromChain(
   rpc: RpcClient,
-  programId: string
+  programId: string,
+  options?: { maxLeafIndex?: number }
 ): Promise<CommitmentTreeIndex> {
   console.log("[CommitmentTree] Fetching stealth announcements from chain...");
 
@@ -738,6 +739,10 @@ export async function buildCommitmentTreeFromChain(
 
     const parsed = parseAnnouncementData(data);
     if (parsed) {
+      // Filter out stale announcements from before a tree reset
+      if (options?.maxLeafIndex !== undefined && parsed.leafIndex >= options.maxLeafIndex) {
+        continue;
+      }
       announcements.push({ commitment: parsed.commitment, leafIndex: parsed.leafIndex });
     }
   }
@@ -745,10 +750,25 @@ export async function buildCommitmentTreeFromChain(
   // Sort by leaf index to insert in correct order
   announcements.sort((a, b) => a.leafIndex - b.leafIndex);
 
+  // Deduplicate by leafIndex (stale pre-reset announcements may share indices with current ones)
+  const deduped: Array<{ commitment: bigint; leafIndex: number }> = [];
+  for (const ann of announcements) {
+    if (deduped.length > 0 && deduped[deduped.length - 1].leafIndex === ann.leafIndex) {
+      console.warn(`[CommitmentTree] Duplicate leafIndex ${ann.leafIndex}, replacing`);
+      deduped[deduped.length - 1] = ann;
+    } else {
+      deduped.push(ann);
+    }
+  }
+
+  if (deduped.length < announcements.length) {
+    console.log(`[CommitmentTree] Filtered ${announcements.length - deduped.length} duplicate announcements`);
+  }
+
   // Build tree
   const tree = new CommitmentTreeIndex();
 
-  for (const { commitment, leafIndex } of announcements) {
+  for (const { commitment, leafIndex } of deduped) {
     // Verify leaf indices are sequential
     if (BigInt(leafIndex) !== tree.getNextIndex()) {
       console.warn(

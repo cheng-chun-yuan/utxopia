@@ -256,61 +256,54 @@ export function formatMerkleProofForChain(
 }
 
 /**
- * Placeholder for actual on-chain verification
+ * Submit on-chain SPV verification via the /api/verify endpoint.
  *
- * In production, this would:
- * 1. Submit block header (if not exists)
- * 2. Call verify_deposit instruction with merkle proof
+ * The endpoint handles:
+ * 1. Fetching raw tx from mempool.space
+ * 2. Uploading to ChadBuffer
+ * 3. Building verify_transaction + verify_stealth_deposit instructions
+ * 4. Submitting and confirming on Solana
  */
 export async function submitSPVVerification(
-  connection: Connection,
-  wallet: WalletContextState,
+  _connection: Connection,
+  _wallet: WalletContextState,
   spvData: SPVVerifyResult,
   expectedAmountSats: number,
-  commitmentBytes: Uint8Array
+  _commitmentBytes: Uint8Array,
+  ephemeralPub?: string,
+  npk?: string,
 ): Promise<{ success: boolean; signature?: string; error?: string }> {
-  if (!wallet.publicKey || !wallet.signTransaction) {
-    return { success: false, error: "Wallet not connected" };
+  if (!ephemeralPub || !npk) {
+    return { success: false, error: "ephemeralPub and npk are required for verification" };
   }
 
   try {
-    console.log("[SPV] Submitting SPV verification...");
+    console.log("[SPV] Submitting verification via /api/verify...");
     console.log("[SPV] Block height:", spvData.blockHeight);
     console.log("[SPV] Confirmations:", spvData.confirmations);
 
-    // Check if block header exists
-    const headerExists = await checkBlockHeaderExists(
-      connection,
-      spvData.blockHeight
-    );
-
-    console.log("[SPV] Block header exists on-chain:", headerExists);
-
-    // Format data for chain
-    const headerData = formatBlockHeaderForChain(spvData.blockHeader);
-    const proofData = formatMerkleProofForChain(spvData.txid, spvData.merkleProof);
-
-    console.log("[SPV] Header data prepared:", {
-      version: headerData.version,
-      timestamp: headerData.timestamp,
-      bits: headerData.bits,
-      nonce: headerData.nonce,
+    const response = await fetch("/api/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sweepTxid: spvData.txid,
+        blockHeight: spvData.blockHeight,
+        amountSats: expectedAmountSats,
+        ephemeralPub,
+        npk,
+      }),
     });
 
-    console.log("[SPV] Merkle proof prepared:", {
-      txIndex: proofData.txIndex,
-      pathLength: proofData.path.length,
-      siblingsCount: proofData.siblings.length,
-    });
+    const result = await response.json();
 
-    // TODO: Build and send actual transaction
-    // For now, return success with the prepared data
-    console.log("[SPV] Verification data ready for on-chain submission");
+    if (!result.success) {
+      return { success: false, error: result.error || "Verification failed" };
+    }
 
-    // In demo mode, just return success
+    console.log("[SPV] Verification confirmed:", result.signature);
     return {
       success: true,
-      signature: "demo_" + Date.now().toString(16),
+      signature: result.signature,
     };
   } catch (error) {
     console.error("[SPV] Submission failed:", error);

@@ -252,7 +252,8 @@ export async function createStealthDeposit(
   recipientMeta: StealthMetaAddress,
   amountSats: bigint
 ): Promise<StealthDeposit> {
-  const { spendingPubKey, viewingPubKey } = parseStealthMetaAddress(recipientMeta);
+  // Only viewingPubKey + mpk needed (spendingPubKey not used by sender)
+  const viewingPubKey = new Uint8Array(recipientMeta.viewingPubKey);
 
   // Generate Ed25519 ephemeral keypair
   const ephemeral = ed25519GenerateKeyPair();
@@ -296,7 +297,8 @@ export async function createStealthDepositWithKeys(
   recipientMeta: StealthMetaAddress,
   amountSats: bigint
 ): Promise<StealthOutputWithKeys> {
-  const { viewingPubKey } = parseStealthMetaAddress(recipientMeta);
+  // Only viewingPubKey + mpk needed (spendingPubKey not used by sender)
+  const viewingPubKey = new Uint8Array(recipientMeta.viewingPubKey);
 
   const ephemeral = ed25519GenerateKeyPair();
   const sharedSecret = x25519Ecdh(ephemeral.privKey, viewingPubKey);
@@ -358,7 +360,8 @@ export async function createNonInteractiveDeposit(
   groupPubKey: Uint8Array,
   network: "mainnet" | "testnet" | "regtest" = "testnet",
 ): Promise<NonInteractiveDepositResult> {
-  const { viewingPubKey } = parseStealthMetaAddress(recipientMeta);
+  // Only viewingPubKey + mpk needed (spendingPubKey not used by sender)
+  const viewingPubKey = new Uint8Array(recipientMeta.viewingPubKey);
 
   // 1. Generate ephemeral Ed25519 keypair
   const ephemeral = ed25519GenerateKeyPair();

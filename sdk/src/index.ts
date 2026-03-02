@@ -83,6 +83,9 @@ export {
   deriveKeysFromWallet,
   deriveKeysFromSignature,
   deriveKeysFromSeed,
+  eddsaGetPubKey,
+  eddsaGetPrivScalar,
+  eddsaPoseidonSign,
   SPENDING_KEY_DERIVATION_MESSAGE,
   createStealthMetaAddress,
   serializeStealthMetaAddress,
@@ -524,6 +527,8 @@ export {
   isSnsStealthAddress,
   deriveParentDomainKey,
   SNS_STEALTH_DATA_SIZE,
+  SNS_STEALTH_DATA_SIZE_LEGACY_V1,
+  SNS_STEALTH_DATA_SIZE_LEGACY_V2,
   type SnsStealthAddress,
 } from "./sns-resolver";
 
@@ -562,9 +567,13 @@ export {
   // JoinSplit transact instruction
   buildTransactInstructionData,
   buildTransactInstruction,
+  // Public unshield instruction
+  buildUnshieldInstructionData,
+  buildUnshieldInstruction,
   type Instruction,
   type RedemptionRequestInstructionOptions,
   type TransactInstructionOptions,
+  type UnshieldInstructionOptions,
 } from "./instructions";
 
 // ==========================================================================

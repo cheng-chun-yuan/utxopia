@@ -13,9 +13,10 @@ import {
   Send,
   Loader2,
   LogOut,
-  TrendingUp,
+  Search,
   ExternalLink,
   Globe,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FeatureCard, type FeatureCardColor } from "@/components/ui/feature-card";
@@ -68,14 +69,12 @@ const features: FeatureConfig[] = [
     color: "privacy",
   },
   {
-    icon: <TrendingUp className="w-full h-full" />,
-    title: "Earn",
-    description: "Yield on zkBTC",
-    subtext: "DeFi yields",
-    href: "/bridge/earn",
+    icon: <Search className="w-full h-full" />,
+    title: "Explorer",
+    description: "On-chain data",
+    subtext: "Commitments & proofs",
+    href: "/explorer",
     color: "purple",
-    disabled: true,
-    badge: "Coming Soon",
   },
 ];
 
@@ -94,15 +93,18 @@ export default function BridgePage() {
   const {
     registeredSnsName,
     hasRegisteredSnsName,
+    needsUpdate: snsNeedsUpdate,
     isLoading: isLoadingSnsName,
     isRegistering: isRegisteringSns,
     error: snsError,
     registerSnsSubdomain,
+    updateSnsStealthData,
   } = useSnsName();
   const {
     totalAmountSats,
     depositCount,
     isLoading: isLoadingInbox,
+    refresh: refreshInbox,
   } = useStealthInbox();
 
   const snsConfig = getConfig();
@@ -166,13 +168,13 @@ export default function BridgePage() {
           {/* Title Section */}
           <div className="text-center mb-8">
             <h1 className="text-[28px] font-bold text-foreground mb-2 tracking-tight">
-              <span className="bg-gradient-to-r from-privacy via-purple to-btc bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-privacy/90 to-privacy bg-clip-text text-transparent">
                 zVault
               </span>{" "}
-              Bridge
+              <span className="text-foreground">Bridge</span>
             </h1>
             <p className="text-body2 text-gray">
-              Bridge Bitcoin to Solana with zero-knowledge privacy
+              Bridge <span className="text-btc">Bitcoin</span> to <span className="text-purple">Solana</span> with <span className="text-privacy">zero-knowledge</span> privacy
             </p>
           </div>
 
@@ -193,7 +195,7 @@ export default function BridgePage() {
               </div>
               {keys && (
                 <button
-                  onClick={clearKeys}
+                  onClick={() => clearKeys(wallet.publicKey?.toBase58())}
                   className="flex items-center gap-1.5 px-2 py-1 rounded-[6px] text-caption text-gray hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
                   title="Clear keys and log out"
                 >
@@ -260,22 +262,48 @@ export default function BridgePage() {
               <div>
                 {/* SNS name badge */}
                 {registeredSnsName && (
-                  <div className="flex items-center gap-2 p-3 bg-btc/10 border border-btc/30 rounded-[10px] mb-3">
-                    <Globe className="w-4 h-4 text-btc" />
-                    <span className="text-body2-semibold text-btc">
-                      {registeredSnsName}.{parentDomain}.sol
-                    </span>
-                    <button
-                      onClick={() => { copy(`${registeredSnsName}.${parentDomain}.sol`); notifyCopied(`.${parentDomain}.sol name`); }}
-                      className="ml-auto p-1.5 rounded-[6px] bg-btc/10 hover:bg-btc/20 transition-colors cursor-pointer"
-                      title={`Copy .${parentDomain}.sol name`}
-                    >
-                      {copied ? (
-                        <Check className="w-3 h-3 text-green-400" />
-                      ) : (
-                        <Copy className="w-3 h-3 text-btc" />
-                      )}
-                    </button>
+                  <div className="mb-3">
+                    <div className="flex items-center gap-2 p-3 bg-btc/10 border border-btc/30 rounded-[10px]">
+                      <Globe className="w-4 h-4 text-btc" />
+                      <span className="text-body2-semibold text-btc">
+                        {registeredSnsName}.{parentDomain}.sol
+                      </span>
+                      <button
+                        onClick={() => { copy(`${registeredSnsName}.${parentDomain}.sol`); notifyCopied(`.${parentDomain}.sol name`); }}
+                        className="ml-auto p-1.5 rounded-[6px] bg-btc/10 hover:bg-btc/20 transition-colors cursor-pointer"
+                        title={`Copy .${parentDomain}.sol name`}
+                      >
+                        {copied ? (
+                          <Check className="w-3 h-3 text-green-400" />
+                        ) : (
+                          <Copy className="w-3 h-3 text-btc" />
+                        )}
+                      </button>
+                    </div>
+                    {snsNeedsUpdate && (
+                      <button
+                        onClick={updateSnsStealthData}
+                        disabled={isRegisteringSns}
+                        className={cn(
+                          "w-full flex items-center justify-center gap-2 mt-2 px-3 py-2 rounded-[8px]",
+                          "bg-yellow-500/10 border border-yellow-500/30 hover:bg-yellow-500/20",
+                          "text-caption text-yellow-400 transition-colors cursor-pointer",
+                          "disabled:opacity-50 disabled:cursor-not-allowed"
+                        )}
+                      >
+                        {isRegisteringSns ? (
+                          <>
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Updating...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="w-3 h-3" />
+                            Update SNS record (outdated format)
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -395,7 +423,17 @@ export default function BridgePage() {
                     <Wallet className="w-5 h-5 text-privacy" />
                   </div>
                   <div>
-                    <p className="text-caption text-gray mb-0.5">Claimable Notes</p>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <p className="text-caption text-gray">Claimable Notes</p>
+                      <button
+                        onClick={refreshInbox}
+                        disabled={isLoadingInbox}
+                        className="p-1 rounded-[4px] text-gray hover:text-privacy hover:bg-privacy/10 transition-colors disabled:opacity-50 cursor-pointer"
+                        title="Refresh notes"
+                      >
+                        <RefreshCw className={cn("w-3 h-3", isLoadingInbox && "animate-spin")} />
+                      </button>
+                    </div>
                     <div className="flex items-baseline gap-2">
                       {isLoadingInbox ? (
                         <div className="flex items-center gap-2">
@@ -420,7 +458,7 @@ export default function BridgePage() {
                 </div>
                 {depositCount > 0 && (
                   <Link
-                    href="/bridge/activity?tab=claimable"
+                    href="/bridge/activity?tab=notes"
                     className={cn(
                       "flex items-center gap-1.5 px-4 py-2 rounded-[10px]",
                       "bg-privacy/10 hover:bg-privacy/20 border border-privacy/20",
@@ -480,7 +518,7 @@ export default function BridgePage() {
           <div className="flex items-center gap-2 py-2.5 px-4 bg-warning/5 border border-warning/15 rounded-[10px]">
             <div className="w-2 h-2 rounded-full bg-warning animate-pulse" />
             <span className="text-caption text-warning">
-              Bitcoin Testnet3 + Solana Devnet
+              Bitcoin {getConfig().bitcoinNetwork.charAt(0).toUpperCase() + getConfig().bitcoinNetwork.slice(1)} + Solana {getConfig().network.charAt(0).toUpperCase() + getConfig().network.slice(1)}
             </span>
           </div>
 

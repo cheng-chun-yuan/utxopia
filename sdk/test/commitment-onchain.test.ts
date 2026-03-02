@@ -125,9 +125,9 @@ describe("On-Chain Commitment Tree", () => {
       const tree = await buildCommitmentTreeFromChain(mockRpc, "mock-program-id");
 
       expect(tree.size()).toBe(0);
-      // Empty tree has known root (ZERO_HASHES[20])
+      // Empty tree has known root (ZERO_HASHES[16])
       expect(tree.getRoot()).toBe(
-        0x2134e76ac5d21aab186c2be1dd8f84ee880a1e46eaf712f9d371b6df22191f3en
+        0x2a7c7c9b6ce5880b9f6f228d72bf6a575a526f29c66ecceef8b753d38bba7323n
       );
     });
 
@@ -169,8 +169,8 @@ describe("On-Chain Commitment Tree", () => {
       expect(proof).not.toBeNull();
       expect(proof!.leafIndex).toBe(1);
       expect(proof!.commitment).toBe(222n);
-      expect(proof!.siblings.length).toBe(20); // TREE_DEPTH
-      expect(proof!.indices.length).toBe(20);
+      expect(proof!.siblings.length).toBe(16); // TREE_DEPTH
+      expect(proof!.indices.length).toBe(16);
       expect(proof!.root).toBe(tree.getRoot());
     });
 
@@ -250,8 +250,8 @@ describe("Integration: Full Flow Simulation", () => {
     expect(proof!.leafIndex).toBe(1);
 
     // Verify proof structure matches circuit expectations
-    expect(proof!.siblings.length).toBe(20);
-    expect(proof!.indices.length).toBe(20);
+    expect(proof!.siblings.length).toBe(16);
+    expect(proof!.indices.length).toBe(16);
     expect(proof!.indices.every((i) => i === 0 || i === 1)).toBe(true);
 
     // Verify root is consistent

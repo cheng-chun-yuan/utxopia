@@ -15,15 +15,17 @@
 
 use solana_sdk::signature::Keypair;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{mpsc, RwLock};
 use tokio::time::{interval, Duration};
 
+use super::header_relayer::HeaderRelayer;
 use super::sqlite_db::{SqliteDepositStore, SqliteError};
 use super::sweeper::{SweeperError, UtxoSweeper};
 use super::types::{DepositRecord, DepositStatus, TrackerConfig, TrackerStats};
 use super::verifier::{SpvVerifier, VerifierError};
 use super::watcher::{AddressWatcher, WatcherError};
 use super::websocket::{DepositUpdatePublisher, SharedWebSocketState};
+use super::ws_listener::{MempoolWsListener, WsEvent};
 
 /// Deposit tracker service errors
 #[derive(Debug, thiserror::Error)]
@@ -197,6 +199,12 @@ impl DepositTrackerService {
     /// Get deposit by address
     pub fn get_deposit_by_address(&self, address: &str) -> Option<DepositRecord> {
         self.db.get_by_address(address).ok().flatten()
+    }
+
+    /// Update a deposit record in the database
+    pub fn update_deposit(&self, record: &DepositRecord) -> Result<(), TrackerError> {
+        self.db.update(record)?;
+        Ok(())
     }
 
     /// Get all deposits
@@ -479,10 +487,15 @@ impl DepositTrackerService {
         );
         println!("Database: {}", self.config.db_path);
         println!("Max retries: {}", self.config.max_retries);
+        println!("WebSocket: {}", if self.config.ws_enabled { &self.config.ws_url } else { "disabled" });
+        println!("Header relay: {}", if self.config.header_relay_enabled { "enabled" } else { "disabled" });
         println!();
 
         // Recover any interrupted deposits
         self.recover_in_progress_deposits()?;
+
+        // Optionally start the mempool.space WebSocket listener
+        let mut ws_event_rx = self.maybe_start_ws_listener();
 
         let mut poll_interval = interval(Duration::from_secs(self.config.poll_interval_secs));
         let mut retry_interval = interval(Duration::from_secs(self.config.retry_delay_secs));
@@ -499,7 +512,83 @@ impl DepositTrackerService {
                         eprintln!("Retry cycle error: {}", e);
                     }
                 }
+                Some(event) = async {
+                    match ws_event_rx.as_mut() {
+                        Some(rx) => rx.recv().await,
+                        None => std::future::pending::<Option<WsEvent>>().await,
+                    }
+                } => {
+                    self.handle_ws_event(event).await;
+                }
             }
+        }
+    }
+
+    /// Start WebSocket listener if enabled, returns event receiver
+    fn maybe_start_ws_listener(&self) -> Option<mpsc::UnboundedReceiver<WsEvent>> {
+        if !self.config.ws_enabled {
+            return None;
+        }
+
+        let (event_tx, event_rx) = mpsc::unbounded_channel::<WsEvent>();
+
+        let header_relayer = if self.config.header_relay_enabled && !self.config.relayer_keypair.is_empty() {
+            match self.create_header_relayer() {
+                Ok(r) => {
+                    println!("[ws] Header relayer configured");
+                    Some(Arc::new(r))
+                }
+                Err(e) => {
+                    eprintln!("[ws] Header relayer failed: {}, continuing without", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        let listener = MempoolWsListener::new(&self.config, event_tx, header_relayer);
+        tokio::spawn(async move { listener.run().await });
+
+        Some(event_rx)
+    }
+
+    fn create_header_relayer(&self) -> Result<HeaderRelayer, String> {
+        let keypair = if self.config.relayer_keypair.starts_with('[') {
+            let bytes: Vec<u8> = serde_json::from_str(&self.config.relayer_keypair)
+                .map_err(|e| format!("parse keypair JSON: {}", e))?;
+            Keypair::from_bytes(&bytes).map_err(|e| format!("invalid keypair: {}", e))?
+        } else {
+            crate::load_keypair_from_file(&self.config.relayer_keypair)
+                .map_err(|e| format!("load keypair: {}", e))?
+        };
+
+        HeaderRelayer::new(
+            &self.config.solana_rpc,
+            &self.config.esplora_url,
+            &self.config.btc_light_client_program_id,
+            keypair,
+            self.config.header_batch_size,
+        )
+        .map_err(|e| e.to_string())
+    }
+
+    async fn handle_ws_event(&self, event: WsEvent) {
+        match event {
+            WsEvent::NewTransaction { txid } => {
+                println!("[ws] Tx {}, running detection...", &txid[..16]);
+                if let Err(e) = self.detect_op_return_deposits().await {
+                    eprintln!("[ws] Detection error: {}", e);
+                }
+            }
+            WsEvent::NewBlock { height, .. } => {
+                println!("[ws] Block {}, processing deposits...", height);
+                if let Err(e) = self.process_cycle().await {
+                    eprintln!("[ws] Process cycle error: {}", e);
+                }
+            }
+            WsEvent::Connected => println!("[ws] Connected - real-time detection active"),
+            WsEvent::Disconnected => println!("[ws] Disconnected - falling back to polling"),
         }
     }
 
@@ -706,7 +795,6 @@ impl DepositTrackerService {
         let mut record = self.db.get_by_address(address)?
             .ok_or_else(|| TrackerError::NotFound(address.to_string()))?;
 
-        let amount_sats = record.amount_sats;
         let record_id = record.id.clone();
 
         // Check if block header is available
@@ -732,7 +820,7 @@ impl DepositTrackerService {
         println!("[{}] Submitting SPV verification...", record_id);
 
         let result = verifier
-            .verify_deposit(sweep_txid, 0, npk, ephemeral_pub, amount_sats)
+            .verify_deposit(sweep_txid, 0, npk, ephemeral_pub)
             .await?;
 
         let mut record = self.db.get_by_address(address)?

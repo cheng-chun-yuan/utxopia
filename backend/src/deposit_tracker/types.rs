@@ -321,12 +321,12 @@ impl DepositRecord {
 pub struct RegisterDepositRequest {
     /// Taproot deposit address (bc1p... or tb1p...)
     pub taproot_address: String,
-    /// The commitment SHA256(nullifier || secret) as hex (64 chars)
+    /// The npk (note public key) as hex (64 chars = 32 bytes), used as Taproot tweak
     pub commitment: String,
     /// Expected amount in satoshis
     pub amount_sats: u64,
-    /// Optional claim link for reference
-    pub claim_link: Option<String>,
+    /// Optional ephemeral public key (64 hex = 32 bytes Ed25519), needed for SPV verification
+    pub ephemeral_pub: Option<String>,
 }
 
 /// Response to POST /api/deposits
@@ -418,6 +418,22 @@ pub struct TrackerConfig {
     pub max_retries: u32,
     /// Delay between retry attempts in seconds
     pub retry_delay_secs: u64,
+
+    // ── WebSocket real-time listener ──
+    /// Enable mempool.space WebSocket for real-time deposit detection + header relay
+    pub ws_enabled: bool,
+    /// mempool.space WebSocket URL
+    pub ws_url: String,
+
+    // ── Header relayer (integrated) ──
+    /// Enable integrated block header relay via the same WS connection
+    pub header_relay_enabled: bool,
+    /// BTC light client program ID on Solana
+    pub btc_light_client_program_id: String,
+    /// Path to relayer Solana keypair (JSON array or file path)
+    pub relayer_keypair: String,
+    /// Minimum batch size for header submission (2-10)
+    pub header_batch_size: u8,
 }
 
 impl Default for TrackerConfig {
@@ -432,6 +448,12 @@ impl Default for TrackerConfig {
             db_path: "data/deposits.db".to_string(),
             max_retries: 5,
             retry_delay_secs: 60,
+            ws_enabled: true,
+            ws_url: "wss://mempool.space/testnet4/api/v1/ws".to_string(),
+            header_relay_enabled: false,
+            btc_light_client_program_id: "Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq".to_string(),
+            relayer_keypair: String::new(),
+            header_batch_size: 5,
         }
     }
 }

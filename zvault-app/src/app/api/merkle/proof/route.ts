@@ -7,12 +7,16 @@ import {
   initPoseidon,
   parseCommitmentTreeData,
   bytesToBigint,
+  type CommitmentTreeIndex,
 } from "@zvault/sdk";
 import { getHeliusConnection } from "@/lib/helius-server";
 
 export const runtime = "nodejs";
 
-// Poseidon initialization state
+// =============================================================================
+// Poseidon init
+// =============================================================================
+
 let poseidonInitialized = false;
 let poseidonInitPromise: Promise<void> | null = null;
 
@@ -26,74 +30,70 @@ async function ensurePoseidonInit(): Promise<void> {
   return poseidonInitPromise;
 }
 
-/**
- * GET /api/merkle/proof?commitment=xxx
- *
- * Get Merkle proof for a commitment.
- * Fetches tree directly from on-chain (like SDK tests do).
- * Returns siblings and indices for circom circuit input.
- */
-export async function GET(request: NextRequest) {
-  try {
-    const commitment = request.nextUrl.searchParams.get("commitment");
+// =============================================================================
+// Tree cache — avoid rebuilding on every proof request
+// =============================================================================
 
-    if (!commitment) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Missing commitment parameter",
-        },
-        { status: 400 }
-      );
+const CACHE_TTL_MS = 30_000; // 30 seconds
+
+let cachedTree: CommitmentTreeIndex | null = null;
+let cachedOnChainRoot: string | null = null;
+let cachedNextIndex: number | null = null;
+let cacheTimestamp = 0;
+let cacheBuildPromise: Promise<void> | null = null;
+
+async function getTreeAndRoot(): Promise<{
+  tree: CommitmentTreeIndex;
+  onChainRoot: string;
+}> {
+  const now = Date.now();
+
+  // Return cached if fresh
+  if (cachedTree && cachedOnChainRoot && now - cacheTimestamp < CACHE_TTL_MS) {
+    return { tree: cachedTree, onChainRoot: cachedOnChainRoot };
+  }
+
+  // Deduplicate concurrent builds
+  if (cacheBuildPromise) {
+    await cacheBuildPromise;
+    if (cachedTree && cachedOnChainRoot) {
+      return { tree: cachedTree, onChainRoot: cachedOnChainRoot };
     }
+  }
 
-    // Parse commitment as hex or decimal
-    let commitmentBigInt: bigint;
-    try {
-      if (commitment.startsWith("0x")) {
-        commitmentBigInt = BigInt(commitment);
-      } else if (/^[0-9a-fA-F]+$/.test(commitment) && commitment.length >= 32) {
-        // Hex without 0x prefix
-        commitmentBigInt = BigInt("0x" + commitment);
-      } else {
-        // Decimal
-        commitmentBigInt = BigInt(commitment);
-      }
-    } catch {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Invalid commitment format. Use hex (0x...) or decimal.",
-        },
-        { status: 400 }
-      );
-    }
-
-    // Ensure Poseidon is initialized
-    await ensurePoseidonInit();
-
-    // Debug: Log the commitment being looked up
-    console.log("[Merkle Proof API] Looking up commitment:");
-    console.log("[Merkle Proof API]   Input hex:", commitment);
-    console.log("[Merkle Proof API]   As bigint:", commitmentBigInt.toString());
-    console.log("[Merkle Proof API]   Normalized hex:", commitmentBigInt.toString(16).padStart(64, "0"));
-
-    // Fetch tree directly from on-chain (same as SDK tests)
-    console.log("[Merkle Proof API] Building tree from on-chain...");
+  cacheBuildPromise = (async () => {
     const connection = getHeliusConnection("devnet");
+    const commitmentTreePda = new PublicKey(DEVNET_CONFIG.commitmentTreePda);
 
+    // Fetch on-chain tree state (root + nextIndex) in one RPC call
+    const treeAccountInfo = await connection.getAccountInfo(commitmentTreePda);
+
+    let maxLeafIndex: number | undefined;
+    let rootHex: string;
+
+    if (treeAccountInfo) {
+      const treeState = parseCommitmentTreeData(new Uint8Array(treeAccountInfo.data));
+      maxLeafIndex = Number(treeState.nextIndex);
+      rootHex = bytesToBigint(treeState.currentRoot).toString(16).padStart(64, "0");
+
+      // Skip rebuild if nextIndex hasn't changed
+      if (cachedTree && cachedNextIndex === maxLeafIndex && cachedOnChainRoot) {
+        cacheTimestamp = now;
+        cacheBuildPromise = null;
+        return;
+      }
+    } else {
+      rootHex = "0".repeat(64);
+    }
+
+    // Build tree from chain
     const tree = await buildCommitmentTreeFromChain(
       {
         getProgramAccounts: async (programId, config) => {
-          // Build filters array, filtering out undefined values
           const filters = config?.filters
             ?.map((f: { memcmp?: { offset: number; bytes: string }; dataSize?: number }) => {
-              if (f.memcmp) {
-                return { memcmp: { offset: f.memcmp.offset, bytes: f.memcmp.bytes } };
-              }
-              if (f.dataSize !== undefined) {
-                return { dataSize: f.dataSize };
-              }
+              if (f.memcmp) return { memcmp: { offset: f.memcmp.offset, bytes: f.memcmp.bytes } };
+              if (f.dataSize !== undefined) return { dataSize: f.dataSize };
               return null;
             })
             .filter((f): f is NonNullable<typeof f> => f !== null);
@@ -108,62 +108,97 @@ export async function GET(request: NextRequest) {
           }));
         },
       },
-      DEVNET_CONFIG.zvaultProgramId
+      DEVNET_CONFIG.zvaultProgramId,
+      maxLeafIndex !== undefined ? { maxLeafIndex } : undefined
     );
 
-    console.log(`[Merkle Proof API] Tree built with ${tree.size()} commitments`);
+    console.log(`[Merkle Proof API] Tree built: ${tree.size()} leaves, root: ${rootHex.slice(0, 16)}...`);
 
-    // Debug: Log first few commitments in tree for comparison
-    const treeData = tree.export();
-    const firstFewCommitments = treeData.commitments.slice(0, 5);
-    console.log("[Merkle Proof API] First few tree commitments (hex):");
-    for (const [hex, entry] of firstFewCommitments) {
-      console.log(`  [${entry.index}]: ${hex}`);
+    cachedTree = tree;
+    cachedOnChainRoot = rootHex;
+    cachedNextIndex = maxLeafIndex ?? null;
+    cacheTimestamp = Date.now();
+    cacheBuildPromise = null;
+  })();
+
+  await cacheBuildPromise;
+
+  if (!cachedTree || !cachedOnChainRoot) {
+    throw new Error("Failed to build commitment tree");
+  }
+
+  return { tree: cachedTree, onChainRoot: cachedOnChainRoot };
+}
+
+// =============================================================================
+// Handler
+// =============================================================================
+
+/**
+ * GET /api/merkle/proof?commitment=xxx
+ *
+ * Returns Merkle proof (siblings + indices) for a commitment.
+ * Tree is cached server-side for 30s to avoid redundant rebuilds.
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const commitment = request.nextUrl.searchParams.get("commitment");
+
+    if (!commitment) {
+      return NextResponse.json(
+        { success: false, error: "Missing commitment parameter" },
+        { status: 400 }
+      );
     }
-    console.log("[Merkle Proof API] Looking for:", commitmentBigInt.toString(16).padStart(64, "0"));
 
-    // Get proof for commitment
+    // Parse commitment
+    let commitmentBigInt: bigint;
+    try {
+      if (commitment.startsWith("0x")) {
+        commitmentBigInt = BigInt(commitment);
+      } else if (/^[0-9a-fA-F]+$/.test(commitment) && commitment.length >= 32) {
+        commitmentBigInt = BigInt("0x" + commitment);
+      } else {
+        commitmentBigInt = BigInt(commitment);
+      }
+    } catch {
+      return NextResponse.json(
+        { success: false, error: "Invalid commitment format. Use hex (0x...) or decimal." },
+        { status: 400 }
+      );
+    }
+
+    await ensurePoseidonInit();
+
+    const start = Date.now();
+    const { tree, onChainRoot } = await getTreeAndRoot();
+    const fetchMs = Date.now() - start;
+
+    // Get proof
     const proof = getMerkleProofFromTree(tree, commitmentBigInt);
 
     if (!proof) {
+      const treeData = tree.export();
       return NextResponse.json(
         {
           success: false,
           error: "Commitment not found in on-chain tree",
           treeSize: tree.size(),
           lookingFor: commitmentBigInt.toString(16).padStart(64, "0"),
-          firstTreeCommitments: firstFewCommitments.map(([hex]) => hex),
+          firstTreeCommitments: treeData.commitments.slice(0, 5).map(([hex]) => hex),
         },
         { status: 404 }
       );
     }
 
-    console.log(`[Merkle Proof API] Found commitment at leaf index ${proof.leafIndex}`);
-
-    // CRITICAL: Fetch the actual on-chain root from the commitment tree account
-    // The locally computed root may differ from the on-chain root
-    const commitmentTreePda = new PublicKey(DEVNET_CONFIG.commitmentTreePda);
-    const treeAccountInfo = await connection.getAccountInfo(commitmentTreePda);
-
-    let onChainRoot: string;
-    if (treeAccountInfo) {
-      const treeState = parseCommitmentTreeData(new Uint8Array(treeAccountInfo.data));
-      onChainRoot = bytesToBigint(treeState.currentRoot).toString(16).padStart(64, "0");
-      console.log(`[Merkle Proof API] On-chain root: ${onChainRoot.slice(0, 16)}...`);
-      console.log(`[Merkle Proof API] Computed root: ${proof.root.toString(16).padStart(64, "0").slice(0, 16)}...`);
-      console.log(`[Merkle Proof API] Roots match: ${onChainRoot === proof.root.toString(16).padStart(64, "0")}`);
-    } else {
-      // Fallback to computed root if account fetch fails
-      console.warn("[Merkle Proof API] Could not fetch on-chain tree, using computed root");
-      onChainRoot = proof.root.toString(16).padStart(64, "0");
-    }
+    console.log(`[Merkle Proof API] Proof for leaf ${proof.leafIndex} in ${fetchMs}ms (${fetchMs < 100 ? "cached" : "rebuilt"})`);
 
     return NextResponse.json({
       success: true,
-      commitment: commitment,
+      commitment,
       leafIndex: proof.leafIndex.toString(),
-      root: onChainRoot,  // Use on-chain root, not computed root
-      computedRoot: proof.root.toString(16).padStart(64, "0"),  // Include computed for debugging
+      root: onChainRoot,
+      computedRoot: proof.root.toString(16).padStart(64, "0"),
       siblings: proof.siblings.map((s) => s.toString(16).padStart(64, "0")),
       indices: proof.indices,
     });
@@ -172,8 +207,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error:
-          error instanceof Error ? error.message : "Failed to get Merkle proof",
+        error: error instanceof Error ? error.message : "Failed to get Merkle proof",
       },
       { status: 500 }
     );

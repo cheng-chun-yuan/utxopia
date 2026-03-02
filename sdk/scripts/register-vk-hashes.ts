@@ -71,6 +71,19 @@ const TIER1_VARIANTS = [
   [2, 2],
 ];
 
+// Tier-2 variants
+const TIER2_VARIANTS = [
+  [1, 3],
+  [3, 1],
+  [2, 3],
+  [3, 2],
+  [1, 4],
+  [4, 1],
+];
+
+// All supported variants
+const ALL_VARIANTS = [...TIER1_VARIANTS, ...TIER2_VARIANTS];
+
 // =============================================================================
 // VK Serialization (matches on-chain verification format)
 // =============================================================================
@@ -170,6 +183,37 @@ function buildInitVkRegistryInstruction(
   };
 }
 
+/**
+ * Build update_vk_registry instruction
+ *
+ * Discriminator: 12 (UPDATE_VK_REGISTRY)
+ * Data: [disc(1), n_inputs(1), n_outputs(1), vk_hash(32)]
+ */
+function buildUpdateVkRegistryInstruction(
+  programId: Address,
+  vkRegistryPda: Address,
+  authority: KeyPairSigner,
+  nInputs: number,
+  nOutputs: number,
+  vkHash: string
+): IInstruction {
+  const data = new Uint8Array(35);
+  data[0] = 12; // UPDATE_VK_REGISTRY discriminator
+  data[1] = nInputs;
+  data[2] = nOutputs;
+  const hashBytes = Buffer.from(vkHash, "hex");
+  data.set(hashBytes, 3);
+
+  return {
+    programAddress: programId,
+    accounts: [
+      { address: vkRegistryPda, role: AccountRole.WRITABLE },
+      { address: authority.address, role: AccountRole.WRITABLE_SIGNER, signer: authority },
+    ],
+    data,
+  };
+}
+
 // =============================================================================
 // Main
 // =============================================================================
@@ -188,7 +232,7 @@ async function main() {
   const vkHashes: Record<string, string> = {};
   const variants: [number, number][] = [];
 
-  for (const [n, m] of TIER1_VARIANTS) {
+  for (const [n, m] of ALL_VARIANTS) {
     const circuitName = `joinsplit_${n}x${m}`;
     const vkPath = path.join(
       CIRCUITS_BUILD_DIR,
@@ -273,28 +317,41 @@ async function main() {
     console.log(`  VK Registry PDA: ${vkRegistryPda}`);
 
     // Check if already registered
+    let alreadyExists = false;
     try {
       const account = await rpc
         .getAccountInfo(vkRegistryPda, { encoding: "base64" })
         .send();
       if (account.value) {
-        console.log(`  Already registered — skipping.`);
-        continue;
+        alreadyExists = true;
       }
     } catch {
-      // Account doesn't exist, proceed
+      // Account doesn't exist, proceed with init
     }
 
-    // Build instruction
-    const ix = buildInitVkRegistryInstruction(
-      config.zvaultProgramId,
-      poolStatePda,
-      vkRegistryPda,
-      authority,
-      n,
-      m,
-      hash
-    );
+    // Build instruction (init or update)
+    let ix: IInstruction;
+    if (alreadyExists) {
+      console.log(`  Exists — updating VK hash...`);
+      ix = buildUpdateVkRegistryInstruction(
+        config.zvaultProgramId,
+        vkRegistryPda,
+        authority,
+        n,
+        m,
+        hash
+      );
+    } else {
+      ix = buildInitVkRegistryInstruction(
+        config.zvaultProgramId,
+        poolStatePda,
+        vkRegistryPda,
+        authority,
+        n,
+        m,
+        hash
+      );
+    }
 
     // Build and send transaction
     const { value: latestBlockhash } = await rpc

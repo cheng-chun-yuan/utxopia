@@ -5,12 +5,13 @@
  * address keys stored in the SNS name record data field.
  *
  * On-chain data layout (after 96-byte SNS header):
- *   version(1) + spendingPubKey(32) + viewingPubKey(32) = 65 bytes
+ *   version(1) + viewingPubKey(32) + mpk(32) = 65 bytes
  *
- * - spendingPubKey: Baby Jubjub compressed (y-coord + x sign bit in MSB)
- * - viewingPubKey:  Ed25519 public key (standard 32-byte encoding)
+ * - viewingPubKey: Ed25519 public key (for X25519 ECDH)
+ * - mpk:          Master Public Key = Poseidon(spendingPub.x, spendingPub.y, nullifyingKey)
  *
  * These two keys are all a sender needs to create a stealth deposit.
+ * spendingPubKey is NOT stored — senders never use it.
  *
  * @module sns-resolver
  */
@@ -24,8 +25,14 @@ import { sha256Hash } from "./crypto";
 /** SNS name record header size (parent:32 + owner:32 + class:32) */
 const SNS_HEADER_SIZE = 96;
 
-/** Stealth data size: version(1) + spendingPubKey(32) + viewingPubKey(32) */
+/** Stealth data size: version(1) + viewingPubKey(32) + mpk(32) = 65 bytes */
 export const SNS_STEALTH_DATA_SIZE = 65;
+
+/** Legacy stealth data size v1: version(1) + spendingPubKey(32) + viewingPubKey(32) = 65 bytes (no mpk) */
+export const SNS_STEALTH_DATA_SIZE_LEGACY_V1 = 65;
+
+/** Legacy stealth data size v2: version(1) + spendingPubKey(32) + viewingPubKey(32) + mpk(32) = 97 bytes */
+export const SNS_STEALTH_DATA_SIZE_LEGACY_V2 = 97;
 
 /** SNS hash prefix used for PDA derivation */
 const HASH_PREFIX = "SPL Name Service";
@@ -39,17 +46,11 @@ export interface SnsStealthAddress {
   /** Full domain (e.g., "alice.btcpro.sol") */
   fullDomain: string;
 
-  /** Baby Jubjub spending public key (32 bytes compressed) */
-  spendingPubKey: Uint8Array;
-
-  /** Ed25519 viewing public key (32 bytes) */
+  /** Ed25519 viewing public key (32 bytes) — for X25519 ECDH */
   viewingPubKey: Uint8Array;
 
-  /** Combined stealth meta-address (64 bytes = spending + viewing) */
-  stealthMetaAddress: Uint8Array;
-
-  /** Hex-encoded stealth meta-address (128 chars) */
-  stealthMetaAddressHex: string;
+  /** Master public key: Poseidon(spendingPub.x, spendingPub.y, nullifyingKey) (32 bytes) — for NPK derivation */
+  mpk: Uint8Array;
 
   /** Data version read from the record */
   version: number;
@@ -125,39 +126,72 @@ async function deriveSubdomainKey(
 /**
  * Parse stealth address data from an SNS name record.
  *
+ * Supports three formats:
+ * - Current (65 bytes, version 2): version(1) + viewingPubKey(32) + mpk(32)
+ * - Legacy v2 (97 bytes, version 1): version(1) + spendingPubKey(32) + viewingPubKey(32) + mpk(32)
+ * - Legacy v1 (65 bytes, version 1): version(1) + spendingPubKey(32) + viewingPubKey(32) — mpk missing
+ *
  * @param accountData - Raw account data (including 96-byte header)
  * @returns Parsed stealth keys or null if invalid
  */
 export function parseSnsStealthData(
   accountData: Uint8Array,
-): { spendingPubKey: Uint8Array; viewingPubKey: Uint8Array; version: number } | null {
-  // Need at least header + stealth data
+): { viewingPubKey: Uint8Array; mpk: Uint8Array; version: number } | null {
+  // Need at least header + 65 bytes of stealth data
   if (accountData.length < SNS_HEADER_SIZE + SNS_STEALTH_DATA_SIZE) {
     return null;
   }
 
   const data = accountData.slice(SNS_HEADER_SIZE);
-
   const version = data[0];
-  const config = getConfig();
-  if (version !== config.snsStealthDataVersion) {
-    return null;
-  }
-
-  const spendingPubKey = data.slice(1, 33);
-  const viewingPubKey = data.slice(33, 65);
-
-  // Basic validation: not all zeros
   const allZero = (buf: Uint8Array) => buf.every((b) => b === 0);
-  if (allZero(spendingPubKey) || allZero(viewingPubKey)) {
+
+  // Current format (version 2): version(1) + viewingPubKey(32) + mpk(32)
+  if (version === 2) {
+    const viewingPubKey = data.slice(1, 33);
+    const mpk = data.slice(33, 65);
+
+    if (allZero(viewingPubKey) || allZero(mpk)) {
+      return null;
+    }
+
+    return {
+      viewingPubKey: new Uint8Array(viewingPubKey),
+      mpk: new Uint8Array(mpk),
+      version,
+    };
+  }
+
+  // Legacy formats (version 1): spendingPubKey was at offset 1
+  if (version !== 1) {
     return null;
   }
 
-  return {
-    spendingPubKey: new Uint8Array(spendingPubKey),
-    viewingPubKey: new Uint8Array(viewingPubKey),
-    version,
-  };
+  // Legacy v2 (97 bytes): version(1) + spendingPubKey(32) + viewingPubKey(32) + mpk(32)
+  if (data.length >= SNS_STEALTH_DATA_SIZE_LEGACY_V2) {
+    const viewingPubKey = data.slice(33, 65);
+    const mpk = data.slice(65, 97);
+
+    if (!allZero(viewingPubKey) && !allZero(mpk)) {
+      return {
+        viewingPubKey: new Uint8Array(viewingPubKey),
+        mpk: new Uint8Array(mpk),
+        version,
+      };
+    }
+  }
+
+  // Legacy v1 (65 bytes): version(1) + spendingPubKey(32) + viewingPubKey(32) — no mpk
+  const viewingPubKey = data.slice(33, 65);
+  if (!allZero(viewingPubKey)) {
+    return {
+      viewingPubKey: new Uint8Array(viewingPubKey),
+      mpk: new Uint8Array(32), // No MPK — deposits will fail (user must re-register)
+      version,
+    };
+  }
+
+  return null;
 }
 
 // ========== Resolution ==========
@@ -217,20 +251,13 @@ export async function resolveSnsName(
       return null;
     }
 
-    // Build combined meta-address (64 bytes)
-    const stealthMetaAddress = new Uint8Array(64);
-    stealthMetaAddress.set(parsed.spendingPubKey, 0);
-    stealthMetaAddress.set(parsed.viewingPubKey, 32);
-
     const fullDomain = `${subdomain}.${parentDomain}.sol`;
 
     return {
       name: subdomain,
       fullDomain,
-      spendingPubKey: parsed.spendingPubKey,
       viewingPubKey: parsed.viewingPubKey,
-      stealthMetaAddress,
-      stealthMetaAddressHex: Buffer.from(stealthMetaAddress).toString("hex"),
+      mpk: parsed.mpk,
       version: parsed.version,
     };
   } catch (err) {

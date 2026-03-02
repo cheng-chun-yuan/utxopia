@@ -11,23 +11,23 @@ import { getDepositStatusFromMempool } from "@/lib/api/client";
 import { registerDeposit } from "@/lib/api/deposits";
 import { formatBtc, truncateMiddle } from "@/lib/utils/formatting";
 import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
-import { useNoteStorage, type StoredNote } from "@/hooks/use-note-storage";
+import { useNoteStorage, type StoredNote } from "@/stores";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import type { DepositStatusResponse, EscrowStatus } from "@/lib/api/types";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 
 // Status badge config
 const STATUS_CONFIG: Record<EscrowStatus | "unknown", { label: string; color: string; bg: string; spinning?: boolean }> = {
-  waiting_payment: { label: "Awaiting BTC", color: "text-yellow-500", bg: "bg-yellow-500/10" },
-  confirming: { label: "Confirming", color: "text-pink-400", bg: "bg-pink-400/10", spinning: true },
-  screening: { label: "Screening", color: "text-emerald-400", bg: "bg-emerald-400/10", spinning: true },
-  passed: { label: "Ready to Mint", color: "text-green-400", bg: "bg-green-400/10" },
-  blocked: { label: "Blocked", color: "text-red-500", bg: "bg-red-500/10" },
-  in_custody: { label: "Ready to Mint", color: "text-green-400", bg: "bg-green-400/10" },
-  minted: { label: "Minted", color: "text-green-400", bg: "bg-green-400/10" },
-  refunded: { label: "Refunded", color: "text-gray-400", bg: "bg-gray-400/10" },
-  expired: { label: "Expired", color: "text-gray-400", bg: "bg-gray-400/10" },
-  unknown: { label: "Unknown", color: "text-gray-400", bg: "bg-gray-400/10" },
+  waiting_payment: { label: "Awaiting BTC", color: "text-warning", bg: "bg-warning/10" },
+  confirming: { label: "Confirming", color: "text-purple", bg: "bg-purple/10", spinning: true },
+  screening: { label: "Screening", color: "text-privacy", bg: "bg-privacy/10", spinning: true },
+  passed: { label: "Ready to Mint", color: "text-privacy", bg: "bg-privacy/10" },
+  blocked: { label: "Blocked", color: "text-error", bg: "bg-error/10" },
+  in_custody: { label: "Ready to Mint", color: "text-privacy", bg: "bg-privacy/10" },
+  minted: { label: "Minted", color: "text-success", bg: "bg-success/10" },
+  refunded: { label: "Refunded", color: "text-gray", bg: "bg-gray/10" },
+  expired: { label: "Expired", color: "text-gray", bg: "bg-gray/10" },
+  unknown: { label: "Unknown", color: "text-gray", bg: "bg-gray/10" },
 };
 
 const StatusBadge = memo(({ status }: { status: EscrowStatus | "unknown" }) => {
@@ -99,7 +99,7 @@ const TrackDepositButton = memo(({ taprootAddress, amountSats, opReturnHex }: {
 
   if (tracked) {
     return (
-      <div className="flex items-center gap-1.5 text-xs text-emerald-400">
+      <div className="flex items-center gap-1.5 text-xs text-privacy">
         <Check className="w-3 h-3" /> Registered with tracker
       </div>
     );
@@ -115,7 +115,7 @@ const TrackDepositButton = memo(({ taprootAddress, amountSats, opReturnHex }: {
         {tracking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Radio className="w-3.5 h-3.5" />}
         {tracking ? "Registering..." : "Track Deposit"}
       </button>
-      {trackError && <p className="text-[10px] text-red-400">{trackError}</p>}
+      {trackError && <p className="text-[10px] text-error">{trackError}</p>}
     </div>
   );
 });
@@ -151,9 +151,9 @@ const DepositCard = memo(({ note, status, onRefresh, isRefreshing }: {
       <div className="space-y-1">
         <span className="text-xs text-gray">Deposit Address</span>
         <div className="flex items-center gap-2">
-          <code className="flex-1 text-xs font-mono text-orange-500 break-all">{note.taprootAddress}</code>
-          <button onClick={() => copy(note.taprootAddress)} className="p-1.5 rounded bg-orange-500/10 hover:bg-orange-500/20">
-            {copied ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3 text-orange-500" />}
+          <code className="flex-1 text-xs font-mono text-btc break-all">{note.taprootAddress}</code>
+          <button onClick={() => copy(note.taprootAddress)} className="p-1.5 rounded bg-btc/10 hover:bg-btc/20">
+            {copied ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3 text-btc" />}
           </button>
         </div>
       </div>
@@ -161,7 +161,7 @@ const DepositCard = memo(({ note, status, onRefresh, isRefreshing }: {
       {/* Secret indicator */}
       {note.secretNote && (
         <div className="flex items-center gap-2 text-xs">
-          <Key className="w-3 h-3 text-emerald-400" />
+          <Key className="w-3 h-3 text-privacy" />
           <span className="text-gray">Secret saved locally</span>
         </div>
       )}
@@ -178,7 +178,7 @@ const DepositCard = memo(({ note, status, onRefresh, isRefreshing }: {
             href={`${getMempoolExplorerUrl()}/tx/${status.btc_txid}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1 text-xs text-orange-500 hover:text-orange-400"
+            className="flex items-center gap-1 text-xs text-btc hover:text-btc-light"
           >
             View transaction <ExternalLink className="w-3 h-3" />
           </a>
@@ -272,7 +272,7 @@ export function BalanceView() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <ArrowDownToLine className="w-5 h-5 text-orange-500" />
+          <ArrowDownToLine className="w-5 h-5 text-btc" />
           <p className="text-lg font-semibold text-white">Bitcoin Deposits</p>
         </div>
         {notes.length > 0 && (
@@ -284,9 +284,9 @@ export function BalanceView() {
 
       {/* Wallet connection */}
       {connected && publicKey && (
-        <div className="flex items-center gap-2 p-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
-          <div className="w-2 h-2 rounded-full bg-emerald-400" />
-          <span className="text-xs text-emerald-400">Solana: {truncateMiddle(publicKey.toBase58(), 6)}</span>
+        <div className="flex items-center gap-2 p-2 bg-privacy/10 border border-privacy/30 rounded-lg">
+          <div className="w-2 h-2 rounded-full bg-privacy" />
+          <span className="text-xs text-privacy">Solana: {truncateMiddle(publicKey.toBase58(), 6)}</span>
         </div>
       )}
 
@@ -305,7 +305,7 @@ export function BalanceView() {
         </div>
       ) : (
         <div className="text-center py-8">
-          <div className="rounded-full bg-orange-500/10 p-4 w-fit mx-auto mb-4">
+          <div className="rounded-full bg-btc/10 p-4 w-fit mx-auto mb-4">
             <BitcoinIcon className="h-8 w-8" />
           </div>
           <p className="text-sm text-gray">No deposits yet</p>
@@ -317,7 +317,7 @@ export function BalanceView() {
       <div className="border-t border-gray/15 pt-4">
         <button onClick={() => setShowLookup(!showLookup)} className="flex items-center justify-between w-full">
           <div className="flex items-center gap-2">
-            <Search className="w-4 h-4 text-orange-500" />
+            <Search className="w-4 h-4 text-btc" />
             <span className="text-sm text-gray-light">Check Address Status</span>
           </div>
           <ChevronDown className={cn("w-4 h-4 text-gray transition-transform", showLookup && "rotate-180")} />
@@ -340,7 +340,7 @@ export function BalanceView() {
             <button
               onClick={handleLookup}
               disabled={isLooking || !lookupAddress.trim()}
-              className="w-full p-2.5 rounded-lg text-xs font-medium bg-orange-500/10 border border-orange-500/30 text-orange-500 hover:bg-orange-500/20 disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full p-2.5 rounded-lg text-xs font-medium bg-btc/10 border border-btc/30 text-btc hover:bg-btc/20 disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {isLooking ? <><Loader2 className="w-4 h-4 animate-spin" /> Checking...</> : <><Search className="w-4 h-4" /> Check Status</>}
             </button>
@@ -354,7 +354,7 @@ export function BalanceView() {
                 {lookupResult.found && lookupResult.amount_sats && (
                   <div className="flex justify-between">
                     <span className="text-xs text-gray">Amount</span>
-                    <span className="text-xs text-orange-500">{formatBtc(lookupResult.amount_sats)} BTC</span>
+                    <span className="text-xs text-btc">{formatBtc(lookupResult.amount_sats)} BTC</span>
                   </div>
                 )}
                 {lookupResult.btc_txid && (
@@ -362,7 +362,7 @@ export function BalanceView() {
                     href={`${getMempoolExplorerUrl()}/tx/${lookupResult.btc_txid}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-xs text-orange-500"
+                    className="flex items-center gap-1 text-xs text-btc"
                   >
                     View tx <ExternalLink className="w-3 h-3" />
                   </a>

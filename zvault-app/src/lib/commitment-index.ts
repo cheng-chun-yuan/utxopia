@@ -219,6 +219,20 @@ export async function syncFromOnChain(): Promise<{
 
   console.log("[CommitmentIndex] Fetching stealth announcements from chain...");
 
+  // Fetch tree state to get nextIndex (filters out stale pre-reset announcements)
+  let treeNextIndex = Number.MAX_SAFE_INTEGER;
+  try {
+    const treePda = new PublicKey(COMMITMENT_TREE_ADDRESS);
+    const treeAccount = await connection.getAccountInfo(treePda);
+    if (treeAccount) {
+      const treeState = parseCommitmentTreeData(new Uint8Array(treeAccount.data));
+      treeNextIndex = Number(treeState.nextIndex);
+      console.log(`[CommitmentIndex] Tree nextIndex: ${treeNextIndex}`);
+    }
+  } catch (e) {
+    console.warn("[CommitmentIndex] Failed to fetch tree state:", e);
+  }
+
   // Fetch all stealth announcement accounts
   const accounts = await connection.getProgramAccounts(ZVAULT_PROGRAM_ID, {
     filters: [{ dataSize: STEALTH_ANNOUNCEMENT_SIZE }],
@@ -233,6 +247,10 @@ export async function syncFromOnChain(): Promise<{
     try {
       const parsed = parseStealthAnnouncement(new Uint8Array(account.account.data));
       if (parsed) {
+        // Skip stale announcements from before a tree reset
+        if (parsed.leafIndex >= treeNextIndex) {
+          continue;
+        }
         const commitmentBigInt = BigInt(
           "0x" +
             Array.from(parsed.commitment)
@@ -253,18 +271,25 @@ export async function syncFromOnChain(): Promise<{
   // Sort by leaf index to ensure correct order
   commitments.sort((a, b) => a.leafIndex - b.leafIndex);
 
-  console.log(`[CommitmentIndex] Parsed ${commitments.length} valid commitments`);
-  console.log(`[CommitmentIndex] Sorted commitments:`, commitments.map(c => ({
-    leafIndex: c.leafIndex,
-    commitment: c.commitment.toString(16).slice(0, 16) + "..."
-  })));
+  // Deduplicate by leafIndex (keep last occurrence)
+  const deduped: typeof commitments = [];
+  for (const c of commitments) {
+    if (deduped.length > 0 && deduped[deduped.length - 1].leafIndex === c.leafIndex) {
+      deduped[deduped.length - 1] = c;
+    } else {
+      deduped.push(c);
+    }
+  }
+  const commitmentsFinal = deduped;
+
+  console.log(`[CommitmentIndex] Parsed ${commitmentsFinal.length} valid commitments (filtered ${commitments.length - commitmentsFinal.length} stale/duplicate)`);
 
   // Reset and rebuild index
   serverIndex = new CommitmentTreeIndex();
   let synced = 0;
   let skipped = 0;
 
-  for (const { commitment, leafIndex, amount } of commitments) {
+  for (const { commitment, leafIndex, amount } of commitmentsFinal) {
     try {
       const addedIndex = serverIndex.addCommitment(commitment, amount);
       const addedIndexNum = Number(addedIndex);

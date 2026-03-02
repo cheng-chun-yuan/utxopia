@@ -44,6 +44,7 @@ const INSTRUCTION = {
   UPDATE_VK_REGISTRY: 12,
   ADD_DEMO_STEALTH: 13,
   TRANSACT: 14,
+  UNSHIELD: 15,
 } as const;
 
 /** Export instruction discriminators for consumers */
@@ -438,6 +439,209 @@ export function buildTransactInstruction(options: TransactInstructionOptions): I
   }
 
   // Stealth announcements (writable PDAs)
+  for (const sa of options.accounts.stealthAnnouncements) {
+    accounts.push({ address: sa, role: AccountRole.WRITABLE });
+  }
+
+  return {
+    programAddress: config.zvaultProgramId,
+    accounts,
+    data,
+  };
+}
+
+// =============================================================================
+// Public Unshield Instruction Builder
+// =============================================================================
+
+/** Unshield instruction options */
+export interface UnshieldInstructionOptions {
+  /** Number of input notes being spent */
+  nInputs: number;
+  /** Number of output notes (includes unshield output as last) */
+  nOutputs: number;
+  /** Groth16 proof bytes (256 bytes) */
+  proofBytes: Uint8Array;
+  /** Merkle root */
+  merkleRoot: Uint8Array;
+  /** Bound parameters hash (computed with createUnshieldBoundParams) */
+  boundParamsHash: Uint8Array;
+  /** Nullifiers (32 bytes each) */
+  nullifiers: Uint8Array[];
+  /** Output commitments (32 bytes each, last = unshield output) */
+  commitmentsOut: Uint8Array[];
+  /** Per-output stealth data for tree outputs only (n_outputs - 1 entries) */
+  stealthData: Uint8Array[];
+  /** Amount being unshielded in satoshis */
+  unshieldAmount: bigint;
+  /** Recipient Solana address (32 bytes, the token account owner) */
+  unshieldAddress: Uint8Array;
+  /** Account addresses */
+  accounts: {
+    poolState: Address;
+    commitmentTree: Address;
+    vkRegistry: Address;
+    user: Address;
+    zbtcMint: Address;
+    poolVault: Address;
+    userTokenAccount: Address;
+    /** Nullifier record PDAs (one per input) */
+    nullifierRecords: Address[];
+    /** Stealth announcement PDAs (one per tree output, n_outputs - 1) */
+    stealthAnnouncements: Address[];
+  };
+}
+
+/**
+ * Build unshield instruction data
+ *
+ * Layout:
+ * - n_inputs: u8
+ * - n_outputs: u8
+ * - proof: [u8; 256]
+ * - merkle_root: [u8; 32]
+ * - bound_params_hash: [u8; 32]
+ * - nullifiers: [[u8; 32]; n_inputs]
+ * - commitments_out: [[u8; 32]; n_outputs]
+ * - stealth_data: [ephemeral_pub(32) + encrypted_amount(8)] x (n_outputs - 1)
+ * - unshield_amount: u64 LE
+ * - unshield_address: [u8; 32]
+ */
+export function buildUnshieldInstructionData(options: {
+  nInputs: number;
+  nOutputs: number;
+  proofBytes: Uint8Array;
+  merkleRoot: Uint8Array;
+  boundParamsHash: Uint8Array;
+  nullifiers: Uint8Array[];
+  commitmentsOut: Uint8Array[];
+  stealthData: Uint8Array[];
+  unshieldAmount: bigint;
+  unshieldAddress: Uint8Array;
+}): Uint8Array {
+  const { nInputs, nOutputs, proofBytes, merkleRoot, boundParamsHash, nullifiers, commitmentsOut, stealthData, unshieldAmount, unshieldAddress } = options;
+
+  if (proofBytes.length !== 256) {
+    throw new Error(`Groth16 proof must be 256 bytes, got ${proofBytes.length}`);
+  }
+  if (nullifiers.length !== nInputs) {
+    throw new Error(`Expected ${nInputs} nullifiers, got ${nullifiers.length}`);
+  }
+  if (commitmentsOut.length !== nOutputs) {
+    throw new Error(`Expected ${nOutputs} commitments, got ${commitmentsOut.length}`);
+  }
+  const nTreeOutputs = nOutputs - 1;
+  if (stealthData.length !== nTreeOutputs) {
+    throw new Error(`Expected ${nTreeOutputs} stealth data entries (tree outputs), got ${stealthData.length}`);
+  }
+  if (unshieldAddress.length !== 32) {
+    throw new Error(`Unshield address must be 32 bytes, got ${unshieldAddress.length}`);
+  }
+
+  const STEALTH_DATA_PER_OUTPUT = 40;
+  const totalSize = 1 + 2 + 256 + 32 + 32 + (nInputs * 32) + (nOutputs * 32) + (nTreeOutputs * STEALTH_DATA_PER_OUTPUT) + 8 + 32;
+  const data = new Uint8Array(totalSize);
+  const view = new DataView(data.buffer);
+
+  let offset = 0;
+
+  // Discriminator
+  data[offset++] = INSTRUCTION.UNSHIELD;
+
+  // Header
+  data[offset++] = nInputs;
+  data[offset++] = nOutputs;
+
+  // Proof (256 bytes)
+  data.set(proofBytes, offset);
+  offset += 256;
+
+  // Merkle root (32 bytes)
+  data.set(merkleRoot, offset);
+  offset += 32;
+
+  // Bound params hash (32 bytes)
+  data.set(boundParamsHash, offset);
+  offset += 32;
+
+  // Nullifiers
+  for (const nullifier of nullifiers) {
+    data.set(nullifier, offset);
+    offset += 32;
+  }
+
+  // Output commitments (all n_outputs, last = unshield)
+  for (const commitment of commitmentsOut) {
+    data.set(commitment, offset);
+    offset += 32;
+  }
+
+  // Stealth data for tree outputs only (n_outputs - 1)
+  for (const sd of stealthData) {
+    data.set(sd.slice(0, STEALTH_DATA_PER_OUTPUT), offset);
+    offset += STEALTH_DATA_PER_OUTPUT;
+  }
+
+  // Unshield amount (u64 LE)
+  view.setBigUint64(offset, unshieldAmount, true);
+  offset += 8;
+
+  // Unshield address (32 bytes)
+  data.set(unshieldAddress, offset);
+
+  return data;
+}
+
+/**
+ * Build a complete public unshield instruction
+ *
+ * Accounts:
+ * 0. pool_state (writable)
+ * 1. commitment_tree (writable)
+ * 2. vk_registry (read)
+ * 3. user (signer)
+ * 4. system_program (read)
+ * 5. zbtc_mint (writable)
+ * 6. pool_vault (writable)
+ * 7. user_token_account (writable)
+ * 8. token_program (read)
+ * 9..9+N nullifier_records (writable)
+ * 9+N.. stealth_announcements (writable, tree outputs only)
+ */
+export function buildUnshieldInstruction(options: UnshieldInstructionOptions): Instruction {
+  const config = getConfig();
+
+  const data = buildUnshieldInstructionData({
+    nInputs: options.nInputs,
+    nOutputs: options.nOutputs,
+    proofBytes: options.proofBytes,
+    merkleRoot: options.merkleRoot,
+    boundParamsHash: options.boundParamsHash,
+    nullifiers: options.nullifiers,
+    commitmentsOut: options.commitmentsOut,
+    stealthData: options.stealthData,
+    unshieldAmount: options.unshieldAmount,
+    unshieldAddress: options.unshieldAddress,
+  });
+
+  const accounts: Instruction["accounts"] = [
+    { address: options.accounts.poolState, role: AccountRole.WRITABLE },
+    { address: options.accounts.commitmentTree, role: AccountRole.WRITABLE },
+    { address: options.accounts.vkRegistry, role: AccountRole.READONLY },
+    { address: options.accounts.user, role: AccountRole.WRITABLE_SIGNER },
+    { address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY },
+    { address: options.accounts.zbtcMint, role: AccountRole.WRITABLE },
+    { address: options.accounts.poolVault, role: AccountRole.WRITABLE },
+    { address: options.accounts.userTokenAccount, role: AccountRole.WRITABLE },
+    { address: TOKEN_2022_PROGRAM_ID, role: AccountRole.READONLY },
+  ];
+
+  // Nullifier records (writable PDAs)
+  for (const nr of options.accounts.nullifierRecords) {
+    accounts.push({ address: nr, role: AccountRole.WRITABLE });
+  }
+
+  // Stealth announcements for tree outputs only (writable PDAs)
   for (const sa of options.accounts.stealthAnnouncements) {
     accounts.push({ address: sa, role: AccountRole.WRITABLE });
   }

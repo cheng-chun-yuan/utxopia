@@ -18,6 +18,10 @@ Cargo.lock
 .env.*.local
 !.env.example
 
+# Keypairs / secrets
+*-keypair.json
+*.key
+
 # Anchor
 .anchor/
 test-ledger/

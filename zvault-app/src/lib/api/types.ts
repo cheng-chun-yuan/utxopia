@@ -59,11 +59,9 @@ export interface DepositStatusResponse {
   op_return_hex?: string;
 }
 
-// Blocklist management types (demo mode)
 export interface BlocklistResponse {
   addresses: string[];
   prefixes: string[];
-  demo_mode: boolean;
 }
 
 export interface ScreenAddressRequest {
@@ -173,19 +171,6 @@ export interface ApiError {
 export interface NoteData {
   nullifier: string;
   secret: string;
-}
-
-// Legacy types for backwards compatibility
-export interface MintRequest {
-  note_export: string;
-  solana_address: string;
-}
-
-export interface MintResponse {
-  success: boolean;
-  tx_signature?: string;
-  zkbtc_amount?: number;
-  message?: string;
 }
 
 // Verify deposit request - submit taproot address for verification

@@ -78,6 +78,17 @@ pub mod instruction {
 
     // JoinSplit (Railgun-aligned)
     pub const TRANSACT: u8 = 14;
+
+    // Public unshield (zkBTC → SPL token)
+    pub const UNSHIELD: u8 = 15;
+
+    // Admin: close any program-owned PDA (devnet only)
+    #[cfg(feature = "devnet")]
+    pub const ADMIN_CLOSE_PDA: u8 = 16;
+
+    // Admin: update pool bounds (devnet only)
+    #[cfg(feature = "devnet")]
+    pub const ADMIN_UPDATE_POOL: u8 = 17;
 }
 
 entrypoint!(process_instruction);
@@ -129,6 +140,20 @@ pub fn process_instruction(
         // JoinSplit (Railgun-aligned)
         instruction::TRANSACT => {
             instructions::process_transact(program_id, accounts, data)
+        }
+        // Public unshield
+        instruction::UNSHIELD => {
+            instructions::process_unshield(program_id, accounts, data)
+        }
+        // Admin: close PDA
+        #[cfg(feature = "devnet")]
+        instruction::ADMIN_CLOSE_PDA => {
+            instructions::process_admin_close_pda(program_id, accounts, data)
+        }
+        // Admin: update pool bounds
+        #[cfg(feature = "devnet")]
+        instruction::ADMIN_UPDATE_POOL => {
+            instructions::process_admin_update_pool(program_id, accounts, data)
         }
         _ => Err(ProgramError::InvalidInstructionData),
     }
@@ -195,6 +220,7 @@ mod tests {
             instruction::INIT_VK_REGISTRY,
             instruction::UPDATE_VK_REGISTRY,
             instruction::TRANSACT,
+            instruction::UNSHIELD,
             #[cfg(feature = "devnet")]
             instruction::ADD_DEMO_STEALTH,
         ];

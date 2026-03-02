@@ -55,7 +55,7 @@ describe("PROOF INPUT VALIDATION", () => {
   });
 
   test("validates merkle proof structure", () => {
-    const TREE_DEPTH = 20;
+    const TREE_DEPTH = 16;
 
     // Valid merkle proof
     const validProof = {

@@ -264,6 +264,154 @@ export async function getMerkleRoot(): Promise<Uint8Array | null> {
 }
 
 // =============================================================================
+// Verify Instruction Builders
+// =============================================================================
+
+/**
+ * Derive VerifiedTransaction PDA
+ * Seeds: ["verified_tx", block_hash(32), txid(32)] under btc-light-client
+ */
+export function deriveVerifiedTransactionPDA(
+  blockHash: Uint8Array,
+  txid: Uint8Array,
+  programId: PublicKey = BTC_LIGHT_CLIENT_PROGRAM_ID
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("verified_tx"), Buffer.from(blockHash), Buffer.from(txid)],
+    programId
+  );
+}
+
+/**
+ * Build btc-light-client verify_transaction instruction data (disc=2)
+ *
+ * Layout (after disc byte):
+ * txid(32) + block_hash(32) + tx_size(u32 LE) + merkle_proof(variable)
+ *
+ * Merkle proof sub-layout:
+ * proof_txid(32) + path_bits(u32 LE) + path_len(u8) + tx_index(u32 LE) + siblings(32 * path_len)
+ */
+export function buildVerifyTransactionInstructionData(params: {
+  txid: Uint8Array;        // 32 bytes, internal byte order
+  blockHash: Uint8Array;   // 32 bytes
+  txSize: number;          // raw tx size in ChadBuffer (after 32-byte authority)
+  txIndex: number;
+  merkleSiblings: Uint8Array[]; // each 32 bytes, internal byte order
+  pathBits: number;        // bitmask of path direction
+}): Buffer {
+  const { txid, blockHash, txSize, txIndex, merkleSiblings, pathBits } = params;
+  const pathLen = merkleSiblings.length;
+
+  // disc(1) + txid(32) + blockHash(32) + txSize(4) + proofTxid(32) + pathBits(4) + pathLen(1) + txIndex(4) + siblings(32*N)
+  const totalSize = 1 + 32 + 32 + 4 + 32 + 4 + 1 + 4 + 32 * pathLen;
+  const buf = Buffer.alloc(totalSize);
+  let offset = 0;
+
+  buf[offset++] = 2; // discriminator
+  Buffer.from(txid).copy(buf, offset); offset += 32;
+  Buffer.from(blockHash).copy(buf, offset); offset += 32;
+  buf.writeUInt32LE(txSize, offset); offset += 4;
+
+  // Merkle proof sub-layout
+  Buffer.from(txid).copy(buf, offset); offset += 32; // proof_txid = txid
+  buf.writeUInt32LE(pathBits, offset); offset += 4;
+  buf[offset++] = pathLen;
+  buf.writeUInt32LE(txIndex, offset); offset += 4;
+  for (const sibling of merkleSiblings) {
+    Buffer.from(sibling).copy(buf, offset); offset += 32;
+  }
+
+  return buf;
+}
+
+/**
+ * Build zvault verify_stealth_deposit instruction data (disc=1)
+ *
+ * Amount is extracted on-chain from the SPV-verified raw transaction.
+ *
+ * Layout: disc(1) + txid(32) + block_height(u64 LE)
+ *         + tx_size(u32 LE) + ephemeral_pub(32) + npk(32) = 109 bytes
+ */
+export function buildVerifyStealthDepositInstructionData(params: {
+  txid: Uint8Array;       // 32 bytes, internal byte order
+  blockHeight: number;
+  txSize: number;
+  ephemeralPub: Uint8Array; // 32 bytes
+  npk: Uint8Array;          // 32 bytes
+}): Buffer {
+  const buf = Buffer.alloc(109);
+  let offset = 0;
+
+  buf[offset++] = 1; // discriminator
+  Buffer.from(params.txid).copy(buf, offset); offset += 32;
+  buf.writeBigUInt64LE(BigInt(params.blockHeight), offset); offset += 8;
+  buf.writeUInt32LE(params.txSize, offset); offset += 4;
+  Buffer.from(params.ephemeralPub).copy(buf, offset); offset += 32;
+  Buffer.from(params.npk).copy(buf, offset); offset += 32;
+
+  return buf;
+}
+
+/**
+ * Build verify_transaction TransactionInstruction
+ */
+export function buildVerifyTransactionInstruction(params: {
+  payer: PublicKey;
+  verifiedTxPDA: PublicKey;
+  lightClientPDA: PublicKey;
+  blockHeaderPDA: PublicKey;
+  chadBuffer: PublicKey;
+  instructionData: Buffer;
+}): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: BTC_LIGHT_CLIENT_PROGRAM_ID,
+    keys: [
+      { pubkey: params.verifiedTxPDA, isSigner: false, isWritable: true },
+      { pubkey: params.lightClientPDA, isSigner: false, isWritable: false },
+      { pubkey: params.blockHeaderPDA, isSigner: false, isWritable: false },
+      { pubkey: params.chadBuffer, isSigner: false, isWritable: false },
+      { pubkey: params.payer, isSigner: true, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    data: params.instructionData,
+  });
+}
+
+/**
+ * Build verify_stealth_deposit TransactionInstruction (11 accounts)
+ */
+export function buildVerifyStealthDepositInstruction(params: {
+  poolStatePDA: PublicKey;
+  verifiedTxPDA: PublicKey;
+  lightClientPDA: PublicKey;
+  commitmentTreePDA: PublicKey;
+  stealthAnnouncementPDA: PublicKey;
+  chadBuffer: PublicKey;
+  authority: PublicKey; // signer, must match pool.authority
+  zbtcMint: PublicKey;
+  poolVaultATA: PublicKey;
+  instructionData: Buffer;
+}): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: ZVAULT_PROGRAM_ID,
+    keys: [
+      { pubkey: params.poolStatePDA, isSigner: false, isWritable: true },
+      { pubkey: params.verifiedTxPDA, isSigner: false, isWritable: false },
+      { pubkey: params.lightClientPDA, isSigner: false, isWritable: false },
+      { pubkey: params.commitmentTreePDA, isSigner: false, isWritable: true },
+      { pubkey: params.stealthAnnouncementPDA, isSigner: false, isWritable: true },
+      { pubkey: params.chadBuffer, isSigner: false, isWritable: false },
+      { pubkey: params.authority, isSigner: true, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: params.zbtcMint, isSigner: false, isWritable: true },
+      { pubkey: params.poolVaultATA, isSigner: false, isWritable: true },
+      { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    data: params.instructionData,
+  });
+}
+
+// =============================================================================
 // ChadBuffer Support (for large proofs)
 // =============================================================================
 
@@ -279,15 +427,15 @@ const CHADBUFFER_IX = {
 };
 
 /** Authority size in buffer */
-const AUTHORITY_SIZE = 32;
+export const AUTHORITY_SIZE = 32;
 
 /** Max data per write tx (conservative to fit in tx size limit) */
-const MAX_DATA_PER_WRITE = 950;
+export const MAX_DATA_PER_WRITE = 950;
 
 /**
  * Create ChadBuffer CREATE instruction
  */
-function createChadBufferCreateIx(
+export function createChadBufferCreateIx(
   bufferKeypair: Keypair,
   payer: PublicKey,
   initialData: Uint8Array
@@ -309,7 +457,7 @@ function createChadBufferCreateIx(
 /**
  * Create ChadBuffer WRITE instruction
  */
-function createChadBufferWriteIx(
+export function createChadBufferWriteIx(
   buffer: PublicKey,
   payer: PublicKey,
   offset: number,

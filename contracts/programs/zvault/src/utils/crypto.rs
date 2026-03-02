@@ -216,6 +216,28 @@ pub fn compute_bound_params_hash_private_transfer(chain_id: u64) -> [u8; 32] {
     reduce_to_field_exact(&hash)
 }
 
+/// Compute bound params hash for public unshield verification.
+/// Must match SDK's `computeBoundParamsHash(createUnshieldBoundParams(...))`.
+///
+/// Layout (45 bytes LE):
+///   treeNumber(4) + hasUnshield(1) + unshieldAddress(32) + chainId(8)
+///   → SHA256 → mod BN254_SCALAR_FIELD
+///
+/// For unshield: treeNumber=0, hasUnshield=1, address=recipient pubkey
+pub fn compute_bound_params_hash_unshield(chain_id: u64, unshield_address: &[u8; 32]) -> [u8; 32] {
+    use super::sha256;
+
+    let mut buf = [0u8; 45];
+    // treeNumber = 0 (first 4 bytes already zero)
+    buf[4] = 1; // hasUnshield = 1
+    buf[5..37].copy_from_slice(unshield_address);
+    // chainId (bytes 37-44, LE)
+    buf[37..45].copy_from_slice(&chain_id.to_le_bytes());
+
+    let hash: [u8; 32] = sha256(&buf);
+    reduce_to_field_exact(&hash)
+}
+
 /// ZBTC token identifier: "zbtc" as u32 = 0x7a627463
 pub const ZBTC_TOKEN_ID: u32 = 0x7a627463;
 

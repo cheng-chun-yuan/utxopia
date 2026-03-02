@@ -4,23 +4,23 @@
 //! 1. User generates npk client-side, sends BTC with OP_RETURN(ephemeralPub || npk)
 //! 2. Backend detects deposit, sweeps UTXO to pool wallet
 //! 3. Backend calls btc-light-client's verify_transaction to create VerifiedTransaction PDA
-//! 4. Backend calls this instruction with npk + amount
+//! 4. Backend calls this instruction with npk (amount extracted on-chain from raw tx)
 //!
 //! This instruction:
 //! - Checks VerifiedTransaction PDA exists (btc-light-client already verified SPV)
 //! - Verifies sufficient confirmations via light client tip height
+//! - Extracts deposit amount trustlessly from the SPV-verified raw transaction
 //! - Computes commitment ON-CHAIN: Poseidon(npk, ZBTC_TOKEN_ID, amount)
 //! - Inserts commitment into Merkle tree
 //! - Creates unified StealthAnnouncement (type=0, plaintext amount) with PDA ["stealth", txid]
 //! - Mints zBTC to pool vault
 //!
-//! Instruction Data (116 bytes, fixed):
+//! Instruction Data (108 bytes, fixed):
 //! - [0-31]   txid              (32 bytes) - Sweep tx ID (internal byte order)
 //! - [32-39]  block_height      (8 bytes)  - Block containing tx (cross-check)
-//! - [40-47]  amount_sats       (8 bytes)  - Amount in satoshis
-//! - [48-51]  tx_size           (4 bytes)  - Raw tx size in ChadBuffer
-//! - [52-83]  ephemeral_pub     (32 bytes) - Ed25519
-//! - [84-115] npk               (32 bytes) - Note public key
+//! - [40-43]  tx_size           (4 bytes)  - Raw tx size in ChadBuffer
+//! - [44-75]  ephemeral_pub     (32 bytes) - Ed25519
+//! - [76-107] npk               (32 bytes) - Note public key
 
 use pinocchio::{
     account_info::AccountInfo,
@@ -39,7 +39,7 @@ use crate::state::{
     ANNOUNCEMENT_TYPE_DEPOSIT,
 };
 use crate::utils::crypto::compute_deposit_commitment;
-use crate::utils::bitcoin::compute_tx_hash;
+use crate::utils::bitcoin::{compute_tx_hash, ParsedTransaction};
 use crate::utils::chadbuffer::read_transaction_from_buffer;
 use crate::utils::{
     mint_zbtc, validate_program_owner, validate_system_program, validate_token_2022_owner,
@@ -56,18 +56,17 @@ pub const DEMO_REQUIRED_CONFIRMATIONS: u64 = 6;
 /// Instruction data for verify_stealth_deposit
 ///
 /// The commitment is computed ON-CHAIN: Poseidon(npk, ZBTC_TOKEN_ID, amount)
-/// The backend provides npk + amount, and the on-chain program computes the commitment.
+/// Amount is extracted trustlessly from the SPV-verified raw transaction — no caller input needed.
 pub struct VerifyStealthDepositData {
     pub txid: [u8; 32],
     pub block_height: u64,
-    pub amount_sats: u64,
     pub tx_size: u32,
     pub ephemeral_pub: [u8; 32],
     pub npk: [u8; 32],
 }
 
 impl VerifyStealthDepositData {
-    pub const HEADER_SIZE: usize = 32 + 8 + 8 + 4 + 32 + 32; // 116 bytes
+    pub const HEADER_SIZE: usize = 32 + 8 + 4 + 32 + 32; // 108 bytes
 
     pub fn from_bytes(data: &[u8]) -> Result<Self, ProgramError> {
         if data.len() < Self::HEADER_SIZE {
@@ -78,19 +77,17 @@ impl VerifyStealthDepositData {
         txid.copy_from_slice(&data[0..32]);
 
         let block_height = u64::from_le_bytes(data[32..40].try_into().unwrap());
-        let amount_sats = u64::from_le_bytes(data[40..48].try_into().unwrap());
-        let tx_size = u32::from_le_bytes(data[48..52].try_into().unwrap());
+        let tx_size = u32::from_le_bytes(data[40..44].try_into().unwrap());
 
         let mut ephemeral_pub = [0u8; 32];
-        ephemeral_pub.copy_from_slice(&data[52..84]);
+        ephemeral_pub.copy_from_slice(&data[44..76]);
 
         let mut npk = [0u8; 32];
-        npk.copy_from_slice(&data[84..116]);
+        npk.copy_from_slice(&data[76..108]);
 
         Ok(Self {
             txid,
             block_height,
-            amount_sats,
             tx_size,
             ephemeral_pub,
             npk,
@@ -116,7 +113,7 @@ impl VerifyStealthDepositData {
 /// 10. `[]` Token-2022 program
 ///
 /// # Instruction data
-/// - VerifyStealthDepositData (116 bytes, fixed — no trailing merkle proof)
+/// - VerifyStealthDepositData (108 bytes, fixed — no trailing merkle proof)
 pub fn process_verify_stealth_deposit(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -183,14 +180,6 @@ pub fn process_verify_stealth_deposit(
         (pool.bump, pool.min_deposit(), pool.max_deposit())
     };
 
-    // Validate amount is within bounds
-    if ix_data.amount_sats < min_deposit {
-        return Err(ZVaultError::AmountTooSmall.into());
-    }
-    if ix_data.amount_sats > max_deposit {
-        return Err(ZVaultError::AmountTooLarge.into());
-    }
-
     // --- VerifiedTransaction PDA check ---
     // Parse the VerifiedTransaction PDA and verify txid matches
     {
@@ -237,6 +226,21 @@ pub fn process_verify_stealth_deposit(
         return Err(ZVaultError::InvalidSpvProof.into());
     }
 
+    // Parse raw transaction and extract deposit amount trustlessly
+    let parsed_tx = ParsedTransaction::parse(raw_tx)
+        .map_err(|_| ZVaultError::InvalidSpvProof)?;
+    let deposit_output = parsed_tx.find_deposit_output()
+        .ok_or(ZVaultError::InvalidSpvProof)?;
+    let amount_sats = deposit_output.value;
+
+    // Validate extracted amount is within bounds
+    if amount_sats < min_deposit {
+        return Err(ZVaultError::AmountTooSmall.into());
+    }
+    if amount_sats > max_deposit {
+        return Err(ZVaultError::AmountTooLarge.into());
+    }
+
     // Derive stealth announcement PDA: ["stealth", txid]
     let (expected_stealth_pda, stealth_bump) = pinocchio::pubkey::find_program_address(
         &[StealthAnnouncement::SEED, &ix_data.txid],
@@ -265,7 +269,7 @@ pub fn process_verify_stealth_deposit(
     }.invoke_signed(&stealth_signer)?;
 
     // Compute commitment ON-CHAIN: Poseidon(npk, ZBTC_TOKEN_ID, amount)
-    let commitment = compute_deposit_commitment(&ix_data.npk, ix_data.amount_sats)?;
+    let commitment = compute_deposit_commitment(&ix_data.npk, amount_sats)?;
 
     // Insert commitment into Merkle tree
     let leaf_index = {
@@ -288,7 +292,7 @@ pub fn process_verify_stealth_deposit(
 
         announcement.announcement_type = ANNOUNCEMENT_TYPE_DEPOSIT;
         announcement.ephemeral_pub = ix_data.ephemeral_pub;
-        announcement.set_amount_sats(ix_data.amount_sats); // plaintext for deposits
+        announcement.set_amount_sats(amount_sats); // plaintext for deposits
         announcement.commitment = commitment;
         announcement.set_leaf_index(leaf_index);
         announcement.set_created_at(clock.unix_timestamp);
@@ -303,7 +307,7 @@ pub fn process_verify_stealth_deposit(
         zbtc_mint,
         pool_vault,
         pool_state_info,
-        ix_data.amount_sats,
+        amount_sats,
         pool_signer_seeds,
     )?;
 
@@ -313,8 +317,8 @@ pub fn process_verify_stealth_deposit(
         let pool = PoolState::from_bytes_mut(&mut pool_data)?;
 
         pool.increment_deposit_count()?;
-        pool.add_minted(ix_data.amount_sats)?;
-        pool.add_shielded(ix_data.amount_sats)?;
+        pool.add_minted(amount_sats)?;
+        pool.add_shielded(amount_sats)?;
         pool.set_last_update(clock.unix_timestamp);
     }
 

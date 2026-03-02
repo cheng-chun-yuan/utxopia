@@ -19,6 +19,8 @@ import {
   fetchCommitmentTree,
   getCommitmentIndex,
   computeUnifiedCommitmentSync,
+  computeBoundParamsHash,
+  DEFAULT_BOUND_PARAMS,
   bytesToBigint,
   bytesToHex,
   hexToBytes,
@@ -334,7 +336,7 @@ export function useClaimFlow(initialNote?: string) {
           nOutputs: 1,
           proof: bytesToHex(proofBytes),
           merkleRoot: bytesToHex(merkleRootBytes),
-          boundParamsHash: "0".repeat(64), // TODO: compute properly
+          boundParamsHash: computeBoundParamsHash(DEFAULT_BOUND_PARAMS),
           nullifiers: [bytesToHex(nullifierBytes)],
           commitmentsOut: [bytesToHex(outputCommitmentBytes)],
           stealthData: [bytesToHex(stealthDataEntry)],

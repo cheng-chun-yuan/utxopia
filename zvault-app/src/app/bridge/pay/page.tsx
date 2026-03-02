@@ -9,7 +9,7 @@ import { PayFlow } from "@/components/btc-widget/pay-flow";
 function PayFlowWithParams() {
   const searchParams = useSearchParams();
 
-  const initialMode = searchParams.get("mode") as "public" | "stealth" | null;
+  const initialMode = searchParams.get("mode") as "public" | "stealth" | "btc_withdraw" | null;
   const commitment = searchParams.get("commitment");
   const leafIndex = searchParams.get("leafIndex");
   const amount = searchParams.get("amount");
@@ -31,6 +31,7 @@ export default function PayPage() {
     <FlowPageLayout
       backHref="/bridge"
       backLabel="Back"
+      width={520}
       badges={[
         {
           icon: <Send className="w-full h-full" />,

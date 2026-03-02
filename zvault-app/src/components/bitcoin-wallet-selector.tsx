@@ -1,6 +1,6 @@
 "use client";
 
-import { useBitcoinWallet } from "@/contexts/bitcoin-wallet-context";
+import { useBitcoinWallet } from "@/stores/bitcoin-wallet-store";
 import type { BtcWalletType } from "@/stores/bitcoin-wallet-store";
 import { Spinner } from "@/components/ui/spinner";
 import { truncateMiddle } from "@/lib/utils/formatting";

@@ -11,6 +11,7 @@ import {
   DEVNET_CONFIG,
   STEALTH_ANNOUNCEMENT_SIZE,
   parseStealthAnnouncement,
+  parseCommitmentTreeData,
 } from "@zvault/sdk";
 import { getHeliusConnection } from "@/lib/helius-server";
 
@@ -54,6 +55,20 @@ async function fetchAnnouncements(): Promise<CacheData> {
 
   console.log("[StealthAPI] Fetching stealth announcements from chain...");
 
+  // Fetch tree state to get current nextIndex (filters out stale pre-reset announcements)
+  let treeNextIndex = Number.MAX_SAFE_INTEGER;
+  try {
+    const commitmentTreePda = new PublicKey(DEVNET_CONFIG.commitmentTreePda);
+    const treeAccount = await connection.getAccountInfo(commitmentTreePda);
+    if (treeAccount) {
+      const treeState = parseCommitmentTreeData(new Uint8Array(treeAccount.data));
+      treeNextIndex = Number(treeState.nextIndex);
+      console.log(`[StealthAPI] Tree nextIndex: ${treeNextIndex}`);
+    }
+  } catch (e) {
+    console.warn("[StealthAPI] Failed to fetch tree state, skipping filter:", e);
+  }
+
   const accounts = await connection.getProgramAccounts(ZVAULT_PROGRAM_ID, {
     filters: [{ dataSize: STEALTH_ANNOUNCEMENT_SIZE }],
   });
@@ -61,14 +76,17 @@ async function fetchAnnouncements(): Promise<CacheData> {
   console.log(`[StealthAPI] Found ${accounts.length} stealth announcement accounts`);
 
   const announcements: CachedAnnouncement[] = [];
-  console.log("[StealthAPI] Parsing announcements...");
 
   for (const account of accounts) {
     try {
       const parsed = parseStealthAnnouncement(new Uint8Array(account.account.data));
       if (parsed) {
+        // Skip stale announcements from before a tree reset
+        if (parsed.leafIndex >= treeNextIndex) {
+          console.log(`[StealthAPI] Skipping stale announcement: leafIndex=${parsed.leafIndex} >= treeNextIndex=${treeNextIndex}`);
+          continue;
+        }
         const commitmentHex = Buffer.from(parsed.commitment).toString("hex");
-        console.log(`[StealthAPI] Announcement: leafIndex=${parsed.leafIndex}, commitment=${commitmentHex.slice(0, 16)}...`);
         announcements.push({
           pubkey: account.pubkey.toBase58(),
           announcementType: parsed.announcementType,
@@ -80,7 +98,6 @@ async function fetchAnnouncements(): Promise<CacheData> {
         });
       }
     } catch (e) {
-      // Skip invalid announcements
       console.warn("[StealthAPI] Failed to parse announcement:", e);
     }
   }
@@ -88,13 +105,28 @@ async function fetchAnnouncements(): Promise<CacheData> {
   // Sort by leafIndex for consistent ordering
   announcements.sort((a, b) => a.leafIndex - b.leafIndex);
 
+  // Check for duplicate leafIndex values (indicates stale announcements from pre-reset)
+  const seen = new Set<number>();
+  const deduped: CachedAnnouncement[] = [];
+  for (const ann of announcements) {
+    if (seen.has(ann.leafIndex)) {
+      console.warn(`[StealthAPI] Duplicate leafIndex ${ann.leafIndex}, keeping latest`);
+      // Replace with the latest one (later in sorted order)
+      const idx = deduped.findIndex(a => a.leafIndex === ann.leafIndex);
+      if (idx >= 0) deduped[idx] = ann;
+    } else {
+      seen.add(ann.leafIndex);
+      deduped.push(ann);
+    }
+  }
+
   const cacheData: CacheData = {
-    announcements,
+    announcements: deduped,
     fetchedAt: Date.now(),
-    count: announcements.length,
+    count: deduped.length,
   };
 
-  console.log(`[StealthAPI] Cached ${announcements.length} announcements`);
+  console.log(`[StealthAPI] Cached ${deduped.length} announcements (filtered ${announcements.length - deduped.length} duplicates)`);
 
   return cacheData;
 }

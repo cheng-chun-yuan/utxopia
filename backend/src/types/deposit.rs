@@ -297,12 +297,12 @@ impl DepositRecord {
 pub struct RegisterDepositRequest {
     /// Taproot deposit address (bc1p... or tb1p...)
     pub taproot_address: String,
-    /// The commitment SHA256(nullifier || secret) as hex (64 chars)
+    /// The npk (note public key) as hex (64 chars = 32 bytes), used as Taproot tweak
     pub commitment: String,
     /// Expected amount in satoshis
     pub amount_sats: u64,
-    /// Optional claim link for reference
-    pub claim_link: Option<String>,
+    /// Optional ephemeral public key (64 hex = 32 bytes Ed25519), needed for SPV verification
+    pub ephemeral_pub: Option<String>,
 }
 
 /// Response to POST /api/deposits

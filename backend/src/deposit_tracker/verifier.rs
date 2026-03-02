@@ -146,7 +146,6 @@ impl SpvVerifier {
     /// * `vout` - Output index in the sweep transaction
     /// * `npk` - The note public key (hex) for on-chain commitment computation
     /// * `ephemeral_pub` - The ephemeral Ed25519 public key (hex) for stealth scanning
-    /// * `amount_sats` - Expected amount in satoshis
     ///
     /// # Returns
     /// Verification result with Solana tx and leaf index
@@ -156,7 +155,6 @@ impl SpvVerifier {
         vout: u32,
         npk: &str,
         ephemeral_pub: &str,
-        amount_sats: u64,
     ) -> Result<VerificationResult, VerifierError> {
         let payer = self.payer.as_ref().ok_or(VerifierError::NoPayerSet)?;
 
@@ -220,7 +218,6 @@ impl SpvVerifier {
                 &merkle_proof,
                 &block_header.header_hex,
                 block_height,
-                amount_sats,
                 &eph_arr,
                 &npk_arr,
                 &block_hash,
@@ -246,12 +243,10 @@ impl SpvVerifier {
     /// # Arguments
     /// * `sweep_txid` - The sweep transaction ID
     /// * `vout` - Output index of the P2TR payment (not the OP_RETURN)
-    /// * `amount_sats` - Expected amount in satoshis
     pub async fn verify_deposit_from_tx(
         &self,
         sweep_txid: &str,
         vout: u32,
-        amount_sats: u64,
     ) -> Result<VerificationResult, VerifierError> {
         // Fetch raw transaction hex from Esplora and decode
         let tx_hex = self.watcher.get_tx_hex(sweep_txid).await?;
@@ -270,7 +265,7 @@ impl SpvVerifier {
 
         let npk_hex = hex::encode(op_return_data.npk);
         let eph_hex = hex::encode(op_return_data.ephemeral_pub);
-        self.verify_deposit(sweep_txid, vout, &npk_hex, &eph_hex, amount_sats)
+        self.verify_deposit(sweep_txid, vout, &npk_hex, &eph_hex)
             .await
     }
 
@@ -368,7 +363,6 @@ impl SpvVerifier {
         merkle_proof: &MerkleProofData,
         block_header_hex: &str,
         block_height: u64,
-        amount_sats: u64,
         ephemeral_pub: &[u8; 32],
         npk: &[u8; 32],
         block_hash: &[u8; 32],
@@ -417,11 +411,7 @@ impl SpvVerifier {
         deposit_data.extend_from_slice(txid);
         // block_height (8)
         deposit_data.extend_from_slice(&block_height.to_le_bytes());
-        // amount_sats (8)
-        deposit_data.extend_from_slice(&amount_sats.to_le_bytes());
-        // tx_size (4) — estimate from raw tx; will be validated on-chain
-        // We need to get the raw tx size. For now, pass 0 and let ChadBuffer handle it.
-        // In practice, the caller should upload the tx to ChadBuffer first.
+        // tx_size (4) — raw tx size in ChadBuffer
         deposit_data.extend_from_slice(&0u32.to_le_bytes());
         // ephemeral_pub (32)
         deposit_data.extend_from_slice(ephemeral_pub);

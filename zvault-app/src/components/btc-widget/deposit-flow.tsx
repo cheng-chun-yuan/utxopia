@@ -6,7 +6,7 @@ import {
   Check, AlertCircle, Key, Wallet,
   RefreshCw, ExternalLink, Tag, Info,
   Zap, Loader2, CheckCircle2, ArrowRight,
-  Hash, FileText, ArrowLeftRight,
+  Hash, FileText, ArrowLeftRight, ChevronDown, Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { notifySuccess, notifyError } from "@/lib/notifications";
@@ -31,8 +31,9 @@ import { registerDeposit } from "@/lib/api/deposits";
 import { getBtcSignerNetwork } from "@/lib/btc-network";
 
 export function DepositFlow() {
-  // Demo mode state (default ON for hackathon)
-  const [demoMode, setDemoMode] = useState(true);
+  const isDevnet = getConfig().network === "devnet";
+  // Demo mode state (only available on devnet)
+  const [demoMode, setDemoMode] = useState(false);
   const [demoAmount, setDemoAmount] = useState("10000");
   const [demoSubmitting, setDemoSubmitting] = useState(false);
   const [demoResult, setDemoResult] = useState<{
@@ -68,6 +69,7 @@ export function DepositFlow() {
   const [selectedUtxoKeys, setSelectedUtxoKeys] = useState<Set<string>>(new Set());
   const [showUtxoList, setShowUtxoList] = useState(false);
   const [editingUtxos, setEditingUtxos] = useState(false);
+  const [showOpReturn, setShowOpReturn] = useState(false);
   const btcWallet = useBitcoinWalletStore();
 
   const resetFlow = () => {
@@ -175,10 +177,11 @@ export function DepositFlow() {
           return;
         }
         // Convert SnsStealthAddress → StealthMetaAddress
+        // spendingPubKey not stored in SNS (senders don't need it)
         const meta: StealthMetaAddress = {
-          spendingPubKey: result.spendingPubKey,
+          spendingPubKey: new Uint8Array(32),
           viewingPubKey: result.viewingPubKey,
-          mpk: new Uint8Array(32),
+          mpk: result.mpk,
         };
         setResolvedMeta(meta);
       } else {
@@ -286,9 +289,9 @@ export function DepositFlow() {
       const { txid } = await btcWallet.signAndBroadcastPsbt(psbtResult.psbtBase64);
 
       // Save to local notes store so it appears in "Bitcoin Deposits" view
-      const commitment = depositPreview.opReturnHex; // ephemeralPub + npk
+      const opReturnHex = depositPreview.opReturnHex; // ephemeralPub + npk
       useNotesStore.getState().saveNote({
-        commitment,
+        commitment: opReturnHex,
         noteExport: txid,
         amountSats: depositPreview.depositAmountSats,
         taprootAddress: depositPreview.depositAddress,
@@ -296,10 +299,14 @@ export function DepositFlow() {
       });
 
       // Register with backend tracker (fire-and-forget)
+      // Backend expects npk (32 bytes = 64 hex chars) as commitment for Taproot tweak
+      const ephemeralPubHex = opReturnHex.slice(0, 64); // first 32 bytes
+      const npkHex = opReturnHex.slice(64); // second 32 bytes
       registerDeposit(
         depositPreview.depositAddress,
-        commitment,
+        npkHex,
         depositPreview.depositAmountSats,
+        ephemeralPubHex,
       ).catch((err) => {
         console.warn("Failed to register deposit with tracker:", err);
       });
@@ -321,32 +328,34 @@ export function DepositFlow() {
 
   return (
     <div className="flex flex-col">
-      {/* Demo Mode Toggle */}
-      <div className="flex items-center justify-between mb-4 p-3 bg-warning/5 border border-warning/20 rounded-[12px]">
-        <div className="flex items-center gap-2">
-          <Zap className="w-4 h-4 text-warning" />
-          <span className="text-body2 text-warning">Demo Mode</span>
-          <Tooltip content="Skip BTC deposit - add mock commitment directly to Solana for testing">
-            <Info className="w-3.5 h-3.5 text-warning/60" />
-          </Tooltip>
-        </div>
-        <button
-          onClick={() => { setDemoMode(!demoMode); setDemoResult(null); }}
-          className={cn(
-            "relative w-11 h-6 rounded-full transition-colors",
-            demoMode ? "bg-warning" : "bg-gray/30"
-          )}
-          role="switch"
-          aria-checked={demoMode}
-        >
-          <span
+      {/* Demo Mode Toggle (devnet only) */}
+      {isDevnet && (
+        <div className="flex items-center justify-between mb-4 p-3 bg-warning/5 border border-warning/20 rounded-[12px]">
+          <div className="flex items-center gap-2">
+            <Zap className="w-4 h-4 text-warning" />
+            <span className="text-body2 text-warning">Demo Mode</span>
+            <Tooltip content="Skip BTC deposit - add mock commitment directly to Solana for testing">
+              <Info className="w-3.5 h-3.5 text-warning/60" />
+            </Tooltip>
+          </div>
+          <button
+            onClick={() => { setDemoMode(!demoMode); setDemoResult(null); }}
             className={cn(
-              "absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform",
-              demoMode && "translate-x-5"
+              "relative w-11 h-6 rounded-full transition-colors",
+              demoMode ? "bg-warning" : "bg-gray/30"
             )}
-          />
-        </button>
-      </div>
+            role="switch"
+            aria-checked={demoMode}
+          >
+            <span
+              className={cn(
+                "absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform",
+                demoMode && "translate-x-5"
+              )}
+            />
+          </button>
+        </div>
+      )}
 
       {/* ========== STEALTH MODE (Send by Stealth) ========== */}
       <>
@@ -671,80 +680,124 @@ export function DepositFlow() {
                         )}
                       </div>
 
-                      <div className="flex justify-center">
-                        <ArrowRight className="w-4 h-4 text-gray" />
+                      {/* ── Flow divider ── */}
+                      <div className="flex items-center gap-2 px-1">
+                        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray/20 to-transparent" />
+                        <span className="text-[10px] text-gray/50 uppercase tracking-widest">Outputs</span>
+                        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray/20 to-transparent" />
                       </div>
 
-                      {/* Output 1: P2TR Deposit */}
+                      {/* Deposit output */}
                       <div className="p-3 bg-btc/5 border border-btc/20 rounded-[12px]">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] font-mono bg-btc/15 text-btc px-1.5 py-0.5 rounded">Output #1</span>
-                          <span className="text-caption text-btc">P2TR Deposit</span>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-btc/15 flex items-center justify-center">
+                              <ArrowRight className="w-3 h-3 text-btc" />
+                            </div>
+                            <span className="text-caption font-semibold text-btc">Deposit</span>
+                          </div>
+                          <span className="text-[10px] font-mono bg-btc/10 text-btc/70 px-1.5 py-0.5 rounded">P2TR</span>
                         </div>
-                        <p className="text-body2 font-mono text-foreground mb-1">
+                        <p className="text-body2-semibold font-mono text-foreground">
                           {(depositPreview.depositAmountSats / 1e8).toFixed(8)} BTC
-                          <span className="text-caption text-gray ml-1">({depositPreview.depositAmountSats.toLocaleString()} sats)</span>
                         </p>
-                        <code className="block text-[10px] font-mono text-btc/70 break-all">
-                          {depositPreview.depositAddress}
-                        </code>
-                      </div>
-
-                      {/* Output 2: OP_RETURN */}
-                      <div className="p-3 bg-sol/5 border border-sol/20 rounded-[12px]">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] font-mono bg-sol/15 text-sol px-1.5 py-0.5 rounded">Output #2</span>
-                          <span className="text-caption text-sol">OP_RETURN (64 bytes)</span>
-                        </div>
-                        <p className="text-body2 font-mono text-foreground mb-1">0.00000000 BTC</p>
-                        <div className="space-y-1">
-                          <div>
-                            <p className="text-[10px] text-gray">ephemeralPub (32 bytes):</p>
-                            <code className="block text-[10px] font-mono text-sol/70 break-all">
-                              {depositPreview.opReturnHex.slice(0, 64)}
-                            </code>
-                          </div>
-                          <div>
-                            <p className="text-[10px] text-gray">npk (32 bytes):</p>
-                            <code className="block text-[10px] font-mono text-sol/70 break-all">
-                              {depositPreview.opReturnHex.slice(64)}
-                            </code>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Output 3: Change (if any) */}
-                      {changeAmount > 0 && (
-                        <div className="p-3 bg-muted border border-gray/20 rounded-[12px]">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-[10px] font-mono bg-gray/15 text-gray px-1.5 py-0.5 rounded">Output #3</span>
-                            <span className="text-caption text-gray-light">Change</span>
-                          </div>
-                          <p className="text-body2 font-mono text-foreground mb-1">
-                            {(changeAmount / 1e8).toFixed(8)} BTC
-                            <span className="text-caption text-gray ml-1">({changeAmount.toLocaleString()} sats)</span>
-                          </p>
-                          <code className="block text-[10px] font-mono text-gray break-all">
-                            {btcWallet.address}
+                        <p className="text-caption text-gray mb-1.5">{depositPreview.depositAmountSats.toLocaleString()} sats</p>
+                        <div className="flex items-center gap-1.5 p-1.5 bg-background/50 rounded-[6px]">
+                          <code className="text-[10px] font-mono text-btc/60 truncate">
+                            {depositPreview.depositAddress.slice(0, 14)}...{depositPreview.depositAddress.slice(-14)}
                           </code>
+                        </div>
+                      </div>
+
+                      {/* ZK Metadata (OP_RETURN) — compact by default */}
+                      <div className="p-3 bg-privacy/5 border border-privacy/20 rounded-[12px]">
+                        <button
+                          onClick={() => setShowOpReturn(!showOpReturn)}
+                          className="w-full flex items-center justify-between cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-privacy/15 flex items-center justify-center">
+                              <Shield className="w-3 h-3 text-privacy" />
+                            </div>
+                            <span className="text-caption font-semibold text-privacy">ZK Metadata</span>
+                            <span className="text-[10px] text-privacy/50">64 bytes</span>
+                          </div>
+                          <ChevronDown className={cn(
+                            "w-3.5 h-3.5 text-gray transition-transform duration-200",
+                            showOpReturn && "rotate-180"
+                          )} />
+                        </button>
+                        {showOpReturn && (
+                          <div className="mt-2 pt-2 border-t border-privacy/10 space-y-1.5">
+                            <div>
+                              <p className="text-[10px] text-gray mb-0.5">Ephemeral Public Key</p>
+                              <code className="block text-[9px] font-mono text-privacy/50 break-all leading-relaxed">
+                                {depositPreview.opReturnHex.slice(0, 64)}
+                              </code>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-gray mb-0.5">Note Public Key</p>
+                              <code className="block text-[9px] font-mono text-privacy/50 break-all leading-relaxed">
+                                {depositPreview.opReturnHex.slice(64)}
+                              </code>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Change output */}
+                      {changeAmount > 0 && (
+                        <div className="p-3 bg-muted border border-gray/15 rounded-[12px]">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-full bg-gray/15 flex items-center justify-center">
+                                <Wallet className="w-3 h-3 text-gray" />
+                              </div>
+                              <span className="text-caption font-semibold text-gray-light">Change</span>
+                            </div>
+                          </div>
+                          <p className="text-body2-semibold font-mono text-foreground">
+                            {(changeAmount / 1e8).toFixed(8)} BTC
+                          </p>
+                          <p className="text-caption text-gray mb-1.5">{changeAmount.toLocaleString()} sats</p>
+                          <div className="flex items-center gap-1.5 p-1.5 bg-background/50 rounded-[6px]">
+                            <code className="text-[10px] font-mono text-gray/60 truncate">
+                              {btcWallet.address?.slice(0, 14)}...{btcWallet.address?.slice(-14)}
+                            </code>
+                          </div>
                         </div>
                       )}
 
-                      {/* Fee */}
-                      <div className="flex items-center justify-between px-2 py-2 border-t border-gray/10">
-                        <span className="text-caption text-gray">Estimated Fee</span>
-                        <span className="text-caption font-mono text-foreground">
-                          {estimatedFee.toLocaleString()} sats
-                          <span className="text-gray ml-1">({(estimatedFee / 1e8).toFixed(8)} BTC)</span>
-                        </span>
+                      {/* Summary */}
+                      <div className="p-3 rounded-[12px] bg-muted border border-gray/15 space-y-1.5">
+                        <div className="flex items-center justify-between text-caption">
+                          <span className="text-gray">Deposit</span>
+                          <span className="font-mono text-btc">{(depositPreview.depositAmountSats / 1e8).toFixed(8)} BTC</span>
+                        </div>
+                        {changeAmount > 0 && (
+                          <div className="flex items-center justify-between text-caption">
+                            <span className="text-gray">Change</span>
+                            <span className="font-mono text-foreground">{(changeAmount / 1e8).toFixed(8)} BTC</span>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between text-caption">
+                          <span className="text-gray">Network Fee</span>
+                          <span className="font-mono text-foreground">{estimatedFee.toLocaleString()} sats</span>
+                        </div>
+                        <div className="flex items-center justify-between text-caption pt-1.5 border-t border-gray/10">
+                          <span className="text-gray-light font-medium">Total</span>
+                          <span className="font-mono text-foreground font-semibold">
+                            {((depositPreview.depositAmountSats + estimatedFee) / 1e8).toFixed(8)} BTC
+                          </span>
+                        </div>
                       </div>
 
                       {/* Insufficient funds warning */}
                       {insufficientFunds && (
-                        <div className="p-2 bg-red-500/10 border border-red-500/20 rounded-[8px]">
+                        <div className="p-2.5 bg-error/10 border border-error/20 rounded-[10px]">
                           <div className="flex items-center gap-2">
-                            <AlertCircle className="w-3.5 h-3.5 text-red-400" />
-                            <span className="text-caption text-red-400">
+                            <AlertCircle className="w-3.5 h-3.5 text-error shrink-0" />
+                            <span className="text-caption text-error">
                               Insufficient funds. Select more UTXOs or reduce amount.
                             </span>
                           </div>
