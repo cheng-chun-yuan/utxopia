@@ -14,7 +14,10 @@ import {
   TransactionInstruction,
   sendAndConfirmTransaction,
 } from '@solana/web3.js';
-import { createHash } from 'crypto';
+import { computeBlockHash, hexToBytes, bytesToHex } from './utils';
+
+// Re-export utils for backwards compatibility with index.ts imports
+export { computeBlockHash, hexToBytes, bytesToHex };
 
 // PDA seeds (must match the btc-light-client Pinocchio program)
 const LIGHT_CLIENT_SEED = Buffer.from('btc_light_client');
@@ -23,13 +26,11 @@ const HEIGHT_INDEX_SEED = Buffer.from('height_index');
 
 // Account discriminators
 const BTC_LIGHT_CLIENT_DISCRIMINATOR: number = 0x06;
-const BLOCK_HEADER_DISCRIMINATOR = 0x07;
 const HEIGHT_INDEX_DISCRIMINATOR = 0x09;
 
 // Instruction discriminators
 const INITIALIZE_DISC: number = 0;
 const EXTEND_BLOCKCHAIN_DISC: number = 1;
-const VERIFY_TRANSACTION_DISC: number = 2;
 const REINITIALIZE_DISC: number = 4;
 
 /**
@@ -67,15 +68,6 @@ export function deriveHeightIndexPda(
     [HEIGHT_INDEX_SEED, heightBuffer],
     programId
   );
-}
-
-/**
- * Compute double SHA-256 of raw block header (80 bytes) → block hash
- */
-export function computeBlockHash(rawHeader: Uint8Array): Uint8Array {
-  const first = createHash('sha256').update(rawHeader).digest();
-  const second = createHash('sha256').update(first).digest();
-  return new Uint8Array(second);
 }
 
 /**
@@ -142,21 +134,6 @@ export async function getLightClientState(
   }
 
   return parseLightClientState(accountInfo.data);
-}
-
-/**
- * Get the on-chain tip height (returns startBlockHeight - 1 if not initialized)
- */
-export async function getLightClientTipHeight(
-  connection: Connection,
-  programId: PublicKey,
-  startBlockHeight: bigint
-): Promise<bigint> {
-  const state = await getLightClientState(connection, programId);
-  if (!state) {
-    return startBlockHeight - 1n;
-  }
-  return state.tipHeight;
 }
 
 /**
@@ -242,12 +219,53 @@ export async function initializeLightClient(
 }
 
 /**
+ * Build reinitialize instruction (disc=4)
+ *
+ * Authority-only: resets all state without closing the PDA.
+ *
+ * Accounts:
+ *   0. [writable] BitcoinLightClient PDA
+ *   1. [signer, writable] Authority
+ *   2. [] System program
+ *   3. [writable] HeightIndex PDA
+ *   4. [writable] BlockHeader PDA
+ */
+export function buildReinitializeInstruction(
+  programId: PublicKey,
+  lightClientPda: PublicKey,
+  authority: PublicKey,
+  heightIndexPda: PublicKey,
+  blockHeaderPda: PublicKey,
+  height: bigint,
+  blockHash: Uint8Array,
+  networkId: number
+): TransactionInstruction {
+  const data = Buffer.alloc(1 + 8 + 32 + 1);
+  data.writeUInt8(REINITIALIZE_DISC, 0);
+  data.writeBigUInt64LE(height, 1);
+  Buffer.from(blockHash).copy(data, 9);
+  data.writeUInt8(networkId, 41);
+
+  return new TransactionInstruction({
+    keys: [
+      { pubkey: lightClientPda, isSigner: false, isWritable: true },
+      { pubkey: authority, isSigner: true, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: heightIndexPda, isSigner: false, isWritable: true },
+      { pubkey: blockHeaderPda, isSigner: false, isWritable: true },
+    ],
+    programId,
+    data,
+  });
+}
+
+/**
  * Build extend_blockchain instruction
  *
  * Instruction data:
  *   [0]            disc (1)
  *   [1]            num_headers (u8)
- *   [2..2+N*80]    raw_headers (N × 80 bytes)
+ *   [2..2+N*80]    raw_headers (N x 80 bytes)
  *
  * Accounts:
  *   0. [writable]           BitcoinLightClient PDA
@@ -338,124 +356,4 @@ export async function extendBlockchain(
   });
   const transaction = new Transaction().add(cuLimit, instruction);
   return await sendAndConfirmTransaction(connection, transaction, [submitter]);
-}
-
-/**
- * Build verify_transaction instruction (disc=2)
- *
- * Instruction data:
- *   [0]      disc
- *   [1-32]   txid (32)
- *   [33-64]  block_hash (32)
- *   [65-68]  tx_size (u32 LE)
- *   [69+]    merkle_proof
- */
-export function buildVerifyTransactionInstruction(
-  programId: PublicKey,
-  verifiedTxPda: PublicKey,
-  lightClientPda: PublicKey,
-  blockHeaderPda: PublicKey,
-  txBufferAccount: PublicKey,
-  payer: PublicKey,
-  txid: Uint8Array,
-  blockHash: Uint8Array,
-  txSize: number,
-  merkleProofTxid: Uint8Array,
-  pathBits: number,
-  pathLen: number,
-  txIndex: number,
-  siblings: Uint8Array[],
-): TransactionInstruction {
-  const proofDataLen = 32 + 4 + 1 + 4 + (siblings.length * 32);
-  const data = Buffer.alloc(1 + 32 + 32 + 4 + proofDataLen);
-  let offset = 0;
-
-  // Discriminator
-  data.writeUInt8(VERIFY_TRANSACTION_DISC, offset);
-  offset += 1;
-
-  // txid (32)
-  Buffer.from(txid).copy(data, offset);
-  offset += 32;
-
-  // block_hash (32)
-  Buffer.from(blockHash).copy(data, offset);
-  offset += 32;
-
-  // tx_size (u32 LE)
-  data.writeUInt32LE(txSize, offset);
-  offset += 4;
-
-  // Merkle proof: txid(32)
-  Buffer.from(merkleProofTxid).copy(data, offset);
-  offset += 32;
-
-  // path_bits (u32 LE)
-  data.writeUInt32LE(pathBits, offset);
-  offset += 4;
-
-  // path_len (u8)
-  data.writeUInt8(pathLen, offset);
-  offset += 1;
-
-  // tx_index (u32 LE)
-  data.writeUInt32LE(txIndex, offset);
-  offset += 4;
-
-  // siblings
-  for (const sibling of siblings) {
-    Buffer.from(sibling).copy(data, offset);
-    offset += 32;
-  }
-
-  return new TransactionInstruction({
-    keys: [
-      { pubkey: verifiedTxPda, isSigner: false, isWritable: true },
-      { pubkey: lightClientPda, isSigner: false, isWritable: false },
-      { pubkey: blockHeaderPda, isSigner: false, isWritable: false },
-      { pubkey: txBufferAccount, isSigner: false, isWritable: false },
-      { pubkey: payer, isSigner: true, isWritable: true },
-      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-    ],
-    programId,
-    data,
-  });
-}
-
-// PDA seed for VerifiedTransaction
-const VERIFIED_TX_SEED = Buffer.from('verified_tx');
-
-/**
- * Derive VerifiedTransaction PDA
- * Seeds: ["verified_tx", blockHash(32), txid(32)]
- */
-export function deriveVerifiedTransactionPda(
-  programId: PublicKey,
-  blockHash: Uint8Array,
-  txid: Uint8Array
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [VERIFIED_TX_SEED, Buffer.from(blockHash), Buffer.from(txid)],
-    programId
-  );
-}
-
-/**
- * Helper to convert hex string to Uint8Array
- */
-export function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
-  }
-  return bytes;
-}
-
-/**
- * Helper to convert Uint8Array to hex string
- */
-export function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
 }

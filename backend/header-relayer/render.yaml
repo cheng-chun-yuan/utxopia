@@ -11,9 +11,9 @@ services:
       - key: PROGRAM_ID
         value: Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq
       - key: BITCOIN_NETWORK
-        value: testnet
+        value: testnet4
       - key: START_BLOCK_HEIGHT
-        value: "4835045"
+        value: "75000"
       - key: POLL_INTERVAL_MS
         value: "30000"
       - key: RELAYER_KEYPAIR

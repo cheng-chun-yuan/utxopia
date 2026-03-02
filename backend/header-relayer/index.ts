@@ -12,17 +12,13 @@ import { Connection, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import {
   getTipHeight,
   getBlockHeaderByHeight,
-  getBlockInfoByHeight,
-  getBlockHashByHeight,
 } from './mempool';
 import {
   getLightClientState,
-  getLightClientTipHeight,
   getBlockHashAtHeight,
   extendBlockchain,
   computeBlockHash,
   bytesToHex,
-  hexToBytes,
 } from './solana';
 import {
   SOLANA_RPC_URL,
@@ -116,8 +112,8 @@ async function syncHeaders(
       const rawHeader = await getBlockHeaderByHeight(BITCOIN_NETWORK, Number(h));
       rawHeaders.push(rawHeader);
 
-      const blockInfo = await getBlockInfoByHeight(BITCOIN_NETWORK, Number(h));
-      log(`  Block ${h}: hash=${blockInfo.id.slice(0, 16)}...`);
+      const hash = computeBlockHash(rawHeader);
+      log(`  Block ${h}: hash=${bytesToHex(hash).slice(0, 16)}...`);
     }
 
     if (rawHeaders.length < 2) {

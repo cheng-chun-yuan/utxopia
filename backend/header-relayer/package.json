@@ -3,11 +3,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "init": "bun run init-light-client.ts",
-    "reset": "bun run reset-light-client.ts",
-    "reinit": "bun run reinit-light-client.ts",
-    "start": "bun run index.ts",
-    "test:reorg": "bun run test-reorg.ts"
+    "admin": "bun run admin.ts",
+    "start": "bun run index.ts"
   },
   "dependencies": {
     "@solana/web3.js": "^1.95.0"
