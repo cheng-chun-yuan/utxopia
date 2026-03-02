@@ -1,16 +1,13 @@
 //! Deposit Tracker API Endpoints
 //!
 //! REST and WebSocket endpoints for deposit tracking:
-//! - POST /api/deposits - Register a new deposit
 //! - GET /api/deposits/:id - Get deposit status
+//! - GET /api/deposits - List all deposits
+//! - GET /api/pool/info - Pool config for SDK
 //! - WS /ws/deposits/:id - Subscribe to status updates
 //! - WS /ws/deposits - Subscribe to all updates
 //!
-//! V2 Stealth Deposit Endpoints:
-//! - POST /api/v2/prepare-deposit - Prepare stealth deposit address
-//! - GET /api/v2/deposits/:id - Get stealth deposit status
-//! - GET /api/v2/deposits - List all stealth deposits
-//! - WS /ws/v2/deposits/:id - Subscribe to stealth deposit updates
+//! Deposits are auto-detected via block scanning (no registration API needed).
 
 use axum::{
     extract::{Path, State},
@@ -23,13 +20,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower_http::cors::{Any, CorsLayer};
 
-use super::db::StealthDepositStore;
 use super::service::DepositTrackerService;
-use super::types::{
-    DepositStatusResponse, PrepareStealthDepositRequest, PrepareStealthDepositResponse,
-    RegisterDepositRequest, RegisterDepositResponse, StealthDepositRecord,
-    StealthDepositStatusResponse,
-};
+use super::types::DepositStatusResponse;
 use super::websocket::{
     create_ws_state, ws_all_deposits_handler, ws_deposit_handler, SharedWebSocketState,
 };
@@ -38,8 +30,6 @@ use super::websocket::{
 pub struct AppState {
     pub tracker: Arc<RwLock<DepositTrackerService>>,
     pub ws_state: SharedWebSocketState,
-    /// Stealth deposit v2 store
-    pub stealth_store: StealthDepositStore,
     /// Pool group public key (x-only, hex-encoded)
     pub group_pubkey: String,
     /// Bitcoin network ("testnet" | "mainnet")
@@ -63,7 +53,6 @@ pub fn create_deposit_router(tracker: DepositTrackerService) -> Router {
     let state = Arc::new(AppState {
         tracker: Arc::new(RwLock::new(tracker_with_ws)),
         ws_state,
-        stealth_store: StealthDepositStore::new(),
         group_pubkey,
         bitcoin_network: "testnet".to_string(),
     });
@@ -75,18 +64,12 @@ pub fn create_deposit_router(tracker: DepositTrackerService) -> Router {
         .allow_headers(Any);
 
     Router::new()
-        // Regular deposit endpoints
-        .route("/api/deposits", post(handle_register_deposit))
+        // Deposit query endpoints (auto-detected deposits)
         .route("/api/deposits/:id", get(handle_get_deposit))
         .route("/api/deposits", get(handle_list_deposits))
-        // Stealth deposit endpoints
-        .route("/api/stealth/prepare", post(handle_prepare_stealth_deposit))
-        .route("/api/stealth/:id", get(handle_get_stealth_deposit))
-        .route("/api/stealth", get(handle_list_stealth_deposits))
         // WebSocket endpoints
         .route("/ws/deposits/:id", get(ws_deposit_handler_wrapper))
         .route("/ws/deposits", get(ws_all_deposits_handler_wrapper))
-        .route("/ws/stealth/:id", get(ws_stealth_deposit_handler))
         // Pool info (for SDK non-interactive deposits)
         .route("/api/pool/info", get(handle_pool_info))
         // Health check and monitoring
@@ -102,42 +85,6 @@ pub fn create_deposit_router(tracker: DepositTrackerService) -> Router {
 // =============================================================================
 // REST Handlers
 // =============================================================================
-
-/// POST /api/deposits
-///
-/// Register a new deposit to track.
-async fn handle_register_deposit(
-    State(state): State<SharedAppState>,
-    Json(req): Json<RegisterDepositRequest>,
-) -> impl IntoResponse {
-    let tracker = state.tracker.write().await;
-
-    match tracker.register_deposit(req.taproot_address, req.commitment.clone(), req.amount_sats) {
-        Ok(id) => {
-            // Set npk and ephemeral_pub for SPV verification
-            // commitment IS the npk (used as Taproot tweak)
-            if let Some(mut record) = tracker.get_deposit(&id) {
-                record.npk = Some(req.commitment.clone());
-                record.ephemeral_pub = req.ephemeral_pub.clone();
-                let _ = tracker.update_deposit(&record);
-            }
-            let response = RegisterDepositResponse {
-                success: true,
-                deposit_id: Some(id),
-                message: Some("Deposit registered for tracking".to_string()),
-            };
-            (StatusCode::OK, Json(response))
-        }
-        Err(e) => {
-            let response = RegisterDepositResponse {
-                success: false,
-                deposit_id: None,
-                message: Some(e.to_string()),
-            };
-            (StatusCode::BAD_REQUEST, Json(response))
-        }
-    }
-}
 
 /// GET /api/deposits/:id
 ///
@@ -165,7 +112,7 @@ async fn handle_get_deposit(
 
 /// GET /api/deposits
 ///
-/// List all deposits (for admin/debugging).
+/// List all deposits (auto-detected via block scanning).
 async fn handle_list_deposits(State(state): State<SharedAppState>) -> impl IntoResponse {
     let tracker = state.tracker.read().await;
 
@@ -184,8 +131,7 @@ async fn handle_list_deposits(State(state): State<SharedAppState>) -> impl IntoR
 /// GET /api/pool/info
 ///
 /// Returns pool configuration needed by SDK for non-interactive deposits.
-/// The SDK uses this to derive deposit addresses client-side without
-/// calling POST /api/stealth/prepare.
+/// The SDK uses this to derive deposit addresses client-side.
 async fn handle_pool_info(State(state): State<SharedAppState>) -> impl IntoResponse {
     Json(serde_json::json!({
         "group_pubkey": state.group_pubkey,
@@ -297,155 +243,6 @@ async fn handle_retry_deposit(
 }
 
 // =============================================================================
-// V2 Stealth Deposit Handlers
-// =============================================================================
-
-fn is_valid_pubkey_hex(s: &str) -> bool {
-    s.len() == 66 && s.chars().all(|c| c.is_ascii_hexdigit())
-}
-
-fn stealth_error_response(error: &str) -> (StatusCode, Json<PrepareStealthDepositResponse>) {
-    (
-        StatusCode::BAD_REQUEST,
-        Json(PrepareStealthDepositResponse {
-            success: false,
-            deposit_id: None,
-            btc_address: None,
-            ephemeral_pub: None,
-            expires_at: None,
-            error: Some(error.to_string()),
-        }),
-    )
-}
-
-/// POST /api/v2/prepare-deposit
-///
-/// Prepare a stealth deposit address with ephemeral key.
-async fn handle_prepare_stealth_deposit(
-    State(state): State<SharedAppState>,
-    Json(req): Json<PrepareStealthDepositRequest>,
-) -> impl IntoResponse {
-    if !is_valid_pubkey_hex(&req.viewing_pub) {
-        return stealth_error_response("Invalid viewing public key format (expected 66 hex chars)");
-    }
-
-    if !is_valid_pubkey_hex(&req.spending_pub) {
-        return stealth_error_response("Invalid spending public key format (expected 66 hex chars)");
-    }
-
-    if !is_valid_pubkey_hex(&req.ephemeral_pub) {
-        return stealth_error_response("Invalid ephemeral public key format (expected 66 hex chars)");
-    }
-
-    // Validate npk (64 hex chars = 32 bytes)
-    if req.npk.len() != 64 || !req.npk.chars().all(|c| c.is_ascii_hexdigit()) {
-        return stealth_error_response("Invalid npk format (expected 64 hex chars)");
-    }
-
-    // Parse npk bytes for address derivation
-    let npk_bytes = match hex::decode(&req.npk) {
-        Ok(bytes) if bytes.len() == 32 => {
-            let mut arr = [0u8; 32];
-            arr.copy_from_slice(&bytes);
-            arr
-        }
-        _ => return stealth_error_response("Invalid npk: must be 32 bytes hex"),
-    };
-
-    // Derive BTC Taproot address from pool keys + npk
-    let pool_keys = crate::taproot::PoolKeys::new();
-    let network = bitcoin::Network::Testnet; // TODO: derive from config
-    let btc_address = match crate::taproot::generate_deposit_address(&pool_keys, &npk_bytes, network) {
-        Ok(deposit) => deposit.address,
-        Err(e) => return stealth_error_response(&format!("Failed to derive BTC address: {}", e)),
-    };
-
-    let ephemeral_pub = req.ephemeral_pub.clone();
-    let commitment = req.npk.clone(); // npk used as commitment identifier
-
-    // Create record (ephemeral private key is held client-side in stealth flow)
-    let record = StealthDepositRecord::new(
-        req.viewing_pub,
-        req.spending_pub,
-        ephemeral_pub.clone(),
-        String::new(), // ephemeral private key stays client-side
-        commitment,
-        btc_address.clone(),
-    );
-
-    let deposit_id = record.id.clone();
-    let expires_at = record.expires_at;
-
-    // Store record
-    match state.stealth_store.insert(record).await {
-        Ok(_) => (
-            StatusCode::OK,
-            Json(PrepareStealthDepositResponse {
-                success: true,
-                deposit_id: Some(deposit_id),
-                btc_address: Some(btc_address),
-                ephemeral_pub: Some(ephemeral_pub),
-                expires_at: Some(expires_at),
-                error: None,
-            }),
-        ),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(PrepareStealthDepositResponse {
-                success: false,
-                deposit_id: None,
-                btc_address: None,
-                ephemeral_pub: None,
-                expires_at: None,
-                error: Some(e.to_string()),
-            }),
-        ),
-    }
-}
-
-/// GET /api/v2/deposits/:id
-///
-/// Get stealth deposit status by ID.
-async fn handle_get_stealth_deposit(
-    State(state): State<SharedAppState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
-    match state.stealth_store.get(&id).await {
-        Some(record) => {
-            let response = StealthDepositStatusResponse::from(&record);
-            (StatusCode::OK, Json(response)).into_response()
-        }
-        None => {
-            let error = serde_json::json!({
-                "error": "Not found",
-                "details": format!("Stealth deposit {} not found", id)
-            });
-            (StatusCode::NOT_FOUND, Json(error)).into_response()
-        }
-    }
-}
-
-/// GET /api/v2/deposits
-///
-/// List all stealth deposits (for admin/debugging).
-async fn handle_list_stealth_deposits(State(state): State<SharedAppState>) -> impl IntoResponse {
-    let deposits: Vec<StealthDepositStatusResponse> = state
-        .stealth_store
-        .get_all()
-        .await
-        .iter()
-        .map(StealthDepositStatusResponse::from)
-        .collect();
-
-    let stats = state.stealth_store.stats().await;
-
-    Json(serde_json::json!({
-        "deposits": deposits,
-        "stats": stats
-    }))
-}
-
-// =============================================================================
 // WebSocket Handler Wrappers
 // =============================================================================
 
@@ -466,71 +263,6 @@ async fn ws_all_deposits_handler_wrapper(
     ws_all_deposits_handler(ws, State(state.ws_state.clone())).await
 }
 
-/// WebSocket handler for stealth deposit v2 updates
-async fn ws_stealth_deposit_handler(
-    ws: axum::extract::ws::WebSocketUpgrade,
-    Path(id): Path<String>,
-    State(state): State<SharedAppState>,
-) -> impl IntoResponse {
-    use axum::extract::ws::Message;
-    use futures_util::{SinkExt, StreamExt};
-    use std::time::Duration;
-
-    ws.on_upgrade(move |socket| async move {
-        let (mut sender, mut receiver) = socket.split();
-
-        // Send initial status
-        if let Some(record) = state.stealth_store.get(&id).await {
-            let update = super::types::StealthDepositStatusUpdate::from(&record);
-            if let Ok(json) = serde_json::to_string(&update) {
-                let _ = sender.send(Message::Text(json)).await;
-            }
-        }
-
-        // Poll for updates every 2 seconds
-        let poll_state = state.clone();
-        let poll_id = id.clone();
-        let poll_task = tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(2));
-            let mut last_status = String::new();
-
-            loop {
-                interval.tick().await;
-
-                if let Some(record) = poll_state.stealth_store.get(&poll_id).await {
-                    let current_status = record.status.to_string();
-                    if current_status != last_status {
-                        last_status = current_status;
-                        let update = super::types::StealthDepositStatusUpdate::from(&record);
-                        if let Ok(json) = serde_json::to_string(&update) {
-                            // Send through channel (simplified - in production use proper channel)
-                            println!("[WS] Status update for {}: {}", poll_id, json);
-                        }
-                    }
-
-                    // Stop polling if terminal state
-                    if record.is_ready() || record.status == super::types::StealthDepositStatus::Failed {
-                        break;
-                    }
-                }
-            }
-        });
-
-        // Handle incoming messages (for keepalive/close)
-        while let Some(msg) = receiver.next().await {
-            match msg {
-                Ok(Message::Close(_)) => break,
-                Ok(Message::Ping(data)) => {
-                    let _ = sender.send(Message::Pong(data)).await;
-                }
-                _ => {}
-            }
-        }
-
-        poll_task.abort();
-    })
-}
-
 // =============================================================================
 // Combined API Server
 // =============================================================================
@@ -548,8 +280,7 @@ pub async fn start_tracker_server(
     println!("=== zkBTC Deposit Tracker API ===");
     println!("Listening on http://{}", addr);
     println!();
-    println!("Deposit Endpoints:");
-    println!("  POST /api/deposits          - Register deposit to track");
+    println!("Deposit Endpoints (auto-detected via block scanning):");
     println!("  GET  /api/deposits/:id      - Get deposit status");
     println!("  GET  /api/deposits          - List all deposits");
     println!("  WS   /ws/deposits/:id       - Subscribe to deposit updates");
@@ -557,12 +288,6 @@ pub async fn start_tracker_server(
     println!();
     println!("Pool Info:");
     println!("  GET  /api/pool/info          - Pool config for SDK deposits");
-    println!();
-    println!("Stealth Deposit Endpoints:");
-    println!("  POST /api/stealth/prepare   - Prepare stealth deposit");
-    println!("  GET  /api/stealth/:id       - Get stealth deposit status");
-    println!("  GET  /api/stealth           - List stealth deposits");
-    println!("  WS   /ws/stealth/:id        - Subscribe to stealth updates");
     println!();
     println!("Monitoring Endpoints:");
     println!("  GET  /api/tracker/health    - Health check");
@@ -600,32 +325,6 @@ mod tests {
                 Request::builder()
                     .uri("/api/tracker/health")
                     .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn test_register_deposit() {
-        let tracker = DepositTrackerService::new_testnet(test_config());
-        let app = create_deposit_router(tracker);
-
-        let body = serde_json::json!({
-            "taproot_address": "tb1p123abc",
-            "commitment": "a".repeat(64),
-            "amount_sats": 100000
-        });
-
-        let response = app
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/api/deposits")
-                    .header("content-type", "application/json")
-                    .body(Body::from(serde_json::to_string(&body).unwrap()))
                     .unwrap(),
             )
             .await

@@ -287,6 +287,19 @@ impl SqliteDepositStore {
         Ok(record)
     }
 
+    /// Get a deposit by its deposit transaction ID
+    pub fn get_by_deposit_txid(&self, txid: &str) -> Result<Option<DepositRecord>, SqliteError> {
+        let conn = self.conn()?;
+
+        let record = conn.query_row(
+            "SELECT * FROM deposits WHERE deposit_txid = ?1",
+            params![txid],
+            |row| Self::row_to_record(row),
+        ).optional()?;
+
+        Ok(record)
+    }
+
     /// Get all deposits with a specific status
     pub fn get_by_status(&self, status: DepositStatus) -> Result<Vec<DepositRecord>, SqliteError> {
         let conn = self.conn()?;

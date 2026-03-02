@@ -1,7 +1,7 @@
 //! mempool.space WebSocket Listener
 //!
 //! Connects to `wss://mempool.space/testnet4/api/v1/ws` for:
-//! 1. Real-time deposit detection via `track-address` on pool receive address
+//! 1. Real-time block detection — triggers block scanning for deposit auto-detection
 //! 2. Block header relay on new block events (replaces separate TypeScript service)
 //!
 //! Falls back gracefully: if WS disconnects, the poll loop in service.rs continues.
@@ -18,7 +18,6 @@ use super::types::TrackerConfig;
 
 #[derive(Debug, Clone)]
 pub enum WsEvent {
-    NewTransaction { txid: String },
     NewBlock { height: u64, hash: String },
     Connected,
     Disconnected,
@@ -28,16 +27,7 @@ pub enum WsEvent {
 
 #[derive(Debug, Deserialize)]
 struct WsMessage {
-    #[serde(rename = "address-transactions")]
-    address_transactions: Option<Vec<TxRef>>,
-    #[serde(rename = "address-transactions-confirmed")]
-    address_transactions_confirmed: Option<Vec<TxRef>>,
     block: Option<BlockRef>,
-}
-
-#[derive(Debug, Deserialize)]
-struct TxRef {
-    txid: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -48,7 +38,6 @@ struct BlockRef {
 
 pub struct MempoolWsListener {
     ws_url: String,
-    pool_address: String,
     event_tx: mpsc::UnboundedSender<WsEvent>,
     header_relayer: Option<Arc<HeaderRelayer>>,
 }
@@ -61,7 +50,6 @@ impl MempoolWsListener {
     ) -> Self {
         Self {
             ws_url: config.ws_url.clone(),
-            pool_address: config.pool_receive_address.clone(),
             event_tx,
             header_relayer,
         }
@@ -99,24 +87,13 @@ impl MempoolWsListener {
 
         let _ = self.event_tx.send(WsEvent::Connected);
 
-        // Subscribe to new blocks
+        // Subscribe to new blocks only (deposits are detected via block scanning)
         write
             .send(Message::Text(
                 serde_json::json!({"action": "want", "data": ["blocks"]}).to_string(),
             ))
             .await
             .map_err(|e| format!("send want blocks: {}", e))?;
-
-        // Track pool receive address
-        if !self.pool_address.is_empty() {
-            write
-                .send(Message::Text(
-                    serde_json::json!({"track-address": self.pool_address}).to_string(),
-                ))
-                .await
-                .map_err(|e| format!("send track-address: {}", e))?;
-            println!("[ws] Tracking address: {}", self.pool_address);
-        }
 
         while let Some(msg) = read.next().await {
             match msg {
@@ -138,17 +115,6 @@ impl MempoolWsListener {
             Ok(m) => m,
             Err(_) => return, // Ignore non-matching messages (welcome, etc.)
         };
-
-        // Emit events for address transactions (mempool + confirmed)
-        for txs in [msg.address_transactions, msg.address_transactions_confirmed]
-            .into_iter()
-            .flatten()
-        {
-            for tx in txs {
-                println!("[ws] Tx at pool address: {}", tx.txid);
-                let _ = self.event_tx.send(WsEvent::NewTransaction { txid: tx.txid });
-            }
-        }
 
         // Handle new block
         if let Some(block) = msg.block {

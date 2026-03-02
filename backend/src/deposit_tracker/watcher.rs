@@ -246,6 +246,64 @@ impl AddressWatcher {
         })
     }
 
+    /// Get block hash at a given height
+    pub async fn get_block_hash(&self, height: u64) -> Result<String, WatcherError> {
+        let url = format!("{}/block-height/{}", self.base_url, height);
+        let resp = self.client.get(&url).send().await?;
+
+        if !resp.status().is_success() {
+            return Err(WatcherError::ParseError(format!(
+                "Block not found at height {}",
+                height
+            )));
+        }
+
+        Ok(resp.text().await?)
+    }
+
+    /// Get transactions in a block, paginated (25 per page).
+    /// `start_index` is the tx offset (0, 25, 50, ...).
+    pub async fn get_block_txs(
+        &self,
+        hash: &str,
+        start_index: u32,
+    ) -> Result<Vec<EsploraTxFull>, WatcherError> {
+        let url = format!("{}/block/{}/txs/{}", self.base_url, hash, start_index);
+        let resp = self.client.get(&url).send().await?;
+
+        if !resp.status().is_success() {
+            return Err(WatcherError::ParseError(format!(
+                "Failed to get txs for block {}",
+                hash
+            )));
+        }
+
+        let txs: Vec<EsploraTxFull> = resp.json().await?;
+        Ok(txs)
+    }
+
+    /// Get ALL transactions in a block (auto-paginates).
+    pub async fn get_all_block_txs(
+        &self,
+        hash: &str,
+    ) -> Result<Vec<EsploraTxFull>, WatcherError> {
+        let mut all_txs = Vec::new();
+        let mut start_index = 0u32;
+
+        loop {
+            let batch = self.get_block_txs(hash, start_index).await?;
+            let count = batch.len();
+            all_txs.extend(batch);
+
+            if count < 25 {
+                break; // Last page
+            }
+            start_index += 25;
+        }
+
+        Ok(all_txs)
+    }
+
     /// Get block header by height
     pub async fn get_block_header(&self, height: u64) -> Result<BlockHeaderData, WatcherError> {
         // Get block hash at height

@@ -4,7 +4,6 @@
 //! Uses btc-light-client's verify_transaction to create a VerifiedTransaction PDA,
 //! then calls zvault's verify_stealth_deposit with that PDA.
 
-use bitcoin::consensus::encode::deserialize as btc_deserialize;
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
     commitment_config::CommitmentConfig,
@@ -20,7 +19,6 @@ use thiserror::Error;
 /// Token-2022 program ID (inline constant to avoid spl-token-2022 crate dependency)
 const TOKEN_2022_PROGRAM_ID: Pubkey = pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
-use super::sweeper::extract_deposit_op_return_from_transaction;
 use super::watcher::{AddressWatcher, MerkleProofData, WatcherError};
 
 /// Get zVault program ID from env or use devnet default
@@ -58,9 +56,6 @@ pub enum VerifierError {
 
     #[error("Verification failed: {0}")]
     VerificationFailed(String),
-
-    #[error("Invalid npk: {0}")]
-    InvalidNpk(String),
 }
 
 /// Result of successful verification
@@ -135,17 +130,16 @@ impl SpvVerifier {
         self.payer.as_ref().map(|k| k.pubkey())
     }
 
-    /// Verify a Bitcoin deposit via VerifiedTransaction PDA
+    /// Verify a Bitcoin deposit via VerifiedTransaction PDA (trustless npk extraction)
     ///
-    /// Two-step process:
-    /// 1. Call btc-light-client's verify_transaction (disc 3) to create VerifiedTransaction PDA
-    /// 2. Call zvault's verify_stealth_deposit with VerifiedTransaction PDA
+    /// The on-chain program now extracts npk + ephemeral_pub directly from the deposit TX's
+    /// OP_RETURN. The backend no longer passes these as instruction data — instead it uploads
+    /// both the sweep TX and deposit TX to ChadBuffer accounts.
     ///
     /// # Arguments
-    /// * `sweep_txid` - The sweep transaction ID (NOT the original deposit)
+    /// * `sweep_txid` - The sweep transaction ID (hex, display order)
     /// * `vout` - Output index in the sweep transaction
-    /// * `npk` - The note public key (hex) for on-chain commitment computation
-    /// * `ephemeral_pub` - The ephemeral Ed25519 public key (hex) for stealth scanning
+    /// * `deposit_txid` - The original deposit transaction ID (hex, display order)
     ///
     /// # Returns
     /// Verification result with Solana tx and leaf index
@@ -153,34 +147,9 @@ impl SpvVerifier {
         &self,
         sweep_txid: &str,
         vout: u32,
-        npk: &str,
-        ephemeral_pub: &str,
+        deposit_txid: &str,
     ) -> Result<VerificationResult, VerifierError> {
         let payer = self.payer.as_ref().ok_or(VerifierError::NoPayerSet)?;
-
-        // Parse npk
-        let npk_bytes = hex::decode(npk)
-            .map_err(|e| VerifierError::InvalidNpk(format!("invalid hex: {}", e)))?;
-        if npk_bytes.len() != 32 {
-            return Err(VerifierError::InvalidNpk(format!(
-                "wrong length: {}",
-                npk_bytes.len()
-            )));
-        }
-        let mut npk_arr = [0u8; 32];
-        npk_arr.copy_from_slice(&npk_bytes);
-
-        // Parse ephemeral_pub
-        let eph_bytes = hex::decode(ephemeral_pub)
-            .map_err(|e| VerifierError::InvalidNpk(format!("invalid ephemeral_pub hex: {}", e)))?;
-        if eph_bytes.len() != 32 {
-            return Err(VerifierError::InvalidNpk(format!(
-                "wrong ephemeral_pub length: {}",
-                eph_bytes.len()
-            )));
-        }
-        let mut eph_arr = [0u8; 32];
-        eph_arr.copy_from_slice(&eph_bytes);
 
         // Get transaction confirmation status
         let tx_status = self.watcher.get_tx_confirmations(sweep_txid).await?;
@@ -192,18 +161,25 @@ impl SpvVerifier {
             .block_height
             .ok_or(VerifierError::TxNotConfirmed)?;
 
-        // Get merkle proof
+        // Get merkle proof for sweep TX
         let merkle_proof = self.watcher.get_merkle_proof(sweep_txid).await?;
 
         // Get block header (needed for verify_transaction)
         let block_header = self.watcher.get_block_header(block_height).await?;
 
-        // Convert txid to internal byte order
-        let txid_bytes = hex::decode(sweep_txid)
-            .map_err(|e| VerifierError::VerificationFailed(format!("invalid txid: {}", e)))?;
-        let mut txid_internal = [0u8; 32];
-        txid_internal.copy_from_slice(&txid_bytes);
-        txid_internal.reverse();
+        // Convert sweep txid to internal byte order
+        let sweep_txid_bytes = hex::decode(sweep_txid)
+            .map_err(|e| VerifierError::VerificationFailed(format!("invalid sweep txid: {}", e)))?;
+        let mut sweep_txid_internal = [0u8; 32];
+        sweep_txid_internal.copy_from_slice(&sweep_txid_bytes);
+        sweep_txid_internal.reverse();
+
+        // Convert deposit txid to internal byte order
+        let deposit_txid_bytes = hex::decode(deposit_txid)
+            .map_err(|e| VerifierError::VerificationFailed(format!("invalid deposit txid: {}", e)))?;
+        let mut deposit_txid_internal = [0u8; 32];
+        deposit_txid_internal.copy_from_slice(&deposit_txid_bytes);
+        deposit_txid_internal.reverse();
 
         // Compute block hash from raw header (double SHA256)
         let header_bytes = hex::decode(&block_header.header_hex)
@@ -214,59 +190,23 @@ impl SpvVerifier {
         let solana_tx = self
             .send_verify_deposit_tx(
                 payer,
-                &txid_internal,
+                &sweep_txid_internal,
+                &deposit_txid_internal,
                 &merkle_proof,
                 &block_header.header_hex,
                 block_height,
-                &eph_arr,
-                &npk_arr,
                 &block_hash,
             )
             .await?;
 
         // Get leaf index from the deposit record PDA
-        let leaf_index = self.get_leaf_index(&txid_internal).await?;
+        let leaf_index = self.get_leaf_index(&sweep_txid_internal).await?;
 
         Ok(VerificationResult {
             solana_tx,
             leaf_index,
             block_height,
         })
-    }
-
-    /// Verify a Bitcoin deposit by extracting npk + ephemeral_pub from the sweep tx's OP_RETURN.
-    ///
-    /// This is the trustless version — the npk and ephemeral_pub are read directly
-    /// from the Bitcoin transaction's 64-byte OP_RETURN rather than passed as parameters.
-    /// The on-chain program computes the commitment from npk + amount.
-    ///
-    /// # Arguments
-    /// * `sweep_txid` - The sweep transaction ID
-    /// * `vout` - Output index of the P2TR payment (not the OP_RETURN)
-    pub async fn verify_deposit_from_tx(
-        &self,
-        sweep_txid: &str,
-        vout: u32,
-    ) -> Result<VerificationResult, VerifierError> {
-        // Fetch raw transaction hex from Esplora and decode
-        let tx_hex = self.watcher.get_tx_hex(sweep_txid).await?;
-        let raw_tx = hex::decode(tx_hex.trim())
-            .map_err(|e| VerifierError::VerificationFailed(format!("invalid tx hex: {}", e)))?;
-
-        // Parse raw transaction and extract OP_RETURN data (ephemeral_pub + npk)
-        let tx: bitcoin::Transaction = btc_deserialize(&raw_tx)
-            .map_err(|e| VerifierError::VerificationFailed(format!("invalid tx: {}", e)))?;
-
-        let op_return_data = extract_deposit_op_return_from_transaction(&tx).ok_or_else(|| {
-            VerifierError::InvalidNpk(
-                "no deposit OP_RETURN found in sweep transaction".to_string(),
-            )
-        })?;
-
-        let npk_hex = hex::encode(op_return_data.npk);
-        let eph_hex = hex::encode(op_return_data.ephemeral_pub);
-        self.verify_deposit(sweep_txid, vout, &npk_hex, &eph_hex)
-            .await
     }
 
     /// Check if block header is available in the BTC light client
@@ -356,15 +296,15 @@ impl SpvVerifier {
     ///
     /// 1. btc-light-client verify_transaction (disc 3) — creates VerifiedTransaction PDA
     /// 2. zvault verify_stealth_deposit (disc 1) — uses VerifiedTransaction PDA
+    ///    npk + ephemeral_pub are extracted on-chain from the deposit TX's OP_RETURN
     async fn send_verify_deposit_tx(
         &self,
         payer: &Keypair,
-        txid: &[u8; 32],
+        sweep_txid: &[u8; 32],
+        deposit_txid: &[u8; 32],
         merkle_proof: &MerkleProofData,
         block_header_hex: &str,
         block_height: u64,
-        ephemeral_pub: &[u8; 32],
-        npk: &[u8; 32],
         block_hash: &[u8; 32],
     ) -> Result<String, VerifierError> {
         // Derive PDAs
@@ -381,12 +321,12 @@ impl SpvVerifier {
         );
 
         let (verified_tx_pda, _) = Pubkey::find_program_address(
-            &[b"verified_tx", block_hash, txid],
+            &[b"verified_tx", block_hash, sweep_txid],
             &self.light_client_program_id,
         );
 
-        let (deposit_record, _) =
-            Pubkey::find_program_address(&[b"stealth", txid], &self.program_id);
+        let (stealth_announcement, _) =
+            Pubkey::find_program_address(&[b"stealth", sweep_txid], &self.program_id);
 
         let (commitment_tree, _) =
             Pubkey::find_program_address(&[b"commitment_tree"], &self.program_id);
@@ -394,7 +334,7 @@ impl SpvVerifier {
         // --- Instruction 1: btc-light-client verify_transaction (disc 3) ---
         let verify_tx_ix = self.build_verify_transaction_ix(
             payer,
-            txid,
+            sweep_txid,
             merkle_proof,
             block_height,
             block_hash,
@@ -404,49 +344,50 @@ impl SpvVerifier {
         )?;
 
         // --- Instruction 2: zvault verify_stealth_deposit (disc 1) ---
+        // New layout: sweep_txid(32) + block_height(8) + sweep_tx_size(4) + deposit_tx_size(4) + deposit_txid(32) = 80 bytes
         let mut deposit_data = Vec::new();
         deposit_data.push(1u8); // discriminator
 
-        // txid (32)
-        deposit_data.extend_from_slice(txid);
+        // sweep_txid (32)
+        deposit_data.extend_from_slice(sweep_txid);
         // block_height (8)
         deposit_data.extend_from_slice(&block_height.to_le_bytes());
-        // tx_size (4) — raw tx size in ChadBuffer
+        // sweep_tx_size (4) — raw tx size in ChadBuffer (placeholder, set by ChadBuffer upload)
         deposit_data.extend_from_slice(&0u32.to_le_bytes());
-        // ephemeral_pub (32)
-        deposit_data.extend_from_slice(ephemeral_pub);
-        // npk (32)
-        deposit_data.extend_from_slice(npk);
+        // deposit_tx_size (4) — raw deposit tx size in ChadBuffer (placeholder)
+        deposit_data.extend_from_slice(&0u32.to_le_bytes());
+        // deposit_txid (32)
+        deposit_data.extend_from_slice(deposit_txid);
 
-        // 11 accounts for verify_stealth_deposit:
-        //   0. pool_state (writable)
-        //   1. verified_tx (readonly, owned by btc-light-client)
-        //   2. light_client (readonly, owned by btc-light-client)
-        //   3. commitment_tree (writable)
-        //   4. deposit_record (writable)
-        //   5. tx_buffer (readonly) — ChadBuffer
-        //   6. authority/payer (signer)
-        //   7. system_program (readonly)
-        //   8. zbtc_mint (writable)
-        //   9. pool_vault (writable)
+        // 12 accounts for verify_stealth_deposit:
+        //   0.  pool_state (writable)
+        //   1.  verified_tx (readonly, owned by btc-light-client)
+        //   2.  light_client (readonly, owned by btc-light-client)
+        //   3.  commitment_tree (writable)
+        //   4.  stealth_announcement (writable)
+        //   5.  sweep_tx_buffer (readonly) — ChadBuffer with sweep TX
+        //   6.  authority/payer (signer)
+        //   7.  system_program (readonly)
+        //   8.  zbtc_mint (writable)
+        //   9.  pool_vault (writable)
         //   10. token_program (readonly)
-        // Note: zbtc_mint and pool_vault need to be provided by the caller
-        // For now, we use placeholder accounts that the caller must fill in
+        //   11. deposit_tx_buffer (readonly) — ChadBuffer with deposit TX
         let deposit_accounts = vec![
             AccountMeta::new(pool_state, false),
             AccountMeta::new_readonly(verified_tx_pda, false),
             AccountMeta::new_readonly(light_client, false),
             AccountMeta::new(commitment_tree, false),
-            AccountMeta::new(deposit_record, false),
-            // tx_buffer — placeholder, must be set by caller via ChadBuffer upload
+            AccountMeta::new(stealth_announcement, false),
+            // sweep_tx_buffer — placeholder, must be set by caller via ChadBuffer upload
             AccountMeta::new_readonly(Pubkey::default(), false),
             AccountMeta::new(payer.pubkey(), true),
             AccountMeta::new_readonly(solana_sdk::system_program::ID, false),
             // zbtc_mint and pool_vault — must be derived from pool state
-            // These would need to be passed in from the caller
             AccountMeta::new(Pubkey::default(), false), // zbtc_mint placeholder
             AccountMeta::new(Pubkey::default(), false), // pool_vault placeholder
             AccountMeta::new_readonly(TOKEN_2022_PROGRAM_ID, false),
+            // deposit_tx_buffer — placeholder, must be set by caller via ChadBuffer upload
+            AccountMeta::new_readonly(Pubkey::default(), false),
         ];
 
         let deposit_ix = Instruction {

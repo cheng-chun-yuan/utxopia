@@ -14,6 +14,7 @@
 //! Uses SQLite for durable storage. Service can restart and resume processing.
 
 use solana_sdk::signature::Keypair;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use tokio::time::{interval, Duration};
@@ -69,6 +70,8 @@ pub struct DepositTrackerService {
     verifier: Option<SpvVerifier>,
     /// WebSocket publisher
     publisher: Option<DepositUpdatePublisher>,
+    /// Last block height scanned for deposits (atomic for interior mutability)
+    last_scanned_height: AtomicU64,
 }
 
 impl DepositTrackerService {
@@ -85,6 +88,7 @@ impl DepositTrackerService {
             sweeper: None,
             verifier: None,
             publisher: None,
+            last_scanned_height: AtomicU64::new(0),
         }
     }
 
@@ -101,6 +105,7 @@ impl DepositTrackerService {
             sweeper: None,
             verifier: None,
             publisher: None,
+            last_scanned_height: AtomicU64::new(0),
         }
     }
 
@@ -157,38 +162,6 @@ impl DepositTrackerService {
     pub fn with_websocket(mut self, ws_state: SharedWebSocketState) -> Self {
         self.publisher = Some(DepositUpdatePublisher::new(ws_state));
         self
-    }
-
-    /// Register a new deposit to track
-    pub fn register_deposit(
-        &self,
-        taproot_address: String,
-        commitment: String,
-        amount_sats: u64,
-    ) -> Result<String, TrackerError> {
-        // Validate commitment format
-        if commitment.len() != 64 {
-            return Err(TrackerError::InvalidCommitment(format!(
-                "wrong length: {} != 64",
-                commitment.len()
-            )));
-        }
-
-        // Check for duplicate
-        if self.db.get_by_address(&taproot_address)?.is_some() {
-            return Err(TrackerError::Duplicate(taproot_address));
-        }
-
-        // Create new record
-        let record = DepositRecord::new(taproot_address, commitment, amount_sats);
-        let id = record.id.clone();
-
-        // Store in database
-        self.db.insert(&record)?;
-
-        println!("[{}] Deposit registered, watching for BTC", id);
-
-        Ok(id)
     }
 
     /// Get deposit by ID
@@ -354,39 +327,102 @@ impl DepositTrackerService {
         Ok(())
     }
 
-    /// Detect deposits from OP_RETURN outputs in recent transactions.
-    ///
-    /// Scans the pool receive address for incoming transactions with 64-byte
-    /// OP_RETURN outputs (ephemeralPub + npk). If a P2TR output in the same tx
-    /// matches `pool_key + H_TapTweak(pool_key || npk)`, auto-register the deposit.
+    /// Detect deposits by scanning new blocks for transactions with 64-byte OP_RETURN
+    /// outputs (ephemeralPub + npk). For each candidate, recompute the tweaked Taproot
+    /// address from pool_key + H_TapTweak(pool_key || npk) and verify a matching P2TR output.
     pub async fn detect_op_return_deposits(&self) -> Result<u32, TrackerError> {
-        use super::sweeper::{extract_deposit_op_return_from_transaction, verify_deposit_output};
-
         let sweeper = match &self.sweeper {
             Some(s) => s,
             None => return Ok(0),
         };
 
-        // Get the pool public key for address verification
         let pool_pubkey_hex = sweeper.pool_public_key();
         let pool_pubkey_bytes = hex::decode(&pool_pubkey_hex)
             .map_err(|e| TrackerError::InvalidAddress(format!("pool key hex: {}", e)))?;
         let pool_pubkey = bitcoin::XOnlyPublicKey::from_slice(&pool_pubkey_bytes)
             .map_err(|e| TrackerError::InvalidAddress(format!("pool key: {}", e)))?;
 
-        // Fetch recent transactions to the pool receive address via watcher
-        let pool_status = self.watcher.check_address(&self.config.pool_receive_address).await?;
-        let mut detected = 0u32;
+        let tip_height = self.watcher.get_tip_height().await?;
 
-        for utxo in &pool_status.utxos {
-            // Fetch full transaction
-            let tx_data = match self.watcher.get_tx(&utxo.txid).await {
-                Ok(t) => t,
-                Err(_) => continue,
+        // Initialize last_scanned_height to tip on first run (don't scan entire chain)
+        let last = self.last_scanned_height.load(Ordering::Relaxed);
+        if last == 0 {
+            // On first run, scan the last 10 blocks to catch recent deposits
+            let start = tip_height.saturating_sub(10);
+            self.last_scanned_height.store(start, Ordering::Relaxed);
+            println!(
+                "[block-scan] First run, scanning from block {} to {}",
+                start, tip_height
+            );
+        }
+
+        let scan_from = self.last_scanned_height.load(Ordering::Relaxed) + 1;
+        if scan_from > tip_height {
+            return Ok(0); // No new blocks
+        }
+
+        let mut total_detected = 0u32;
+
+        for height in scan_from..=tip_height {
+            let block_hash = match self.watcher.get_block_hash(height).await {
+                Ok(h) => h,
+                Err(e) => {
+                    eprintln!("[block-scan] Failed to get block hash at {}: {}", height, e);
+                    break; // Stop scanning, will retry next cycle
+                }
             };
 
-            // Try to get raw transaction for parsing
-            let tx_hex = match self.watcher.get_tx_hex(&utxo.txid).await {
+            let detected = self
+                .scan_block_for_deposits(&block_hash, height, &pool_pubkey)
+                .await?;
+            total_detected += detected;
+
+            self.last_scanned_height.store(height, Ordering::Relaxed);
+        }
+
+        if total_detected > 0 {
+            println!(
+                "[block-scan] Detected {} new deposits in blocks {}-{}",
+                total_detected, scan_from, tip_height
+            );
+        }
+
+        Ok(total_detected)
+    }
+
+    /// Scan a single block for deposit transactions with valid OP_RETURN + tweaked P2TR.
+    async fn scan_block_for_deposits(
+        &self,
+        block_hash: &str,
+        block_height: u64,
+        pool_pubkey: &bitcoin::XOnlyPublicKey,
+    ) -> Result<u32, TrackerError> {
+        use super::sweeper::extract_deposit_op_return_from_transaction;
+
+        let block_txs = match self.watcher.get_all_block_txs(block_hash).await {
+            Ok(txs) => txs,
+            Err(e) => {
+                eprintln!(
+                    "[block-scan] Failed to get txs for block {}: {}",
+                    block_hash, e
+                );
+                return Ok(0);
+            }
+        };
+
+        let mut detected = 0u32;
+
+        for esplora_tx in &block_txs {
+            // Quick pre-filter: look for an OP_RETURN-shaped output in the Esplora JSON
+            let has_op_return = esplora_tx.vout.iter().any(|o| {
+                o.scriptpubkey_type == "op_return"
+            });
+            if !has_op_return {
+                continue;
+            }
+
+            // Fetch raw tx to parse with bitcoin lib
+            let tx_hex = match self.watcher.get_tx_hex(&esplora_tx.txid).await {
                 Ok(h) => h,
                 Err(_) => continue,
             };
@@ -396,84 +432,213 @@ impl DepositTrackerService {
                 Err(_) => continue,
             };
 
-            let parsed_tx: bitcoin::Transaction = match bitcoin::consensus::encode::deserialize(&raw_tx) {
-                Ok(t) => t,
-                Err(_) => continue,
-            };
+            let parsed_tx: bitcoin::Transaction =
+                match bitcoin::consensus::encode::deserialize(&raw_tx) {
+                    Ok(t) => t,
+                    Err(_) => continue,
+                };
 
-            // Look for 72-byte OP_RETURN
             let op_return_data = match extract_deposit_op_return_from_transaction(&parsed_tx) {
                 Some(d) => d,
                 None => continue,
             };
 
-            let npk_hex = hex::encode(op_return_data.npk);
+            // Try to match a P2TR output against pool_key tweaked with npk
+            let matched = self.match_deposit_output(
+                &parsed_tx,
+                &esplora_tx.txid,
+                block_height,
+                &op_return_data,
+                pool_pubkey,
+            )?;
 
-            // Check if already registered
-            if self.db.get_by_address(&npk_hex).ok().flatten().is_some() {
-                continue; // Already tracked
+            if matched {
+                detected += 1;
+            }
+        }
+
+        Ok(detected)
+    }
+
+    /// Check if a transaction's P2TR output matches the expected tweaked address
+    /// and register it as a deposit if so.
+    fn match_deposit_output(
+        &self,
+        parsed_tx: &bitcoin::Transaction,
+        txid: &str,
+        block_height: u64,
+        op_return_data: &super::types::DepositOpReturnData,
+        pool_pubkey: &bitcoin::XOnlyPublicKey,
+    ) -> Result<bool, TrackerError> {
+        use super::sweeper::verify_deposit_output;
+
+        let npk_hex = hex::encode(op_return_data.npk);
+
+        // Check if already tracked by npk
+        if self.db.get_by_deposit_txid(txid)?.is_some() {
+            return Ok(false);
+        }
+
+        for (vout, output) in parsed_tx.output.iter().enumerate() {
+            let script = output.script_pubkey.as_bytes();
+            // P2TR: OP_1 (0x51) + PUSH32 (0x20) + 32 bytes = 34 bytes
+            if script.len() != 34 || script[0] != 0x51 || script[1] != 0x20 {
+                continue;
             }
 
-            // Verify: find a P2TR output that matches pool_key tweaked with this npk
-            let mut matched_address = None;
-            for output in &parsed_tx.output {
-                let script = output.script_pubkey.as_bytes();
-                // P2TR: OP_1 (0x51) + PUSH32 (0x20) + 32 bytes = 34 bytes
-                if script.len() == 34 && script[0] == 0x51 && script[1] == 0x20 {
-                    let mut output_key_bytes = [0u8; 32];
-                    output_key_bytes.copy_from_slice(&script[2..34]);
-                    if let Ok(output_key) = bitcoin::XOnlyPublicKey::from_slice(&output_key_bytes) {
-                        if verify_deposit_output(&output_key, &pool_pubkey, &op_return_data.npk) {
-                            // Reconstruct the Taproot address from output key
-                            let tweaked = bitcoin::key::TweakedPublicKey::dangerous_assume_tweaked(output_key);
-                            let addr = bitcoin::Address::p2tr_tweaked(tweaked, bitcoin::Network::Testnet);
-                            matched_address = Some(addr.to_string());
-                            break;
-                        }
-                    }
-                }
-            }
-
-            let taproot_address = match matched_address {
-                Some(a) => a,
-                None => continue, // No matching P2TR output
+            let mut output_key_bytes = [0u8; 32];
+            output_key_bytes.copy_from_slice(&script[2..34]);
+            let output_key = match bitcoin::XOnlyPublicKey::from_slice(&output_key_bytes) {
+                Ok(k) => k,
+                Err(_) => continue,
             };
 
-            // Check if already tracked by this address
-            if self.db.get_by_address(&taproot_address).ok().flatten().is_some() {
+            if !verify_deposit_output(&output_key, pool_pubkey, &op_return_data.npk) {
                 continue;
+            }
+
+            // Match found — reconstruct Taproot address
+            let tweaked =
+                bitcoin::key::TweakedPublicKey::dangerous_assume_tweaked(output_key);
+            let addr =
+                bitcoin::Address::p2tr_tweaked(tweaked, bitcoin::Network::Testnet);
+            let taproot_address = addr.to_string();
+
+            // Check if already tracked by address
+            if self.db.get_by_address(&taproot_address).ok().flatten().is_some() {
+                return Ok(false);
             }
 
             // Auto-register the deposit
             let mut record = DepositRecord::new(
                 taproot_address,
                 npk_hex.clone(),
-                utxo.value,
+                output.value.to_sat(),
             );
             record.ephemeral_pub = Some(hex::encode(op_return_data.ephemeral_pub));
             record.npk = Some(npk_hex.clone());
             record.auto_detected = true;
-            record.deposit_txid = Some(utxo.txid.clone());
-            record.deposit_vout = Some(utxo.vout);
+            record.deposit_txid = Some(txid.to_string());
+            record.deposit_vout = Some(vout as u32);
+            record.deposit_block_height = Some(block_height);
             record.status = DepositStatus::Detected;
+            record.confirmations = 1; // It's in a block
 
             if let Err(e) = self.db.insert(&record) {
-                eprintln!("[OP_RETURN] Failed to insert auto-detected deposit: {}", e);
-                continue;
+                eprintln!("[block-scan] Failed to insert deposit: {}", e);
+                return Ok(false);
             }
 
             println!(
-                "[{}] Auto-detected deposit via OP_RETURN: {} sats, npk={}",
-                record.id, utxo.value, &npk_hex[..16]
+                "[{}] Auto-detected deposit via block scan: {} sats, npk={}, block={}",
+                record.id,
+                output.value.to_sat(),
+                &npk_hex[..16],
+                block_height
             );
-            detected += 1;
+            return Ok(true);
         }
 
-        if detected > 0 {
-            println!("[OP_RETURN] Auto-detected {} new deposits", detected);
+        Ok(false)
+    }
+
+    /// Detect deposit from a single mempool transaction (pre-confirmation).
+    pub async fn detect_mempool_tx(&self, txid: &str) -> Result<bool, TrackerError> {
+        use super::sweeper::{extract_deposit_op_return_from_transaction, verify_deposit_output};
+
+        let sweeper = match &self.sweeper {
+            Some(s) => s,
+            None => return Ok(false),
+        };
+
+        let pool_pubkey_hex = sweeper.pool_public_key();
+        let pool_pubkey_bytes = hex::decode(&pool_pubkey_hex)
+            .map_err(|e| TrackerError::InvalidAddress(format!("pool key hex: {}", e)))?;
+        let pool_pubkey = bitcoin::XOnlyPublicKey::from_slice(&pool_pubkey_bytes)
+            .map_err(|e| TrackerError::InvalidAddress(format!("pool key: {}", e)))?;
+
+        // Fetch raw tx
+        let tx_hex = match self.watcher.get_tx_hex(txid).await {
+            Ok(h) => h,
+            Err(_) => return Ok(false),
+        };
+
+        let raw_tx = match hex::decode(tx_hex.trim()) {
+            Ok(b) => b,
+            Err(_) => return Ok(false),
+        };
+
+        let parsed_tx: bitcoin::Transaction =
+            match bitcoin::consensus::encode::deserialize(&raw_tx) {
+                Ok(t) => t,
+                Err(_) => return Ok(false),
+            };
+
+        let op_return_data = match extract_deposit_op_return_from_transaction(&parsed_tx) {
+            Some(d) => d,
+            None => return Ok(false),
+        };
+
+        let npk_hex = hex::encode(op_return_data.npk);
+
+        // Check if already tracked
+        if self.db.get_by_deposit_txid(txid)?.is_some() {
+            return Ok(false);
         }
 
-        Ok(detected)
+        for (vout, output) in parsed_tx.output.iter().enumerate() {
+            let script = output.script_pubkey.as_bytes();
+            if script.len() != 34 || script[0] != 0x51 || script[1] != 0x20 {
+                continue;
+            }
+
+            let mut output_key_bytes = [0u8; 32];
+            output_key_bytes.copy_from_slice(&script[2..34]);
+            let output_key = match bitcoin::XOnlyPublicKey::from_slice(&output_key_bytes) {
+                Ok(k) => k,
+                Err(_) => continue,
+            };
+
+            if !verify_deposit_output(&output_key, &pool_pubkey, &op_return_data.npk) {
+                continue;
+            }
+
+            let tweaked = bitcoin::key::TweakedPublicKey::dangerous_assume_tweaked(output_key);
+            let addr = bitcoin::Address::p2tr_tweaked(tweaked, bitcoin::Network::Testnet);
+            let taproot_address = addr.to_string();
+
+            if self.db.get_by_address(&taproot_address).ok().flatten().is_some() {
+                return Ok(false);
+            }
+
+            let mut record = DepositRecord::new(
+                taproot_address,
+                npk_hex.clone(),
+                output.value.to_sat(),
+            );
+            record.ephemeral_pub = Some(hex::encode(op_return_data.ephemeral_pub));
+            record.npk = Some(npk_hex.clone());
+            record.auto_detected = true;
+            record.deposit_txid = Some(txid.to_string());
+            record.deposit_vout = Some(vout as u32);
+            record.status = DepositStatus::Pending; // Not confirmed yet
+
+            if let Err(e) = self.db.insert(&record) {
+                eprintln!("[mempool] Failed to insert deposit: {}", e);
+                return Ok(false);
+            }
+
+            println!(
+                "[{}] Detected deposit in mempool: {} sats, npk={}, txid={}",
+                record.id,
+                output.value.to_sat(),
+                &npk_hex[..16],
+                &txid[..16]
+            );
+            return Ok(true);
+        }
+
+        Ok(false)
     }
 
     /// Run the tracker service (blocking)
@@ -487,6 +652,7 @@ impl DepositTrackerService {
         );
         println!("Database: {}", self.config.db_path);
         println!("Max retries: {}", self.config.max_retries);
+        println!("Detection: block scanning (auto-detect OP_RETURN deposits)");
         println!("WebSocket: {}", if self.config.ws_enabled { &self.config.ws_url } else { "disabled" });
         println!("Header relay: {}", if self.config.header_relay_enabled { "enabled" } else { "disabled" });
         println!();
@@ -575,19 +741,13 @@ impl DepositTrackerService {
 
     async fn handle_ws_event(&self, event: WsEvent) {
         match event {
-            WsEvent::NewTransaction { txid } => {
-                println!("[ws] Tx {}, running detection...", &txid[..16]);
-                if let Err(e) = self.detect_op_return_deposits().await {
-                    eprintln!("[ws] Detection error: {}", e);
-                }
-            }
             WsEvent::NewBlock { height, .. } => {
-                println!("[ws] Block {}, processing deposits...", height);
+                println!("[ws] Block {}, scanning for deposits...", height);
                 if let Err(e) = self.process_cycle().await {
                     eprintln!("[ws] Process cycle error: {}", e);
                 }
             }
-            WsEvent::Connected => println!("[ws] Connected - real-time detection active"),
+            WsEvent::Connected => println!("[ws] Connected - real-time block detection active"),
             WsEvent::Disconnected => println!("[ws] Disconnected - falling back to polling"),
         }
     }
@@ -753,8 +913,7 @@ impl DepositTrackerService {
         };
 
         let record_id = record.id.clone();
-        let npk = record.npk.clone().unwrap_or_default();
-        let ephemeral_pub = record.ephemeral_pub.clone().unwrap_or_default();
+        let deposit_txid = record.deposit_txid.clone().unwrap_or_default();
 
         let tx_status = self.watcher.get_tx_confirmations(&sweep_txid).await?;
 
@@ -770,19 +929,18 @@ impl DepositTrackerService {
         );
 
         if record.can_verify() {
-            self.verify_deposit(address, &sweep_txid, &npk, &ephemeral_pub).await?;
+            self.verify_deposit(address, &sweep_txid, &deposit_txid).await?;
         }
 
         Ok(())
     }
 
-    /// Submit deposit for SPV verification
+    /// Submit deposit for SPV verification (trustless npk extraction)
     async fn verify_deposit(
         &self,
         address: &str,
         sweep_txid: &str,
-        npk: &str,
-        ephemeral_pub: &str,
+        deposit_txid: &str,
     ) -> Result<(), TrackerError> {
         let verifier = match &self.verifier {
             Some(v) => v,
@@ -820,7 +978,7 @@ impl DepositTrackerService {
         println!("[{}] Submitting SPV verification...", record_id);
 
         let result = verifier
-            .verify_deposit(sweep_txid, 0, npk, ephemeral_pub)
+            .verify_deposit(sweep_txid, 0, deposit_txid)
             .await?;
 
         let mut record = self.db.get_by_address(address)?
@@ -888,57 +1046,19 @@ mod tests {
     }
 
     #[test]
-    fn test_register_deposit() {
+    fn test_get_nonexistent_deposit() {
         let config = test_config();
         let service = DepositTrackerService::new_testnet(config);
 
-        let id = service
-            .register_deposit(
-                "tb1p123abc".to_string(),
-                "a".repeat(64),
-                100_000,
-            )
-            .unwrap();
-
-        assert!(id.starts_with("dep_"));
-
-        let record = service.get_deposit(&id).unwrap();
-        assert_eq!(record.status, DepositStatus::Pending);
-        assert_eq!(record.amount_sats, 100_000);
+        assert!(service.get_deposit("nonexistent").is_none());
     }
 
     #[test]
-    fn test_duplicate_registration() {
+    fn test_stats_empty() {
         let config = test_config();
         let service = DepositTrackerService::new_testnet(config);
-
-        service
-            .register_deposit("tb1p123".to_string(), "b".repeat(64), 50_000)
-            .unwrap();
-
-        let result = service.register_deposit("tb1p123".to_string(), "c".repeat(64), 60_000);
-        assert!(matches!(result, Err(TrackerError::Duplicate(_))));
-    }
-
-    #[test]
-    fn test_invalid_commitment() {
-        let config = test_config();
-        let service = DepositTrackerService::new_testnet(config);
-
-        let result = service.register_deposit("tb1p456".to_string(), "abc".to_string(), 10_000);
-        assert!(matches!(result, Err(TrackerError::InvalidCommitment(_))));
-    }
-
-    #[test]
-    fn test_stats() {
-        let config = test_config();
-        let service = DepositTrackerService::new_testnet(config);
-
-        service.register_deposit("tb1p1".to_string(), "a".repeat(64), 100_000).unwrap();
-        service.register_deposit("tb1p2".to_string(), "b".repeat(64), 200_000).unwrap();
 
         let stats = service.stats();
-        assert_eq!(stats.total_deposits, 2);
-        assert_eq!(stats.pending, 2);
+        assert_eq!(stats.total_deposits, 0);
     }
 }

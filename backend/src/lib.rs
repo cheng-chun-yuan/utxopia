@@ -103,7 +103,7 @@ pub use taproot::{
 
 pub use deposit_tracker::{
     create_tracker_service, create_ws_state, DepositRecord, DepositStatus, DepositStatusResponse,
-    DepositTrackerService, RegisterDepositRequest, RegisterDepositResponse, SharedTrackerService,
+    DepositTrackerService, SharedTrackerService,
     TrackerConfig, TrackerError, TrackerStats,
 };
 

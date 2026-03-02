@@ -21,7 +21,7 @@ TIER="${1:---tier1}"
 
 # Define tier variants (must match compile.sh)
 TIER1_CIRCUITS=("joinsplit_1x1" "joinsplit_1x2" "joinsplit_2x1" "joinsplit_2x2")
-TIER2_CIRCUITS=("${TIER1_CIRCUITS[@]}" "joinsplit_1x3" "joinsplit_3x1" "joinsplit_2x3" "joinsplit_3x2" "joinsplit_1x4" "joinsplit_4x1")
+TIER2_CIRCUITS=("${TIER1_CIRCUITS[@]}" "joinsplit_1x3" "joinsplit_3x1" "joinsplit_2x3" "joinsplit_3x2" "joinsplit_1x4" "joinsplit_4x1" "joinsplit_1x5" "joinsplit_5x1" "joinsplit_3x3" "joinsplit_2x4" "joinsplit_4x2" "joinsplit_1x6" "joinsplit_6x1" "joinsplit_2x5" "joinsplit_5x2")
 
 case "$TIER" in
   --tier1)
@@ -53,24 +53,18 @@ PTAU_POWER=18
 
 echo "=== Groth16 Trusted Setup for ${#CIRCUITS[@]} variants ($TIER) ==="
 
-# Phase 1: Powers of Tau (shared across all circuits)
+# Phase 1: Powers of Tau — use Hermez ceremony (54 contributors, production-grade)
 mkdir -p "$PTAU_DIR"
-PTAU_FILE="$PTAU_DIR/pot${PTAU_POWER}_final.ptau"
+HERMEZ_PTAU="$PTAU_DIR/powersOfTau28_hez_final_${PTAU_POWER}.ptau"
+PTAU_FILE="$HERMEZ_PTAU"
 
-if [ ! -f "$PTAU_FILE" ]; then
+if [ ! -f "$HERMEZ_PTAU" ]; then
   echo ""
-  echo "--- Phase 1: Powers of Tau (2^${PTAU_POWER}) ---"
-
-  npx snarkjs powersoftau new bn128 $PTAU_POWER "$PTAU_DIR/pot${PTAU_POWER}_0000.ptau" -v
-  npx snarkjs powersoftau contribute "$PTAU_DIR/pot${PTAU_POWER}_0000.ptau" "$PTAU_DIR/pot${PTAU_POWER}_0001.ptau" --name="First contribution" -v -e="random entropy for setup"
-  npx snarkjs powersoftau prepare phase2 "$PTAU_DIR/pot${PTAU_POWER}_0001.ptau" "$PTAU_FILE" -v
-
-  # Cleanup intermediate files
-  rm -f "$PTAU_DIR/pot${PTAU_POWER}_0000.ptau" "$PTAU_DIR/pot${PTAU_POWER}_0001.ptau"
-
-  echo "  PTAU: $PTAU_FILE"
+  echo "--- Phase 1: Downloading Hermez Powers of Tau (2^${PTAU_POWER}, 54 contributors) ---"
+  curl -L -o "$HERMEZ_PTAU" "https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_${PTAU_POWER}.ptau"
+  echo "  PTAU: $HERMEZ_PTAU"
 else
-  echo "Using existing PTAU: $PTAU_FILE"
+  echo "Using existing Hermez PTAU: $HERMEZ_PTAU"
 fi
 
 # Phase 2: Circuit-specific setup

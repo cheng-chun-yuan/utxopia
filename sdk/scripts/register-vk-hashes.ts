@@ -63,26 +63,23 @@ const WS_URL =
     ? "wss://api.devnet.solana.com"
     : "ws://127.0.0.1:8900";
 
-// Tier-1 variants (most common)
-const TIER1_VARIANTS = [
-  [1, 1],
-  [1, 2],
-  [2, 1],
-  [2, 2],
-];
+// Auto-discover all variants from circuits/build directory
+function discoverVariants(): [number, number][] {
+  const variants: [number, number][] = [];
+  if (!fs.existsSync(CIRCUITS_BUILD_DIR)) return variants;
+  for (const entry of fs.readdirSync(CIRCUITS_BUILD_DIR)) {
+    const match = entry.match(/^joinsplit_(\d+)x(\d+)$/);
+    if (!match) continue;
+    const vkPath = path.join(CIRCUITS_BUILD_DIR, entry, `${entry}.vkey.json`);
+    if (fs.existsSync(vkPath)) {
+      variants.push([parseInt(match[1]), parseInt(match[2])]);
+    }
+  }
+  // Sort by N then M for consistent ordering
+  return variants.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+}
 
-// Tier-2 variants
-const TIER2_VARIANTS = [
-  [1, 3],
-  [3, 1],
-  [2, 3],
-  [3, 2],
-  [1, 4],
-  [4, 1],
-];
-
-// All supported variants
-const ALL_VARIANTS = [...TIER1_VARIANTS, ...TIER2_VARIANTS];
+const ALL_VARIANTS = discoverVariants();
 
 // =============================================================================
 // VK Serialization (matches on-chain verification format)

@@ -21,6 +21,9 @@ pub const STEALTH_OP_RETURN_VERSION: u8 = 2;
 /// Legacy version for backward compatibility
 pub const STEALTH_OP_RETURN_VERSION_V1: u32 = 1;
 
+/// Deposit OP_RETURN data size: ephemeralPub(32) + npk(32) = 64 bytes
+pub const DEPOSIT_OP_RETURN_SIZE: usize = 64;
+
 /// Total size of stealth OP_RETURN data (SIMPLIFIED - 99 bytes)
 /// = 1 (magic) + 1 (version) + 32 (view pub) + 32 (spend pub) + 32 (commitment)
 pub const STEALTH_OP_RETURN_SIZE: usize = 98;
@@ -93,6 +96,12 @@ impl StealthOpReturnData {
             Err(ZVaultError::InvalidStealthOpReturn.into())
         }
     }
+}
+
+/// Parsed deposit OP_RETURN data: ephemeralPub(32) + npk(32)
+pub struct DepositOpReturn {
+    pub ephemeral_pub: [u8; 32],
+    pub npk: [u8; 32],
 }
 
 /// Double SHA256 hash (Bitcoin standard)
@@ -381,6 +390,36 @@ impl<'a> TxOutput<'a> {
         self.script_pubkey[2] == STEALTH_OP_RETURN_MAGIC
     }
 
+    /// Parse deposit OP_RETURN: exactly 64 bytes = ephemeralPub(32) + npk(32)
+    /// Handles both direct push (0x6a 0x40 <64 bytes>) and PUSHDATA1 (0x6a 0x4c 0x40 <64 bytes>)
+    pub fn get_deposit_op_return(&self) -> Option<DepositOpReturn> {
+        if !self.is_op_return() || self.script_pubkey.len() < 2 {
+            return None;
+        }
+
+        let data_slice = if self.script_pubkey.len() == 66
+            && self.script_pubkey[1] == 0x40
+        {
+            // Direct push: OP_RETURN (0x6a) + push 64 (0x40) + 64 bytes
+            &self.script_pubkey[2..66]
+        } else if self.script_pubkey.len() == 67
+            && self.script_pubkey[1] == 0x4c
+            && self.script_pubkey[2] == 0x40
+        {
+            // PUSHDATA1: OP_RETURN (0x6a) + OP_PUSHDATA1 (0x4c) + len 64 (0x40) + 64 bytes
+            &self.script_pubkey[3..67]
+        } else {
+            return None;
+        };
+
+        let mut ephemeral_pub = [0u8; 32];
+        let mut npk = [0u8; 32];
+        ephemeral_pub.copy_from_slice(&data_slice[0..32]);
+        npk.copy_from_slice(&data_slice[32..64]);
+
+        Some(DepositOpReturn { ephemeral_pub, npk })
+    }
+
     /// Get raw OP_RETURN data (after opcode and push length)
     pub fn get_op_return_data(&self) -> Option<&'a [u8]> {
         if !self.is_op_return() || self.script_pubkey.len() < 2 {
@@ -400,6 +439,10 @@ impl<'a> TxOutput<'a> {
 pub struct ParsedTransaction<'a> {
     /// Transaction version
     pub version: i32,
+    /// Raw inputs data slice
+    inputs_data: &'a [u8],
+    /// Input count
+    input_count: usize,
     /// Raw outputs data slice
     outputs_data: &'a [u8],
     /// Output count
@@ -435,6 +478,9 @@ impl<'a> ParsedTransaction<'a> {
         let (input_count, varint_size) = read_varint(&raw_tx[offset..])?;
         offset += varint_size;
 
+        // Remember where inputs start
+        let inputs_start = offset;
+
         // Skip inputs
         for _ in 0..input_count {
             // Previous output (32 + 4 bytes)
@@ -451,6 +497,8 @@ impl<'a> ParsedTransaction<'a> {
                 return Err(ProgramError::InvalidInstructionData);
             }
         }
+
+        let inputs_end = offset;
 
         // Output count (varint)
         let (output_count, varint_size) = read_varint(&raw_tx[offset..])?;
@@ -476,6 +524,8 @@ impl<'a> ParsedTransaction<'a> {
 
         Ok(Self {
             version,
+            inputs_data: &raw_tx[inputs_start..inputs_end],
+            input_count: input_count as usize,
             outputs_data: &raw_tx[outputs_start..offset],
             output_count: output_count as usize,
             is_segwit,
@@ -507,6 +557,38 @@ impl<'a> ParsedTransaction<'a> {
     pub fn find_deposit_output(&self) -> Option<TxOutput<'a>> {
         self.outputs()
             .find(|output| !output.is_op_return() && output.value > 0)
+    }
+
+    /// Find deposit OP_RETURN (64-byte: ephemeralPub + npk) from outputs
+    pub fn find_deposit_op_return(&self) -> Option<DepositOpReturn> {
+        for output in self.outputs() {
+            if output.is_op_return() {
+                if let Some(data) = output.get_deposit_op_return() {
+                    return Some(data);
+                }
+            }
+        }
+        None
+    }
+
+    /// Iterate over inputs
+    pub fn inputs(&self) -> InputIterator<'a> {
+        InputIterator {
+            data: self.inputs_data,
+            offset: 0,
+            remaining: self.input_count,
+        }
+    }
+
+    /// Check if any input spends from the given txid (prev_output hash match)
+    /// txid should be in internal byte order (raw double-SHA256 output)
+    pub fn find_input_with_prev_txid(&self, target_txid: &[u8; 32]) -> bool {
+        for input in self.inputs() {
+            if &input.prev_txid == target_txid {
+                return true;
+            }
+        }
+        false
     }
 
     /// Find stealth OP_RETURN and parse stealth data
@@ -557,6 +639,54 @@ impl<'a> Iterator for OutputIterator<'a> {
         self.remaining -= 1;
 
         Some(TxOutput { value, script_pubkey })
+    }
+}
+
+/// Parsed Bitcoin transaction input
+pub struct TxInput {
+    /// Previous transaction hash (internal byte order)
+    pub prev_txid: [u8; 32],
+    /// Previous output index
+    pub prev_vout: u32,
+}
+
+/// Iterator over transaction inputs
+pub struct InputIterator<'a> {
+    data: &'a [u8],
+    offset: usize,
+    remaining: usize,
+}
+
+impl<'a> Iterator for InputIterator<'a> {
+    type Item = TxInput;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining == 0 || self.offset + 36 > self.data.len() {
+            return None;
+        }
+
+        // Previous txid (32 bytes)
+        let mut prev_txid = [0u8; 32];
+        prev_txid.copy_from_slice(&self.data[self.offset..self.offset + 32]);
+        self.offset += 32;
+
+        // Previous vout (4 bytes)
+        let prev_vout = u32::from_le_bytes(
+            self.data[self.offset..self.offset + 4].try_into().ok()?
+        );
+        self.offset += 4;
+
+        // Script length (varint) + script + sequence (4)
+        let (script_len, varint_size) = read_varint(&self.data[self.offset..]).ok()?;
+        self.offset += varint_size + script_len as usize + 4;
+
+        if self.offset > self.data.len() {
+            return None;
+        }
+
+        self.remaining -= 1;
+
+        Some(TxInput { prev_txid, prev_vout })
     }
 }
 
@@ -611,5 +741,148 @@ mod tests {
         };
         assert!(output.is_op_return());
         assert!(output.get_commitment().is_some());
+    }
+
+    #[test]
+    fn test_deposit_op_return_direct_push() {
+        // OP_RETURN (0x6a) + push 64 (0x40) + 64 bytes
+        let mut script = vec![0x6a, 0x40];
+        let ephemeral = [0xaa; 32];
+        let npk = [0xbb; 32];
+        script.extend_from_slice(&ephemeral);
+        script.extend_from_slice(&npk);
+
+        let output = TxOutput {
+            value: 0,
+            script_pubkey: &script,
+        };
+        assert!(output.is_op_return());
+        let data = output.get_deposit_op_return().unwrap();
+        assert_eq!(data.ephemeral_pub, ephemeral);
+        assert_eq!(data.npk, npk);
+    }
+
+    #[test]
+    fn test_deposit_op_return_pushdata1() {
+        // OP_RETURN (0x6a) + PUSHDATA1 (0x4c) + 64 (0x40) + 64 bytes
+        let mut script = vec![0x6a, 0x4c, 0x40];
+        script.extend_from_slice(&[0x11; 32]); // ephemeral
+        script.extend_from_slice(&[0x22; 32]); // npk
+
+        let output = TxOutput {
+            value: 0,
+            script_pubkey: &script,
+        };
+        let data = output.get_deposit_op_return().unwrap();
+        assert_eq!(data.ephemeral_pub, [0x11; 32]);
+        assert_eq!(data.npk, [0x22; 32]);
+    }
+
+    #[test]
+    fn test_deposit_op_return_wrong_size() {
+        // 32-byte OP_RETURN should NOT match deposit format
+        let mut script = vec![0x6a, 0x20];
+        script.extend_from_slice(&[0xaa; 32]);
+
+        let output = TxOutput {
+            value: 0,
+            script_pubkey: &script,
+        };
+        assert!(output.get_deposit_op_return().is_none());
+    }
+
+    /// Build a minimal raw Bitcoin transaction for testing
+    fn build_test_tx(
+        inputs: &[([u8; 32], u32)], // (prev_txid, prev_vout)
+        outputs: &[(u64, &[u8])],     // (value, script_pubkey)
+    ) -> Vec<u8> {
+        let mut tx = Vec::new();
+
+        // Version (4 bytes)
+        tx.extend_from_slice(&1i32.to_le_bytes());
+
+        // Input count
+        tx.push(inputs.len() as u8);
+        for (prev_txid, prev_vout) in inputs {
+            tx.extend_from_slice(prev_txid);
+            tx.extend_from_slice(&prev_vout.to_le_bytes());
+            tx.push(0); // empty script
+            tx.extend_from_slice(&0xffffffffu32.to_le_bytes()); // sequence
+        }
+
+        // Output count
+        tx.push(outputs.len() as u8);
+        for (value, script) in outputs {
+            tx.extend_from_slice(&value.to_le_bytes());
+            tx.push(script.len() as u8);
+            tx.extend_from_slice(script);
+        }
+
+        // Locktime
+        tx.extend_from_slice(&0u32.to_le_bytes());
+
+        tx
+    }
+
+    #[test]
+    fn test_parsed_tx_inputs() {
+        let prev_txid_1 = [0x11u8; 32];
+        let prev_txid_2 = [0x22u8; 32];
+
+        let p2tr_script = {
+            let mut s = vec![0x51, 0x20]; // OP_1 + PUSH_32
+            s.extend_from_slice(&[0xaa; 32]);
+            s
+        };
+
+        let raw_tx = build_test_tx(
+            &[(prev_txid_1, 0), (prev_txid_2, 1)],
+            &[(50000, &p2tr_script)],
+        );
+
+        let parsed = ParsedTransaction::parse(&raw_tx).unwrap();
+        assert_eq!(parsed.input_count, 2);
+
+        // Verify input iteration
+        let inputs: Vec<TxInput> = parsed.inputs().collect();
+        assert_eq!(inputs.len(), 2);
+        assert_eq!(inputs[0].prev_txid, prev_txid_1);
+        assert_eq!(inputs[0].prev_vout, 0);
+        assert_eq!(inputs[1].prev_txid, prev_txid_2);
+        assert_eq!(inputs[1].prev_vout, 1);
+
+        // Test find_input_with_prev_txid
+        assert!(parsed.find_input_with_prev_txid(&prev_txid_1));
+        assert!(parsed.find_input_with_prev_txid(&prev_txid_2));
+        assert!(!parsed.find_input_with_prev_txid(&[0x33; 32]));
+    }
+
+    #[test]
+    fn test_parsed_tx_deposit_op_return() {
+        let prev_txid = [0x11u8; 32];
+        let ephemeral = [0xaa; 32];
+        let npk = [0xbb; 32];
+
+        // P2TR output
+        let p2tr_script = {
+            let mut s = vec![0x51, 0x20];
+            s.extend_from_slice(&[0xcc; 32]);
+            s
+        };
+
+        // Deposit OP_RETURN: 0x6a 0x40 + 64 bytes
+        let mut op_return_script = vec![0x6a, 0x40];
+        op_return_script.extend_from_slice(&ephemeral);
+        op_return_script.extend_from_slice(&npk);
+
+        let raw_tx = build_test_tx(
+            &[(prev_txid, 0)],
+            &[(50000, &p2tr_script), (0, &op_return_script)],
+        );
+
+        let parsed = ParsedTransaction::parse(&raw_tx).unwrap();
+        let deposit_data = parsed.find_deposit_op_return().unwrap();
+        assert_eq!(deposit_data.ephemeral_pub, ephemeral);
+        assert_eq!(deposit_data.npk, npk);
     }
 }

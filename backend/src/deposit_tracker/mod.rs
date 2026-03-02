@@ -3,13 +3,13 @@
 //! Tracks Bitcoin deposits through their complete lifecycle:
 //!
 //! ```text
-//! PENDING → DETECTED → CONFIRMING → CONFIRMED → SWEEPING → SWEEP_CONFIRMING → VERIFYING → READY → CLAIMED
+//! DETECTED → CONFIRMING → CONFIRMED → SWEEPING → SWEEP_CONFIRMING → VERIFYING → READY → CLAIMED
 //! ```
 //!
 //! ## Components
 //!
 //! - **types**: Data structures for deposits, status, and API types
-//! - **watcher**: Polls Esplora for Bitcoin transactions
+//! - **watcher**: Polls Esplora for Bitcoin transactions and block data
 //! - **sweeper**: Sweeps UTXOs from deposit addresses to pool wallet
 //! - **verifier**: Submits SPV proofs to Solana for verification
 //! - **websocket**: Real-time status updates via WebSocket
@@ -18,18 +18,12 @@
 //!
 //! ## Flow Overview
 //!
-//! 1. User generates deposit address (via SDK)
-//! 2. User registers deposit with backend (POST /api/deposits)
-//! 3. Service polls Esplora for incoming transactions
-//! 4. After 6 confirmations, service sweeps UTXO to pool wallet
-//! 5. After 2 sweep confirmations, service submits SPV proof to Solana
+//! 1. Service scans new blocks for transactions with 64-byte OP_RETURN (ephemeralPub + npk)
+//! 2. Verifies P2TR output matches pool_key tweaked with npk from OP_RETURN
+//! 3. Auto-registers deposit (no API registration needed)
+//! 4. After confirmation, sweeps UTXO to pool wallet
+//! 5. After sweep confirms, submits SPV proof to Solana
 //! 6. User can claim zkBTC once status is "ready"
-//!
-//! ## API Endpoints
-//!
-//! - `POST /api/deposits` - Register a deposit to track
-//! - `GET /api/deposits/:id` - Get deposit status
-//! - `WS /ws/deposits/:id` - Subscribe to status updates
 
 pub mod api;
 pub mod db;
@@ -51,11 +45,7 @@ pub use service::{
 pub use sweeper::{SweepResult, SweeperError, UtxoSweeper};
 pub use types::{
     DepositRecord, DepositStatus, DepositStatusResponse, DepositStatusUpdate,
-    RegisterDepositRequest, RegisterDepositResponse, TrackerConfig, TrackerStats,
-    // V2 stealth deposit types
-    PrepareStealthDepositRequest, PrepareStealthDepositResponse,
-    StealthDepositRecord, StealthDepositStatus, StealthDepositStatusResponse,
-    StealthDepositStatusUpdate,
+    TrackerConfig, TrackerStats,
 };
 pub use verifier::{SpvVerifier, VerificationResult, VerifierError};
 pub use watcher::{AddressWatcher, BlockHeaderData, MerkleProofData, Utxo, WatcherError};
@@ -63,7 +53,7 @@ pub use websocket::{
     create_ws_state, ws_all_deposits_handler, ws_deposit_handler, DepositUpdatePublisher,
     SharedWebSocketState, WebSocketState,
 };
-pub use db::{DbError, StealthDepositStats, StealthDepositStore};
+pub use db::DbError;
 pub use header_relayer::HeaderRelayer;
 pub use sqlite_db::{SqliteDepositStore, SqliteError};
 pub use ws_listener::{MempoolWsListener, WsEvent};
