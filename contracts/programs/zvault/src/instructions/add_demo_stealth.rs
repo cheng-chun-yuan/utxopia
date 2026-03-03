@@ -189,8 +189,10 @@ pub fn process_add_demo_stealth(
         announcement.set_amount_sats(ix_data.amount_sats);
         announcement.commitment = commitment;
         announcement.set_leaf_index(leaf_index);
-        announcement.set_created_at(clock.unix_timestamp);
     }
+
+    // Emit leaf inserted event
+    crate::utils::events::emit_leaf_inserted(&commitment, clock.unix_timestamp);
 
     // Mint zBTC to pool vault so users can claim
     let bump_bytes = [pool_bump];

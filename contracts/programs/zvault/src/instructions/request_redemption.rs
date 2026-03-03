@@ -16,6 +16,7 @@ use pinocchio::{
 };
 use pinocchio_system::instructions::CreateAccount;
 
+use crate::constants::MAX_BTC_SCRIPT_LEN;
 use crate::error::ZVaultError;
 use crate::state::{
     CommitmentTree, NullifierOperationType, NullifierRecord, PoolState,
@@ -33,7 +34,7 @@ use crate::utils::{validate_program_owner, validate_system_program, validate_acc
 /// - amount_sats: u64 - Amount to redeem (revealed - unavoidable)
 /// - vk_hash: [u8; 32] - Verification key hash (all zeros = demo mode)
 /// - btc_script_len: u8
-/// - btc_script: [u8; 62] - BTC withdrawal address
+/// - btc_script: [u8; MAX_BTC_SCRIPT_LEN] - BTC withdrawal scriptPubKey (raw bytes)
 /// - request_nonce: u64 - Unique nonce for this request
 pub struct RequestRedemptionData {
     pub proof_hash: [u8; 32],
@@ -41,7 +42,7 @@ pub struct RequestRedemptionData {
     pub nullifier_hash: [u8; 32],
     pub amount_sats: u64,
     pub vk_hash: [u8; 32],
-    pub btc_script: [u8; 62],
+    pub btc_script: [u8; MAX_BTC_SCRIPT_LEN],
     pub btc_script_len: u8,
     pub request_nonce: u64,
 }
@@ -69,7 +70,7 @@ impl RequestRedemptionData {
         vk_hash.copy_from_slice(&data[104..136]);
 
         let btc_script_len = data[136];
-        if btc_script_len as usize > 62 {
+        if btc_script_len as usize > MAX_BTC_SCRIPT_LEN {
             return Err(ZVaultError::InvalidBtcAddress.into());
         }
 
@@ -78,7 +79,7 @@ impl RequestRedemptionData {
             return Err(ProgramError::InvalidInstructionData);
         }
 
-        let mut btc_script = [0u8; 62];
+        let mut btc_script = [0u8; MAX_BTC_SCRIPT_LEN];
         btc_script[..btc_script_len as usize].copy_from_slice(&data[137..addr_end]);
 
         let request_nonce = u64::from_le_bytes(data[addr_end..addr_end + 8].try_into().unwrap());
@@ -254,16 +255,19 @@ pub fn process_request_redemption(
     }
     .invoke_signed(&nullifier_signer)?;
 
-    // Record nullifier (prevent double-spend)
+    // Record nullifier (prevent double-spend) — slim: discriminator only
     {
         let mut nullifier_data = accounts.nullifier_record.try_borrow_mut_data()?;
-        let nullifier = NullifierRecord::init(&mut nullifier_data)?;
-
-        nullifier.nullifier_hash.copy_from_slice(&ix_data.nullifier_hash);
-        nullifier.set_spent_at(clock.unix_timestamp);
-        nullifier.spent_by.copy_from_slice(accounts.user.key().as_ref());
-        nullifier.set_operation_type(NullifierOperationType::FullWithdrawal);
+        NullifierRecord::init(&mut nullifier_data)?;
     }
+
+    // Emit nullifier spent event
+    crate::utils::events::emit_nullifier_spent(
+        &ix_data.nullifier_hash,
+        NullifierOperationType::FullWithdrawal as u8,
+        clock.unix_timestamp,
+        accounts.user.key().as_ref().try_into().unwrap(),
+    );
 
     // Create redemption request PDA
     let (_, redemption_bump) = find_program_address(

@@ -95,10 +95,10 @@ async function testClaimProof(): Promise<boolean> {
   console.log("\n[TEST] Claim proof generation (Unified Model)...");
 
   try {
-    // Generate random private key (Grumpkin scalar)
+    // Generate random private key (Baby Jubjub scalar)
     const privKey = randomFieldElement();
     // For testing, derive pubKeyX = hash(privKey) as approximation
-    // In production, this would be Grumpkin scalar multiplication
+    // In production, this would be Baby Jubjub scalar multiplication
     const pubKeyX = poseidon2Hash([privKey]);
     const amount = 100000n; // 0.001 BTC in sats
     const leafIndex = 0n;

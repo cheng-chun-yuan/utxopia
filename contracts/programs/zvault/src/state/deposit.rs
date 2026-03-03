@@ -23,7 +23,7 @@ pub struct DepositRecord {
     /// Padding for alignment
     _padding: [u8; 6],
 
-    /// The commitment hash: Poseidon(notePubKey, amount)
+    /// The commitment hash: Poseidon(npk, token, amount)
     pub commitment: [u8; 32],
 
     /// Amount in satoshis (stored for convenience, also visible via btc_txid)

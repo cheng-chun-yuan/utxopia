@@ -32,23 +32,24 @@ pub const ANNOUNCEMENT_TYPE_DEPOSIT: u8 = 0;
 /// Announcement type: transfer (XOR-encrypted amount from JoinSplit transact)
 pub const ANNOUNCEMENT_TYPE_TRANSFER: u8 = 1;
 
-/// Stealth announcement account size (single ephemeral key)
+/// Stealth announcement account size
 ///
-/// Layout (90 bytes):
+/// Layout (82 bytes):
 /// - discriminator (1 byte)
 /// - announcement_type (1 byte): 0=deposit (plaintext amount), 1=transfer (encrypted amount)
 /// - ephemeral_pub (32 bytes, Ed25519 compressed)
 /// - amount_bytes (8 bytes, plaintext if type=0, XOR encrypted if type=1)
-/// - commitment (32 bytes)
+/// - commitment (32 bytes, Poseidon hash for Merkle tree — stored for self-sovereign recovery)
 /// - leaf_index (8 bytes, position in Merkle tree)
-/// - created_at (8 bytes)
+///
+/// Removed field (emitted as sol_log_data event):
+/// - created_at (8 bytes) — available from slot time / event logs
 pub const STEALTH_ANNOUNCEMENT_SIZE: usize = 1 + // discriminator
     1 + // announcement_type
     32 + // ephemeral_pub (Ed25519 key, 32 bytes)
     8 + // amount_bytes (plaintext if deposit, XOR encrypted if transfer)
-    32 + // commitment
-    8 + // leaf_index (position in Merkle tree)
-    8; // created_at = 90 bytes
+    32 + // commitment (Poseidon hash, stored on-chain for self-sovereign recovery)
+    8; // leaf_index (position in Merkle tree) = 82 bytes
 
 /// Unified stealth announcement with type flag
 ///
@@ -82,15 +83,11 @@ pub struct StealthAnnouncement {
     /// type=1: XOR encrypted with SHA256(shared_secret || "amount")[0..8] (transfer)
     amount_bytes: [u8; 8],
 
-    /// Commitment for Merkle tree verification
-    /// commitment = Poseidon(npk, ZBTC_TOKEN_ID, amount)
+    /// Commitment = Poseidon(npk, token, amount) — stored for self-sovereign recovery
     pub commitment: [u8; 32],
 
     /// Leaf index in Merkle tree
     leaf_index_bytes: [u8; 8],
-
-    /// Timestamp (stored as bytes for alignment)
-    created_at_bytes: [u8; 8],
 }
 
 impl StealthAnnouncement {
@@ -120,16 +117,6 @@ impl StealthAnnouncement {
     /// Set leaf_index
     pub fn set_leaf_index(&mut self, value: u64) {
         self.leaf_index_bytes = value.to_le_bytes();
-    }
-
-    /// Get created_at as i64
-    pub fn created_at(&self) -> i64 {
-        i64::from_le_bytes(self.created_at_bytes)
-    }
-
-    /// Set created_at
-    pub fn set_created_at(&mut self, value: i64) {
-        self.created_at_bytes = value.to_le_bytes();
     }
 
     /// Initialize from mutable bytes

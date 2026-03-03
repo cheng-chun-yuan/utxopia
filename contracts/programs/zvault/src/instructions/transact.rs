@@ -243,15 +243,20 @@ pub fn process_transact(
             signer_seeds,
         )?;
 
-        // Initialize nullifier record
+        // Initialize nullifier record (slim: discriminator only)
         {
             let mut nullifier_data = nullifier_info.try_borrow_mut_data()?;
-            let record = NullifierRecord::init(&mut nullifier_data)?;
-            record.nullifier_hash.copy_from_slice(nullifiers[i]);
-            record.set_spent_at(clock.unix_timestamp);
-            record.spent_by.copy_from_slice(user.key().as_ref());
-            record.set_operation_type(NullifierOperationType::PrivateTransfer);
+            NullifierRecord::init(&mut nullifier_data)?;
         }
+
+        // Emit nullifier spent event
+        let null_hash: &[u8; 32] = nullifiers[i].try_into().unwrap();
+        crate::utils::events::emit_nullifier_spent(
+            null_hash,
+            NullifierOperationType::PrivateTransfer as u8,
+            clock.unix_timestamp,
+            user.key().as_ref().try_into().unwrap(),
+        );
     }
 
     // Insert output commitments into Merkle tree and create stealth announcements
@@ -315,10 +320,12 @@ pub fn process_transact(
                 announcement.announcement_type = crate::state::ANNOUNCEMENT_TYPE_TRANSFER;
                 announcement.ephemeral_pub = *ephemeral_pub;
                 announcement.set_amount_bytes(encrypted_amount);
-                announcement.commitment = *commitments_out[i];
+                announcement.commitment.copy_from_slice(commitments_out[i]);
                 announcement.set_leaf_index(leaf_index);
-                announcement.set_created_at(clock.unix_timestamp);
             }
+
+            // Emit leaf inserted event
+            crate::utils::events::emit_leaf_inserted(commitments_out[i], clock.unix_timestamp);
         }
     }
 

@@ -1,25 +1,26 @@
-//! Public Unshield instruction (disc 15)
+//! Redeem instruction (disc 16)
 //!
-//! Converts shielded zkBTC back to public SPL tokens on Solana.
-//! User proves ownership via JoinSplit ZK proof, nullifiers are created,
-//! and pool vault transfers public zBTC to the user's token account.
+//! JoinSplit N→M where the last output creates a RedemptionRequest PDA
+//! for BTC withdrawal — atomic private transfer + BTC redemption in one tx.
 //!
-//! The last output commitment is the "unshield output" — verified in ZK proof
-//! but NOT inserted into the Merkle tree. Instead, the unshield amount is
-//! transferred from pool vault → user's token account.
-//! Remaining M-1 outputs go into tree as normal (change notes).
+//! The last output commitment is verified in the ZK proof but NOT inserted
+//! into the Merkle tree. Instead, a RedemptionRequest PDA is created for
+//! the backend FROST signing pipeline to process.
+//! Remaining M-1 outputs go into the tree as normal (change notes).
 //!
 //! Instruction Data Layout:
 //! - [0]     n_inputs:           u8
-//! - [1]     n_outputs:          u8  (includes unshield output as last)
+//! - [1]     n_outputs:          u8  (includes redeem output as last)
 //! - [2..258]  proof:            [u8; 256]  (Groth16 proof)
 //! - [258..290] merkle_root:     [u8; 32]
 //! - [290..322] bound_params_hash: [u8; 32]
 //! - [322..]  nullifiers:        [[u8; 32]; n_inputs]
-//! - [..]     commitments_out:   [[u8; 32]; n_outputs]  (last = unshield)
+//! - [..]     commitments_out:   [[u8; 32]; n_outputs]  (last = redeem)
 //! - [..]     stealth_data:      [ephemeral_pub(32) + encrypted_amount(8)] × (n_outputs - 1)
-//! - [..]     unshield_amount:   u64 (8 bytes LE)
-//! - [..]     unshield_address:  [u8; 32] (recipient Solana pubkey)
+//! - [..]     redeem_amount:     u64 (8 bytes LE)
+//! - [..]     btc_script_len:    u8
+//! - [..]     btc_script:        [u8; btc_script_len] (variable, max 62)
+//! - [..]     request_nonce:     u64 (8 bytes LE)
 //!
 //! Accounts:
 //! 0. pool_state           (writable)
@@ -27,12 +28,9 @@
 //! 2. vk_registry          (read)
 //! 3. user                 (signer, payer)
 //! 4. system_program       (read)
-//! 5. zbtc_mint            (writable)
-//! 6. pool_vault           (writable)
-//! 7. user_token_account   (writable)
-//! 8. token_program        (read)
-//! 9..9+n_inputs           nullifier_records (writable, PDA)
-//! 9+n_inputs..            stealth_announcements (writable, PDA) — only for tree outputs
+//! 5..5+N                  nullifier_records (writable PDA)
+//! 5+N..5+N+(M-1)          stealth_announcements (writable PDA)
+//! 5+N+(M-1)               redemption_request (writable PDA)
 
 use pinocchio::{
     account_info::AccountInfo,
@@ -46,15 +44,15 @@ use crate::debug_msg;
 use crate::error::ZVaultError;
 use crate::state::{
     CommitmentTree, NullifierOperationType, NullifierRecord, PoolState,
-    StealthAnnouncement, VkRegistry, NULLIFIER_RECORD_DISCRIMINATOR,
+    RedemptionRequest, RedemptionStatus, StealthAnnouncement, VkRegistry,
+    NULLIFIER_RECORD_DISCRIMINATOR, REDEMPTION_REQUEST_DISCRIMINATOR,
     STEALTH_ANNOUNCEMENT_DISCRIMINATOR,
 };
 use crate::utils::groth16::GROTH16_PROOF_SIZE;
 use crate::utils::{
     create_pda_account, validate_account_writable, validate_program_owner,
-    validate_system_program, validate_token_2022_owner, validate_token_program_key,
+    validate_system_program,
 };
-use crate::utils::token::{transfer_zbtc, validate_token_account};
 
 /// Maximum supported N + M
 const MAX_JOINSPLIT_SIZE: usize = crate::constants::MAX_SAFE_JOINSPLIT_SIZE;
@@ -63,9 +61,9 @@ const MAX_JOINSPLIT_SIZE: usize = crate::constants::MAX_SAFE_JOINSPLIT_SIZE;
 const STEALTH_DATA_PER_OUTPUT: usize = 40;
 
 /// Number of fixed accounts before nullifiers
-const FIXED_ACCOUNTS: usize = 9;
+const FIXED_ACCOUNTS: usize = 5;
 
-pub fn process_unshield(
+pub fn process_redeem(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     data: &[u8],
@@ -78,24 +76,24 @@ pub fn process_unshield(
     let n_inputs = data[0] as usize;
     let n_outputs = data[1] as usize;
 
-    // n_outputs must be >= 1 (the unshield output itself)
+    // n_outputs must be >= 1 (the redeem output itself)
     if n_inputs == 0 || n_outputs == 0 || n_inputs + n_outputs > MAX_JOINSPLIT_SIZE {
         debug_msg!("Invalid JoinSplit dimensions");
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    // Tree outputs = n_outputs - 1 (last output is unshield, not inserted)
+    // Tree outputs = n_outputs - 1 (last output is redeem, not inserted)
     let n_tree_outputs = n_outputs - 1;
 
-    // Calculate expected data length
+    // Calculate minimum data length (btc_script_len is variable)
     let header_size = 2 + GROTH16_PROOF_SIZE + 32 + 32;
     let nullifiers_size = n_inputs * 32;
     let commitments_size = n_outputs * 32;
     let stealth_size = n_tree_outputs * STEALTH_DATA_PER_OUTPUT;
-    let unshield_data_size = 8 + 32; // unshield_amount(8) + unshield_address(32)
-    let expected_len = header_size + nullifiers_size + commitments_size + stealth_size + unshield_data_size;
+    let redeem_fixed_size = 8 + 1; // redeem_amount(8) + btc_script_len(1)
+    let min_len = header_size + nullifiers_size + commitments_size + stealth_size + redeem_fixed_size;
 
-    if data.len() < expected_len {
+    if data.len() < min_len {
         debug_msg!("Instruction data too short");
         return Err(ProgramError::InvalidInstructionData);
     }
@@ -120,7 +118,7 @@ pub fn process_unshield(
         offset += 32;
     }
 
-    // Parse output commitments (all n_outputs, including unshield)
+    // Parse output commitments (all n_outputs, including redeem)
     let mut commitments_out: [&[u8; 32]; MAX_JOINSPLIT_SIZE] = [ZERO_REF; MAX_JOINSPLIT_SIZE];
     for i in 0..n_outputs {
         commitments_out[i] = data[offset..offset + 32].try_into().unwrap();
@@ -131,26 +129,43 @@ pub fn process_unshield(
     let stealth_data_start = offset;
     offset += n_tree_outputs * STEALTH_DATA_PER_OUTPUT;
 
-    // Parse unshield amount and address
-    let unshield_amount = u64::from_le_bytes(data[offset..offset + 8].try_into().unwrap());
+    // Parse redeem amount
+    let redeem_amount = u64::from_le_bytes(data[offset..offset + 8].try_into().unwrap());
     offset += 8;
 
-    let unshield_address: &[u8; 32] = data[offset..offset + 32].try_into().unwrap();
+    // Parse btc_script (variable length to save tx space)
+    let btc_script_len = data[offset] as usize;
+    offset += 1;
 
-    // Verify bound params hash matches expected value for unshield
+    if btc_script_len == 0 || btc_script_len > crate::constants::MAX_BTC_SCRIPT_LEN {
+        debug_msg!("Invalid BTC script length");
+        return Err(ZVaultError::InvalidBtcAddress.into());
+    }
+
+    if data.len() < offset + btc_script_len + 8 {
+        debug_msg!("Instruction data too short for btc_script + nonce");
+        return Err(ProgramError::InvalidInstructionData);
+    }
+
+    let btc_script = &data[offset..offset + btc_script_len];
+    offset += btc_script_len;
+
+    // Parse request nonce
+    let request_nonce = u64::from_le_bytes(data[offset..offset + 8].try_into().unwrap());
+
+    // Verify bound params hash matches expected value for redeem
     {
-        let expected = crate::utils::crypto::compute_bound_params_hash_unshield(
+        let expected = crate::utils::crypto::compute_bound_params_hash_redeem(
             crate::constants::CHAIN_ID,
-            unshield_address,
         );
         if *bound_params_hash != expected {
-            debug_msg!("Invalid bound params hash for unshield");
+            debug_msg!("Invalid bound params hash for redeem");
             return Err(ZVaultError::InvalidBoundParams.into());
         }
     }
 
-    // Validate account count
-    let min_accounts = FIXED_ACCOUNTS + n_inputs + n_tree_outputs;
+    // Validate account count: fixed + nullifiers + tree_outputs stealth + 1 redemption
+    let min_accounts = FIXED_ACCOUNTS + n_inputs + n_tree_outputs + 1;
     if accounts.len() < min_accounts {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
@@ -160,63 +175,36 @@ pub fn process_unshield(
     let vk_registry_info = &accounts[2];
     let user = &accounts[3];
     let system_program = &accounts[4];
-    let zbtc_mint = &accounts[5];
-    let pool_vault = &accounts[6];
-    let user_token_account = &accounts[7];
-    let token_program = &accounts[8];
 
     // Validate core accounts
     validate_program_owner(pool_state_info, program_id)?;
     validate_program_owner(commitment_tree_info, program_id)?;
     validate_program_owner(vk_registry_info, program_id)?;
     validate_system_program(system_program)?;
-    validate_token_2022_owner(zbtc_mint)?;
-    validate_token_2022_owner(pool_vault)?;
-    validate_token_program_key(token_program)?;
     validate_account_writable(pool_state_info)?;
     validate_account_writable(commitment_tree_info)?;
-    validate_account_writable(zbtc_mint)?;
-    validate_account_writable(pool_vault)?;
-    validate_account_writable(user_token_account)?;
 
     if !user.is_signer() {
         return Err(ProgramError::MissingRequiredSignature);
     }
 
-    // Validate pool is not paused and get pool vault + bump
-    let pool_bump: u8;
-    {
+    // Validate pool is not paused
+    let (pending_redemptions, total_shielded) = {
         let pool_data = pool_state_info.try_borrow_data()?;
         let pool = PoolState::from_bytes(&pool_data)?;
         if pool.is_paused() {
             return Err(ZVaultError::PoolPaused.into());
         }
+        (pool.pending_redemptions(), pool.total_shielded())
+    };
 
-        // Verify zbtc_mint matches pool
-        if zbtc_mint.key().as_ref() != pool.zbtc_mint {
-            debug_msg!("zBTC mint mismatch");
-            return Err(ProgramError::InvalidAccountData);
-        }
-
-        // Verify pool vault matches pool
-        if pool_vault.key().as_ref() != pool.pool_vault {
-            debug_msg!("Pool vault mismatch");
-            return Err(ProgramError::InvalidAccountData);
-        }
+    // Validate redeem amount
+    if redeem_amount == 0 {
+        return Err(ZVaultError::ZeroAmount.into());
     }
-
-    // Derive pool PDA for signing transfer
-    let pool_seeds: &[&[u8]] = &[PoolState::SEED];
-    let (expected_pool_pda, bump) = find_program_address(pool_seeds, program_id);
-    if pool_state_info.key() != &expected_pool_pda {
-        debug_msg!("Invalid pool PDA");
-        return Err(ProgramError::InvalidSeeds);
+    if redeem_amount > total_shielded {
+        return Err(ZVaultError::InsufficientFunds.into());
     }
-    pool_bump = bump;
-
-    // Validate user token account: owned by Token-2022, correct mint
-    let unshield_recipient = Pubkey::from(*unshield_address);
-    validate_token_account(user_token_account, zbtc_mint.key(), &unshield_recipient)?;
 
     // Validate VK registry for this (N, M) variant
     {
@@ -261,25 +249,13 @@ pub fn process_unshield(
         proof_bytes, &public_inputs[..pi_len], delta_g2, ic,
     )?;
 
-    debug_msg!("Unshield JoinSplit proof verified");
-
-    // Verify unshield commitment: last output = Poseidon(unshield_address, ZBTC_TOKEN_ID, unshield_amount)
-    {
-        let expected_commitment = crate::utils::crypto::compute_deposit_commitment(
-            unshield_address,
-            unshield_amount,
-        )?;
-        if *commitments_out[n_outputs - 1] != expected_commitment {
-            debug_msg!("Unshield commitment mismatch");
-            return Err(ZVaultError::InvalidCommitment.into());
-        }
-    }
+    debug_msg!("Redeem JoinSplit proof verified");
 
     // Get clock and rent for PDA creation
     let clock = Clock::get()?;
     let rent = Rent::get()?;
 
-    // Process nullifiers
+    // Process nullifiers — same as unshield
     for i in 0..n_inputs {
         let nullifier_info = &accounts[FIXED_ACCOUNTS + i];
         validate_account_writable(nullifier_info)?;
@@ -329,7 +305,7 @@ pub fn process_unshield(
         );
     }
 
-    // Insert tree outputs (all except the last unshield output) into Merkle tree
+    // Insert tree outputs (all except the last redeem output) into Merkle tree
     {
         let mut tree_data = commitment_tree_info.try_borrow_mut_data()?;
         let tree = CommitmentTree::from_bytes_mut(&mut tree_data)?;
@@ -394,29 +370,70 @@ pub fn process_unshield(
         }
     }
 
-    // Transfer unshield amount from pool vault to user's token account
+    // Create RedemptionRequest PDA — same pattern as request_redemption.rs
     {
-        let pool_bump_bytes = [pool_bump];
-        let pool_signer_seeds: &[&[u8]] = &[PoolState::SEED, &pool_bump_bytes];
+        let redemption_info = &accounts[FIXED_ACCOUNTS + n_inputs + n_tree_outputs];
+        validate_account_writable(redemption_info)?;
 
-        transfer_zbtc(
-            token_program,
-            pool_vault,
-            user_token_account,
-            pool_state_info, // Pool PDA is the vault authority
-            unshield_amount,
-            pool_signer_seeds,
+        let nonce_bytes = request_nonce.to_le_bytes();
+        let redemption_seeds: &[&[u8]] = &[
+            RedemptionRequest::SEED,
+            user.key().as_ref(),
+            &nonce_bytes,
+        ];
+        let (expected_redemption_pda, redemption_bump) =
+            find_program_address(redemption_seeds, program_id);
+        if redemption_info.key() != &expected_redemption_pda {
+            debug_msg!("Invalid redemption request PDA");
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        {
+            let redemption_data = redemption_info.try_borrow_data()?;
+            if !redemption_data.is_empty()
+                && redemption_data[0] == REDEMPTION_REQUEST_DISCRIMINATOR
+            {
+                return Err(ZVaultError::AlreadyInitialized.into());
+            }
+        }
+
+        let redemption_bump_bytes = [redemption_bump];
+        let redemption_signer_seeds: &[&[u8]] = &[
+            RedemptionRequest::SEED,
+            user.key().as_ref(),
+            &nonce_bytes,
+            &redemption_bump_bytes,
+        ];
+
+        create_pda_account(
+            user,
+            redemption_info,
+            program_id,
+            rent.minimum_balance(RedemptionRequest::LEN),
+            RedemptionRequest::LEN as u64,
+            redemption_signer_seeds,
         )?;
+
+        {
+            let mut redemption_data = redemption_info.try_borrow_mut_data()?;
+            let redemption = RedemptionRequest::init(&mut redemption_data)?;
+            redemption.set_request_id(request_nonce);
+            redemption.requester.copy_from_slice(user.key().as_ref());
+            redemption.set_amount_sats(redeem_amount);
+            redemption.set_btc_script(btc_script)?;
+            redemption.set_status(RedemptionStatus::Pending);
+        }
     }
 
-    // Update pool state: decrement total_shielded
+    // Update pool state: decrement total_shielded, increment pending_redemptions
     {
         let mut pool_data = pool_state_info.try_borrow_mut_data()?;
         let pool = PoolState::from_bytes_mut(&mut pool_data)?;
-        pool.sub_shielded(unshield_amount)?;
+        pool.sub_shielded(redeem_amount)?;
+        pool.set_pending_redemptions(pending_redemptions.saturating_add(1));
         pool.set_last_update(clock.unix_timestamp);
     }
 
-    debug_msg!("Unshield completed");
+    debug_msg!("Redeem completed");
     Ok(())
 }

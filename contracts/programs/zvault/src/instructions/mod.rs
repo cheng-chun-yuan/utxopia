@@ -28,6 +28,12 @@ pub mod complete_redemption;
 // Public unshield (zkBTC → SPL token)
 pub mod unshield;
 
+// Redeem: JoinSplit → BTC withdrawal
+pub mod redeem;
+
+// Public redeem: burn SPL → BTC withdrawal
+pub mod public_redeem;
+
 // Demo/testing
 pub mod add_demo_stealth;
 
@@ -47,6 +53,8 @@ pub use mark_processing::*;
 pub use cancel_redemption::*;
 pub use complete_redemption::*;
 pub use unshield::*;
+pub use redeem::*;
+pub use public_redeem::*;
 pub use add_demo_stealth::*;
 pub use admin_close_pda::*;
 pub use admin_update_pool::*;

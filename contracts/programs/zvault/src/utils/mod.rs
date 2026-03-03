@@ -7,6 +7,7 @@ pub mod bitcoin;
 pub mod chadbuffer;
 pub mod crypto;
 
+pub mod events;
 pub mod token;
 pub mod groth16;
 pub mod validation;
@@ -15,6 +16,7 @@ pub use bitcoin::*;
 pub use chadbuffer::*;
 pub use crypto::*;
 
+pub use events::*;
 pub use token::*;
 pub use groth16::*;
 pub use validation::*;

@@ -174,7 +174,7 @@ export interface RedemptionSnapshot {
 }
 
 export function parseRedemptionRequest(data: Buffer): RedemptionSnapshot | null {
-  if (data.length < 118 || data[0] !== 0x04) return null;
+  if (data.length < 90 || data[0] !== 0x04) return null;
   return {
     status: data[1],
     requester: new PublicKey(data.subarray(16, 48)),

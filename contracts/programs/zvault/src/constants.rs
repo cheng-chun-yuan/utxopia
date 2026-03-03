@@ -12,8 +12,9 @@ pub const REQUIRED_CONFIRMATIONS: u32 = 2;
 /// Maximum Groth16 proof size in bytes (256 bytes = 2 G1 + 1 G2)
 pub const MAX_GROTH16_PROOF_SIZE: usize = 256;
 
-/// Maximum BTC scriptPubKey length
-pub const MAX_BTC_SCRIPT_LEN: usize = 62;
+/// Maximum BTC scriptPubKey length (raw bytes, not bech32 string)
+/// P2TR/P2WSH = 34 bytes (OP_x + PUSH32 + 32-byte key/hash)
+pub const MAX_BTC_SCRIPT_LEN: usize = 34;
 
 /// BTC Light Client program ID — localnet (EU5ZyFqRuUHHJcarRWPmKxezhsFKBVjcc5M2L3sobmd7)
 /// Generated from target/deploy/btc_light_client-keypair.json

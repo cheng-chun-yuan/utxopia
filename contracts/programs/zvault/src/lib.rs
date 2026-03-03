@@ -82,13 +82,19 @@ pub mod instruction {
     // Public unshield (zkBTC → SPL token)
     pub const UNSHIELD: u8 = 15;
 
+    // Redeem: JoinSplit N→M with BTC redemption (last output → RedemptionRequest)
+    pub const REDEEM: u8 = 16;
+
+    // Public redeem: burn SPL zBTC → RedemptionRequest (no ZK proof)
+    pub const PUBLIC_REDEEM: u8 = 17;
+
     // Admin: close any program-owned PDA (devnet only)
     #[cfg(feature = "devnet")]
-    pub const ADMIN_CLOSE_PDA: u8 = 16;
+    pub const ADMIN_CLOSE_PDA: u8 = 20;
 
     // Admin: update pool bounds (devnet only)
     #[cfg(feature = "devnet")]
-    pub const ADMIN_UPDATE_POOL: u8 = 17;
+    pub const ADMIN_UPDATE_POOL: u8 = 21;
 }
 
 entrypoint!(process_instruction);
@@ -144,6 +150,14 @@ pub fn process_instruction(
         // Public unshield
         instruction::UNSHIELD => {
             instructions::process_unshield(program_id, accounts, data)
+        }
+        // Redeem: JoinSplit + BTC redemption
+        instruction::REDEEM => {
+            instructions::process_redeem(program_id, accounts, data)
+        }
+        // Public redeem: burn SPL → BTC redemption
+        instruction::PUBLIC_REDEEM => {
+            instructions::process_public_redeem(program_id, accounts, data)
         }
         // Admin: close PDA
         #[cfg(feature = "devnet")]
@@ -221,6 +235,8 @@ mod tests {
             instruction::UPDATE_VK_REGISTRY,
             instruction::TRANSACT,
             instruction::UNSHIELD,
+            instruction::REDEEM,
+            instruction::PUBLIC_REDEEM,
             #[cfg(feature = "devnet")]
             instruction::ADD_DEMO_STEALTH,
         ];

@@ -21,7 +21,7 @@ pub enum RedemptionStatus {
 
 /// Redemption request - pending BTC withdrawal (zero-copy layout)
 ///
-/// Layout (118 bytes):
+/// Layout (90 bytes):
 /// - discriminator:     1 byte
 /// - status:            1 byte
 /// - btc_script_len:    1 byte
@@ -30,7 +30,7 @@ pub enum RedemptionStatus {
 /// - request_id:        8 bytes
 /// - requester:         32 bytes
 /// - amount_sats:       8 bytes
-/// - btc_script:        62 bytes (scriptPubKey for BTC withdrawal)
+/// - btc_script:        34 bytes (raw scriptPubKey for BTC withdrawal, not bech32 string)
 #[repr(C)]
 pub struct RedemptionRequest {
     /// Account discriminator

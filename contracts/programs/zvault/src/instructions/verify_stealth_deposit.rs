@@ -330,8 +330,10 @@ pub fn process_verify_stealth_deposit(
         announcement.set_amount_sats(amount_sats); // plaintext for deposits
         announcement.commitment = commitment;
         announcement.set_leaf_index(leaf_index);
-        announcement.set_created_at(clock.unix_timestamp);
     }
+
+    // Emit leaf inserted event (commitment + timestamp for indexer)
+    crate::utils::events::emit_leaf_inserted(&commitment, clock.unix_timestamp);
 
     // Mint zBTC to pool vault
     let pool_bump_bytes = [pool_bump];

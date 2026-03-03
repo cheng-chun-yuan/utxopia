@@ -240,7 +240,7 @@ async function main() {
   const commitment = computeUnifiedCommitment(pubKeyX, amount);
   const commitmentBytes = bigintToBytes32(commitment);
 
-  // Generate random ephemeral key for stealth deposit (33 bytes compressed)
+  // Generate random ephemeral key for stealth deposit (32 bytes Ed25519)
   const ephemeralPub = new Uint8Array(33);
   ephemeralPub[0] = 0x02; // Compressed format
   crypto.getRandomValues(ephemeralPub.subarray(1));

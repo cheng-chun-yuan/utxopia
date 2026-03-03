@@ -137,8 +137,8 @@ function generateX25519Keypair(): { publicKey: Uint8Array; privateKey: Uint8Arra
 }
 
 /**
- * Generate a mock Grumpkin keypair (33-byte compressed pubkey)
- * In production, use actual Grumpkin curve operations
+ * Generate a mock Baby Jubjub keypair (32-byte compressed pubkey)
+ * In production, use actual Baby Jubjub curve operations
  */
 function generateGrumpkinKeypair(): { publicKey: Uint8Array; privateKey: Uint8Array } {
   const privateKey = crypto.randomBytes(32);
@@ -154,7 +154,7 @@ function generateGrumpkinKeypair(): { publicKey: Uint8Array; privateKey: Uint8Ar
 // ============================================================================
 
 interface StealthMetaAddress {
-  spendingPubKey: Uint8Array; // 33 bytes (Grumpkin compressed)
+  spendingPubKey: Uint8Array; // 32 bytes (Baby Jubjub compressed)
   viewingPubKey: Uint8Array;  // 32 bytes (X25519)
   spendingPrivKey: Uint8Array;
   viewingPrivKey: Uint8Array;
@@ -180,7 +180,7 @@ function generateStealthMetaAddress(): StealthMetaAddress {
  */
 function encodeStealthAddress(meta: StealthMetaAddress): string {
   const combined = new Uint8Array(65);
-  combined.set(meta.spendingPubKey, 0);  // 33 bytes
+  combined.set(meta.spendingPubKey, 0);  // 32 bytes
   combined.set(meta.viewingPubKey, 33);   // 32 bytes
   return Buffer.from(combined).toString("hex");
 }
@@ -298,7 +298,7 @@ function buildAddDemoNoteInstruction(
  *
  * Data format (74 bytes):
  * - discriminator (1)
- * - ephemeral_pub (33) - Grumpkin compressed
+ * - ephemeral_pub (32) - Ed25519
  * - commitment (32)
  * - encrypted_amount (8) - XOR encrypted
  */
@@ -309,7 +309,7 @@ function buildAddDemoStealthInstruction(
   authority: PublicKey,
   zbtcMint: PublicKey,
   poolVault: PublicKey,
-  ephemeralPub: Uint8Array,  // 33-byte Grumpkin compressed
+  ephemeralPub: Uint8Array,  // 32-byte Ed25519
   commitment: Uint8Array,
   encryptedAmount: Uint8Array,  // 8 bytes XOR encrypted
 ): TransactionInstruction {
@@ -402,7 +402,7 @@ function generateDemoNote(): DemoNote {
 }
 
 interface StealthDeposit {
-  ephemeralPub: Uint8Array;      // 33-byte Grumpkin compressed
+  ephemeralPub: Uint8Array;      // 32-byte Ed25519
   commitment: Uint8Array;        // 32-byte
   encryptedAmount: Uint8Array;   // 8-byte XOR encrypted
   amount: bigint;
@@ -417,7 +417,7 @@ function generateStealthDeposit(
   recipientMeta: StealthMetaAddress,
   amount: bigint,
 ): StealthDeposit {
-  // Generate single ephemeral Grumpkin keypair
+  // Generate single ephemeral keypair
   const ephemeral = generateGrumpkinKeypair();
 
   // Compute shared secret (simplified - in production use proper ECDH)
@@ -439,7 +439,7 @@ function generateStealthDeposit(
   }
 
   return {
-    ephemeralPub: ephemeral.publicKey,  // 33 bytes compressed
+    ephemeralPub: ephemeral.publicKey,  // 32 bytes
     commitment,
     encryptedAmount,
     amount,

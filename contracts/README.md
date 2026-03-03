@@ -61,9 +61,9 @@ contracts/
 
 ## Privacy Model
 
-- **Commitment**: `Poseidon2(notePubKey, amount)`
-- **Nullifier**: `Poseidon2(spendingPrivKey, leafIndex)`
-- **Stealth**: Dual-key ECDH (X25519 viewing + Grumpkin spending)
+- **Commitment**: `Poseidon(npk, token, amount)`
+- **Nullifier**: `Poseidon(nullifyingKey, leafIndex)`
+- **Stealth**: Dual-key ECDH (X25519 viewing + Baby Jubjub spending)
 
 ## Development
 
