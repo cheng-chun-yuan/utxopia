@@ -299,21 +299,19 @@ export const useZVaultStore = create<ZVaultState>((set, get) => ({
         lastAnnouncementCount = data.count;
         lastAnnouncementCachedAt = data.cachedAt;
 
-        // Convert API response to scan format (includes announcementType for unified scanning)
+        // Convert API response to scan format
         const announcements = data.announcements.map((ann: {
           announcementType: number;
           ephemeralPub: string;
           encryptedAmount: string;
           commitment: string;
           leafIndex: number;
-          createdAt: string;
         }) => ({
           announcementType: ann.announcementType,
           ephemeralPub: hexToBytes(ann.ephemeralPub),
           encryptedAmount: hexToBytes(ann.encryptedAmount),
           commitment: hexToBytes(ann.commitment),
           leafIndex: ann.leafIndex,
-          createdAt: Number(ann.createdAt),
         }));
 
         // Scan locally for privacy (server doesn't know which are ours)

@@ -298,8 +298,7 @@ export function DepositFlow() {
         expiresAt: Math.floor(Date.now() / 1000) + 86400 * 30, // 30 days
       });
 
-      // Register with backend tracker (fire-and-forget)
-      // Backend expects npk (32 bytes = 64 hex chars) as commitment for Taproot tweak
+      // Register with backend tracker and save depositId
       const ephemeralPubHex = opReturnHex.slice(0, 64); // first 32 bytes
       const npkHex = opReturnHex.slice(64); // second 32 bytes
       registerDeposit(
@@ -307,7 +306,11 @@ export function DepositFlow() {
         npkHex,
         depositPreview.depositAmountSats,
         ephemeralPubHex,
-      ).catch((err) => {
+      ).then((res) => {
+        if (res.deposit_id) {
+          useNotesStore.getState().updateNote(opReturnHex, { depositId: res.deposit_id });
+        }
+      }).catch((err) => {
         console.warn("Failed to register deposit with tracker:", err);
       });
 
@@ -897,9 +900,14 @@ export function DepositFlow() {
 
                 <div className="mb-2">
                   <p className="text-caption text-gray mb-1">TxID:</p>
-                  <code className="block text-[10px] font-mono text-btc bg-muted p-2 rounded-[8px] break-all">
+                  <a
+                    href={`https://mempool.space/testnet4/tx/${walletDepositResult.txid}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block text-[10px] font-mono text-btc bg-muted p-2 rounded-[8px] break-all hover:underline"
+                  >
                     {walletDepositResult.txid}
-                  </code>
+                  </a>
                 </div>
 
                 <div className="mb-2">

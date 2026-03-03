@@ -10,6 +10,7 @@ import {
   type CommitmentTreeIndex,
 } from "@zvault/sdk";
 import { getHeliusConnection } from "@/lib/helius-server";
+import { getTreeProofFromBackend } from "@/lib/api/tree";
 
 export const runtime = "nodejs";
 
@@ -31,7 +32,7 @@ async function ensurePoseidonInit(): Promise<void> {
 }
 
 // =============================================================================
-// Tree cache — avoid rebuilding on every proof request
+// Tree cache — avoid rebuilding on every proof request (fallback only)
 // =============================================================================
 
 const CACHE_TTL_MS = 30_000; // 30 seconds
@@ -137,8 +138,8 @@ async function getTreeAndRoot(): Promise<{
 /**
  * GET /api/merkle/proof?commitment=xxx
  *
- * Returns Merkle proof (siblings + indices) for a commitment.
- * Tree is cached server-side for 30s to avoid redundant rebuilds.
+ * Fast path: tries backend's cached tree first (~1ms).
+ * Fallback: rebuilds from on-chain data if backend is unavailable (~2-5s).
  */
 export async function GET(request: NextRequest) {
   try {
@@ -151,15 +152,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Parse commitment
-    let commitmentBigInt: bigint;
+    // Parse commitment to normalize hex
+    let commitmentHex: string;
     try {
       if (commitment.startsWith("0x")) {
-        commitmentBigInt = BigInt(commitment);
+        commitmentHex = commitment.slice(2);
       } else if (/^[0-9a-fA-F]+$/.test(commitment) && commitment.length >= 32) {
-        commitmentBigInt = BigInt("0x" + commitment);
+        commitmentHex = commitment;
       } else {
-        commitmentBigInt = BigInt(commitment);
+        // Decimal — convert to hex
+        commitmentHex = BigInt(commitment).toString(16).padStart(64, "0");
       }
     } catch {
       return NextResponse.json(
@@ -168,7 +170,41 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // =========================================================================
+    // Fast path: try backend's cached tree first
+    // =========================================================================
+    const backendResult = await getTreeProofFromBackend(commitmentHex);
+
+    if (backendResult?.success) {
+      console.log(`[Merkle Proof API] Fast path: proof from backend for leaf ${backendResult.leaf_index}`);
+      return NextResponse.json({
+        success: true,
+        commitment: commitmentHex,
+        leafIndex: String(backendResult.leaf_index),
+        root: backendResult.root,
+        computedRoot: backendResult.root,
+        siblings: backendResult.siblings,
+        indices: backendResult.indices,
+        source: "backend",
+      });
+    }
+
+    // =========================================================================
+    // Fallback: rebuild from on-chain data (trustless)
+    // =========================================================================
+    console.log("[Merkle Proof API] Backend unavailable, falling back to on-chain rebuild");
+
     await ensurePoseidonInit();
+
+    let commitmentBigInt: bigint;
+    try {
+      commitmentBigInt = BigInt("0x" + commitmentHex);
+    } catch {
+      return NextResponse.json(
+        { success: false, error: "Invalid commitment hex" },
+        { status: 400 }
+      );
+    }
 
     const start = Date.now();
     const { tree, onChainRoot } = await getTreeAndRoot();
@@ -191,7 +227,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log(`[Merkle Proof API] Proof for leaf ${proof.leafIndex} in ${fetchMs}ms (${fetchMs < 100 ? "cached" : "rebuilt"})`);
+    console.log(`[Merkle Proof API] Fallback: proof for leaf ${proof.leafIndex} in ${fetchMs}ms (${fetchMs < 100 ? "cached" : "rebuilt"})`);
 
     return NextResponse.json({
       success: true,
@@ -201,6 +237,7 @@ export async function GET(request: NextRequest) {
       computedRoot: proof.root.toString(16).padStart(64, "0"),
       siblings: proof.siblings.map((s) => s.toString(16).padStart(64, "0")),
       indices: proof.indices,
+      source: "on-chain",
     });
   } catch (error) {
     console.error("[Merkle Proof API] Error:", error);

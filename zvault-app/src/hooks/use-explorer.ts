@@ -10,6 +10,7 @@ import {
   type ExplorerTransferEvent,
   type ExplorerRedemption,
   type RpcClient,
+  type IndexerLeaf,
 } from "@zvault/sdk";
 import { getRpc } from "@/lib/adapters/connection-adapter";
 import { address } from "@solana/kit";
@@ -76,10 +77,30 @@ const SWR_OPTIONS = {
   errorRetryCount: 3,
 };
 
+const INDEXER_URL = process.env.NEXT_PUBLIC_INDEXER_URL || "http://localhost:3001";
+
+/** Fetch leaf data from the backend event indexer */
+async function fetchIndexerLeaves(): Promise<IndexerLeaf[]> {
+  try {
+    const resp = await fetch(`${INDEXER_URL}/api/tree/leaves`);
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    return data.leaves ?? [];
+  } catch {
+    return [];
+  }
+}
+
 export function useDeposits() {
   const { data, error, isLoading, mutate } = useSWR<ExplorerDeposit[]>(
     "explorer-deposits",
-    () => fetchExplorerDeposits(createRpcAdapter(), ZVAULT_PROGRAM_ID),
+    async () => {
+      const [rpcAdapter, leaves] = await Promise.all([
+        Promise.resolve(createRpcAdapter()),
+        fetchIndexerLeaves(),
+      ]);
+      return fetchExplorerDeposits(rpcAdapter, ZVAULT_PROGRAM_ID, leaves);
+    },
     SWR_OPTIONS
   );
   return {
@@ -93,7 +114,13 @@ export function useDeposits() {
 export function useTransfers() {
   const { data, error, isLoading, mutate } = useSWR<ExplorerTransferEvent[]>(
     "explorer-transfers",
-    () => fetchExplorerTransfers(createRpcAdapter(), ZVAULT_PROGRAM_ID),
+    async () => {
+      const [rpcAdapter, leaves] = await Promise.all([
+        Promise.resolve(createRpcAdapter()),
+        fetchIndexerLeaves(),
+      ]);
+      return fetchExplorerTransfers(rpcAdapter, ZVAULT_PROGRAM_ID, leaves);
+    },
     SWR_OPTIONS
   );
   return {

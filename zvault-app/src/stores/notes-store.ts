@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 export interface StoredNote {
   commitment: string;
@@ -9,6 +10,7 @@ export interface StoredNote {
   taprootAddress: string;
   createdAt: number;
   expiresAt: number;
+  depositId?: string;
   secretNote?: string;
   poseidonCommitment?: string;
   poseidonNote?: {
@@ -26,45 +28,61 @@ interface NotesState {
   // Actions
   saveNote: (note: Omit<StoredNote, "createdAt">) => boolean;
   getNote: (commitment: string) => StoredNote | undefined;
+  updateNote: (commitment: string, updates: Partial<StoredNote>) => void;
   deleteNote: (commitment: string) => boolean;
   clearNotes: () => boolean;
   getActiveNotes: () => StoredNote[];
 }
 
-export const useNotesStore = create<NotesState>((set, get) => ({
-  notes: [],
-  isLoaded: true,
+export const useNotesStore = create<NotesState>()(
+  persist(
+    (set, get) => ({
+      notes: [],
+      isLoaded: true,
 
-  saveNote: (note) => {
-    const newNote: StoredNote = {
-      ...note,
-      createdAt: Date.now(),
-    };
-    set((state) => ({ notes: [...state.notes, newNote] }));
-    return true;
-  },
+      saveNote: (note) => {
+        const newNote: StoredNote = {
+          ...note,
+          createdAt: Date.now(),
+        };
+        set((state) => ({ notes: [...state.notes, newNote] }));
+        return true;
+      },
 
-  getNote: (commitment) => {
-    return get().notes.find((n) => n.commitment === commitment);
-  },
+      getNote: (commitment) => {
+        return get().notes.find((n) => n.commitment === commitment);
+      },
 
-  deleteNote: (commitment) => {
-    set((state) => ({
-      notes: state.notes.filter((n) => n.commitment !== commitment),
-    }));
-    return true;
-  },
+      updateNote: (commitment, updates) => {
+        set((state) => ({
+          notes: state.notes.map((n) =>
+            n.commitment === commitment ? { ...n, ...updates } : n
+          ),
+        }));
+      },
 
-  clearNotes: () => {
-    set({ notes: [] });
-    return true;
-  },
+      deleteNote: (commitment) => {
+        set((state) => ({
+          notes: state.notes.filter((n) => n.commitment !== commitment),
+        }));
+        return true;
+      },
 
-  getActiveNotes: () => {
-    const now = Date.now();
-    return get().notes.filter((note) => note.expiresAt * 1000 > now);
-  },
-}));
+      clearNotes: () => {
+        set({ notes: [] });
+        return true;
+      },
+
+      getActiveNotes: () => {
+        const now = Date.now();
+        return get().notes.filter((note) => note.expiresAt * 1000 > now);
+      },
+    }),
+    {
+      name: "zvault-notes",
+    }
+  )
+);
 
 // Backwards compatible hook
 export function useNoteStorage() {

@@ -240,27 +240,25 @@ export async function syncFromOnChain(): Promise<{
 
   console.log(`[CommitmentIndex] Found ${accounts.length} stealth announcements`);
 
-  // Parse announcements and collect commitments with leaf indices
+  // Parse announcements — commitment is stored on-chain (self-sovereign recovery)
   const commitments: Array<{ commitment: bigint; leafIndex: number; amount: bigint }> = [];
 
   for (const account of accounts) {
     try {
       const parsed = parseStealthAnnouncement(new Uint8Array(account.account.data));
       if (parsed) {
-        // Skip stale announcements from before a tree reset
         if (parsed.leafIndex >= treeNextIndex) {
           continue;
         }
-        const commitmentBigInt = BigInt(
-          "0x" +
-            Array.from(parsed.commitment)
-              .map((b) => b.toString(16).padStart(2, "0"))
-              .join("")
-        );
+        // Read commitment directly from on-chain account data
+        let commitmentBigint = 0n;
+        for (let i = 0; i < parsed.commitment.length; i++) {
+          commitmentBigint = (commitmentBigint << 8n) | BigInt(parsed.commitment[i]);
+        }
         commitments.push({
-          commitment: commitmentBigInt,
+          commitment: commitmentBigint,
           leafIndex: parsed.leafIndex,
-          amount: 0n, // Amount is encrypted, we don't need it for merkle proofs
+          amount: 0n,
         });
       }
     } catch (e) {

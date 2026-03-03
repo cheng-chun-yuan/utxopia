@@ -184,7 +184,8 @@ export async function buildRedeemTransaction(
 
   const [poolState] = derivePoolStatePDA();
 
-  // Encode BTC address as UTF-8 bytes for on-chain storage
+  // TODO: Convert bech32 btcAddress to raw scriptPubKey bytes (max 34 bytes)
+  // For now, encode as UTF-8 (caller must pass raw scriptPubKey hex or short address)
   const btcAddressBytes = new TextEncoder().encode(btcAddress);
   const instructionData = sdkBuildRedemptionRequestInstructionData(amountSats, btcAddressBytes);
 

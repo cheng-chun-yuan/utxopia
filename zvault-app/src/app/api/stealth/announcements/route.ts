@@ -26,7 +26,6 @@ interface CachedAnnouncement {
   encryptedAmount: string; // hex
   commitment: string; // hex
   leafIndex: number;
-  createdAt: string; // bigint as string
 }
 
 interface CacheData {
@@ -86,15 +85,13 @@ async function fetchAnnouncements(): Promise<CacheData> {
           console.log(`[StealthAPI] Skipping stale announcement: leafIndex=${parsed.leafIndex} >= treeNextIndex=${treeNextIndex}`);
           continue;
         }
-        const commitmentHex = Buffer.from(parsed.commitment).toString("hex");
         announcements.push({
           pubkey: account.pubkey.toBase58(),
           announcementType: parsed.announcementType,
           ephemeralPub: Buffer.from(parsed.ephemeralPub).toString("hex"),
           encryptedAmount: Buffer.from(parsed.encryptedAmount).toString("hex"),
-          commitment: commitmentHex,
+          commitment: Buffer.from(parsed.commitment).toString("hex"),
           leafIndex: parsed.leafIndex,
-          createdAt: parsed.createdAt.toString(),
         });
       }
     } catch (e) {

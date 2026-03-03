@@ -47,6 +47,8 @@ export interface RegisterDepositResponse {
 export interface DepositStatusResponse {
   id: string;
   status: DepositStatus;
+  taproot_address: string;
+  amount_sats: number;
   confirmations: number;
   can_claim: boolean;
   btc_txid?: string;
@@ -54,6 +56,8 @@ export interface DepositStatusResponse {
   sweep_confirmations: number;
   solana_tx?: string;
   leaf_index?: number;
+  npk?: string;
+  ephemeral_pub?: string;
   error?: string;
   created_at: number;
   updated_at: number;
@@ -178,6 +182,34 @@ export async function getDepositStatus(
 ): Promise<DepositStatusResponse> {
   const response = await fetch(
     `${getTrackerApiUrl()}/api/deposits/${depositId}`,
+    {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({
+      error: `HTTP ${response.status}: ${response.statusText}`,
+    }));
+    throw ApiError.fromResponse(error, response.status);
+  }
+
+  return response.json();
+}
+
+/**
+ * Get deposit status by taproot address
+ *
+ * @param address - The Bitcoin taproot address (tb1p... or bc1p...)
+ */
+export async function getDepositByAddress(
+  address: string
+): Promise<DepositStatusResponse> {
+  const response = await fetch(
+    `${getTrackerApiUrl()}/api/deposits/by-address/${encodeURIComponent(address)}`,
     {
       method: "GET",
       headers: {

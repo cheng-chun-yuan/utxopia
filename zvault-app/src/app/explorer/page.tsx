@@ -126,19 +126,23 @@ function DepositRow({ deposit }: { deposit: DepositRecord }) {
             {formatBtc(deposit.amountSats)} BTC
           </span>
         </div>
-        <span className="text-caption text-gray">{timeAgo(deposit.createdAt)}</span>
+        {deposit.createdAt ? (
+          <span className="text-caption text-gray">{timeAgo(deposit.createdAt)}</span>
+        ) : null}
       </div>
 
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-caption text-gray">Commitment</span>
-          <div className="flex items-center gap-1.5">
-            <code className="text-caption font-mono text-green-400">
-              {truncate(deposit.commitment, 8, 6)}
-            </code>
-            <CopyButton text={deposit.commitment} label="Commitment" variant="default" iconSize="sm" />
+        {deposit.commitment && (
+          <div className="flex items-center justify-between">
+            <span className="text-caption text-gray">Commitment</span>
+            <div className="flex items-center gap-1.5">
+              <code className="text-caption font-mono text-green-400">
+                {truncate(deposit.commitment, 8, 6)}
+              </code>
+              <CopyButton text={deposit.commitment} label="Commitment" variant="default" iconSize="sm" />
+            </div>
           </div>
-        </div>
+        )}
         <div className="flex items-center justify-between">
           <span className="text-caption text-gray">Leaf Index</span>
           <span className="text-caption text-foreground font-mono">

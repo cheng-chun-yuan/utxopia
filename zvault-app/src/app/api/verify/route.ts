@@ -353,7 +353,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
       "confirmed"
     );
     const relayer = getRelayerKeypair();
-    const network = process.env.NEXT_PUBLIC_BTC_NETWORK || "testnet4";
+    const network = (process.env.NEXT_PUBLIC_BTC_NETWORK || "testnet4") as "mainnet" | "testnet" | "testnet4" | "signet" | "regtest";
 
     // 1. Fetch raw tx hex from mempool.space and strip SegWit witness data
     console.log("[Verify] Fetching raw transaction...");
