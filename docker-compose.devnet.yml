@@ -73,14 +73,16 @@ services:
       - frost-signer-3
     restart: unless-stopped
 
-  # ─── Deposit Tracker (auto-detect → sweep → SPV verify) ─────────
-  # Now includes real-time WebSocket detection + integrated header relay
+  # ─── Deposit Tracker + Event Indexer (auto-detect → sweep → SPV verify → tree cache) ─────────
+  # Now includes real-time WebSocket detection + integrated header relay + Merkle tree cache
   deposit-tracker:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: zvault-deposit-tracker
     command: ["/app/zbtc-api", "tracker", "--interval", "60", "--confirmations", "1"]
+    ports:
+      - "3002:3001"
     volumes:
       - tracker-data:/app/data
     environment:
@@ -97,13 +99,18 @@ services:
       ESPLORA_URL: https://mempool.space/testnet4/api
       SOLANA_RPC_URL: https://api.devnet.solana.com
       DEPOSIT_DB_PATH: /app/data/deposits.db
+      # Event indexer + Merkle tree cache
+      INDEXER_DB_PATH: /app/data/events.db
+      INDEXER_POLL_INTERVAL_SECS: "10"
+      ZVAULT_PROGRAM_ID: 25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM
+      TRACKER_API_PORT: "3001"
       # Real-time WebSocket detection (mempool.space)
       MEMPOOL_WS_ENABLED: "true"
       MEMPOOL_WS_URL: wss://mempool.space/testnet4/api/v1/ws
       # Integrated header relay (replaces separate header-relayer service)
       HEADER_RELAY_ENABLED: "true"
       BTC_LIGHT_CLIENT_PROGRAM_ID: Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq
-      RELAYER_KEYPAIR: "[50,128,114,217,238,93,48,208,84,69,168,140,72,35,173,128,57,239,14,139,145,69,241,221,89,52,36,156,104,238,166,101,13,98,59,211,107,90,137,69,248,31,168,162,72,104,198,209,65,164,43,83,227,202,213,91,45,163,238,203,91,107,68,170]"
+      RELAYER_KEYPAIR: "${RELAYER_KEYPAIR}"
       HEADER_BATCH_SIZE: "5"
     depends_on:
       - frost-signer-1
@@ -124,10 +131,13 @@ services:
       NEXT_PUBLIC_ZKBTC_API_URL: https://api.amidoggy.xyz
       NEXT_PUBLIC_SOLANA_RPC_URL: https://api.devnet.solana.com
       NEXT_PUBLIC_CIRCUIT_CDN_URL: https://circuits.amidoggy.xyz
-      ADMIN_KEYPAIR: "[50,128,114,217,238,93,48,208,84,69,168,140,72,35,173,128,57,239,14,139,145,69,241,221,89,52,36,156,104,238,166,101,13,98,59,211,107,90,137,69,248,31,168,162,72,104,198,209,65,164,43,83,227,202,213,91,45,163,238,203,91,107,68,170]"
-      RELAYER_KEYPAIR: "[50,128,114,217,238,93,48,208,84,69,168,140,72,35,173,128,57,239,14,139,145,69,241,221,89,52,36,156,104,238,166,101,13,98,59,211,107,90,137,69,248,31,168,162,72,104,198,209,65,164,43,83,227,202,213,91,45,163,238,203,91,107,68,170]"
+      # Backend tree cache (fast Merkle proofs)
+      TRACKER_API_URL: http://deposit-tracker:3001
+      ADMIN_KEYPAIR: "${ADMIN_KEYPAIR}"
+      RELAYER_KEYPAIR: "${RELAYER_KEYPAIR}"
     depends_on:
       - backend-api
+      - deposit-tracker
     restart: unless-stopped
 
   # ─── Cloudflare Tunnel ───────────────────────────────────────────
@@ -152,7 +162,7 @@ services:
       DEPLOY_ENV: devnet
       DEVNET_SOLANA_RPC_URL: https://api.devnet.solana.com
       DEVNET_PROGRAM_ID: Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq
-      DEVNET_RELAYER_KEYPAIR: "[50,128,114,217,238,93,48,208,84,69,168,140,72,35,173,128,57,239,14,139,145,69,241,221,89,52,36,156,104,238,166,101,13,98,59,211,107,90,137,69,248,31,168,162,72,104,198,209,65,164,43,83,227,202,213,91,45,163,238,203,91,107,68,170]"
+      DEVNET_RELAYER_KEYPAIR: "${DEVNET_RELAYER_KEYPAIR}"
       DEVNET_BITCOIN_NETWORK: testnet4
       DEVNET_START_BLOCK_HEIGHT: "124088"
       DEVNET_POLL_INTERVAL_MS: "30000"
