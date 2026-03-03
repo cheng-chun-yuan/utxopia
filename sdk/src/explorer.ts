@@ -14,11 +14,11 @@ import { STEALTH_ANNOUNCEMENT_SIZE } from "./stealth";
 // Constants
 // =============================================================================
 
-/** NullifierRecord account size (88 bytes) */
-export const NULLIFIER_RECORD_SIZE = 88;
+/** NullifierRecord account size (1 byte — slim layout, just discriminator) */
+export const NULLIFIER_RECORD_SIZE = 1;
 
-/** RedemptionRequest account size (118 bytes) */
-export const REDEMPTION_REQUEST_SIZE = 118;
+/** RedemptionRequest account size (90 bytes) */
+export const REDEMPTION_REQUEST_SIZE = 90;
 
 /** NullifierRecord discriminator byte */
 export const NULLIFIER_RECORD_DISCRIMINATOR = 0x03;
@@ -47,9 +47,11 @@ export const OPERATION_TYPE_LABELS: Record<number, string> = {
 export interface ExplorerDeposit {
   pubkey: string;
   amountSats: bigint;
-  commitment: string;
   leafIndex: bigint;
-  createdAt: number;
+  /** Commitment hex (from indexer events, not on-chain) */
+  commitment?: string;
+  /** Unix timestamp (from indexer events, not on-chain) */
+  createdAt?: number;
 }
 
 /** Transfer event — either a new commitment or a spent nullifier */
@@ -125,7 +127,7 @@ function decodeBase64(b64: string): Uint8Array {
 // Parsers
 // =============================================================================
 
-/** Parse a StealthAnnouncement for explorer display */
+/** Parse a StealthAnnouncement for explorer display (82B layout) */
 function parseAnnouncement(pubkey: string, data: Uint8Array) {
   const amountSats = readU64LE(data, 34);
   return {
@@ -134,27 +136,24 @@ function parseAnnouncement(pubkey: string, data: Uint8Array) {
     amountSats,
     commitment: toHex(data.slice(42, 74)),
     leafIndex: readU64LE(data, 74),
-    createdAt: readI64LE(data, 82),
     isDeposit: amountSats <= MAX_PLAINTEXT_SATS,
   };
 }
 
-/** Parse a NullifierRecord account (88 bytes) */
+/** Parse a NullifierRecord account (1 byte — slim layout)
+ * Only confirms existence (discriminator = 0x03). Metadata from indexer events. */
 export function parseNullifierRecord(
   pubkey: string,
-  data: Uint8Array
+  _data: Uint8Array
 ): ExplorerTransferEvent {
   return {
     type: "nullifier",
     pubkey,
-    timestamp: readI64LE(data, 40),
-    nullifierHash: toHex(data.slice(8, 40)),
-    operationType: OPERATION_TYPE_LABELS[data[1]] ?? `Unknown(${data[1]})`,
-    spentBy: bs58Encode(data.slice(48, 80)),
+    timestamp: 0, // metadata available from indexer
   };
 }
 
-/** Parse a RedemptionRequest account (118 bytes) */
+/** Parse a RedemptionRequest account (90 bytes, raw scriptPubKey) */
 export function parseRedemptionRequest(
   pubkey: string,
   data: Uint8Array
@@ -170,7 +169,7 @@ export function parseRedemptionRequest(
     amountSats: readU64LE(data, 48),
     status,
     requester: bs58Encode(data.slice(16, 48)),
-    btcScript: toHex(data.slice(56, 56 + Math.min(scriptLen, 62))),
+    btcScript: toHex(data.slice(56, 56 + Math.min(scriptLen, 34))),
   };
 }
 
@@ -205,46 +204,75 @@ async function fetchAccountsBySize(
 // Fetchers
 // =============================================================================
 
+/** Indexer leaf data for enriching explorer deposits */
+export interface IndexerLeaf {
+  leaf_index: number;
+  commitment: string; // hex
+  created_at: number; // unix timestamp
+}
+
 /** Fetch all deposit StealthAnnouncements (plaintext amounts) */
 export async function fetchExplorerDeposits(
   rpc: RpcClient,
-  programId: string
+  programId: string,
+  indexerLeaves?: IndexerLeaf[]
 ): Promise<ExplorerDeposit[]> {
   const accounts = await fetchAccountsBySize(rpc, programId, STEALTH_ANNOUNCEMENT_SIZE);
+
+  // Build leaf_index → indexer data map for enrichment
+  const leafMap = new Map<number, IndexerLeaf>();
+  if (indexerLeaves) {
+    for (const leaf of indexerLeaves) {
+      leafMap.set(leaf.leaf_index, leaf);
+    }
+  }
 
   return accounts
     .map(({ pubkey, data }) => parseAnnouncement(pubkey, data))
     .filter((a) => a.isDeposit)
-    .map(({ pubkey, amountSats, commitment, leafIndex, createdAt }) => ({
-      pubkey,
-      amountSats,
-      commitment,
-      leafIndex,
-      createdAt,
-    }))
-    .sort((a, b) => b.createdAt - a.createdAt);
+    .map(({ pubkey, amountSats, leafIndex, commitment }) => {
+      const indexerData = leafMap.get(Number(leafIndex));
+      return {
+        pubkey,
+        amountSats,
+        leafIndex,
+        commitment, // from on-chain account (self-sovereign)
+        createdAt: indexerData?.created_at,
+      };
+    })
+    .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
 }
 
 /** Fetch all transfer events (encrypted announcements + nullifiers) */
 export async function fetchExplorerTransfers(
   rpc: RpcClient,
-  programId: string
+  programId: string,
+  indexerLeaves?: IndexerLeaf[]
 ): Promise<ExplorerTransferEvent[]> {
   const [announcements, nullifiers] = await Promise.all([
     fetchAccountsBySize(rpc, programId, STEALTH_ANNOUNCEMENT_SIZE),
     fetchAccountsBySize(rpc, programId, NULLIFIER_RECORD_SIZE),
   ]);
 
+  // Build leaf_index → indexer data map for enrichment
+  const leafMap = new Map<number, IndexerLeaf>();
+  if (indexerLeaves) {
+    for (const leaf of indexerLeaves) {
+      leafMap.set(leaf.leaf_index, leaf);
+    }
+  }
+
   const events: ExplorerTransferEvent[] = [];
 
   for (const { pubkey, data } of announcements) {
     const ann = parseAnnouncement(pubkey, data);
     if (ann.isDeposit) continue;
+    const indexerData = leafMap.get(Number(ann.leafIndex));
     events.push({
       type: "commitment",
       pubkey,
-      timestamp: ann.createdAt,
-      commitment: ann.commitment,
+      timestamp: indexerData?.created_at ?? 0,
+      commitment: ann.commitment, // from on-chain account
       leafIndex: ann.leafIndex,
     });
   }
@@ -253,7 +281,7 @@ export async function fetchExplorerTransfers(
     events.push(parseNullifierRecord(pubkey, data));
   }
 
-  return events.sort((a, b) => b.timestamp - a.timestamp);
+  return events;
 }
 
 /** Fetch all redemption requests */

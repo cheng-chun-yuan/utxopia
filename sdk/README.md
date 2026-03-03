@@ -91,7 +91,7 @@ const noteData = buildAddDemoNoteData(secret); // 32-byte secret
 
 // Build demo stealth instruction data
 const stealthData = buildAddDemoStealthData(
-  ephemeralPub,  // 33 bytes
+  ephemeralPub,  // 32 bytes (Ed25519)
   commitment,    // 32 bytes
   amountSats     // bigint
 );
@@ -215,10 +215,11 @@ DEMO_INSTRUCTION.ADD_DEMO_STEALTH // 22
 
 ```typescript
 interface ZVaultKeys {
-  spendingPubKey: GrumpkinPoint;
+  spendingPubKey: BabyJubPoint;
   spendingPrivKey: bigint;
-  viewingPubKey: GrumpkinPoint;
-  viewingPrivKey: bigint;
+  viewingPubKey: Uint8Array;
+  viewingPrivKey: Uint8Array;
+  nullifyingKey: bigint;
 }
 ```
 
@@ -226,7 +227,7 @@ interface ZVaultKeys {
 
 ```typescript
 interface StealthDeposit {
-  ephemeralPub: Uint8Array;  // 33 bytes compressed
+  ephemeralPub: Uint8Array;  // 32 bytes (Ed25519)
   amountSats: bigint;
   commitment: Uint8Array;    // 32 bytes
   createdAt: number;
@@ -238,8 +239,8 @@ interface StealthDeposit {
 ```typescript
 interface ScannedNote {
   amount: bigint;
-  ephemeralPub: GrumpkinPoint;
-  stealthPub: GrumpkinPoint;
+  ephemeralPub: Uint8Array;
+  stealthPub: BabyJubPoint;
   leafIndex: number;
   commitment: Uint8Array;
 }
@@ -260,7 +261,7 @@ interface ConnectionAdapter {
 1. **Never expose spending private key** - Only needed for claiming
 2. **Viewing key can be delegated** - For balance monitoring without spend capability
 3. **Nullifiers prevent double-spending** - Derived from spending key + leaf index
-4. **Commitments hide amounts** - Poseidon2 hash of stealth pubkey + amount
+4. **Commitments hide amounts** - Poseidon hash of NPK, token, and amount
 
 ## Development
 

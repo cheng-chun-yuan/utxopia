@@ -291,8 +291,10 @@ export {
 export {
   computeBoundParamsHash,
   createUnshieldBoundParams,
+  createRedeemBoundParams,
   DEFAULT_BOUND_PARAMS,
   type BoundParams,
+  type BoundParamsMode,
 } from "./bound-params";
 
 // ==========================================================================
@@ -332,6 +334,7 @@ export {
   deriveBlockHeaderPDA,
   deriveHeightIndexPDA,
   deriveVkRegistryPDA,
+  deriveRedemptionRequestPDA,
   commitmentToBytes,
 } from "./pda";
 
@@ -570,10 +573,20 @@ export {
   // Public unshield instruction
   buildUnshieldInstructionData,
   buildUnshieldInstruction,
+  // Redeem: JoinSplit → BTC withdrawal
+  buildRedeemInstructionData,
+  buildRedeemInstruction,
+  // Public redeem: burn SPL → BTC withdrawal
+  buildPublicRedeemInstructionData,
+  buildPublicRedeemInstruction,
+  // Redemption PDA helper
+  deriveRedemptionRequestPDA as deriveRedemptionRequestPDAFromInstruction,
   type Instruction,
   type RedemptionRequestInstructionOptions,
   type TransactInstructionOptions,
   type UnshieldInstructionOptions,
+  type RedeemInstructionOptions,
+  type PublicRedeemInstructionOptions,
 } from "./instructions";
 
 // ==========================================================================
@@ -605,7 +618,23 @@ export {
   type ExplorerDeposit,
   type ExplorerTransferEvent,
   type ExplorerRedemption,
+  type IndexerLeaf,
 } from "./explorer";
+
+// ==========================================================================
+// Event Parsing (sol_log_data events from on-chain program)
+// ==========================================================================
+
+export {
+  parseProgramEvents,
+  parseLeafInsertedEvent,
+  parseNullifierSpentEvent,
+  EVENT_LEAF_INSERTED,
+  EVENT_NULLIFIER_SPENT,
+  type LeafInsertedEvent,
+  type NullifierSpentEvent,
+  type ProgramEvent,
+} from "./events";
 
 // ==========================================================================
 // Demo Instructions (devnet/localnet only)

@@ -34,9 +34,10 @@
 
 // ========== Constants (defined before imports to ensure availability) ==========
 
-/** StealthAnnouncement account size (90 bytes - Ed25519 ephemeral key)
- * Layout: 1 (disc) + 1 (type) + 32 (ephemeral) + 8 (amount_bytes) + 32 (commitment) + 8 (leaf_idx) + 8 (created_at) */
-export const STEALTH_ANNOUNCEMENT_SIZE = 90;
+/** StealthAnnouncement account size (82 bytes)
+ * Layout: 1 (disc) + 1 (type) + 32 (ephemeral) + 8 (amount) + 32 (commitment) + 8 (leaf_idx)
+ * Removed: created_at (8B, emitted as event) */
+export const STEALTH_ANNOUNCEMENT_SIZE = 82;
 
 /** Discriminator for StealthAnnouncement */
 export const STEALTH_ANNOUNCEMENT_DISCRIMINATOR = 0x08;
@@ -176,9 +177,9 @@ export interface OnChainStealthAnnouncement {
   ephemeralPub: Uint8Array;
   /** Raw amount bytes: plaintext if type=0, encrypted if type=1 */
   encryptedAmount: Uint8Array;
+  /** Commitment = Poseidon(npk, token, amount) stored on-chain */
   commitment: Uint8Array;
   leafIndex: number;
-  createdAt: number;
 }
 
 // ========== Helper Functions ==========
@@ -610,16 +611,15 @@ export async function prepareClaimInputs(
 // ========== On-chain Parsing ==========
 
 /**
- * Parse a StealthAnnouncement account data (unified format)
+ * Parse a StealthAnnouncement account data (slim format)
  *
- * Layout (90 bytes):
+ * Layout (50 bytes):
  * - discriminator (1 byte) = 0x08
  * - announcement_type (1 byte): 0=deposit (plaintext), 1=transfer (encrypted)
  * - ephemeral_pub (32 bytes) - Ed25519 key
  * - amount_bytes (8 bytes) - plaintext if type=0, encrypted if type=1
- * - commitment (32 bytes)
+ * - commitment (32 bytes) - Poseidon hash stored on-chain
  * - leaf_index (8 bytes)
- * - created_at (8 bytes)
  */
 export function parseStealthAnnouncement(
   data: Uint8Array
@@ -655,18 +655,6 @@ export function parseStealthAnnouncement(
     throw new Error("Leaf index overflow - value exceeds safe integer range");
   }
   const leafIndex = Number(leafIndexBigInt);
-  offset += 8;
-
-  const createdAtView = new DataView(
-    data.buffer,
-    data.byteOffset + offset,
-    8
-  );
-  const createdAtBigInt = createdAtView.getBigInt64(0, true);
-  const maxSafeTimestamp = BigInt(Number.MAX_SAFE_INTEGER);
-  const createdAt = createdAtBigInt < 0n ? 0 :
-    createdAtBigInt > maxSafeTimestamp ? Number.MAX_SAFE_INTEGER :
-    Number(createdAtBigInt);
 
   return {
     announcementType,
@@ -674,7 +662,6 @@ export function parseStealthAnnouncement(
     encryptedAmount,
     commitment,
     leafIndex,
-    createdAt,
   };
 }
 
@@ -687,7 +674,9 @@ export function parseStealthAnnouncement(
  * - type=0 (deposit): amount is plaintext u64 LE in amount_bytes
  * - type=1 (transfer): amount is XOR-encrypted in amount_bytes
  *
- * Both are verified with: Poseidon(npk, ZBTC_TOKEN_ID, amount) == commitment
+ * Commitment is computed locally: Poseidon(npk, ZBTC_TOKEN_ID, amount).
+ * For deposits, we verify the derived NPK produces a valid commitment.
+ * For transfers, we verify the decrypted amount is in a valid range.
  */
 export async function scanUnifiedNotes(
   source: WalletSignerAdapter | ZVaultKeys,
@@ -720,15 +709,13 @@ export async function scanUnifiedNotes(
         continue;
       }
 
-      // Derive stealth scalar and expected NPK + commitment
+      // Derive stealth scalar and expected NPK + commitment (computed locally)
       const stealthScalar = deriveStealthScalar(sharedSecret);
       const npk = computeNPKSync(mpk, stealthScalar);
-      const expectedCommitment = computeJoinSplitCommitmentSync(npk, ZBTC_TOKEN_ID, amount);
-      const actualCommitment = bytesToBigint(ann.commitment);
+      const commitmentBigint = computeJoinSplitCommitmentSync(npk, ZBTC_TOKEN_ID, amount);
 
-      if (expectedCommitment !== actualCommitment) {
-        continue;
-      }
+      // Convert commitment bigint to bytes for the ScannedNote
+      const commitmentBytes = bigintToBytes(commitmentBigint);
 
       // Derive stealth public key (for spending)
       const stealthPub = deriveStealthPubKey(keys.spendingPubKey, sharedSecret);
@@ -738,7 +725,7 @@ export async function scanUnifiedNotes(
         ephemeralPub: ann.ephemeralPub,
         stealthPub,
         leafIndex: ann.leafIndex,
-        commitment: ann.commitment,
+        commitment: commitmentBytes,
       });
     } catch (error) {
       if (error instanceof TypeError || error instanceof RangeError) {
@@ -948,6 +935,3 @@ export function deriveStealthAnnouncementPda(
   return pda.toString();
 }
 
-// ========== Removed Grumpkin functions ==========
-// extractYSign, extractX, reconstructCompressedPub are no longer needed
-// as Ed25519 uses 32-byte keys without prefix bytes

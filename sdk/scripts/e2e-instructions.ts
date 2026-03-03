@@ -634,7 +634,7 @@ async function main() {
   log.success("needsBuffer / bufferNeedsBuffer - Buffer utilities");
   log.success("computeUnifiedCommitment - Poseidon2 commitment");
   log.success("computeNullifier - Nullifier derivation");
-  log.success("generateGrumpkinKeyPair - Grumpkin keypair");
+  log.success("generateGrumpkinKeyPair - Baby Jubjub keypair");
   log.success("pointToCompressedBytes - Point compression");
   log.success("All PDA derivation functions");
 

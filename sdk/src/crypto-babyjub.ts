@@ -5,7 +5,7 @@
  *   a*x^2 + y^2 = 1 + d*x^2*y^2
  *   a = 168700, d = 168696
  *
- * Over BN254 scalar field (same as Grumpkin base field).
+ * Over BN254 scalar field.
  * Used for spending keys and in-circuit key derivation via BabyPbk().
  *
  * @see https://eips.ethereum.org/EIPS/eip-2494

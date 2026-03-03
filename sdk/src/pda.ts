@@ -201,6 +201,31 @@ export async function deriveVerifiedTransactionPDA(
 }
 
 // =============================================================================
+// Redemption Request PDAs
+// =============================================================================
+
+/**
+ * Derive Redemption Request PDA
+ *
+ * Seeds: ["redemption", user_pubkey(32), nonce_le(8)]
+ */
+export async function deriveRedemptionRequestPDA(
+  userPubkey: Uint8Array,
+  nonce: bigint,
+  programId: Address = ZVAULT_PROGRAM_ID
+): Promise<[Address, number]> {
+  const nonceBytes = new Uint8Array(8);
+  const view = new DataView(nonceBytes.buffer);
+  view.setBigUint64(0, nonce, true);
+
+  const result = await getProgramDerivedAddress({
+    programAddress: programId,
+    seeds: [new TextEncoder().encode("redemption"), userPubkey, nonceBytes],
+  });
+  return [result[0], result[1]];
+}
+
+// =============================================================================
 // VK Registry PDAs
 // =============================================================================
 

@@ -12,6 +12,9 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { BN254_FIELD_PRIME, bytesToBigint } from "./crypto";
 
+/** Bound params mode: transfer(0), unshield(1), redeem(2) */
+export type BoundParamsMode = 'transfer' | 'unshield' | 'redeem';
+
 export interface BoundParams {
   /** Tree number (0 for default) */
   treeNumber: number;
@@ -19,6 +22,8 @@ export interface BoundParams {
   unshieldAddress: Uint8Array | null;
   /** Chain ID (prevents cross-chain replay) */
   chainId: bigint;
+  /** Mode flag: 'transfer'(0), 'unshield'(1), 'redeem'(2). Defaults to inferred from unshieldAddress. */
+  mode?: BoundParamsMode;
 }
 
 /**
@@ -39,8 +44,14 @@ export function computeBoundParamsHash(params: BoundParams): bigint {
   // treeNumber (4 bytes LE)
   view.setUint32(0, params.treeNumber, true);
 
-  // hasUnshield (1 byte)
-  buf[4] = params.unshieldAddress ? 1 : 0;
+  // flag byte: transfer=0, unshield=1, redeem=2
+  if (params.mode === 'redeem') {
+    buf[4] = 2;
+  } else if (params.mode === 'unshield' || params.unshieldAddress) {
+    buf[4] = 1;
+  } else {
+    buf[4] = 0;
+  }
 
   // unshieldAddress (32 bytes, zeros if null)
   if (params.unshieldAddress) {
@@ -69,6 +80,21 @@ export const DEFAULT_BOUND_PARAMS: BoundParams = {
   unshieldAddress: null,
   chainId: 103n, // Solana devnet chain ID
 };
+
+/**
+ * Create bound params for a redeem (JoinSplit → BTC withdrawal)
+ */
+export function createRedeemBoundParams(
+  chainId: bigint = 103n,
+  treeNumber: number = 0,
+): BoundParams {
+  return {
+    treeNumber,
+    unshieldAddress: null,
+    chainId,
+    mode: 'redeem',
+  };
+}
 
 /**
  * Create bound params for an unshield (public withdrawal)

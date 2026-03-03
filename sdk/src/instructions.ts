@@ -45,6 +45,8 @@ const INSTRUCTION = {
   ADD_DEMO_STEALTH: 13,
   TRANSACT: 14,
   UNSHIELD: 15,
+  REDEEM: 16,
+  PUBLIC_REDEEM: 17,
 } as const;
 
 /** Export instruction discriminators for consumers */
@@ -132,8 +134,8 @@ export function buildRedemptionRequestInstructionData(
   amountSats: bigint,
   btcScript: Uint8Array
 ): Uint8Array {
-  if (btcScript.length > 62) {
-    throw new Error("BTC scriptPubKey too long (max 62 bytes)");
+  if (btcScript.length > 34) {
+    throw new Error("BTC scriptPubKey too long (max 34 bytes)");
   }
 
   // Layout: discriminator(1) + amount(8) + script_len(1) + script
@@ -650,6 +652,343 @@ export function buildUnshieldInstruction(options: UnshieldInstructionOptions): I
     programAddress: config.zvaultProgramId,
     accounts,
     data,
+  };
+}
+
+// =============================================================================
+// Redeem Instruction Builder (JoinSplit → BTC withdrawal)
+// =============================================================================
+
+/** Redeem instruction options */
+export interface RedeemInstructionOptions {
+  /** Number of input notes being spent */
+  nInputs: number;
+  /** Number of output notes (includes redeem output as last) */
+  nOutputs: number;
+  /** Groth16 proof bytes (256 bytes) */
+  proofBytes: Uint8Array;
+  /** Merkle root */
+  merkleRoot: Uint8Array;
+  /** Bound parameters hash (computed with createRedeemBoundParams) */
+  boundParamsHash: Uint8Array;
+  /** Nullifiers (32 bytes each) */
+  nullifiers: Uint8Array[];
+  /** Output commitments (32 bytes each, last = redeem output) */
+  commitmentsOut: Uint8Array[];
+  /** Per-output stealth data for tree outputs only (n_outputs - 1 entries) */
+  stealthData: Uint8Array[];
+  /** Amount being redeemed in satoshis */
+  redeemAmount: bigint;
+  /** Bitcoin scriptPubKey for withdrawal (raw bytes, variable length) */
+  btcScript: Uint8Array;
+  /** Unique nonce for this redemption request */
+  requestNonce: bigint;
+  /** Account addresses */
+  accounts: {
+    poolState: Address;
+    commitmentTree: Address;
+    vkRegistry: Address;
+    user: Address;
+    /** Nullifier record PDAs (one per input) */
+    nullifierRecords: Address[];
+    /** Stealth announcement PDAs (one per tree output, n_outputs - 1) */
+    stealthAnnouncements: Address[];
+    /** Redemption request PDA */
+    redemptionRequest: Address;
+  };
+}
+
+/**
+ * Build redeem instruction data
+ *
+ * Layout:
+ * - n_inputs: u8
+ * - n_outputs: u8
+ * - proof: [u8; 256]
+ * - merkle_root: [u8; 32]
+ * - bound_params_hash: [u8; 32]
+ * - nullifiers: [[u8; 32]; n_inputs]
+ * - commitments_out: [[u8; 32]; n_outputs]
+ * - stealth_data: [ephemeral_pub(32) + encrypted_amount(8)] x (n_outputs - 1)
+ * - redeem_amount: u64 LE
+ * - btc_script_len: u8
+ * - btc_script: [u8; btc_script_len] (variable)
+ * - request_nonce: u64 LE
+ */
+export function buildRedeemInstructionData(options: {
+  nInputs: number;
+  nOutputs: number;
+  proofBytes: Uint8Array;
+  merkleRoot: Uint8Array;
+  boundParamsHash: Uint8Array;
+  nullifiers: Uint8Array[];
+  commitmentsOut: Uint8Array[];
+  stealthData: Uint8Array[];
+  redeemAmount: bigint;
+  btcScript: Uint8Array;
+  requestNonce: bigint;
+}): Uint8Array {
+  const { nInputs, nOutputs, proofBytes, merkleRoot, boundParamsHash, nullifiers, commitmentsOut, stealthData, redeemAmount, btcScript, requestNonce } = options;
+
+  if (proofBytes.length !== 256) {
+    throw new Error(`Groth16 proof must be 256 bytes, got ${proofBytes.length}`);
+  }
+  if (btcScript.length === 0 || btcScript.length > 34) {
+    throw new Error(`BTC scriptPubKey must be 1-62 bytes, got ${btcScript.length}`);
+  }
+  const nTreeOutputs = nOutputs - 1;
+  if (stealthData.length !== nTreeOutputs) {
+    throw new Error(`Expected ${nTreeOutputs} stealth data entries, got ${stealthData.length}`);
+  }
+
+  const STEALTH_DATA_PER_OUTPUT = 40;
+  const totalSize = 1 + 2 + 256 + 32 + 32 + (nInputs * 32) + (nOutputs * 32) + (nTreeOutputs * STEALTH_DATA_PER_OUTPUT) + 8 + 1 + btcScript.length + 8;
+  const data = new Uint8Array(totalSize);
+  const view = new DataView(data.buffer);
+
+  let offset = 0;
+
+  // Discriminator
+  data[offset++] = INSTRUCTION.REDEEM;
+
+  // Header
+  data[offset++] = nInputs;
+  data[offset++] = nOutputs;
+
+  // Proof
+  data.set(proofBytes, offset);
+  offset += 256;
+
+  // Merkle root
+  data.set(merkleRoot, offset);
+  offset += 32;
+
+  // Bound params hash
+  data.set(boundParamsHash, offset);
+  offset += 32;
+
+  // Nullifiers
+  for (const nullifier of nullifiers) {
+    data.set(nullifier, offset);
+    offset += 32;
+  }
+
+  // Output commitments
+  for (const commitment of commitmentsOut) {
+    data.set(commitment, offset);
+    offset += 32;
+  }
+
+  // Stealth data for tree outputs only
+  for (const sd of stealthData) {
+    data.set(sd.slice(0, STEALTH_DATA_PER_OUTPUT), offset);
+    offset += STEALTH_DATA_PER_OUTPUT;
+  }
+
+  // Redeem amount (u64 LE)
+  view.setBigUint64(offset, redeemAmount, true);
+  offset += 8;
+
+  // BTC script (variable length)
+  data[offset++] = btcScript.length;
+  data.set(btcScript, offset);
+  offset += btcScript.length;
+
+  // Request nonce (u64 LE)
+  view.setBigUint64(offset, requestNonce, true);
+
+  return data;
+}
+
+/**
+ * Build a complete redeem instruction
+ *
+ * Accounts:
+ * 0. pool_state (writable)
+ * 1. commitment_tree (writable)
+ * 2. vk_registry (read)
+ * 3. user (signer)
+ * 4. system_program (read)
+ * 5..5+N nullifier_records (writable)
+ * 5+N..5+N+(M-1) stealth_announcements (writable)
+ * 5+N+(M-1) redemption_request (writable)
+ */
+export function buildRedeemInstruction(options: RedeemInstructionOptions): Instruction {
+  const config = getConfig();
+
+  const data = buildRedeemInstructionData({
+    nInputs: options.nInputs,
+    nOutputs: options.nOutputs,
+    proofBytes: options.proofBytes,
+    merkleRoot: options.merkleRoot,
+    boundParamsHash: options.boundParamsHash,
+    nullifiers: options.nullifiers,
+    commitmentsOut: options.commitmentsOut,
+    stealthData: options.stealthData,
+    redeemAmount: options.redeemAmount,
+    btcScript: options.btcScript,
+    requestNonce: options.requestNonce,
+  });
+
+  const accounts: Instruction["accounts"] = [
+    { address: options.accounts.poolState, role: AccountRole.WRITABLE },
+    { address: options.accounts.commitmentTree, role: AccountRole.WRITABLE },
+    { address: options.accounts.vkRegistry, role: AccountRole.READONLY },
+    { address: options.accounts.user, role: AccountRole.WRITABLE_SIGNER },
+    { address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY },
+  ];
+
+  // Nullifier records
+  for (const nr of options.accounts.nullifierRecords) {
+    accounts.push({ address: nr, role: AccountRole.WRITABLE });
+  }
+
+  // Stealth announcements (tree outputs only)
+  for (const sa of options.accounts.stealthAnnouncements) {
+    accounts.push({ address: sa, role: AccountRole.WRITABLE });
+  }
+
+  // Redemption request PDA
+  accounts.push({ address: options.accounts.redemptionRequest, role: AccountRole.WRITABLE });
+
+  return {
+    programAddress: config.zvaultProgramId,
+    accounts,
+    data,
+  };
+}
+
+// =============================================================================
+// Public Redeem Instruction Builder (burn SPL → BTC withdrawal)
+// =============================================================================
+
+/** Public redeem instruction options */
+export interface PublicRedeemInstructionOptions {
+  /** Amount to redeem in satoshis */
+  amountSats: bigint;
+  /** Bitcoin scriptPubKey for withdrawal (raw bytes, variable length) */
+  btcScript: Uint8Array;
+  /** Unique nonce for this redemption request */
+  requestNonce: bigint;
+  /** Account addresses */
+  accounts: {
+    poolState: Address;
+    zbtcMint: Address;
+    userTokenAccount: Address;
+    user: Address;
+    /** Redemption request PDA */
+    redemptionRequest: Address;
+  };
+}
+
+/**
+ * Build public redeem instruction data
+ *
+ * Layout:
+ * - amount_sats: u64 LE (8)
+ * - btc_script_len: u8 (1)
+ * - btc_script: [u8; btc_script_len] (variable)
+ * - request_nonce: u64 LE (8)
+ */
+export function buildPublicRedeemInstructionData(options: {
+  amountSats: bigint;
+  btcScript: Uint8Array;
+  requestNonce: bigint;
+}): Uint8Array {
+  const { amountSats, btcScript, requestNonce } = options;
+
+  if (btcScript.length === 0 || btcScript.length > 34) {
+    throw new Error(`BTC scriptPubKey must be 1-62 bytes, got ${btcScript.length}`);
+  }
+
+  const totalSize = 1 + 8 + 1 + btcScript.length + 8;
+  const data = new Uint8Array(totalSize);
+  const view = new DataView(data.buffer);
+
+  let offset = 0;
+
+  // Discriminator
+  data[offset++] = INSTRUCTION.PUBLIC_REDEEM;
+
+  // Amount (u64 LE)
+  view.setBigUint64(offset, amountSats, true);
+  offset += 8;
+
+  // BTC script (variable length)
+  data[offset++] = btcScript.length;
+  data.set(btcScript, offset);
+  offset += btcScript.length;
+
+  // Request nonce (u64 LE)
+  view.setBigUint64(offset, requestNonce, true);
+
+  return data;
+}
+
+/**
+ * Build a complete public redeem instruction
+ *
+ * Accounts:
+ * 0. pool_state (writable)
+ * 1. zbtc_mint (writable)
+ * 2. user_token_account (writable)
+ * 3. user (signer)
+ * 4. system_program (read)
+ * 5. token_program (read, Token-2022)
+ * 6. redemption_request (writable PDA)
+ */
+export function buildPublicRedeemInstruction(options: PublicRedeemInstructionOptions): Instruction {
+  const config = getConfig();
+
+  const data = buildPublicRedeemInstructionData({
+    amountSats: options.amountSats,
+    btcScript: options.btcScript,
+    requestNonce: options.requestNonce,
+  });
+
+  const accounts: Instruction["accounts"] = [
+    { address: options.accounts.poolState, role: AccountRole.WRITABLE },
+    { address: options.accounts.zbtcMint, role: AccountRole.WRITABLE },
+    { address: options.accounts.userTokenAccount, role: AccountRole.WRITABLE },
+    { address: options.accounts.user, role: AccountRole.WRITABLE_SIGNER },
+    { address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY },
+    { address: TOKEN_2022_PROGRAM_ID, role: AccountRole.READONLY },
+    { address: options.accounts.redemptionRequest, role: AccountRole.WRITABLE },
+  ];
+
+  return {
+    programAddress: config.zvaultProgramId,
+    accounts,
+    data,
+  };
+}
+
+// =============================================================================
+// Redemption Request PDA Derivation
+// =============================================================================
+
+/**
+ * Derive RedemptionRequest PDA
+ *
+ * Seeds: ["redemption", user_pubkey, nonce_le_bytes]
+ */
+export function deriveRedemptionRequestPDA(
+  userAddress: Address,
+  nonce: bigint,
+  programAddress?: Address,
+): { address: Uint8Array; seeds: Uint8Array[] } {
+  const userBytes = addressToBytes(userAddress);
+  const nonceBytes = new Uint8Array(8);
+  const view = new DataView(nonceBytes.buffer);
+  view.setBigUint64(0, nonce, true);
+
+  return {
+    address: userBytes, // Caller should use getProgramDerivedAddress
+    seeds: [
+      new TextEncoder().encode("redemption"),
+      userBytes,
+      nonceBytes,
+    ],
   };
 }
 

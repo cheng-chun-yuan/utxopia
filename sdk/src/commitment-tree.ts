@@ -563,9 +563,9 @@ const STEALTH_ANNOUNCEMENT_DISCRIMINATOR = 0x08;
 
 /**
  * Stealth announcement account size
- * Layout: 1 (disc) + 1 (bump) + 32 (ephemeral Ed25519) + 8 (encrypted_amount) + 32 (commitment) + 8 (leaf_idx) + 8 (created_at)
+ * Layout: 1 (disc) + 1 (type) + 32 (ephemeral Ed25519) + 8 (amount) + 32 (commitment) + 8 (leaf_idx)
  */
-const STEALTH_ANNOUNCEMENT_SIZE = 90;
+const STEALTH_ANNOUNCEMENT_SIZE = 82;
 
 /**
  * RPC client interface for on-chain queries
@@ -604,8 +604,8 @@ export interface OnChainMerkleProof {
  * Parse stealth announcement account data
  */
 function parseAnnouncementData(data: Uint8Array): {
-  commitment: bigint;
   leafIndex: number;
+  commitment: Uint8Array;
   encryptedAmount: Uint8Array;
 } | null {
   if (data.length < STEALTH_ANNOUNCEMENT_SIZE) {
@@ -616,19 +616,16 @@ function parseAnnouncementData(data: Uint8Array): {
     return null;
   }
 
-  // Skip: discriminator (1) + bump (1) + ephemeralPub (32 Ed25519) + encryptedAmount (8)
-  const commitmentOffset = 2 + 32 + 8;
-  const commitment = bytesToBigintBE(data.slice(commitmentOffset, commitmentOffset + 32));
+  // Layout: disc(1) + type(1) + ephemeral(32) + amount(8) + commitment(32) + leaf_index(8) = 82
+  const encryptedAmount = data.slice(2 + 32, 2 + 32 + 8);
+  const commitment = data.slice(42, 74);
 
-  // Leaf index: after commitment (32 bytes)
-  const leafIndexOffset = commitmentOffset + 32;
+  // Leaf index at offset 74
+  const leafIndexOffset = 74;
   const leafIndexView = new DataView(data.buffer, data.byteOffset + leafIndexOffset, 8);
   const leafIndex = Number(leafIndexView.getBigUint64(0, true));
 
-  // Encrypted amount for reference
-  const encryptedAmount = data.slice(2 + 32, 2 + 32 + 8);
-
-  return { commitment, leafIndex, encryptedAmount };
+  return { leafIndex, commitment, encryptedAmount };
 }
 
 /**
@@ -709,7 +706,7 @@ function toBase58(bytes: Uint8Array): string {
 export async function buildCommitmentTreeFromChain(
   rpc: RpcClient,
   programId: string,
-  options?: { maxLeafIndex?: number }
+  options?: { maxLeafIndex?: number; commitments?: Map<number, bigint> }
 ): Promise<CommitmentTreeIndex> {
   console.log("[CommitmentTree] Fetching stealth announcements from chain...");
 
@@ -725,11 +722,16 @@ export async function buildCommitmentTreeFromChain(
 
   console.log(`[CommitmentTree] Found ${accounts.length} stealth announcements`);
 
-  // Parse and sort by leaf index
+  // With slim layout, commitments are no longer stored on-chain.
+  // To build the tree, we need commitments from the indexer API.
+  // If a commitments map is provided via options, use it.
+  // Otherwise, this function returns a tree built from indexer data only.
+  const commitmentsByIndex = options?.commitments ?? new Map<number, bigint>();
+
+  // Parse leaf indices from on-chain accounts
   const announcements: Array<{ commitment: bigint; leafIndex: number }> = [];
 
   for (const { account } of accounts) {
-    // Handle base64 or Uint8Array data
     let data: Uint8Array;
     if (typeof account.data === "string") {
       data = Uint8Array.from(atob(account.data), (c) => c.charCodeAt(0));
@@ -739,11 +741,15 @@ export async function buildCommitmentTreeFromChain(
 
     const parsed = parseAnnouncementData(data);
     if (parsed) {
-      // Filter out stale announcements from before a tree reset
       if (options?.maxLeafIndex !== undefined && parsed.leafIndex >= options.maxLeafIndex) {
         continue;
       }
-      announcements.push({ commitment: parsed.commitment, leafIndex: parsed.leafIndex });
+      // Use on-chain commitment (self-sovereign), fall back to indexer
+      const onChainCommitment = bytesToBigintBE(parsed.commitment);
+      const commitment = onChainCommitment !== 0n
+        ? onChainCommitment
+        : (commitmentsByIndex.get(parsed.leafIndex) ?? 0n);
+      announcements.push({ commitment, leafIndex: parsed.leafIndex });
     }
   }
 
@@ -788,62 +794,27 @@ export async function buildCommitmentTreeFromChain(
 }
 
 /**
- * Get leaf index for a commitment from on-chain data
+ * Get leaf index for a commitment.
+ *
+ * With slim StealthAnnouncement layout, commitment is no longer stored on-chain.
+ * Use scanUnifiedNotes() to get leafIndex for your notes, or query the indexer API.
+ * This function builds the full tree from chain to find the index.
  *
  * @param rpc - RPC client
  * @param programId - zVault program ID
  * @param commitment - Commitment to find
  * @returns Leaf index or -1 if not found
- *
- * @example
- * ```typescript
- * const leafIndex = await getLeafIndexForCommitment(connection, programId, myCommitment);
- * if (leafIndex >= 0) {
- *   console.log(`Found at index ${leafIndex}`);
- * }
- * ```
  */
 export async function getLeafIndexForCommitment(
   rpc: RpcClient,
   programId: string,
   commitment: bigint
 ): Promise<number> {
-  // Convert commitment to 32 bytes for filter
-  const commitmentBytes = new Uint8Array(32);
-  let temp = commitment;
-  for (let i = 31; i >= 0; i--) {
-    commitmentBytes[i] = Number(temp & 0xffn);
-    temp = temp >> 8n;
-  }
-
-  // Filter by commitment at offset 42 (2 + 32 + 8)
-  const commitmentOffset = 2 + 32 + 8;
-
   try {
-    const accounts = await rpc.getProgramAccounts(programId, {
-      filters: [
-        { memcmp: { offset: 0, bytes: toBase58(new Uint8Array([STEALTH_ANNOUNCEMENT_DISCRIMINATOR])) } },
-        { memcmp: { offset: commitmentOffset, bytes: toBase58(commitmentBytes) } },
-        { dataSize: STEALTH_ANNOUNCEMENT_SIZE },
-      ],
-      encoding: "base64",
-    });
-
-    if (accounts.length === 0) {
-      return -1;
-    }
-
-    // Parse first match
-    const { account } = accounts[0];
-    let data: Uint8Array;
-    if (typeof account.data === "string") {
-      data = Uint8Array.from(atob(account.data), (c) => c.charCodeAt(0));
-    } else {
-      data = account.data;
-    }
-
-    const parsed = parseAnnouncementData(data);
-    return parsed?.leafIndex ?? -1;
+    const tree = await buildCommitmentTreeFromChain(rpc, programId);
+    if (!tree) return -1;
+    const proof = tree.getMerkleProof(commitment);
+    return proof ? Number(proof.leafIndex) : -1;
   } catch (error) {
     console.error("[CommitmentTree] Error fetching leaf index:", error);
     return -1;

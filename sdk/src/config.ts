@@ -171,27 +171,28 @@ export const LOCALNET_CHADBUFFER_PROGRAM_ID: Address = address(
 // =============================================================================
 
 /**
- * Devnet Configuration (v3.2.0)
+ * Devnet Configuration (v3.3.0)
  *
- * Fresh deployment 2026-02-28:
- * - JoinSplit circuit architecture
- * - Program ID: B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq
+ * Fresh deployment 2026-03-03:
+ * - Slim accounts: StealthAnnouncement 82B, NullifierRecord 1B
+ * - Event emission via sol_log_data
+ * - Program ID: 25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM
  */
 export const DEVNET_CONFIG: NetworkConfig = {
   network: "devnet",
 
-  // Program IDs (fresh deployment 2026-02-28)
-  zvaultProgramId: address("B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq"),
+  // Program IDs (fresh deployment 2026-03-03)
+  zvaultProgramId: address("25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM"),
   btcLightClientProgramId: address("Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"),
   chadbufferProgramId: CHADBUFFER_PROGRAM_ID,
   token2022ProgramId: TOKEN_2022_PROGRAM_ID,
   ataProgramId: ATA_PROGRAM_ID,
 
-  // Deployed Accounts (fresh deployment 2026-02-28)
-  poolStatePda: address("D2fPWueWrn5H3fazLz7QYydxpBMnL7iqkaxEpFPion5i"),
-  commitmentTreePda: address("3t2wuqAE2mDa5du64Edfie5PYh22eQXqSVvxboPr1kLs"),
-  zbtcMint: address("4pLu3qTY3kNWvvftPG22XzXxWuRPkg7GHWW8hcnoUPgd"),
-  poolVault: address("BXEwCHkUttWopX93jTTik4fYn3kxsgWKqneyoFZRxAUo"),
+  // Deployed Accounts (fresh deployment 2026-03-03)
+  poolStatePda: address("7Xr7MthZPc7YeHfU5SRmguxovhiDNhfestWgtPruUfjE"),
+  commitmentTreePda: address("76bh2QB7c9L73yHea8AV7vthsDsuDCp2QqQToGcA3JdK"),
+  zbtcMint: address("8wCJtuj6ir9VxvjJ14EK4KpFffx4gSKV5ZJ1jYSdRzxN"),
+  poolVault: address("ELFqueP7akYfkM7nTfWs3tTS5MJpGnbvMuBUxayKT6zb"),
 
   // RPC Endpoints
   solanaRpcUrl: "https://api.devnet.solana.com",
@@ -205,7 +206,7 @@ export const DEVNET_CONFIG: NetworkConfig = {
   circuitCdnUrl: "https://circuits.amidoggy.xyz",
 
   // Groth16 Verifier: verification is inline in the zVault program (no separate verifier program)
-  groth16VerifierProgramId: address("B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq"),
+  groth16VerifierProgramId: address("25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM"),
 
   // VK Hashes (SHA256 of serialized VK bytes, generated from circom trusted setup)
   vkHashes: {
@@ -434,14 +435,14 @@ export const BTC_LIGHT_CLIENT_PROGRAM_ID: Address = DEVNET_CONFIG.btcLightClient
 // Version Info
 // =============================================================================
 
-export const SDK_VERSION = "3.2.0";
+export const SDK_VERSION = "3.3.0";
 
 /** JoinSplit Merkle tree depth */
 export const JOINSPLIT_TREE_DEPTH = 16;
 
 export const DEPLOYMENT_INFO = {
   version: SDK_VERSION,
-  deployedAt: "2026-02-28",
+  deployedAt: "2026-03-03",
   network: "devnet" as NetworkType,
   features: [
     "demo-stealth",
