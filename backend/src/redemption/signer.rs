@@ -149,8 +149,6 @@ pub struct MpcSigner {
     frost_client: FrostClient,
     /// Group public key (x-only)
     pub public_key: XOnlyPublicKey,
-    /// Secp256k1 context
-    secp: Secp256k1<secp256k1::All>,
 }
 
 impl MpcSigner {
@@ -163,7 +161,6 @@ impl MpcSigner {
         Self {
             frost_client,
             public_key,
-            secp: Secp256k1::new(),
         }
     }
 }

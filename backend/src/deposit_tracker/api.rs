@@ -64,9 +64,10 @@ pub fn create_deposit_router(tracker: DepositTrackerService) -> Router {
         .allow_headers(Any);
 
     Router::new()
-        // Deposit query endpoints (auto-detected deposits)
+        // Deposit registration and query endpoints
+        .route("/api/deposits", get(handle_list_deposits).post(handle_register_deposit))
         .route("/api/deposits/:id", get(handle_get_deposit))
-        .route("/api/deposits", get(handle_list_deposits))
+        .route("/api/deposits/by-address/:address", get(handle_get_by_address))
         // WebSocket endpoints
         .route("/ws/deposits/:id", get(ws_deposit_handler_wrapper))
         .route("/ws/deposits", get(ws_all_deposits_handler_wrapper))
@@ -126,6 +127,72 @@ async fn handle_list_deposits(State(state): State<SharedAppState>) -> impl IntoR
         "deposits": deposits,
         "stats": tracker.stats()
     }))
+}
+
+/// POST /api/deposits
+///
+/// Register a deposit for tracking. If the address already exists, returns the existing record.
+async fn handle_register_deposit(
+    State(state): State<SharedAppState>,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let taproot_address = body.get("taproot_address").and_then(|v| v.as_str());
+    let commitment = body.get("commitment").and_then(|v| v.as_str());
+    let amount_sats = body.get("amount_sats").and_then(|v| v.as_u64());
+    let ephemeral_pub = body.get("ephemeral_pub").and_then(|v| v.as_str()).map(String::from);
+
+    let (taproot_address, commitment, amount_sats) = match (taproot_address, commitment, amount_sats) {
+        (Some(a), Some(c), Some(amt)) => (a.to_string(), c.to_string(), amt),
+        _ => {
+            return (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                "success": false,
+                "error": "Missing required fields: taproot_address, commitment, amount_sats"
+            }))).into_response();
+        }
+    };
+
+    let tracker = state.tracker.read().await;
+
+    match tracker.register_deposit(taproot_address, commitment, amount_sats, ephemeral_pub) {
+        Ok(record) => {
+            let response = DepositStatusResponse::from(&record);
+            (StatusCode::OK, Json(serde_json::json!({
+                "success": true,
+                "deposit_id": record.id,
+                "deposit": response
+            }))).into_response()
+        }
+        Err(e) => {
+            (StatusCode::BAD_REQUEST, Json(serde_json::json!({
+                "success": false,
+                "error": e.to_string()
+            }))).into_response()
+        }
+    }
+}
+
+/// GET /api/deposits/by-address/:address
+///
+/// Look up a deposit by its taproot address.
+async fn handle_get_by_address(
+    State(state): State<SharedAppState>,
+    Path(address): Path<String>,
+) -> impl IntoResponse {
+    let tracker = state.tracker.read().await;
+
+    match tracker.get_deposit_by_address(&address) {
+        Some(record) => {
+            let response = DepositStatusResponse::from(&record);
+            (StatusCode::OK, Json(response)).into_response()
+        }
+        None => {
+            let error = serde_json::json!({
+                "error": "Not found",
+                "details": format!("No deposit found for address {}", address)
+            });
+            (StatusCode::NOT_FOUND, Json(error)).into_response()
+        }
+    }
 }
 
 /// GET /api/pool/info
@@ -280,11 +347,13 @@ pub async fn start_tracker_server(
     println!("=== zkBTC Deposit Tracker API ===");
     println!("Listening on http://{}", addr);
     println!();
-    println!("Deposit Endpoints (auto-detected via block scanning):");
-    println!("  GET  /api/deposits/:id      - Get deposit status");
-    println!("  GET  /api/deposits          - List all deposits");
-    println!("  WS   /ws/deposits/:id       - Subscribe to deposit updates");
-    println!("  WS   /ws/deposits           - Subscribe to all updates");
+    println!("Deposit Endpoints:");
+    println!("  POST /api/deposits                   - Register deposit for tracking");
+    println!("  GET  /api/deposits                   - List all deposits");
+    println!("  GET  /api/deposits/:id               - Get deposit status by ID");
+    println!("  GET  /api/deposits/by-address/:addr  - Get deposit by taproot address");
+    println!("  WS   /ws/deposits/:id                - Subscribe to deposit updates");
+    println!("  WS   /ws/deposits                    - Subscribe to all updates");
     println!();
     println!("Pool Info:");
     println!("  GET  /api/pool/info          - Pool config for SDK deposits");

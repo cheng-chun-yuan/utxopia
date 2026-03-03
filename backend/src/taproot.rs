@@ -24,7 +24,7 @@
 
 use bitcoin::key::{Keypair, Secp256k1, TweakedPublicKey};
 use bitcoin::secp256k1::{self, SecretKey};
-use bitcoin::taproot::{TaprootBuilder, LeafVersion, TaprootSpendInfo};
+use bitcoin::taproot::{TaprootBuilder, TaprootSpendInfo};
 use bitcoin::opcodes::all::*;
 use bitcoin::script::Builder as ScriptBuilder;
 use bitcoin::{Address, Network, ScriptBuf, XOnlyPublicKey};
@@ -331,11 +331,11 @@ pub fn generate_deposit_address_dual_path(
     // Now we need to incorporate the commitment into the final address
     // We do this by tweaking the output key with the commitment
     // This ensures each commitment gets a unique address
-    let commitment_tweak = compute_commitment_tweak(&output_key.to_inner(), commitment);
+    let commitment_tweak = compute_commitment_tweak(&output_key.to_x_only_public_key(), commitment);
     let scalar = secp256k1::Scalar::from_be_bytes(commitment_tweak)
         .map_err(|_| TaprootError::InvalidScalar)?;
 
-    let final_output_key = output_key.to_inner()
+    let final_output_key = output_key.to_x_only_public_key()
         .add_tweak(secp, &scalar)
         .map_err(|_| TaprootError::TweakFailed)?;
 
@@ -347,15 +347,7 @@ pub fn generate_deposit_address_dual_path(
         network,
     );
 
-    // Get script leaf hash
-    let script_leaf_hash = taproot_spend_info
-        .control_block(&(refund_script.clone(), LeafVersion::TapScript))
-        .map(|cb| {
-            // The leaf hash is part of the control block computation
-            // For simplicity, we compute it from the script
-            compute_tapleaf_hash(&refund_script)
-        })
-        .unwrap_or_else(|| compute_tapleaf_hash(&refund_script));
+    let script_leaf_hash = compute_tapleaf_hash(&refund_script);
 
     Ok(TaprootDepositDualPathRaw {
         address: address.to_string(),

@@ -143,7 +143,7 @@ impl DepositTrackerService {
     /// Set up verifier with Solana keypair
     pub fn with_verifier(mut self, keypair: Keypair) -> Self {
         let program_id = std::env::var("ZVAULT_PROGRAM_ID")
-            .unwrap_or_else(|_| "B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq".to_string());
+            .unwrap_or_else(|_| "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM".to_string());
         let mut verifier = if self.config.esplora_url.contains("localhost") || self.config.esplora_url.contains("127.0.0.1") {
             // Custom esplora URL (e.g., regtest) — use it for the verifier too
             match SpvVerifier::new(&self.config.solana_rpc, &self.config.esplora_url, &program_id) {
@@ -162,6 +162,32 @@ impl DepositTrackerService {
     pub fn with_websocket(mut self, ws_state: SharedWebSocketState) -> Self {
         self.publisher = Some(DepositUpdatePublisher::new(ws_state));
         self
+    }
+
+    /// Register a new deposit for tracking.
+    /// If a deposit with the same taproot_address already exists, returns the existing record.
+    pub fn register_deposit(
+        &self,
+        taproot_address: String,
+        commitment: String,
+        amount_sats: u64,
+        ephemeral_pub: Option<String>,
+    ) -> Result<DepositRecord, TrackerError> {
+        // Check for existing deposit at this address
+        if let Some(existing) = self.db.get_by_address(&taproot_address)? {
+            return Ok(existing);
+        }
+
+        let mut record = DepositRecord::new(taproot_address, commitment.clone(), amount_sats);
+        record.ephemeral_pub = ephemeral_pub;
+        // commitment field is the npk for npk-based deposits
+        record.npk = Some(commitment);
+
+        self.db.insert(&record).map_err(|e| match e {
+            SqliteError::Duplicate(msg) => TrackerError::Duplicate(msg),
+            other => TrackerError::Database(other),
+        })?;
+        Ok(record)
     }
 
     /// Get deposit by ID
@@ -723,7 +749,7 @@ impl DepositTrackerService {
         let keypair = if self.config.relayer_keypair.starts_with('[') {
             let bytes: Vec<u8> = serde_json::from_str(&self.config.relayer_keypair)
                 .map_err(|e| format!("parse keypair JSON: {}", e))?;
-            Keypair::from_bytes(&bytes).map_err(|e| format!("invalid keypair: {}", e))?
+            Keypair::try_from(bytes.as_slice()).map_err(|e| format!("invalid keypair: {}", e))?
         } else {
             crate::load_keypair_from_file(&self.config.relayer_keypair)
                 .map_err(|e| format!("load keypair: {}", e))?
@@ -978,7 +1004,7 @@ impl DepositTrackerService {
         println!("[{}] Submitting SPV verification...", record_id);
 
         let result = verifier
-            .verify_deposit(sweep_txid, 0, deposit_txid)
+            .verify_deposit(sweep_txid, deposit_txid)
             .await?;
 
         let mut record = self.db.get_by_address(address)?

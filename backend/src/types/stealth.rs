@@ -88,18 +88,18 @@ pub struct StealthDepositRecord {
     pub id: String,
 
     // User's stealth keys (public)
-    /// User's viewing public key (33 bytes Grumpkin compressed, hex)
+    /// User's Viewing Public Key (32 bytes Ed25519, hex)
     pub viewing_pub: String,
-    /// User's spending public key (33 bytes Grumpkin compressed, hex)
+    /// User's Spending Public Key (32 bytes Baby Jubjub compressed, hex)
     pub spending_pub: String,
 
     // Backend-generated ephemeral key (private key encrypted/stored securely)
-    /// Ephemeral public key for ECDH (33 bytes Grumpkin compressed, hex)
+    /// Ephemeral Key for ECDH (32 bytes Ed25519, hex)
     pub ephemeral_pub: String,
     /// Encrypted ephemeral private key (for signing)
     pub ephemeral_priv_encrypted: String,
 
-    /// Pre-computed commitment = Poseidon2(stealthPub.x, placeholder_amount)
+    /// Pre-computed commitment = Poseidon(npk, token, amount)
     /// Recomputed with actual amount after deposit detected
     pub commitment: String,
 
@@ -291,9 +291,9 @@ impl StealthDepositRecord {
 /// POST /api/v2/prepare-deposit - Prepare a stealth deposit
 #[derive(Debug, Deserialize)]
 pub struct PrepareStealthDepositRequest {
-    /// User's viewing public key (66 hex chars = 33 bytes Grumpkin compressed)
+    /// User's Viewing Public Key (64 hex chars = 32 bytes Ed25519)
     pub viewing_pub: String,
-    /// User's spending public key (66 hex chars = 33 bytes Grumpkin compressed)
+    /// User's Spending Public Key (64 hex chars = 32 bytes Baby Jubjub compressed)
     pub spending_pub: String,
 }
 
@@ -383,7 +383,7 @@ pub struct StealthData {
     pub version: u8,
     /// Ephemeral X25519 viewing public key (32 bytes, hex)
     pub ephemeral_view_pub: String,
-    /// Ephemeral Grumpkin spending public key (33 bytes, hex)
+    /// Ephemeral Baby Jubjub Spending Public Key (32 bytes, hex)
     pub ephemeral_spend_pub: String,
     /// Commitment (32 bytes, hex)
     pub commitment: String,

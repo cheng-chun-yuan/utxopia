@@ -78,8 +78,8 @@ pub struct StealthDepositRecord {
     /// Stealth deposit mode
     pub mode: StealthMode,
 
-    /// Recipient's stealth meta-address (130 hex chars = 65 bytes)
-    /// Format: spending_pubkey (33 bytes) || viewing_pubkey (32 bytes)
+    /// Recipient's stealth meta-address (192 hex chars = 96 bytes)
+    /// Format: spending_pubkey (32 bytes) || viewing_pubkey (32 bytes) || mpk (32 bytes)
     pub recipient_stealth_address: String,
 
     /// Amount in satoshis (required for commitment computation)
@@ -102,11 +102,11 @@ pub struct StealthDepositRecord {
     /// Ephemeral X25519 viewing public key (32 bytes, hex)
     pub ephemeral_view_pub: String,
 
-    /// Ephemeral Grumpkin spending private key (32 bytes, hex)
+    /// Ephemeral Baby Jubjub spending private key (32 bytes, hex)
     /// Only stored for relay mode
     pub ephemeral_spend_priv: Option<String>,
 
-    /// Ephemeral Grumpkin spending public key (33 bytes compressed, hex)
+    /// Ephemeral Baby Jubjub Spending Public Key (32 bytes compressed, hex)
     pub ephemeral_spend_pub: String,
 
     /// Commitment (32 bytes, hex)
@@ -378,7 +378,7 @@ pub struct StealthData {
     pub version: u8,
     /// Ephemeral X25519 viewing public key (32 bytes, hex)
     pub ephemeral_view_pub: String,
-    /// Ephemeral Grumpkin spending public key (33 bytes, hex)
+    /// Ephemeral Baby Jubjub Spending Public Key (32 bytes, hex)
     pub ephemeral_spend_pub: String,
     /// Commitment (32 bytes, hex)
     pub commitment: String,

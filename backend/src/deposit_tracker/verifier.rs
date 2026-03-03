@@ -24,7 +24,7 @@ use super::watcher::{AddressWatcher, MerkleProofData, WatcherError};
 /// Get zVault program ID from env or use devnet default
 fn zvault_program_id() -> String {
     std::env::var("ZVAULT_PROGRAM_ID")
-        .unwrap_or_else(|_| "B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq".to_string())
+        .unwrap_or_else(|_| "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM".to_string())
 }
 
 /// Get BTC light client program ID from env or use devnet default
@@ -146,7 +146,6 @@ impl SpvVerifier {
     pub async fn verify_deposit(
         &self,
         sweep_txid: &str,
-        vout: u32,
         deposit_txid: &str,
     ) -> Result<VerificationResult, VerifierError> {
         let payer = self.payer.as_ref().ok_or(VerifierError::NoPayerSet)?;
@@ -193,7 +192,6 @@ impl SpvVerifier {
                 &sweep_txid_internal,
                 &deposit_txid_internal,
                 &merkle_proof,
-                &block_header.header_hex,
                 block_height,
                 &block_hash,
             )
@@ -303,7 +301,6 @@ impl SpvVerifier {
         sweep_txid: &[u8; 32],
         deposit_txid: &[u8; 32],
         merkle_proof: &MerkleProofData,
-        block_header_hex: &str,
         block_height: u64,
         block_hash: &[u8; 32],
     ) -> Result<String, VerifierError> {
@@ -336,7 +333,6 @@ impl SpvVerifier {
             payer,
             sweep_txid,
             merkle_proof,
-            block_height,
             block_hash,
             &light_client,
             &block_header_pda,
@@ -425,7 +421,6 @@ impl SpvVerifier {
         payer: &Keypair,
         txid: &[u8; 32],
         merkle_proof: &MerkleProofData,
-        block_height: u64,
         block_hash: &[u8; 32],
         light_client: &Pubkey,
         block_header_pda: &Pubkey,
@@ -487,56 +482,9 @@ fn double_sha256(data: &[u8]) -> [u8; 32] {
     result
 }
 
-/// Parse P2TR scriptpubkey to get the x-only pubkey
-fn parse_p2tr_pubkey(scriptpubkey_hex: &str) -> Result<[u8; 32], VerifierError> {
-    let script_bytes = hex::decode(scriptpubkey_hex)
-        .map_err(|e| VerifierError::VerificationFailed(format!("invalid scriptpubkey: {}", e)))?;
-
-    // P2TR format: OP_1 (0x51) + OP_PUSHBYTES_32 (0x20) + 32-byte pubkey
-    if script_bytes.len() != 34 {
-        return Err(VerifierError::VerificationFailed(format!(
-            "invalid P2TR script length: {}",
-            script_bytes.len()
-        )));
-    }
-
-    if script_bytes[0] != 0x51 || script_bytes[1] != 0x20 {
-        return Err(VerifierError::VerificationFailed(
-            "not a P2TR script".to_string(),
-        ));
-    }
-
-    let mut pubkey = [0u8; 32];
-    pubkey.copy_from_slice(&script_bytes[2..34]);
-    Ok(pubkey)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_parse_p2tr_pubkey() {
-        // Valid P2TR scriptpubkey
-        let script = "5120".to_string() + &"ab".repeat(32);
-        let result = parse_p2tr_pubkey(&script);
-        assert!(result.is_ok());
-
-        let pubkey = result.unwrap();
-        assert_eq!(pubkey, [0xab; 32]);
-    }
-
-    #[test]
-    fn test_parse_p2tr_pubkey_invalid() {
-        // Invalid length
-        let result = parse_p2tr_pubkey("5120ab");
-        assert!(result.is_err());
-
-        // Wrong prefix (P2WPKH instead of P2TR)
-        let script = "0014".to_string() + &"ab".repeat(20);
-        let result = parse_p2tr_pubkey(&script);
-        assert!(result.is_err());
-    }
 
     #[test]
     fn test_verifier_creation() {

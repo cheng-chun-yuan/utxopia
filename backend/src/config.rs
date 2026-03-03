@@ -221,7 +221,7 @@ impl ZVaultConfig {
         // Program IDs (required for non-devnet)
         let program_id = get_required_or_devnet_default(
             "ZVAULT_PROGRAM_ID",
-            "B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq",
+            "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM",
             network,
         )?;
 

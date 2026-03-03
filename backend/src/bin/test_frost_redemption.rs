@@ -15,7 +15,7 @@
 
 use bitcoin::{TapTweakHash, XOnlyPublicKey};
 use zbtc::frost_client::FrostClient;
-use zbtc::redemption::builder::{TxBuilder, UnsignedTx};
+use zbtc::redemption::builder::{TxBuilder};
 use zbtc::redemption::signer::{MpcSigner, TxSigner};
 use zbtc::redemption::types::{PoolUtxo, WithdrawalRequest};
 

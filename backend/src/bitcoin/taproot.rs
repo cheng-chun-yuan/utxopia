@@ -26,7 +26,7 @@ use bitcoin::key::{Keypair, Secp256k1, TweakedPublicKey};
 use bitcoin::opcodes::all::*;
 use bitcoin::script::Builder as ScriptBuilder;
 use bitcoin::secp256k1::{self, SecretKey};
-use bitcoin::taproot::{LeafVersion, TaprootBuilder, TaprootSpendInfo};
+use bitcoin::taproot::{TaprootBuilder, TaprootSpendInfo};
 use bitcoin::{Address, Network, ScriptBuf, XOnlyPublicKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -340,7 +340,7 @@ pub fn generate_deposit_address_dual_path(
     // Output key = committed_internal_key + taproot_tweak(merkle_root) * G
     // Both key-path (admin) and script-path (user refund) work correctly
     let output_key = taproot_spend_info.output_key();
-    let (output_x_only, _) = (output_key.to_inner(), ());
+    let (output_x_only, _) = (output_key.to_x_only_public_key(), ());
 
     let address = Address::p2tr_tweaked(output_key, network);
 
@@ -431,7 +431,7 @@ pub fn generate_frost_deposit_address(
 
     // Output key = committed_internal_key + taproot_tweak(merkle_root) * G
     let output_key = taproot_spend_info.output_key();
-    let output_x_only = output_key.to_inner();
+    let output_x_only = output_key.to_x_only_public_key();
 
     let address = Address::p2tr_tweaked(output_key, network);
 
