@@ -13,7 +13,7 @@ Parameterized Groth16 circuits for private N-to-M asset transfers using circom.
 │  N Inputs (spent notes)              M Outputs (new notes)           │
 │  ┌─────────────────────┐            ┌──────────────────────┐        │
 │  │ Input 0             │            │ Output 0              │        │
-│  │ ├ NPK = P(MPK,rand) │            │ ├ Commitment =        │        │
+│  │ ├ NPK = P(MPK,rand) │   MPK = Master Public Key, NPK = Note Public Key            │ ├ Commitment =        │        │
 │  │ ├ Commitment ∈ Tree │            │ │   P(npk,token,val)  │        │
 │  │ ├ Nullifier = P(nk,i)│           │ ├ Range: val < 2^120  │        │
 │  │ └ Merkle proof ✓    │            │ └ npk is fresh        │        │

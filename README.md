@@ -83,7 +83,7 @@ Sender:                              Recipient:
 └────────────────────┘               └────────────────────┘
 ```
 
-- **Viewing Key** (Ed25519): Detect and decrypt incoming transfers via deposit records (cannot spend)
+- **Viewing Key** (Ed25519): Detect and decrypt incoming transfers via stealth announcements (cannot spend)
 - **Spending Key** (Baby Jubjub): Sign JoinSplit transactions (EdDSA-Poseidon)
 
 ### 3. Three-Key Model
@@ -93,7 +93,7 @@ Spending Key (Baby Jubjub) ─► Signs JoinSplit transactions (EdDSA-Poseidon)
        │
        ├─► Nullifying Key (BN254 scalar) ─► Generates nullifiers, prevents double-spend
        │
-       └─► Viewing Key (Ed25519) ─► Scans deposit records, decrypts amounts
+       └─► Viewing Key (Ed25519) ─► Scans stealth announcements, decrypts amounts
 ```
 
 Share viewing key with accountants, regulators, or compliance without risk of fund loss.
@@ -177,7 +177,7 @@ bash scripts/setup.sh
 
 | Program | Address |
 |---------|---------|
-| zVault | `B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq` |
+| zVault | `25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM` |
 | BTC Light Client | `Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq` |
 | ChadBuffer | `C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF` |
 

@@ -151,7 +151,7 @@ Spending Key (Baby Jubjub) ─► Signs JoinSplit transactions (EdDSA-Poseidon)
 
 ## Key Program IDs
 
-- **zVault (devnet)**: `B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq`
+- **zVault (devnet)**: `25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM`
 - **BTC Light Client**: `Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq`
 
 ## On-Chain Instructions

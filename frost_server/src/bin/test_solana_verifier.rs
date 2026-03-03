@@ -14,7 +14,7 @@ use clap::Parser;
 use frost_server::solana_verifier::{find_program_address, SolanaVerifier};
 
 /// Default devnet zVault program ID
-const DEVNET_PROGRAM_ID: &str = "B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq";
+const DEVNET_PROGRAM_ID: &str = "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM";
 const DEVNET_RPC_URL: &str = "https://api.devnet.solana.com";
 
 #[derive(Parser)]

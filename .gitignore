@@ -34,9 +34,6 @@ test-ledger/
 .vercel
 .env*.local
 
-# Reference repos
-bitcoin-spv/
-
 # Circom build artifacts
 circuits/build/
 sdk/circuits/

@@ -32,7 +32,7 @@ const FROST_SIGNER_URLS = [
   process.env.FROST_SIGNER_2_URL || "http://localhost:8082",
   process.env.FROST_SIGNER_3_URL || "http://localhost:8083",
 ];
-const ZVAULT_PROGRAM_ID = process.env.ZVAULT_PROGRAM_ID || "B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq";
+const ZVAULT_PROGRAM_ID = process.env.ZVAULT_PROGRAM_ID || "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM";
 const BTC_LIGHT_CLIENT_PROGRAM_ID = process.env.BTC_LIGHT_CLIENT_PROGRAM_ID || "Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq";
 const SIGNING_MODE = process.env.ZVAULT_SIGNING_MODE || "frost";
 const CIRCUITS_DIR = path.resolve(__dirname, "../circuits/build");

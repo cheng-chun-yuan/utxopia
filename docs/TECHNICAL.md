@@ -303,7 +303,7 @@ Offset   Field              Size    Description
 |------|----------------|------------------|
 | **Sender** | Shared secret, recipient pubkeys | Send unlinkable funds |
 | **Recipient (Viewing Key)** | Incoming transfers, amounts | Detect payments, cannot spend |
-| **Recipient (Spending Key)** | Everything + nullifier secret | Claim funds |
+| **Recipient (Spending Key)** | Everything + Nullifying Key | Claim funds |
 | **Observer** | Encrypted data, unlinkable points | Nothing useful |
 
 ---
@@ -378,7 +378,7 @@ Offset   Field              Size    Description
 
 | Program | Address |
 |---------|---------|
-| zVault | `B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq` |
+| zVault | `25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM` |
 | BTC Light Client | `Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq` |
 | ChadBuffer | `6VrJmWbhN9WbEkg87JizunVMpL6CHKGVmzWCf3o3LRgy` |
 

@@ -35,14 +35,15 @@ pub enum SolanaVerifyError {
 
 /// RedemptionRequest account layout offsets (from contracts/programs/zvault/src/state/redemption.rs)
 ///
-/// Layout (118 bytes): disc(1) + status(1) + btc_addr_len(1) + padding(5) +
-///         request_id(8) + requester(32) + amount_sats(8) + btc_address(62)
+/// Layout (90 bytes): disc(1) + status(1) + btc_script_len(1) + padding(1) +
+///         processing_slot(4) + request_id(8) + requester(32) + amount_sats(8) + btc_script(34)
+/// Note: btc_script stores raw scriptPubKey bytes, not bech32 address strings.
 const REDEMPTION_DISCRIMINATOR: u8 = 0x04;
 const REDEMPTION_STATUS_OFFSET: usize = 1;
 const REDEMPTION_BTC_ADDR_LEN_OFFSET: usize = 2;
-const REDEMPTION_AMOUNT_OFFSET: usize = 48; // 1+1+1+5+8+32
+const REDEMPTION_AMOUNT_OFFSET: usize = 48; // 1+1+1+1+4+8+32
 const REDEMPTION_BTC_ADDR_OFFSET: usize = 56; // 48+8
-const REDEMPTION_MIN_LEN: usize = 118; // full struct size
+const REDEMPTION_MIN_LEN: usize = 90; // full struct size
 
 /// Solana on-chain verifier
 pub struct SolanaVerifier {
@@ -167,18 +168,16 @@ impl SolanaVerifier {
             });
         }
 
-        // Check BTC address
-        let addr_len = data[REDEMPTION_BTC_ADDR_LEN_OFFSET] as usize;
-        if REDEMPTION_BTC_ADDR_OFFSET + addr_len > data.len() {
+        // Check BTC scriptPubKey (stored as raw bytes, not bech32 string)
+        let script_len = data[REDEMPTION_BTC_ADDR_LEN_OFFSET] as usize;
+        if REDEMPTION_BTC_ADDR_OFFSET + script_len > data.len() {
             return Err(SolanaVerifyError::InvalidAccountData(
-                "BTC address length exceeds account data".to_string(),
+                "BTC script length exceeds account data".to_string(),
             ));
         }
-        let on_chain_addr =
-            std::str::from_utf8(&data[REDEMPTION_BTC_ADDR_OFFSET..REDEMPTION_BTC_ADDR_OFFSET + addr_len])
-                .map_err(|_| {
-                    SolanaVerifyError::InvalidAccountData("BTC address is not valid UTF-8".to_string())
-                })?;
+        let on_chain_script =
+            &data[REDEMPTION_BTC_ADDR_OFFSET..REDEMPTION_BTC_ADDR_OFFSET + script_len];
+        let on_chain_addr = hex::encode(on_chain_script);
 
         if on_chain_addr != expected_btc_address {
             return Err(SolanaVerifyError::BtcAddressMismatch {
@@ -190,7 +189,7 @@ impl SolanaVerifier {
         tracing::info!(
             pda = %pda_base58,
             amount = on_chain_amount,
-            btc_address = %on_chain_addr,
+            btc_script = %on_chain_addr,
             status = status,
             "RedemptionRequest verified on-chain"
         );
@@ -330,8 +329,8 @@ mod tests {
     #[test]
     fn test_pda_derivation_known_vector() {
         // Test with a known program ID and seeds
-        // Using the zVault program ID: B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq
-        let program_id_bytes = bs58::decode("B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq")
+        // Using the zVault program ID: 25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM
+        let program_id_bytes = bs58::decode("25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM")
             .into_vec()
             .unwrap();
         let mut program_id = [0u8; 32];
@@ -354,7 +353,7 @@ mod tests {
     #[test]
     fn test_pda_with_redemption_seeds() {
         // Simulate a real redemption PDA derivation
-        let program_id_bytes = bs58::decode("B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq")
+        let program_id_bytes = bs58::decode("25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM")
             .into_vec()
             .unwrap();
         let mut program_id = [0u8; 32];
@@ -375,7 +374,7 @@ mod tests {
 
     #[test]
     fn test_account_data_parsing() {
-        // Build a mock RedemptionRequest account data buffer (118 bytes)
+        // Build a mock RedemptionRequest account data buffer (90 bytes)
         let mut data = vec![0u8; REDEMPTION_MIN_LEN];
 
         // Set discriminator
@@ -384,18 +383,23 @@ mod tests {
         // Set status = Processing (1)
         data[REDEMPTION_STATUS_OFFSET] = 1;
 
-        // Set BTC address length
-        let btc_addr = b"tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx";
-        data[REDEMPTION_BTC_ADDR_LEN_OFFSET] = btc_addr.len() as u8;
+        // Set BTC scriptPubKey (P2WPKH example: OP_0 PUSH20 <20-byte hash>)
+        let btc_script: [u8; 22] = [
+            0x00, 0x14, // OP_0 PUSH20
+            0x75, 0x1e, 0x76, 0xe8, 0x19, 0x91, 0x96, 0xd4,
+            0x54, 0x94, 0x1c, 0x45, 0xd1, 0xb3, 0xa3, 0x23,
+            0xf1, 0x43, 0x3b, 0xd6,
+        ];
+        data[REDEMPTION_BTC_ADDR_LEN_OFFSET] = btc_script.len() as u8;
 
         // Set amount = 50000 sats
         let amount: u64 = 50_000;
         data[REDEMPTION_AMOUNT_OFFSET..REDEMPTION_AMOUNT_OFFSET + 8]
             .copy_from_slice(&amount.to_le_bytes());
 
-        // Set BTC address
-        data[REDEMPTION_BTC_ADDR_OFFSET..REDEMPTION_BTC_ADDR_OFFSET + btc_addr.len()]
-            .copy_from_slice(btc_addr);
+        // Set BTC scriptPubKey
+        data[REDEMPTION_BTC_ADDR_OFFSET..REDEMPTION_BTC_ADDR_OFFSET + btc_script.len()]
+            .copy_from_slice(&btc_script);
 
         // Verify parsing
         assert_eq!(data[0], REDEMPTION_DISCRIMINATOR);
@@ -408,12 +412,10 @@ mod tests {
         );
         assert_eq!(parsed_amount, 50_000);
 
-        let addr_len = data[REDEMPTION_BTC_ADDR_LEN_OFFSET] as usize;
-        let parsed_addr = std::str::from_utf8(
-            &data[REDEMPTION_BTC_ADDR_OFFSET..REDEMPTION_BTC_ADDR_OFFSET + addr_len],
-        )
-        .unwrap();
-        assert_eq!(parsed_addr, "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx");
+        let script_len = data[REDEMPTION_BTC_ADDR_LEN_OFFSET] as usize;
+        let parsed_script =
+            &data[REDEMPTION_BTC_ADDR_OFFSET..REDEMPTION_BTC_ADDR_OFFSET + script_len];
+        assert_eq!(parsed_script, &btc_script);
     }
 
     #[test]
