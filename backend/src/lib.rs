@@ -39,6 +39,8 @@ pub mod storage;
 pub mod types;
 pub mod services;
 pub mod api;
+pub mod event_indexer;
+pub mod merkle_tree;
 
 // =============================================================================
 // Legacy Modules (for backward compatibility)
@@ -105,6 +107,10 @@ pub use deposit_tracker::{
     create_tracker_service, create_ws_state, DepositRecord, DepositStatus, DepositStatusResponse,
     DepositTrackerService, SharedTrackerService,
     TrackerConfig, TrackerError, TrackerStats,
+};
+
+pub use event_indexer::{
+    EventStore, EventIndexerService, event_indexer_router, TreeCache,
 };
 
 pub use stealth::{

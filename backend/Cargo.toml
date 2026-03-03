@@ -60,6 +60,10 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 r2d2 = "0.8"
 r2d2_sqlite = "0.24"
 
+# Poseidon hashing for Merkle tree (circom-compatible BN254)
+light-poseidon = "0.3"
+ark-bn254 = "0.5"
+
 [dev-dependencies]
 mockall = "0.13"
 tower = "0.5"

@@ -17,10 +17,12 @@
 use zbtc::api_server as api;
 use zbtc::config::ZVaultConfig;
 use zbtc::deposit_tracker::{self, TrackerConfig};
+use zbtc::event_indexer::{EventIndexerConfig, EventIndexerService, EventStore, TreeCache, event_indexer_router};
 use zbtc::redemption::{MpcSigner, RedemptionConfig, RedemptionService, SingleKeySigner};
 use zbtc::stealth::StealthDepositService;
 use zbtc::units;
 use std::env;
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() {
@@ -72,6 +74,9 @@ fn print_usage() {
     println!("  BTC_LIGHT_CLIENT_PROGRAM_ID   BTC light client program ID on Solana");
     println!("  RELAYER_KEYPAIR               Solana keypair JSON for header relay submissions");
     println!("  HEADER_BATCH_SIZE             Headers per batch (2-10, default: 5)");
+    println!("  INDEXER_DB_PATH               Event indexer SQLite path (default: data/events.db)");
+    println!("  INDEXER_POLL_INTERVAL_SECS    Event indexer poll interval (default: 10)");
+    println!("  ZVAULT_PROGRAM_ID             zVault program ID for event indexing");
     println!();
     println!("Note: Most functionality is handled by the SDK on the client side.");
     println!();
@@ -343,6 +348,12 @@ async fn run_tracker_service(args: &[String]) {
         service
     };
 
+    // API server port
+    let api_port: u16 = env::var("TRACKER_API_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(3001);
+
     println!("=== zBTC Deposit Tracker ===");
     println!();
     println!("Configuration:");
@@ -356,10 +367,82 @@ async fn run_tracker_service(args: &[String]) {
     println!("  Database: {}", config.db_path);
     println!("  Max Retries: {}", config.max_retries);
     println!("  Retry Delay: {} seconds", config.retry_delay_secs);
+    println!("  API Port: {}", api_port);
     println!();
     println!("Watching for Bitcoin deposits...");
     println!("Press Ctrl+C to stop");
     println!();
+
+    // Create a separate tracker instance for the API server (shares same SQLite DB)
+    let has_custom_esplora_api = env::var("ESPLORA_URL").is_ok();
+    let api_tracker = if has_custom_esplora_api {
+        deposit_tracker::DepositTrackerService::new(config.clone())
+    } else {
+        deposit_tracker::DepositTrackerService::new_testnet(config.clone())
+    };
+
+    // =========================================================================
+    // Event Indexer + Merkle Tree Cache
+    // =========================================================================
+
+    let indexer_db_path = env::var("INDEXER_DB_PATH")
+        .unwrap_or_else(|_| "data/events.db".to_string());
+    let indexer_poll_secs: u64 = env::var("INDEXER_POLL_INTERVAL_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(10);
+    let solana_rpc = env::var("SOLANA_RPC_URL")
+        .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
+    let zvault_program_id = env::var("ZVAULT_PROGRAM_ID")
+        .unwrap_or_else(|_| "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM".to_string());
+
+    let event_store = Arc::new(
+        EventStore::new(&indexer_db_path).expect("Failed to create event store")
+    );
+    let tree_cache = Arc::new(
+        TreeCache::new(event_store.clone()).expect("Failed to create tree cache")
+    );
+
+    // Build the indexer router (proof, status, sync, ws, leaves, nullifiers)
+    let indexer_router = event_indexer_router(event_store.clone(), tree_cache.clone());
+
+    // Start the event indexer service in background
+    let indexer_config = EventIndexerConfig {
+        rpc_url: solana_rpc,
+        program_id: zvault_program_id,
+        poll_interval_secs: indexer_poll_secs,
+    };
+    let indexer_service = EventIndexerService::new(indexer_config, event_store.clone())
+        .expect("Failed to create event indexer service")
+        .with_tree_cache(tree_cache.clone());
+
+    tokio::spawn(async move {
+        let mut svc = indexer_service;
+        svc.run().await;
+    });
+
+    // Spawn the API server (deposit tracker + event indexer merged) in background
+    tokio::spawn(async move {
+        let deposit_router = deposit_tracker::api::create_deposit_router(api_tracker);
+        let merged = deposit_router.merge(indexer_router);
+
+        let addr = std::net::SocketAddr::from(([0, 0, 0, 0], api_port));
+        println!("=== zkBTC Tracker + Indexer API ===");
+        println!("Listening on http://{}", addr);
+        println!();
+        println!("Tree Endpoints:");
+        println!("  GET  /api/tree/proof?commitment=<hex>  - Merkle proof");
+        println!("  GET  /api/tree/status                  - Tree root/size");
+        println!("  GET  /api/tree/leaves                  - All leaves");
+        println!("  POST /api/tree/sync                    - Force rebuild");
+        println!("  WS   /ws/tree                          - Live tree updates");
+        println!();
+
+        let listener = tokio::net::TcpListener::bind(addr).await.expect("bind failed");
+        if let Err(e) = axum::serve(listener, merged).await {
+            eprintln!("API server error: {}", e);
+        }
+    });
 
     if let Err(e) = service.run().await {
         eprintln!("Error: {}", e);
