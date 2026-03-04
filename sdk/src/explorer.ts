@@ -136,7 +136,7 @@ function parseAnnouncement(pubkey: string, data: Uint8Array) {
     amountSats,
     commitment: toHex(data.slice(42, 74)),
     leafIndex: readU64LE(data, 74),
-    isDeposit: amountSats <= MAX_PLAINTEXT_SATS,
+    isDeposit: data[1] === 0,
   };
 }
 

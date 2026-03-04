@@ -73,7 +73,7 @@ const StatsDisplay = memo(function StatsDisplay({
   }
 
   const vaultBtc = (Number(stats?.totalShielded ?? 0n) / 100_000_000).toFixed(4);
-  const deposits = (stats?.stealthAnnouncementCount ?? 0).toLocaleString();
+  const leafCount = (stats?.stealthAnnouncementCount ?? 0).toLocaleString();
   const volumeBtc = (Number(stats?.volume ?? 0n) / 100_000_000).toFixed(4);
 
   return (
@@ -86,8 +86,8 @@ const StatsDisplay = memo(function StatsDisplay({
         <div className="text-caption text-gray">Vault (BTC)</div>
       </div>
       <div className="space-y-2 text-center">
-        <div className="text-heading5 text-foreground">{deposits}</div>
-        <div className="text-caption text-gray">Deposits</div>
+        <div className="text-heading5 text-foreground">{leafCount}</div>
+        <div className="text-caption text-gray">Leaves</div>
       </div>
       <div className="space-y-2 text-center">
         <div className="text-heading5 text-foreground">{volumeBtc}</div>

@@ -31,7 +31,7 @@ export interface PoolStats {
 
 const POOL_STATE_ADDRESS = DEVNET_CONFIG.poolStatePda;
 const ZVAULT_PROGRAM_ID = DEVNET_CONFIG.zvaultProgramId;
-const STEALTH_ANNOUNCEMENT_SIZE = 90;
+const STEALTH_ANNOUNCEMENT_SIZE = 82;
 
 /**
  * Fetch pool stats from on-chain data.

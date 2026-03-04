@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useCallback, useMemo, memo } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import {
-  AlertCircle, RefreshCw, Clock, CheckCircle2, XCircle,
-  ExternalLink, Key, Copy, Check, ArrowDownToLine, Loader2, Search, ChevronDown
+  AlertCircle, RefreshCw, Clock, CheckCircle2, XCircle, RotateCcw,
+  ExternalLink, Key, Copy, Check, ArrowDownToLine, Loader2, Search, ChevronDown, ArrowRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -13,15 +13,17 @@ import {
   getDepositProgress,
   getStatusMessage,
   isDepositTerminal,
+  retryDeposit,
   type DepositStatus,
   type DepositStatusResponse as TrackerDepositStatus,
 } from "@/lib/api/deposits";
 import { useDepositStatus } from "@/hooks/use-deposit-status";
-import { formatBtc, truncateMiddle } from "@/lib/utils/formatting";
+import { formatBtc, formatSats, truncateMiddle } from "@/lib/utils/formatting";
 import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
 import { useNoteStorage, type StoredNote } from "@/stores";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
+import { useBackendDeposits } from "@/hooks/use-backend-deposits";
 
 // =============================================================================
 // Status badge — maps backend DepositStatus to UI
@@ -35,8 +37,8 @@ const STATUS_CONFIG: Record<DepositStatus | "unknown", { label: string; color: s
   sweeping: { label: "Sweeping", color: "text-blue-400", bg: "bg-blue-400/10", spinning: true },
   sweep_confirming: { label: "Sweep Confirming", color: "text-blue-400", bg: "bg-blue-400/10", spinning: true },
   verifying: { label: "Verifying on Solana", color: "text-sol", bg: "bg-sol/10", spinning: true },
-  ready: { label: "Ready to Claim", color: "text-success", bg: "bg-success/10" },
-  claimed: { label: "Claimed", color: "text-success", bg: "bg-success/10" },
+  ready: { label: "Minted", color: "text-success", bg: "bg-success/10" },
+  claimed: { label: "Minted", color: "text-success", bg: "bg-success/10" },
   failed: { label: "Failed", color: "text-error", bg: "bg-error/10" },
   unknown: { label: "Unknown", color: "text-gray", bg: "bg-gray/10" },
 };
@@ -64,26 +66,35 @@ const ProgressBar = memo(({ progress }: { progress: number }) => (
 ));
 ProgressBar.displayName = "ProgressBar";
 
-// OP_RETURN data display (ephemeralPub + npk)
+// OP_RETURN data display (collapsible)
 const OpReturnData = memo(({ ephemeralPub, npk }: { ephemeralPub?: string; npk?: string }) => {
+  const [open, setOpen] = useState(false);
   if (!ephemeralPub && !npk) return null;
   return (
-    <div className="space-y-1.5 pt-2 border-t border-gray/15">
-      <span className="text-xs text-gray">OP_RETURN (64 bytes)</span>
-      <div className="bg-background rounded-lg p-2 space-y-1.5">
-        {ephemeralPub && (
-          <div>
-            <p className="text-[10px] text-gray">ephemeralPub (32 bytes):</p>
-            <code className="block text-[10px] font-mono text-purple-400 break-all">{ephemeralPub}</code>
-          </div>
-        )}
-        {npk && (
-          <div>
-            <p className="text-[10px] text-gray">npk (32 bytes):</p>
-            <code className="block text-[10px] font-mono text-purple-400 break-all">{npk}</code>
-          </div>
-        )}
-      </div>
+    <div className="pt-2 border-t border-gray/15">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 text-xs text-gray hover:text-gray-light cursor-pointer transition-colors w-full"
+      >
+        <ChevronDown className={cn("w-3 h-3 transition-transform", open && "rotate-180")} />
+        OP_RETURN (64 bytes)
+      </button>
+      {open && (
+        <div className="bg-background rounded-lg p-2 mt-1.5 space-y-1.5">
+          {ephemeralPub && (
+            <div>
+              <p className="text-[10px] text-gray">ephemeralPub (32 bytes):</p>
+              <code className="block text-[10px] font-mono text-purple-400 break-all">{ephemeralPub}</code>
+            </div>
+          )}
+          {npk && (
+            <div>
+              <p className="text-[10px] text-gray">npk (32 bytes):</p>
+              <code className="block text-[10px] font-mono text-purple-400 break-all">{npk}</code>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 });
@@ -98,7 +109,7 @@ const LIFECYCLE_STEPS = [
   { key: "confirmed", label: "Confirmed" },
   { key: "sweeping", label: "Swept" },
   { key: "verifying", label: "Verified" },
-  { key: "ready", label: "Ready" },
+  { key: "ready", label: "Minted" },
 ] as const;
 
 const STATUS_ORDER: Record<string, number> = {
@@ -143,12 +154,12 @@ LifecycleStepper.displayName = "LifecycleStepper";
 const DepositCard = memo(({ note }: { note: StoredNote }) => {
   const { copied, copy } = useCopyToClipboard();
   const depositId = note.depositId || null;
+  const [retrying, setRetrying] = useState(false);
 
   const {
     status,
     confirmations,
     sweepConfirmations,
-    canClaim,
     btcTxid,
     sweepTxid,
     solanaTx,
@@ -201,9 +212,13 @@ const DepositCard = memo(({ note }: { note: StoredNote }) => {
     <div className="p-4 bg-muted border border-gray/15 rounded-xl space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <span className="text-sm text-white flex items-center gap-2">
+        <span className="text-sm text-white flex items-center gap-1.5">
           <BitcoinIcon className="w-4 h-4" />
-          {formatBtc(note.amountSats)} BTC
+          {formatBtc(note.amountSats)} <span className="text-btc text-xs">BTC</span>
+          {deposit?.minted_sats != null && (<>
+            <ArrowRight className="w-3 h-3 text-gray mx-0.5" />
+            {formatBtc(deposit.minted_sats)} <span className="text-privacy text-xs">zkBTC</span>
+          </>)}
         </span>
         <div className="flex items-center gap-2">
           <button onClick={depositId ? refresh : fetchByAddress} disabled={loading} className="p-1.5 rounded bg-gray/10 hover:bg-gray/20">
@@ -306,6 +321,30 @@ const DepositCard = memo(({ note }: { note: StoredNote }) => {
         </div>
       )}
 
+      {/* Retry button for failed deposits */}
+      {effectiveStatus === "failed" && (depositId || addrStatus?.id) && (
+        <button
+          onClick={async () => {
+            const id = depositId || addrStatus?.id;
+            if (!id) return;
+            setRetrying(true);
+            try {
+              await retryDeposit(id);
+              if (depositId) refresh();
+              else fetchByAddress();
+            } catch (err) {
+              console.error("Retry failed:", err);
+            } finally {
+              setRetrying(false);
+            }
+          }}
+          disabled={retrying}
+          className="w-full p-2 rounded-lg text-xs font-medium bg-btc/10 border border-btc/30 text-btc hover:bg-btc/20 disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {retrying ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Retrying...</> : <><RotateCcw className="w-3.5 h-3.5" /> Retry Deposit</>}
+        </button>
+      )}
+
       {/* OP_RETURN data */}
       <OpReturnData ephemeralPub={effectiveEphemeralPub} npk={effectiveNpk} />
 
@@ -324,12 +363,271 @@ const DepositCard = memo(({ note }: { note: StoredNote }) => {
 DepositCard.displayName = "DepositCard";
 
 // =============================================================================
+// Backend deposit card — for deposits fetched from backend (no localStorage note)
+// =============================================================================
+
+// Timeline step component
+const TimelineStep = memo(({
+  done,
+  active,
+  title,
+  children,
+  isLast,
+}: {
+  done: boolean;
+  active: boolean;
+  title: string;
+  children?: React.ReactNode;
+  isLast?: boolean;
+}) => {
+  const [expanded, setExpanded] = useState(false);
+  const hasChildren = !!children;
+
+  return (
+    <div className="flex gap-3">
+      {/* Timeline line + circle */}
+      <div className="flex flex-col items-center">
+        <div className={cn(
+          "w-6 h-6 rounded-full flex items-center justify-center shrink-0",
+          done ? "bg-success/20" : active ? "bg-btc/20 border border-btc/50" : "bg-gray/10"
+        )}>
+          {done ? (
+            <CheckCircle2 className="w-4 h-4 text-success" />
+          ) : active ? (
+            <Loader2 className="w-3.5 h-3.5 text-btc animate-spin" />
+          ) : (
+            <Clock className="w-3 h-3 text-gray/40" />
+          )}
+        </div>
+        {!isLast && (
+          <div className={cn("w-px flex-1 min-h-[16px]", done ? "bg-success/30" : "bg-gray/10")} />
+        )}
+      </div>
+
+      {/* Content */}
+      <div className={cn("pb-4 flex-1", isLast && "pb-0")}>
+        <p className={cn(
+          "text-sm font-medium",
+          done ? "text-white" : active ? "text-white" : "text-gray/40"
+        )}>{title}</p>
+        {hasChildren && (done || active) && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="flex items-center gap-1 text-[11px] text-gray hover:text-gray-light mt-1.5 cursor-pointer transition-colors"
+          >
+            <ChevronDown className={cn("w-3 h-3 transition-transform", expanded && "rotate-180")} />
+            Details
+          </button>
+        )}
+        {expanded && children && (
+          <div className="mt-2 space-y-1.5 pl-1">
+            {children}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+TimelineStep.displayName = "TimelineStep";
+
+// Tx link helper
+const TxLink = memo(({ href, label, color = "text-btc/70 hover:text-btc" }: { href: string; label: string; color?: string }) => {
+  const { copied, copy } = useCopyToClipboard();
+  const id = href.split("/").pop() || "";
+  return (
+    <div className="flex items-center gap-1.5">
+      <a href={href} target="_blank" rel="noopener noreferrer"
+        className={cn("flex items-center gap-1 text-[11px] cursor-pointer transition-colors", color)}>
+        {label} <ExternalLink className="w-2.5 h-2.5" />
+      </a>
+      <code className="text-[10px] font-mono text-gray">{truncateMiddle(id, 6)}</code>
+      <button onClick={() => copy(id)} className="cursor-pointer p-0.5">
+        {copied ? <Check className="w-2.5 h-2.5 text-success" /> : <Copy className="w-2.5 h-2.5 text-gray/40 hover:text-gray" />}
+      </button>
+    </div>
+  );
+});
+TxLink.displayName = "TxLink";
+
+const BackendDepositCard = memo(({ deposit }: { deposit: TrackerDepositStatus }) => {
+  const { copied, copy } = useCopyToClipboard();
+  const status = deposit.status;
+  const stepOrder = STATUS_ORDER[status] ?? 0;
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="space-y-4">
+      {/* Amount header card — click to expand timeline */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full p-4 rounded-xl bg-gradient-to-br from-muted to-muted/50 border border-gray/15 cursor-pointer hover:border-gray/25 transition-colors text-left"
+      >
+        <div className="flex items-center justify-between mb-3">
+          <StatusBadge status={status} />
+          <div className="flex items-center gap-2">
+            {deposit.leaf_index != null && (
+              <span className="text-[10px] text-gray font-mono">Leaf #{deposit.leaf_index}</span>
+            )}
+            <ChevronDown className={cn("w-3.5 h-3.5 text-gray transition-transform", expanded && "rotate-180")} />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray">Deposit</span>
+            <span className="flex items-center gap-1.5">
+              <BitcoinIcon className="w-4 h-4" />
+              <span className="text-base font-semibold text-white">{formatBtc(deposit.amount_sats)}</span>
+              <span className="text-xs text-btc">BTC</span>
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray">Receive</span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-4 h-4 rounded-full bg-privacy/20 flex items-center justify-center text-[8px] font-bold text-privacy">z</span>
+              <span className="text-base font-semibold text-white">{formatBtc(deposit.minted_sats ?? deposit.amount_sats)}</span>
+              <span className="text-xs text-privacy">zkBTC</span>
+            </span>
+          </div>
+          {deposit.sweep_fee_sats != null && (
+            <div className="flex items-center justify-between pt-1 border-t border-gray/10">
+              <span className="text-[10px] text-gray">Network Fee</span>
+              <span className="text-[10px] text-gray">{formatSats(deposit.sweep_fee_sats)} sats</span>
+            </div>
+          )}
+        </div>
+      </button>
+
+      {/* Timeline — expanded on click */}
+      {expanded && (<>
+      <div className="px-1">
+        {/* Step 1: Deposit Detected */}
+        <TimelineStep
+          done={stepOrder >= 1}
+          active={stepOrder === 1}
+          title="Deposit BTC to Reserve"
+          isLast={false}
+        >
+          {deposit.btc_txid && (
+            <TxLink
+              href={`${getMempoolExplorerUrl()}/tx/${deposit.btc_txid}`}
+              label="Deposit tx"
+            />
+          )}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-gray">Address</span>
+            <code className="text-[10px] font-mono text-btc/70 truncate max-w-[180px]">{deposit.taproot_address}</code>
+            <button onClick={() => copy(deposit.taproot_address)} className="cursor-pointer p-0.5">
+              {copied ? <Check className="w-2.5 h-2.5 text-success" /> : <Copy className="w-2.5 h-2.5 text-gray/40 hover:text-gray" />}
+            </button>
+          </div>
+          {deposit.confirmations > 0 && (
+            <span className="text-[10px] text-gray">{deposit.confirmations} confirmation{deposit.confirmations !== 1 ? "s" : ""}</span>
+          )}
+        </TimelineStep>
+
+        {/* Step 2: Sweep to Pool */}
+        <TimelineStep
+          done={stepOrder >= 3}
+          active={stepOrder === 3}
+          title="Sweep to Pool"
+          isLast={false}
+        >
+          {deposit.sweep_txid && (
+            <TxLink
+              href={`${getMempoolExplorerUrl()}/tx/${deposit.sweep_txid}`}
+              label="Sweep tx"
+            />
+          )}
+          {deposit.sweep_confirmations > 0 && (
+            <span className="text-[10px] text-gray">{deposit.sweep_confirmations} confirmation{deposit.sweep_confirmations !== 1 ? "s" : ""}</span>
+          )}
+        </TimelineStep>
+
+        {/* Step 3: SPV Verification */}
+        <TimelineStep
+          done={stepOrder >= 4}
+          active={stepOrder === 4}
+          title="SPV Verification"
+          isLast={false}
+        >
+          {deposit.solana_tx && (
+            <>
+              <span className={cn(
+                "inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full",
+                "bg-success/10 text-success"
+              )}>
+                <CheckCircle2 className="w-2.5 h-2.5" /> SPV Confirmed
+              </span>
+              <TxLink
+                href={`https://explorer.solana.com/tx/${deposit.solana_tx}?cluster=devnet`}
+                label="Solana tx"
+                color="text-sol/70 hover:text-sol"
+              />
+            </>
+          )}
+        </TimelineStep>
+
+        {/* Step 4: Mint zkBTC */}
+        <TimelineStep
+          done={stepOrder >= 5}
+          active={false}
+          title="Mint zkBTC"
+          isLast
+        />
+      </div>
+
+      {/* Error */}
+      {deposit.error && (
+        <div className="flex items-center gap-2 p-2 bg-error/10 border border-error/30 rounded-lg text-xs text-error">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          {deposit.error}
+        </div>
+      )}
+
+      {/* OP_RETURN — collapsible */}
+      <OpReturnData ephemeralPub={deposit.ephemeral_pub} npk={deposit.npk} />
+      </> )}
+    </div>
+  );
+});
+BackendDepositCard.displayName = "BackendDepositCard";
+
+// =============================================================================
+// Retry button (shared between DepositCard and address lookup)
+// =============================================================================
+
+const RetryButton = memo(({ depositId, onRetried }: { depositId: string; onRetried: () => void }) => {
+  const [retrying, setRetrying] = useState(false);
+  return (
+    <button
+      onClick={async () => {
+        setRetrying(true);
+        try {
+          await retryDeposit(depositId);
+          onRetried();
+        } catch (err) {
+          console.error("Retry failed:", err);
+        } finally {
+          setRetrying(false);
+        }
+      }}
+      disabled={retrying}
+      className="w-full p-2 rounded-lg text-xs font-medium bg-btc/10 border border-btc/30 text-btc hover:bg-btc/20 disabled:opacity-50 flex items-center justify-center gap-2"
+    >
+      {retrying ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Retrying...</> : <><RotateCcw className="w-3.5 h-3.5" /> Retry Deposit</>}
+    </button>
+  );
+});
+RetryButton.displayName = "RetryButton";
+
+// =============================================================================
 // Main BalanceView
 // =============================================================================
 
 export function BalanceView() {
   const { publicKey, connected } = useWallet();
   const { notes, isLoaded } = useNoteStorage();
+  const { deposits: backendDeposits, isLoading: backendLoading } = useBackendDeposits();
 
   const [mounted, setMounted] = useState(false);
 
@@ -361,6 +659,16 @@ export function BalanceView() {
 
   const sortedNotes = useMemo(() => [...notes].sort((a, b) => b.createdAt - a.createdAt), [notes]);
 
+  // Backend deposits that are NOT already in localStorage (dedup by taproot address)
+  const backendOnlyDeposits = useMemo(() => {
+    const localAddresses = new Set(notes.map((n) => n.taprootAddress));
+    return backendDeposits
+      .filter((d) => !localAddresses.has(d.taproot_address))
+      .sort((a, b) => b.updated_at - a.updated_at);
+  }, [backendDeposits, notes]);
+
+  const hasAnyDeposits = sortedNotes.length > 0 || backendOnlyDeposits.length > 0;
+
   if (!mounted || !isLoaded) {
     return (
       <div className="flex flex-col items-center py-12">
@@ -388,8 +696,8 @@ export function BalanceView() {
         </div>
       )}
 
-      {/* Deposit cards */}
-      {sortedNotes.length > 0 ? (
+      {/* Deposit cards from localStorage */}
+      {sortedNotes.length > 0 && (
         <div className="space-y-3">
           {sortedNotes.map((note, index) => (
             <DepositCard
@@ -398,7 +706,30 @@ export function BalanceView() {
             />
           ))}
         </div>
-      ) : (
+      )}
+
+      {/* Deposits from backend (not in localStorage) */}
+      {backendOnlyDeposits.length > 0 && (
+        <div className="space-y-3">
+          {sortedNotes.length > 0 && (
+            <p className="text-xs text-gray pt-2">Tracked by Backend</p>
+          )}
+          {backendOnlyDeposits.map((dep) => (
+            <BackendDepositCard key={dep.id} deposit={dep} />
+          ))}
+        </div>
+      )}
+
+      {/* Loading state for backend */}
+      {!hasAnyDeposits && backendLoading && (
+        <div className="flex flex-col items-center py-8">
+          <Loader2 className="w-6 h-6 text-btc animate-spin mb-2" />
+          <p className="text-sm text-gray">Checking for deposits...</p>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!hasAnyDeposits && !backendLoading && (
         <div className="text-center py-8">
           <div className="rounded-full bg-btc/10 p-4 w-fit mx-auto mb-4">
             <BitcoinIcon className="h-8 w-8" />
@@ -449,7 +780,11 @@ export function BalanceView() {
                 {lookupResult.amount_sats > 0 && (
                   <div className="flex justify-between">
                     <span className="text-xs text-gray">Amount</span>
-                    <span className="text-xs text-btc">{formatBtc(lookupResult.amount_sats)} BTC</span>
+                    <span className="text-xs flex items-center gap-1">
+                      <span className="text-btc">{formatBtc(lookupResult.amount_sats)} BTC</span>
+                      <ArrowRight className="w-2.5 h-2.5 text-gray" />
+                      <span className="text-privacy">{formatBtc(lookupResult.minted_sats ?? lookupResult.amount_sats)} zkBTC</span>
+                    </span>
                   </div>
                 )}
                 <div className="flex justify-between">
@@ -468,6 +803,15 @@ export function BalanceView() {
                   </a>
                 )}
                 <OpReturnData ephemeralPub={lookupResult.ephemeral_pub} npk={lookupResult.npk} />
+                {lookupResult.status === "failed" && lookupResult.id && (
+                  <RetryButton
+                    depositId={lookupResult.id}
+                    onRetried={async () => {
+                      const updated = await getDepositByAddress(lookupAddress.trim());
+                      setLookupResult(updated);
+                    }}
+                  />
+                )}
                 <button onClick={() => { setLookupResult(null); setLookupAddress(""); }} className="text-xs text-gray hover:text-gray-light">
                   Clear
                 </button>

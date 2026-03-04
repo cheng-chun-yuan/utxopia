@@ -9,11 +9,14 @@
 
 import { ApiError } from "./errors";
 
-// API base URL for deposit tracker
-const getTrackerApiUrl = () =>
-  process.env.NEXT_PUBLIC_TRACKER_API_URL ||
-  process.env.NEXT_PUBLIC_ZKBTC_API_URL ||
-  "http://localhost:3001";
+// WebSocket needs the public backend URL (can't proxy through Next.js)
+const getTrackerWsUrl = () => {
+  const base =
+    (typeof window !== "undefined" ? process.env.NEXT_PUBLIC_TRACKER_API_URL : undefined) ||
+    process.env.NEXT_PUBLIC_ZKBTC_API_URL ||
+    `${typeof window !== "undefined" ? window.location.origin : "http://localhost:3001"}`;
+  return base.replace("http://", "ws://").replace("https://", "wss://");
+};
 
 // =============================================================================
 // Types
@@ -50,6 +53,7 @@ export interface DepositStatusResponse {
   taproot_address: string;
   amount_sats: number;
   confirmations: number;
+  /** @deprecated No claim step — deposits are auto-minted */
   can_claim: boolean;
   btc_txid?: string;
   sweep_txid?: string;
@@ -58,6 +62,8 @@ export interface DepositStatusResponse {
   leaf_index?: number;
   npk?: string;
   ephemeral_pub?: string;
+  sweep_fee_sats?: number;
+  minted_sats?: number;
   error?: string;
   created_at: number;
   updated_at: number;
@@ -70,6 +76,42 @@ export interface DepositStatusUpdate {
   sweep_confirmations: number;
   can_claim: boolean;
   error?: string;
+}
+
+/**
+ * Retry a failed deposit
+ *
+ * @param depositId - The deposit ID to retry
+ */
+export async function retryDeposit(
+  depositId: string
+): Promise<{ success: boolean; message?: string }> {
+  const response = await fetch(`/api/tracker/retry/${depositId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({
+      error: `HTTP ${response.status}: ${response.statusText}`,
+    }));
+    throw ApiError.fromResponse(error, response.status);
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch all deposits from backend
+ */
+export async function fetchAllDeposits(): Promise<{
+  deposits: DepositStatusResponse[];
+}> {
+  const response = await fetch("/api/deposits");
+  if (!response.ok) {
+    throw new Error(`Failed to fetch deposits: ${response.status}`);
+  }
+  return response.json();
 }
 
 // =============================================================================
@@ -154,7 +196,7 @@ export async function registerDeposit(
     ephemeral_pub: ephemeralPub,
   };
 
-  const response = await fetch(`${getTrackerApiUrl()}/api/deposits`, {
+  const response = await fetch(`/api/deposits`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -181,7 +223,7 @@ export async function getDepositStatus(
   depositId: string
 ): Promise<DepositStatusResponse> {
   const response = await fetch(
-    `${getTrackerApiUrl()}/api/deposits/${depositId}`,
+    `/api/deposits/${depositId}`,
     {
       method: "GET",
       headers: {
@@ -209,7 +251,7 @@ export async function getDepositByAddress(
   address: string
 ): Promise<DepositStatusResponse> {
   const response = await fetch(
-    `${getTrackerApiUrl()}/api/deposits/by-address/${encodeURIComponent(address)}`,
+    `/api/deposits/by-address/${encodeURIComponent(address)}`,
     {
       method: "GET",
       headers: {
@@ -247,7 +289,7 @@ export async function prepareStealthDeposit(
     spending_pub: spendingPub,
   };
 
-  const response = await fetch(`${getTrackerApiUrl()}/api/stealth/prepare`, {
+  const response = await fetch(`/api/stealth/prepare`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -274,7 +316,7 @@ export async function getStealthDepositStatus(
   depositId: string
 ): Promise<StealthDepositStatusResponse> {
   const response = await fetch(
-    `${getTrackerApiUrl()}/api/stealth/${depositId}`,
+    `/api/stealth/${depositId}`,
     {
       method: "GET",
       headers: {
@@ -305,9 +347,7 @@ export function subscribeToStealthDeposit(
     onOpen?: () => void;
   }
 ): { ws: WebSocket; unsubscribe: () => void } {
-  const wsUrl = getTrackerApiUrl()
-    .replace("http://", "ws://")
-    .replace("https://", "wss://");
+  const wsUrl = getTrackerWsUrl();
 
   const ws = new WebSocket(`${wsUrl}/ws/stealth/${depositId}`);
 
@@ -362,9 +402,7 @@ export function subscribeToDepositStatus(
   depositId: string,
   options: DepositWebSocketOptions
 ): { ws: WebSocket; unsubscribe: () => void } {
-  const wsUrl = getTrackerApiUrl()
-    .replace("http://", "ws://")
-    .replace("https://", "wss://");
+  const wsUrl = getTrackerWsUrl();
 
   const ws = new WebSocket(`${wsUrl}/ws/deposits/${depositId}`);
 
@@ -418,17 +456,10 @@ export function isDepositProcessing(status: DepositStatus): boolean {
 }
 
 /**
- * Check if a deposit can be claimed
- */
-export function isDepositClaimable(status: DepositStatus): boolean {
-  return status === "ready";
-}
-
-/**
  * Check if a deposit is in a terminal state
  */
 export function isDepositTerminal(status: DepositStatus): boolean {
-  return ["claimed", "failed"].includes(status);
+  return ["ready", "claimed", "failed"].includes(status);
 }
 
 /**
@@ -443,8 +474,8 @@ export function getStatusMessage(status: DepositStatus): string {
     sweeping: "Sweeping to pool wallet",
     sweep_confirming: "Sweep transaction confirming",
     verifying: "Verifying on Solana",
-    ready: "Ready to claim zkBTC",
-    claimed: "zkBTC claimed successfully",
+    ready: "zkBTC Minted",
+    claimed: "zkBTC Minted",
     failed: "Deposit failed",
   };
 
@@ -485,7 +516,7 @@ export function getDepositProgress(
     case "verifying":
       return 80;
     case "ready":
-      return 95;
+      return 100;
     case "claimed":
       return 100;
     case "failed":

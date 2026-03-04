@@ -77,12 +77,10 @@ const SWR_OPTIONS = {
   errorRetryCount: 3,
 };
 
-const INDEXER_URL = process.env.NEXT_PUBLIC_INDEXER_URL || "http://localhost:3001";
-
-/** Fetch leaf data from the backend event indexer */
+/** Fetch leaf data from the backend event indexer (proxied via Next.js API route) */
 async function fetchIndexerLeaves(): Promise<IndexerLeaf[]> {
   try {
-    const resp = await fetch(`${INDEXER_URL}/api/tree/leaves`);
+    const resp = await fetch("/api/tree/leaves");
     if (!resp.ok) return [];
     const data = await resp.json();
     return data.leaves ?? [];

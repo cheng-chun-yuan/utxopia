@@ -89,7 +89,8 @@ export default function BridgePage() {
     deriveKeys,
     clearKeys,
   } = useZVaultKeys();
-  const { copied, copy } = useCopyToClipboard();
+  const { copied: snsCopied, copy: copySns } = useCopyToClipboard();
+  const { copied: stealthCopied, copy: copyStealth } = useCopyToClipboard();
   const {
     registeredSnsName,
     hasRegisteredSnsName,
@@ -269,11 +270,11 @@ export default function BridgePage() {
                         {registeredSnsName}.{parentDomain}.sol
                       </span>
                       <button
-                        onClick={() => { copy(`${registeredSnsName}.${parentDomain}.sol`); notifyCopied(`.${parentDomain}.sol name`); }}
+                        onClick={() => { copySns(`${registeredSnsName}.${parentDomain}.sol`); notifyCopied(`.${parentDomain}.sol name`); }}
                         className="ml-auto p-1.5 rounded-[6px] bg-btc/10 hover:bg-btc/20 transition-colors cursor-pointer"
                         title={`Copy .${parentDomain}.sol name`}
                       >
-                        {copied ? (
+                        {snsCopied ? (
                           <Check className="w-3 h-3 text-green-400" />
                         ) : (
                           <Copy className="w-3 h-3 text-btc" />
@@ -313,14 +314,14 @@ export default function BridgePage() {
                     {shortAddress}
                   </code>
                   <button
-                    onClick={() => { copy(stealthAddressEncoded || ""); notifyCopied("Stealth address"); }}
+                    onClick={() => { copyStealth(stealthAddressEncoded || ""); notifyCopied("Stealth address"); }}
                     className={cn(
                       "p-2 rounded-[6px] transition-colors cursor-pointer",
                       "bg-privacy/10 hover:bg-privacy/20"
                     )}
                     title="Copy stealth address"
                   >
-                    {copied ? (
+                    {stealthCopied ? (
                       <Check className="w-4 h-4 text-green-400" />
                     ) : (
                       <Copy className="w-4 h-4 text-privacy" />

@@ -374,7 +374,7 @@ export function DepositFlow() {
               )}
             >
               <Tag className="w-3.5 h-3.5" />
-              .btcpro.sol Name
+              .btcpro.sol
               <Tooltip content="A human-readable name (like alice.btcpro.sol) that maps to a stealth address via Solana Name Service.">
                 <Info className="w-3 h-3 opacity-60" />
               </Tooltip>
@@ -396,7 +396,7 @@ export function DepositFlow() {
           {/* Recipient Input */}
           <div className="mb-4">
             <label className="text-body2 text-gray-light pl-2 mb-2 block">
-              {recipientType === "btcpro" ? "Recipient .btcpro.sol Name" : "Recipient Stealth Address"}
+              {recipientType === "btcpro" ? "Recipient .btcpro.sol" : "Recipient Stealth Address"}
             </label>
             <div className="flex gap-2">
               <div className="flex-1 relative">
