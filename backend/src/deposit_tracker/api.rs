@@ -66,6 +66,7 @@ pub fn create_deposit_router(tracker: DepositTrackerService) -> Router {
     Router::new()
         // Deposit registration and query endpoints
         .route("/api/deposits", get(handle_list_deposits).post(handle_register_deposit))
+        .route("/api/deposits/verified", get(handle_verified_deposits))
         .route("/api/deposits/:id", get(handle_get_deposit))
         .route("/api/deposits/by-address/:address", get(handle_get_by_address))
         // WebSocket endpoints
@@ -109,6 +110,25 @@ async fn handle_get_deposit(
             (StatusCode::NOT_FOUND, Json(error)).into_response()
         }
     }
+}
+
+/// GET /api/deposits/verified
+///
+/// List only verified deposits (status=ready or claimed) with npk/ephemeral_pub.
+/// Used by frontend to match deposits to user's viewing key.
+async fn handle_verified_deposits(State(state): State<SharedAppState>) -> impl IntoResponse {
+    let tracker = state.tracker.read().await;
+
+    let mut verified: Vec<DepositStatusResponse> = Vec::new();
+    for record in tracker.get_all_deposits() {
+        if matches!(record.status, super::types::DepositStatus::Ready | super::types::DepositStatus::Claimed) {
+            verified.push(DepositStatusResponse::from(&record));
+        }
+    }
+
+    Json(serde_json::json!({
+        "deposits": verified
+    }))
 }
 
 /// GET /api/deposits
@@ -350,6 +370,7 @@ pub async fn start_tracker_server(
     println!("Deposit Endpoints:");
     println!("  POST /api/deposits                   - Register deposit for tracking");
     println!("  GET  /api/deposits                   - List all deposits");
+    println!("  GET  /api/deposits/verified           - List verified deposits (ready/claimed)");
     println!("  GET  /api/deposits/:id               - Get deposit status by ID");
     println!("  GET  /api/deposits/by-address/:addr  - Get deposit by taproot address");
     println!("  WS   /ws/deposits/:id                - Subscribe to deposit updates");

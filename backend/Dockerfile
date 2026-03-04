@@ -47,11 +47,15 @@ COPY --from=builder /app/target/release/zbtc-api /app/zbtc-api
 # Create data directory and non-root user
 RUN mkdir -p /app/data && \
     useradd -m -u 1000 appuser && chown -R appuser:appuser /app
-USER appuser
+
+# Entrypoint: fix data dir ownership (handles host-created files), then run as appuser
+RUN printf '#!/bin/sh\nchown -R appuser:appuser /app/data 2>/dev/null || true\nexec gosu appuser "$@"\n' > /app/entrypoint.sh && \
+    chmod +x /app/entrypoint.sh && \
+    apt-get update && apt-get install -y gosu && rm -rf /var/lib/apt/lists/*
 
 ENV RUST_LOG=info
 
 EXPOSE 3001
 
-# Default: start API server
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["/app/zbtc-api", "api", "--port", "3001"]

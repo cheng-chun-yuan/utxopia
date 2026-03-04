@@ -686,6 +686,9 @@ impl DepositTrackerService {
         // Recover any interrupted deposits
         self.recover_in_progress_deposits()?;
 
+        // Backfill sweep fees for older deposits missing fee data
+        self.backfill_sweep_fees().await;
+
         // Optionally start the mempool.space WebSocket listener
         let mut ws_event_rx = self.maybe_start_ws_listener();
 
@@ -917,7 +920,7 @@ impl DepositTrackerService {
             .sweep_utxo(address, commitment, self.config.required_confirmations)
             .await?;
 
-        record.mark_sweep_broadcast(result.txid.clone(), result.pool_address);
+        record.mark_sweep_broadcast(result.txid.clone(), result.pool_address, result.fee_sats);
         self.db.update(&record)?;
 
         println!(
@@ -1030,6 +1033,47 @@ impl DepositTrackerService {
     async fn publish_update(&self, record: &DepositRecord) {
         if let Some(publisher) = &self.publisher {
             publisher.publish_deposit_status(record).await;
+        }
+    }
+
+    /// Backfill sweep_fee_sats for deposits that were swept but missing fee data.
+    /// Fetches the sweep transaction from Esplora to get the fee.
+    async fn backfill_sweep_fees(&self) {
+        let records = match self.db.get_all() {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("[backfill] Failed to load deposits: {}", e);
+                return;
+            }
+        };
+
+        let mut updated = 0;
+        for mut record in records {
+            // Only backfill if sweep happened but fee is missing
+            if record.sweep_txid.is_some() && record.sweep_fee_sats.is_none() {
+                let sweep_txid = record.sweep_txid.as_ref().unwrap().clone();
+                match self.watcher.get_tx(&sweep_txid).await {
+                    Ok(tx) => {
+                        record.sweep_fee_sats = Some(tx.fee);
+                        if let Err(e) = self.db.update(&record) {
+                            eprintln!("[backfill] Failed to update {}: {}", record.id, e);
+                        } else {
+                            println!(
+                                "[backfill] {} sweep_fee_sats={} (minted={})",
+                                record.id, tx.fee, record.amount_sats.saturating_sub(tx.fee)
+                            );
+                            updated += 1;
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[backfill] Failed to fetch sweep tx {}: {}", sweep_txid, e);
+                    }
+                }
+            }
+        }
+
+        if updated > 0 {
+            println!("[backfill] Updated {} deposits with sweep fees", updated);
         }
     }
 

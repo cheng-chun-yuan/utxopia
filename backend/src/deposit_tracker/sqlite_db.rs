@@ -133,6 +133,16 @@ impl SqliteDepositStore {
             ).ok();
         }
 
+        // Migration: add sweep_fee_sats column
+        let has_sweep_fee = conn
+            .prepare("SELECT sweep_fee_sats FROM deposits LIMIT 0")
+            .is_ok();
+        if !has_sweep_fee {
+            conn.execute_batch(
+                "ALTER TABLE deposits ADD COLUMN sweep_fee_sats INTEGER;"
+            ).ok();
+        }
+
         Ok(())
     }
 
@@ -148,14 +158,16 @@ impl SqliteDepositStore {
                 sweep_txid, sweep_confirmations, sweep_block_height, pool_address,
                 solana_tx, leaf_index, created_at, updated_at, error,
                 retry_count, last_retry_at,
-                ephemeral_pub, encrypted_amount_hex, auto_detected, npk
+                ephemeral_pub, encrypted_amount_hex, auto_detected, npk,
+                sweep_fee_sats
             ) VALUES (
                 ?1, ?2, ?3, ?4, ?5,
                 ?6, ?7, ?8, ?9,
                 ?10, ?11, ?12, ?13,
                 ?14, ?15, ?16, ?17, ?18,
                 ?19, ?20,
-                ?21, ?22, ?23, ?24
+                ?21, ?22, ?23, ?24,
+                ?25
             )
             "#,
             params![
@@ -183,6 +195,7 @@ impl SqliteDepositStore {
                 record.encrypted_amount_hex,
                 record.auto_detected as i64,
                 record.npk,
+                record.sweep_fee_sats.map(|v| v as i64),
             ],
         ).map_err(|e| {
             if let rusqlite::Error::SqliteFailure(ref err, _) = e {
@@ -224,7 +237,8 @@ impl SqliteDepositStore {
                 ephemeral_pub = ?20,
                 encrypted_amount_hex = ?21,
                 auto_detected = ?22,
-                npk = ?23
+                npk = ?23,
+                sweep_fee_sats = ?24
             WHERE id = ?1
             "#,
             params![
@@ -251,6 +265,7 @@ impl SqliteDepositStore {
                 record.encrypted_amount_hex,
                 record.auto_detected as i64,
                 record.npk,
+                record.sweep_fee_sats.map(|v| v as i64),
             ],
         )?;
 
@@ -431,6 +446,7 @@ impl SqliteDepositStore {
             sweep_confirmations: row.get::<_, i64>("sweep_confirmations")? as u32,
             sweep_block_height: row.get::<_, Option<i64>>("sweep_block_height")?.map(|v| v as u64),
             pool_address: row.get("pool_address")?,
+            sweep_fee_sats: row.get::<_, Option<i64>>("sweep_fee_sats").unwrap_or(None).map(|v| v as u64),
             solana_tx: row.get("solana_tx")?,
             leaf_index: row.get::<_, Option<i64>>("leaf_index")?.map(|v| v as u64),
             ephemeral_pub: row.get("ephemeral_pub").unwrap_or(None),

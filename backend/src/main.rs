@@ -26,6 +26,9 @@ use std::sync::Arc;
 
 #[tokio::main]
 async fn main() {
+    // Load .env file if present (won't override existing env vars)
+    let _ = dotenv::dotenv();
+
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {
@@ -332,9 +335,20 @@ async fn run_tracker_service(args: &[String]) {
         service
     };
 
-    // Configure verifier if keypair available
-    let service = if let Ok(keypair_path) = env::var("VERIFIER_KEYPAIR") {
-        match zbtc::load_keypair_from_file(&keypair_path) {
+    // Configure verifier if keypair available (supports inline JSON or file path)
+    let service = if let Ok(keypair_val) = env::var("VERIFIER_KEYPAIR") {
+        let keypair_result = if keypair_val.starts_with('[') {
+            serde_json::from_str::<Vec<u8>>(&keypair_val)
+                .map_err(|e| format!("parse keypair JSON: {}", e))
+                .and_then(|bytes| {
+                    solana_sdk::signer::keypair::Keypair::try_from(bytes.as_slice())
+                        .map_err(|e| format!("invalid keypair: {}", e))
+                })
+        } else {
+            zbtc::load_keypair_from_file(&keypair_val)
+                .map_err(|e| format!("{}", e))
+        };
+        match keypair_result {
             Ok(keypair) => {
                 println!("Verifier configured with Solana keypair");
                 service.with_verifier(keypair)
@@ -421,14 +435,25 @@ async fn run_tracker_service(args: &[String]) {
         svc.run().await;
     });
 
-    // Spawn the API server (deposit tracker + event indexer merged) in background
+    // Create stealth + redemption services (previously in backend-api)
+    let redemption_config = RedemptionConfig::default();
+    let redemption = create_service(redemption_config);
+    let stealth = StealthDepositService::new_testnet();
+
+    // Spawn the unified API server (deposit tracker + event indexer + stealth/redeem) in background
     tokio::spawn(async move {
         let deposit_router = deposit_tracker::api::create_deposit_router(api_tracker);
-        let merged = deposit_router.merge(indexer_router);
+        let api_router = api::create_combined_router(redemption, stealth);
+        let merged = api_router.merge(deposit_router).merge(indexer_router);
 
         let addr = std::net::SocketAddr::from(([0, 0, 0, 0], api_port));
-        println!("=== zkBTC Tracker + Indexer API ===");
+        println!("=== zkBTC Unified API ===");
         println!("Listening on http://{}", addr);
+        println!();
+        println!("Stealth Endpoints:");
+        println!("  POST /api/stealth/prepare              - Prepare stealth deposit");
+        println!("  GET  /api/stealth/status/:id           - Stealth deposit status");
+        println!("  POST /api/stealth/announce             - Manual announcement");
         println!();
         println!("Tree Endpoints:");
         println!("  GET  /api/tree/proof?commitment=<hex>  - Merkle proof");

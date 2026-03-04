@@ -117,6 +117,8 @@ pub struct DepositRecord {
     pub sweep_block_height: Option<u64>,
     /// Pool wallet address that received the sweep
     pub pool_address: Option<String>,
+    /// Fee paid for the sweep transaction (in satoshis)
+    pub sweep_fee_sats: Option<u64>,
 
     // Solana verification (uses sweep_txid)
     /// Solana transaction signature for SPV verification
@@ -171,6 +173,7 @@ impl DepositRecord {
             sweep_confirmations: 0,
             sweep_block_height: None,
             pool_address: None,
+            sweep_fee_sats: None,
             solana_tx: None,
             leaf_index: None,
             ephemeral_pub: None,
@@ -221,9 +224,10 @@ impl DepositRecord {
     }
 
     /// Mark sweep tx broadcast
-    pub fn mark_sweep_broadcast(&mut self, sweep_txid: String, pool_address: String) {
+    pub fn mark_sweep_broadcast(&mut self, sweep_txid: String, pool_address: String, fee_sats: u64) {
         self.sweep_txid = Some(sweep_txid);
         self.pool_address = Some(pool_address);
+        self.sweep_fee_sats = Some(fee_sats);
         self.status = DepositStatus::SweepConfirming;
         self.touch();
     }
@@ -332,6 +336,8 @@ pub struct DepositStatusResponse {
     pub leaf_index: Option<u64>,
     pub npk: Option<String>,
     pub ephemeral_pub: Option<String>,
+    pub sweep_fee_sats: Option<u64>,
+    pub minted_sats: Option<u64>,
     pub error: Option<String>,
     pub created_at: u64,
     pub updated_at: u64,
@@ -339,6 +345,7 @@ pub struct DepositStatusResponse {
 
 impl From<&DepositRecord> for DepositStatusResponse {
     fn from(record: &DepositRecord) -> Self {
+        let minted_sats = record.sweep_fee_sats.map(|fee| record.amount_sats.saturating_sub(fee));
         Self {
             id: record.id.clone(),
             status: record.status.to_string(),
@@ -353,6 +360,8 @@ impl From<&DepositRecord> for DepositStatusResponse {
             leaf_index: record.leaf_index,
             npk: record.npk.clone(),
             ephemeral_pub: record.ephemeral_pub.clone(),
+            sweep_fee_sats: record.sweep_fee_sats,
+            minted_sats,
             error: record.error.clone(),
             created_at: record.created_at,
             updated_at: record.updated_at,
@@ -500,7 +509,7 @@ mod tests {
 
         // Sweep
         record.mark_sweeping();
-        record.mark_sweep_broadcast("sweep_txid".to_string(), "pool_addr".to_string());
+        record.mark_sweep_broadcast("sweep_txid".to_string(), "pool_addr".to_string(), 222);
         assert_eq!(record.status, DepositStatus::SweepConfirming);
 
         // Sweep confirms

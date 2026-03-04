@@ -46,48 +46,23 @@ services:
       run --bind 0.0.0.0:9003 --id 3
       --password test --network testnet4
 
-  # ─── Backend API ───────────────────────────────────────────────────
-  backend-api:
+  # ─── Unified Backend (API + Deposit Tracker + Event Indexer) ──────
+  # Single service: stealth/redeem API + deposit tracking + tree cache + header relay
+  backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: zvault-backend
-    ports:
-      - "3001:3001"
-    environment:
-      RUST_LOG: info
-      ZVAULT_NETWORK: devnet
-      ZVAULT_SOLANA_RPC: https://api.devnet.solana.com
-      ZVAULT_BITCOIN_RPC: https://mempool.space/testnet4/api
-      ZVAULT_SIGNING_MODE: frost
-      ZVAULT_FROST_THRESHOLD: "2"
-      ZVAULT_FROST_PARTICIPANTS: "3"
-      ZVAULT_FROST_SIGNER_URLS: http://frost-signer-1:9001,http://frost-signer-2:9002,http://frost-signer-3:9003
-      ZVAULT_FROST_KEY_SHARE: placeholder
-      ZVAULT_FROST_GROUP_PUBKEY: d857a067bec0ae2027a6026ef73d2905f108b1a66de6d12d23a3feb42013b1dd
-      ZVAULT_DEMO_MODE: "1"
-      API_PORT: "3001"
-    depends_on:
-      - frost-signer-1
-      - frost-signer-2
-      - frost-signer-3
-    restart: unless-stopped
-
-  # ─── Deposit Tracker + Event Indexer (auto-detect → sweep → SPV verify → tree cache) ─────────
-  # Now includes real-time WebSocket detection + integrated header relay + Merkle tree cache
-  deposit-tracker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: zvault-deposit-tracker
     command: ["/app/zbtc-api", "tracker", "--interval", "60", "--confirmations", "1"]
     ports:
-      - "3002:3001"
+      - "3001:3001"
     volumes:
       - tracker-data:/app/data
     environment:
       RUST_LOG: info,zbtc=debug
       ZVAULT_NETWORK: devnet
+      ZVAULT_SOLANA_RPC: https://api.devnet.solana.com
+      ZVAULT_BITCOIN_RPC: https://mempool.space/testnet4/api
       ZVAULT_SIGNING_MODE: frost
       ZVAULT_FROST_THRESHOLD: "2"
       ZVAULT_FROST_PARTICIPANTS: "3"
@@ -111,6 +86,7 @@ services:
       HEADER_RELAY_ENABLED: "true"
       BTC_LIGHT_CLIENT_PROGRAM_ID: Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq
       RELAYER_KEYPAIR: "${RELAYER_KEYPAIR}"
+      VERIFIER_KEYPAIR: "${RELAYER_KEYPAIR}"
       HEADER_BATCH_SIZE: "5"
     depends_on:
       - frost-signer-1
@@ -131,13 +107,12 @@ services:
       NEXT_PUBLIC_ZKBTC_API_URL: https://api.amidoggy.xyz
       NEXT_PUBLIC_SOLANA_RPC_URL: https://api.devnet.solana.com
       NEXT_PUBLIC_CIRCUIT_CDN_URL: https://circuits.amidoggy.xyz
-      # Backend tree cache (fast Merkle proofs)
-      TRACKER_API_URL: http://deposit-tracker:3001
+      # Backend API (unified: stealth + tree cache + tracker)
+      TRACKER_API_URL: http://backend:3001
       ADMIN_KEYPAIR: "${ADMIN_KEYPAIR}"
       RELAYER_KEYPAIR: "${RELAYER_KEYPAIR}"
     depends_on:
-      - backend-api
-      - deposit-tracker
+      - backend
     restart: unless-stopped
 
   # ─── Cloudflare Tunnel ───────────────────────────────────────────
@@ -149,7 +124,7 @@ services:
       - /Users/chengchunyuan/.cloudflared:/etc/cloudflared:ro
     depends_on:
       - zvault-app
-      - backend-api
+      - backend
     restart: unless-stopped
 
   # ─── Header Relayer (testnet4 → Solana devnet) ─────────────────────

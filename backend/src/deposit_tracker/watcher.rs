@@ -184,6 +184,13 @@ impl AddressWatcher {
         })
     }
 
+    /// Get raw transaction bytes (decoded from hex)
+    pub async fn get_raw_tx(&self, txid: &str) -> Result<Vec<u8>, WatcherError> {
+        let hex = self.get_tx_hex(txid).await?;
+        hex::decode(hex.trim())
+            .map_err(|e| WatcherError::ParseError(format!("invalid tx hex: {}", e)))
+    }
+
     /// Get raw transaction hex
     pub async fn get_tx_hex(&self, txid: &str) -> Result<String, WatcherError> {
         let url = format!("{}/tx/{}/hex", self.base_url, txid);
