@@ -1,5 +1,7 @@
 export type ClaimStep = "input" | "verifying" | "claiming" | "success" | "error";
 
+export type ClaimRecipientMode = "self" | "stealth" | "public";
+
 export type ClaimProgress =
   | "idle"
   | "generating_proof"

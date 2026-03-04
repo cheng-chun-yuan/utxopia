@@ -1,13 +1,27 @@
 "use client";
 
-import { Shield, Copy, Key, Link2, CheckCircle2, Coins } from "lucide-react";
+import { useState } from "react";
+import { Shield, Copy, Key, Link2, CheckCircle2, Coins, Wallet, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { WalletButton } from "@/components/ui/wallet-button";
+import { StealthRecipientInput } from "@/components/ui/stealth-recipient-input";
 import { formatBtc } from "@/lib/utils/formatting";
 import { ErrorMessage } from "@/features/shared/components";
 import { useClipboard } from "@/features/shared/hooks";
 import type { PublicKey } from "@solana/web3.js";
-import type { VerifyResult } from "../types";
+import type { StealthMetaAddress } from "@zvault/sdk";
+import type { ClaimRecipientMode, VerifyResult } from "../types";
+
+// Validate Solana address
+function isValidSolanaAddress(address: string): boolean {
+  try {
+    const { PublicKey: PK } = require("@solana/web3.js");
+    new PK(address);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 interface ClaimFormProps {
   secretPhrase: string;
@@ -21,6 +35,12 @@ interface ClaimFormProps {
   error: string | null;
   connected: boolean;
   publicKey: PublicKey | null;
+  recipientMode: ClaimRecipientMode;
+  onRecipientModeChange: (mode: ClaimRecipientMode) => void;
+  resolvedMeta: StealthMetaAddress | null;
+  onMetaResolved: (meta: StealthMetaAddress | null) => void;
+  solanaAddress: string;
+  onSolanaAddressChange: (address: string) => void;
 }
 
 export function ClaimForm({
@@ -35,12 +55,27 @@ export function ClaimForm({
   error,
   connected,
   publicKey,
+  recipientMode,
+  onRecipientModeChange,
+  resolvedMeta,
+  onMetaResolved,
+  solanaAddress,
+  onSolanaAddressChange,
 }: ClaimFormProps) {
   const { copied, copy } = useClipboard();
+  const [stealthError, setStealthError] = useState<string | null>(null);
+  const [resolvedName, setResolvedName] = useState<string | null>(null);
 
   const handleCopyLink = () => {
     if (claimLinkUrl) copy(claimLinkUrl);
   };
+
+  const canClaim = (() => {
+    if (secretPhrase.trim().length < 8 || !connected) return false;
+    if (recipientMode === "stealth" && !resolvedMeta) return false;
+    if (recipientMode === "public" && !isValidSolanaAddress(solanaAddress)) return false;
+    return true;
+  })();
 
   return (
     <div className="space-y-4">
@@ -134,22 +169,119 @@ export function ClaimForm({
         </div>
       )}
 
-      {/* Recipient Wallet */}
-      <div>
-        <label className="text-body2 text-gray-light pl-2 mb-2 block">
-          Recipient Wallet
-        </label>
-        {connected && publicKey ? (
-          <div className="flex items-center gap-2 p-3 bg-muted border border-privacy/20 rounded-[12px]">
-            <div className="w-2 h-2 rounded-full bg-privacy" />
-            <span className="text-body2 font-mono text-gray-light">
-              {publicKey.toBase58().slice(0, 8)}...{publicKey.toBase58().slice(-8)}
-            </span>
+      {/* Recipient Section */}
+      {verifyResult && (
+        <div>
+          <label className="text-body2 text-gray-light pl-2 mb-2 block">
+            Send To
+          </label>
+
+          {/* Recipient Mode Toggle */}
+          <div className="flex gap-1 mb-3">
+            <button
+              onClick={() => onRecipientModeChange("self")}
+              className={cn(
+                "flex-1 px-3 py-2 rounded-[8px] text-caption font-medium transition-colors",
+                recipientMode === "self"
+                  ? "bg-privacy/15 text-privacy border border-privacy/30"
+                  : "bg-muted text-gray border border-gray/15 hover:text-gray-light"
+              )}
+            >
+              Self
+            </button>
+            <button
+              onClick={() => onRecipientModeChange("stealth")}
+              className={cn(
+                "flex-1 px-3 py-2 rounded-[8px] text-caption font-medium transition-colors",
+                recipientMode === "stealth"
+                  ? "bg-purple/15 text-purple border border-purple/30"
+                  : "bg-muted text-gray border border-gray/15 hover:text-gray-light"
+              )}
+            >
+              Stealth
+            </button>
+            <button
+              onClick={() => onRecipientModeChange("public")}
+              className={cn(
+                "flex-1 px-3 py-2 rounded-[8px] text-caption font-medium transition-colors",
+                recipientMode === "public"
+                  ? "bg-btc/15 text-btc border border-btc/30"
+                  : "bg-muted text-gray border border-gray/15 hover:text-gray-light"
+              )}
+            >
+              Public
+            </button>
           </div>
-        ) : (
-          <WalletButton className="btn-tertiary w-full justify-center" />
-        )}
-      </div>
+
+          {/* Recipient Input per Mode */}
+          {recipientMode === "self" && connected && publicKey && (
+            <div className="flex items-center gap-2 p-3 bg-muted border border-privacy/20 rounded-[12px]">
+              <div className="w-2 h-2 rounded-full bg-privacy" />
+              <span className="text-body2 font-mono text-gray-light">
+                {publicKey.toBase58().slice(0, 8)}...{publicKey.toBase58().slice(-8)}
+              </span>
+              <span className="text-caption text-gray ml-auto">Your wallet</span>
+            </div>
+          )}
+
+          {recipientMode === "stealth" && (
+            <StealthRecipientInput
+              onResolved={(meta, name) => {
+                onMetaResolved(meta);
+                setResolvedName(name);
+              }}
+              resolvedMeta={resolvedMeta}
+              resolvedName={resolvedName}
+              error={stealthError}
+              onError={setStealthError}
+            />
+          )}
+
+          {recipientMode === "public" && (
+            <div>
+              <div className="relative">
+                <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray" />
+                <input
+                  type="text"
+                  value={solanaAddress}
+                  onChange={(e) => onSolanaAddressChange(e.target.value)}
+                  placeholder="Solana wallet address..."
+                  className={cn(
+                    "w-full p-3 pl-10 bg-muted border rounded-[12px]",
+                    "text-body2 font-mono text-foreground placeholder:text-gray",
+                    "outline-none transition-colors",
+                    solanaAddress && isValidSolanaAddress(solanaAddress)
+                      ? "border-btc/30"
+                      : "border-gray/15 focus:border-btc/40"
+                  )}
+                />
+              </div>
+              <p className="text-caption text-gray mt-1 pl-2">
+                Unshields zBTC to a public Solana wallet
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Recipient Wallet (shown only when no verifyResult, for self mode) */}
+      {!verifyResult && (
+        <div>
+          <label className="text-body2 text-gray-light pl-2 mb-2 block">
+            Recipient Wallet
+          </label>
+          {connected && publicKey ? (
+            <div className="flex items-center gap-2 p-3 bg-muted border border-privacy/20 rounded-[12px]">
+              <div className="w-2 h-2 rounded-full bg-privacy" />
+              <span className="text-body2 font-mono text-gray-light">
+                {publicKey.toBase58().slice(0, 8)}...{publicKey.toBase58().slice(-8)}
+              </span>
+            </div>
+          ) : (
+            <WalletButton className="btn-tertiary w-full justify-center" />
+          )}
+        </div>
+      )}
 
       {/* Error */}
       {error && <ErrorMessage message={error} />}
@@ -168,11 +300,11 @@ export function ClaimForm({
         )}
         <button
           onClick={onClaim}
-          disabled={secretPhrase.trim().length < 8 || !connected}
+          disabled={!canClaim}
           className="btn-primary w-full"
         >
           <Coins className="w-5 h-5" />
-          Claim zBTC
+          {recipientMode === "public" ? "Unshield zBTC" : "Claim zBTC"}
         </button>
       </div>
     </div>

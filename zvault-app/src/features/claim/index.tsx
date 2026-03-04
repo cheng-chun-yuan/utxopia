@@ -27,7 +27,13 @@ function ClaimContent() {
     splitLoading,
     connected,
     publicKey,
+    recipientMode,
+    resolvedMeta,
+    solanaAddress,
     setSecretPhrase,
+    setRecipientMode,
+    setResolvedMeta,
+    setSolanaAddress,
     parseClaimLink,
     pasteFromClipboard,
     verify,
@@ -100,6 +106,12 @@ function ClaimContent() {
             error={error}
             connected={connected}
             publicKey={publicKey}
+            recipientMode={recipientMode}
+            onRecipientModeChange={setRecipientMode}
+            resolvedMeta={resolvedMeta}
+            onMetaResolved={setResolvedMeta}
+            solanaAddress={solanaAddress}
+            onSolanaAddressChange={setSolanaAddress}
           />
         )}
 

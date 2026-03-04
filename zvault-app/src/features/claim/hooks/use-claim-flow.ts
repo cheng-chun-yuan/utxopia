@@ -9,23 +9,28 @@ import {
   encodeClaimLink,
   decodeClaimLink,
   deriveNote,
+  deriveMasterKey,
   createNote,
   initPoseidon,
   initProver,
   generateJoinSplitProof,
   proofToBytes,
-  babyJubMul,
-  BABYJUB_BASE8,
+  eddsaGetPubKey,
+  eddsaPoseidonSign,
   fetchCommitmentTree,
   getCommitmentIndex,
-  computeUnifiedCommitmentSync,
+  computeJoinSplitCommitmentSync,
+  computeJoinSplitNullifierSync,
   computeBoundParamsHash,
   DEFAULT_BOUND_PARAMS,
+  createUnshieldBoundParams,
+  createStealthDepositWithKeys,
+  poseidonHashSync,
+  PDA_SEEDS,
   bytesToBigint,
   bytesToHex,
-  hexToBytes,
   DEVNET_CONFIG,
-  BN254_FIELD_PRIME,
+  type StealthMetaAddress,
   type JoinSplitProofInputs,
 } from "@zvault/sdk";
 import {
@@ -38,6 +43,7 @@ import { useFlowState } from "@/features/shared/hooks";
 import type {
   ClaimStep,
   ClaimProgress,
+  ClaimRecipientMode,
   VerifyResult,
   ClaimResult,
   SplitResult,
@@ -45,6 +51,29 @@ import type {
 
 /** ZBTC token ID used in Poseidon commitment */
 const ZBTC_TOKEN_ID = BigInt(0x7a627463);
+
+/** BN254 scalar field modulus (big-endian bytes) */
+const BN254_FR_MODULUS = [
+  0x30, 0x64, 0x4e, 0x72, 0xe1, 0x31, 0xa0, 0x29,
+  0xb8, 0x50, 0x45, 0xb6, 0x81, 0x81, 0x58, 0x5d,
+  0x28, 0x33, 0xe8, 0x48, 0x79, 0xb9, 0x70, 0x91,
+  0x43, 0xe1, 0xf5, 0x93, 0xf0, 0x00, 0x00, 0x01,
+];
+
+/** Match on-chain reduce_to_field for Solana address → BN254 field element */
+function reduceToFieldClaimFlow(bytes: Uint8Array): bigint {
+  let isGe = true;
+  for (let i = 0; i < 32; i++) {
+    if (bytes[i] < BN254_FR_MODULUS[i]) { isGe = false; break; }
+    if (bytes[i] > BN254_FR_MODULUS[i]) { break; }
+  }
+  if (!isGe) {
+    return BigInt("0x" + Buffer.from(bytes).toString("hex"));
+  }
+  const reduced = new Uint8Array(bytes);
+  reduced[0] &= 0x2F;
+  return BigInt("0x" + Buffer.from(reduced).toString("hex"));
+}
 
 export function useClaimFlow(initialNote?: string) {
   const { publicKey, connected } = useWallet();
@@ -64,6 +93,11 @@ export function useClaimFlow(initialNote?: string) {
 
   // Form state
   const [secretPhrase, setSecretPhrase] = useState(initialNote || "");
+
+  // Recipient state
+  const [recipientMode, setRecipientMode] = useState<ClaimRecipientMode>("self");
+  const [resolvedMeta, setResolvedMeta] = useState<StealthMetaAddress | null>(null);
+  const [solanaAddress, setSolanaAddress] = useState("");
 
   // Results
   const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null);
@@ -147,25 +181,30 @@ export function useClaimFlow(initialNote?: string) {
     setStep("verifying");
 
     try {
-      const note = deriveNote(secretPhrase.trim(), 0, BigInt(0));
-      const privKey = note.nullifier;
-      const pubKeyPoint = babyJubMul(privKey, BABYJUB_BASE8);
+      await initPoseidon();
+
+      // Derive EdDSA seed and public key from secret phrase
+      const masterKey = deriveMasterKey(secretPhrase.trim());
+      const pubKeyPoint = await eddsaGetPubKey(masterKey);
       const pubKeyX = pubKeyPoint.x;
 
-      const nullifierHash = note.nullifierHash ?? 0n;
-      const nullifierHashHex = nullifierHash.toString(16).padStart(64, "0");
+      // Also derive note for nullifyingKey and random
+      const note = deriveNote(secretPhrase.trim(), 0, BigInt(0));
 
-      // Find commitment in index
+      // Find commitment in index by trying common amounts
+      // On-chain commitment = Poseidon(npk, ZBTC_TOKEN_ID, amount)
       const commitmentIndex = getCommitmentIndex();
       let foundAmount: number | null = null;
+      let foundLeafIndex: bigint = 0n;
 
-      const tryAmounts = [10000, 100000, 50000, 25000, 1000000];
+      const tryAmounts = [1000, 2000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000];
       for (const amt of tryAmounts) {
-        const testCommitment = computeUnifiedCommitmentSync(pubKeyX, BigInt(amt));
+        const testCommitment = computeJoinSplitCommitmentSync(pubKeyX, ZBTC_TOKEN_ID, BigInt(amt));
         const testHex = testCommitment.toString(16).padStart(64, "0");
         const entry = commitmentIndex.getCommitment(testHex);
         if (entry) {
           foundAmount = amt;
+          foundLeafIndex = entry.index;
           break;
         }
       }
@@ -176,12 +215,47 @@ export function useClaimFlow(initialNote?: string) {
         );
       }
 
-      const commitment = computeUnifiedCommitmentSync(pubKeyX, BigInt(foundAmount));
+      // Compute actual nullifier hash: Poseidon(nullifyingKey, leafIndex)
+      const nullifierValue = computeJoinSplitNullifierSync(note.nullifier, foundLeafIndex);
+      const nullifierHex = nullifierValue.toString(16).padStart(64, "0");
+
+      // Check if nullifier already spent via backend indexer (cached in SQLite)
+      try {
+        const nullifierResp = await fetch(
+          `/api/tracker/nullifier/${nullifierHex}`
+        );
+        if (nullifierResp.ok) {
+          const nullifierData = await nullifierResp.json();
+          if (nullifierData.found) {
+            throw new Error("This note has already been claimed.");
+          }
+        }
+      } catch (checkErr) {
+        // If it's our "already claimed" error, rethrow
+        if (checkErr instanceof Error && checkErr.message.includes("already been claimed")) {
+          throw checkErr;
+        }
+        // Otherwise fall back to on-chain check
+        const nullifierBytesCheck = new Uint8Array(32);
+        for (let i = 0; i < 32; i++) {
+          nullifierBytesCheck[i] = parseInt(nullifierHex.slice(i * 2, i * 2 + 2), 16);
+        }
+        const [nullifierPda] = PublicKey.findProgramAddressSync(
+          [Buffer.from(PDA_SEEDS.NULLIFIER), nullifierBytesCheck],
+          new PublicKey(DEVNET_CONFIG.zvaultProgramId)
+        );
+        const nullifierAccount = await connection.getAccountInfo(nullifierPda);
+        if (nullifierAccount !== null) {
+          throw new Error("This note has already been claimed.");
+        }
+      }
+
+      const commitment = computeJoinSplitCommitmentSync(pubKeyX, ZBTC_TOKEN_ID, BigInt(foundAmount));
       const commitmentHex = commitment.toString(16).padStart(64, "0");
 
       setVerifyResult({
         commitment: commitmentHex,
-        nullifierHash: nullifierHashHex,
+        nullifierHash: nullifierHex,
         amountSats: foundAmount,
       });
       setStep("input");
@@ -189,7 +263,7 @@ export function useClaimFlow(initialNote?: string) {
       setError(err instanceof Error ? err.message : "Failed to verify claim");
       setStep("error");
     }
-  }, [secretPhrase, setError, setStep]);
+  }, [secretPhrase, connection, setError, setStep]);
 
   // Claim via JoinSplit relay
   const claim = useCallback(async () => {
@@ -201,16 +275,27 @@ export function useClaimFlow(initialNote?: string) {
       setError("Please connect your Solana wallet");
       return;
     }
+    if (recipientMode === "stealth" && !resolvedMeta) {
+      setError("Please resolve a stealth recipient first");
+      return;
+    }
+    if (recipientMode === "public" && !solanaAddress.trim()) {
+      setError("Please enter a Solana address");
+      return;
+    }
 
     setError(null);
     setStep("claiming");
     setClaimProgress("generating_proof");
 
     try {
-      const note = deriveNote(secretPhrase.trim(), 0, BigInt(0));
-      const privKey = note.nullifier;
-      const pubKeyPoint = babyJubMul(privKey, BABYJUB_BASE8);
+      // Derive EdDSA seed and keys from secret phrase
+      const masterKey = deriveMasterKey(secretPhrase.trim());
+      const pubKeyPoint = await eddsaGetPubKey(masterKey);
       const pubKeyX = pubKeyPoint.x;
+
+      // Also derive note for nullifyingKey and random
+      const note = deriveNote(secretPhrase.trim(), 0, BigInt(0));
 
       if (!verifyResult?.amountSats) {
         throw new Error("Please verify your claim first.");
@@ -241,8 +326,8 @@ export function useClaimFlow(initialNote?: string) {
         console.warn("[Claim] Could not fetch commitment tree:", fetchErr);
       }
 
-      // Look up commitment in local index
-      const commitment = computeUnifiedCommitmentSync(pubKeyX, BigInt(amountSats));
+      // Look up commitment in local index (on-chain: Poseidon(npk, token, amount))
+      const commitment = computeJoinSplitCommitmentSync(pubKeyX, ZBTC_TOKEN_ID, BigInt(amountSats));
       const commitmentHex = commitment.toString(16).padStart(64, "0");
       const indexEntry = commitmentIndex.getCommitment(commitmentHex);
 
@@ -262,33 +347,74 @@ export function useClaimFlow(initialNote?: string) {
         throw new Error("Prover not ready. Please wait for initialization.");
       }
 
-      // Generate JoinSplit(1,1) proof: 1 input (deposit) → 1 output (claimed note)
-      // The output NPK is derived for the claimer
-      const outputNpk = pubKeyX; // Same key for self-claim
-      const nullifierHash = note.nullifierHash ?? 0n;
+      // Compute actual nullifier: Poseidon(nullifyingKey, leafIndex)
+      const nullifierHash = computeJoinSplitNullifierSync(note.nullifier, leafIndexBigint);
+      const amountBig = BigInt(amountSats);
 
-      // Compute bound params hash (hash of all public params bound to the proof)
-      // For a 1x1 JoinSplit, this binds the output commitment
-      const outputCommitment = computeUnifiedCommitmentSync(outputNpk, BigInt(amountSats));
+      // Determine output NPK and stealth data based on recipient mode
+      let outputNpk: bigint;
+      let stealthDataEntry: Uint8Array;
+      let isPublicUnshield = false;
+      let boundParamsHashValue: bigint;
+
+      if (recipientMode === "stealth" && resolvedMeta) {
+        // Send to another stealth address
+        const result = await createStealthDepositWithKeys(resolvedMeta, amountBig);
+        outputNpk = result.stealthPubKeyX;
+        stealthDataEntry = new Uint8Array(40);
+        stealthDataEntry.set(result.ephemeralPub, 0);
+        stealthDataEntry.set(result.encryptedAmount, 32);
+        boundParamsHashValue = computeBoundParamsHash(DEFAULT_BOUND_PARAMS);
+      } else if (recipientMode === "public") {
+        // Unshield to Solana address
+        isPublicUnshield = true;
+        const recipientPubkey = new PublicKey(solanaAddress.trim());
+        const addrBytes = recipientPubkey.toBytes();
+        // Match on-chain reduce_to_field: if bytes >= BN254 modulus, mask first byte
+        outputNpk = reduceToFieldClaimFlow(addrBytes);
+        const unshieldParams = createUnshieldBoundParams(addrBytes);
+        boundParamsHashValue = computeBoundParamsHash(unshieldParams);
+        // Dummy stealth data (not used for unshield)
+        stealthDataEntry = new Uint8Array(40);
+      } else {
+        // Self-claim (default)
+        outputNpk = pubKeyX;
+        stealthDataEntry = new Uint8Array(40);
+        const ephPubHex = pubKeyX.toString(16).padStart(64, "0");
+        for (let i = 0; i < 32; i++) {
+          stealthDataEntry[i] = parseInt(ephPubHex.slice(i * 2, i * 2 + 2), 16);
+        }
+        for (let i = 0; i < 8; i++) {
+          stealthDataEntry[32 + i] = Number((amountBig >> BigInt(i * 8)) & 0xffn);
+        }
+        boundParamsHashValue = computeBoundParamsHash(DEFAULT_BOUND_PARAMS);
+      }
+
+      const outputCommitment = computeJoinSplitCommitmentSync(outputNpk, ZBTC_TOKEN_ID, amountBig);
+
+      // Compute EdDSA-Poseidon signature
+      // msgHash = Poseidon(merkleRoot, boundParamsHash, nullifier, outputCommitment)
+      const msgHash = poseidonHashSync([merkleRoot, boundParamsHashValue, nullifierHash, outputCommitment]);
+      const [sigR8x, sigR8y, sigS] = await eddsaPoseidonSign(masterKey, msgHash);
 
       const joinsplitInputs: JoinSplitProofInputs = {
         nInputs: 1,
         nOutputs: 1,
         merkleRoot,
-        boundParamsHash: 0n, // Computed by circuit
+        boundParamsHash: boundParamsHashValue,
         token: ZBTC_TOKEN_ID,
         publicKey: [pubKeyPoint.x, pubKeyPoint.y],
-        signature: [0n, 0n, 0n], // EdDSA-Poseidon signature (computed during proof gen)
+        signature: [sigR8x, sigR8y, sigS],
         nullifyingKey: note.nullifier,
         inputs: [
           {
             random: note.secret ?? 0n,
-            value: BigInt(amountSats),
+            value: amountBig,
             leafIndex: leafIndexBigint,
             merkleProof: { siblings: merkleSiblings, indices: merkleIndices },
           },
         ],
-        outputs: [{ npk: outputNpk, value: BigInt(amountSats) }],
+        outputs: [{ npk: outputNpk, value: amountBig }],
       };
 
       const proofData = await generateJoinSplitProof(joinsplitInputs);
@@ -296,7 +422,7 @@ export function useClaimFlow(initialNote?: string) {
 
       setClaimProgress("relaying");
 
-      // Submit via relay API
+      // Convert values to hex bytes
       const nullifierBytes = new Uint8Array(32);
       const nhHex = nullifierHash.toString(16).padStart(64, "0");
       for (let i = 0; i < 32; i++) {
@@ -315,35 +441,53 @@ export function useClaimFlow(initialNote?: string) {
         outputCommitmentBytes[i] = parseInt(ocHex.slice(i * 2, i * 2 + 2), 16);
       }
 
-      // Stealth data: ephemeral pub (32 bytes) + encrypted amount (8 bytes)
-      const stealthDataEntry = new Uint8Array(40);
-      // For self-claim, ephemeral pub can be the pubkey X coordinate
-      const ephPubHex = pubKeyX.toString(16).padStart(64, "0");
-      for (let i = 0; i < 32; i++) {
-        stealthDataEntry[i] = parseInt(ephPubHex.slice(i * 2, i * 2 + 2), 16);
-      }
-      // Encrypted amount (little-endian u64)
-      const amountBigint = BigInt(amountSats);
-      for (let i = 0; i < 8; i++) {
-        stealthDataEntry[32 + i] = Number((amountBigint >> BigInt(i * 8)) & 0xffn);
-      }
+      let relayResult: { success: boolean; signature?: string; error?: string };
 
-      const relayResponse = await fetch("/api/relay", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nInputs: 1,
-          nOutputs: 1,
-          proof: bytesToHex(proofBytes),
-          merkleRoot: bytesToHex(merkleRootBytes),
-          boundParamsHash: computeBoundParamsHash(DEFAULT_BOUND_PARAMS),
-          nullifiers: [bytesToHex(nullifierBytes)],
-          commitmentsOut: [bytesToHex(outputCommitmentBytes)],
-          stealthData: [bytesToHex(stealthDataEntry)],
-        }),
-      });
+      if (isPublicUnshield) {
+        // Public unshield: call /api/unshield
+        const recipientPubkey = new PublicKey(solanaAddress.trim());
+        const zbtcMint = new PublicKey(DEVNET_CONFIG.zbtcMint);
+        const TOKEN_2022_PID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+        const recipientTokenAccount = getAssociatedTokenAddressSync(
+          zbtcMint, recipientPubkey, false, TOKEN_2022_PID
+        );
 
-      const relayResult = await relayResponse.json();
+        const relayResponse = await fetch("/api/unshield", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nInputs: 1,
+            nOutputs: 1,
+            proof: bytesToHex(proofBytes),
+            merkleRoot: bytesToHex(merkleRootBytes),
+            boundParamsHash: boundParamsHashValue.toString(16).padStart(64, "0"),
+            nullifiers: [bytesToHex(nullifierBytes)],
+            commitmentsOut: [bytesToHex(outputCommitmentBytes)],
+            stealthData: [],
+            unshieldAmount: amountSats.toString(),
+            recipientAddress: recipientPubkey.toBase58(),
+            recipientTokenAccount: recipientTokenAccount.toBase58(),
+          }),
+        });
+        relayResult = await relayResponse.json();
+      } else {
+        // Private transfer (self or stealth): call /api/relay
+        const relayResponse = await fetch("/api/relay", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nInputs: 1,
+            nOutputs: 1,
+            proof: bytesToHex(proofBytes),
+            merkleRoot: bytesToHex(merkleRootBytes),
+            boundParamsHash: boundParamsHashValue.toString(16).padStart(64, "0"),
+            nullifiers: [bytesToHex(nullifierBytes)],
+            commitmentsOut: [bytesToHex(outputCommitmentBytes)],
+            stealthData: [bytesToHex(stealthDataEntry)],
+          }),
+        });
+        relayResult = await relayResponse.json();
+      }
 
       if (!relayResult.success) {
         throw new Error(`Relay failed: ${relayResult.error}`);
@@ -351,7 +495,7 @@ export function useClaimFlow(initialNote?: string) {
 
       setClaimProgress("complete");
       setClaimResult({
-        txSignature: relayResult.signature,
+        txSignature: relayResult.signature ?? "",
         claimedAmount: amountSats,
         merkleRoot: merkleRoot.toString(16).padStart(64, "0"),
         leafIndex,
@@ -373,6 +517,9 @@ export function useClaimFlow(initialNote?: string) {
     connection,
     verifyResult,
     proverReady,
+    recipientMode,
+    resolvedMeta,
+    solanaAddress,
     setError,
     setStep,
   ]);
@@ -430,6 +577,9 @@ export function useClaimFlow(initialNote?: string) {
     resetFlowState();
     setClaimProgress("idle");
     setSecretPhrase("");
+    setRecipientMode("self");
+    setResolvedMeta(null);
+    setSolanaAddress("");
     setVerifyResult(null);
     setClaimResult(null);
     setSplitResult(null);
@@ -454,8 +604,14 @@ export function useClaimFlow(initialNote?: string) {
     splitLoading,
     connected,
     publicKey,
+    recipientMode,
+    resolvedMeta,
+    solanaAddress,
 
     setSecretPhrase,
+    setRecipientMode,
+    setResolvedMeta,
+    setSolanaAddress,
     parseClaimLink,
     pasteFromClipboard,
     verify,
