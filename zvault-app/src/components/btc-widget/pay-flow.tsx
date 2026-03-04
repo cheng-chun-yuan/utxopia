@@ -5,7 +5,8 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import {
   CheckCircle2, Send, Wallet, Shield, Clock, AlertCircle,
-  Key, Copy, Check, Pencil, X, Loader2, Zap, Plus, Trash2, Bitcoin,
+  Key, Copy, Check, Pencil, X, Loader2, Zap, Plus, Trash2, Bitcoin, FileText,
+  Download, Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { parseSats, validateWithdrawalAmount } from "@/lib/utils/validation";
@@ -19,11 +20,14 @@ import {
   initPoseidon,
   prepareClaimInputs,
   DEVNET_CONFIG,
+  deriveMasterKey,
+  eddsaGetPubKey,
   type StealthMetaAddress,
   type ScannedNote,
   type JoinSplitProofInputs,
 } from "@zvault/sdk";
 import { bytesToHex } from "@/lib/solana/instructions";
+import { scanSecretPhrase, type ScannedSecretNote } from "@/lib/claim-utils";
 
 // Validate Solana address
 function isValidSolanaAddress(address: string): boolean {
@@ -196,8 +200,9 @@ function StepIndicator({ current }: { current: PayStep }) {
 
 interface OutputRow {
   id: string;
-  mode: "stealth" | "public";
+  mode: "stealth" | "public" | "note";
   amount: string;
+  secretPhrase: string;
   resolvedMeta: StealthMetaAddress | null;
   resolvedName: string | null;
   stealthError: string | null;
@@ -205,11 +210,12 @@ interface OutputRow {
   addressError: string | null;
 }
 
-function createOutputRow(mode: "stealth" | "public" = "public", defaultAddress = ""): OutputRow {
+function createOutputRow(mode: "stealth" | "public" | "note" = "public", defaultAddress = ""): OutputRow {
   return {
     id: crypto.randomUUID(),
     mode,
     amount: "",
+    secretPhrase: "",
     resolvedMeta: null,
     resolvedName: null,
     stealthError: null,
@@ -242,9 +248,10 @@ interface PayFlowProps {
     leafIndex: number;
     amount: bigint;
   };
+  initialSecretPhrase?: string;
 }
 
-export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
+export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: PayFlowProps) {
   const { publicKey, connected, signTransaction } = useWallet();
   const {
     keys,
@@ -278,6 +285,14 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
   const [showNoteSelector, setShowNoteSelector] = useState(false);
   const notePreselectedRef = useRef(false);
 
+  // Imported note from secret phrase
+  const [showImportInput, setShowImportInput] = useState(!!initialSecretPhrase);
+  const [importPhrase, setImportPhrase] = useState(initialSecretPhrase || "");
+  const [importedNote, setImportedNote] = useState<ScannedSecretNote | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const importAutoTriggered = useRef(false);
+
   // Output rows state — default first output to "public" when coming from InboxItem "To Wallet"
   const defaultOutputMode = initialMode === "btc_withdraw" ? "public" : (initialMode === "public" ? "public" : "stealth");
   const [outputs, setOutputs] = useState<OutputRow[]>([
@@ -294,10 +309,11 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
     return availableNotes.filter((n) => selectedNoteIds.has(n.id));
   }, [availableNotes, selectedNoteIds]);
 
-  // Total input sats
+  // Total input sats (imported note replaces inbox notes when active)
   const totalInputSats = useMemo(() => {
+    if (importedNote) return importedNote.amount;
     return selectedNotes.reduce((sum, n) => sum + Number(n.amount), 0);
-  }, [selectedNotes]);
+  }, [selectedNotes, importedNote]);
 
   // Total output sats (sum of all output amounts)
   const totalOutputSats = useMemo(() => {
@@ -311,7 +327,7 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
   const changeSats = totalInputSats - totalOutputSats;
 
   // Circuit shape
-  const nInputs = selectedNotes.length;
+  const nInputs = importedNote ? 1 : selectedNotes.length;
   const nOutputs = outputs.length + (changeSats > 0 ? 1 : 0); // +1 for change
 
   // Initialize default recipient address when wallet connects
@@ -361,6 +377,44 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
     }
   }, [connected, hasKeys, step]);
 
+  // Auto-import note from ?note= URL param
+  useEffect(() => {
+    if (!initialSecretPhrase || importAutoTriggered.current || !connected || !hasKeys) return;
+    importAutoTriggered.current = true;
+    handleImportScan(initialSecretPhrase);
+  }, [initialSecretPhrase, connected, hasKeys]);
+
+  // Import scan handler
+  const handleImportScan = useCallback(async (phrase?: string) => {
+    const p = (phrase || importPhrase).trim();
+    if (p.length < 8) {
+      setImportError("Secret phrase must be at least 8 characters");
+      return;
+    }
+    setImportLoading(true);
+    setImportError(null);
+    try {
+      const result = await scanSecretPhrase(p);
+      setImportedNote(result);
+      // When imported note is active, clear inbox note selection
+      setSelectedNoteIds(new Set());
+      notePreselectedRef.current = true; // prevent auto-select from overriding
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "Failed to scan phrase");
+    } finally {
+      setImportLoading(false);
+    }
+  }, [importPhrase]);
+
+  // Clear imported note
+  const clearImportedNote = useCallback(() => {
+    setImportedNote(null);
+    setImportPhrase("");
+    setImportError(null);
+    setShowImportInput(false);
+    notePreselectedRef.current = false;
+  }, []);
+
   // ===== Output row handlers =====
 
   const updateOutput = useCallback(
@@ -406,7 +460,7 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
 
   const validationErrors = useMemo(() => {
     const errors: string[] = [];
-    if (selectedNotes.length === 0) errors.push("Select at least one input note");
+    if (!importedNote && selectedNotes.length === 0) errors.push("Select at least one input note");
     if (outputs.length === 0) errors.push("Add at least one recipient");
 
     for (const o of outputs) {
@@ -461,6 +515,10 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
         errors.push("Enter valid Solana addresses");
         break;
       }
+      if (o.mode === "note" && o.secretPhrase.trim().length < 8) {
+        errors.push("Secret phrase must be at least 8 characters");
+        break;
+      }
     }
 
     return errors;
@@ -471,7 +529,9 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
   // ===== Main pay handler =====
 
   const handlePay = async () => {
-    if (!publicKey || !keys || !signTransaction || !canSubmit) return;
+    // Imported note only needs wallet for stealth address (self-change), not for keys
+    if (!importedNote && (!publicKey || !keys || !signTransaction || !canSubmit)) return;
+    if (importedNote && !canSubmit) return;
 
     setLoading(true);
     setError(null);
@@ -480,7 +540,8 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
 
     try {
       // Validate circuit availability before anything else
-      const circuitKey = `${selectedNotes.length}x${outputs.length + (changeSats > 0 ? 1 : 0)}`;
+      const effectiveNInputs = importedNote ? 1 : selectedNotes.length;
+      const circuitKey = `${effectiveNInputs}x${outputs.length + (changeSats > 0 ? 1 : 0)}`;
       if (!AVAILABLE_CIRCUITS.has(circuitKey)) {
         throw new Error(
           `Circuit JoinSplit(${circuitKey}) is not available. ` +
@@ -493,64 +554,125 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
 
       const { computeJoinSplitCommitmentSync, createStealthDepositWithKeys,
               eddsaPoseidonSign, computeBoundParamsHash, DEFAULT_BOUND_PARAMS,
-              createUnshieldBoundParams, poseidonHashSync } = await import("@zvault/sdk");
+              createUnshieldBoundParams, poseidonHashSync,
+              getCommitmentIndex: getCommitmentIndexSdk } = await import("@zvault/sdk");
 
-      // 1. Fetch Merkle proofs for all input notes in parallel
-      setProofStatus(`Fetching ${selectedNotes.length} Merkle proof(s)...`);
+      // Build input data: either from imported note or from inbox notes
+      let inputsData: {
+        note: { commitmentHex: string; leafIndex: number; amount: bigint };
+        claimInputs: {
+          npk: bigint;
+          random: bigint;
+          nullifyingKey: bigint;
+          nullifier: bigint;
+          merkleRoot: bigint;
+          merklePath: bigint[];
+          merkleIndices: number[];
+        };
+        // For imported notes: phrase-derived keys
+        eddsaSeed?: Uint8Array;
+        pubKeyX?: bigint;
+        pubKeyY?: bigint;
+      }[];
 
-      const merkleResults = await Promise.all(
-        selectedNotes.map(async (note) => {
-          const resp = await fetch(`/api/merkle/proof?commitment=${note.commitmentHex}`);
-          const data = await resp.json();
-          if (!data.success) {
-            throw new Error(`Note ${note.commitmentHex.slice(0, 16)}... not found on-chain`);
-          }
-          return { note, merkle: data };
-        })
-      );
+      if (importedNote) {
+        // Imported note path: use phrase-derived keys
+        setProofStatus("Fetching Merkle proof for imported note...");
 
-      // Validate all proofs share the same merkle root
-      const roots = merkleResults.map((r) => r.merkle.root);
-      if (new Set(roots).size > 1) {
-        throw new Error("Input notes have different Merkle roots — tree may have changed");
+        const resp = await fetch(`/api/merkle/proof?commitment=${importedNote.commitment}`);
+        const merkle = await resp.json();
+        if (!merkle.success) {
+          throw new Error("Imported note commitment not found on-chain");
+        }
+
+        const merkleRoot = BigInt("0x" + merkle.root);
+        const merklePath = (merkle.siblings as string[]).map((s: string) => BigInt("0x" + s));
+        const merkleIndices = merkle.indices as number[];
+
+        inputsData = [{
+          note: {
+            commitmentHex: importedNote.commitment,
+            leafIndex: Number(importedNote.leafIndex),
+            amount: BigInt(importedNote.amount),
+          },
+          claimInputs: {
+            npk: importedNote.pubKeyX,
+            random: importedNote.random,
+            nullifyingKey: importedNote.nullifyingKey,
+            nullifier: BigInt("0x" + importedNote.nullifierHash),
+            merkleRoot,
+            merklePath,
+            merkleIndices,
+          },
+          eddsaSeed: importedNote.eddsaSeed,
+          pubKeyX: importedNote.pubKeyX,
+          pubKeyY: importedNote.pubKeyY,
+        }];
+      } else {
+        // Standard inbox notes path
+        setProofStatus(`Fetching ${selectedNotes.length} Merkle proof(s)...`);
+
+        const merkleResults = await Promise.all(
+          selectedNotes.map(async (note) => {
+            const resp = await fetch(`/api/merkle/proof?commitment=${note.commitmentHex}`);
+            const data = await resp.json();
+            if (!data.success) {
+              throw new Error(`Note ${note.commitmentHex.slice(0, 16)}... not found on-chain`);
+            }
+            return { note, merkle: data };
+          })
+        );
+
+        // Validate all proofs share the same merkle root
+        const roots = merkleResults.map((r) => r.merkle.root);
+        if (new Set(roots).size > 1) {
+          throw new Error("Input notes have different Merkle roots — tree may have changed");
+        }
+
+        // Prepare claim inputs for each input note
+        setProofStatus("Deriving stealth keys...");
+
+        inputsData = await Promise.all(
+          merkleResults.map(async ({ note, merkle }) => {
+            const scannedNote: ScannedNote = {
+              amount: typeof note.amount === "bigint" ? note.amount : BigInt(note.amount || 0),
+              ephemeralPub: note.ephemeralPub,
+              stealthPub: {
+                x: typeof note.stealthPub?.x === "bigint" ? note.stealthPub.x : BigInt(note.stealthPub?.x || 0),
+                y: typeof note.stealthPub?.y === "bigint" ? note.stealthPub.y : BigInt(note.stealthPub?.y || 0),
+              },
+              leafIndex: note.leafIndex,
+              commitment: note.commitment,
+            };
+
+            const realMerkleProof = {
+              root: BigInt("0x" + merkle.root),
+              pathElements: (merkle.siblings as string[]).map((s: string) => BigInt("0x" + s)),
+              pathIndices: merkle.indices as number[],
+            };
+
+            const claimInputs = await prepareClaimInputs(keys!, scannedNote, realMerkleProof);
+
+            // Verify commitment
+            const derivedCommitment = computeJoinSplitCommitmentSync(
+              claimInputs.npk, ZBTC_TOKEN_ID, scannedNote.amount
+            );
+            const derivedHex = derivedCommitment.toString(16).padStart(64, "0");
+            if (derivedHex !== note.commitmentHex.toLowerCase()) {
+              throw new Error(`Commitment mismatch for note ${note.commitmentHex.slice(0, 16)}...`);
+            }
+
+            return {
+              note: {
+                commitmentHex: note.commitmentHex,
+                leafIndex: note.leafIndex,
+                amount: scannedNote.amount,
+              },
+              claimInputs,
+            };
+          })
+        );
       }
-
-      // 2. Prepare claim inputs for each input note
-      setProofStatus("Deriving stealth keys...");
-
-      const inputsData = await Promise.all(
-        merkleResults.map(async ({ note, merkle }) => {
-          const scannedNote: ScannedNote = {
-            amount: typeof note.amount === "bigint" ? note.amount : BigInt(note.amount || 0),
-            ephemeralPub: note.ephemeralPub,
-            stealthPub: {
-              x: typeof note.stealthPub?.x === "bigint" ? note.stealthPub.x : BigInt(note.stealthPub?.x || 0),
-              y: typeof note.stealthPub?.y === "bigint" ? note.stealthPub.y : BigInt(note.stealthPub?.y || 0),
-            },
-            leafIndex: note.leafIndex,
-            commitment: note.commitment,
-          };
-
-          const realMerkleProof = {
-            root: BigInt("0x" + merkle.root),
-            pathElements: (merkle.siblings as string[]).map((s: string) => BigInt("0x" + s)),
-            pathIndices: merkle.indices as number[],
-          };
-
-          const claimInputs = await prepareClaimInputs(keys, scannedNote, realMerkleProof);
-
-          // Verify commitment
-          const derivedCommitment = computeJoinSplitCommitmentSync(
-            claimInputs.npk, ZBTC_TOKEN_ID, scannedNote.amount
-          );
-          const derivedHex = derivedCommitment.toString(16).padStart(64, "0");
-          if (derivedHex !== note.commitmentHex.toLowerCase()) {
-            throw new Error(`Commitment mismatch for note ${note.commitmentHex.slice(0, 16)}...`);
-          }
-
-          return { note, scannedNote, claimInputs };
-        })
-      );
 
       // 3. Prepare outputs — use createStealthDepositWithKeys for ALL outputs
       // so that npk (for commitment) and stealth data (ephemeralPub + encryptedAmount)
@@ -568,7 +690,7 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
       // Store the full stealth-with-keys result for each output (including public/change)
       const stealthResults: Awaited<ReturnType<typeof createStealthDepositWithKeys>>[] = [];
 
-      // Reorder outputs: stealth first, then public (unshield) last
+      // Reorder outputs: stealth/note first, then public (unshield) last
       // This ensures the unshield output is the last commitment in the proof
       const hasPublicOutput = outputs.some(o => o.mode === "public");
       const orderedOutputs = hasPublicOutput
@@ -592,6 +714,27 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
             ephemeralPub: new Uint8Array(32),
             encryptedAmount: new Uint8Array(8),
             stealthPubKeyX: addrReduced,
+          } as Awaited<ReturnType<typeof createStealthDepositWithKeys>>);
+        } else if (output.mode === "note") {
+          // Note output: derive EdDSA pubkey from secret phrase (must match claim flow)
+          const masterKey = deriveMasterKey(output.secretPhrase.trim());
+          const pubKeyPoint = await eddsaGetPubKey(masterKey);
+          const outputNpk = pubKeyPoint.x;
+          recipientNpks.push(outputNpk);
+          // Stealth data: use pubKeyX as ephemeral pub + plaintext amount (LE u64)
+          const ephPubBytes = new Uint8Array(32);
+          const ephPubHex = outputNpk.toString(16).padStart(64, "0");
+          for (let i = 0; i < 32; i++) {
+            ephPubBytes[i] = parseInt(ephPubHex.slice(i * 2, i * 2 + 2), 16);
+          }
+          const encAmount = new Uint8Array(8);
+          for (let i = 0; i < 8; i++) {
+            encAmount[i] = Number((amount >> BigInt(i * 8)) & 0xffn);
+          }
+          stealthResults.push({
+            ephemeralPub: ephPubBytes,
+            encryptedAmount: encAmount,
+            stealthPubKeyX: outputNpk,
           } as Awaited<ReturnType<typeof createStealthDepositWithKeys>>);
         } else if (output.mode === "stealth" && output.resolvedMeta) {
           // Stealth output: single call provides BOTH npk AND stealth data
@@ -655,7 +798,20 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
       const msgHashInputs = [merkleRoot, boundParamsHash, ...allNullifiers, ...outCommitments];
       const msgHash = poseidonHashSync(msgHashInputs);
 
-      const [sigR8x, sigR8y, sigS] = await eddsaPoseidonSign(keys.eddsaSeed, msgHash);
+      // Use phrase-derived keys for imported notes, wallet-derived keys for inbox notes
+      let sigR8x: bigint, sigR8y: bigint, sigS: bigint;
+      let proofPublicKey: [bigint, bigint];
+      let proofNullifyingKey: bigint;
+
+      if (importedNote && inputsData[0].eddsaSeed) {
+        [sigR8x, sigR8y, sigS] = await eddsaPoseidonSign(inputsData[0].eddsaSeed, msgHash);
+        proofPublicKey = [inputsData[0].pubKeyX!, inputsData[0].pubKeyY!];
+        proofNullifyingKey = inputsData[0].claimInputs.nullifyingKey;
+      } else {
+        [sigR8x, sigR8y, sigS] = await eddsaPoseidonSign(keys!.eddsaSeed, msgHash);
+        proofPublicKey = [keys!.spendingPubKey.x, keys!.spendingPubKey.y];
+        proofNullifyingKey = inputsData[0].claimInputs.nullifyingKey;
+      }
 
       // 6. Build JoinSplit proof inputs
       setProofStatus("Generating JoinSplit proof...");
@@ -667,17 +823,17 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
       const actualNOutputs = sendAmounts.length;
 
       const joinsplitInputs: JoinSplitProofInputs = {
-        nInputs: selectedNotes.length,
+        nInputs: effectiveNInputs,
         nOutputs: actualNOutputs,
         merkleRoot,
         boundParamsHash,
         token: ZBTC_TOKEN_ID,
-        publicKey: [keys.spendingPubKey.x, keys.spendingPubKey.y],
+        publicKey: proofPublicKey,
         signature: [sigR8x, sigR8y, sigS],
-        nullifyingKey: inputsData[0].claimInputs.nullifyingKey,
-        inputs: inputsData.map(({ note, scannedNote, claimInputs }) => ({
+        nullifyingKey: proofNullifyingKey,
+        inputs: inputsData.map(({ note, claimInputs }) => ({
           random: claimInputs.random,
-          value: scannedNote.amount,
+          value: note.amount,
           leafIndex: BigInt(note.leafIndex),
           merkleProof: {
             siblings: claimInputs.merklePath,
@@ -729,7 +885,7 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            nInputs: selectedNotes.length,
+            nInputs: effectiveNInputs,
             nOutputs: actualNOutputs,
             proof: bytesToHex(proofBytes),
             merkleRoot: merkleRootHex,
@@ -750,7 +906,7 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            nInputs: selectedNotes.length,
+            nInputs: effectiveNInputs,
             nOutputs: actualNOutputs,
             proof: bytesToHex(proofBytes),
             merkleRoot: merkleRootHex,
@@ -772,6 +928,11 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
       if (changeSats > 0) {
         setChangeAmountSats(changeSats);
       }
+      // Capture Note output phrases for claim links in success
+      const notePhrases = outputs
+        .filter(o => o.mode === "note" && o.secretPhrase.trim().length >= 8)
+        .map(o => ({ phrase: o.secretPhrase.trim(), amount: parseSats(o.amount) ?? 0 }));
+      setNoteOutputPhrases(notePhrases);
       setStep("success");
     } catch (err) {
       console.error("[Pay] Error:", err);
@@ -825,6 +986,9 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
     }
   };
 
+  // Track Note output phrases for success display
+  const [noteOutputPhrases, setNoteOutputPhrases] = useState<{ phrase: string; amount: number }[]>([]);
+
   const resetFlow = () => {
     setStep(availableNotes.length > 0 ? "compose" : "connect");
     setSelectedNoteIds(new Set());
@@ -833,6 +997,8 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
     setError(null);
     setRequestId(null);
     setChangeAmountSats(0);
+    clearImportedNote();
+    setNoteOutputPhrases([]);
   };
 
   // ===== CONNECT STEP =====
@@ -895,15 +1061,17 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
             <p className="text-body2-semibold text-gray-light uppercase tracking-wider text-xs">
               Inputs
             </p>
-            <button
-              onClick={() => setShowNoteSelector(!showNoteSelector)}
-              className="text-caption text-purple hover:text-purple/80 transition-colors"
-            >
-              {showNoteSelector ? "Done" : "Edit"}
-            </button>
+            {!importedNote && (
+              <button
+                onClick={() => setShowNoteSelector(!showNoteSelector)}
+                className="text-caption text-purple hover:text-purple/80 transition-colors"
+              >
+                {showNoteSelector ? "Done" : "Edit"}
+              </button>
+            )}
           </div>
 
-          {showNoteSelector ? (
+          {importedNote ? null : showNoteSelector ? (
             /* Full note selector with checkboxes */
             <div className="space-y-1.5 mb-2">
               {availableNotes.map((note) => (
@@ -968,6 +1136,96 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
                 ))
               )}
             </div>
+          )}
+
+          {/* Imported note display */}
+          {importedNote && (
+            <div className="mb-2 p-2.5 rounded-[10px] bg-btc/5 border border-btc/20">
+              <div className="flex items-center gap-2">
+                <Download className="w-4 h-4 text-btc shrink-0" />
+                <span className="text-body2-semibold text-foreground">
+                  {formatBtc(importedNote.amount)} zkBTC
+                </span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-btc/15 text-btc font-medium">
+                  imported
+                </span>
+                <span className="text-caption text-gray font-mono ml-auto">
+                  leaf #{Number(importedNote.leafIndex)}
+                </span>
+                <button
+                  onClick={clearImportedNote}
+                  className="p-1 rounded text-gray/50 hover:text-error transition-colors"
+                  title="Remove imported note"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Import from Secret button/form */}
+          {!importedNote && (
+            showImportInput ? (
+              <div className="mb-2 p-3 rounded-[10px] bg-muted border border-btc/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <Key className="w-4 h-4 text-btc" />
+                  <span className="text-caption text-gray-light">Import from Secret Phrase</span>
+                  <button
+                    onClick={() => { setShowImportInput(false); setImportPhrase(""); setImportError(null); }}
+                    className="ml-auto p-1 rounded text-gray/50 hover:text-gray-light transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={importPhrase}
+                    onChange={(e) => setImportPhrase(e.target.value)}
+                    placeholder="Enter secret phrase..."
+                    className={cn(
+                      "flex-1 px-3 py-2 bg-background border border-gray/20 rounded-[8px]",
+                      "text-body2 font-mono text-foreground placeholder:text-gray/40",
+                      "outline-none focus:border-btc/40 transition-colors"
+                    )}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleImportScan(); }}
+                  />
+                  <button
+                    onClick={() => handleImportScan()}
+                    disabled={importLoading || importPhrase.trim().length < 8}
+                    className={cn(
+                      "px-3 py-2 rounded-[8px] text-caption font-medium transition-colors",
+                      "bg-btc/20 text-btc hover:bg-btc/30",
+                      "disabled:opacity-40 disabled:cursor-not-allowed"
+                    )}
+                  >
+                    {importLoading ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Search className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+                {importError && (
+                  <p className="text-[11px] text-error mt-1.5 pl-1">{importError}</p>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowImportInput(true)}
+                className="mb-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-[8px] text-caption text-btc hover:bg-btc/5 border border-dashed border-btc/20 hover:border-btc/40 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Import from Secret
+              </button>
+            )
+          )}
+
+          {/* Disable inbox note selector when imported note is active */}
+          {importedNote && selectedNotes.length > 0 && (
+            <p className="text-[11px] text-gray mb-2 pl-1">
+              Inbox notes disabled while using imported note
+            </p>
           )}
 
           {/* Input total */}
@@ -1208,7 +1466,7 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
 
   // ===== SUCCESS STEP =====
   if (step === "success" && requestId) {
-    const hasStealth = outputs.some((o) => o.mode === "stealth");
+    const hasStealth = outputs.some((o) => o.mode === "stealth" || o.mode === "note");
 
     return (
       <div className="flex flex-col items-center">
@@ -1257,6 +1515,15 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
           </div>
         </div>
 
+        {/* Claim links for Note outputs */}
+        {noteOutputPhrases.length > 0 && (
+          <div className="w-full mb-4 space-y-2">
+            {noteOutputPhrases.map((np, i) => (
+              <NoteClaimLink key={i} phrase={np.phrase} amount={np.amount} />
+            ))}
+          </div>
+        )}
+
         <div className="w-full flex items-center gap-3 p-3 bg-privacy/10 border border-privacy/20 rounded-[12px] mb-6">
           <CheckCircle2 className="w-5 h-5 text-privacy shrink-0" />
           <p className="text-caption text-gray-light">
@@ -1275,6 +1542,48 @@ export function PayFlow({ initialMode, preselectedNote }: PayFlowProps) {
   }
 
   return null;
+}
+
+// ===== NOTE CLAIM LINK COMPONENT =====
+
+function NoteClaimLink({ phrase, amount }: { phrase: string; amount: number }) {
+  const [copied, setCopied] = useState(false);
+  const claimUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/claim?note=${encodeURIComponent(phrase)}`
+    : "";
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(claimUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div className="p-3 rounded-[12px] bg-btc/5 border border-btc/20">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <FileText className="w-4 h-4 text-btc" />
+          <span className="text-body2-semibold text-foreground">
+            Note: {formatBtc(amount)} zkBTC
+          </span>
+        </div>
+        <button
+          onClick={handleCopy}
+          className="flex items-center gap-1 text-caption text-btc hover:text-btc/80 transition-colors"
+        >
+          {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+          {copied ? "Copied!" : "Copy Link"}
+        </button>
+      </div>
+      <div className="p-2 bg-background rounded-[8px] break-all">
+        <code className="text-[11px] font-mono text-gray-light">{claimUrl}</code>
+      </div>
+      <p className="text-[11px] text-gray mt-1.5">
+        Share this link to let someone claim this note
+      </p>
+    </div>
+  );
 }
 
 // ===== OUTPUT ROW CARD COMPONENT =====
@@ -1336,6 +1645,17 @@ function OutputRowCard({
             >
               Public
             </button>
+            <button
+              onClick={() => onUpdate({ mode: "note", addressError: null, stealthError: null })}
+              className={cn(
+                "px-2 py-1 rounded-[6px] text-[11px] font-medium transition-colors",
+                output.mode === "note"
+                  ? "bg-btc/20 text-btc"
+                  : "text-gray hover:text-gray-light"
+              )}
+            >
+              Note
+            </button>
           </div>
           {/* Remove */}
           {canRemove && (
@@ -1350,7 +1670,35 @@ function OutputRowCard({
       </div>
 
       {/* Recipient */}
-      {output.mode === "stealth" ? (
+      {output.mode === "note" ? (
+        <div className="mb-2">
+          <label className="text-caption text-gray pl-1 mb-1 block">
+            Secret Phrase (share to let someone claim)
+          </label>
+          <div className="relative">
+            <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-btc" />
+            <input
+              type="text"
+              value={output.secretPhrase}
+              onChange={(e) => onUpdate({ secretPhrase: e.target.value })}
+              placeholder="e.g. alpha-bravo-charlie-1234"
+              className={cn(
+                "w-full px-3 py-2 pl-9 bg-muted border rounded-[8px]",
+                "text-body2 font-mono text-foreground placeholder:text-gray/40",
+                "outline-none transition-colors",
+                output.secretPhrase.trim().length >= 8
+                  ? "border-btc/30"
+                  : "border-gray/20 focus:border-btc/40"
+              )}
+            />
+          </div>
+          {output.secretPhrase.trim().length > 0 && output.secretPhrase.trim().length < 8 && (
+            <p className="text-[11px] text-gray mt-1 pl-1">
+              Min 8 characters ({8 - output.secretPhrase.trim().length} more)
+            </p>
+          )}
+        </div>
+      ) : output.mode === "stealth" ? (
         <div className="mb-2">
           <StealthRecipientInput
             onResolved={(meta, name) =>

@@ -13,6 +13,7 @@ function PayFlowWithParams() {
   const commitment = searchParams.get("commitment");
   const leafIndex = searchParams.get("leafIndex");
   const amount = searchParams.get("amount");
+  const noteParam = searchParams.get("note");
 
   return (
     <PayFlow
@@ -22,6 +23,7 @@ function PayFlowWithParams() {
           ? { commitment, leafIndex: Number(leafIndex), amount: BigInt(amount) }
           : undefined
       }
+      initialSecretPhrase={noteParam || undefined}
     />
   );
 }
