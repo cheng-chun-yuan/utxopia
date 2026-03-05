@@ -9,7 +9,7 @@ import { PayFlow } from "@/components/btc-widget/pay-flow";
 function PayFlowWithParams() {
   const searchParams = useSearchParams();
 
-  const initialMode = searchParams.get("mode") as "public" | "stealth" | "btc_withdraw" | null;
+  const initialMode = searchParams.get("mode") as "stealth" | "btc_withdraw" | null;
   const commitment = searchParams.get("commitment");
   const leafIndex = searchParams.get("leafIndex");
   const amount = searchParams.get("amount");

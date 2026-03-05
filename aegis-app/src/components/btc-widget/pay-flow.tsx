@@ -267,7 +267,7 @@ function autoSelectNotes(notes: InboxNote[], targetSats: number): Set<string> {
 }
 
 interface PayFlowProps {
-  initialMode?: "public" | "stealth" | "btc_withdraw";
+  initialMode?: "stealth" | "btc_withdraw";
   preselectedNote?: {
     commitment: string;
     leafIndex: number;
@@ -314,7 +314,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   const importAutoTriggered = useRef(false);
 
   // Output rows state — default first output based on initialMode
-  const defaultOutputMode: OutputMode = initialMode === "btc_withdraw" ? "btc" : (initialMode === "public" ? "public" : "stealth");
+  const defaultOutputMode: OutputMode = initialMode === "btc_withdraw" ? "btc" : "stealth";
   const [outputs, setOutputs] = useState<OutputRow[]>([
     createOutputRow(defaultOutputMode),
   ]);
@@ -1879,7 +1879,6 @@ function OutputRowCard({
             {([
               { mode: "stealth" as const, label: "Stealth", activeClass: "bg-purple/20 text-purple", disabled: false },
               { mode: "note" as const, label: "Note", activeClass: "bg-btc/20 text-btc", disabled: false },
-              { mode: "public" as const, label: "Public", activeClass: "bg-privacy/20 text-privacy", disabled: disablePublic && output.mode !== "public" },
               { mode: "btc" as const, label: "BTC", activeClass: "bg-btc/20 text-btc", disabled: disableBtc && output.mode !== "btc" },
             ] as const).map((tab) => (
               <button
@@ -1887,8 +1886,7 @@ function OutputRowCard({
                 onClick={() => {
                   if (tab.disabled) return;
                   const reset: Partial<OutputRow> = { mode: tab.mode };
-                  if (tab.mode === "public") { reset.stealthError = null; reset.solanaAddress = defaultAddress; }
-                  else if (tab.mode === "stealth") { reset.addressError = null; }
+                  if (tab.mode === "stealth") { reset.addressError = null; }
                   else if (tab.mode === "note") { reset.addressError = null; reset.stealthError = null; }
                   else { reset.addressError = null; reset.stealthError = null; }
                   onUpdate(reset);
@@ -1903,8 +1901,7 @@ function OutputRowCard({
                       : "text-gray hover:text-gray-light"
                 )}
                 title={
-                  tab.mode === "public" && tab.disabled ? "Only 1 public output allowed" :
-                  tab.mode === "btc" && tab.disabled ? "Only 1 BTC/public output allowed" :
+                  tab.mode === "btc" && tab.disabled ? "Only 1 BTC output allowed" :
                   undefined
                 }
               >
