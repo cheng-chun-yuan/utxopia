@@ -269,22 +269,27 @@ export default function VaultPage() {
               <div>
                 {/* Address bar — shows SNS name (green) if available, stealth address otherwise */}
                 {!isPasskeyUser && hasRegisteredSnsName ? (
-                  <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/25 rounded-[10px] mb-2">
-                    <Globe className="w-4 h-4 text-green-400 shrink-0" />
-                    <span className="flex-1 text-body2-semibold text-green-400 truncate">
-                      {registeredSnsName}.{parentDomain}.sol
-                    </span>
-                    <button
-                      onClick={() => { copySns(`${registeredSnsName}.${parentDomain}.sol`); notifyCopied(`.${parentDomain}.sol name`); }}
-                      className="p-2 rounded-[6px] bg-green-500/10 hover:bg-green-500/20 transition-colors cursor-pointer"
-                      title={`Copy .${parentDomain}.sol name`}
-                    >
-                      {snsCopied ? (
-                        <Check className="w-4 h-4 text-green-400" />
-                      ) : (
-                        <Copy className="w-4 h-4 text-green-400" />
-                      )}
-                    </button>
+                  <div className="mb-2">
+                    <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/25 rounded-[10px]">
+                      <Globe className="w-4 h-4 text-green-400 shrink-0" />
+                      <span className="flex-1 text-body2-semibold text-green-400 truncate">
+                        {registeredSnsName}.{parentDomain}.sol
+                      </span>
+                      <button
+                        onClick={() => { copySns(`${registeredSnsName}.${parentDomain}.sol`); notifyCopied(`.${parentDomain}.sol name`); }}
+                        className="p-2 rounded-[6px] bg-green-500/10 hover:bg-green-500/20 transition-colors cursor-pointer"
+                        title={`Copy .${parentDomain}.sol name`}
+                      >
+                        {snsCopied ? (
+                          <Check className="w-4 h-4 text-green-400" />
+                        ) : (
+                          <Copy className="w-4 h-4 text-green-400" />
+                        )}
+                      </button>
+                    </div>
+                    <code className="block text-[11px] font-mono text-gray/50 truncate mt-1.5 px-1">
+                      {shortAddress}
+                    </code>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 p-3 bg-background/50 rounded-[10px] mb-2">
