@@ -287,9 +287,16 @@ export default function VaultPage() {
                         )}
                       </button>
                     </div>
-                    <code className="block text-[11px] font-mono text-gray/50 truncate mt-1.5 px-1">
-                      {shortAddress}
-                    </code>
+                    <button
+                      onClick={() => { copyStealth(stealthAddressEncoded || ""); notifyCopied("Stealth address"); }}
+                      className="flex items-center gap-1.5 mt-1.5 px-1 group cursor-pointer"
+                      title="Copy stealth address"
+                    >
+                      <code className="text-[11px] font-mono text-gray/50 truncate group-hover:text-gray/70 transition-colors">
+                        {shortAddress}
+                      </code>
+                      <Copy className="w-3 h-3 text-gray/30 group-hover:text-gray/50 transition-colors shrink-0" />
+                    </button>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 p-3 bg-background/50 rounded-[10px] mb-2">
