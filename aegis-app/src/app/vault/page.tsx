@@ -267,73 +267,72 @@ export default function VaultPage() {
               </div>
             ) : (
               <div>
-                {/* SNS name badge */}
-                {!isPasskeyUser && registeredSnsName && (
-                  <div className="mb-3">
-                    <div className="flex items-center gap-2 p-3 bg-btc/10 border border-btc/30 rounded-[10px]">
-                      <Globe className="w-4 h-4 text-btc" />
-                      <span className="text-body2-semibold text-btc">
-                        {registeredSnsName}.{parentDomain}.sol
-                      </span>
-                      <button
-                        onClick={() => { copySns(`${registeredSnsName}.${parentDomain}.sol`); notifyCopied(`.${parentDomain}.sol name`); }}
-                        className="ml-auto p-1.5 rounded-[6px] bg-btc/10 hover:bg-btc/20 transition-colors cursor-pointer"
-                        title={`Copy .${parentDomain}.sol name`}
-                      >
-                        {snsCopied ? (
-                          <Check className="w-3 h-3 text-green-400" />
-                        ) : (
-                          <Copy className="w-3 h-3 text-btc" />
-                        )}
-                      </button>
-                    </div>
-                    {snsNeedsUpdate && (
-                      <button
-                        onClick={updateSnsStealthData}
-                        disabled={isRegisteringSns}
-                        className={cn(
-                          "w-full flex items-center justify-center gap-2 mt-2 px-3 py-2 rounded-[8px]",
-                          "bg-yellow-500/10 border border-yellow-500/30 hover:bg-yellow-500/20",
-                          "text-caption text-yellow-400 transition-colors cursor-pointer",
-                          "disabled:opacity-50 disabled:cursor-not-allowed"
-                        )}
-                      >
-                        {isRegisteringSns ? (
-                          <>
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                            Updating...
-                          </>
-                        ) : (
-                          <>
-                            <RefreshCw className="w-3 h-3" />
-                            Update SNS record (outdated format)
-                          </>
-                        )}
-                      </button>
-                    )}
+                {/* Address bar — shows SNS name (green) if available, stealth address otherwise */}
+                {!isPasskeyUser && hasRegisteredSnsName ? (
+                  <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/25 rounded-[10px] mb-2">
+                    <Globe className="w-4 h-4 text-green-400 shrink-0" />
+                    <span className="flex-1 text-body2-semibold text-green-400 truncate">
+                      {registeredSnsName}.{parentDomain}.sol
+                    </span>
+                    <button
+                      onClick={() => { copySns(`${registeredSnsName}.${parentDomain}.sol`); notifyCopied(`.${parentDomain}.sol name`); }}
+                      className="p-2 rounded-[6px] bg-green-500/10 hover:bg-green-500/20 transition-colors cursor-pointer"
+                      title={`Copy .${parentDomain}.sol name`}
+                    >
+                      {snsCopied ? (
+                        <Check className="w-4 h-4 text-green-400" />
+                      ) : (
+                        <Copy className="w-4 h-4 text-green-400" />
+                      )}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 p-3 bg-background/50 rounded-[10px] mb-2">
+                    <code className="flex-1 text-caption font-mono text-privacy truncate">
+                      {shortAddress}
+                    </code>
+                    <button
+                      onClick={() => { copyStealth(stealthAddressEncoded || ""); notifyCopied("Stealth address"); }}
+                      className={cn(
+                        "p-2 rounded-[6px] transition-colors cursor-pointer",
+                        "bg-privacy/10 hover:bg-privacy/20"
+                      )}
+                      title="Copy stealth address"
+                    >
+                      {stealthCopied ? (
+                        <Check className="w-4 h-4 text-green-400" />
+                      ) : (
+                        <Copy className="w-4 h-4 text-privacy" />
+                      )}
+                    </button>
                   </div>
                 )}
 
-                {/* Stealth address */}
-                <div className="flex items-center gap-2 p-3 bg-background/50 rounded-[10px] mb-2">
-                  <code className="flex-1 text-caption font-mono text-privacy truncate">
-                    {shortAddress}
-                  </code>
+                {/* SNS needs update warning */}
+                {!isPasskeyUser && snsNeedsUpdate && (
                   <button
-                    onClick={() => { copyStealth(stealthAddressEncoded || ""); notifyCopied("Stealth address"); }}
+                    onClick={updateSnsStealthData}
+                    disabled={isRegisteringSns}
                     className={cn(
-                      "p-2 rounded-[6px] transition-colors cursor-pointer",
-                      "bg-privacy/10 hover:bg-privacy/20"
+                      "w-full flex items-center justify-center gap-2 mb-2 px-3 py-2 rounded-[8px]",
+                      "bg-yellow-500/10 border border-yellow-500/30 hover:bg-yellow-500/20",
+                      "text-caption text-yellow-400 transition-colors cursor-pointer",
+                      "disabled:opacity-50 disabled:cursor-not-allowed"
                     )}
-                    title="Copy stealth address"
                   >
-                    {stealthCopied ? (
-                      <Check className="w-4 h-4 text-green-400" />
+                    {isRegisteringSns ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Updating...
+                      </>
                     ) : (
-                      <Copy className="w-4 h-4 text-privacy" />
+                      <>
+                        <RefreshCw className="w-3 h-3" />
+                        Update SNS record (outdated format)
+                      </>
                     )}
                   </button>
-                </div>
+                )}
 
                 {/* SNS name registration */}
                 {!isPasskeyUser && !registeredSnsName && !showSnsInput && !isLoadingSnsName && keys && (
