@@ -1849,7 +1849,7 @@ function OutputRowCard({
   const isOwnWallet = output.solanaAddress === defaultAddress;
 
   return (
-    <div className="p-3 rounded-[12px] bg-card border border-gray/15">
+    <div className="p-4 rounded-[12px] bg-card border border-gray/15">
       {/* Header row */}
       <div className="flex items-center justify-between mb-2">
         <span className="text-caption text-gray">Output {index + 1}</span>
@@ -1918,18 +1918,18 @@ function OutputRowCard({
         </div>
       ) : output.mode === "note" ? (
         <div className="mb-2">
-          <label className="text-caption text-gray pl-1 mb-1 block">
+          <label className="text-body2 text-gray-light pl-2 mb-2 block">
             Secret Phrase (share to let someone claim)
           </label>
           <div className="relative">
-            <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-btc" />
+            <FileText className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-btc" />
             <input
               type="text"
               value={output.secretPhrase}
               onChange={(e) => onUpdate({ secretPhrase: e.target.value })}
               placeholder="e.g. alpha-bravo-charlie-1234"
               className={cn(
-                "w-full px-3 py-2 pl-9 bg-muted border rounded-[8px]",
+                "w-full pl-10 pr-4 py-3 bg-muted border rounded-[10px]",
                 "text-body2 font-mono text-foreground placeholder:text-gray/40",
                 "outline-none transition-colors",
                 output.secretPhrase.trim().length >= 8
@@ -1939,7 +1939,7 @@ function OutputRowCard({
             />
           </div>
           {output.secretPhrase.trim().length > 0 && output.secretPhrase.trim().length < 8 && (
-            <p className="text-[11px] text-gray mt-1 pl-1">
+            <p className="text-caption text-gray mt-1 pl-2">
               Min 8 characters ({8 - output.secretPhrase.trim().length} more)
             </p>
           )}
@@ -1958,16 +1958,19 @@ function OutputRowCard({
         </div>
       ) : (
         <div className="mb-2">
+          <label className="text-body2 text-gray-light pl-2 mb-2 block">
+            Recipient
+          </label>
           {isEditingAddress ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               <input
                 type="text"
                 value={output.solanaAddress}
                 onChange={(e) => onUpdate({ solanaAddress: e.target.value, addressError: null })}
                 placeholder="Solana address..."
                 className={cn(
-                  "flex-1 px-3 py-2 bg-muted border rounded-[8px]",
-                  "text-caption font-mono text-gray-light placeholder:text-gray/40",
+                  "flex-1 px-4 py-3 bg-muted border rounded-[10px]",
+                  "text-body2 font-mono text-gray-light placeholder:text-gray/40",
                   "outline-none transition-colors",
                   output.addressError ? "border-error/50" : "border-gray/20 focus:border-purple/40"
                 )}
@@ -1980,44 +1983,45 @@ function OutputRowCard({
                     onUpdate({ addressError: "Invalid address" });
                   }
                 }}
-                className="p-1.5 rounded-[6px] bg-privacy/10 hover:bg-privacy/20 text-privacy transition-colors"
+                className="px-4 py-3 rounded-[10px] bg-privacy/10 hover:bg-privacy/20 text-privacy transition-colors"
               >
-                <Check className="w-3.5 h-3.5" />
+                <Check className="w-4 h-4" />
               </button>
               <button
                 onClick={() => {
                   onUpdate({ solanaAddress: defaultAddress, addressError: null });
                   setIsEditingAddress(false);
                 }}
-                className="p-1.5 rounded-[6px] bg-gray/10 hover:bg-gray/20 text-gray transition-colors"
+                className="px-4 py-3 rounded-[10px] bg-gray/10 hover:bg-gray/20 text-gray transition-colors"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
           ) : (
             <div
               onClick={() => setIsEditingAddress(true)}
               className={cn(
-                "flex items-center gap-2 p-2 rounded-[8px] cursor-pointer transition-colors",
+                "flex items-center gap-2 px-4 py-3 rounded-[10px] cursor-pointer transition-colors",
                 "bg-muted border",
                 isOwnWallet ? "border-privacy/20 hover:border-privacy/40" : "border-purple/20 hover:border-purple/40"
               )}
             >
               <div className={cn("w-1.5 h-1.5 rounded-full", isOwnWallet ? "bg-privacy" : "bg-purple")} />
-              <span className="flex-1 text-caption font-mono text-gray-light truncate">
+              <span className="flex-1 text-body2 font-mono text-gray-light truncate">
                 {output.solanaAddress ? truncateMiddle(output.solanaAddress, 6) : "Click to set address"}
               </span>
               <Pencil className="w-3 h-3 text-gray" />
             </div>
           )}
           {output.addressError && (
-            <p className="text-[11px] text-error mt-1 pl-1">{output.addressError}</p>
+            <p className="text-caption text-error mt-1 pl-2">{output.addressError}</p>
           )}
         </div>
       )}
 
       {/* Amount */}
-      <div className="flex items-center gap-2">
+      <label className="text-body2 text-gray-light pl-2 mb-2 block">Amount</label>
+      <div className="flex items-center gap-3">
         <input
           type="number"
           value={output.amount}
@@ -2025,13 +2029,13 @@ function OutputRowCard({
           placeholder="0"
           min="0"
           className={cn(
-            "flex-1 px-3 py-2 bg-muted border border-gray/20 rounded-[8px]",
+            "flex-1 px-4 py-3 bg-muted border border-gray/20 rounded-[10px]",
             "text-body2 font-mono text-foreground placeholder:text-gray",
             "outline-none focus:border-purple/40 transition-colors",
             "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           )}
         />
-        <span className="text-caption text-gray shrink-0">sats</span>
+        <span className="text-body2 text-gray shrink-0">sats</span>
       </div>
     </div>
   );
