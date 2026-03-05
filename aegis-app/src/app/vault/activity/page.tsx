@@ -21,7 +21,7 @@ type TabType = "deposits" | "notes";
 
 const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
   { id: "deposits", label: "Deposits", icon: <ArrowDownToLine className="w-4 h-4" /> },
-  { id: "notes", label: "Notes", icon: <Inbox className="w-4 h-4" /> },
+  { id: "notes", label: "My Funds", icon: <Inbox className="w-4 h-4" /> },
 ];
 
 function TabBar({
@@ -86,7 +86,7 @@ function NotesTab() {
         <div className="flex items-center justify-center py-8">
           <div className="flex items-center gap-2 text-gray">
             <div className="w-5 h-5 border-2 border-privacy border-t-transparent rounded-full animate-spin" />
-            <span className="text-body2">Scanning announcements...</span>
+            <span className="text-body2">Checking for incoming deposits...</span>
           </div>
         </div>
       )}

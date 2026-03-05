@@ -87,7 +87,7 @@ const StatsDisplay = memo(function StatsDisplay({
       </div>
       <div className="space-y-2 text-center">
         <div className="text-heading5 text-foreground">{leafCount}</div>
-        <div className="text-caption text-gray">Leaves</div>
+        <div className="text-caption text-gray">Transactions</div>
       </div>
       <div className="space-y-2 text-center">
         <div className="text-heading5 text-foreground">{volumeBtc}</div>
@@ -276,7 +276,7 @@ export default function Home() {
 
                 {/* Step 3 - Mint */}
                 <div className="flex flex-col items-center text-center gap-3 p-5 gradient-bg-card rounded-[12px]">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-btc/20 to-privacy/20 border border-sol/20 flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-full bg-linear-to-br from-btc/20 to-privacy/20 border border-sol/20 flex items-center justify-center">
                     <Lock className="w-6 h-6 text-sol" />
                   </div>
                   <div>

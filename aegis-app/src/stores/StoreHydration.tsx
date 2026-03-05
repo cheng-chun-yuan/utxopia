@@ -16,6 +16,7 @@ export function StoreHydration(): JSX.Element {
   const keys = useAegisStore((s) => s.keys);
   const isPoseidonReady = useAegisStore((s) => s.isPoseidonReady);
   const hydrateKeys = useAegisStore((s) => s.hydrateKeys);
+  const hydratePasskeyKeys = useAegisStore((s) => s.hydratePasskeyKeys);
   const inboxLoading = useAegisStore((s) => s.inboxLoading);
   const inboxNotesLength = useAegisStore((s) => s.inboxNotes.length);
   const refreshInbox = useAegisStore((s) => s.refreshInbox);
@@ -41,6 +42,14 @@ export function StoreHydration(): JSX.Element {
       hydrateKeys(walletPubkey);
     }
   }, [walletPubkey, isPoseidonReady, keys, hydrateKeys]);
+
+  // Auto-hydrate passkey keys (no wallet needed)
+  useEffect(() => {
+    if (isPoseidonReady && !keys && !walletPubkey && !hasHydratedRef.current) {
+      hasHydratedRef.current = true;
+      hydratePasskeyKeys();
+    }
+  }, [isPoseidonReady, keys, walletPubkey, hydratePasskeyKeys]);
 
   // Reset hydration flag when wallet disconnects
   useEffect(() => {

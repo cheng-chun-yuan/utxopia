@@ -5,6 +5,7 @@ import { PublicKey, type Connection } from "@solana/web3.js";
 import {
   initPoseidon,
   deriveKeysFromWallet,
+  deriveKeysFromSeedCircuit,
   createStealthMetaAddress,
   encodeStealthMetaAddress,
   scanUnifiedNotes,
@@ -151,6 +152,8 @@ interface AegisState {
     signMessage: (message: Uint8Array) => Promise<Uint8Array>;
   }) => Promise<void>;
   hydrateKeys: (walletPubkey: PublicKey) => boolean;
+  deriveKeysFromPasskeySeed: (seed: Uint8Array) => Promise<void>;
+  hydratePasskeyKeys: () => boolean;
   clearKeys: (walletPubkey?: string) => void;
   refreshInbox: (connection?: Connection) => Promise<void>;
   refreshPublicBalance: (walletPubkey?: PublicKey) => Promise<void>;
@@ -250,9 +253,73 @@ export const useAegisStore = create<AegisState>((set, get) => ({
     return true;
   },
 
+  deriveKeysFromPasskeySeed: async (seed: Uint8Array) => {
+    set({ isLoading: true, error: null });
+    try {
+      const derivedKeys = await deriveKeysFromSeedCircuit(seed);
+      const meta = createStealthMetaAddress(derivedKeys);
+      const encoded = encodeStealthMetaAddress(meta);
+
+      // Persist with "passkey:" prefix
+      const credentialId = typeof window !== "undefined"
+        ? localStorage.getItem("aegis:passkey_credential_id") || "default"
+        : "default";
+      persistKeys("passkey:" + credentialId, derivedKeys);
+
+      set({
+        keys: derivedKeys,
+        stealthAddress: meta,
+        stealthAddressEncoded: encoded,
+        hasKeys: true,
+        isLoading: false,
+      });
+    } catch (err) {
+      set({
+        error: err instanceof Error ? err.message : "Failed to derive keys from passkey",
+        isLoading: false,
+      });
+    }
+  },
+
+  hydratePasskeyKeys: () => {
+    try {
+      const credentialId = typeof window !== "undefined"
+        ? localStorage.getItem("aegis:passkey_credential_id")
+        : null;
+      if (!credentialId) return false;
+
+      const restored = loadKeys("passkey:" + credentialId, new Uint8Array(32));
+      if (!restored) return false;
+
+      const meta = createStealthMetaAddress(restored);
+      const encoded = encodeStealthMetaAddress(meta);
+
+      set({
+        keys: restored,
+        stealthAddress: meta,
+        stealthAddressEncoded: encoded,
+        hasKeys: true,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
   clearKeys: (walletPubkey?: string) => {
     if (walletPubkey) {
       removeKeys(walletPubkey);
+    }
+    // Also clear passkey keys if present
+    try {
+      const credentialId = typeof window !== "undefined"
+        ? localStorage.getItem("aegis:passkey_credential_id")
+        : null;
+      if (credentialId) {
+        removeKeys("passkey:" + credentialId);
+      }
+    } catch {
+      // ignore
     }
     set({
       keys: null,

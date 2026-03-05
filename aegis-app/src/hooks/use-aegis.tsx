@@ -42,13 +42,13 @@ export function useAegis() {
     }
   }, [wallet.publicKey, store.refreshPublicBalance]);
 
-  // Clear keys when wallet disconnects
-  // Note: wallet.publicKey may still be available briefly during disconnect
+  // Clear keys when wallet disconnects — but only if using wallet auth (not passkey)
+  // Passkey-derived keys have solanaPublicKey set to all zeros
   useEffect(() => {
-    if (!wallet.connected) {
+    if (!wallet.connected && store.keys?.solanaPublicKey.some(b => b !== 0)) {
       store.clearKeys(wallet.publicKey?.toBase58());
     }
-  }, [wallet.connected, wallet.publicKey, store.clearKeys]);
+  }, [wallet.connected, wallet.publicKey, store.clearKeys, store.keys]);
 
   return {
     // Poseidon

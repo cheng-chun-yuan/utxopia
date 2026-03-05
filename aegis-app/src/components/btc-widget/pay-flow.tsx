@@ -691,7 +691,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 
       if (hasImportedNotes) {
         // Imported notes path: use phrase-derived keys via standard prepareClaimInputs
-        setProofStatus(`Fetching Merkle proof(s) for ${activeImportedNotes.length} imported note(s)...`);
+        setProofStatus("Verifying imported funds...");
 
         // Fetch all announcements once
         const announcementsResp = await fetch("/api/stealth/announcements");
@@ -755,7 +755,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         }));
       } else {
         // Standard inbox notes path
-        setProofStatus(`Fetching ${selectedNotes.length} Merkle proof(s)...`);
+        setProofStatus("Verifying your funds...");
 
         const merkleResults = await Promise.all(
           selectedNotes.map(async (note) => {
@@ -775,7 +775,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         }
 
         // Prepare claim inputs for each input note
-        setProofStatus("Deriving stealth keys...");
+        setProofStatus("Preparing private transfer...");
 
         inputsData = await Promise.all(
           merkleResults.map(async ({ note, merkle }) => {
@@ -822,7 +822,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       // 3. Prepare outputs — use createStealthDepositWithKeys for ALL outputs
       // so that npk (for commitment) and stealth data (ephemeralPub + encryptedAmount)
       // come from the SAME ECDH shared secret. Otherwise scanner can't find notes.
-      setProofStatus("Preparing outputs...");
+      setProofStatus("Building transaction...");
 
       const selfMeta = stealthAddress ? {
         spendingPubKey: new Uint8Array(32),
@@ -982,7 +982,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       }
 
       // 6. Build JoinSplit proof inputs
-      setProofStatus("Generating JoinSplit proof...");
+      setProofStatus("Generating privacy proof...");
 
       if (!prover.isInitialized) {
         await prover.initialize();
@@ -1578,14 +1578,14 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
             </div>
           )}
           <div className="flex justify-between items-center text-body2 pt-1 border-t border-gray/10">
-            <span className="text-gray">{isPublicRedeem ? "Type" : "Circuit"}</span>
+            <span className="text-gray">Privacy</span>
             <span className={cn("font-mono text-xs", isPublicRedeem ? "text-btc" : "text-purple")}>
               {isPublicRedeem
-                ? "Public Redeem (no ZK proof)"
+                ? "Public (no proof)"
                 : <>
-                    JoinSplit({nInputs},{nOutputs})
+                    ZK Proof
                     {hasPublicOutput && " + Unshield"}
-                    {hasBtcOutput && " + Redeem"}
+                    {hasBtcOutput && " + BTC Withdraw"}
                   </>
               }
             </span>
@@ -1762,10 +1762,10 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
             </div>
           )}
           <div className="flex justify-between items-center text-body2 pt-2 border-t border-gray/15">
-            <span className="text-gray-light">Circuit</span>
+            <span className="text-gray-light">Privacy</span>
             <span className="font-mono text-purple text-xs">
-              JoinSplit({nInputs},{nOutputs})
-              {successBtcOutput && " + Redeem"}
+              ZK Proof
+              {successBtcOutput && " + BTC Withdraw"}
             </span>
           </div>
         </div>

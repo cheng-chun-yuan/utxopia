@@ -119,7 +119,7 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: aegis-cloudflared
-    command: tunnel --no-autoupdate --config /etc/cloudflared/aegis.yml run aegis
+    command: tunnel --no-autoupdate --config /etc/cloudflared/aegis.yml run 2cf1a4fa-ace1-4c53-9865-b3d8086dc516
     volumes:
       - /Users/chengchunyuan/.cloudflared:/etc/cloudflared:ro
     depends_on:

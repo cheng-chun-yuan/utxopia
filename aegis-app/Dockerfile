@@ -8,13 +8,11 @@ FROM base AS builder
 COPY sdk /app/sdk
 RUN cd /app/sdk && bun install && bun run build
 
-# Copy app source and install deps
+# Copy app source and point @aegis/sdk to local build
 COPY aegis-app /app/aegis-app
-RUN cd /app/aegis-app && bun install
-
-# Override npm @aegis/sdk with local built SDK (AFTER bun install)
-RUN rm -rf /app/aegis-app/node_modules/@aegis/sdk && \
-    ln -sf /app/sdk /app/aegis-app/node_modules/@aegis/sdk
+RUN cd /app/aegis-app && \
+    sed -i 's|"@aegis/sdk": "[^"]*"|"@aegis/sdk": "file:../sdk"|' package.json && \
+    bun install
 
 # Build Next.js
 ENV NEXT_TELEMETRY_DISABLED=1

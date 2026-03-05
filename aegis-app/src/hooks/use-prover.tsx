@@ -36,7 +36,7 @@ export function useProver(): ProverState {
 
   const initialize = useCallback(async () => {
     try {
-      setProgress("Initializing prover...");
+      setProgress("Preparing privacy engine...");
       await initProver();
       setIsInitialized(true);
       setProgress(null);
@@ -50,9 +50,7 @@ export function useProver(): ProverState {
     async (inputs: JoinSplitProofInputs) => {
       setIsGenerating(true);
       setError(null);
-      setProgress(
-        `Generating JoinSplit(${inputs.nInputs}x${inputs.nOutputs}) proof...`
-      );
+      setProgress("Generating privacy proof...");
       try {
         const proof = await generateJoinSplitProof(inputs);
         const bytes = proofToBytes(proof);

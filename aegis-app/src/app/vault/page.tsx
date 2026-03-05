@@ -24,6 +24,8 @@ import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useAegisKeys } from "@/hooks/use-aegis";
+import { usePasskey } from "@/hooks/use-passkey";
+import { useAegisStore } from "@/stores";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useSnsName } from "@/hooks/use-sns-name";
 import { useStealthInbox } from "@/hooks/use-aegis";
@@ -31,6 +33,7 @@ import { getConfig } from "@aegis/sdk";
 import { notifyCopied } from "@/lib/notifications";
 import { TooltipText } from "@/components/ui/tooltip";
 import { OnboardingModal } from "@/components/onboarding-modal";
+import { AuthModal } from "@/components/auth-modal";
 
 interface FeatureConfig {
   icon: React.ReactNode;
@@ -62,9 +65,9 @@ const features: FeatureConfig[] = [
   },
   {
     icon: <Wallet className="w-full h-full" />,
-    title: "Notes",
+    title: "My Funds",
     description: "All your zkBTC",
-    subtext: "Claim & manage",
+    subtext: "View & spend",
     href: "/vault/activity",
     color: "privacy",
   },
@@ -107,6 +110,32 @@ export default function VaultPage() {
     isLoading: isLoadingInbox,
     refresh: refreshInbox,
   } = useStealthInbox();
+
+  const {
+    isSupported: passkeySupported,
+    hasCredential: hasPasskeyCredential,
+    isLoading: passkeyLoading,
+    error: passkeyError,
+    register: registerPasskey,
+    authenticate: authenticatePasskey,
+    clearCredential: clearPasskeyCredential,
+  } = usePasskey();
+
+  const deriveKeysFromPasskeySeed = useAegisStore((s) => s.deriveKeysFromPasskeySeed);
+
+  const handlePasskeyRegister = async () => {
+    const seed = await registerPasskey();
+    if (seed) await deriveKeysFromPasskeySeed(seed);
+  };
+
+  const handlePasskeyAuthenticate = async () => {
+    const seed = await authenticatePasskey();
+    if (seed) await deriveKeysFromPasskeySeed(seed);
+  };
+
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+
+  const isPasskeyUser = keys && keys.solanaPublicKey.every(b => b === 0);
 
   const snsConfig = getConfig();
   const parentDomain = snsConfig.snsParentDomain || "btcpro";
@@ -175,7 +204,7 @@ export default function VaultPage() {
               <span className="text-foreground">Vault</span>
             </h1>
             <p className="text-body2 text-gray">
-              Private <span className="text-btc">Bitcoin</span> on <span className="text-purple">Solana</span> with <span className="text-privacy">zero-knowledge</span> privacy
+              Private Bitcoin on Solana with zero-knowledge privacy
             </p>
           </div>
 
@@ -196,7 +225,10 @@ export default function VaultPage() {
               </div>
               {keys && (
                 <button
-                  onClick={() => clearKeys(wallet.publicKey?.toBase58())}
+                  onClick={() => {
+                    clearKeys(wallet.publicKey?.toBase58());
+                    clearPasskeyCredential();
+                  }}
                   className="flex items-center gap-1.5 px-2 py-1 rounded-[6px] text-caption text-gray hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
                   title="Clear keys and log out"
                 >
@@ -206,63 +238,31 @@ export default function VaultPage() {
               )}
             </div>
 
-            {!wallet.connected ? (
-              <div className="text-center py-5">
-                <p className="text-body2 text-gray mb-4">
-                  Connect your wallet to generate a private stealth address
+            {!keys ? (
+              <div className="text-center py-6">
+                <p className="text-body2 text-gray mb-1.5">
+                  Unlock your vault to send and receive private Bitcoin
+                </p>
+                <p className="text-caption text-gray/60 mb-5">
+                  Use a passkey or wallet to access your funds securely
                 </p>
                 <button
-                  onClick={() => setVisible(true)}
+                  onClick={() => setAuthModalOpen(true)}
                   className={cn(
-                    "inline-flex items-center gap-2 px-5 py-2.5 rounded-[12px]",
-                    "bg-privacy/20 hover:bg-privacy/30 border border-privacy/30",
-                    "text-body2 text-privacy transition-all duration-200 cursor-pointer",
-                    "hover:shadow-[0_0_20px_rgba(20,241,149,0.15)]"
+                    "inline-flex items-center gap-2 px-6 py-3 rounded-[12px]",
+                    "bg-privacy hover:bg-privacy/80",
+                    "text-body2 text-background font-medium transition-all duration-200 cursor-pointer",
+                    "hover:shadow-[0_0_24px_rgba(20,241,149,0.2)]"
                   )}
                 >
-                  <Wallet className="w-4 h-4" />
-                  Connect Wallet
+                  <Key className="w-4 h-4" />
+                  Unlock Vault
                 </button>
-              </div>
-            ) : !keys ? (
-              <div className="text-center py-5">
-                <p className="text-body2 text-gray mb-4">
-                  Sign a message to derive your private Aegis keys
-                </p>
-                {error && (
-                  <p className="text-caption text-red-400 mb-3">{error}</p>
-                )}
-                <div className="flex items-center justify-center gap-3">
-                  <button
-                    onClick={deriveKeys}
-                    disabled={isLoading}
-                    className={cn(
-                      "inline-flex items-center gap-2 px-5 py-2.5 rounded-[12px]",
-                      "bg-privacy hover:bg-privacy/80 disabled:bg-gray/30",
-                      "text-body2 text-background disabled:text-gray transition-all duration-200 cursor-pointer",
-                      "hover:shadow-[0_0_20px_rgba(20,241,149,0.2)]"
-                    )}
-                  >
-                    <Key className="w-4 h-4" />
-                    {isLoading ? "Signing..." : "Sign to Derive Keys"}
-                  </button>
-                  <button
-                    onClick={() => wallet.disconnect().catch(() => {})}
-                    className={cn(
-                      "inline-flex items-center gap-2 px-4 py-2.5 rounded-[12px]",
-                      "bg-gray/20 hover:bg-red-500/20 border border-gray/30 hover:border-red-500/30",
-                      "text-body2 text-gray hover:text-red-400 transition-colors cursor-pointer"
-                    )}
-                  >
-                    <LogOut className="w-4 h-4" />
-                    Sign out
-                  </button>
-                </div>
               </div>
             ) : (
               <div>
                 {/* SNS name badge */}
-                {registeredSnsName && (
+                {!isPasskeyUser && registeredSnsName && (
                   <div className="mb-3">
                     <div className="flex items-center gap-2 p-3 bg-btc/10 border border-btc/30 rounded-[10px]">
                       <Globe className="w-4 h-4 text-btc" />
@@ -330,7 +330,7 @@ export default function VaultPage() {
                 </div>
 
                 {/* SNS name registration */}
-                {!registeredSnsName && !showSnsInput && !isLoadingSnsName && keys && (
+                {!isPasskeyUser && !registeredSnsName && !showSnsInput && !isLoadingSnsName && keys && (
                   <button
                     onClick={() => setShowSnsInput(true)}
                     className="flex items-center gap-2 text-caption text-btc hover:text-btc/80 transition-colors mt-2 cursor-pointer"
@@ -339,14 +339,14 @@ export default function VaultPage() {
                     Register a .{parentDomain}.sol name
                   </button>
                 )}
-                {isLoadingSnsName && (
+                {!isPasskeyUser && isLoadingSnsName && (
                   <div className="flex items-center gap-2 text-caption text-gray mt-2">
                     <Loader2 className="w-3 h-3 animate-spin" />
                     Checking for .{parentDomain}.sol name...
                   </div>
                 )}
 
-                {showSnsInput && (
+                {!isPasskeyUser && showSnsInput && (
                   <div className="mt-3 p-3 bg-background/50 rounded-[10px] border border-btc/20">
                     <div className="flex items-center gap-2 mb-2">
                       <div className="flex-1 relative">
@@ -425,7 +425,7 @@ export default function VaultPage() {
                   </div>
                   <div>
                     <div className="flex items-center gap-2 mb-0.5">
-                      <p className="text-caption text-gray">Claimable Notes</p>
+                      <p className="text-caption text-gray">Ready to Spend</p>
                       <button
                         onClick={refreshInbox}
                         disabled={isLoadingInbox}
@@ -467,7 +467,7 @@ export default function VaultPage() {
                       "hover:shadow-[0_0_15px_rgba(20,241,149,0.1)]"
                     )}
                   >
-                    View Notes
+                    View Funds
                     <Wallet className="w-4 h-4" />
                   </Link>
                 )}
@@ -561,6 +561,22 @@ export default function VaultPage() {
 
       {/* First-time user onboarding */}
       <OnboardingModal />
+
+      {/* Auth modal */}
+      <AuthModal
+        open={authModalOpen}
+        onOpenChange={setAuthModalOpen}
+        passkeySupported={passkeySupported}
+        hasPasskeyCredential={hasPasskeyCredential}
+        passkeyLoading={passkeyLoading}
+        walletLoading={isLoading}
+        walletConnected={wallet.connected}
+        error={error || passkeyError}
+        onPasskeyRegister={handlePasskeyRegister}
+        onPasskeyAuthenticate={handlePasskeyAuthenticate}
+        onWalletConnect={() => { setAuthModalOpen(false); setVisible(true); }}
+        onWalletDeriveKeys={deriveKeys}
+      />
     </main>
   );
 }
