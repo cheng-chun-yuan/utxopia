@@ -2,16 +2,17 @@
  * Bitcoin Block Header Relayer Service
  *
  * Permissionless batch header submission via extend_blockchain.
- * No reorg detection needed — competing forks create separate hash-based PDAs
- * and the on-chain program picks the heaviest chain automatically.
+ * Auto-detects chain reorgs (orphaned on-chain tip) and reinitializes
+ * the light client to recover without manual intervention.
  *
  * Configuration via DEPLOY_ENV-prefixed env vars (see config.ts).
  */
 
-import { Connection, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { Connection, Keypair, LAMPORTS_PER_SOL, Transaction, sendAndConfirmTransaction } from '@solana/web3.js';
 import {
   getTipHeight,
   getBlockHeaderByHeight,
+  getBlockHashByHeight,
 } from './mempool';
 import {
   getLightClientState,
@@ -19,7 +20,12 @@ import {
   extendBlockchain,
   computeBlockHash,
   bytesToHex,
+  deriveLightClientPda,
+  deriveHeightIndexPda,
+  deriveBlockHeaderPda,
+  buildReinitializeInstruction,
 } from './solana';
+import { hexToBytesReversed } from './utils';
 import {
   SOLANA_RPC_URL,
   PROGRAM_ID,
@@ -28,6 +34,7 @@ import {
   POLL_AT_TIP_MS,
   START_BLOCK_HEIGHT,
   getRelayerKeypair,
+  getNetworkId,
   logConfig,
   BATCH_SIZE,
 } from './config';
@@ -41,6 +48,68 @@ function log(message: string, ...args: unknown[]) {
 // Sleep helper
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Reorg cooldown: prevent reinit loops
+const REINIT_COOLDOWN_MS = 60_000;
+let lastReinitTime = 0;
+
+/**
+ * Detect chain reorg and auto-reinitialize the light client.
+ * Returns true if a reorg was detected and recovery was performed.
+ */
+async function detectAndHandleReorg(
+  connection: Connection,
+  relayer: Keypair,
+): Promise<boolean> {
+  // Cooldown guard
+  const now = Date.now();
+  if (now - lastReinitTime < REINIT_COOLDOWN_MS) {
+    log(`[Reorg] Skipping check — cooldown active (${Math.round((REINIT_COOLDOWN_MS - (now - lastReinitTime)) / 1000)}s remaining)`);
+    return false;
+  }
+
+  const state = await getLightClientState(connection, PROGRAM_ID);
+  if (!state) return false;
+
+  const onChainHex = Buffer.from(state.tipHash).reverse().toString('hex');
+  const canonicalHash = await getBlockHashByHeight(BITCOIN_NETWORK, Number(state.tipHeight));
+
+  if (onChainHex === canonicalHash) return false; // Not a reorg
+
+  log(`[Reorg] Detected at height ${state.tipHeight}!`);
+  log(`[Reorg]   On-chain hash: ${onChainHex}`);
+  log(`[Reorg]   Canonical hash: ${canonicalHash}`);
+
+  // Reinitialize 10 blocks behind current BTC tip
+  const btcTip = await getTipHeight(BITCOIN_NETWORK);
+  const reinitHeight = BigInt(btcTip - 10);
+  const reinitHashHex = await getBlockHashByHeight(BITCOIN_NETWORK, Number(reinitHeight));
+  const reinitHashBytes = hexToBytesReversed(reinitHashHex);
+
+  const networkId = getNetworkId();
+  const [lightClientPda] = deriveLightClientPda(PROGRAM_ID);
+  const [heightIndexPda] = deriveHeightIndexPda(PROGRAM_ID, reinitHeight);
+  const [blockHeaderPda] = deriveBlockHeaderPda(PROGRAM_ID, reinitHashBytes);
+
+  const ix = buildReinitializeInstruction(
+    PROGRAM_ID,
+    lightClientPda,
+    relayer.publicKey,
+    heightIndexPda,
+    blockHeaderPda,
+    reinitHeight,
+    reinitHashBytes,
+    networkId,
+  );
+
+  log(`[Reorg] Reinitializing to height ${reinitHeight} (hash: ${reinitHashHex})...`);
+  const tx = new Transaction().add(ix);
+  const sig = await sendAndConfirmTransaction(connection, tx, [relayer]);
+  log(`[Reorg] Reinitialized successfully! tx: ${sig}`);
+
+  lastReinitTime = Date.now();
+  return true;
 }
 
 /**
@@ -159,6 +228,13 @@ async function syncHeaders(
       }
 
       log(`Error submitting batch at height ${height}: ${errorMessage}`);
+
+      // Check for chain reorg before giving up
+      const reorgHandled = await detectAndHandleReorg(connection, relayer);
+      if (reorgHandled) {
+        return true; // Exit syncHeaders so the main loop retries with fresh state
+      }
+
       throw error;
     }
   }
@@ -202,6 +278,14 @@ async function main() {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       log(`Sync error: ${errorMessage}`);
+
+      // Attempt reorg recovery on any sync failure
+      try {
+        await detectAndHandleReorg(connection, relayer);
+      } catch (reorgErr: unknown) {
+        const reorgMsg = reorgErr instanceof Error ? reorgErr.message : String(reorgErr);
+        log(`[Reorg] Recovery check failed: ${reorgMsg}`);
+      }
     }
 
     const sleepTime = syncedBlocks ? POLL_INTERVAL_MS : POLL_AT_TIP_MS;

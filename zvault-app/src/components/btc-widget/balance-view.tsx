@@ -3,24 +3,20 @@
 import React, { useState, useEffect, useCallback, useMemo, memo } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import {
-  AlertCircle, RefreshCw, Clock, CheckCircle2, XCircle, RotateCcw,
-  ExternalLink, Key, Copy, Check, ArrowDownToLine, Loader2, Search, ChevronDown, ArrowRight
+  AlertCircle, Clock, CheckCircle2, XCircle, RotateCcw,
+  ExternalLink, Copy, Check, ArrowDownToLine, Loader2, Search, ChevronDown, ArrowRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   getDepositByAddress,
-  getDepositStatus,
   getDepositProgress,
   getStatusMessage,
-  isDepositTerminal,
   retryDeposit,
   type DepositStatus,
   type DepositStatusResponse as TrackerDepositStatus,
 } from "@/lib/api/deposits";
-import { useDepositStatus } from "@/hooks/use-deposit-status";
 import { formatBtc, formatSats, truncateMiddle } from "@/lib/utils/formatting";
 import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
-import { useNoteStorage, type StoredNote } from "@/stores";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { useBackendDeposits } from "@/hooks/use-backend-deposits";
@@ -100,270 +96,13 @@ const OpReturnData = memo(({ ephemeralPub, npk }: { ephemeralPub?: string; npk?:
 });
 OpReturnData.displayName = "OpReturnData";
 
-// =============================================================================
-// Deposit lifecycle stepper
-// =============================================================================
-
-const LIFECYCLE_STEPS = [
-  { key: "detected", label: "Detected" },
-  { key: "confirmed", label: "Confirmed" },
-  { key: "sweeping", label: "Swept" },
-  { key: "verifying", label: "Verified" },
-  { key: "ready", label: "Minted" },
-] as const;
-
 const STATUS_ORDER: Record<string, number> = {
   pending: 0, detected: 1, confirming: 1, confirmed: 2,
   sweeping: 3, sweep_confirming: 3, verifying: 4, ready: 5, claimed: 5,
 };
 
-const LifecycleStepper = memo(({ status }: { status: DepositStatus }) => {
-  const currentStep = STATUS_ORDER[status] ?? 0;
-  return (
-    <div className="flex items-center gap-1 w-full">
-      {LIFECYCLE_STEPS.map((step, i) => {
-        const stepIdx = i + 1; // steps start at 1 (detected)
-        const done = currentStep >= stepIdx;
-        const active = currentStep === stepIdx;
-        return (
-          <React.Fragment key={step.key}>
-            <div className="flex flex-col items-center flex-1">
-              <div className={cn(
-                "w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold transition-colors",
-                done ? "bg-btc text-white" : active ? "bg-btc/30 text-btc border border-btc" : "bg-gray/15 text-gray"
-              )}>
-                {done ? <Check className="w-3 h-3" /> : i + 1}
-              </div>
-              <span className={cn("text-[9px] mt-0.5", done || active ? "text-btc" : "text-gray")}>{step.label}</span>
-            </div>
-            {i < LIFECYCLE_STEPS.length - 1 && (
-              <div className={cn("h-0.5 flex-1 rounded-full -mt-3", currentStep > stepIdx ? "bg-btc" : "bg-gray/15")} />
-            )}
-          </React.Fragment>
-        );
-      })}
-    </div>
-  );
-});
-LifecycleStepper.displayName = "LifecycleStepper";
-
 // =============================================================================
-// Deposit card — uses useDepositStatus hook for live updates
-// =============================================================================
-
-const DepositCard = memo(({ note }: { note: StoredNote }) => {
-  const { copied, copy } = useCopyToClipboard();
-  const depositId = note.depositId || null;
-  const [retrying, setRetrying] = useState(false);
-
-  const {
-    status,
-    confirmations,
-    sweepConfirmations,
-    btcTxid,
-    sweepTxid,
-    solanaTx,
-    error,
-    isLoading,
-    deposit,
-    refresh,
-  } = useDepositStatus(depositId, { pollInterval: 15000 });
-
-  // Fall back to address-based lookup if no depositId
-  const [addrStatus, setAddrStatus] = useState<TrackerDepositStatus | null>(null);
-  const [addrLoading, setAddrLoading] = useState(false);
-
-  const fetchByAddress = useCallback(async () => {
-    if (depositId) return; // using hook instead
-    setAddrLoading(true);
-    try {
-      const data = await getDepositByAddress(note.taprootAddress);
-      setAddrStatus(data);
-      // Save depositId for future use
-      if (data.id) {
-        useNoteStorage().updateNote(note.commitment, { depositId: data.id });
-      }
-    } catch {
-      // No deposit found in tracker — that's okay
-    } finally {
-      setAddrLoading(false);
-    }
-  }, [depositId, note.taprootAddress, note.commitment]);
-
-  useEffect(() => {
-    if (!depositId) fetchByAddress();
-  }, [depositId, fetchByAddress]);
-
-  // Resolve effective status
-  const effectiveStatus: DepositStatus = status || addrStatus?.status || "pending";
-  const effectiveConfirmations = confirmations || addrStatus?.confirmations || 0;
-  const effectiveSweepConfirmations = sweepConfirmations || addrStatus?.sweep_confirmations || 0;
-  const effectiveTxid = btcTxid || addrStatus?.btc_txid;
-  const effectiveSweepTxid = sweepTxid || addrStatus?.sweep_txid;
-  const effectiveSolanaTx = solanaTx || addrStatus?.solana_tx;
-  const effectiveError = error || addrStatus?.error;
-  const effectiveNpk = deposit?.npk || addrStatus?.npk;
-  const effectiveEphemeralPub = deposit?.ephemeral_pub || addrStatus?.ephemeral_pub;
-
-  const progress = getDepositProgress(effectiveStatus, effectiveConfirmations, effectiveSweepConfirmations);
-  const loading = isLoading || addrLoading;
-
-  return (
-    <div className="p-4 bg-muted border border-gray/15 rounded-xl space-y-3">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-white flex items-center gap-1.5">
-          <BitcoinIcon className="w-4 h-4" />
-          {formatBtc(note.amountSats)} <span className="text-btc text-xs">BTC</span>
-          {deposit?.minted_sats != null && (<>
-            <ArrowRight className="w-3 h-3 text-gray mx-0.5" />
-            {formatBtc(deposit.minted_sats)} <span className="text-privacy text-xs">zkBTC</span>
-          </>)}
-        </span>
-        <div className="flex items-center gap-2">
-          <button onClick={depositId ? refresh : fetchByAddress} disabled={loading} className="p-1.5 rounded bg-gray/10 hover:bg-gray/20">
-            <RefreshCw className={cn("w-3 h-3 text-gray", loading && "animate-spin")} />
-          </button>
-          <StatusBadge status={effectiveStatus} />
-        </div>
-      </div>
-
-      {/* Lifecycle Stepper */}
-      {effectiveStatus !== "pending" && effectiveStatus !== "failed" && (
-        <LifecycleStepper status={effectiveStatus} />
-      )}
-
-      {/* Progress bar */}
-      {effectiveStatus !== "pending" && effectiveStatus !== "failed" && (
-        <div className="space-y-1">
-          <div className="flex justify-between text-[10px] text-gray">
-            <span>{getStatusMessage(effectiveStatus)}</span>
-            <span>{progress}%</span>
-          </div>
-          <ProgressBar progress={progress} />
-        </div>
-      )}
-
-      {/* Address */}
-      <div className="space-y-1">
-        <span className="text-xs text-gray">Deposit Address</span>
-        <div className="flex items-center gap-2">
-          <code className="flex-1 text-xs font-mono text-btc break-all">{note.taprootAddress}</code>
-          <button onClick={() => copy(note.taprootAddress)} className="p-1.5 rounded bg-btc/10 hover:bg-btc/20">
-            {copied ? <Check className="w-3 h-3 text-success" /> : <Copy className="w-3 h-3 text-btc" />}
-          </button>
-        </div>
-      </div>
-
-      {/* Secret indicator */}
-      {note.secretNote && (
-        <div className="flex items-center gap-2 text-xs">
-          <Key className="w-3 h-3 text-privacy" />
-          <span className="text-gray">Secret saved locally</span>
-        </div>
-      )}
-
-      {/* Confirmations */}
-      {effectiveTxid && (
-        <div className="space-y-2 pt-2 border-t border-gray/15">
-          <div className="flex justify-between text-xs">
-            <span className="text-gray">BTC Confirmations</span>
-            <span className="text-gray-light">{effectiveConfirmations}</span>
-          </div>
-          <a
-            href={`${getMempoolExplorerUrl()}/tx/${effectiveTxid}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 text-xs text-btc hover:text-btc-light"
-          >
-            View deposit tx <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
-      )}
-
-      {/* Sweep tx */}
-      {effectiveSweepTxid && (
-        <div className="space-y-1 pt-1">
-          <div className="flex justify-between text-xs">
-            <span className="text-gray">Sweep Confirmations</span>
-            <span className="text-gray-light">{effectiveSweepConfirmations}</span>
-          </div>
-          <a
-            href={`${getMempoolExplorerUrl()}/tx/${effectiveSweepTxid}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300"
-          >
-            View sweep tx <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
-      )}
-
-      {/* Solana verification */}
-      {effectiveSolanaTx && (
-        <div className="pt-1">
-          <a
-            href={`https://explorer.solana.com/tx/${effectiveSolanaTx}?cluster=devnet`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 text-xs text-sol hover:text-sol/80"
-          >
-            View Solana verification <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
-      )}
-
-      {/* Error */}
-      {effectiveError && (
-        <div className="flex items-center gap-2 p-2 bg-error/10 border border-error/30 rounded-lg text-xs text-error">
-          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-          {effectiveError}
-        </div>
-      )}
-
-      {/* Retry button for failed deposits */}
-      {effectiveStatus === "failed" && (depositId || addrStatus?.id) && (
-        <button
-          onClick={async () => {
-            const id = depositId || addrStatus?.id;
-            if (!id) return;
-            setRetrying(true);
-            try {
-              await retryDeposit(id);
-              if (depositId) refresh();
-              else fetchByAddress();
-            } catch (err) {
-              console.error("Retry failed:", err);
-            } finally {
-              setRetrying(false);
-            }
-          }}
-          disabled={retrying}
-          className="w-full p-2 rounded-lg text-xs font-medium bg-btc/10 border border-btc/30 text-btc hover:bg-btc/20 disabled:opacity-50 flex items-center justify-center gap-2"
-        >
-          {retrying ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Retrying...</> : <><RotateCcw className="w-3.5 h-3.5" /> Retry Deposit</>}
-        </button>
-      )}
-
-      {/* OP_RETURN data */}
-      <OpReturnData ephemeralPub={effectiveEphemeralPub} npk={effectiveNpk} />
-
-      {/* Mempool link */}
-      <a
-        href={`${getMempoolExplorerUrl()}/address/${note.taprootAddress}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center justify-center gap-2 text-xs text-gray hover:text-gray-light pt-2"
-      >
-        View on Mempool <ExternalLink className="w-3 h-3" />
-      </a>
-    </div>
-  );
-});
-DepositCard.displayName = "DepositCard";
-
-// =============================================================================
-// Backend deposit card — for deposits fetched from backend (no localStorage note)
+// Unified deposit card (DepositCard style)
 // =============================================================================
 
 // Timeline step component
@@ -449,7 +188,7 @@ const TxLink = memo(({ href, label, color = "text-btc/70 hover:text-btc" }: { hr
 });
 TxLink.displayName = "TxLink";
 
-const BackendDepositCard = memo(({ deposit }: { deposit: TrackerDepositStatus }) => {
+const DepositCard = memo(({ deposit }: { deposit: TrackerDepositStatus }) => {
   const { copied, copy } = useCopyToClipboard();
   const status = deposit.status;
   const stepOrder = STATUS_ORDER[status] ?? 0;
@@ -590,7 +329,7 @@ const BackendDepositCard = memo(({ deposit }: { deposit: TrackerDepositStatus })
     </div>
   );
 });
-BackendDepositCard.displayName = "BackendDepositCard";
+DepositCard.displayName = "DepositCard";
 
 // =============================================================================
 // Retry button (shared between DepositCard and address lookup)
@@ -626,7 +365,6 @@ RetryButton.displayName = "RetryButton";
 
 export function BalanceView() {
   const { publicKey, connected } = useWallet();
-  const { notes, isLoaded } = useNoteStorage();
   const { deposits: backendDeposits, isLoading: backendLoading } = useBackendDeposits();
 
   const [mounted, setMounted] = useState(false);
@@ -657,19 +395,24 @@ export function BalanceView() {
     }
   }, [lookupAddress]);
 
-  const sortedNotes = useMemo(() => [...notes].sort((a, b) => b.createdAt - a.createdAt), [notes]);
+  // Split backend deposits into ongoing vs minted
+  const { ongoing, minted } = useMemo(() => {
+    const sorted = [...backendDeposits].sort((a, b) => b.updated_at - a.updated_at);
+    const ongoing: TrackerDepositStatus[] = [];
+    const minted: TrackerDepositStatus[] = [];
+    for (const d of sorted) {
+      if (d.status === "ready" || d.status === "claimed") {
+        minted.push(d);
+      } else {
+        ongoing.push(d);
+      }
+    }
+    return { ongoing, minted };
+  }, [backendDeposits]);
 
-  // Backend deposits that are NOT already in localStorage (dedup by taproot address)
-  const backendOnlyDeposits = useMemo(() => {
-    const localAddresses = new Set(notes.map((n) => n.taprootAddress));
-    return backendDeposits
-      .filter((d) => !localAddresses.has(d.taproot_address))
-      .sort((a, b) => b.updated_at - a.updated_at);
-  }, [backendDeposits, notes]);
+  const hasAnyDeposits = backendDeposits.length > 0;
 
-  const hasAnyDeposits = sortedNotes.length > 0 || backendOnlyDeposits.length > 0;
-
-  if (!mounted || !isLoaded) {
+  if (!mounted) {
     return (
       <div className="flex flex-col items-center py-12">
         <div className="w-12 h-12 mb-4 border-4 border-gray/15 border-t-pink-400 rounded-full animate-spin" />
@@ -696,26 +439,28 @@ export function BalanceView() {
         </div>
       )}
 
-      {/* Deposit cards from localStorage */}
-      {sortedNotes.length > 0 && (
+      {/* Ongoing deposits */}
+      {ongoing.length > 0 && (
         <div className="space-y-3">
-          {sortedNotes.map((note, index) => (
-            <DepositCard
-              key={`${note.commitment}-${index}`}
-              note={note}
-            />
+          <div className="flex items-center gap-2">
+            <Loader2 className="w-3.5 h-3.5 text-btc animate-spin" />
+            <span className="text-xs font-medium text-btc">Ongoing ({ongoing.length})</span>
+          </div>
+          {ongoing.map((dep) => (
+            <DepositCard key={dep.id} deposit={dep} />
           ))}
         </div>
       )}
 
-      {/* Deposits from backend (not in localStorage) */}
-      {backendOnlyDeposits.length > 0 && (
+      {/* Minted deposits */}
+      {minted.length > 0 && (
         <div className="space-y-3">
-          {sortedNotes.length > 0 && (
-            <p className="text-xs text-gray pt-2">Tracked by Backend</p>
-          )}
-          {backendOnlyDeposits.map((dep) => (
-            <BackendDepositCard key={dep.id} deposit={dep} />
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-3.5 h-3.5 text-success" />
+            <span className="text-xs font-medium text-success">Minted ({minted.length})</span>
+          </div>
+          {minted.map((dep) => (
+            <DepositCard key={dep.id} deposit={dep} />
           ))}
         </div>
       )}
