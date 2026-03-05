@@ -111,44 +111,48 @@ function TabBar({
 }
 
 // =============================================================================
-// Deposits Tab
+// Table wrapper — horizontal scroll on mobile, full width on desktop
 // =============================================================================
 
-function DepositRow({ deposit }: { deposit: DepositRecord }) {
+function TableWrapper({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center gap-4 p-4 gradient-bg-card rounded-[12px]">
-      <div className="p-1.5 rounded-[8px] bg-green-500/10 shrink-0">
-        <ArrowDownToLine className="w-3.5 h-3.5 text-green-400" />
-      </div>
-      <span className="text-body2-semibold text-foreground shrink-0 w-[140px] font-mono">
-        {formatBtc(deposit.amountSats)} BTC
-      </span>
-      {deposit.commitment && (
-        <div className="flex items-center gap-1.5 min-w-0">
-          <code className="text-caption font-mono text-green-400 truncate">
-            {truncate(deposit.commitment, 8, 6)}
-          </code>
-          <CopyButton text={deposit.commitment} label="Commitment" variant="default" iconSize="sm" />
-        </div>
-      )}
-      <span className="text-caption text-foreground font-mono shrink-0 ml-auto">
-        #{deposit.leafIndex.toString()}
-      </span>
-      {deposit.createdAt ? (
-        <span className="text-caption text-gray shrink-0 w-[60px] text-right">{timeAgo(deposit.createdAt)}</span>
-      ) : null}
-      <a
-        href={solanaExplorerUrl(deposit.pubkey)}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="shrink-0 text-sol hover:text-sol/80 transition-colors"
-        aria-label="View on OrbMarkets"
-      >
-        <ExternalLink className="w-3.5 h-3.5" />
-      </a>
+    <div className="overflow-x-auto rounded-[12px] border border-gray/15">
+      <table className="w-full min-w-[600px]">
+        {children}
+      </table>
     </div>
   );
 }
+
+function TableHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <thead>
+      <tr className="border-b border-gray/15">
+        {children}
+      </tr>
+    </thead>
+  );
+}
+
+function Th({ children, className }: { children?: React.ReactNode; className?: string }) {
+  return (
+    <th className={cn("px-4 py-3 text-left text-caption text-gray font-medium whitespace-nowrap", className)}>
+      {children}
+    </th>
+  );
+}
+
+function Td({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <td className={cn("px-4 py-3.5 whitespace-nowrap", className)}>
+      {children}
+    </td>
+  );
+}
+
+// =============================================================================
+// Deposits Tab
+// =============================================================================
 
 function DepositsTab() {
   const { deposits, isLoading, error, refresh } = useDeposits();
@@ -165,11 +169,63 @@ function DepositsTab() {
           <RefreshCw className="w-3.5 h-3.5" />
         </button>
       </div>
-      <div className="space-y-3">
-        {deposits.map((d) => (
-          <DepositRow key={d.pubkey} deposit={d} />
-        ))}
-      </div>
+      <TableWrapper>
+        <TableHeader>
+          <Th>Type</Th>
+          <Th>Commitment</Th>
+          <Th>Amount</Th>
+          <Th>Leaf</Th>
+          <Th>Timestamp</Th>
+          <Th className="w-[40px]" />
+        </TableHeader>
+        <tbody className="divide-y divide-gray/10">
+          {deposits.map((d) => (
+            <tr key={d.pubkey} className="hover:bg-gray/5 transition-colors">
+              <Td>
+                <div className="flex items-center gap-2">
+                  <div className="p-1 rounded-[6px] bg-green-500/10">
+                    <ArrowDownToLine className="w-3 h-3 text-green-400" />
+                  </div>
+                  <span className="text-caption text-green-400 font-medium">Deposit</span>
+                </div>
+              </Td>
+              <Td>
+                {d.commitment && (
+                  <div className="flex items-center gap-1.5">
+                    <code className="text-caption font-mono text-foreground">
+                      {truncate(d.commitment, 8, 6)}
+                    </code>
+                    <CopyButton text={d.commitment} label="Commitment" variant="default" iconSize="sm" />
+                  </div>
+                )}
+              </Td>
+              <Td>
+                <span className="text-body2 text-foreground font-mono">
+                  {formatBtc(d.amountSats)}
+                </span>
+                <span className="text-caption text-gray ml-1">BTC</span>
+              </Td>
+              <Td>
+                <span className="text-caption text-foreground font-mono">#{d.leafIndex.toString()}</span>
+              </Td>
+              <Td>
+                <span className="text-caption text-gray">{d.createdAt ? timeAgo(d.createdAt) : "—"}</span>
+              </Td>
+              <Td>
+                <a
+                  href={solanaExplorerUrl(d.pubkey)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sol hover:text-sol/80 transition-colors"
+                  aria-label="View on OrbMarkets"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </Td>
+            </tr>
+          ))}
+        </tbody>
+      </TableWrapper>
     </div>
   );
 }
@@ -177,59 +233,6 @@ function DepositsTab() {
 // =============================================================================
 // Transfers Tab
 // =============================================================================
-
-function TransferEventRow({ event }: { event: TransferEvent }) {
-  const isCommitment = event.type === "commitment";
-
-  return (
-    <div className="flex items-center gap-4 p-4 gradient-bg-card rounded-[12px]">
-      <div
-        className={cn(
-          "p-1.5 rounded-[8px] shrink-0",
-          isCommitment ? "bg-purple-500/10" : "bg-red-500/10"
-        )}
-      >
-        {isCommitment ? (
-          <ArrowDownToLine className="w-3.5 h-3.5 text-purple-400" />
-        ) : (
-          <ArrowUpFromLine className="w-3.5 h-3.5 text-red-400" />
-        )}
-      </div>
-      <span
-        className={cn(
-          "text-body2-semibold shrink-0 w-[140px]",
-          isCommitment ? "text-purple-400" : "text-red-400"
-        )}
-      >
-        {isCommitment ? "Commitment" : "Nullifier"}
-      </span>
-      {isCommitment && event.commitment && (
-        <div className="flex items-center gap-1.5 min-w-0">
-          <code className="text-caption font-mono text-purple-400 truncate">
-            {truncate(event.commitment, 8, 6)}
-          </code>
-          <CopyButton text={event.commitment} label="Commitment" variant="default" iconSize="sm" />
-        </div>
-      )}
-      {isCommitment && event.leafIndex != null && (
-        <span className="text-caption text-foreground font-mono shrink-0 ml-auto">
-          #{event.leafIndex.toString()}
-        </span>
-      )}
-      {!isCommitment && <div className="flex-1" />}
-      <span className="text-caption text-gray shrink-0 w-[60px] text-right">{timeAgo(event.timestamp)}</span>
-      <a
-        href={solanaExplorerUrl(event.pubkey)}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="shrink-0 text-sol hover:text-sol/80 transition-colors"
-        aria-label="View on OrbMarkets"
-      >
-        <ExternalLink className="w-3.5 h-3.5" />
-      </a>
-    </div>
-  );
-}
 
 function TransfersTab() {
   const { events, isLoading, error, refresh } = useTransfers();
@@ -246,11 +249,70 @@ function TransfersTab() {
           <RefreshCw className="w-3.5 h-3.5" />
         </button>
       </div>
-      <div className="space-y-3">
-        {events.map((e, i) => (
-          <TransferEventRow key={`${e.pubkey}-${i}`} event={e} />
-        ))}
-      </div>
+      <TableWrapper>
+        <TableHeader>
+          <Th>Type</Th>
+          <Th>Hash</Th>
+          <Th>Leaf</Th>
+          <Th>Timestamp</Th>
+          <Th className="w-[40px]" />
+        </TableHeader>
+        <tbody className="divide-y divide-gray/10">
+          {events.map((e, i) => {
+            const isCommitment = e.type === "commitment";
+            return (
+              <tr key={`${e.pubkey}-${i}`} className="hover:bg-gray/5 transition-colors">
+                <Td>
+                  <div className="flex items-center gap-2">
+                    <div className={cn("p-1 rounded-[6px]", isCommitment ? "bg-purple-500/10" : "bg-red-500/10")}>
+                      {isCommitment
+                        ? <ArrowDownToLine className="w-3 h-3 text-purple-400" />
+                        : <ArrowUpFromLine className="w-3 h-3 text-red-400" />
+                      }
+                    </div>
+                    <span className={cn("text-caption font-medium", isCommitment ? "text-purple-400" : "text-red-400")}>
+                      {isCommitment ? "Commitment" : "Nullifier"}
+                    </span>
+                  </div>
+                </Td>
+                <Td>
+                  {isCommitment && e.commitment ? (
+                    <div className="flex items-center gap-1.5">
+                      <code className="text-caption font-mono text-foreground">
+                        {truncate(e.commitment, 8, 6)}
+                      </code>
+                      <CopyButton text={e.commitment} label="Commitment" variant="default" iconSize="sm" />
+                    </div>
+                  ) : (
+                    <span className="text-caption text-gray">—</span>
+                  )}
+                </Td>
+                <Td>
+                  {isCommitment && e.leafIndex != null ? (
+                    <span className="text-caption text-foreground font-mono">#{e.leafIndex.toString()}</span>
+                  ) : (
+                    <span className="text-caption text-gray">—</span>
+                  )}
+                </Td>
+                <Td>
+                  <span className="text-caption text-gray">{timeAgo(e.timestamp)}</span>
+                </Td>
+                <Td>
+                  <a
+                    href={solanaExplorerUrl(e.pubkey)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sol hover:text-sol/80 transition-colors"
+                    aria-label="View on OrbMarkets"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </Td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </TableWrapper>
     </div>
   );
 }
@@ -264,45 +326,6 @@ const STATUS_STYLES: Record<RedemptionRecord["status"], { bg: string; text: stri
   Processing: { bg: "bg-blue-500/10 border-blue-500/20", text: "text-blue-400" },
   Failed: { bg: "bg-red-500/10 border-red-500/20", text: "text-red-400" },
 };
-
-function RedemptionRow({ redemption }: { redemption: RedemptionRecord }) {
-  const statusStyle = STATUS_STYLES[redemption.status];
-
-  return (
-    <div className="flex items-center gap-4 p-4 gradient-bg-card rounded-[12px]">
-      <div className="p-1.5 rounded-[8px] bg-orange-500/10 shrink-0">
-        <ArrowUpFromLine className="w-3.5 h-3.5 text-orange-400" />
-      </div>
-      <span className="text-body2-semibold text-foreground shrink-0 w-[140px] font-mono">
-        {formatBtc(redemption.amountSats)} BTC
-      </span>
-      <div className="flex items-center gap-1.5 min-w-0">
-        <code className="text-caption font-mono text-foreground truncate">
-          {truncate(redemption.requester, 6, 4)}
-        </code>
-        <CopyButton text={redemption.requester} label="Requester" variant="default" iconSize="sm" />
-      </div>
-      <span
-        className={cn(
-          "px-2 py-0.5 rounded-full text-caption border shrink-0 ml-auto",
-          statusStyle.bg,
-          statusStyle.text
-        )}
-      >
-        {redemption.status}
-      </span>
-      <a
-        href={solanaExplorerUrl(redemption.pubkey)}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="shrink-0 text-sol hover:text-sol/80 transition-colors"
-        aria-label="View on OrbMarkets"
-      >
-        <ExternalLink className="w-3.5 h-3.5" />
-      </a>
-    </div>
-  );
-}
 
 function WithdrawalsTab() {
   const { redemptions, isLoading, error, refresh } = useRedemptions();
@@ -319,11 +342,70 @@ function WithdrawalsTab() {
           <RefreshCw className="w-3.5 h-3.5" />
         </button>
       </div>
-      <div className="space-y-3">
-        {redemptions.map((r) => (
-          <RedemptionRow key={r.pubkey} redemption={r} />
-        ))}
-      </div>
+      <TableWrapper>
+        <TableHeader>
+          <Th>Status</Th>
+          <Th>Requester</Th>
+          <Th>Amount</Th>
+          <Th>BTC Script</Th>
+          <Th>Request</Th>
+          <Th className="w-[40px]" />
+        </TableHeader>
+        <tbody className="divide-y divide-gray/10">
+          {redemptions.map((r) => {
+            const statusStyle = STATUS_STYLES[r.status];
+            return (
+              <tr key={r.pubkey} className="hover:bg-gray/5 transition-colors">
+                <Td>
+                  <span className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-caption border", statusStyle.bg, statusStyle.text)}>
+                    {r.status}
+                  </span>
+                </Td>
+                <Td>
+                  <div className="flex items-center gap-1.5">
+                    <code className="text-caption font-mono text-foreground">
+                      {truncate(r.requester, 6, 4)}
+                    </code>
+                    <CopyButton text={r.requester} label="Requester" variant="default" iconSize="sm" />
+                  </div>
+                </Td>
+                <Td>
+                  <span className="text-body2 text-foreground font-mono">
+                    {formatBtc(r.amountSats)}
+                  </span>
+                  <span className="text-caption text-gray ml-1">BTC</span>
+                </Td>
+                <Td>
+                  {r.btcScript ? (
+                    <div className="flex items-center gap-1.5">
+                      <code className="text-caption font-mono text-btc">
+                        {truncate(r.btcScript, 8, 6)}
+                      </code>
+                      <CopyButton text={r.btcScript} label="BTC Script" variant="default" iconSize="sm" />
+                    </div>
+                  ) : (
+                    <span className="text-caption text-gray">—</span>
+                  )}
+                </Td>
+                <Td>
+                  <span className="text-caption text-foreground font-mono">#{r.requestId.toString()}</span>
+                </Td>
+                <Td>
+                  <a
+                    href={solanaExplorerUrl(r.pubkey)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sol hover:text-sol/80 transition-colors"
+                    aria-label="View on OrbMarkets"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </Td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </TableWrapper>
     </div>
   );
 }
