@@ -948,3 +948,31 @@ export function deriveStealthAnnouncementPda(
   return pda.toString();
 }
 
+// ========== Deposit Ownership Check ==========
+
+/**
+ * Check if a deposit (identified by its OP_RETURN ephemeralPub + npk) belongs
+ * to the given viewing key holder.
+ *
+ * Performs X25519 ECDH between the viewer's private key and the deposit's
+ * ephemeral public key, derives the expected NPK, and compares it with the
+ * deposit's actual NPK.
+ */
+export function isDepositForViewer(
+  viewingPrivKey: Uint8Array,
+  spendingPubKey: { x: bigint; y: bigint },
+  nullifyingKey: bigint,
+  ephemeralPub: Uint8Array,
+  depositNpk: bigint,
+): boolean {
+  try {
+    const sharedSecret = x25519Ecdh(viewingPrivKey, ephemeralPub);
+    const mpk = computeMPKSync(spendingPubKey.x, spendingPubKey.y, nullifyingKey);
+    const stealthScalar = deriveStealthScalar(sharedSecret);
+    const expectedNpk = computeNPKSync(mpk, stealthScalar);
+    return expectedNpk === depositNpk;
+  } catch {
+    return false;
+  }
+}
+

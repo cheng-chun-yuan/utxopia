@@ -362,6 +362,7 @@ export {
   encryptAmount,
   decryptAmount,
   computeNullifierHashForNote,
+  isDepositForViewer,
   STEALTH_ANNOUNCEMENT_SIZE,
   STEALTH_ANNOUNCEMENT_DISCRIMINATOR,
   ANNOUNCEMENT_TYPE_DEPOSIT,

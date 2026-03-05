@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo, memo } from "react";
 import Image from "next/image";
-import { useWallet } from "@solana/wallet-adapter-react";
 import {
   AlertCircle, Clock, CheckCircle2, XCircle, RotateCcw,
   ExternalLink, Copy, Check, ArrowDownToLine, Loader2, Search, ChevronDown, ArrowRight
@@ -21,6 +20,8 @@ import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { useBackendDeposits } from "@/hooks/use-backend-deposits";
+import { useAegisStore } from "@/stores";
+import { isDepositForViewer, hexToBytes, bytesToBigint } from "@aegis/sdk";
 
 // =============================================================================
 // Status badge — maps backend DepositStatus to UI
@@ -365,8 +366,8 @@ RetryButton.displayName = "RetryButton";
 // =============================================================================
 
 export function BalanceView() {
-  const { publicKey, connected } = useWallet();
   const { deposits: backendDeposits, isLoading: backendLoading } = useBackendDeposits();
+  const keys = useAegisStore((s) => s.keys);
 
   const [mounted, setMounted] = useState(false);
 
@@ -396,9 +397,30 @@ export function BalanceView() {
     }
   }, [lookupAddress]);
 
-  // Split backend deposits into ongoing vs minted
+  // Filter deposits to only show ones belonging to the current user
+  const myDeposits = useMemo(() => {
+    if (!keys) return [];
+    return backendDeposits.filter((d) => {
+      if (!d.ephemeral_pub || !d.npk) return false;
+      try {
+        const ephPub = hexToBytes(d.ephemeral_pub);
+        const npk = bytesToBigint(hexToBytes(d.npk));
+        return isDepositForViewer(
+          keys.viewingPrivKey,
+          keys.spendingPubKey,
+          keys.nullifyingKey,
+          ephPub,
+          npk,
+        );
+      } catch {
+        return false;
+      }
+    });
+  }, [backendDeposits, keys]);
+
+  // Split into ongoing vs minted
   const { ongoing, minted } = useMemo(() => {
-    const sorted = [...backendDeposits].sort((a, b) => b.updated_at - a.updated_at);
+    const sorted = [...myDeposits].sort((a, b) => b.updated_at - a.updated_at);
     const ongoing: TrackerDepositStatus[] = [];
     const minted: TrackerDepositStatus[] = [];
     for (const d of sorted) {
@@ -409,9 +431,9 @@ export function BalanceView() {
       }
     }
     return { ongoing, minted };
-  }, [backendDeposits]);
+  }, [myDeposits]);
 
-  const hasAnyDeposits = backendDeposits.length > 0;
+  const hasAnyDeposits = myDeposits.length > 0;
 
   if (!mounted) {
     return (
@@ -432,11 +454,10 @@ export function BalanceView() {
         </div>
       </div>
 
-      {/* Wallet connection */}
-      {connected && publicKey && (
-        <div className="flex items-center gap-2 p-2 bg-privacy/10 border border-privacy/30 rounded-lg">
-          <div className="w-2 h-2 rounded-full bg-privacy" />
-          <span className="text-xs text-privacy">Solana: {truncateMiddle(publicKey.toBase58(), 6)}</span>
+      {/* No keys — prompt to unlock */}
+      {!keys && (
+        <div className="text-center py-8">
+          <p className="text-sm text-gray">Unlock your vault to see your deposits</p>
         </div>
       )}
 
@@ -475,13 +496,13 @@ export function BalanceView() {
       )}
 
       {/* Empty state */}
-      {!hasAnyDeposits && !backendLoading && (
+      {keys && !hasAnyDeposits && !backendLoading && (
         <div className="text-center py-8">
           <div className="rounded-full bg-btc/10 p-4 w-fit mx-auto mb-4">
             <BitcoinIcon className="h-8 w-8" />
           </div>
-          <p className="text-sm text-gray">No deposits yet</p>
-          <p className="text-xs text-gray/40 mt-1">Create a deposit to see your Bitcoin activity</p>
+          <p className="text-sm text-gray">No deposits found for your keys</p>
+          <p className="text-xs text-gray/40 mt-1">Deposits addressed to you will appear here automatically</p>
         </div>
       )}
 
