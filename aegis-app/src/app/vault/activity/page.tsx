@@ -10,14 +10,12 @@ import {
   Shield,
   Inbox,
   Link2,
-  Eye,
   EyeOff,
 } from "lucide-react";
-import { useWallet } from "@solana/wallet-adapter-react";
 import { cn } from "@/lib/utils";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { BalanceView } from "@/components/btc-widget/balance-view";
-import { useAegis, useAegisKeys, useStealthInbox } from "@/hooks/use-aegis";
+import { useAegisKeys, useStealthInbox } from "@/hooks/use-aegis";
 import { InboxList, EmptyInbox } from "@/components/stealth-inbox";
 
 type TabType = "deposits" | "notes";
@@ -63,53 +61,27 @@ function TabBar({
 }
 
 function BalanceBar() {
-  const { publicZkbtcBalance, refreshPublicBalance } = useAegis();
-  const { totalAmountSats } = useStealthInbox();
+  const { totalAmountSats, depositCount } = useStealthInbox();
   const { keys } = useAegisKeys();
-  const { publicKey } = useWallet();
-
-  useEffect(() => {
-    if (publicKey) refreshPublicBalance(publicKey);
-  }, [publicKey, refreshPublicBalance]);
-
-  const privateBtc = (Number(totalAmountSats) / 1e8).toFixed(8);
-  const publicBtc = (Number(publicZkbtcBalance) / 1e8).toFixed(8);
-  const totalSats = Number(totalAmountSats) + Number(publicZkbtcBalance);
-  const totalBtc = (totalSats / 1e8).toFixed(8);
 
   if (!keys) return null;
 
-  return (
-    <div className="rounded-[12px] bg-muted/60 border border-gray/15 p-4 space-y-3">
-      {/* Total */}
-      <div className="text-center">
-        <p className="text-caption text-gray mb-1">Total zkBTC</p>
-        <p className="text-[22px] font-bold font-mono text-foreground tracking-tight">
-          {totalBtc}
-        </p>
-      </div>
+  const privateBtc = (Number(totalAmountSats) / 1e8).toFixed(8);
 
-      {/* Private / Public split bar */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex items-center gap-2.5 p-2.5 rounded-[10px] bg-privacy/8 border border-privacy/15">
-          <div className="p-1.5 rounded-[6px] bg-privacy/15">
-            <EyeOff className="w-3.5 h-3.5 text-privacy" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-[10px] text-gray uppercase tracking-wider">Private</p>
-            <p className="text-body2-semibold font-mono text-privacy truncate">{privateBtc}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2.5 p-2.5 rounded-[10px] bg-purple/8 border border-purple/15">
-          <div className="p-1.5 rounded-[6px] bg-purple/15">
-            <Eye className="w-3.5 h-3.5 text-purple" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-[10px] text-gray uppercase tracking-wider">Public</p>
-            <p className="text-body2-semibold font-mono text-purple truncate">{publicBtc}</p>
-          </div>
-        </div>
+  return (
+    <div className="flex items-center gap-3 p-3 rounded-[12px] bg-privacy/8 border border-privacy/15">
+      <div className="p-2 rounded-[8px] bg-privacy/15">
+        <EyeOff className="w-4 h-4 text-privacy" />
       </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] text-gray uppercase tracking-wider">Private zkBTC</p>
+        <p className="text-[20px] font-bold font-mono text-privacy tracking-tight">{privateBtc}</p>
+      </div>
+      {depositCount > 0 && (
+        <span className="text-caption text-gray/60">
+          {depositCount} note{depositCount !== 1 ? "s" : ""}
+        </span>
+      )}
     </div>
   );
 }
