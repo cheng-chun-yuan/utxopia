@@ -41,7 +41,7 @@ use pinocchio::{
 };
 
 use crate::debug_msg;
-use crate::error::ZVaultError;
+use crate::error::AegisError;
 use crate::state::{
     CommitmentTree, NullifierOperationType, NullifierRecord, PoolState,
     RedemptionRequest, RedemptionStatus, StealthAnnouncement, VkRegistry,
@@ -139,7 +139,7 @@ pub fn process_redeem(
 
     if btc_script_len == 0 || btc_script_len > crate::constants::MAX_BTC_SCRIPT_LEN {
         debug_msg!("Invalid BTC script length");
-        return Err(ZVaultError::InvalidBtcAddress.into());
+        return Err(AegisError::InvalidBtcAddress.into());
     }
 
     if data.len() < offset + btc_script_len + 8 {
@@ -160,7 +160,7 @@ pub fn process_redeem(
         );
         if *bound_params_hash != expected {
             debug_msg!("Invalid bound params hash for redeem");
-            return Err(ZVaultError::InvalidBoundParams.into());
+            return Err(AegisError::InvalidBoundParams.into());
         }
     }
 
@@ -193,17 +193,17 @@ pub fn process_redeem(
         let pool_data = pool_state_info.try_borrow_data()?;
         let pool = PoolState::from_bytes(&pool_data)?;
         if pool.is_paused() {
-            return Err(ZVaultError::PoolPaused.into());
+            return Err(AegisError::PoolPaused.into());
         }
         (pool.pending_redemptions(), pool.total_shielded())
     };
 
     // Validate redeem amount
     if redeem_amount == 0 {
-        return Err(ZVaultError::ZeroAmount.into());
+        return Err(AegisError::ZeroAmount.into());
     }
     if redeem_amount > total_shielded {
-        return Err(ZVaultError::InsufficientFunds.into());
+        return Err(AegisError::InsufficientFunds.into());
     }
 
     // Validate VK registry for this (N, M) variant
@@ -213,7 +213,7 @@ pub fn process_redeem(
 
         if vk.n_inputs != n_inputs as u8 || vk.n_outputs != n_outputs as u8 {
             debug_msg!("VK registry mismatch");
-            return Err(ZVaultError::InvalidVkRegistry.into());
+            return Err(AegisError::InvalidVkRegistry.into());
         }
     }
 
@@ -223,7 +223,7 @@ pub fn process_redeem(
         let tree = CommitmentTree::from_bytes(&tree_data)?;
         if !tree.is_valid_root(merkle_root) {
             debug_msg!("Invalid Merkle root");
-            return Err(ZVaultError::InvalidMerkleProof.into());
+            return Err(AegisError::InvalidMerkleProof.into());
         }
     }
 
@@ -271,7 +271,7 @@ pub fn process_redeem(
             let nullifier_data = nullifier_info.try_borrow_data()?;
             if !nullifier_data.is_empty() && nullifier_data[0] == NULLIFIER_RECORD_DISCRIMINATOR {
                 debug_msg!("Nullifier already spent");
-                return Err(ZVaultError::NullifierAlreadyUsed.into());
+                return Err(AegisError::NullifierAlreadyUsed.into());
             }
         }
 
@@ -393,7 +393,7 @@ pub fn process_redeem(
             if !redemption_data.is_empty()
                 && redemption_data[0] == REDEMPTION_REQUEST_DISCRIMINATOR
             {
-                return Err(ZVaultError::AlreadyInitialized.into());
+                return Err(AegisError::AlreadyInitialized.into());
             }
         }
 

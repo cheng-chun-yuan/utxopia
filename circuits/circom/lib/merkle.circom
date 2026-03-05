@@ -7,7 +7,7 @@ include "circomlib/circuits/mux1.circom";
  * Merkle proof verifier using Poseidon hash
  * Verifies a leaf belongs to a Merkle tree with given root.
  *
- * @param levels - Tree depth (default 16 for zVault JoinSplit)
+ * @param levels - Tree depth (default 16 for Aegis JoinSplit)
  */
 template MerkleProofVerifier(levels) {
     signal input leaf;

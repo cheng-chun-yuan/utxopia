@@ -1,6 +1,6 @@
 //! Solana Relayer Client
 //!
-//! Simple relayer that calls zVault contract instructions.
+//! Simple relayer that calls Aegis contract instructions.
 //! All logic (merkle tree, token minting) is handled by the contract.
 //!
 //! Flow:
@@ -27,7 +27,7 @@ fn double_sha256_header(data: &[u8]) -> [u8; 32] {
 // Constants
 // ============================================================================
 
-/// Solana devnet RPC endpoint (default, override via ZVaultConfig)
+/// Solana devnet RPC endpoint (default, override via AEGISConfig)
 pub const DEVNET_RPC: &str = "https://api.devnet.solana.com";
 
 /// Token-2022 program ID
@@ -39,11 +39,11 @@ pub const ATA_PROGRAM_ID: Pubkey =
     solana_sdk::pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
 
 // ============================================================================
-// Devnet Defaults (used when ZVAULT_NETWORK=devnet and no env vars set)
+// Devnet Defaults (used when AEGIS_NETWORK=devnet and no env vars set)
 // For production, all addresses MUST come from environment variables.
 // ============================================================================
 
-/// zVault program ID (devnet default)
+/// Aegis program ID (devnet default)
 pub const DEVNET_PROGRAM_ID: &str = "AtztELZfz3GHA8hFQCv7aT9Mt47Xhknv3ZCNb3fmXsgf";
 
 /// Pool state PDA (devnet default)
@@ -153,8 +153,8 @@ impl SolClient {
         }
     }
 
-    /// Create new client from ZVaultConfig (preferred for production)
-    pub fn from_config(config: &crate::config::ZVaultConfig) -> Result<Self, SolError> {
+    /// Create new client from AEGISConfig (preferred for production)
+    pub fn from_config(config: &crate::config::AEGISConfig) -> Result<Self, SolError> {
         let rpc = RpcClient::new_with_commitment(
             config.solana_rpc.clone(),
             CommitmentConfig::confirmed(),

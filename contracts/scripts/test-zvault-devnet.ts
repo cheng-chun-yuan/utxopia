@@ -1,5 +1,5 @@
 /**
- * ZVault Devnet Test Script
+ * AEGIS Devnet Test Script
  *
  * Tests all 6 main functions:
  * 1. deposit - Generate credentials
@@ -9,7 +9,7 @@
  * 5. sendStealth - Send via ECDH
  * 6. withdraw - Request BTC withdrawal
  *
- * Run: bun run scripts/test-zvault-devnet.ts
+ * Run: bun run scripts/test-aegis-devnet.ts
  */
 
 import {
@@ -27,7 +27,7 @@ import * as fs from "fs";
 // Import from SDK
 import {
   createClient,
-  ZVAULT_PROGRAM_ID,
+  AEGIS_PROGRAM_ID,
   deposit,
   sendLink,
   generateNote,
@@ -45,7 +45,7 @@ import {
 // ============================================================================
 
 const RPC_URL = "https://api.devnet.solana.com";
-const PROGRAM_ID = ZVAULT_PROGRAM_ID;
+const PROGRAM_ID = AEGIS_PROGRAM_ID;
 
 // Instruction discriminators
 const INSTRUCTION = {
@@ -295,7 +295,7 @@ function testSendLink() {
 function testDeriveNote() {
   console.log("\n--- Test 3: DERIVE_NOTE (deterministic) ---");
 
-  const seed = "test-wallet-zvault-2024";
+  const seed = "test-wallet-aegis-2024";
 
   // Derive multiple notes from same seed
   const note0 = deriveNote(seed, 0, 100_000n);
@@ -403,7 +403,7 @@ interface TestResult {
 
 async function main() {
   console.log("\n" + "=".repeat(60));
-  console.log("        ZVAULT DEVNET TEST");
+  console.log("        AEGIS DEVNET TEST");
   console.log("=".repeat(60));
 
   const results: TestResult[] = [];

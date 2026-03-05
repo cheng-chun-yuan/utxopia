@@ -1,12 +1,12 @@
 /**
- * Event parser for zVault sol_log_data events
+ * Event parser for Aegis sol_log_data events
  *
  * Events are emitted by the on-chain program as base64-encoded log data.
  * Transaction logs contain lines like: "Program data: <base64>"
  * Each base64 segment decodes to one slice from sol_log_data.
  */
 
-/** Event discriminators matching contracts/programs/zvault/src/utils/events.rs */
+/** Event discriminators matching contracts/programs/aegis/src/utils/events.rs */
 export const EVENT_LEAF_INSERTED = 0x01;
 export const EVENT_NULLIFIER_SPENT = 0x02;
 

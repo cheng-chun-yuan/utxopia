@@ -13,7 +13,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::error::ZVaultError;
+use crate::error::AegisError;
 use crate::state::PoolState;
 use crate::utils::validate_program_owner;
 
@@ -43,7 +43,7 @@ pub fn process_admin_close_pda(
         let pool_data = pool_state_info.try_borrow_data()?;
         let pool = PoolState::from_bytes(&pool_data)?;
         if authority.key().as_ref() != pool.authority {
-            return Err(ZVaultError::Unauthorized.into());
+            return Err(AegisError::Unauthorized.into());
         }
     }
 

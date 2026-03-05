@@ -1,4 +1,4 @@
-//! Environment-based Configuration for zVault Backend
+//! Environment-based Configuration for Aegis Backend
 //!
 //! This module provides secure configuration loading from environment variables.
 //! All sensitive values (keys, secrets) MUST come from environment variables,
@@ -7,30 +7,30 @@
 //! # Required Environment Variables
 //!
 //! ## Network Configuration
-//! - `ZVAULT_NETWORK` - "mainnet", "testnet", or "devnet" (default: "devnet")
-//! - `ZVAULT_SOLANA_RPC` - Solana RPC endpoint URL
-//! - `ZVAULT_BITCOIN_RPC` - Bitcoin/Esplora API endpoint URL
+//! - `AEGIS_NETWORK` - "mainnet", "testnet", or "devnet" (default: "devnet")
+//! - `AEGIS_SOLANA_RPC` - Solana RPC endpoint URL
+//! - `AEGIS_BITCOIN_RPC` - Bitcoin/Esplora API endpoint URL
 //!
 //! ## Solana Program IDs (must match deployed contracts)
-//! - `ZVAULT_PROGRAM_ID` - zVault program ID
-//! - `ZVAULT_POOL_STATE` - Pool state PDA
-//! - `ZVAULT_COMMITMENT_TREE` - Commitment tree PDA
-//! - `ZVAULT_ZBTC_MINT` - zBTC mint address
+//! - `AEGIS_PROGRAM_ID` - Aegis program ID
+//! - `AEGIS_POOL_STATE` - Pool state PDA
+//! - `AEGIS_COMMITMENT_TREE` - Commitment tree PDA
+//! - `AEGIS_ZBTC_MINT` - zBTC mint address
 //!
 //! ## Signing Configuration
-//! - `ZVAULT_SIGNING_MODE` - "single" (POC) or "frost" (production)
-//! - `ZVAULT_SIGNER_KEY` - Base58-encoded Solana keypair (for relayer)
-//! - `ZVAULT_BTC_SIGNER_KEY` - Hex-encoded BTC signing key (single mode only)
+//! - `AEGIS_SIGNING_MODE` - "single" (POC) or "frost" (production)
+//! - `AEGIS_SIGNER_KEY` - Base58-encoded Solana keypair (for relayer)
+//! - `AEGIS_BTC_SIGNER_KEY` - Hex-encoded BTC signing key (single mode only)
 //!
 //! ## FROST Configuration (production)
-//! - `ZVAULT_FROST_THRESHOLD` - Required signers (e.g., "2")
-//! - `ZVAULT_FROST_PARTICIPANTS` - Total participants (e.g., "3")
-//! - `ZVAULT_FROST_KEY_SHARE` - This node's encrypted key share
+//! - `AEGIS_FROST_THRESHOLD` - Required signers (e.g., "2")
+//! - `AEGIS_FROST_PARTICIPANTS` - Total participants (e.g., "3")
+//! - `AEGIS_FROST_KEY_SHARE` - This node's encrypted key share
 //!
 //! ## Optional Settings
-//! - `ZVAULT_DEPOSIT_LIMIT_SATS` - Maximum deposit per transaction
-//! - `ZVAULT_LOG_LEVEL` - Logging level (debug, info, warn, error)
-//! - `ZVAULT_DEMO_MODE` - Set to "1" to enable demo instructions (devnet only)
+//! - `AEGIS_DEPOSIT_LIMIT_SATS` - Maximum deposit per transaction
+//! - `AEGIS_LOG_LEVEL` - Logging level (debug, info, warn, error)
+//! - `AEGIS_DEMO_MODE` - Set to "1" to enable demo instructions (devnet only)
 
 use std::env;
 use std::str::FromStr;
@@ -74,7 +74,7 @@ impl FromStr for Network {
             "devnet" | "dev" | "testnet4" => Ok(Network::Devnet),
             "regtest" => Ok(Network::Regtest),
             _ => Err(ConfigError::InvalidValue(
-                "ZVAULT_NETWORK".to_string(),
+                "AEGIS_NETWORK".to_string(),
                 format!("unknown network: {}", s),
             )),
         }
@@ -168,7 +168,7 @@ impl SigningMode {
 
 /// Main configuration struct
 #[derive(Debug, Clone)]
-pub struct ZVaultConfig {
+pub struct AEGISConfig {
     /// Network environment
     pub network: Network,
 
@@ -178,7 +178,7 @@ pub struct ZVaultConfig {
     /// Bitcoin/Esplora API endpoint
     pub bitcoin_api: String,
 
-    /// zVault program ID
+    /// Aegis program ID
     pub program_id: String,
 
     /// Pool state PDA
@@ -203,42 +203,42 @@ pub struct ZVaultConfig {
     pub log_level: String,
 }
 
-impl ZVaultConfig {
+impl AEGISConfig {
     /// Load configuration from environment variables
     pub fn from_env() -> Result<Self, ConfigError> {
         // Required: Network
-        let network: Network = env::var("ZVAULT_NETWORK")
+        let network: Network = env::var("AEGIS_NETWORK")
             .unwrap_or_else(|_| "devnet".to_string())
             .parse()?;
 
         // RPC endpoints (with defaults)
-        let solana_rpc = env::var("ZVAULT_SOLANA_RPC")
+        let solana_rpc = env::var("AEGIS_SOLANA_RPC")
             .unwrap_or_else(|_| network.default_solana_rpc().to_string());
 
-        let bitcoin_api = env::var("ZVAULT_BITCOIN_RPC")
+        let bitcoin_api = env::var("AEGIS_BITCOIN_RPC")
             .unwrap_or_else(|_| network.default_bitcoin_api().to_string());
 
         // Program IDs (required for non-devnet)
         let program_id = get_required_or_devnet_default(
-            "ZVAULT_PROGRAM_ID",
+            "AEGIS_PROGRAM_ID",
             "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM",
             network,
         )?;
 
         let pool_state = get_required_or_devnet_default(
-            "ZVAULT_POOL_STATE",
+            "AEGIS_POOL_STATE",
             "D2fPWueWrn5H3fazLz7QYydxpBMnL7iqkaxEpFPion5i",
             network,
         )?;
 
         let commitment_tree = get_required_or_devnet_default(
-            "ZVAULT_COMMITMENT_TREE",
+            "AEGIS_COMMITMENT_TREE",
             "3t2wuqAE2mDa5du64Edfie5PYh22eQXqSVvxboPr1kLs",
             network,
         )?;
 
         let zbtc_mint = get_required_or_devnet_default(
-            "ZVAULT_ZBTC_MINT",
+            "AEGIS_ZBTC_MINT",
             "4pLu3qTY3kNWvvftPG22XzXxWuRPkg7GHWW8hcnoUPgd",
             network,
         )?;
@@ -252,18 +252,18 @@ impl ZVaultConfig {
             Network::Testnet => 10_000_000_000, // 100 BTC for testing
             Network::Devnet | Network::Regtest => 100_000_000_000, // 1000 BTC for development
         };
-        let deposit_limit_sats = env::var("ZVAULT_DEPOSIT_LIMIT_SATS")
+        let deposit_limit_sats = env::var("AEGIS_DEPOSIT_LIMIT_SATS")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(default_limit);
 
         // Demo mode (only allowed on testnet/devnet)
-        let demo_mode = env::var("ZVAULT_DEMO_MODE").map(|v| v == "1").unwrap_or(false);
+        let demo_mode = env::var("AEGIS_DEMO_MODE").map(|v| v == "1").unwrap_or(false);
         if demo_mode && !network.allows_demo_mode() {
             return Err(ConfigError::DemoModeNotAllowed(format!("{:?}", network)));
         }
 
-        let log_level = env::var("ZVAULT_LOG_LEVEL").unwrap_or_else(|_| "info".to_string());
+        let log_level = env::var("AEGIS_LOG_LEVEL").unwrap_or_else(|_| "info".to_string());
 
         Ok(Self {
             network,
@@ -307,7 +307,7 @@ impl ZVaultConfig {
 
     /// Print configuration summary (hiding sensitive values)
     pub fn print_summary(&self) {
-        println!("=== zVault Configuration ===");
+        println!("=== Aegis Configuration ===");
         println!("Network: {:?}", self.network);
         println!("Solana RPC: {}", self.solana_rpc);
         println!("Bitcoin API: {}", self.bitcoin_api);
@@ -345,7 +345,7 @@ fn get_required_or_devnet_default(
 
 /// Load signing configuration from environment
 fn load_signing_config(network: Network) -> Result<SigningMode, ConfigError> {
-    let mode = env::var("ZVAULT_SIGNING_MODE").unwrap_or_else(|_| {
+    let mode = env::var("AEGIS_SIGNING_MODE").unwrap_or_else(|_| {
         if matches!(network, Network::Mainnet) {
             "frost".to_string()
         } else {
@@ -356,7 +356,7 @@ fn load_signing_config(network: Network) -> Result<SigningMode, ConfigError> {
     match mode.to_lowercase().as_str() {
         "single" => {
             // For devnet, we can use a derived key (with warning)
-            let key = env::var("ZVAULT_BTC_SIGNER_KEY").unwrap_or_else(|_| {
+            let key = env::var("AEGIS_BTC_SIGNER_KEY").unwrap_or_else(|_| {
                 if matches!(network, Network::Devnet | Network::Regtest) {
                     eprintln!("WARNING: Using derived POC key for devnet/regtest - DO NOT USE WITH REAL FUNDS");
                     // Return empty string to indicate "use derived key"
@@ -368,54 +368,54 @@ fn load_signing_config(network: Network) -> Result<SigningMode, ConfigError> {
 
             if key.is_empty() && !matches!(network, Network::Devnet | Network::Regtest) {
                 return Err(ConfigError::MissingEnvVar(
-                    "ZVAULT_BTC_SIGNER_KEY".to_string(),
+                    "AEGIS_BTC_SIGNER_KEY".to_string(),
                 ));
             }
 
             Ok(SigningMode::Single { key })
         }
         "frost" => {
-            let threshold: u8 = env::var("ZVAULT_FROST_THRESHOLD")
+            let threshold: u8 = env::var("AEGIS_FROST_THRESHOLD")
                 .map_err(|_| {
-                    ConfigError::FrostConfigIncomplete("ZVAULT_FROST_THRESHOLD required".to_string())
+                    ConfigError::FrostConfigIncomplete("AEGIS_FROST_THRESHOLD required".to_string())
                 })?
                 .parse()
                 .map_err(|_| {
                     ConfigError::InvalidValue(
-                        "ZVAULT_FROST_THRESHOLD".to_string(),
+                        "AEGIS_FROST_THRESHOLD".to_string(),
                         "must be a number".to_string(),
                     )
                 })?;
 
-            let participants: u8 = env::var("ZVAULT_FROST_PARTICIPANTS")
+            let participants: u8 = env::var("AEGIS_FROST_PARTICIPANTS")
                 .map_err(|_| {
                     ConfigError::FrostConfigIncomplete(
-                        "ZVAULT_FROST_PARTICIPANTS required".to_string(),
+                        "AEGIS_FROST_PARTICIPANTS required".to_string(),
                     )
                 })?
                 .parse()
                 .map_err(|_| {
                     ConfigError::InvalidValue(
-                        "ZVAULT_FROST_PARTICIPANTS".to_string(),
+                        "AEGIS_FROST_PARTICIPANTS".to_string(),
                         "must be a number".to_string(),
                     )
                 })?;
 
-            let key_share = env::var("ZVAULT_FROST_KEY_SHARE").map_err(|_| {
-                ConfigError::FrostConfigIncomplete("ZVAULT_FROST_KEY_SHARE required".to_string())
+            let key_share = env::var("AEGIS_FROST_KEY_SHARE").map_err(|_| {
+                ConfigError::FrostConfigIncomplete("AEGIS_FROST_KEY_SHARE required".to_string())
             })?;
 
             if threshold > participants {
                 return Err(ConfigError::InvalidValue(
-                    "ZVAULT_FROST_THRESHOLD".to_string(),
+                    "AEGIS_FROST_THRESHOLD".to_string(),
                     "threshold cannot exceed participants".to_string(),
                 ));
             }
 
-            let signer_urls: Vec<String> = env::var("ZVAULT_FROST_SIGNER_URLS")
+            let signer_urls: Vec<String> = env::var("AEGIS_FROST_SIGNER_URLS")
                 .map_err(|_| {
                     ConfigError::FrostConfigIncomplete(
-                        "ZVAULT_FROST_SIGNER_URLS required (comma-separated URLs)".to_string(),
+                        "AEGIS_FROST_SIGNER_URLS required (comma-separated URLs)".to_string(),
                     )
                 })?
                 .split(',')
@@ -425,13 +425,13 @@ fn load_signing_config(network: Network) -> Result<SigningMode, ConfigError> {
 
             if signer_urls.len() < participants as usize {
                 return Err(ConfigError::FrostConfigIncomplete(format!(
-                    "ZVAULT_FROST_SIGNER_URLS has {} URLs but {} participants configured",
+                    "AEGIS_FROST_SIGNER_URLS has {} URLs but {} participants configured",
                     signer_urls.len(),
                     participants,
                 )));
             }
 
-            let api_key = env::var("ZVAULT_FROST_API_KEY").ok();
+            let api_key = env::var("AEGIS_FROST_API_KEY").ok();
 
             Ok(SigningMode::Frost {
                 threshold,
@@ -442,7 +442,7 @@ fn load_signing_config(network: Network) -> Result<SigningMode, ConfigError> {
             })
         }
         _ => Err(ConfigError::InvalidValue(
-            "ZVAULT_SIGNING_MODE".to_string(),
+            "AEGIS_SIGNING_MODE".to_string(),
             format!("unknown mode: {} (use 'single' or 'frost')", mode),
         )),
     }

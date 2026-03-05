@@ -1,8 +1,8 @@
 /**
  * PDA (Program Derived Address) Derivation Utilities
  *
- * Centralized module for all zVault PDA derivations.
- * Prevents code duplication across api.ts, zvault.ts, etc.
+ * Centralized module for all Aegis PDA derivations.
+ * Prevents code duplication across api.ts, aegis.ts, etc.
  *
  * NOTE: Program IDs are defined in config.ts and re-exported here
  * for backwards compatibility. Use config.ts for all new code.
@@ -17,13 +17,13 @@ import {
 
 // Import program IDs from config for local use
 import {
-  ZVAULT_PROGRAM_ID as _ZVAULT_PROGRAM_ID,
+  AEGIS_PROGRAM_ID as _AEGIS_PROGRAM_ID,
   BTC_LIGHT_CLIENT_PROGRAM_ID as _BTC_LIGHT_CLIENT_PROGRAM_ID,
 } from "./config";
 
 // Re-export everything from config for backwards compatibility
 export {
-  ZVAULT_PROGRAM_ID,
+  AEGIS_PROGRAM_ID,
   BTC_LIGHT_CLIENT_PROGRAM_ID,
   getConfig,
   setConfig,
@@ -35,7 +35,7 @@ export {
 } from "./config";
 
 // Local aliases for use in this file
-const ZVAULT_PROGRAM_ID = _ZVAULT_PROGRAM_ID;
+const AEGIS_PROGRAM_ID = _AEGIS_PROGRAM_ID;
 const BTC_LIGHT_CLIENT_PROGRAM_ID = _BTC_LIGHT_CLIENT_PROGRAM_ID;
 
 // =============================================================================
@@ -56,14 +56,14 @@ export const PDA_SEEDS = {
 } as const;
 
 // =============================================================================
-// Core zVault PDAs
+// Core Aegis PDAs
 // =============================================================================
 
 /**
  * Derive Pool State PDA
  */
 export async function derivePoolStatePDA(
-  programId: Address = ZVAULT_PROGRAM_ID
+  programId: Address = AEGIS_PROGRAM_ID
 ): Promise<[Address, number]> {
   const result = await getProgramDerivedAddress({
     programAddress: programId,
@@ -76,7 +76,7 @@ export async function derivePoolStatePDA(
  * Derive Commitment Tree PDA
  */
 export async function deriveCommitmentTreePDA(
-  programId: Address = ZVAULT_PROGRAM_ID
+  programId: Address = AEGIS_PROGRAM_ID
 ): Promise<[Address, number]> {
   const result = await getProgramDerivedAddress({
     programAddress: programId,
@@ -90,7 +90,7 @@ export async function deriveCommitmentTreePDA(
  */
 export async function deriveNullifierRecordPDA(
   nullifierHash: Uint8Array,
-  programId: Address = ZVAULT_PROGRAM_ID
+  programId: Address = AEGIS_PROGRAM_ID
 ): Promise<[Address, number]> {
   const result = await getProgramDerivedAddress({
     programAddress: programId,
@@ -104,7 +104,7 @@ export async function deriveNullifierRecordPDA(
  */
 export async function deriveStealthAnnouncementPDA(
   ephemeralPubOrCommitment: Uint8Array,
-  programId: Address = ZVAULT_PROGRAM_ID
+  programId: Address = AEGIS_PROGRAM_ID
 ): Promise<[Address, number]> {
   const result = await getProgramDerivedAddress({
     programAddress: programId,
@@ -121,7 +121,7 @@ export async function deriveStealthAnnouncementPDA(
  */
 export async function deriveDepositStealthPDA(
   txid: Uint8Array,
-  programId: Address = ZVAULT_PROGRAM_ID
+  programId: Address = AEGIS_PROGRAM_ID
 ): Promise<[Address, number]> {
   const result = await getProgramDerivedAddress({
     programAddress: programId,
@@ -212,7 +212,7 @@ export async function deriveVerifiedTransactionPDA(
 export async function deriveRedemptionRequestPDA(
   userPubkey: Uint8Array,
   nonce: bigint,
-  programId: Address = ZVAULT_PROGRAM_ID
+  programId: Address = AEGIS_PROGRAM_ID
 ): Promise<[Address, number]> {
   const nonceBytes = new Uint8Array(8);
   const view = new DataView(nonceBytes.buffer);
@@ -237,7 +237,7 @@ export async function deriveRedemptionRequestPDA(
 export async function deriveVkRegistryPDA(
   nInputs: number,
   nOutputs: number,
-  programId: Address = ZVAULT_PROGRAM_ID
+  programId: Address = AEGIS_PROGRAM_ID
 ): Promise<[Address, number]> {
   const result = await getProgramDerivedAddress({
     programAddress: programId,

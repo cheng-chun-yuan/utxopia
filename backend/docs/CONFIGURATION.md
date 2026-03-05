@@ -1,6 +1,6 @@
-# zVault Backend Configuration
+# Aegis Backend Configuration
 
-This document describes all configuration options for the zVault backend services.
+This document describes all configuration options for the Aegis backend services.
 
 ## Configuration Methods
 
@@ -20,10 +20,10 @@ Priority: CLI args > Environment variables > `.env` file > Defaults
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ZVAULT_NETWORK` | No | `devnet` | Network mode: `mainnet`, `testnet`, `devnet` |
-| `ZVAULT_DEMO_MODE` | No | `false` | Enable demo mode (`"1"` to enable; devnet/testnet only) |
-| `ZVAULT_LOG_LEVEL` | No | `info` | Log level: `debug`, `info`, `warn`, `error` |
-| `ZVAULT_DEPOSIT_LIMIT_SATS` | No | network-based* | Maximum deposit per transaction |
+| `AEGIS_NETWORK` | No | `devnet` | Network mode: `mainnet`, `testnet`, `devnet` |
+| `AEGIS_DEMO_MODE` | No | `false` | Enable demo mode (`"1"` to enable; devnet/testnet only) |
+| `AEGIS_LOG_LEVEL` | No | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| `AEGIS_DEPOSIT_LIMIT_SATS` | No | network-based* | Maximum deposit per transaction |
 | `API_PORT` | No | `3001` | REST API server port |
 
 *Deposit limit defaults: mainnet=1,000,000,000 (10 BTC), testnet=10,000,000,000, devnet=100,000,000,000.
@@ -32,26 +32,26 @@ Priority: CLI args > Environment variables > `.env` file > Defaults
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ZVAULT_BITCOIN_RPC` | No | network-based* | Esplora/Blockstream API endpoint |
+| `AEGIS_BITCOIN_RPC` | No | network-based* | Esplora/Blockstream API endpoint |
 | `POOL_SIGNING_KEY` | Yes** | - | Hex-encoded private key for BTC signing (legacy) |
 | `POOL_RECEIVE_ADDRESS` | No | testnet faucet | Pool wallet address for swept funds |
 | `ESPLORA_URL` | No | `https://mempool.space/testnet/api` | Esplora API endpoint (tracker) |
 
 *Bitcoin API defaults: mainnet=`https://mempool.space/api`, testnet=`https://mempool.space/testnet/api`, devnet=`https://mempool.space/testnet4/api`.
 
-**Required for redemption service, optional for deposit tracker (uses simulated mode). Prefer `ZVAULT_BTC_SIGNER_KEY` in FROST config.
+**Required for redemption service, optional for deposit tracker (uses simulated mode). Prefer `AEGIS_BTC_SIGNER_KEY` in FROST config.
 
 ### Solana Configuration
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ZVAULT_SOLANA_RPC` | No | network-based* | Solana RPC endpoint |
+| `AEGIS_SOLANA_RPC` | No | network-based* | Solana RPC endpoint |
 | `SOLANA_RPC_URL` | No | `https://api.devnet.solana.com` | Solana RPC (tracker service) |
 | `VERIFIER_KEYPAIR` | Yes** | - | Path to Solana keypair JSON file |
-| `ZVAULT_PROGRAM_ID` | No*** | `AtztELZfz3GHA8hFQCv7aT9Mt47Xhknv3ZCNb3fmXsgf` | zVault program ID |
-| `ZVAULT_POOL_STATE` | No*** | `8bbcVecB619HHsHn2TQMraJ8R8WjQjApdZY7h9JCJW7b` | Pool state PDA |
-| `ZVAULT_COMMITMENT_TREE` | No*** | `HtfDXZ5mBQNBdZrDxJMbXCDkyUqFdTDj7zAqo3aqrqiA` | Commitment tree PDA |
-| `ZVAULT_ZBTC_MINT` | No*** | `HiDyAcEBTS7SRiLA49BZ5B6XMBAksgwLEAHpvteR8vbV` | zBTC mint address |
+| `AEGIS_PROGRAM_ID` | No*** | `AtztELZfz3GHA8hFQCv7aT9Mt47Xhknv3ZCNb3fmXsgf` | Aegis program ID |
+| `AEGIS_POOL_STATE` | No*** | `8bbcVecB619HHsHn2TQMraJ8R8WjQjApdZY7h9JCJW7b` | Pool state PDA |
+| `AEGIS_COMMITMENT_TREE` | No*** | `HtfDXZ5mBQNBdZrDxJMbXCDkyUqFdTDj7zAqo3aqrqiA` | Commitment tree PDA |
+| `AEGIS_ZBTC_MINT` | No*** | `HiDyAcEBTS7SRiLA49BZ5B6XMBAksgwLEAHpvteR8vbV` | zBTC mint address |
 
 *Solana RPC defaults: devnet=`https://api.devnet.solana.com`, testnet=`https://api.testnet.solana.com`, mainnet=`https://api.mainnet-beta.solana.com`.
 
@@ -84,18 +84,18 @@ Priority: CLI args > Environment variables > `.env` file > Defaults
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ZVAULT_SIGNING_MODE` | No | `single` (devnet) | Signing mode: `single` or `frost` |
-| `ZVAULT_BTC_SIGNER_KEY` | Yes* | — | Hex BTC private key (single-key mode) |
-| `ZVAULT_FROST_THRESHOLD` | Yes** | — | FROST threshold (e.g., 2) |
-| `ZVAULT_FROST_PARTICIPANTS` | Yes** | — | Total signers (e.g., 3) |
-| `ZVAULT_FROST_KEY_SHARE` | Yes** | — | Encrypted key share |
-| `ZVAULT_FROST_SIGNER_URLS` | Yes** | — | Comma-separated signer URLs |
-| `ZVAULT_FROST_API_KEY` | No | — | Optional API key for FROST servers |
-| `ZVAULT_FROST_GROUP_PUBKEY` | Yes** | — | Hex x-only group public key (64 chars) |
+| `AEGIS_SIGNING_MODE` | No | `single` (devnet) | Signing mode: `single` or `frost` |
+| `AEGIS_BTC_SIGNER_KEY` | Yes* | — | Hex BTC private key (single-key mode) |
+| `AEGIS_FROST_THRESHOLD` | Yes** | — | FROST threshold (e.g., 2) |
+| `AEGIS_FROST_PARTICIPANTS` | Yes** | — | Total signers (e.g., 3) |
+| `AEGIS_FROST_KEY_SHARE` | Yes** | — | Encrypted key share |
+| `AEGIS_FROST_SIGNER_URLS` | Yes** | — | Comma-separated signer URLs |
+| `AEGIS_FROST_API_KEY` | No | — | Optional API key for FROST servers |
+| `AEGIS_FROST_GROUP_PUBKEY` | Yes** | — | Hex x-only group public key (64 chars) |
 
-*Required when `ZVAULT_SIGNING_MODE=single`. **Required when `ZVAULT_SIGNING_MODE=frost`.
+*Required when `AEGIS_SIGNING_MODE=single`. **Required when `AEGIS_SIGNING_MODE=frost`.
 
-> **Note**: On mainnet, `ZVAULT_SIGNING_MODE` defaults to `frost`. Single-key mode is rejected by `validate_for_production()`.
+> **Note**: On mainnet, `AEGIS_SIGNING_MODE` defaults to `frost`. Single-key mode is rejected by `validate_for_production()`.
 
 For FROST signer server configuration, see [FROST Server Documentation](../../docs/FROST.md).
 
@@ -105,7 +105,7 @@ For FROST signer server configuration, see [FROST Server Documentation](../../do
 |----------|----------|---------|-------------|
 | `RUST_LOG` | No | `info` | Log level filter (trace, debug, info, warn, error) |
 | `LOG_FORMAT` | No | `json` | Log format: `json` or `pretty` |
-| `LOG_TARGET` | No | - | Filter to specific module (e.g., `zvault::deposit_tracker`) |
+| `LOG_TARGET` | No | - | Filter to specific module (e.g., `aegis::deposit_tracker`) |
 
 ---
 
@@ -152,7 +152,7 @@ Create a `.env` file in the backend directory:
 
 ```bash
 # Network
-ZVAULT_NETWORK=testnet
+AEGIS_NETWORK=testnet
 
 # Bitcoin
 POOL_SIGNING_KEY=your_private_key_hex
@@ -179,8 +179,8 @@ LOG_FORMAT=pretty
 
 ```bash
 # .env.development
-ZVAULT_NETWORK=testnet
-ZVAULT_DEMO_MODE=false
+AEGIS_NETWORK=testnet
+AEGIS_DEMO_MODE=false
 API_PORT=3001
 
 ESPLORA_URL=https://mempool.space/testnet/api
@@ -198,8 +198,8 @@ LOG_FORMAT=pretty
 
 ```bash
 # .env.production
-ZVAULT_NETWORK=mainnet
-ZVAULT_DEMO_MODE=false
+AEGIS_NETWORK=mainnet
+AEGIS_DEMO_MODE=false
 API_PORT=8080
 
 POOL_SIGNING_KEY=${VAULT_BTC_KEY}  # Use secret manager
@@ -207,9 +207,9 @@ POOL_RECEIVE_ADDRESS=bc1q...
 
 ESPLORA_URL=https://mempool.space/api
 SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
-VERIFIER_KEYPAIR=/etc/zvault/verifier.json
+VERIFIER_KEYPAIR=/etc/aegis/verifier.json
 
-DEPOSIT_DB_PATH=/var/lib/zvault/deposits.db
+DEPOSIT_DB_PATH=/var/lib/aegis/deposits.db
 DEPOSIT_POLL_INTERVAL_SECS=30
 DEPOSIT_REQUIRED_CONFIRMATIONS=6
 
@@ -221,8 +221,8 @@ LOG_FORMAT=json
 
 ```bash
 # .env.demo
-ZVAULT_NETWORK=testnet
-ZVAULT_DEMO_MODE=true
+AEGIS_NETWORK=testnet
+AEGIS_DEMO_MODE=true
 API_PORT=3001
 
 # No signing key needed in demo mode
@@ -278,7 +278,7 @@ LOG_FORMAT=pretty
 
 ```bash
 # Example: Load from Vault
-export POOL_SIGNING_KEY=$(vault kv get -field=key secret/zvault/btc)
+export POOL_SIGNING_KEY=$(vault kv get -field=key secret/aegis/btc)
 ```
 
 ### Key Rotation
@@ -297,8 +297,8 @@ export POOL_SIGNING_KEY=$(vault kv get -field=key secret/zvault/btc)
 
 ```bash
 # Secure keypair file
-chmod 600 /etc/zvault/verifier.json
-chown zvault:zvault /etc/zvault/verifier.json
+chmod 600 /etc/aegis/verifier.json
+chown aegis:aegis /etc/aegis/verifier.json
 ```
 
 ---
@@ -323,7 +323,7 @@ The configuration is validated at startup. Invalid configurations will cause the
 cargo run -- demo
 
 # Check environment loading
-env | grep -E "^(ZVAULT|POOL|SOLANA|DEPOSIT)"
+env | grep -E "^(AEGIS|POOL|SOLANA|DEPOSIT)"
 ```
 
 ---
@@ -333,11 +333,11 @@ env | grep -E "^(ZVAULT|POOL|SOLANA|DEPOSIT)"
 Configuration can also be created programmatically in Rust:
 
 ```rust
-use zbtc::common::ZVaultConfig;
+use zbtc::common::AEGISConfig;
 use zbtc::deposit_tracker::TrackerConfig;
 
 // Load from environment
-let config = ZVaultConfig::from_env()?;
+let config = AEGISConfig::from_env()?;
 
 // Or create manually
 let tracker_config = TrackerConfig {

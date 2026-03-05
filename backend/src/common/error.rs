@@ -1,12 +1,12 @@
-//! Common Error Types for zVault Backend
+//! Common Error Types for Aegis Backend
 //!
 //! Provides unified error handling across all modules.
 
 use thiserror::Error;
 
-/// Root error type for zVault backend
+/// Root error type for Aegis backend
 #[derive(Debug, Error)]
-pub enum ZVaultError {
+pub enum AegisError {
     /// Configuration errors
     #[error("configuration error: {0}")]
     Config(#[from] crate::config::ConfigError),
@@ -48,7 +48,7 @@ pub enum ZVaultError {
     Io(#[from] std::io::Error),
 }
 
-impl ZVaultError {
+impl AegisError {
     /// Create a Bitcoin error
     pub fn bitcoin(msg: impl Into<String>) -> Self {
         Self::Bitcoin(msg.into())
@@ -88,32 +88,32 @@ impl ZVaultError {
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
-            ZVaultError::Bitcoin(_)
-                | ZVaultError::Solana(_)
-                | ZVaultError::Storage(_)
-                | ZVaultError::Io(_)
+            AegisError::Bitcoin(_)
+                | AegisError::Solana(_)
+                | AegisError::Storage(_)
+                | AegisError::Io(_)
         )
     }
 
     /// Get error code for API responses
     pub fn error_code(&self) -> &'static str {
         match self {
-            ZVaultError::Config(_) => "CONFIG_ERROR",
-            ZVaultError::Logging(_) => "LOGGING_ERROR",
-            ZVaultError::Bitcoin(_) => "BITCOIN_ERROR",
-            ZVaultError::Solana(_) => "SOLANA_ERROR",
-            ZVaultError::Storage(_) => "STORAGE_ERROR",
-            ZVaultError::Api(_) => "API_ERROR",
-            ZVaultError::Service(_) => "SERVICE_ERROR",
-            ZVaultError::Validation(_) => "VALIDATION_ERROR",
-            ZVaultError::Internal(_) => "INTERNAL_ERROR",
-            ZVaultError::Io(_) => "IO_ERROR",
+            AegisError::Config(_) => "CONFIG_ERROR",
+            AegisError::Logging(_) => "LOGGING_ERROR",
+            AegisError::Bitcoin(_) => "BITCOIN_ERROR",
+            AegisError::Solana(_) => "SOLANA_ERROR",
+            AegisError::Storage(_) => "STORAGE_ERROR",
+            AegisError::Api(_) => "API_ERROR",
+            AegisError::Service(_) => "SERVICE_ERROR",
+            AegisError::Validation(_) => "VALIDATION_ERROR",
+            AegisError::Internal(_) => "INTERNAL_ERROR",
+            AegisError::Io(_) => "IO_ERROR",
         }
     }
 }
 
-/// Result type alias using ZVaultError
-pub type Result<T> = std::result::Result<T, ZVaultError>;
+/// Result type alias using AegisError
+pub type Result<T> = std::result::Result<T, AegisError>;
 
 #[cfg(test)]
 mod tests {
@@ -121,15 +121,15 @@ mod tests {
 
     #[test]
     fn test_error_creation() {
-        let err = ZVaultError::bitcoin("connection failed");
+        let err = AegisError::bitcoin("connection failed");
         assert!(err.to_string().contains("connection failed"));
         assert_eq!(err.error_code(), "BITCOIN_ERROR");
     }
 
     #[test]
     fn test_retryable_errors() {
-        assert!(ZVaultError::bitcoin("timeout").is_retryable());
-        assert!(ZVaultError::solana("rpc failed").is_retryable());
-        assert!(!ZVaultError::validation("invalid input").is_retryable());
+        assert!(AegisError::bitcoin("timeout").is_retryable());
+        assert!(AegisError::solana("rpc failed").is_retryable());
+        assert!(!AegisError::validation("invalid input").is_retryable());
     }
 }

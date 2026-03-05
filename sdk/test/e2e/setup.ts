@@ -43,7 +43,7 @@ export interface LocalnetConfig {
   network: string;
   rpcUrl: string;
   programs: {
-    zVault: string;
+    Aegis: string;
     btcLightClient: string;
     groth16Verifier?: string;
     chadbuffer?: string;
@@ -307,7 +307,7 @@ export async function createTestContext(): Promise<E2ETestContext> {
     if (localnetConfig) {
       const customConfig = createConfig(LOCALNET_CONFIG, {
         // Override with actual deployed addresses
-        zvaultProgramId: kitAddress(localnetConfig.programs.zVault),
+        aegisProgramId: kitAddress(localnetConfig.programs.Aegis),
         btcLightClientProgramId: kitAddress(localnetConfig.programs.btcLightClient),
         chadbufferProgramId: localnetConfig.programs.chadbuffer
           ? kitAddress(localnetConfig.programs.chadbuffer)
@@ -400,7 +400,7 @@ export async function createTestContext(): Promise<E2ETestContext> {
     network: NETWORK,
     rpcUrl: RPC_URL,
     programs: {
-      zVault: config.zvaultProgramId.toString(),
+      Aegis: config.aegisProgramId.toString(),
       btcLightClient: config.btcLightClientProgramId.toString(),
       groth16Verifier: config.groth16VerifierProgramId.toString(),
       chadbuffer: config.chadbufferProgramId.toString(),
@@ -442,7 +442,7 @@ export function logTestEnvironment(ctx: E2ETestContext): void {
   console.log(`Skip On-Chain Tests: ${ctx.skipOnChain}`);
   console.log(`Skip Proof Tests: ${ctx.skipProof}`);
   console.log(`Prover Ready: ${ctx.proverReady}`);
-  console.log(`zVault Program: ${ctx.localnetConfig.programs.zVault}`);
+  console.log(`Aegis Program: ${ctx.localnetConfig.programs.Aegis}`);
   console.log(`Pool State: ${ctx.localnetConfig.accounts.poolState}`);
   console.log(`Commitment Tree: ${ctx.localnetConfig.accounts.commitmentTree}`);
   console.log("=".repeat(60) + "\n");

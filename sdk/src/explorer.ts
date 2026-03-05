@@ -1,7 +1,7 @@
 /**
- * Explorer utilities for ZVault
+ * Explorer utilities for AEGIS
  *
- * Types, parsers, and fetchers for browsing on-chain zVault activity:
+ * Types, parsers, and fetchers for browsing on-chain Aegis activity:
  * - Deposits (StealthAnnouncement with plaintext amounts)
  * - Transfers (StealthAnnouncement with encrypted amounts + NullifierRecords)
  * - Redemptions (RedemptionRequest accounts)
@@ -240,7 +240,14 @@ export async function fetchExplorerDeposits(
         createdAt: indexerData?.created_at,
       };
     })
-    .sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0));
+    .sort((a, b) => {
+      const aHasTime = (a.createdAt ?? 0) > 0;
+      const bHasTime = (b.createdAt ?? 0) > 0;
+      if (aHasTime && bHasTime) return (b.createdAt ?? 0) - (a.createdAt ?? 0);
+      if (aHasTime && !bHasTime) return -1;
+      if (!aHasTime && bHasTime) return 1;
+      return Number(b.leafIndex - a.leafIndex);
+    });
 }
 
 /** Fetch all transfer events (encrypted announcements + nullifiers) */
@@ -249,10 +256,7 @@ export async function fetchExplorerTransfers(
   programId: string,
   indexerLeaves?: IndexerLeaf[]
 ): Promise<ExplorerTransferEvent[]> {
-  const [announcements, nullifiers] = await Promise.all([
-    fetchAccountsBySize(rpc, programId, STEALTH_ANNOUNCEMENT_SIZE),
-    fetchAccountsBySize(rpc, programId, NULLIFIER_RECORD_SIZE),
-  ]);
+  const announcements = await fetchAccountsBySize(rpc, programId, STEALTH_ANNOUNCEMENT_SIZE);
 
   // Build leaf_index → indexer data map for enrichment
   const leafMap = new Map<number, IndexerLeaf>();
@@ -272,14 +276,20 @@ export async function fetchExplorerTransfers(
       type: "commitment",
       pubkey,
       timestamp: indexerData?.created_at ?? 0,
-      commitment: ann.commitment, // from on-chain account
+      commitment: ann.commitment,
       leafIndex: ann.leafIndex,
     });
   }
 
-  for (const { pubkey, data } of nullifiers) {
-    events.push(parseNullifierRecord(pubkey, data));
-  }
+  // Sort by timestamp descending (most recent first); if no timestamp, by leafIndex high→low
+  events.sort((a, b) => {
+    const aHasTime = a.timestamp > 0;
+    const bHasTime = b.timestamp > 0;
+    if (aHasTime && bHasTime) return b.timestamp - a.timestamp;
+    if (aHasTime && !bHasTime) return -1;
+    if (!aHasTime && bHasTime) return 1;
+    return Number((b.leafIndex ?? 0n) - (a.leafIndex ?? 0n));
+  });
 
   return events;
 }

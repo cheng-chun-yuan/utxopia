@@ -1,6 +1,6 @@
 {
   "buildCommand": "bun run build:sdk && bun run build:frontend",
-  "outputDirectory": "zvault-app/.next",
+  "outputDirectory": "aegis-app/.next",
   "installCommand": "bun install",
   "framework": "nextjs"
 }

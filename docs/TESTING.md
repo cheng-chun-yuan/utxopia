@@ -5,7 +5,7 @@ This project has tests at four main layers:
 - **Contracts** (Rust + TypeScript helpers)
 - **SDK** (TypeScript, Bun test)
 - **Devnet / Backend** (integration against running services)
-- **zVault App** (frontend, Vitest)
+- **Aegis App** (frontend, Vitest)
 
 The goal is to keep each test file focused, small, and clearly scoped (unit, integration, or E2E).
 
@@ -65,16 +65,16 @@ The goal is to keep each test file focused, small, and clearly scoped (unit, int
   - New SDK flows that stay within the SDK (no external services) → `test/integration`.
   - New flows that require a running validator / circuits / backend → `test/e2e`.
 
-### zVault App (`zvault-app`)
+### Aegis App (`aegis-app`)
 
 - Frontend tests are co-located with code using Vitest:
-  - Stores: `src/stores/__tests__/zvault-store.test.ts`, `src/stores/__tests__/notes-store.test.ts`.
+  - Stores: `src/stores/__tests__/aegis-store.test.ts`, `src/stores/__tests__/notes-store.test.ts`.
   - Hooks: `src/hooks/__tests__/use-pool-stats.test.tsx`, `src/hooks/__tests__/use-copy-to-clipboard.test.ts`.
   - Utils: `src/lib/utils/__tests__/formatting.test.ts`, `src/lib/utils/__tests__/validation.test.ts`.
   - API: `src/lib/api/__tests__/client.test.ts`, `src/lib/api/__tests__/errors.test.ts`.
   - Components: `src/components/btc-widget/__tests__/widget.test.tsx`.
 - **How to run**:
-  - `cd zvault-app && bun test` (Vitest).
+  - `cd aegis-app && bun test` (Vitest).
 - **Conventions**:
   - Keep tests close to the code they cover in `__tests__` folders.
   - Use descriptive file names, e.g. `use-pool-stats.test.tsx`, `widget.test.tsx`.

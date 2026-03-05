@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# zVault Devnet Integration Test — Bootstrap Script
+# Aegis Devnet Integration Test — Bootstrap Script
 # =============================================================================
 # Sets up everything needed for production-like devnet testing:
 # 1. Compile JoinSplit circuits + trusted setup
@@ -20,7 +20,7 @@ DEVNET_TEST_DIR="$ROOT_DIR/devnet-test"
 ENV_FILE="$DEVNET_TEST_DIR/.env"
 
 echo "============================================"
-echo " zVault Devnet Bootstrap"
+echo " Aegis Devnet Bootstrap"
 echo "============================================"
 echo "Root: $ROOT_DIR"
 echo ""

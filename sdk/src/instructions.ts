@@ -1,7 +1,7 @@
 /**
- * ZVault Instruction Builders (JoinSplit Architecture)
+ * AEGIS Instruction Builders (JoinSplit Architecture)
  *
- * Low-level instruction building for ZVault operations.
+ * Low-level instruction building for AEGIS operations.
  * All Groth16 proofs are verified inline using BN254 pairing syscalls.
  *
  * @module instructions
@@ -33,7 +33,7 @@ export interface Instruction {
 // Constants
 // =============================================================================
 
-/** Instruction discriminators (must match contracts/programs/zvault/src/lib.rs) */
+/** Instruction discriminators (must match contracts/programs/aegis/src/lib.rs) */
 const INSTRUCTION = {
   INITIALIZE: 0,
   VERIFY_STEALTH_DEPOSIT: 1,
@@ -193,7 +193,7 @@ export function buildRedemptionRequestInstruction(
   ];
 
   return {
-    programAddress: config.zvaultProgramId,
+    programAddress: config.aegisProgramId,
     accounts,
     data,
   };
@@ -276,7 +276,7 @@ export function buildCompleteRedemptionInstruction(
   ];
 
   return {
-    programAddress: config.zvaultProgramId,
+    programAddress: config.aegisProgramId,
     accounts,
     data,
   };
@@ -446,7 +446,7 @@ export function buildTransactInstruction(options: TransactInstructionOptions): I
   }
 
   return {
-    programAddress: config.zvaultProgramId,
+    programAddress: config.aegisProgramId,
     accounts,
     data,
   };
@@ -649,7 +649,7 @@ export function buildUnshieldInstruction(options: UnshieldInstructionOptions): I
   }
 
   return {
-    programAddress: config.zvaultProgramId,
+    programAddress: config.aegisProgramId,
     accounts,
     data,
   };
@@ -852,7 +852,7 @@ export function buildRedeemInstruction(options: RedeemInstructionOptions): Instr
   accounts.push({ address: options.accounts.redemptionRequest, role: AccountRole.WRITABLE });
 
   return {
-    programAddress: config.zvaultProgramId,
+    programAddress: config.aegisProgramId,
     accounts,
     data,
   };
@@ -957,7 +957,7 @@ export function buildPublicRedeemInstruction(options: PublicRedeemInstructionOpt
   ];
 
   return {
-    programAddress: config.zvaultProgramId,
+    programAddress: config.aegisProgramId,
     accounts,
     data,
   };

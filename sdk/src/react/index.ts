@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * React Hooks for ZVault SDK
+ * React Hooks for AEGIS SDK
  *
  * Platform-agnostic hooks that work in both React (web) and React Native.
  */

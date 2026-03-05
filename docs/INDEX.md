@@ -1,4 +1,4 @@
-# zVault Documentation Index
+# Aegis Documentation Index
 
 Privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs.
 
@@ -22,14 +22,14 @@ Privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs.
 
 ## Recommended Reading Order
 
-### New to zVault
+### New to Aegis
 
 1. **[Technical Overview](./TECHNICAL.md)** - Understand the architecture and key innovations
 2. **[Circuits](./CIRCUITS.md)** - How JoinSplit proofs work
 3. **[SDK Reference](../sdk/docs/SDK.md)** - Client-side API
 4. **[How to Run](./RUNNING.md)** - Set up a local development environment
 
-### Operating zVault
+### Operating Aegis
 
 1. **[How to Run](./RUNNING.md)** - Start all services
 2. **[Backend Configuration](../backend/docs/CONFIGURATION.md)** - Environment setup
@@ -56,7 +56,7 @@ Privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs.
 | FROST Signing Server | `frost_server/` | [FROST Server](./FROST.md) |
 | Backend API + Tracker | `backend/` | [Architecture](../backend/docs/ARCHITECTURE.md), [Services](../backend/docs/SERVICES.md), [API](../backend/docs/API.md) |
 | Header Relayer | `backend/header-relayer/` | [Services](../backend/docs/SERVICES.md), [How to Run](./RUNNING.md) |
-| Web Frontend | `zvault-app/` | [How to Run](./RUNNING.md) |
+| Web Frontend | `aegis-app/` | [How to Run](./RUNNING.md) |
 
 ---
 
@@ -78,6 +78,6 @@ Privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs.
 
 | Program | Address |
 |---------|---------|
-| zVault | `25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM` |
+| Aegis | `25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM` |
 | BTC Light Client | `Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq` |
 | ChadBuffer | `6VrJmWbhN9WbEkg87JizunVMpL6CHKGVmzWCf3o3LRgy` |

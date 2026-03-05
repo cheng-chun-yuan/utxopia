@@ -5,7 +5,7 @@ import {
   setConfig,
   getConfig,
   createFetchConnectionAdapter,
-} from "@zvault/sdk";
+} from "@aegis/sdk";
 
 async function main() {
   // Use devnet config

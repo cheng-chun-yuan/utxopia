@@ -12,7 +12,7 @@ import * as fs from "fs";
 const RPC_URL = "https://api.devnet.solana.com";
 
 // From .devnet-config.json (verified)
-const ZVAULT_PROGRAM = new PublicKey("zKeyrLmpT8W9o8iRvhizuSihLAFLhfAGBvfM638Pbw8");
+const AEGIS_PROGRAM = new PublicKey("zKeyrLmpT8W9o8iRvhizuSihLAFLhfAGBvfM638Pbw8");
 const POOL_STATE = new PublicKey("ELGSdquznDBd6uUkWsBAmguMBmtuur7D5kapwoyZq44J");
 const COMMITMENT_TREE = new PublicKey("5p7WERgzB6AHcga19QehvaTfbiVoM1Bg6drkwzYHYamq");
 const ZBTC_MINT = new PublicKey("56gihX59Zy3coM9B1PYXLPoFEzjNuPEVhskCZcKq3VKx");
@@ -64,7 +64,7 @@ async function main() {
   const ephemeralPubSliced = instructionData.slice(2, 34);
   const [announcementPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("stealth"), ephemeralPubSliced],
-    ZVAULT_PROGRAM
+    AEGIS_PROGRAM
   );
 
   console.log(`\nAnnouncement PDA: ${announcementPda.toBase58()}`);
@@ -80,7 +80,7 @@ async function main() {
       { pubkey: POOL_VAULT, isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022, isSigner: false, isWritable: false },
     ],
-    programId: ZVAULT_PROGRAM,
+    programId: AEGIS_PROGRAM,
     data: instructionData,
   });
 

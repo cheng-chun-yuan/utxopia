@@ -1,17 +1,17 @@
 {
   "programs": {
     "devnet": {
-      "zVault": "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM",
+      "Aegis": "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM",
       "btc_light_client": "Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"
     },
     "localnet": {
-      "zVault": "B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq",
+      "Aegis": "B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq",
       "btc_light_client": "EU5ZyFqRuUHHJcarRWPmKxezhsFKBVjcc5M2L3sobmd7",
       "chadbuffer": "6VrJmWbhN9WbEkg87JizunVMpL6CHKGVmzWCf3o3LRgy",
       "groth16_verifier": "GHpnVKv4o2vSNvyxffM16uuThfQLujoWFikjwwLdaDYb"
     },
     "mainnet": {
-      "zVault": "",
+      "Aegis": "",
       "btc_light_client": ""
     }
   },

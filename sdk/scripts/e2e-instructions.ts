@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * zVault SDK E2E Test
+ * Aegis SDK E2E Test
  *
  * Comprehensive end-to-end test validating all SDK functions:
  * 1. Demo Deposit - Build stealth commitment instruction
@@ -313,11 +313,11 @@ async function testDemoDeposit(
   }
 
   // Derive PDAs using SDK
-  const [poolState] = await derivePoolStatePDA(config.zvaultProgramId);
-  const [commitmentTree] = await deriveCommitmentTreePDA(config.zvaultProgramId);
+  const [poolState] = await derivePoolStatePDA(config.aegisProgramId);
+  const [commitmentTree] = await deriveCommitmentTreePDA(config.aegisProgramId);
   const [stealthAnnouncement] = await deriveStealthAnnouncementPDA(
     commitment,
-    config.zvaultProgramId
+    config.aegisProgramId
   );
 
   log.data("Pool State PDA", poolState.toString());
@@ -366,10 +366,10 @@ async function testClaimZkBTC(
   log.data("Proof size", `${proofBytes.length} bytes`);
 
   // Derive PDAs
-  const [poolState] = await derivePoolStatePDA(config.zvaultProgramId);
-  const [commitmentTree] = await deriveCommitmentTreePDA(config.zvaultProgramId);
+  const [poolState] = await derivePoolStatePDA(config.aegisProgramId);
+  const [commitmentTree] = await deriveCommitmentTreePDA(config.aegisProgramId);
   const nullifierHash = bigintToBytes32(computeNullifier(note.nullifier, BigInt(note.leafIndex)));
-  const [nullifierRecord] = await deriveNullifierRecordPDA(nullifierHash, config.zvaultProgramId);
+  const [nullifierRecord] = await deriveNullifierRecordPDA(nullifierHash, config.aegisProgramId);
   const recipientAta = await deriveATA(payer.address, config.zbtcMint);
 
   log.info("Building claim instruction:");
@@ -440,10 +440,10 @@ async function testSplitNote(
   const proofBytes = createMockProof(MOCK_PROOF_SIZE);
 
   // Derive PDAs
-  const [poolState] = await derivePoolStatePDA(config.zvaultProgramId);
-  const [commitmentTree] = await deriveCommitmentTreePDA(config.zvaultProgramId);
+  const [poolState] = await derivePoolStatePDA(config.aegisProgramId);
+  const [commitmentTree] = await deriveCommitmentTreePDA(config.aegisProgramId);
   const nullifierHash = bigintToBytes32(computeNullifier(note.nullifier, BigInt(note.leafIndex)));
-  const [nullifierRecord] = await deriveNullifierRecordPDA(nullifierHash, config.zvaultProgramId);
+  const [nullifierRecord] = await deriveNullifierRecordPDA(nullifierHash, config.aegisProgramId);
 
   // Generate mock stealth output data (32-byte fields for circuit public inputs)
   const output1EphemeralPubX = randomBytes(32);
@@ -452,8 +452,8 @@ async function testSplitNote(
   const output2EncryptedAmountWithSign = randomBytes(32);
 
   // Derive stealth announcement PDAs from ephemeral pubkey x-coordinates
-  const [stealthAnnouncement1] = await deriveStealthAnnouncementPDA(output1EphemeralPubX, config.zvaultProgramId);
-  const [stealthAnnouncement2] = await deriveStealthAnnouncementPDA(output2EphemeralPubX, config.zvaultProgramId);
+  const [stealthAnnouncement1] = await deriveStealthAnnouncementPDA(output1EphemeralPubX, config.aegisProgramId);
+  const [stealthAnnouncement2] = await deriveStealthAnnouncementPDA(output2EphemeralPubX, config.aegisProgramId);
 
   // Build split instruction using SDK (buffer mode)
   const splitIx = buildSplitInstruction({
@@ -555,7 +555,7 @@ function testChadBufferUtilities(): void {
 // =============================================================================
 
 async function main() {
-  log.section(`zVault SDK E2E Test - ${NETWORK.toUpperCase()}`);
+  log.section(`Aegis SDK E2E Test - ${NETWORK.toUpperCase()}`);
 
   // Configure network
   setConfig(NETWORK);
@@ -565,7 +565,7 @@ async function main() {
   log.data("Network", NETWORK);
   log.data("RPC URL", RPC_URL);
   log.data("Submit TX", SUBMIT_TX.toString());
-  log.data("zVault Program", config.zvaultProgramId.toString());
+  log.data("Aegis Program", config.aegisProgramId.toString());
   log.data("ChadBuffer Program", CHADBUFFER_PROGRAM_ID.toString());
   log.data("Groth16 Verifier", config.groth16VerifierProgramId.toString());
 

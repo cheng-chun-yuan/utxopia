@@ -6,7 +6,7 @@
 use reqwest::Client;
 use serde::Deserialize;
 
-use crate::config::{Network, ZVaultConfig};
+use crate::config::{Network, AEGISConfig};
 
 /// Esplora HTTP client
 #[derive(Debug, Clone)]
@@ -24,8 +24,8 @@ impl EsploraClient {
         }
     }
 
-    /// Create a client from ZVaultConfig
-    pub fn from_config(config: &ZVaultConfig) -> Self {
+    /// Create a client from AEGISConfig
+    pub fn from_config(config: &AEGISConfig) -> Self {
         Self::new(&config.bitcoin_api)
     }
 

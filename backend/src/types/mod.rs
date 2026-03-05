@@ -1,6 +1,6 @@
 //! Shared Types Module
 //!
-//! Data types shared across the zVault backend.
+//! Data types shared across the Aegis backend.
 
 pub mod deposit;
 pub mod redemption;

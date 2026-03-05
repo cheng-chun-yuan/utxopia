@@ -35,7 +35,7 @@ use pinocchio::{
 };
 use pinocchio_system::instructions::CreateAccount;
 
-use crate::error::ZVaultError;
+use crate::error::AegisError;
 use crate::state::{
     CommitmentTree, PoolState, StealthAnnouncement,
     VerifiedTransactionView, light_client_tip_height,
@@ -176,11 +176,11 @@ pub fn process_verify_stealth_deposit(
         let pool = PoolState::from_bytes(&pool_data)?;
 
         if pool.is_paused() {
-            return Err(ZVaultError::PoolPaused.into());
+            return Err(AegisError::PoolPaused.into());
         }
 
         if authority.key().as_ref() != pool.authority {
-            return Err(ZVaultError::Unauthorized.into());
+            return Err(AegisError::Unauthorized.into());
         }
 
         (pool.bump, pool.min_deposit(), pool.max_deposit())
@@ -194,12 +194,12 @@ pub fn process_verify_stealth_deposit(
 
         // Verify txid matches (both in internal byte order)
         if *vt.txid() != ix_data.sweep_txid {
-            return Err(ZVaultError::InvalidSpvProof.into());
+            return Err(AegisError::InvalidSpvProof.into());
         }
 
         // Cross-check block height
         if vt.block_height() as u64 != ix_data.block_height {
-            return Err(ZVaultError::InvalidBlockHeader.into());
+            return Err(AegisError::InvalidBlockHeader.into());
         }
     }
 
@@ -213,66 +213,66 @@ pub fn process_verify_stealth_deposit(
             tip - ix_data.block_height + 1
         };
         if confirmations < DEMO_REQUIRED_CONFIRMATIONS {
-            return Err(ZVaultError::InsufficientConfirmations.into());
+            return Err(AegisError::InsufficientConfirmations.into());
         }
     }
 
     // --- Read and verify sweep TX from ChadBuffer ---
     let sweep_buffer_data = tx_buffer_info
         .try_borrow_data()
-        .map_err(|_| ZVaultError::InvalidBlockHeader)?;
+        .map_err(|_| AegisError::InvalidBlockHeader)?;
 
     let sweep_raw_tx = read_transaction_from_buffer(&sweep_buffer_data, ix_data.sweep_tx_size as usize)?;
 
     // Verify sweep transaction hash matches sweep_txid
     let computed_sweep_hash = compute_tx_hash(sweep_raw_tx);
     if computed_sweep_hash != ix_data.sweep_txid {
-        return Err(ZVaultError::InvalidSpvProof.into());
+        return Err(AegisError::InvalidSpvProof.into());
     }
 
     // Parse sweep TX and extract deposit amount
     let sweep_parsed = ParsedTransaction::parse(sweep_raw_tx)
-        .map_err(|_| ZVaultError::InvalidSpvProof)?;
+        .map_err(|_| AegisError::InvalidSpvProof)?;
 
     // --- Read and verify deposit TX from ChadBuffer ---
     let deposit_buffer_data = deposit_tx_buffer_info
         .try_borrow_data()
-        .map_err(|_| ZVaultError::InvalidBlockHeader)?;
+        .map_err(|_| AegisError::InvalidBlockHeader)?;
 
     let deposit_raw_tx = read_transaction_from_buffer(&deposit_buffer_data, ix_data.deposit_tx_size as usize)?;
 
     // Verify deposit transaction hash matches deposit_txid
     let computed_deposit_hash = compute_tx_hash(deposit_raw_tx);
     if computed_deposit_hash != ix_data.deposit_txid {
-        return Err(ZVaultError::InvalidSpvProof.into());
+        return Err(AegisError::InvalidSpvProof.into());
     }
 
     // Parse deposit TX
     let deposit_parsed = ParsedTransaction::parse(deposit_raw_tx)
-        .map_err(|_| ZVaultError::InvalidSpvProof)?;
+        .map_err(|_| AegisError::InvalidSpvProof)?;
 
     // --- Verify sweep TX spends from deposit TX (input linkage) ---
     // This proves the chain: deposit TX -> sweep TX (SPV-verified)
     if !sweep_parsed.find_input_with_prev_txid(&ix_data.deposit_txid) {
-        return Err(ZVaultError::InvalidSpvProof.into());
+        return Err(AegisError::InvalidSpvProof.into());
     }
 
     // --- Extract npk + ephemeral_pub from deposit TX OP_RETURN ---
     let DepositOpReturn { ephemeral_pub, npk } = deposit_parsed
         .find_deposit_op_return()
-        .ok_or(ZVaultError::InvalidStealthOpReturn)?;
+        .ok_or(AegisError::InvalidStealthOpReturn)?;
 
     // Extract deposit amount from sweep TX's deposit output
     let deposit_output = sweep_parsed.find_deposit_output()
-        .ok_or(ZVaultError::InvalidSpvProof)?;
+        .ok_or(AegisError::InvalidSpvProof)?;
     let amount_sats = deposit_output.value;
 
     // Validate extracted amount is within bounds
     if amount_sats < min_deposit {
-        return Err(ZVaultError::AmountTooSmall.into());
+        return Err(AegisError::AmountTooSmall.into());
     }
     if amount_sats > max_deposit {
-        return Err(ZVaultError::AmountTooLarge.into());
+        return Err(AegisError::AmountTooLarge.into());
     }
 
     // Derive stealth announcement PDA: ["stealth", sweep_txid]
@@ -312,7 +312,7 @@ pub fn process_verify_stealth_deposit(
         let tree = CommitmentTree::from_bytes_mut(&mut tree_data)?;
 
         if !tree.has_capacity() {
-            return Err(ZVaultError::TreeFull.into());
+            return Err(AegisError::TreeFull.into());
         }
 
         tree.insert_leaf(&commitment)?

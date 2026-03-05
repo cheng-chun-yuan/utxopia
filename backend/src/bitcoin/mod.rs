@@ -1,6 +1,6 @@
 //! Bitcoin Infrastructure Module
 //!
-//! This module provides all Bitcoin-related functionality for the zVault backend:
+//! This module provides all Bitcoin-related functionality for the Aegis backend:
 //! - Esplora API client for blockchain interaction
 //! - Transaction signing (single-key and FROST threshold)
 //! - Taproot address generation with embedded commitments

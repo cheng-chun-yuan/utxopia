@@ -19,7 +19,7 @@ pub enum DepositStatus {
     Confirmed,
     /// Creating and broadcasting sweep tx to pool wallet
     Sweeping,
-    /// Waiting for 2 confirmations on sweep tx
+    /// Waiting for 6 confirmations on sweep tx
     SweepConfirming,
     /// Submitting sweep tx for SPV verification on Solana
     Verifying,
@@ -307,7 +307,7 @@ impl DepositRecord {
 
     /// Check if sweep is ready for SPV verification
     pub fn can_verify(&self) -> bool {
-        self.status == DepositStatus::SweepConfirming && self.sweep_confirmations >= 2
+        self.status == DepositStatus::SweepConfirming && self.sweep_confirmations >= 6
     }
 
     /// Check if user can claim zBTC
@@ -437,7 +437,7 @@ impl Default for TrackerConfig {
         Self {
             poll_interval_secs: 30,
             required_confirmations: 1, // Devnet: fast testing (use 3+ for production)
-            required_sweep_confirmations: 1,
+            required_sweep_confirmations: 6,
             esplora_url: String::new(),
             solana_rpc: "https://api.devnet.solana.com".to_string(),
             pool_receive_address: String::new(), // Must be set via env
@@ -512,8 +512,8 @@ mod tests {
         record.mark_sweep_broadcast("sweep_txid".to_string(), "pool_addr".to_string(), 222);
         assert_eq!(record.status, DepositStatus::SweepConfirming);
 
-        // Sweep confirms
-        record.update_sweep_confirmations(2, Some(1002));
+        // Sweep confirms (6 required)
+        record.update_sweep_confirmations(6, Some(1006));
         assert!(record.can_verify());
 
         // Verify

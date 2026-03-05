@@ -1,5 +1,5 @@
 /**
- * ZVault SDK Configuration
+ * AEGIS SDK Configuration
  *
  * Centralized configuration for all network-specific addresses, endpoints, and settings.
  * This is the SINGLE SOURCE OF TRUTH for all on-chain addresses and configuration.
@@ -28,8 +28,8 @@ export interface NetworkConfig {
   // Program IDs
   // -------------------------------------------------------------------------
 
-  /** zVault main program ID */
-  zvaultProgramId: Address;
+  /** Aegis main program ID */
+  aegisProgramId: Address;
 
   /** BTC Light Client program ID (manages light client + block headers for SPV) */
   btcLightClientProgramId: Address;
@@ -182,7 +182,7 @@ export const DEVNET_CONFIG: NetworkConfig = {
   network: "devnet",
 
   // Program IDs (fresh deployment 2026-03-03)
-  zvaultProgramId: address("25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM"),
+  aegisProgramId: address("25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM"),
   btcLightClientProgramId: address("Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"),
   chadbufferProgramId: CHADBUFFER_PROGRAM_ID,
   token2022ProgramId: TOKEN_2022_PROGRAM_ID,
@@ -205,7 +205,7 @@ export const DEVNET_CONFIG: NetworkConfig = {
   // Circuit CDN (Groth16 artifacts: .wasm, .zkey files)
   circuitCdnUrl: "https://circuits.amidoggy.xyz",
 
-  // Groth16 Verifier: verification is inline in the zVault program (no separate verifier program)
+  // Groth16 Verifier: verification is inline in the Aegis program (no separate verifier program)
   groth16VerifierProgramId: address("25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM"),
 
   // VK Hashes (SHA256 of serialized VK bytes, generated from circom trusted setup)
@@ -249,7 +249,7 @@ export const MAINNET_CONFIG: NetworkConfig = {
   network: "mainnet",
 
   // Program IDs (placeholder - update when deployed)
-  zvaultProgramId: address("11111111111111111111111111111111"),
+  aegisProgramId: address("11111111111111111111111111111111"),
   btcLightClientProgramId: address("11111111111111111111111111111111"),
   chadbufferProgramId: CHADBUFFER_PROGRAM_ID,
   token2022ProgramId: TOKEN_2022_PROGRAM_ID,
@@ -270,7 +270,7 @@ export const MAINNET_CONFIG: NetworkConfig = {
   esploraUrl: "https://mempool.space/api",
 
   // Circuit CDN
-  circuitCdnUrl: "https://cdn.jsdelivr.net/npm/@zvault/sdk@latest/circuits",
+  circuitCdnUrl: "https://cdn.jsdelivr.net/npm/@aegis/sdk@latest/circuits",
 
   // Groth16 Verifier (placeholder)
   groth16VerifierProgramId: address("11111111111111111111111111111111"),
@@ -305,7 +305,7 @@ export const LOCALNET_CONFIG: NetworkConfig = {
   network: "localnet",
 
   // Program IDs
-  zvaultProgramId: address("2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV"),
+  aegisProgramId: address("2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV"),
   btcLightClientProgramId: address("Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"),
   chadbufferProgramId: LOCALNET_CHADBUFFER_PROGRAM_ID,
   token2022ProgramId: TOKEN_2022_PROGRAM_ID,
@@ -328,7 +328,7 @@ export const LOCALNET_CONFIG: NetworkConfig = {
   // Circuit CDN (use local files for development)
   circuitCdnUrl: "/circuits",
 
-  // Groth16 Verifier: verification is inline in the zVault program
+  // Groth16 Verifier: verification is inline in the Aegis program
   groth16VerifierProgramId: address("RoqAPQgZ5ztdhV3jHBKgTmeLBAfyYcaBsjKiXHNwXf3"),
 
   // VK Hashes (same as devnet - generated from same trusted setup)
@@ -387,7 +387,7 @@ export function setConfig(network: NetworkType | NetworkConfig): void {
       case "mainnet":
         throw new Error(
           "Mainnet is not yet deployed. " +
-          "zVault is currently available on devnet only. " +
+          "Aegis is currently available on devnet only. " +
           "Use setConfig('devnet') or wait for mainnet deployment announcement."
         );
       case "localnet":
@@ -398,7 +398,7 @@ export function setConfig(network: NetworkType | NetworkConfig): void {
     }
   } else {
     // Check if custom config is using placeholder mainnet addresses
-    if (network.network === "mainnet" && network.zvaultProgramId === MAINNET_CONFIG.zvaultProgramId) {
+    if (network.network === "mainnet" && network.aegisProgramId === MAINNET_CONFIG.aegisProgramId) {
       throw new Error(
         "Cannot use placeholder mainnet configuration. " +
         "Mainnet is not yet deployed."
@@ -425,8 +425,8 @@ export function createConfig(
 // Convenience Exports
 // =============================================================================
 
-/** Default zVault program ID (from current config) */
-export const ZVAULT_PROGRAM_ID: Address = DEVNET_CONFIG.zvaultProgramId;
+/** Default Aegis program ID (from current config) */
+export const AEGIS_PROGRAM_ID: Address = DEVNET_CONFIG.aegisProgramId;
 
 /** BTC Light Client program ID (manages light client + block headers) */
 export const BTC_LIGHT_CLIENT_PROGRAM_ID: Address = DEVNET_CONFIG.btcLightClientProgramId;

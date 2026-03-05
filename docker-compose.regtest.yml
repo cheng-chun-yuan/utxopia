@@ -1,7 +1,7 @@
 services:
   esplora:
     image: blockstream/esplora
-    container_name: zvault-esplora-regtest
+    container_name: aegis-esplora-regtest
     command: ["/srv/explorer/run.sh", "bitcoin-regtest", "explorer"]
     ports:
       - "3000:80"       # Esplora REST API (nginx)

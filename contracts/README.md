@@ -1,10 +1,10 @@
-# zVault Contracts
+# Aegis Contracts
 
-Solana smart contracts for zVault - a privacy-preserving Bitcoin to Solana bridge using Pinocchio.
+Solana smart contracts for Aegis - a privacy-preserving Bitcoin to Solana bridge using Pinocchio.
 
 ## Programs
 
-### zVault (Pinocchio)
+### Aegis (Pinocchio)
 Main privacy bridge program - optimized with [Pinocchio](https://github.com/febo/pinocchio).
 
 **Program ID (devnet):** `B2H3B6iDg3zfvZkT4dNgjhKSqrtdcWBJSwbP7Wbbhzsq`
@@ -35,7 +35,7 @@ bun run setup:devnet
 ```
 contracts/
 ├── programs/
-│   ├── zvault/              # Main Pinocchio program
+│   ├── aegis/              # Main Pinocchio program
 │   │   └── src/
 │   │       ├── lib.rs       # Entry point + dispatcher
 │   │       ├── instructions/ # All instruction handlers

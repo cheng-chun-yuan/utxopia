@@ -1,4 +1,4 @@
-# zVault Technical Documentation
+# Aegis Technical Documentation
 
 **Privacy-Preserving BTC on Solana with Zero-Knowledge Proofs**
 
@@ -6,7 +6,7 @@
 
 ## Overview
 
-zVault is a trustless bridge enabling Bitcoin holders to access Solana with full transaction privacy.
+Aegis is a trustless bridge enabling Bitcoin holders to access Solana with full transaction privacy.
 
 ```
 BTC Deposit ─► Taproot Address ─► SPV Verify ─► Shielded Pool ─► ZK Transfers ─► Withdraw BTC
@@ -56,7 +56,7 @@ BTC Deposit ─► Taproot Address ─► SPV Verify ─► Shielded Pool ─►
 │                               SPV proof │                                       │
 │                                        ▼                                        │
 │   ┌────────────────────────────────────────────────────────────────────────┐    │
-│   │                    zVault Program (Pinocchio)                          │    │
+│   │                    Aegis Program (Pinocchio)                          │    │
 │   │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌───────────┐│    │
 │   │   │ Commitment   │  │  Nullifier   │  │   Stealth    │  │   Name    ││    │
 │   │   │    Tree      │  │  Registry    │  │Announcements │  │ Registry  ││    │
@@ -70,7 +70,7 @@ BTC Deposit ─► Taproot Address ─► SPV Verify ─► Shielded Pool ─►
 ┌────────────────────────────────────────▼────────────────────────────────────────┐
 │                            CLIENT LAYER                                          │
 │   ┌──────────────────────────────────────────────────────────────────────────┐  │
-│   │                         @zvault/sdk                                       │  │
+│   │                         @aegis/sdk                                       │  │
 │   │   Note Management │ Proof Generation │ Stealth ECDH │ Taproot Derivation │  │
 │   └──────────────────────────────────────────────────────────────────────────┘  │
 │              ┌─────────────────────────┼─────────────────────────┐              │
@@ -86,7 +86,7 @@ BTC Deposit ─► Taproot Address ─► SPV Verify ─► Shielded Pool ─►
 | Component | Responsibility |
 |-----------|---------------|
 | **BTC Light Client** | Maintains Bitcoin header chain, validates SPV proofs |
-| **zVault Program** | Manages commitments, nullifiers, stealth announcements (npk-based), names |
+| **Aegis Program** | Manages commitments, nullifiers, stealth announcements (npk-based), names |
 | **Header Relayer** | Syncs Bitcoin headers to Solana (permissionless) |
 | **SDK** | Client-side proof generation, key derivation, transaction building |
 | **FROST Server** | BTC redemption signing (2-of-3 threshold) |
@@ -378,7 +378,7 @@ Offset   Field              Size    Description
 
 | Program | Address |
 |---------|---------|
-| zVault | `25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM` |
+| Aegis | `25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM` |
 | BTC Light Client | `Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq` |
 | ChadBuffer | `6VrJmWbhN9WbEkg87JizunVMpL6CHKGVmzWCf3o3LRgy` |
 
@@ -443,7 +443,7 @@ Custom error codes start at 6000 to avoid conflicts with Solana system errors.
 | 6065 | `AccountClosed` | Account has been closed |
 | 6066 | `InvalidVkRegistry` | VK registry doesn't match circuit variant |
 
-> Source: `contracts/programs/zvault/src/error.rs`
+> Source: `contracts/programs/aegis/src/error.rs`
 
 ---
 
@@ -496,7 +496,7 @@ Total: 256 bytes
 
 Public inputs per variant: `2 + N + M` (merkleRoot + boundParamsHash + N nullifiers + M commitments).
 
-> Source: `contracts/programs/zvault/src/state/commitment_tree.rs`, `vk_registry.rs`
+> Source: `contracts/programs/aegis/src/state/commitment_tree.rs`, `vk_registry.rs`
 
 ---
 

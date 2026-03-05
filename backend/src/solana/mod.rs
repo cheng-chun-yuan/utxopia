@@ -1,6 +1,6 @@
 //! Solana Infrastructure Module
 //!
-//! This module provides Solana blockchain interaction for the zVault backend:
+//! This module provides Solana blockchain interaction for the Aegis backend:
 //! - RPC client for Solana devnet/mainnet
 //! - Transaction building and submission
 //! - SPV proof verification on-chain

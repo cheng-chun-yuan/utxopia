@@ -14,7 +14,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 const COMPOSE_FILE = path.join(PROJECT_ROOT, "docker-compose.regtest.yml");
-const CONTAINER_NAME = "zvault-esplora-regtest";
+const CONTAINER_NAME = "aegis-esplora-regtest";
 
 const DEFAULT_ESPLORA_URL = "http://localhost:3000/regtest/api";
 

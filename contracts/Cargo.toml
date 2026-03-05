@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "programs/zvault",
+    "programs/aegis",
     "programs/btc-light-client",
 ]
 exclude = [

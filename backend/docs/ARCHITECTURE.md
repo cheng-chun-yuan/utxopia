@@ -1,14 +1,14 @@
-# zVault Backend Architecture
+# Aegis Backend Architecture
 
 ## Overview
 
-The zVault backend provides server-side services for the privacy-preserving Bitcoin-to-Solana bridge. It handles operations that cannot run on the client, including Bitcoin transaction signing, SPV verification submission, and real-time deposit tracking.
+The Aegis backend provides server-side services for the privacy-preserving Bitcoin-to-Solana bridge. It handles operations that cannot run on the client, including Bitcoin transaction signing, SPV verification submission, and real-time deposit tracking.
 
 ## High-Level Architecture
 
 ```
                                     ┌─────────────────────────────────────────────────────────┐
-                                    │                    zVault Backend                        │
+                                    │                    Aegis Backend                        │
                                     │                                                         │
 ┌──────────────┐                   │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
 │   Frontend   │───HTTP/WS────────▶│  │  API Layer  │  │  Services   │  │   Storage   │    │
@@ -41,7 +41,7 @@ backend/src/
 ├── api_server.rs             # Combined API server (REST + WS)
 ├── btc_client.rs             # Bitcoin RPC/Esplora client
 ├── btc_spv.rs                # SPV proof utilities
-├── config.rs                 # ZVaultConfig (env-based, SigningMode)
+├── config.rs                 # AEGISConfig (env-based, SigningMode)
 ├── esplora.rs                # Esplora API bindings
 ├── frost_client.rs           # Shared FROST client (broadcast, session retry, round coordination)
 ├── logging.rs                # Logging setup
@@ -52,7 +52,7 @@ backend/src/
 │── # ── Organized Module Directories ──
 ├── common/                   # Shared Infrastructure
 │   ├── config.rs            # Unified configuration management
-│   ├── error.rs             # Common error types (ZVaultError)
+│   ├── error.rs             # Common error types (AegisError)
 │   └── logging.rs           # Structured JSON logging
 │
 ├── bitcoin/                  # Bitcoin Layer
@@ -214,7 +214,7 @@ User                    Frontend/SDK              Backend                 Bitcoi
 | Component | Purpose |
 |-----------|---------|
 | `SolClient` | Solana RPC client for program interaction |
-| `record_deposit` | Submit verified deposit to zVault program |
+| `record_deposit` | Submit verified deposit to Aegis program |
 | `verify_btc_deposit` | Submit SPV proof for verification |
 
 ### Storage Layer
@@ -237,10 +237,10 @@ User                    Frontend/SDK              Backend                 Bitcoi
 
 ## Error Handling
 
-The `ZVaultError` enum provides unified error handling:
+The `AegisError` enum provides unified error handling:
 
 ```rust
-pub enum ZVaultError {
+pub enum AegisError {
     // Bitcoin errors
     BitcoinRpc(String),
     TransactionBuild(String),

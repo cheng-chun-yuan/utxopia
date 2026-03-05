@@ -1,7 +1,7 @@
 /**
  * Bitcoin Subpath
  *
- * Bitcoin-related utilities for ZVault:
+ * Bitcoin-related utilities for AEGIS:
  * - Taproot address derivation
  * - Claim link encoding/decoding
  * - Esplora API client

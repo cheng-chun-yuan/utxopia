@@ -29,11 +29,11 @@ import {
   createAssociatedTokenAccountInstruction,
 } from "@solana/spl-token";
 import {
-  ZVAULT_PROGRAM_ID,
+  AEGIS_PROGRAM_ID,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
   deriveNullifierRecordPDA,
-} from "@zvault/sdk";
+} from "@aegis/sdk";
 import * as fs from "fs";
 
 const RPC_URL = "https://api.devnet.solana.com";
@@ -140,7 +140,7 @@ async function main() {
   const authority = loadKeypair("~/.config/solana/johnny.json");
 
   console.log(`\nAuthority: ${authority.publicKey.toBase58()}`);
-  console.log(`Program: ${ZVAULT_PROGRAM_ID}`);
+  console.log(`Program: ${AEGIS_PROGRAM_ID}`);
 
   // Derive PDAs
   const [poolStatePDA] = await derivePoolStatePDA();
@@ -219,7 +219,7 @@ async function main() {
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
-    programId: new PublicKey(ZVAULT_PROGRAM_ID as string),
+    programId: new PublicKey(AEGIS_PROGRAM_ID as string),
     data: claimPublicData,
   });
 

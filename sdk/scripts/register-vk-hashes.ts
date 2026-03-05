@@ -295,7 +295,7 @@ async function main() {
   });
 
   // Derive pool state PDA
-  const [poolStatePda] = await derivePoolStatePDA(config.zvaultProgramId);
+  const [poolStatePda] = await derivePoolStatePDA(config.aegisProgramId);
 
   // Register each variant
   for (const [n, m] of variants) {
@@ -309,7 +309,7 @@ async function main() {
     const [vkRegistryPda] = await deriveVkRegistryPDA(
       n,
       m,
-      config.zvaultProgramId
+      config.aegisProgramId
     );
     console.log(`  VK Registry PDA: ${vkRegistryPda}`);
 
@@ -331,7 +331,7 @@ async function main() {
     if (alreadyExists) {
       console.log(`  Exists — updating VK hash...`);
       ix = buildUpdateVkRegistryInstruction(
-        config.zvaultProgramId,
+        config.aegisProgramId,
         vkRegistryPda,
         authority,
         n,
@@ -340,7 +340,7 @@ async function main() {
       );
     } else {
       ix = buildInitVkRegistryInstruction(
-        config.zvaultProgramId,
+        config.aegisProgramId,
         poolStatePda,
         vkRegistryPda,
         authority,

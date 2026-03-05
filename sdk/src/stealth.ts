@@ -1,5 +1,5 @@
 /**
- * Stealth address utilities for ZVault
+ * Stealth address utilities for AEGIS
  *
  * Dual-curve stealth flow (Railgun-style):
  *
@@ -70,7 +70,7 @@ import {
   encryptAmountEd25519,
   decryptAmountEd25519,
 } from "./crypto-ed25519";
-import type { StealthMetaAddress, ZVaultKeys, WalletSignerAdapter } from "./keys";
+import type { StealthMetaAddress, AegisKeys, WalletSignerAdapter } from "./keys";
 import { deriveKeysFromWallet, parseStealthMetaAddress, constantTimeCompare } from "./keys";
 import {
   poseidonHashSync,
@@ -100,7 +100,7 @@ export function decryptAmount(encryptedAmount: Uint8Array, sharedSecret: Uint8Ar
 // ========== Type Guard ==========
 
 /**
- * Type guard to distinguish between WalletSignerAdapter and ZVaultKeys
+ * Type guard to distinguish between WalletSignerAdapter and AegisKeys
  */
 export function isWalletAdapter(source: unknown): source is WalletSignerAdapter {
   return (
@@ -185,7 +185,7 @@ export interface OnChainStealthAnnouncement {
 // ========== Helper Functions ==========
 
 /** Domain separator for stealth key derivation */
-const STEALTH_KEY_DOMAIN = new TextEncoder().encode("zVault-stealth-v1");
+const STEALTH_KEY_DOMAIN = new TextEncoder().encode("Aegis-stealth-v1");
 
 /**
  * ZBTC token identifier for JoinSplit commitments.
@@ -399,7 +399,7 @@ export async function createNonInteractiveDeposit(
  * Scan announcements using viewing key only
  */
 export async function scanAnnouncements(
-  source: WalletSignerAdapter | ZVaultKeys,
+  source: WalletSignerAdapter | AegisKeys,
   announcements: {
     ephemeralPub: Uint8Array;
     encryptedAmount: Uint8Array;
@@ -544,9 +544,9 @@ export async function scanAnnouncementsViewOnly(
 }
 
 /**
- * Export view-only keys from full ZVaultKeys
+ * Export view-only keys from full AegisKeys
  */
-export function exportViewOnlyKeys(keys: ZVaultKeys): ViewOnlyKeys {
+export function exportViewOnlyKeys(keys: AegisKeys): ViewOnlyKeys {
   return {
     viewingPrivKey: keys.viewingPrivKey,
     spendingPubKey: keys.spendingPubKey,
@@ -560,7 +560,7 @@ export function exportViewOnlyKeys(keys: ZVaultKeys): ViewOnlyKeys {
  * Prepare claim inputs for ZK proof generation
  */
 export async function prepareClaimInputs(
-  source: WalletSignerAdapter | ZVaultKeys,
+  source: WalletSignerAdapter | AegisKeys,
   note: ScannedNote,
   merkleProof: {
     root: bigint;
@@ -679,7 +679,7 @@ export function parseStealthAnnouncement(
  * For transfers, we verify the decrypted amount is in a valid range.
  */
 export async function scanUnifiedNotes(
-  source: WalletSignerAdapter | ZVaultKeys,
+  source: WalletSignerAdapter | AegisKeys,
   announcements: OnChainStealthAnnouncement[]
 ): Promise<ScannedNote[]> {
   const keys = isWalletAdapter(source) ? await deriveKeysFromWallet(source) : source;
@@ -714,8 +714,21 @@ export async function scanUnifiedNotes(
       const npk = computeNPKSync(mpk, stealthScalar);
       const commitmentBigint = computeJoinSplitCommitmentSync(npk, ZBTC_TOKEN_ID, amount);
 
+      // For deposits (type=0), amount is plaintext so any key reads valid amount.
+      // Must verify commitment to filter out deposits that don't belong to us.
+      // For transfers (type=1), wrong key → garbage decrypted amount → already filtered above.
+      if (ann.announcementType === ANNOUNCEMENT_TYPE_DEPOSIT) {
+        const onChainCommitment = bytesToBigint(ann.commitment);
+        if (commitmentBigint !== onChainCommitment) {
+          continue; // Not our deposit — ECDH shared secret doesn't match
+        }
+      }
+
       // Convert commitment bigint to bytes for the ScannedNote
-      const commitmentBytes = bigintToBytes(commitmentBigint);
+      // Use on-chain commitment bytes for transfers (preserves exact on-chain value)
+      const commitmentBytes = ann.announcementType === ANNOUNCEMENT_TYPE_DEPOSIT
+        ? bigintToBytes(commitmentBigint)
+        : new Uint8Array(ann.commitment);
 
       // Derive stealth public key (for spending)
       const stealthPub = deriveStealthPubKey(keys.spendingPubKey, sharedSecret);
@@ -827,7 +840,7 @@ export function unpackEncryptedAmountWithSign(packed: bigint): { encryptedAmount
  * Create stealth output data for a self-send (change output)
  */
 export async function createStealthOutput(
-  keys: ZVaultKeys,
+  keys: AegisKeys,
   amountSats: bigint
 ): Promise<StealthOutputData> {
   const ephemeral = ed25519GenerateKeyPair();
@@ -852,7 +865,7 @@ export async function createStealthOutput(
  * Create stealth output with npk for JoinSplit circuit input
  */
 export async function createStealthOutputWithKeys(
-  keys: ZVaultKeys,
+  keys: AegisKeys,
   amountSats: bigint
 ): Promise<StealthOutputWithKeys> {
   const ephemeral = ed25519GenerateKeyPair();
@@ -878,7 +891,7 @@ export async function createStealthOutputWithKeys(
  * Create stealth output data with pre-computed commitment
  */
 export async function createStealthOutputForCommitment(
-  keys: ZVaultKeys,
+  keys: AegisKeys,
   amountSats: bigint,
   existingCommitment: Uint8Array
 ): Promise<StealthOutputData> {
@@ -900,7 +913,7 @@ export async function createStealthOutputForCommitment(
  * Compute nullifier hash for a scanned note
  */
 export function computeNullifierHashForNote(
-  keys: ZVaultKeys,
+  keys: AegisKeys,
   note: ScannedNote
 ): Uint8Array {
   // In JoinSplit model, nullifier = Poseidon(nullifyingKey, leafIndex)

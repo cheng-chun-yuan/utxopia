@@ -72,7 +72,7 @@ describe("Phase 1: Deposit Setup", () => {
       deriveKeysFromSeed,
       createStealthMetaAddress,
       initPoseidon,
-    } = await import("@zvault/sdk");
+    } = await import("@aegis/sdk");
     await initPoseidon();
 
     const seed = crypto.getRandomValues(new Uint8Array(32));
@@ -215,7 +215,7 @@ describe("Phase 3: Private Transfer (JoinSplit)", () => {
       return;
     }
 
-    const { initPoseidon, generateNote, computeNoteCommitment } = await import("@zvault/sdk");
+    const { initPoseidon, generateNote, computeNoteCommitment } = await import("@aegis/sdk");
     await initPoseidon();
 
     const ZBTC_TOKEN_ID = 0x7a627463;

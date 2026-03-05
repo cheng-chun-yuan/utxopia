@@ -47,7 +47,7 @@ describe("Deposit address generation", () => {
       deriveKeysFromSeed,
       createStealthMetaAddress,
       initPoseidon,
-    } = await import("@zvault/sdk");
+    } = await import("@aegis/sdk");
     await initPoseidon();
 
     // Generate keys from a random seed
@@ -87,7 +87,7 @@ describe("Deposit address generation", () => {
       deriveKeysFromSeed,
       createStealthMetaAddress,
       initPoseidon,
-    } = await import("@zvault/sdk");
+    } = await import("@aegis/sdk");
     await initPoseidon();
 
     const seed = crypto.getRandomValues(new Uint8Array(32));
@@ -126,7 +126,7 @@ describe("Backend tracker registration", () => {
       deriveKeysFromSeed,
       createStealthMetaAddress,
       initPoseidon,
-    } = await import("@zvault/sdk");
+    } = await import("@aegis/sdk");
     await initPoseidon();
 
     const seed = crypto.getRandomValues(new Uint8Array(32));
@@ -216,7 +216,7 @@ describe("Regtest deposit (local mode)", () => {
       deriveKeysFromSeed,
       createStealthMetaAddress,
       initPoseidon,
-    } = await import("@zvault/sdk");
+    } = await import("@aegis/sdk");
     await initPoseidon();
 
     const seed = crypto.getRandomValues(new Uint8Array(32));

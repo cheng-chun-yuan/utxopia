@@ -11,7 +11,7 @@ import {
   generateClaimDirectProof,
 } from "../helpers/zk";
 
-describe("zVault Circom ZK Proof Integration", function () {
+describe("Aegis Circom ZK Proof Integration", function () {
   let user: Keypair;
   let poseidon: Poseidon;
   let merkleTree: PoseidonMerkleTree;

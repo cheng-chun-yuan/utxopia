@@ -1,5 +1,5 @@
 /**
- * Claim link utilities for zVault
+ * Claim link utilities for Aegis
  *
  * Claim links encode the note secrets (nullifier + secret + amount)
  * in a URL-safe format that can be shared with recipients.
@@ -10,7 +10,7 @@
 import { type Note, deserializeNote, serializeNote } from "./note";
 
 // Base URL for claim links (configurable)
-const DEFAULT_BASE_URL = "https://zvault.app";
+const DEFAULT_BASE_URL = "https://aegis.app";
 
 /**
  * Encoded claim link data

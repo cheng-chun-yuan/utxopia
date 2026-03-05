@@ -20,7 +20,7 @@ import {
   buildSplitCommitmentInstruction,
 } from "../helpers/instructions";
 
-describe("zVault E2E Flow Simulation", function () {
+describe("Aegis E2E Flow Simulation", function () {
   let authority: Keypair;
   let user: Keypair;
   let poseidon: Poseidon;

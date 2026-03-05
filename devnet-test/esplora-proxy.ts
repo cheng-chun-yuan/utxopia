@@ -2,7 +2,7 @@
  * Esplora-compatible HTTP proxy for Bitcoin regtest
  *
  * Translates Esplora REST API calls to bitcoind JSON-RPC.
- * Implements the subset of endpoints used by the zVault backend watcher.
+ * Implements the subset of endpoints used by the Aegis backend watcher.
  *
  * Usage:
  *   bun run esplora-proxy.ts

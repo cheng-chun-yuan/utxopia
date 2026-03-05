@@ -3,7 +3,7 @@
  *
  * Verifies all 7 services are reachable and healthy:
  * 1. Solana devnet RPC
- * 2. zVault program deployed
+ * 2. Aegis program deployed
  * 3. BTC Light Client program deployed
  * 4. FROST signers (x3) healthy
  * 5. Backend API healthy
@@ -39,9 +39,9 @@ describe("Solana devnet", () => {
     expect(version["solana-core"]).toBeDefined();
   });
 
-  it("zVault program is deployed", async () => {
+  it("Aegis program is deployed", async () => {
     const info = await ctx.connection.getAccountInfo(
-      new PublicKey(ctx.config.zvaultProgramId.toString())
+      new PublicKey(ctx.config.aegisProgramId.toString())
     );
     expect(info).not.toBeNull();
     expect(info!.executable).toBe(true);

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * zVault Demo Flow Integration Test
+ * Aegis Demo Flow Integration Test
  *
  * Tests the complete flow on localnet:
  * 1. Generate .zkey stealth addresses
@@ -51,7 +51,7 @@ const RPC_URL = process.env.RPC_URL || "https://api.devnet.solana.com";
 const configPath = path.join(__dirname, "..", "config.json");
 const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
 const PROGRAM_ID = new PublicKey(
-  process.env.PROGRAM_ID || config.programs.devnet.zVault
+  process.env.PROGRAM_ID || config.programs.devnet.Aegis
 );
 
 // Instruction discriminators
@@ -453,7 +453,7 @@ function generateStealthDeposit(
 
 async function main() {
   console.log("\n" + "=".repeat(60));
-  console.log("zVault Demo Flow Integration Test");
+  console.log("Aegis Demo Flow Integration Test");
   console.log("=".repeat(60) + "\n");
 
   // Connect

@@ -1,13 +1,13 @@
-# @zvault/sdk
+# @aegis/sdk
 
-TypeScript SDK for interacting with the zVault protocol - a privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs.
+TypeScript SDK for interacting with the Aegis protocol - a privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs.
 
 ## Installation
 
 ```bash
-bun add @zvault/sdk
+bun add @aegis/sdk
 # or
-npm install @zvault/sdk
+npm install @aegis/sdk
 ```
 
 ## Quick Start
@@ -18,7 +18,7 @@ import {
   createStealthDeposit,
   scanAnnouncements,
   resolveSnsName,
-} from '@zvault/sdk';
+} from '@aegis/sdk';
 
 // 1. Derive keys from wallet
 const keys = await deriveKeysFromWallet(walletAdapter);
@@ -40,9 +40,9 @@ const notes = await scanAnnouncements(keys, announcements);
 Derive spending and viewing keys from a Solana wallet signature (RAILGUN-style):
 
 ```typescript
-import { deriveKeysFromWallet, type ZVaultKeys } from '@zvault/sdk';
+import { deriveKeysFromWallet, type AegisKeys } from '@aegis/sdk';
 
-const keys: ZVaultKeys = await deriveKeysFromWallet(walletAdapter);
+const keys: AegisKeys = await deriveKeysFromWallet(walletAdapter);
 // keys.spendingPubKey - for receiving funds
 // keys.viewingPubKey  - for scanning deposits
 // keys.spendingPrivKey - for claiming (keep secret!)
@@ -58,7 +58,7 @@ import {
   createStealthDeposit,
   scanAnnouncements,
   prepareClaimInputs,
-} from '@zvault/sdk';
+} from '@aegis/sdk';
 
 // Sender: Create stealth deposit
 const deposit = await createStealthDeposit(recipientMeta, amountSats);
@@ -84,7 +84,7 @@ import {
   getPoolStatePDASeeds,
   getCommitmentTreePDASeeds,
   DEMO_INSTRUCTION,
-} from '@zvault/sdk';
+} from '@aegis/sdk';
 
 // Build demo note instruction data
 const noteData = buildAddDemoNoteData(secret); // 32-byte secret
@@ -111,7 +111,7 @@ import {
   deriveNote,
   createClaimLink,
   parseClaimLink,
-} from '@zvault/sdk';
+} from '@aegis/sdk';
 
 // Generate random note
 const note = generateNote(100000n);
@@ -131,7 +131,7 @@ const parsed = parseClaimLink(link);
 Generate BTC deposit addresses:
 
 ```typescript
-import { deriveTaprootAddress, verifyTaprootAddress } from '@zvault/sdk';
+import { deriveTaprootAddress, verifyTaprootAddress } from '@aegis/sdk';
 
 // Derive taproot address from commitment
 const address = deriveTaprootAddress(commitment, 'testnet');
@@ -149,7 +149,7 @@ import {
   createMerkleProof,
   proofToNoirFormat,
   TREE_DEPTH,
-} from '@zvault/sdk';
+} from '@aegis/sdk';
 
 const proof = createMerkleProof(leaves, leafIndex);
 const noirProof = proofToNoirFormat(proof);
@@ -193,7 +193,7 @@ const noirProof = proofToNoirFormat(proof);
 
 ```typescript
 // Program IDs
-ZVAULT_PROGRAM_ID        // Main zVault program (devnet)
+AEGIS_PROGRAM_ID        // Main Aegis program (devnet)
 CHADBUFFER_PROGRAM_ID    // ChadBuffer for SPV proofs
 
 // Merkle Tree
@@ -211,10 +211,10 @@ DEMO_INSTRUCTION.ADD_DEMO_STEALTH // 22
 
 ## Types
 
-### ZVaultKeys
+### AegisKeys
 
 ```typescript
-interface ZVaultKeys {
+interface AegisKeys {
   spendingPubKey: BabyJubPoint;
   spendingPrivKey: bigint;
   viewingPubKey: Uint8Array;

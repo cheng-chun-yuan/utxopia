@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Check zVault devnet status
+ * Check Aegis devnet status
  */
 
 import { Connection, PublicKey } from "@solana/web3.js";
@@ -10,14 +10,14 @@ const RPC_URL = "https://api.devnet.solana.com";
 
 async function main() {
   console.log("=".repeat(60));
-  console.log("zVault Devnet Status Check");
+  console.log("Aegis Devnet Status Check");
   console.log("=".repeat(60));
 
   const connection = new Connection(RPC_URL, "confirmed");
   const devnetConfig = JSON.parse(fs.readFileSync(".devnet-config.json", "utf-8"));
 
   console.log("\n📋 Configuration:");
-  console.log(`  Program: ${devnetConfig.programs.zVault}`);
+  console.log(`  Program: ${devnetConfig.programs.Aegis}`);
   console.log(`  Pool State: ${devnetConfig.accounts.poolState}`);
   console.log(`  Commitment Tree: ${devnetConfig.accounts.commitmentTree}`);
   console.log(`  zkBTC Mint: ${devnetConfig.accounts.zkbtcMint}`);
@@ -85,7 +85,7 @@ async function main() {
 
   // Fetch recent stealth announcements
   console.log("\n📣 Recent Stealth Announcements:");
-  const programId = new PublicKey(devnetConfig.programs.zVault);
+  const programId = new PublicKey(devnetConfig.programs.Aegis);
   try {
     const accounts = await connection.getProgramAccounts(programId, {
       filters: [

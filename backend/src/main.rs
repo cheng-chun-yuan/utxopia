@@ -15,7 +15,7 @@
 //!   cargo run -- demo            - Run interactive demo
 
 use zbtc::api_server as api;
-use zbtc::config::ZVaultConfig;
+use zbtc::config::AEGISConfig;
 use zbtc::deposit_tracker::{self, TrackerConfig};
 use zbtc::event_indexer::{EventIndexerConfig, EventIndexerService, EventStore, TreeCache, event_indexer_router};
 use zbtc::redemption::{MpcSigner, RedemptionConfig, RedemptionService, SingleKeySigner};
@@ -79,7 +79,7 @@ fn print_usage() {
     println!("  HEADER_BATCH_SIZE             Headers per batch (2-10, default: 5)");
     println!("  INDEXER_DB_PATH               Event indexer SQLite path (default: data/events.db)");
     println!("  INDEXER_POLL_INTERVAL_SECS    Event indexer poll interval (default: 10)");
-    println!("  ZVAULT_PROGRAM_ID             zVault program ID for event indexing");
+    println!("  AEGIS_PROGRAM_ID             Aegis program ID for event indexing");
     println!();
     println!("Note: Most functionality is handled by the SDK on the client side.");
     println!();
@@ -90,7 +90,7 @@ fn print_usage() {
 /// Create redemption service from environment, supporting both single-key and FROST modes
 fn create_service(config: RedemptionConfig) -> RedemptionService {
     // Check for FROST signing mode first
-    if let Ok(mode) = env::var("ZVAULT_SIGNING_MODE") {
+    if let Ok(mode) = env::var("AEGIS_SIGNING_MODE") {
         if mode.to_lowercase() == "frost" {
             return match create_frost_service(config.clone()) {
                 Ok(service) => service,
@@ -119,16 +119,16 @@ fn create_service(config: RedemptionConfig) -> RedemptionService {
 
 /// Create redemption service with FROST threshold signing
 fn create_frost_service(config: RedemptionConfig) -> Result<RedemptionService, String> {
-    let zvault_config = ZVaultConfig::from_env().map_err(|e| e.to_string())?;
+    let aegis_config = AEGISConfig::from_env().map_err(|e| e.to_string())?;
 
-    let frost_client = zvault_config
+    let frost_client = aegis_config
         .signing
         .frost_client()
         .ok_or("signing mode is not FROST")?;
 
-    // Get group pubkey from ZVAULT_FROST_GROUP_PUBKEY env var
-    let group_pubkey_hex = env::var("ZVAULT_FROST_GROUP_PUBKEY")
-        .map_err(|_| "ZVAULT_FROST_GROUP_PUBKEY required for FROST mode".to_string())?;
+    // Get group pubkey from AEGIS_FROST_GROUP_PUBKEY env var
+    let group_pubkey_hex = env::var("AEGIS_FROST_GROUP_PUBKEY")
+        .map_err(|_| "AEGIS_FROST_GROUP_PUBKEY required for FROST mode".to_string())?;
 
     let group_pubkey_bytes = hex::decode(&group_pubkey_hex)
         .map_err(|e| format!("invalid group pubkey hex: {}", e))?;
@@ -293,7 +293,7 @@ async fn run_tracker_service(args: &[String]) {
     };
 
     // Configure sweeper based on signing mode
-    let service = if let Ok(mode) = env::var("ZVAULT_SIGNING_MODE") {
+    let service = if let Ok(mode) = env::var("AEGIS_SIGNING_MODE") {
         if mode.to_lowercase() == "frost" {
             // FROST threshold signing
             match configure_frost_sweeper(service, &config) {
@@ -407,7 +407,7 @@ async fn run_tracker_service(args: &[String]) {
         .unwrap_or(10);
     let solana_rpc = env::var("SOLANA_RPC_URL")
         .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
-    let zvault_program_id = env::var("ZVAULT_PROGRAM_ID")
+    let aegis_program_id = env::var("AEGIS_PROGRAM_ID")
         .unwrap_or_else(|_| "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM".to_string());
 
     let event_store = Arc::new(
@@ -423,7 +423,7 @@ async fn run_tracker_service(args: &[String]) {
     // Start the event indexer service in background
     let indexer_config = EventIndexerConfig {
         rpc_url: solana_rpc,
-        program_id: zvault_program_id,
+        program_id: aegis_program_id,
         poll_interval_secs: indexer_poll_secs,
     };
     let indexer_service = EventIndexerService::new(indexer_config, event_store.clone())
@@ -479,15 +479,15 @@ fn configure_frost_sweeper(
     service: deposit_tracker::DepositTrackerService,
     _config: &TrackerConfig,
 ) -> Result<deposit_tracker::DepositTrackerService, String> {
-    let zvault_config = ZVaultConfig::from_env().map_err(|e| e.to_string())?;
+    let aegis_config = AEGISConfig::from_env().map_err(|e| e.to_string())?;
 
-    let frost_client = zvault_config
+    let frost_client = aegis_config
         .signing
         .frost_client()
         .ok_or("signing mode is not FROST")?;
 
-    let group_pubkey_hex = env::var("ZVAULT_FROST_GROUP_PUBKEY")
-        .map_err(|_| "ZVAULT_FROST_GROUP_PUBKEY required for FROST mode".to_string())?;
+    let group_pubkey_hex = env::var("AEGIS_FROST_GROUP_PUBKEY")
+        .map_err(|_| "AEGIS_FROST_GROUP_PUBKEY required for FROST mode".to_string())?;
 
     let group_pubkey_bytes = hex::decode(&group_pubkey_hex)
         .map_err(|e| format!("invalid group pubkey hex: {}", e))?;
@@ -495,7 +495,7 @@ fn configure_frost_sweeper(
     let group_pubkey = bitcoin::XOnlyPublicKey::from_slice(&group_pubkey_bytes)
         .map_err(|e| format!("invalid group pubkey: {}", e))?;
 
-    let network = zvault_config.network.bitcoin_network();
+    let network = aegis_config.network.bitcoin_network();
 
     Ok(service.with_frost_sweeper(frost_client, group_pubkey, network))
 }

@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Create 5 Excalidraw architecture diagrams for zVault covering system overview, deposit/withdrawal flow, crypto key model, JoinSplit circuit, and FROST signing.
+**Goal:** Create 5 Excalidraw architecture diagrams for Aegis covering system overview, deposit/withdrawal flow, crypto key model, JoinSplit circuit, and FROST signing.
 
 **Architecture:** Each diagram is a standalone `.excalidraw` JSON file in `docs/diagrams/`. Files use Excalidraw v2 format with rectangle, text, arrow, ellipse, and diamond elements. A helper TypeScript script generates the JSON programmatically for maintainability.
 
@@ -103,17 +103,17 @@ Three horizontal color-coded bands:
 **Solana Layer (y=260, h=300, bg=#f3e5f5 purple tint):**
 - Band label: "SOLANA LAYER"
 - Left box: "BTC Light Client" with sub-label "(SPV Verification)"
-- Right large box: "zVault Program" containing 5 smaller boxes:
+- Right large box: "Aegis Program" containing 5 smaller boxes:
   - "Commitment Tree (depth 16)"
   - "Nullifier Registry"
   - "Stealth Announcements"
   - "Name Registry (.zkey)"
   - "VK Registry"
-- Arrow: BTC Light Client ↔ zVault Program
+- Arrow: BTC Light Client ↔ Aegis Program
 
 **Client Layer (y=600, h=250, bg=#e3f2fd blue tint):**
 - Band label: "CLIENT LAYER"
-- Central box: "@zvault/sdk" with sub-label "(Note Mgmt | Proofs | Stealth | Taproot)"
+- Central box: "@aegis/sdk" with sub-label "(Note Mgmt | Proofs | Stealth | Taproot)"
 - Below SDK, 4 boxes in a row:
   - "Web App (Next.js)"
   - "Mobile App (Expo)"

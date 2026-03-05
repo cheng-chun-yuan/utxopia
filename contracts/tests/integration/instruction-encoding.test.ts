@@ -22,7 +22,7 @@ import {
   POOL_STATE_SIZE,
 } from "../helpers/pda";
 
-describe("zVault Instruction Encoding", function () {
+describe("Aegis Instruction Encoding", function () {
   let authority: Keypair;
   let user: Keypair;
   let poolStatePda: PublicKey;

@@ -154,7 +154,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}",
         r#"
 ╔════════════════════════════════════════════════════════════════════╗
-║      zVault E2E Deposit Test - FROST + SPV Verification            ║
+║      Aegis E2E Deposit Test - FROST + SPV Verification            ║
 ╚════════════════════════════════════════════════════════════════════╝
 "#);
 
@@ -497,9 +497,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Compute commitment tweak: H_zVault/CommitmentTweak(output_key || commitment)
+/// Compute commitment tweak: H_Aegis/CommitmentTweak(output_key || commitment)
 fn compute_commitment_tweak(output_key: &XOnlyPublicKey, commitment: &[u8; 32]) -> [u8; 32] {
-    let tag_hash = Sha256::digest(b"zVault/CommitmentTweak");
+    let tag_hash = Sha256::digest(b"Aegis/CommitmentTweak");
 
     let mut hasher = Sha256::new();
     hasher.update(&tag_hash);
@@ -537,7 +537,7 @@ fn compute_full_tweak(
         .expect("Taptweak failed");
 
     // Step 3: Compute commitment tweak on output_key
-    let commit_tag = Sha256::digest(b"zVault/CommitmentTweak");
+    let commit_tag = Sha256::digest(b"Aegis/CommitmentTweak");
 
     let mut commit_hasher = Sha256::new();
     commit_hasher.update(&commit_tag);

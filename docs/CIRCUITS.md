@@ -318,7 +318,7 @@ Generates Rust code with `ALPHA_G1`, `BETA_G2`, `GAMMA_G2`, `DELTA_G2`, and `IC`
 Proofs are generated in the browser/app via snarkjs WASM:
 
 ```typescript
-import { generateJoinSplitProof } from '@zvault/sdk';
+import { generateJoinSplitProof } from '@aegis/sdk';
 
 const proof = await generateJoinSplitProof({
   nInputs: 2, nOutputs: 2,
@@ -359,7 +359,7 @@ Proofs are verified inline on Solana using `alt_bn128` pairing syscalls:
 
 ### Verification Equation
 
-The zVault program verifies Groth16 proofs on-chain using Solana's native BN254 syscalls:
+The Aegis program verifies Groth16 proofs on-chain using Solana's native BN254 syscalls:
 
 ```
 e(-A, B) × e(α, β) × e(vk_x, γ) × e(C, δ) == 1
@@ -400,7 +400,7 @@ VK Registry PDA seed: ["vk_registry", n_inputs, n_outputs]
 VK hash: SHA-256(alpha || beta || gamma || delta || IC[0] || ... || IC[k])
 ```
 
-> Source: `contracts/programs/zvault/src/utils/groth16.rs`
+> Source: `contracts/programs/aegis/src/utils/groth16.rs`
 
 ---
 

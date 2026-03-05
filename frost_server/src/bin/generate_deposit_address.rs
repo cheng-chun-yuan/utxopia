@@ -176,9 +176,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Compute commitment tweak: H_zVault/CommitmentTweak(output_key || commitment)
+/// Compute commitment tweak: H_Aegis/CommitmentTweak(output_key || commitment)
 fn compute_commitment_tweak(output_key: &XOnlyPublicKey, commitment: &[u8; 32]) -> [u8; 32] {
-    let tag_hash = Sha256::digest(b"zVault/CommitmentTweak");
+    let tag_hash = Sha256::digest(b"Aegis/CommitmentTweak");
 
     let mut hasher = Sha256::new();
     hasher.update(&tag_hash);

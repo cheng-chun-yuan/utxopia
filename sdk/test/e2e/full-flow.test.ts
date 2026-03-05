@@ -2,7 +2,7 @@
  * Full E2E Flow Test: Groth16 Verification — Claim + Spend Partial Public
  *
  * ⚠️  DEPRECATED: This test uses legacy claim/spend_partial_public circuits.
- * The current zVault implementation uses JoinSplit circuits instead.
+ * The current Aegis implementation uses JoinSplit circuits instead.
  *
  * For current E2E tests, use:
  * - scripts/e2e-mock-spv.ts - Mock SPV deposit flow
@@ -301,7 +301,7 @@ describe.skip("Full E2E Flow — Groth16 Verification (DEPRECATED - uses legacy 
     const nullifierHashBytes = bigintToBytes(nullifierHash, 32);
     const [nullifierPda] = await deriveNullifierRecordPDA(
       nullifierHashBytes,
-      config.zvaultProgramId
+      config.aegisProgramId
     );
 
     const rootBytes = bigintToBytes(claimData.merkleProof.root, 32);
@@ -436,7 +436,7 @@ describe.skip("Full E2E Flow — Groth16 Verification (DEPRECATED - uses legacy 
     const nullifierHashBytes = bigintToBytes(nullifierHash, 32);
     const [nullifierPda] = await deriveNullifierRecordPDA(
       nullifierHashBytes,
-      config.zvaultProgramId
+      config.aegisProgramId
     );
 
     // Create ATA for recipient
@@ -464,7 +464,7 @@ describe.skip("Full E2E Flow — Groth16 Verification (DEPRECATED - uses legacy 
     // Derive stealth announcement PDA using ephemeral pub x (matching program)
     const [stealthAnnouncementPda] = await deriveStealthAnnouncementPDA(
       changeEphemeralPubX,
-      config.zvaultProgramId
+      config.aegisProgramId
     );
 
     const rootBytes = bigintToBytes(claimData.merkleProof.root, 32);
@@ -578,7 +578,7 @@ describe.skip("Full E2E Flow — Groth16 Verification (DEPRECATED - uses legacy 
     // 5. Submit claim
     console.log("\n5. Submitting claim...");
     const nullifierHashBytes = bigintToBytes(nullifierHash, 32);
-    const [nullifierPda] = await deriveNullifierRecordPDA(nullifierHashBytes, config.zvaultProgramId);
+    const [nullifierPda] = await deriveNullifierRecordPDA(nullifierHashBytes, config.aegisProgramId);
 
     const recipientAta = await getOrCreateAssociatedTokenAccount(
       ctx.connection,

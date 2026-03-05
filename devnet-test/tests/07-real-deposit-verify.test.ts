@@ -669,7 +669,7 @@ describe("Real E2E Deposit Verification", () => {
   let npk: Uint8Array;
   let ephemeralPub: Uint8Array;
   let blockHeight: number;
-  let zvaultProgramId: PublicKey;
+  let aegisProgramId: PublicKey;
 
   it("0. prerequisites — regtest and localnet available", async () => {
     if (!IS_LOCAL) {
@@ -701,7 +701,7 @@ describe("Real E2E Deposit Verification", () => {
       deriveKeysFromSeed,
       createStealthMetaAddress,
       initPoseidon,
-    } = await import("@zvault/sdk");
+    } = await import("@aegis/sdk");
     await initPoseidon();
 
     // Generate keys from random seed
@@ -805,7 +805,7 @@ describe("Real E2E Deposit Verification", () => {
     if (!IS_LOCAL || !depositTxid) return;
 
     const connection = new Connection(SOLANA_RPC_URL, "confirmed");
-    zvaultProgramId = new PublicKey(ctx.config.zvaultProgramId);
+    aegisProgramId = new PublicKey(ctx.config.aegisProgramId);
 
     // ---- Fetch raw tx and strip witness data ----
     const rawTxHex = await (
@@ -909,7 +909,7 @@ describe("Real E2E Deposit Verification", () => {
     const verifySig = await sendV0Tx(connection, ctx.payer, [verifyTxIx]);
     console.log(`  verify_transaction confirmed: ${verifySig}`);
 
-    // ---- Step 2: Call zvault verify_stealth_deposit ----
+    // ---- Step 2: Call aegis verify_stealth_deposit ----
     const ixData = buildVerifyStealthDepositIxData({
       txid: txidInternal,
       blockHeight,
@@ -922,7 +922,7 @@ describe("Real E2E Deposit Verification", () => {
 
     const commitmentTreePda = new PublicKey(ctx.config.commitmentTreePda);
     const [depositRecordPda] = deriveDepositStealthPda(
-      zvaultProgramId,
+      aegisProgramId,
       txidInternal
     );
     const zbtcMint = new PublicKey(ctx.config.zbtcMint);
@@ -943,7 +943,7 @@ describe("Real E2E Deposit Verification", () => {
     // 0=pool_state, 1=verified_tx, 2=light_client, 3=commitment_tree,
     // 4=deposit_record, 5=tx_buffer, 6=authority, 7=system, 8=mint, 9=vault, 10=token
     const ix = new TransactionInstruction({
-      programId: zvaultProgramId,
+      programId: aegisProgramId,
       keys: [
         { pubkey: poolStatePda, isSigner: false, isWritable: true },
         { pubkey: verifiedTxPda, isSigner: false, isWritable: false },

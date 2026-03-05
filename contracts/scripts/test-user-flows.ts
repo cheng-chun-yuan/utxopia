@@ -2,7 +2,7 @@
 /**
  * E2E User Flow Test — 4 Parts (Bitcoin regtest)
  *
- * Exercises the 4 main zVault user flows, each building on the previous:
+ * Exercises the 4 main Aegis user flows, each building on the previous:
  *   Part 1: Deposit      — VERIFY_STEALTH_DEPOSIT (disc=1) with real BTC regtest + SPV
  *   Part 2: Private Send  — JoinSplit 1x1 TRANSACT (disc=14)
  *   Part 3: Split         — JoinSplit 1x2 TRANSACT (disc=14)
@@ -97,7 +97,7 @@ function loadProgramId(): PublicKey {
   if (process.env.PROGRAM_ID) return new PublicKey(process.env.PROGRAM_ID);
   try {
     const config = loadConfig();
-    return new PublicKey(config.programs.zVault);
+    return new PublicKey(config.programs.Aegis);
   } catch {
     return NETWORK === "devnet"
       ? new PublicKey(DEVNET_PROGRAM_ID)
@@ -633,7 +633,7 @@ async function main() {
   const ESPLORA_URL = process.env.BITCOIN_API_URL || "http://localhost:3000/regtest/api";
 
   console.log("============================================================");
-  console.log(`zVault E2E User Flow Test — 4 Parts (${NETWORK})`);
+  console.log(`Aegis E2E User Flow Test — 4 Parts (${NETWORK})`);
   console.log("============================================================");
   console.log(`Network: ${NETWORK}`);
   console.log(`RPC: ${RPC_URL}`);

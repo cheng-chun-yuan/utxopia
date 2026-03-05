@@ -12,7 +12,7 @@ use pinocchio::{
 };
 
 use crate::constants::TOKEN_2022_PROGRAM_ID;
-use crate::error::ZVaultError;
+use crate::error::AegisError;
 
 // ============================================================================
 // PDA CREATION HELPER (shared across all instructions)
@@ -105,7 +105,7 @@ pub fn validate_program_owner(
 ) -> Result<(), ProgramError> {
     let owner = account.owner();
     if owner != program_id {
-        return Err(ZVaultError::InvalidAccountOwner.into());
+        return Err(AegisError::InvalidAccountOwner.into());
     }
     Ok(())
 }
@@ -163,7 +163,7 @@ pub fn validate_program_owners(
 #[inline(always)]
 pub fn validate_account_writable(account: &AccountInfo) -> Result<(), ProgramError> {
     if !account.is_writable() {
-        return Err(ZVaultError::AccountNotWritable.into());
+        return Err(AegisError::AccountNotWritable.into());
     }
     Ok(())
 }
@@ -185,15 +185,15 @@ pub fn validate_token_mint(
 ) -> Result<(), ProgramError> {
     let data = token_account.try_borrow_data()?;
     if data.len() < 32 {
-        return Err(ZVaultError::InvalidAccountData.into());
+        return Err(AegisError::InvalidAccountData.into());
     }
 
     let mint_bytes: [u8; 32] = data[0..32]
         .try_into()
-        .map_err(|_| ZVaultError::InvalidAccountData)?;
+        .map_err(|_| AegisError::InvalidAccountData)?;
 
     if mint_bytes != expected_mint.as_ref() {
-        return Err(ZVaultError::InvalidMint.into());
+        return Err(AegisError::InvalidMint.into());
     }
     Ok(())
 }
@@ -225,7 +225,7 @@ pub fn validate_initialized(
 ) -> Result<(), ProgramError> {
     let data = account.try_borrow_data()?;
     if data.is_empty() || data[0] != expected_discriminator {
-        return Err(ZVaultError::NotInitialized.into());
+        return Err(AegisError::NotInitialized.into());
     }
     Ok(())
 }
@@ -241,7 +241,7 @@ pub fn validate_not_initialized(
 ) -> Result<(), ProgramError> {
     let data = account.try_borrow_data()?;
     if !data.is_empty() && data[0] == discriminator {
-        return Err(ZVaultError::AlreadyInitialized.into());
+        return Err(AegisError::AlreadyInitialized.into());
     }
     Ok(())
 }

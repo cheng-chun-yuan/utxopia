@@ -1,6 +1,6 @@
 //! Utility modules
 //!
-//! Security-critical utilities for the zVault Pinocchio program.
+//! Security-critical utilities for the Aegis Pinocchio program.
 //! All validation functions MUST be called before deserializing account data.
 
 pub mod bitcoin;

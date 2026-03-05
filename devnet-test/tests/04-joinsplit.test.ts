@@ -102,8 +102,8 @@ describe("Circuit artifact verification", () => {
 
 describe("VK registry on-chain", () => {
   it("VK registry PDA exists for joinsplit_1x2", async () => {
-    const { deriveVkRegistryPDA } = await import("@zvault/sdk");
-    const [vkPda] = await deriveVkRegistryPDA(1, 2, ctx.config.zvaultProgramId);
+    const { deriveVkRegistryPDA } = await import("@aegis/sdk");
+    const [vkPda] = await deriveVkRegistryPDA(1, 2, ctx.config.aegisProgramId);
 
     try {
       const info = await ctx.connection.getAccountInfo(new PublicKey(vkPda.toString()));
@@ -126,7 +126,7 @@ describe("JoinSplit proof generation", () => {
       return;
     }
 
-    const { initPoseidon, generateNote, computeNoteCommitment } = await import("@zvault/sdk");
+    const { initPoseidon, generateNote, computeNoteCommitment } = await import("@aegis/sdk");
     await initPoseidon();
 
     // Build mock inputs for a 1-input, 2-output JoinSplit

@@ -1,11 +1,11 @@
-# @zvault/sdk v3.0 (JoinSplit Architecture)
+# @aegis/sdk v3.0 (JoinSplit Architecture)
 
 Privacy-preserving BTC to Solana bridge SDK using Groth16 JoinSplit proofs.
 
 ## Installation
 
 ```bash
-bun add @zvault/sdk
+bun add @aegis/sdk
 ```
 
 ## Quick Start
@@ -17,7 +17,7 @@ import {
   buildTransactInstruction,
   scanUnifiedNotes,
   formatBtc,
-} from '@zvault/sdk';
+} from '@aegis/sdk';
 
 // 1. DEPOSIT: Generate npk-based deposit (user sends any amount)
 const deposit = await createNonInteractiveDeposit(recipientMeta, groupPubKey);
@@ -105,7 +105,7 @@ Nullifier = Poseidon(nullifyingKey, leafIndex)
 
 ## Import Routes
 
-### Main Entry (`@zvault/sdk`)
+### Main Entry (`@aegis/sdk`)
 
 ```typescript
 import {
@@ -124,8 +124,8 @@ import {
   buildRedemptionRequestInstruction, // BTC withdrawal request
 
   // === Key Derivation ===
-  deriveKeysFromWallet,             // Wallet → ZVaultKeys
-  deriveKeysFromSeed,               // Seed → ZVaultKeys
+  deriveKeysFromWallet,             // Wallet → AegisKeys
+  deriveKeysFromSeed,               // Seed → AegisKeys
   createStealthMetaAddress,         // Keys → StealthMetaAddress
 
   // === Poseidon (JoinSplit) ===
@@ -153,12 +153,12 @@ import {
   type JoinSplitProofInputs,
   type TransactInstructionOptions,
   type JoinSplitNote,
-  type ZVaultKeys,
+  type AegisKeys,
   type StealthMetaAddress,
   type BoundParams,
   type NonInteractiveDepositResult,
   type ScannedNote,
-} from '@zvault/sdk';
+} from '@aegis/sdk';
 ```
 
 ---
@@ -212,10 +212,10 @@ interface JoinSplitProofInputs {
 }
 ```
 
-### ZVaultKeys
+### AegisKeys
 
 ```typescript
-interface ZVaultKeys {
+interface AegisKeys {
   solanaPublicKey: Uint8Array;          // User identity (32 bytes)
   spendingPrivKey: bigint;              // Baby Jubjub private key
   spendingPubKey: BabyJubPoint;         // BJJ public key
@@ -258,7 +258,7 @@ interface ScannedNote {
 The recommended deposit method. User can send **any amount** of BTC — the commitment is computed on-chain.
 
 ```typescript
-import { createNonInteractiveDeposit, createStealthMetaAddress, initPoseidon } from '@zvault/sdk';
+import { createNonInteractiveDeposit, createStealthMetaAddress, initPoseidon } from '@aegis/sdk';
 
 await initPoseidon();
 
@@ -276,7 +276,7 @@ console.log('OP_RETURN payload (64 bytes):', deposit.opReturnPayload);
 ### 2. Scan for Incoming Deposits & Transfers
 
 ```typescript
-import { scanUnifiedNotes, parseStealthAnnouncement } from '@zvault/sdk';
+import { scanUnifiedNotes, parseStealthAnnouncement } from '@aegis/sdk';
 
 // Fetch StealthAnnouncement PDAs from Solana (disc 0x08, 90 bytes)
 const rawAnnouncements = await fetchStealthAnnouncementAccounts(connection);
@@ -296,7 +296,7 @@ for (const note of myNotes) {
 ### 3. Legacy Deposit (with fixed amount)
 
 ```typescript
-import { depositToNote, initPoseidon } from '@zvault/sdk';
+import { depositToNote, initPoseidon } from '@aegis/sdk';
 
 await initPoseidon();
 const deposit = await depositToNote(100_000n, 'testnet');
@@ -309,7 +309,7 @@ console.log('Display:', deposit.displayAmount); // "0.00100000 BTC"
 ### 4. JoinSplit Transfer
 
 ```typescript
-import { generateJoinSplitProof, buildTransactInstruction } from '@zvault/sdk';
+import { generateJoinSplitProof, buildTransactInstruction } from '@aegis/sdk';
 
 // Generate proof (1 input → 2 outputs split)
 const proof = await generateJoinSplitProof({
@@ -340,7 +340,7 @@ const ix = buildTransactInstruction({ ... });
 ### 5. Stealth Transfer (in-protocol)
 
 ```typescript
-import { createStealthDeposit, scanAnnouncements } from '@zvault/sdk';
+import { createStealthDeposit, scanAnnouncements } from '@aegis/sdk';
 
 // Sender: Create stealth deposit
 const deposit = await createStealthDeposit(recipientMeta, 50_000n);
@@ -362,7 +362,7 @@ for (const note of notes) {
 Parses an on-chain `StealthAnnouncement` PDA into structured data. Both deposits and transfers use the same 90-byte layout:
 
 ```typescript
-import { parseStealthAnnouncement } from '@zvault/sdk';
+import { parseStealthAnnouncement } from '@aegis/sdk';
 
 const ann = parseStealthAnnouncement(accountData);
 // Returns: { announcementType, ephemeralPub, amountBytes, commitment, leafIndex, createdAt }
@@ -389,7 +389,7 @@ Offset   Field              Size
 ## Network Configuration
 
 ```typescript
-import { setConfig } from '@zvault/sdk';
+import { setConfig } from '@aegis/sdk';
 
 setConfig('devnet');  // or 'localnet', 'mainnet'
 ```
@@ -439,7 +439,7 @@ Derive 3-key set from Solana wallet signature:
 | `createStealthMetaAddress(keys)` | 96-byte shareable stealth address |
 | `serialize/deserializeStealthMetaAddress` | Stealth address encoding |
 | `createDelegatedViewKey(keys, permissions)` | Time-limited view-only key |
-| `clearZVaultKeys(keys)` | Secure memory clearing |
+| `clearAegisKeys(keys)` | Secure memory clearing |
 | `extractViewOnlyBundle(keys)` | Export view-only key bundle |
 
 ### Stealth Deposit (`./stealth-deposit`)

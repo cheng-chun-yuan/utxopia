@@ -26,7 +26,7 @@ console.log('\nEphemeral PubKey:', Buffer.from(ephemeralPub).toString('hex'));
 const sharedSecret = x25519.getSharedSecret(ephemeralPriv, viewingPub);
 
 // Derive stealth scalar
-const STEALTH_KEY_DOMAIN = new TextEncoder().encode('zVault-stealth-v1');
+const STEALTH_KEY_DOMAIN = new TextEncoder().encode('Aegis-stealth-v1');
 const hi = new Uint8Array(sharedSecret.length + STEALTH_KEY_DOMAIN.length);
 hi.set(sharedSecret, 0);
 hi.set(STEALTH_KEY_DOMAIN, sharedSecret.length);

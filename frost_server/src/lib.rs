@@ -1,8 +1,8 @@
-//! FROST Threshold Signing Server for zVault
+//! FROST Threshold Signing Server for Aegis
 //!
 //! This library provides threshold Schnorr signatures using FROST
 //! (Flexible Round-Optimized Schnorr Threshold signatures) for
-//! secure Bitcoin operations in zVault.
+//! secure Bitcoin operations in Aegis.
 //!
 //! # Architecture
 //!

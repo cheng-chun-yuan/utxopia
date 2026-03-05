@@ -1,4 +1,4 @@
-//! Structured Logging for zVault Backend
+//! Structured Logging for Aegis Backend
 //!
 //! Provides production-ready structured logging with:
 //! - JSON output for log aggregation services (ELK, Datadog, etc.)
@@ -15,7 +15,7 @@
 //! init_logging(LogLevel::Info, true)?; // JSON mode for production
 //!
 //! // Log events
-//! tracing::info!(target: "zvault::api", request_id = %id, "Processing withdrawal");
+//! tracing::info!(target: "aegis::api", request_id = %id, "Processing withdrawal");
 //! ```
 
 use serde::Serialize;
@@ -198,9 +198,9 @@ pub fn log_security_event(
     };
 
     if success {
-        tracing::info!(target: "zvault::security", "{}", event.to_json());
+        tracing::info!(target: "aegis::security", "{}", event.to_json());
     } else {
-        tracing::warn!(target: "zvault::security", "{}", event.to_json());
+        tracing::warn!(target: "aegis::security", "{}", event.to_json());
     }
 }
 
@@ -219,7 +219,7 @@ pub fn log_api_request(
             "client_ip": client_ip
         }));
 
-    tracing::info!(target: "zvault::api", "{}", event.to_json());
+    tracing::info!(target: "aegis::api", "{}", event.to_json());
 }
 
 /// Log an API response
@@ -248,9 +248,9 @@ pub fn log_api_response(
         }));
 
     match level {
-        LogLevel::Error => tracing::error!(target: "zvault::api", "{}", event.to_json()),
-        LogLevel::Warn => tracing::warn!(target: "zvault::api", "{}", event.to_json()),
-        _ => tracing::info!(target: "zvault::api", "{}", event.to_json()),
+        LogLevel::Error => tracing::error!(target: "aegis::api", "{}", event.to_json()),
+        LogLevel::Warn => tracing::warn!(target: "aegis::api", "{}", event.to_json()),
+        _ => tracing::info!(target: "aegis::api", "{}", event.to_json()),
     }
 }
 
@@ -276,9 +276,9 @@ pub fn log_deposit_event(
     }
 
     if success {
-        tracing::info!(target: "zvault::deposit", "{}", event.to_json());
+        tracing::info!(target: "aegis::deposit", "{}", event.to_json());
     } else {
-        tracing::error!(target: "zvault::deposit", "{}", event.to_json());
+        tracing::error!(target: "aegis::deposit", "{}", event.to_json());
     }
 }
 
@@ -308,9 +308,9 @@ pub fn log_withdrawal_event(
     }
 
     if success {
-        tracing::info!(target: "zvault::withdrawal", "{}", event.to_json());
+        tracing::info!(target: "aegis::withdrawal", "{}", event.to_json());
     } else {
-        tracing::error!(target: "zvault::withdrawal", "{}", event.to_json());
+        tracing::error!(target: "aegis::withdrawal", "{}", event.to_json());
     }
 }
 
@@ -334,7 +334,7 @@ pub fn init_logging(level: LogLevel, json_format: bool) -> Result<(), LoggingErr
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| {
             EnvFilter::new(format!(
-                "zvault={},tower_http={},axum={}",
+                "aegis={},tower_http={},axum={}",
                 format!("{:?}", level).to_lowercase(),
                 format!("{:?}", level).to_lowercase(),
                 format!("{:?}", level).to_lowercase()
@@ -377,8 +377,8 @@ pub fn init_logging(level: LogLevel, json_format: bool) -> Result<(), LoggingErr
     Ok(())
 }
 
-/// Initialize logging from ZVaultConfig
-pub fn init_from_config(config: &crate::config::ZVaultConfig) -> Result<(), LoggingError> {
+/// Initialize logging from AEGISConfig
+pub fn init_from_config(config: &crate::config::AEGISConfig) -> Result<(), LoggingError> {
     let level = LogLevel::from(config.log_level.as_str());
     let json_format = config.network == crate::config::Network::Mainnet;
 

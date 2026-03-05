@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-zVault is a privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs. Users deposit BTC, which becomes shielded commitments in a Merkle tree. All transfers use JoinSplit(N,M) proofs — no public tokens ever exist. Amount is revealed only at BTC withdrawal.
+Aegis is a privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs. Users deposit BTC, which becomes shielded commitments in a Merkle tree. All transfers use JoinSplit(N,M) proofs — no public tokens ever exist. Amount is revealed only at BTC withdrawal.
 
 **Key Technologies**: Pinocchio (Solana), circom circuits (Groth16 JoinSplit proofs), Taproot (BTC deposits), Baby Jubjub + Ed25519 (stealth addresses), FROST (threshold signing)
 
 ## Commands
 
-### Frontend (Next.js) - `/zvault-app`
+### Frontend (Next.js) - `/aegis-app`
 ```bash
 bun run dev          # Start dev server (port 3000)
 bun run build        # Production build (builds SDK first)
@@ -81,13 +81,13 @@ BTC Deposit → Taproot Address (npk-tweaked) → Backend Sweep → SPV Verifica
 
 | Directory | Purpose | Language |
 |-----------|---------|----------|
-| `contracts/programs/zvault` | Main Solana program (11 instructions) | Rust (Pinocchio) |
+| `contracts/programs/aegis` | Main Solana program (11 instructions) | Rust (Pinocchio) |
 | `contracts/programs/btc-light-client` | Bitcoin header tracking (standalone program) | Rust (Pinocchio) |
 | `circuits` | JoinSplit Groth16 ZK circuits | circom |
-| `sdk` | TypeScript SDK (@zvault/sdk) | TypeScript |
+| `sdk` | TypeScript SDK (@aegis/sdk) | TypeScript |
 | `frost_server` | FROST threshold signing + policy engine + audit log | Rust |
 | `backend` | API server + deposit tracker + redemption + header relayer | Rust + TypeScript |
-| `zvault-app` | Web interface | Next.js + React |
+| `aegis-app` | Web interface | Next.js + React |
 
 ### JoinSplit Circuit Architecture
 
@@ -151,7 +151,7 @@ Spending Key (Baby Jubjub) ─► Signs JoinSplit transactions (EdDSA-Poseidon)
 
 ## Key Program IDs
 
-- **zVault (devnet)**: `25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM`
+- **Aegis (devnet)**: `25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM`
 - **BTC Light Client**: `Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq`
 
 ## On-Chain Instructions
@@ -166,7 +166,7 @@ Spending Key (Baby Jubjub) ─► Signs JoinSplit transactions (EdDSA-Poseidon)
 | 11-12 | VK registry | Init/update verification key hashes |
 | 14 | `transact` | JoinSplit N-to-M private transfer (Groth16) |
 
-## SDK Usage (@zvault/sdk)
+## SDK Usage (@aegis/sdk)
 
 ```typescript
 import {
@@ -174,7 +174,7 @@ import {
   generateJoinSplitProof,
   buildTransactInstruction,
   scanUnifiedNotes,
-} from '@zvault/sdk';
+} from '@aegis/sdk';
 
 // 1. DEPOSIT: Generate npk-based deposit (user sends any amount)
 const deposit = await createNonInteractiveDeposit(recipientMeta, groupPubKey);

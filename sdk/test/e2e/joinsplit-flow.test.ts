@@ -254,7 +254,7 @@ describe("JoinSplit Full Flow — SDK-driven E2E", () => {
     const demoData = buildAddDemoStealthData(ephemeralPub, npkBytes, inputAmount);
 
     // Derive PDAs for the demo instruction
-    const programId = new PublicKey(config.zvaultProgramId.toString());
+    const programId = new PublicKey(config.aegisProgramId.toString());
     const poolState = new PublicKey(config.poolStatePda.toString());
     const commitmentTree = new PublicKey(config.commitmentTreePda.toString());
     const zkbtcMint = new PublicKey(config.zbtcMint.toString());
@@ -325,7 +325,7 @@ describe("JoinSplit Full Flow — SDK-driven E2E", () => {
           }));
         },
       },
-      config.zvaultProgramId.toString(),
+      config.aegisProgramId.toString(),
       maxLeafIndex !== undefined ? { maxLeafIndex } : undefined,
     );
 

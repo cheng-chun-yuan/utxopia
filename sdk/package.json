@@ -1,7 +1,7 @@
 {
-  "name": "@zvault/sdk",
+  "name": "@aegis/sdk",
   "version": "2.0.2",
-  "description": "ZVault SDK - Privacy-preserving Bitcoin to Solana bridge",
+  "description": "Aegis SDK - Private Bitcoin on Solana",
   "type": "module",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -125,6 +125,6 @@
     "snarkjs",
     "taproot"
   ],
-  "author": "ZVault Team",
+  "author": "Aegis Team",
   "license": "MIT"
 }

@@ -21,7 +21,7 @@ import {
   type Address,
 } from "@solana/kit";
 
-import { setConfig, getConfig, type NetworkConfig } from "@zvault/sdk";
+import { setConfig, getConfig, type NetworkConfig } from "@aegis/sdk";
 
 // =============================================================================
 // Test Mode Detection
@@ -160,7 +160,7 @@ export function logContext(ctx: TestContext) {
   console.log(`  Mode: ${TEST_MODE}`);
   console.log(`  Solana RPC: ${SOLANA_RPC_URL}`);
   console.log(`  Payer: ${ctx.payer.publicKey.toBase58()}`);
-  console.log(`  zVault: ${ctx.config.zvaultProgramId}`);
+  console.log(`  Aegis: ${ctx.config.aegisProgramId}`);
   console.log(`  BTC Relay: ${ctx.config.btcLightClientProgramId}`);
   console.log(`  Backend: ${ctx.backendApiUrl}`);
   console.log(`  FROST signers: ${ctx.frostSignerUrls.length}`);

@@ -1,5 +1,5 @@
 /**
- * Note (shielded commitment) utilities for zVault
+ * Note (shielded commitment) utilities for Aegis
  *
  * A Note represents a shielded deposit with:
  * - nullifier: Random secret for spending

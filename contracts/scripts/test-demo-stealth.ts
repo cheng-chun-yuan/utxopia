@@ -6,13 +6,13 @@
 import { Connection, Keypair, PublicKey, Transaction, TransactionInstruction, SystemProgram, sendAndConfirmTransaction } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 import {
-  ZVAULT_PROGRAM_ID,
+  AEGIS_PROGRAM_ID,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
   generateStealthAddress,
   encryptAmount,
-} from "@zvault/sdk";
-import { poseidon2Hash } from "@zvault/sdk";
+} from "@aegis/sdk";
+import { poseidon2Hash } from "@aegis/sdk";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -34,7 +34,7 @@ async function main() {
   const authority = loadKeypair("~/.config/solana/id.json");
 
   console.log(`\nAuthority: ${authority.publicKey.toBase58()}`);
-  console.log(`Program: ${ZVAULT_PROGRAM_ID}`);
+  console.log(`Program: ${AEGIS_PROGRAM_ID}`);
 
   // Derive PDAs
   const [poolStatePDA] = await derivePoolStatePDA();
@@ -71,7 +71,7 @@ async function main() {
   // Derive stealth announcement PDA
   const [stealthAnnouncementPDA] = PublicKey.findProgramAddressSync(
     [Buffer.from("stealth"), stealthResult.ephemeralPub.slice(1, 33)],
-    new PublicKey(ZVAULT_PROGRAM_ID as string)
+    new PublicKey(AEGIS_PROGRAM_ID as string)
   );
   console.log(`Stealth Announcement PDA: ${stealthAnnouncementPDA.toBase58()}`);
 
@@ -106,7 +106,7 @@ async function main() {
       { pubkey: poolVault, isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
     ],
-    programId: new PublicKey(ZVAULT_PROGRAM_ID as string),
+    programId: new PublicKey(AEGIS_PROGRAM_ID as string),
     data: instructionData,
   });
 

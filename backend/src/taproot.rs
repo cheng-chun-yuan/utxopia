@@ -54,7 +54,7 @@ impl PoolKeys {
     ///
     /// # Security
     ///
-    /// - Production: Loads key from ZVAULT_BTC_SIGNER_KEY environment variable
+    /// - Production: Loads key from AEGIS_BTC_SIGNER_KEY environment variable
     /// - Devnet: Falls back to derived key if env var not set (with warning)
     ///
     /// For mainnet, FROST DKG should be used instead of single-key signing.
@@ -64,30 +64,30 @@ impl PoolKeys {
         let secp = Secp256k1::new();
 
         // Try to load from environment variable first
-        let secret_key = match env::var("ZVAULT_BTC_SIGNER_KEY") {
+        let secret_key = match env::var("AEGIS_BTC_SIGNER_KEY") {
             Ok(hex_key) if !hex_key.is_empty() => {
                 let bytes = hex::decode(&hex_key)
-                    .expect("ZVAULT_BTC_SIGNER_KEY must be valid hex");
+                    .expect("AEGIS_BTC_SIGNER_KEY must be valid hex");
                 SecretKey::from_slice(&bytes)
-                    .expect("ZVAULT_BTC_SIGNER_KEY must be a valid secp256k1 secret key")
+                    .expect("AEGIS_BTC_SIGNER_KEY must be a valid secp256k1 secret key")
             }
             _ => {
                 // Check if we're on devnet (allow fallback) or production (error)
-                let network = env::var("ZVAULT_NETWORK").unwrap_or_else(|_| "devnet".to_string());
+                let network = env::var("AEGIS_NETWORK").unwrap_or_else(|_| "devnet".to_string());
                 if network == "mainnet" {
                     panic!(
-                        "ZVAULT_BTC_SIGNER_KEY environment variable is required for mainnet. \
+                        "AEGIS_BTC_SIGNER_KEY environment variable is required for mainnet. \
                          For production, use FROST DKG instead of single-key signing."
                     );
                 }
 
                 // Devnet/testnet fallback with warning
                 eprintln!("WARNING: Using derived key for {} - DO NOT USE WITH REAL FUNDS!", network);
-                eprintln!("Set ZVAULT_BTC_SIGNER_KEY environment variable for custom keys.");
+                eprintln!("Set AEGIS_BTC_SIGNER_KEY environment variable for custom keys.");
 
                 // Use environment-specific seed (not fully deterministic)
                 let seed_input = format!(
-                    "zvault_devnet_key_{}",
+                    "aegis_devnet_key_{}",
                     env::var("HOSTNAME").unwrap_or_else(|_| "local".to_string())
                 );
                 let seed = sha256(seed_input.as_bytes());
@@ -381,7 +381,7 @@ impl TaprootDepositDualPathRaw {
 /// Compute commitment tweak: H_commitment(output_key || commitment)
 fn compute_commitment_tweak(output_key: &XOnlyPublicKey, commitment: &[u8; 32]) -> [u8; 32] {
     // Use a tagged hash for domain separation
-    let tag_hash = sha256(b"zVault/CommitmentTweak");
+    let tag_hash = sha256(b"Aegis/CommitmentTweak");
 
     let mut hasher = Sha256::new();
     hasher.update(&tag_hash);

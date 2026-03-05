@@ -2,7 +2,7 @@
 name = "frost-server"
 version = "0.1.0"
 edition = "2021"
-description = "FROST threshold signing server for zVault"
+description = "FROST threshold signing server for Aegis"
 
 [[bin]]
 name = "frost-server"

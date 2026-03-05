@@ -11,7 +11,7 @@
  *
  * Prerequisites:
  *   - solana-test-validator running
- *   - zVault and Groth16 verifier deployed
+ *   - Aegis and Groth16 verifier deployed
  *
  * Run: bun run scripts/test-e2e-onchain.ts
  */
@@ -61,10 +61,10 @@ import {
   prepareClaimInputs,
   bytesToBigint,
   type ClaimInputs,
-  type ZVaultKeys,
+  type AegisKeys,
   type StealthMetaAddress,
   type ScannedNote,
-} from "@zvault/sdk";
+} from "@aegis/sdk";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -588,7 +588,7 @@ async function main() {
   const authority = await loadKeypair(walletPath);
 
   // Program IDs
-  const programId = new PublicKey(localConfig.programs.zVault);
+  const programId = new PublicKey(localConfig.programs.Aegis);
   const zkbtcMint = new PublicKey(localConfig.accounts.zkbtcMint);
   const poolVault = new PublicKey(localConfig.accounts.poolVault);
 
@@ -627,13 +627,13 @@ async function main() {
   log("✓ Prover initialized");
 
   // ==========================================================================
-  // Step 1: Generate ZVault keys (proper stealth model)
+  // Step 1: Generate AEGIS keys (proper stealth model)
   // ==========================================================================
   logSection("Step 1: Generate Stealth Keys");
 
   // Generate deterministic keys from a seed (simulating wallet signature derivation)
   const testSeed = randomFieldElement();
-  const keys: ZVaultKeys = await deriveKeysFromSeed(bigintToBytes32(testSeed));
+  const keys: AegisKeys = await deriveKeysFromSeed(bigintToBytes32(testSeed));
 
   // Create stealth meta address (spending + viewing public keys)
   const stealthMetaAddress: StealthMetaAddress = createStealthMetaAddress(keys);
@@ -742,7 +742,7 @@ async function main() {
 
   // Use scanAnnouncements to properly reconstruct the ScannedNote
   // This uses the SDK's internal stealth derivation logic (SHA256 domain separator)
-  const { scanAnnouncements } = await import("@zvault/sdk");
+  const { scanAnnouncements } = await import("@aegis/sdk");
 
   // Format the deposit as an announcement for scanning
   const announcements = [{
@@ -831,7 +831,7 @@ async function main() {
   // ==========================================================================
   logSection("Step 7: Compute VK Hash");
 
-  const vkHash = await computeVkHash("zvault_claim");
+  const vkHash = await computeVkHash("aegis_claim");
   log(`VK hash: 0x${Buffer.from(vkHash).toString("hex").slice(0, 32)}...`);
 
   // ==========================================================================

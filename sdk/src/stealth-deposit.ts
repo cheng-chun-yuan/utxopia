@@ -1,5 +1,5 @@
 /**
- * Stealth Deposit utilities for ZVault
+ * Stealth Deposit utilities for AEGIS
  *
  * Combines BTC deposit verification with automatic stealth announcement.
  * Uses Ed25519 ephemeral keys for ECDH and Baby Jubjub for stealth derivation.
@@ -69,13 +69,13 @@ export const STEALTH_OP_RETURN_SIZE = 32;
 /** Instruction discriminator for verify_stealth_deposit */
 export const VERIFY_STEALTH_DEPOSIT_DISCRIMINATOR = 1;
 
-import { ZVAULT_PROGRAM_ID } from "./pda";
+import { AEGIS_PROGRAM_ID } from "./pda";
 const SYSTEM_PROGRAM_ID: Address = address(
   "11111111111111111111111111111111"
 );
 
 /** Domain separator for stealth key derivation */
-const STEALTH_KEY_DOMAIN = new TextEncoder().encode("zVault-stealth-v1");
+const STEALTH_KEY_DOMAIN = new TextEncoder().encode("Aegis-stealth-v1");
 
 // ========== Types ==========
 
@@ -230,7 +230,7 @@ export async function verifyStealthDeposit(
   transactionSize: number,
   verifiedTransactionPda: Address,
   network: "mainnet" | "testnet" = "testnet",
-  programId: Address = ZVAULT_PROGRAM_ID
+  programId: Address = AEGIS_PROGRAM_ID
 ): Promise<string> {
   console.log("=== Verify Stealth Deposit ===");
   console.log(`Txid: ${btcTxid}`);

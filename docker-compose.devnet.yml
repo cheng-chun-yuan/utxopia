@@ -1,4 +1,4 @@
-# zVault Devnet Stack — Backend + FROST Signers + Header Relayer
+# Aegis Devnet Stack — Backend + FROST Signers + Header Relayer
 #
 # Usage:
 #   docker compose -f docker-compose.devnet.yml up --build -d
@@ -21,7 +21,7 @@ services:
   # ─── FROST Threshold Signers (2-of-3) ──────────────────────────────
   frost-signer-1:
     <<: *frost-common
-    container_name: zvault-frost-1
+    container_name: aegis-frost-1
     ports:
       - "9001:9001"
     command: >
@@ -30,7 +30,7 @@ services:
 
   frost-signer-2:
     <<: *frost-common
-    container_name: zvault-frost-2
+    container_name: aegis-frost-2
     ports:
       - "9002:9002"
     command: >
@@ -39,7 +39,7 @@ services:
 
   frost-signer-3:
     <<: *frost-common
-    container_name: zvault-frost-3
+    container_name: aegis-frost-3
     ports:
       - "9003:9003"
     command: >
@@ -52,7 +52,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: zvault-backend
+    container_name: aegis-backend
     command: ["/app/zbtc-api", "tracker", "--interval", "60", "--confirmations", "1"]
     ports:
       - "3001:3001"
@@ -60,16 +60,16 @@ services:
       - tracker-data:/app/data
     environment:
       RUST_LOG: info,zbtc=debug
-      ZVAULT_NETWORK: devnet
-      ZVAULT_SOLANA_RPC: https://api.devnet.solana.com
-      ZVAULT_BITCOIN_RPC: https://mempool.space/testnet4/api
-      ZVAULT_SIGNING_MODE: frost
-      ZVAULT_FROST_THRESHOLD: "2"
-      ZVAULT_FROST_PARTICIPANTS: "3"
-      ZVAULT_FROST_SIGNER_URLS: http://frost-signer-1:9001,http://frost-signer-2:9002,http://frost-signer-3:9003
-      ZVAULT_FROST_KEY_SHARE: placeholder
-      ZVAULT_FROST_GROUP_PUBKEY: d857a067bec0ae2027a6026ef73d2905f108b1a66de6d12d23a3feb42013b1dd
-      ZVAULT_DEMO_MODE: "1"
+      AEGIS_NETWORK: devnet
+      AEGIS_SOLANA_RPC: https://api.devnet.solana.com
+      AEGIS_BITCOIN_RPC: https://mempool.space/testnet4/api
+      AEGIS_SIGNING_MODE: frost
+      AEGIS_FROST_THRESHOLD: "2"
+      AEGIS_FROST_PARTICIPANTS: "3"
+      AEGIS_FROST_SIGNER_URLS: http://frost-signer-1:9001,http://frost-signer-2:9002,http://frost-signer-3:9003
+      AEGIS_FROST_KEY_SHARE: placeholder
+      AEGIS_FROST_GROUP_PUBKEY: d857a067bec0ae2027a6026ef73d2905f108b1a66de6d12d23a3feb42013b1dd
+      AEGIS_DEMO_MODE: "1"
       POOL_RECEIVE_ADDRESS: tb1pmpt6qea7czhzqfaxqfh0w0ffqhcs3vdxdhndztfr50ltggqnk8wsdrd5m5
       ESPLORA_URL: https://mempool.space/testnet4/api
       SOLANA_RPC_URL: https://api.devnet.solana.com
@@ -77,7 +77,7 @@ services:
       # Event indexer + Merkle tree cache
       INDEXER_DB_PATH: /app/data/events.db
       INDEXER_POLL_INTERVAL_SECS: "10"
-      ZVAULT_PROGRAM_ID: 25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM
+      AEGIS_PROGRAM_ID: 25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM
       TRACKER_API_PORT: "3001"
       # Real-time WebSocket detection (mempool.space)
       MEMPOOL_WS_ENABLED: "true"
@@ -95,11 +95,11 @@ services:
     restart: unless-stopped
 
   # ─── Frontend (Next.js) ──────────────────────────────────────────
-  zvault-app:
+  aegis-app:
     build:
       context: .
-      dockerfile: zvault-app/Dockerfile
-    container_name: zvault-app
+      dockerfile: aegis-app/Dockerfile
+    container_name: aegis-app
     ports:
       - "3000:3000"
     environment:
@@ -118,12 +118,12 @@ services:
   # ─── Cloudflare Tunnel ───────────────────────────────────────────
   cloudflared:
     image: cloudflare/cloudflared:latest
-    container_name: zvault-cloudflared
-    command: tunnel --no-autoupdate --config /etc/cloudflared/zvault.yml run zvault
+    container_name: aegis-cloudflared
+    command: tunnel --no-autoupdate --config /etc/cloudflared/aegis.yml run aegis
     volumes:
       - /Users/chengchunyuan/.cloudflared:/etc/cloudflared:ro
     depends_on:
-      - zvault-app
+      - aegis-app
       - backend
     restart: unless-stopped
 
@@ -132,7 +132,7 @@ services:
     build:
       context: ./backend/header-relayer
       dockerfile: Dockerfile
-    container_name: zvault-header-relayer
+    container_name: aegis-header-relayer
     environment:
       DEPLOY_ENV: devnet
       DEVNET_SOLANA_RPC_URL: https://api.devnet.solana.com

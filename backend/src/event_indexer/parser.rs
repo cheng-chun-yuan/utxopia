@@ -1,6 +1,6 @@
-//! Event parser for zVault sol_log_data events
+//! Event parser for Aegis sol_log_data events
 //!
-//! Matches discriminators from contracts/programs/zvault/src/utils/events.rs:
+//! Matches discriminators from contracts/programs/aegis/src/utils/events.rs:
 //! - 0x01 = LeafInserted (commitment + created_at)
 //! - 0x02 = NullifierSpent (nullifier_hash + op_type + spent_at + spent_by)
 

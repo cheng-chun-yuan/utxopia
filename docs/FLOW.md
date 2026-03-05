@@ -1,4 +1,4 @@
-# zVault: Complete Transaction Flow
+# Aegis: Complete Transaction Flow
 
 End-to-end lifecycle from BTC deposit through shielded transfers to withdrawal.
 
@@ -69,7 +69,7 @@ Two on-chain instructions in sequence:
 - Submits Merkle inclusion proof for the sweep TX
 - Creates `VerifiedTransaction` PDA: `["verified_tx", block_hash, sweep_txid]`
 
-**Step B** — `zvault::verify_stealth_deposit` (disc 1):
+**Step B** — `aegis::verify_stealth_deposit` (disc 1):
 
 Instruction data (80 bytes):
 | Offset | Size | Field |

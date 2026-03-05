@@ -1,5 +1,5 @@
 /**
- * WASM-based Groth16 Proof Generator for ZVault
+ * WASM-based Groth16 Proof Generator for AEGIS
  *
  * Universal prover that works in both Browser and Node.js environments.
  * Uses Groth16 proofs via snarkjs with lazy loading.

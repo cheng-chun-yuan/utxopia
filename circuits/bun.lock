@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "@zvault/circuits",
+      "name": "@aegis/circuits",
       "dependencies": {
         "circomlib": "^2.0.5",
         "circomlibjs": "^0.1.7",

@@ -1,4 +1,4 @@
-# zVault SDK Reference
+# Aegis SDK Reference
 
 TypeScript SDK for privacy-preserving BTC to Solana bridge.
 
@@ -7,7 +7,7 @@ TypeScript SDK for privacy-preserving BTC to Solana bridge.
 ## Installation
 
 ```bash
-bun add @zvault/sdk
+bun add @aegis/sdk
 ```
 
 ---
@@ -22,7 +22,7 @@ import {
   createClaimLinkFromNote,
   sendPrivate,
   withdraw
-} from '@zvault/sdk';
+} from '@aegis/sdk';
 
 // 1. Generate deposit credentials
 const result = await deposit(100_000n); // 0.001 BTC
@@ -61,7 +61,7 @@ await withdraw(config, myNote, 'tb1q...');
 ## Key Management
 
 ```typescript
-import { deriveKeysFromWallet, createStealthMetaAddress } from '@zvault/sdk';
+import { deriveKeysFromWallet, createStealthMetaAddress } from '@aegis/sdk';
 
 // Derive keys from wallet signature
 const keys = await deriveKeysFromWallet(walletAdapter);
@@ -86,7 +86,7 @@ const meta = createStealthMetaAddress(keys);
 ## Stealth Address Operations
 
 ```typescript
-import { scanAnnouncements, lookupZkeyName } from '@zvault/sdk';
+import { scanAnnouncements, lookupZkeyName } from '@aegis/sdk';
 
 // Scan for incoming transfers using viewing key
 const myNotes = await scanAnnouncements(keys, announcements);
@@ -103,7 +103,7 @@ await sendPrivate(config, myNote, entry.stealthMetaAddress);
 All proofs are generated client-side via snarkjs (Groth16, BN254 curve):
 
 ```typescript
-import { generateClaimProof, generateSpendSplitProof } from '@zvault/sdk';
+import { generateClaimProof, generateSpendSplitProof } from '@aegis/sdk';
 
 // Claim proof
 const proof = await generateClaimProof({
@@ -130,8 +130,8 @@ interface BabyJubPoint {
   y: bigint;
 }
 
-// ZVault keys (private)
-interface ZVaultKeys {
+// AEGIS keys (private)
+interface AegisKeys {
   spendingPrivKey: bigint;         // Baby Jubjub scalar
   spendingPubKey: BabyJubPoint;
   viewingPrivKey: Uint8Array;      // Ed25519 (32 bytes)
@@ -162,7 +162,7 @@ interface ScannedNote {
 
 ```typescript
 // Program IDs (devnet)
-ZVAULT_PROGRAM_ID = '25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM';
+AEGIS_PROGRAM_ID = '25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM';
 CHADBUFFER_PROGRAM_ID = '6VrJmWbhN9WbEkg87JizunVMpL6CHKGVmzWCf3o3LRgy';
 
 // Merkle tree

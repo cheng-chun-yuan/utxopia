@@ -11,8 +11,8 @@
 ### 1. `system-overview.excalidraw`
 3-layer architecture (BTC / Solana / Client). Color-coded horizontal bands:
 - **Bitcoin Layer (orange)**: User Wallet → Taproot Address → Bitcoin Network → Header Relayer
-- **Solana Layer (purple)**: BTC Light Client ↔ zVault Program (Commitment Tree, Nullifier Registry, Stealth Announcements, Name Registry, VK Registry)
-- **Client Layer (blue)**: @zvault/sdk → Web App, Mobile App, Backend API, FROST Server
+- **Solana Layer (purple)**: BTC Light Client ↔ Aegis Program (Commitment Tree, Nullifier Registry, Stealth Announcements, Name Registry, VK Registry)
+- **Client Layer (blue)**: @aegis/sdk → Web App, Mobile App, Backend API, FROST Server
 
 ### 2. `deposit-withdraw-flow.excalidraw`
 End-to-end lifecycle as 3 horizontal swimlanes:

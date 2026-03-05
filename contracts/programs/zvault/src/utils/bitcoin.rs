@@ -4,7 +4,7 @@
 
 use pinocchio::program_error::ProgramError;
 
-use crate::error::ZVaultError;
+use crate::error::AegisError;
 
 /// OP_RETURN opcode
 pub const OP_RETURN: u8 = 0x6a;
@@ -13,7 +13,7 @@ pub const OP_RETURN: u8 = 0x6a;
 pub const COMMITMENT_SIZE: usize = 32;
 
 /// Magic byte for stealth OP_RETURN
-pub const STEALTH_OP_RETURN_MAGIC: u8 = 0x7A; // 'z' for zVault stealth
+pub const STEALTH_OP_RETURN_MAGIC: u8 = 0x7A; // 'z' for Aegis stealth
 
 /// Current version for stealth OP_RETURN format (simplified)
 pub const STEALTH_OP_RETURN_VERSION: u8 = 2;
@@ -44,11 +44,11 @@ impl StealthOpReturnData {
     /// Supports both V2 (98 bytes) and V1 (142 bytes) formats.
     pub fn parse(data: &[u8]) -> Result<Self, ProgramError> {
         if data.len() < STEALTH_OP_RETURN_SIZE {
-            return Err(ZVaultError::InvalidStealthOpReturn.into());
+            return Err(AegisError::InvalidStealthOpReturn.into());
         }
 
         if data[0] != STEALTH_OP_RETURN_MAGIC {
-            return Err(ZVaultError::InvalidStealthOpReturn.into());
+            return Err(AegisError::InvalidStealthOpReturn.into());
         }
 
         let version = data[1];
@@ -74,7 +74,7 @@ impl StealthOpReturnData {
             // V1: Legacy format (142 bytes)
             let version_v1 = u32::from_le_bytes(data[1..5].try_into().unwrap());
             if version_v1 != STEALTH_OP_RETURN_VERSION_V1 {
-                return Err(ZVaultError::InvalidStealthOpReturn.into());
+                return Err(AegisError::InvalidStealthOpReturn.into());
             }
 
             let mut ephemeral_view_pub = [0u8; 32];
@@ -93,7 +93,7 @@ impl StealthOpReturnData {
                 commitment,
             })
         } else {
-            Err(ZVaultError::InvalidStealthOpReturn.into())
+            Err(AegisError::InvalidStealthOpReturn.into())
         }
     }
 }

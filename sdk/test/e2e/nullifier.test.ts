@@ -142,11 +142,11 @@ describe("NULLIFIER GUARD E2E", () => {
 
       const [pda1] = await deriveNullifierRecordPDA(
         note.nullifierHashBytes,
-        ctx.config.zvaultProgramId
+        ctx.config.aegisProgramId
       );
       const [pda2] = await deriveNullifierRecordPDA(
         note.nullifierHashBytes,
-        ctx.config.zvaultProgramId
+        ctx.config.aegisProgramId
       );
 
       expect(pda1.toString()).toBe(pda2.toString());
@@ -158,11 +158,11 @@ describe("NULLIFIER GUARD E2E", () => {
 
       const [pda1] = await deriveNullifierRecordPDA(
         note1.nullifierHashBytes,
-        ctx.config.zvaultProgramId
+        ctx.config.aegisProgramId
       );
       const [pda2] = await deriveNullifierRecordPDA(
         note2.nullifierHashBytes,
-        ctx.config.zvaultProgramId
+        ctx.config.aegisProgramId
       );
 
       expect(pda1.toString()).not.toBe(pda2.toString());
@@ -174,7 +174,7 @@ describe("NULLIFIER GUARD E2E", () => {
       // The PDA should be derived from ["nullifier", nullifierHash]
       const [pda] = await deriveNullifierRecordPDA(
         nullifierHash,
-        ctx.config.zvaultProgramId
+        ctx.config.aegisProgramId
       );
 
       // Verify it's a valid Solana address
@@ -216,9 +216,9 @@ describe("NULLIFIER GUARD E2E", () => {
       expect(splitNullifier).toEqual(partialNullifier);
 
       // All operations would derive the same PDA
-      const [claimPda] = await deriveNullifierRecordPDA(claimNullifier, ctx.config.zvaultProgramId);
-      const [splitPda] = await deriveNullifierRecordPDA(splitNullifier, ctx.config.zvaultProgramId);
-      const [partialPda] = await deriveNullifierRecordPDA(partialNullifier, ctx.config.zvaultProgramId);
+      const [claimPda] = await deriveNullifierRecordPDA(claimNullifier, ctx.config.aegisProgramId);
+      const [splitPda] = await deriveNullifierRecordPDA(splitNullifier, ctx.config.aegisProgramId);
+      const [partialPda] = await deriveNullifierRecordPDA(partialNullifier, ctx.config.aegisProgramId);
 
       expect(claimPda.toString()).toBe(splitPda.toString());
       expect(splitPda.toString()).toBe(partialPda.toString());
@@ -241,9 +241,9 @@ describe("NULLIFIER GUARD E2E", () => {
       expect(bytesToHex(note1.nullifierHashBytes)).not.toBe(bytesToHex(note3.nullifierHashBytes));
 
       // All should derive different PDAs
-      const [pda1] = await deriveNullifierRecordPDA(note1.nullifierHashBytes, ctx.config.zvaultProgramId);
-      const [pda2] = await deriveNullifierRecordPDA(note2.nullifierHashBytes, ctx.config.zvaultProgramId);
-      const [pda3] = await deriveNullifierRecordPDA(note3.nullifierHashBytes, ctx.config.zvaultProgramId);
+      const [pda1] = await deriveNullifierRecordPDA(note1.nullifierHashBytes, ctx.config.aegisProgramId);
+      const [pda2] = await deriveNullifierRecordPDA(note2.nullifierHashBytes, ctx.config.aegisProgramId);
+      const [pda3] = await deriveNullifierRecordPDA(note3.nullifierHashBytes, ctx.config.aegisProgramId);
 
       expect(pda1.toString()).not.toBe(pda2.toString());
       expect(pda2.toString()).not.toBe(pda3.toString());
@@ -274,7 +274,7 @@ describe("NULLIFIER GUARD E2E", () => {
         const note = createTestNote(TEST_AMOUNTS.small);
         const [nullifierPda] = await deriveNullifierRecordPDA(
           note.nullifierHashBytes,
-          ctx.config.zvaultProgramId
+          ctx.config.aegisProgramId
         );
 
         console.log("  → Nullifier PDA: " + nullifierPda.toString());
@@ -321,7 +321,7 @@ describe("NULLIFIER GUARD E2E", () => {
       console.log("\n2. Derive nullifier record PDA");
       const [nullifierPda, bump] = await deriveNullifierRecordPDA(
         nullifierHashBytes,
-        ctx.config.zvaultProgramId
+        ctx.config.aegisProgramId
       );
       console.log(`   PDA: ${nullifierPda.toString()}`);
       console.log(`   Bump: ${bump}`);

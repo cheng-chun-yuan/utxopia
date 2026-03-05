@@ -43,7 +43,7 @@ use pinocchio::{
 };
 
 use crate::debug_msg;
-use crate::error::ZVaultError;
+use crate::error::AegisError;
 use crate::state::{
     CommitmentTree, NullifierOperationType, NullifierRecord, PoolState,
     StealthAnnouncement, VkRegistry, NULLIFIER_RECORD_DISCRIMINATOR,
@@ -145,7 +145,7 @@ pub fn process_unshield(
         );
         if *bound_params_hash != expected {
             debug_msg!("Invalid bound params hash for unshield");
-            return Err(ZVaultError::InvalidBoundParams.into());
+            return Err(AegisError::InvalidBoundParams.into());
         }
     }
 
@@ -189,7 +189,7 @@ pub fn process_unshield(
         let pool_data = pool_state_info.try_borrow_data()?;
         let pool = PoolState::from_bytes(&pool_data)?;
         if pool.is_paused() {
-            return Err(ZVaultError::PoolPaused.into());
+            return Err(AegisError::PoolPaused.into());
         }
 
         // Verify zbtc_mint matches pool
@@ -225,7 +225,7 @@ pub fn process_unshield(
 
         if vk.n_inputs != n_inputs as u8 || vk.n_outputs != n_outputs as u8 {
             debug_msg!("VK registry mismatch");
-            return Err(ZVaultError::InvalidVkRegistry.into());
+            return Err(AegisError::InvalidVkRegistry.into());
         }
     }
 
@@ -235,7 +235,7 @@ pub fn process_unshield(
         let tree = CommitmentTree::from_bytes(&tree_data)?;
         if !tree.is_valid_root(merkle_root) {
             debug_msg!("Invalid Merkle root");
-            return Err(ZVaultError::InvalidMerkleProof.into());
+            return Err(AegisError::InvalidMerkleProof.into());
         }
     }
 
@@ -271,7 +271,7 @@ pub fn process_unshield(
         )?;
         if *commitments_out[n_outputs - 1] != expected_commitment {
             debug_msg!("Unshield commitment mismatch");
-            return Err(ZVaultError::InvalidCommitment.into());
+            return Err(AegisError::InvalidCommitment.into());
         }
     }
 
@@ -295,7 +295,7 @@ pub fn process_unshield(
             let nullifier_data = nullifier_info.try_borrow_data()?;
             if !nullifier_data.is_empty() && nullifier_data[0] == NULLIFIER_RECORD_DISCRIMINATOR {
                 debug_msg!("Nullifier already spent");
-                return Err(ZVaultError::NullifierAlreadyUsed.into());
+                return Err(AegisError::NullifierAlreadyUsed.into());
             }
         }
 

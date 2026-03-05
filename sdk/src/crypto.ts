@@ -1,5 +1,5 @@
 /**
- * Cryptographic utilities for zVault
+ * Cryptographic utilities for Aegis
  *
  * This module provides:
  * - Field constants (BN254)

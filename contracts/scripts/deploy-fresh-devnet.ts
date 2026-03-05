@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Deploy Fresh zVault to Devnet
+ * Deploy Fresh Aegis to Devnet
  *
  * Creates a completely new deployment with:
  * - New program ID (fresh keypair)
@@ -85,7 +85,7 @@ function buildInitializeIx(
 
 async function main() {
   console.log("=".repeat(60));
-  console.log("Deploy Fresh zVault to Devnet");
+  console.log("Deploy Fresh Aegis to Devnet");
   console.log("=".repeat(60));
   console.log();
   console.log("This will:");
@@ -113,7 +113,7 @@ async function main() {
 
   // Generate new program keypair
   const programKeypair = Keypair.generate();
-  const programKeypairPath = path.join(__dirname, "..", "target", "deploy", "zvault-new-keypair.json");
+  const programKeypairPath = path.join(__dirname, "..", "target", "deploy", "aegis-new-keypair.json");
 
   console.log(`\nNew Program ID: ${programKeypair.publicKey.toBase58()}`);
 
@@ -144,7 +144,7 @@ async function main() {
       `--url ${RPC_URL} ` +
       `--program-id ${programKeypairPath} ` +
       `--keypair ~/.config/solana/johnny.json ` +
-      `target/deploy/zvault_pinocchio.so`,
+      `target/deploy/aegis_pinocchio.so`,
       { cwd: path.join(__dirname, ".."), stdio: "inherit" }
     );
   } catch (error) {
@@ -204,8 +204,8 @@ async function main() {
   );
   console.log(`✓ Frost Vault: ${frostVaultAccount.address.toBase58()}`);
 
-  // Initialize zVault
-  console.log("\nInitializing zVault pool...");
+  // Initialize Aegis
+  console.log("\nInitializing Aegis pool...");
   const ix = buildInitializeIx(
     poolStatePda,
     commitmentTreePda,
@@ -222,7 +222,7 @@ async function main() {
   const sig = await sendAndConfirmTransaction(connection, tx, [authority], {
     commitment: "confirmed",
   });
-  console.log(`✓ zVault initialized: ${sig}`);
+  console.log(`✓ Aegis initialized: ${sig}`);
 
   // Verify commitment tree size
   const treeInfo = await connection.getAccountInfo(commitmentTreePda);
@@ -233,7 +233,7 @@ async function main() {
     network: "devnet",
     rpcUrl: RPC_URL,
     programs: {
-      zVault: programId.toBase58(),
+      Aegis: programId.toBase58(),
       groth16Verifier: GROTH16_VERIFIER_ID.toBase58(),
       chadbuffer: CHADBUFFER_ID.toBase58(),
     },

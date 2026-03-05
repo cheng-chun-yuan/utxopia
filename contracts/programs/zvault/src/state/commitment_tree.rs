@@ -201,7 +201,7 @@ impl CommitmentTree {
     pub fn insert_leaf(&mut self, commitment: &[u8; 32]) -> Result<u64, ProgramError> {
         let leaf_index = self.next_index();
         if leaf_index >= Self::MAX_LEAVES {
-            return Err(crate::error::ZVaultError::TreeFull.into());
+            return Err(crate::error::AegisError::TreeFull.into());
         }
 
         let mut current_hash = *commitment;

@@ -14,7 +14,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::error::ZVaultError;
+use crate::error::AegisError;
 use crate::state::{
     PoolState, RedemptionRequest, RedemptionStatus,
     VerifiedTransactionView, light_client_tip_height,
@@ -127,7 +127,7 @@ pub fn process_complete_redemption(
         let pool = PoolState::from_bytes(&pool_data)?;
 
         if authority.key().as_ref() != pool.authority {
-            return Err(ZVaultError::Unauthorized.into());
+            return Err(AegisError::Unauthorized.into());
         }
 
         (pool.bump, pool.pending_redemptions())
@@ -140,7 +140,7 @@ pub fn process_complete_redemption(
 
         let status = redemption.get_status();
         if status != RedemptionStatus::Pending && status != RedemptionStatus::Processing {
-            return Err(ZVaultError::InvalidRedemptionState.into());
+            return Err(AegisError::InvalidRedemptionState.into());
         }
 
         let script = redemption.get_btc_script();
@@ -158,7 +158,7 @@ pub fn process_complete_redemption(
 
         // Verify txid matches
         if *vt.txid() != ix_data.btc_txid {
-            return Err(ZVaultError::RedemptionSpvFailed.into());
+            return Err(AegisError::RedemptionSpvFailed.into());
         }
 
         vt.block_height() as u64
@@ -174,26 +174,26 @@ pub fn process_complete_redemption(
             tip - block_height + 1
         };
         if confirmations < REQUIRED_CONFIRMATIONS {
-            return Err(ZVaultError::InsufficientConfirmations.into());
+            return Err(AegisError::InsufficientConfirmations.into());
         }
     }
 
     // Read raw transaction from ChadBuffer
     let buffer_data = tx_buffer_info
         .try_borrow_data()
-        .map_err(|_| ZVaultError::RedemptionSpvFailed)?;
+        .map_err(|_| AegisError::RedemptionSpvFailed)?;
     let raw_tx = read_transaction_from_buffer(&buffer_data, ix_data.tx_size as usize)?;
 
     // Verify transaction hash matches provided txid
     let computed_hash = compute_tx_hash(raw_tx);
     if computed_hash != ix_data.btc_txid {
-        return Err(ZVaultError::RedemptionSpvFailed.into());
+        return Err(AegisError::RedemptionSpvFailed.into());
     }
 
     // --- Output verification ---
     // Parse raw tx and verify an output pays the expected script with sufficient amount
     let parsed_tx = ParsedTransaction::parse(raw_tx)
-        .map_err(|_| ZVaultError::RedemptionSpvFailed)?;
+        .map_err(|_| AegisError::RedemptionSpvFailed)?;
 
     let expected_script_slice = &expected_script[..expected_script_len];
     let min_amount = amount_sats.saturating_sub(MAX_FEE_SATS);
@@ -206,7 +206,7 @@ pub fn process_complete_redemption(
         }
     }
     if !found {
-        return Err(ZVaultError::RedemptionOutputMismatch.into());
+        return Err(AegisError::RedemptionOutputMismatch.into());
     }
 
     // --- Burn zBTC from pool vault ---

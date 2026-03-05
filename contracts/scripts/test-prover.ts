@@ -20,13 +20,13 @@ import {
   cleanup,
   type SpendSplitInputs,
   type ClaimInputs,
-} from "@zvault/sdk/prover";
+} from "@aegis/sdk/prover";
 
 // Import poseidon for proper commitment computation
 import {
   poseidon2Hash,
   computeUnifiedCommitment,
-} from "@zvault/sdk/poseidon2";
+} from "@aegis/sdk/poseidon2";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

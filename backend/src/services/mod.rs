@@ -1,6 +1,6 @@
 //! Domain Services Module
 //!
-//! Contains the core business logic services for zVault:
+//! Contains the core business logic services for Aegis:
 //! - Deposit tracking and processing
 //! - Redemption/withdrawal handling
 //! - Stealth deposit management

@@ -333,7 +333,7 @@ describe("FROST Sweep E2E (Regtest)", () => {
     npk = crypto.getRandomValues(new Uint8Array(32));
 
     // Use SDK to derive the tweaked Taproot address
-    const { deriveTaprootAddress } = await import("@zvault/sdk");
+    const { deriveTaprootAddress } = await import("@aegis/sdk");
     const result = deriveTaprootAddress(npk, "regtest", groupPubKeyBytes);
     depositAddress = result.address;
     outputKeyBytes = result.outputKey;

@@ -53,7 +53,7 @@ async function main() {
         }));
       },
     },
-    DEVNET_CONFIG.zvaultProgramId
+    DEVNET_CONFIG.aegisProgramId
   );
 
   console.log("Tree size:", tree.size());

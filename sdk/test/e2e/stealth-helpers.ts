@@ -29,7 +29,7 @@ import {
 } from "@solana/kit";
 
 import type { E2ETestContext } from "./setup";
-import { deriveKeysFromSeed, createStealthMetaAddress, type ZVaultKeys, type StealthMetaAddress } from "../../src/keys";
+import { deriveKeysFromSeed, createStealthMetaAddress, type AegisKeys, type StealthMetaAddress } from "../../src/keys";
 import { createStealthDeposit, scanAnnouncements, prepareClaimInputs, type StealthDeposit, type ScannedNote, type ClaimInputs } from "../../src/stealth";
 import { buildAddDemoStealthData, DEMO_INSTRUCTION } from "../../src/demo";
 import { buildCommitmentTreeFromChain, getMerkleProofFromTree, type OnChainMerkleProof, type CommitmentTreeIndex } from "../../src/commitment-tree";
@@ -46,7 +46,7 @@ import { hashNullifierSync, computeNullifierSync } from "../../src/poseidon";
  */
 export interface TestStealthNote {
   /** Recipient keys (needed for scanning and claiming) */
-  recipientKeys: ZVaultKeys;
+  recipientKeys: AegisKeys;
   /** Stealth deposit data */
   deposit: StealthDeposit;
   /** Amount in satoshis */
@@ -90,9 +90,9 @@ export interface PreparedClaimData {
  * Same seed always produces same keys (deterministic for testing).
  *
  * @param seed - Seed string (e.g., "recipient-1", "sender-test")
- * @returns ZVaultKeys with spending and viewing keys
+ * @returns AegisKeys with spending and viewing keys
  */
-export function generateTestKeys(seed: string): ZVaultKeys {
+export function generateTestKeys(seed: string): AegisKeys {
   const encoder = new TextEncoder();
   const seedBytes = encoder.encode(seed);
   return deriveKeysFromSeed(seedBytes);
@@ -105,12 +105,12 @@ export function generateTestKeys(seed: string): ZVaultKeys {
 /**
  * Create a stealth deposit for a recipient
  *
- * @param recipientKeys - Recipient's ZVault keys
+ * @param recipientKeys - Recipient's AEGIS keys
  * @param amount - Amount in satoshis
  * @returns TestStealthNote with deposit data
  */
 export async function createTestStealthDeposit(
-  recipientKeys: ZVaultKeys,
+  recipientKeys: AegisKeys,
   amount: bigint
 ): Promise<TestStealthNote> {
   // Create stealth meta-address from recipient keys
@@ -142,7 +142,7 @@ export async function submitDemoStealthDeposit(
   ctx: E2ETestContext,
   testNote: TestStealthNote
 ): Promise<string> {
-  const zvaultProgramId = new PublicKey(ctx.localnetConfig.programs.zVault);
+  const aegisProgramId = new PublicKey(ctx.localnetConfig.programs.Aegis);
   const commitmentTreePda = new PublicKey(ctx.localnetConfig.accounts.commitmentTree);
   const poolStatePda = new PublicKey(ctx.localnetConfig.accounts.poolState);
 
@@ -150,7 +150,7 @@ export async function submitDemoStealthDeposit(
   // Ed25519 ephemeral pub is already 32 bytes, use directly
   const [announcementPda] = await deriveStealthAnnouncementPDA(
     testNote.deposit.ephemeralPub,
-    address(ctx.localnetConfig.programs.zVault)
+    address(ctx.localnetConfig.programs.Aegis)
   );
 
   // Build instruction data
@@ -181,7 +181,7 @@ export async function submitDemoStealthDeposit(
       { pubkey: new PublicKey(ctx.localnetConfig.accounts.poolVault), isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
     ],
-    programId: zvaultProgramId,
+    programId: aegisProgramId,
     data: Buffer.from(instructionData),
   });
 
@@ -201,13 +201,13 @@ export async function submitDemoStealthDeposit(
  * Create and submit a stealth deposit in one call
  *
  * @param ctx - E2E test context
- * @param recipientKeys - Recipient's ZVault keys
+ * @param recipientKeys - Recipient's AEGIS keys
  * @param amount - Amount in satoshis
  * @returns TestStealthNote with leaf index set
  */
 export async function createAndSubmitStealthDeposit(
   ctx: E2ETestContext,
-  recipientKeys: ZVaultKeys,
+  recipientKeys: AegisKeys,
   amount: bigint
 ): Promise<TestStealthNote> {
   // Create the deposit
@@ -240,7 +240,7 @@ export async function createAndSubmitStealthDeposit(
         }));
       },
     },
-    ctx.localnetConfig.programs.zVault
+    ctx.localnetConfig.programs.Aegis
   );
 
   // Find the leaf index for our commitment
@@ -291,7 +291,7 @@ export async function fetchOnChainTree(
         }));
       },
     },
-    ctx.localnetConfig.programs.zVault
+    ctx.localnetConfig.programs.Aegis
   );
 }
 
@@ -332,7 +332,7 @@ export async function fetchStealthAnnouncements(
   const STEALTH_ANNOUNCEMENT_SIZE = 90;
 
   const accounts = await ctx.connection.getProgramAccounts(
-    new PublicKey(ctx.localnetConfig.programs.zVault),
+    new PublicKey(ctx.localnetConfig.programs.Aegis),
     {
       filters: [
         { dataSize: STEALTH_ANNOUNCEMENT_SIZE },
@@ -396,13 +396,13 @@ export async function fetchStealthAnnouncements(
  * 4. Prepare claim inputs with spending key
  *
  * @param ctx - E2E test context
- * @param recipientKeys - Recipient's ZVault keys
+ * @param recipientKeys - Recipient's AEGIS keys
  * @param expectedCommitment - Expected commitment to find (optional, for verification)
  * @returns PreparedClaimData ready for proof generation
  */
 export async function scanAndPrepareClaim(
   ctx: E2ETestContext,
-  recipientKeys: ZVaultKeys,
+  recipientKeys: AegisKeys,
   expectedCommitment?: bigint
 ): Promise<PreparedClaimData> {
   // 1. Fetch announcements from chain
@@ -489,7 +489,7 @@ export async function checkNullifierExists(
   const { deriveNullifierRecordPDA } = await import("../../src/pda");
   const [nullifierPda] = await deriveNullifierRecordPDA(
     nullifierHashBytes,
-    address(ctx.localnetConfig.programs.zVault)
+    address(ctx.localnetConfig.programs.Aegis)
   );
 
   const info = await ctx.connection.getAccountInfo(new PublicKey(nullifierPda.toString()));

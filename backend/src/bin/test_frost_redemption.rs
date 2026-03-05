@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  Funding pool address...");
     let fund_output = std::process::Command::new("docker")
         .args([
-            "exec", "zvault-esplora-regtest",
+            "exec", "aegis-esplora-regtest",
             "/srv/explorer/bitcoin/bin/bitcoin-cli",
             "-regtest", "-datadir=/data/bitcoin", "-rpcwallet=test",
             "sendtoaddress", &pool_addr_str, "0.001",
@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Mine 1 block
     let _ = std::process::Command::new("docker")
         .args([
-            "exec", "zvault-esplora-regtest",
+            "exec", "aegis-esplora-regtest",
             "/srv/explorer/bitcoin/bin/bitcoin-cli",
             "-regtest", "-datadir=/data/bitcoin", "-rpcwallet=test",
             "generatetoaddress", "1", &pool_addr_str,
@@ -116,7 +116,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n[Step 3] Getting destination address...");
     let dest_output = std::process::Command::new("docker")
         .args([
-            "exec", "zvault-esplora-regtest",
+            "exec", "aegis-esplora-regtest",
             "/srv/explorer/bitcoin/bin/bitcoin-cli",
             "-regtest", "-datadir=/data/bitcoin", "-rpcwallet=test",
             "getnewaddress", "", "bech32m",
@@ -173,7 +173,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Mine to confirm
         let _ = std::process::Command::new("docker")
             .args([
-                "exec", "zvault-esplora-regtest",
+                "exec", "aegis-esplora-regtest",
                 "/srv/explorer/bitcoin/bin/bitcoin-cli",
                 "-regtest", "-datadir=/data/bitcoin", "-rpcwallet=test",
                 "generatetoaddress", "1", &pool_addr_str,

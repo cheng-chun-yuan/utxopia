@@ -1,12 +1,12 @@
-//! Error definitions for ZVault program
+//! Error definitions for AEGIS program
 
 use pinocchio::program_error::ProgramError;
 use thiserror::Error;
 
-/// Custom error codes for ZVault
+/// Custom error codes for AEGIS
 /// Starting at 6000 to avoid conflicts with system errors
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
-pub enum ZVaultError {
+pub enum AegisError {
     #[error("Pool is paused")]
     PoolPaused = 6000,
 
@@ -147,8 +147,8 @@ pub enum ZVaultError {
     DifficultyMismatch = 6071,
 }
 
-impl From<ZVaultError> for ProgramError {
-    fn from(e: ZVaultError) -> Self {
+impl From<AegisError> for ProgramError {
+    fn from(e: AegisError) -> Self {
         ProgramError::Custom(e as u32)
     }
 }

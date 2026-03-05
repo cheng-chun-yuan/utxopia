@@ -183,8 +183,8 @@ impl RedemptionService {
         request.mark_broadcasting();
         self.queue.update(request.clone()).await.ok();
 
-        // Broadcast mode controlled by ZVAULT_BROADCAST_MODE env var
-        let broadcast_mode = std::env::var("ZVAULT_BROADCAST_MODE")
+        // Broadcast mode controlled by AEGIS_BROADCAST_MODE env var
+        let broadcast_mode = std::env::var("AEGIS_BROADCAST_MODE")
             .unwrap_or_else(|_| "simulated".to_string());
 
         if broadcast_mode == "real" {

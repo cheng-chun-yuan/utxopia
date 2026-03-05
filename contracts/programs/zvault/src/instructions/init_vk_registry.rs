@@ -16,7 +16,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::error::ZVaultError;
+use crate::error::AegisError;
 use crate::state::{PoolState, VkRegistry, VK_REGISTRY_DISCRIMINATOR};
 use crate::utils::{create_pda_account, validate_program_owner, validate_system_program};
 
@@ -95,7 +95,7 @@ pub fn process_init_vk_registry(
         let pool = PoolState::from_bytes(&pool_data)?;
 
         if authority.key().as_ref() != pool.authority {
-            return Err(ZVaultError::Unauthorized.into());
+            return Err(AegisError::Unauthorized.into());
         }
     }
 
@@ -179,7 +179,7 @@ pub fn process_update_vk_registry(
         let registry = VkRegistry::from_bytes_mut(&mut vk_data)?;
 
         if !registry.is_authority(authority.key().as_ref().try_into().unwrap()) {
-            return Err(ZVaultError::Unauthorized.into());
+            return Err(AegisError::Unauthorized.into());
         }
 
         // Verify variant matches

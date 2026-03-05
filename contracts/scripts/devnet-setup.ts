@@ -1,5 +1,5 @@
 /**
- * Devnet Setup Script for zVault
+ * Devnet Setup Script for Aegis
  *
  * This script:
  * 1. Initializes the pool state
@@ -217,7 +217,7 @@ function buildRecordDepositInstruction(
 
 async function main() {
   console.log("\n========================================");
-  console.log("zVault Devnet Setup");
+  console.log("Aegis Devnet Setup");
   console.log("========================================\n");
 
   // Connect to devnet

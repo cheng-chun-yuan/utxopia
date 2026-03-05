@@ -4,7 +4,7 @@
  *
  * Pre-flight checks before running the test suite:
  * 1. Solana devnet reachable
- * 2. zVault program deployed
+ * 2. Aegis program deployed
  * 3. BTC Light Client program deployed
  * 4. Pool state PDA initialized
  * 5. Commitment tree PDA initialized
@@ -32,9 +32,9 @@ const FROST_SIGNER_URLS = [
   process.env.FROST_SIGNER_2_URL || "http://localhost:8082",
   process.env.FROST_SIGNER_3_URL || "http://localhost:8083",
 ];
-const ZVAULT_PROGRAM_ID = process.env.ZVAULT_PROGRAM_ID || "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM";
+const AEGIS_PROGRAM_ID = process.env.AEGIS_PROGRAM_ID || "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM";
 const BTC_LIGHT_CLIENT_PROGRAM_ID = process.env.BTC_LIGHT_CLIENT_PROGRAM_ID || "Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq";
-const SIGNING_MODE = process.env.ZVAULT_SIGNING_MODE || "frost";
+const SIGNING_MODE = process.env.AEGIS_SIGNING_MODE || "frost";
 const CIRCUITS_DIR = path.resolve(__dirname, "../circuits/build");
 
 interface CheckResult {
@@ -238,10 +238,10 @@ function checkCircuitArtifacts() {
 // =============================================================================
 
 async function main() {
-  console.log("=== zVault Devnet Readiness Check ===\n");
+  console.log("=== Aegis Devnet Readiness Check ===\n");
 
   await checkSolana();
-  await checkProgramDeployed("zVault Program", ZVAULT_PROGRAM_ID);
+  await checkProgramDeployed("Aegis Program", AEGIS_PROGRAM_ID);
   await checkProgramDeployed("BTC Light Client Program", BTC_LIGHT_CLIENT_PROGRAM_ID);
 
   // Check PDAs (would need to derive — use known devnet addresses)

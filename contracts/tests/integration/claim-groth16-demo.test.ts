@@ -12,7 +12,7 @@ import { PoseidonMerkleTree } from "../helpers/merkle";
 import { type Poseidon, generateNote } from "../helpers/zk";
 import { buildClaimGroth16Instruction } from "../helpers/instructions";
 
-describe("zVault Groth16 ZK Proof Integration (demo mode)", function () {
+describe("Aegis Groth16 ZK Proof Integration (demo mode)", function () {
   let user: Keypair;
   let poseidon: Poseidon;
   let merkleTree: PoseidonMerkleTree;

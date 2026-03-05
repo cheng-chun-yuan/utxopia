@@ -11,7 +11,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Parser)]
 #[command(name = "frost-server")]
-#[command(about = "FROST threshold signing server for zVault")]
+#[command(about = "FROST threshold signing server for Aegis")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -70,9 +70,9 @@ enum Commands {
         #[arg(long, env = "FROST_SOLANA_RPC_URL")]
         solana_rpc_url: Option<String>,
 
-        /// zVault program ID for PDA derivation (base58)
-        #[arg(long, env = "FROST_ZVAULT_PROGRAM_ID")]
-        zvault_program_id: Option<String>,
+        /// Aegis program ID for PDA derivation (base58)
+        #[arg(long, env = "FROST_AEGIS_PROGRAM_ID")]
+        aegis_program_id: Option<String>,
     },
 
     /// Run DKG ceremony coordinator
@@ -136,12 +136,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             audit_log,
             network,
             solana_rpc_url,
-            zvault_program_id,
+            aegis_program_id,
         } => {
             run_server(
                 bind, id, key_file, password, esplora_url, pool_address,
                 max_amount, max_fee, require_context, audit_log, network,
-                solana_rpc_url, zvault_program_id,
+                solana_rpc_url, aegis_program_id,
             )
             .await?;
         }
@@ -179,7 +179,7 @@ async fn run_server(
     audit_log_path: Option<String>,
     network_str: String,
     solana_rpc_url: Option<String>,
-    zvault_program_id: Option<String>,
+    aegis_program_id: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let key_path = key_file.unwrap_or_else(|| format!("config/signer{}.key.enc", signer_id));
 
@@ -221,7 +221,7 @@ async fn run_server(
     }
 
     // Build Solana verifier (if configured)
-    let solana_verifier = match (&solana_rpc_url, &zvault_program_id) {
+    let solana_verifier = match (&solana_rpc_url, &aegis_program_id) {
         (Some(rpc_url), Some(program_id)) => {
             match frost_server::solana_verifier::SolanaVerifier::new(rpc_url.clone(), program_id) {
                 Ok(v) => {
@@ -239,7 +239,7 @@ async fn run_server(
             }
         }
         (Some(_), None) | (None, Some(_)) => {
-            tracing::warn!("Both --solana-rpc-url and --zvault-program-id are required for Solana verification");
+            tracing::warn!("Both --solana-rpc-url and --aegis-program-id are required for Solana verification");
             None
         }
         _ => None,

@@ -1,6 +1,6 @@
-# zVault — How to Run
+# Aegis — How to Run
 
-Complete guide for running all zVault services locally and on devnet.
+Complete guide for running all Aegis services locally and on devnet.
 
 ---
 
@@ -88,7 +88,7 @@ solana-test-validator \
 ```bash
 cd contracts
 
-# Deploy both zvault and btc-light-client programs
+# Deploy both aegis and btc-light-client programs
 bun run scripts/deploy-localnet.ts
 
 # Or deploy to devnet:
@@ -120,7 +120,7 @@ POOL_SIGNING_KEY=<hex_private_key> cargo run -- redemption
 ### Step 5: Start Frontend
 
 ```bash
-cd zvault-app
+cd aegis-app
 bun install
 bun run dev
 # Open http://localhost:3000
@@ -136,7 +136,7 @@ Two on-chain programs:
 
 | Program | ID (devnet) | Purpose |
 |---------|-------------|---------|
-| zVault | `25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM` | Main bridge logic (12 instructions) |
+| Aegis | `25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM` | Main bridge logic (12 instructions) |
 | BTC Light Client | `Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq` | Bitcoin header verification |
 
 ```bash
@@ -308,11 +308,11 @@ POOL_SIGNING_KEY=<hex_private_key> cargo run -- redemption [--interval <secs>] [
 
 **For FROST signing mode:**
 ```bash
-ZVAULT_SIGNING_MODE=frost \
-ZVAULT_FROST_THRESHOLD=2 \
-ZVAULT_FROST_PARTICIPANTS=3 \
-ZVAULT_FROST_KEY_SHARE=<encrypted_share> \
-ZVAULT_FROST_SIGNER_URLS=http://localhost:9001,http://localhost:9002,http://localhost:9003 \
+AEGIS_SIGNING_MODE=frost \
+AEGIS_FROST_THRESHOLD=2 \
+AEGIS_FROST_PARTICIPANTS=3 \
+AEGIS_FROST_KEY_SHARE=<encrypted_share> \
+AEGIS_FROST_SIGNER_URLS=http://localhost:9001,http://localhost:9002,http://localhost:9003 \
 cargo run -- redemption
 ```
 
@@ -390,7 +390,7 @@ bun run e2e
 ### 3.9 Frontend (Next.js)
 
 ```bash
-cd zvault-app
+cd aegis-app
 bun install
 bun run dev       # Development (port 3000)
 bun run build     # Production build
@@ -406,23 +406,23 @@ bun run test      # Vitest tests
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ZVAULT_NETWORK` | `devnet` | Network: mainnet, testnet, devnet |
-| `ZVAULT_SOLANA_RPC` | (per network) | Solana RPC endpoint |
-| `ZVAULT_BITCOIN_RPC` | (per network) | Esplora API endpoint |
-| `ZVAULT_PROGRAM_ID` | (devnet default) | zVault program ID |
-| `ZVAULT_POOL_STATE` | (devnet default) | Pool state PDA |
-| `ZVAULT_COMMITMENT_TREE` | (devnet default) | Commitment tree PDA |
-| `ZVAULT_ZBTC_MINT` | (devnet default) | zBTC mint address |
-| `ZVAULT_SIGNING_MODE` | `single` (devnet) | `single` or `frost` |
-| `ZVAULT_BTC_SIGNER_KEY` | — | Hex BTC private key (single mode) |
-| `ZVAULT_FROST_THRESHOLD` | — | FROST threshold (e.g., 2) |
-| `ZVAULT_FROST_PARTICIPANTS` | — | FROST total signers (e.g., 3) |
-| `ZVAULT_FROST_KEY_SHARE` | — | Encrypted key share |
-| `ZVAULT_FROST_SIGNER_URLS` | — | Comma-separated signer URLs |
-| `ZVAULT_FROST_API_KEY` | — | Optional API key for FROST servers |
-| `ZVAULT_DEPOSIT_LIMIT_SATS` | (per network) | Max deposit amount |
-| `ZVAULT_DEMO_MODE` | `0` | Enable demo instructions (devnet only) |
-| `ZVAULT_LOG_LEVEL` | `info` | Log level |
+| `AEGIS_NETWORK` | `devnet` | Network: mainnet, testnet, devnet |
+| `AEGIS_SOLANA_RPC` | (per network) | Solana RPC endpoint |
+| `AEGIS_BITCOIN_RPC` | (per network) | Esplora API endpoint |
+| `AEGIS_PROGRAM_ID` | (devnet default) | Aegis program ID |
+| `AEGIS_POOL_STATE` | (devnet default) | Pool state PDA |
+| `AEGIS_COMMITMENT_TREE` | (devnet default) | Commitment tree PDA |
+| `AEGIS_ZBTC_MINT` | (devnet default) | zBTC mint address |
+| `AEGIS_SIGNING_MODE` | `single` (devnet) | `single` or `frost` |
+| `AEGIS_BTC_SIGNER_KEY` | — | Hex BTC private key (single mode) |
+| `AEGIS_FROST_THRESHOLD` | — | FROST threshold (e.g., 2) |
+| `AEGIS_FROST_PARTICIPANTS` | — | FROST total signers (e.g., 3) |
+| `AEGIS_FROST_KEY_SHARE` | — | Encrypted key share |
+| `AEGIS_FROST_SIGNER_URLS` | — | Comma-separated signer URLs |
+| `AEGIS_FROST_API_KEY` | — | Optional API key for FROST servers |
+| `AEGIS_DEPOSIT_LIMIT_SATS` | (per network) | Max deposit amount |
+| `AEGIS_DEMO_MODE` | `0` | Enable demo instructions (devnet only) |
+| `AEGIS_LOG_LEVEL` | `info` | Log level |
 | `API_PORT` | `3001` | API server port |
 | `POOL_SIGNING_KEY` | — | Hex BTC key for sweeper/redemption |
 | `POOL_RECEIVE_ADDRESS` | — | Pool BTC address |
@@ -492,14 +492,14 @@ Full deposit → claim flow with real Groth16 proof generation. Requires compile
 
 ### Security
 
-- [ ] Switch to `ZVAULT_SIGNING_MODE=frost` (single-key is POC only)
+- [ ] Switch to `AEGIS_SIGNING_MODE=frost` (single-key is POC only)
 - [ ] Run DKG ceremony with real distributed signers (not test keys)
 - [ ] Store FROST key shares in HSM or encrypted at rest
-- [ ] Set `ZVAULT_DEMO_MODE=0` (demo instructions disabled on mainnet)
-- [ ] Set `ZVAULT_NETWORK=mainnet`
+- [ ] Set `AEGIS_DEMO_MODE=0` (demo instructions disabled on mainnet)
+- [ ] Set `AEGIS_NETWORK=mainnet`
 - [ ] Deploy without `--features devnet` flag
 - [ ] Use private RPC endpoints (not public devnet/mainnet RPCs)
-- [ ] Set appropriate `ZVAULT_DEPOSIT_LIMIT_SATS`
+- [ ] Set appropriate `AEGIS_DEPOSIT_LIMIT_SATS`
 
 ### Infrastructure
 
@@ -537,7 +537,7 @@ Full deposit → claim flow with real Groth16 proof generation. Requires compile
 ┌──────────────────┐  ┌─────────────────────┐  ┌────────────────┐
 │  Backend API     │  │  Solana Programs     │  │  Bitcoin       │
 │  (:3001)         │  │                      │  │  Network       │
-│                  │  │  zVault (12 ix)      │  │                │
+│                  │  │  Aegis (12 ix)      │  │                │
 │  - Deposit addr  │  │  BTC Light Client    │  │  - Taproot     │
 │  - Status check  │  │                      │  │    deposits    │
 │  - Redemption    │  │  State:              │  │  - FROST-signed│
@@ -593,7 +593,7 @@ Full deposit → claim flow with real Groth16 proof generation. Requires compile
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| zVault Program (12 ix) | Fully implemented | Pinocchio, all instructions working |
+| Aegis Program (12 ix) | Fully implemented | Pinocchio, all instructions working |
 | BTC Light Client | Fully implemented | Header storage + validation |
 | FROST Server | Fully implemented | DKG, signing, keystore with AES-256-GCM |
 | Backend API | Fully implemented | 14+ endpoints, CORS, combined server |

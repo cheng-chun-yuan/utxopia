@@ -1,8 +1,8 @@
-# zVault - Privacy-Preserving BTC on Solana
+# Aegis - Privacy-Preserving BTC on Solana
 
 **Private Bitcoin on Solana using Zero-Knowledge Proofs**
 
-zVault is a trustless bridge that enables Bitcoin holders to access Solana DeFi with full transaction privacy. Deposit BTC, receive shielded zkBTC, and transact without revealing amounts or linking identities.
+Aegis is a trustless bridge that enables Bitcoin holders to access Solana DeFi with full transaction privacy. Deposit BTC, receive shielded zkBTC, and transact without revealing amounts or linking identities.
 
 ```
 BTC Deposit → Taproot Address → SPV Verify → On-Chain Commitment → ZK Transfers → Withdraw BTC
@@ -27,7 +27,7 @@ Bitcoin's transparent blockchain makes privacy challenging:
 - Cross-chain bridges expose user activity on both chains
 - DeFi participation requires revealing transaction history
 
-**zVault solves this** by creating a privacy layer between Bitcoin and Solana using zero-knowledge proofs.
+**Aegis solves this** by creating a privacy layer between Bitcoin and Solana using zero-knowledge proofs.
 
 ---
 
@@ -42,7 +42,7 @@ Bitcoin's transparent blockchain makes privacy challenging:
 | **Stealth Addresses** | Baby Jubjub + Ed25519 ECDH | Unlinkable one-time addresses (EIP-5564/DKSAP) |
 | **Name Service** | .zkey.sol (SNS-style) | Human-readable stealth addresses |
 | **Data Publishing** | ChadBuffer | Large data upload on-chain |
-| **Client SDK** | @zvault/sdk (TypeScript) | Full privacy toolkit with React hooks |
+| **Client SDK** | @aegis/sdk (TypeScript) | Full privacy toolkit with React hooks |
 | **Frontend** | Next.js | Web interface |
 | **Backend** | Rust (Axum) + FROST | API server + threshold BTC signing |
 
@@ -113,15 +113,15 @@ await sendPrivate(config, myNote, entry.stealthMetaAddress);
 ## Project Structure
 
 ```
-zVault/
+Aegis/
 ├── contracts/                  # Solana programs (Pinocchio)
-│   ├── programs/zvault/        # Main zVault program (14 instructions)
+│   ├── programs/aegis/        # Main Aegis program (14 instructions)
 │   └── programs/btc-light-client/ # Bitcoin header tracking (standalone)
 ├── circuits/                   # Zero-knowledge circuits (circom)
 │   ├── circom/joinsplit.circom # Parameterized JoinSplit(N,M,16) template
 │   └── circom/lib/             # Shared (commitment, nullifier, merkle, mpk)
-├── sdk/                        # @zvault/sdk TypeScript client
-├── zvault-app/                 # Next.js web interface
+├── sdk/                        # @aegis/sdk TypeScript client
+├── aegis-app/                 # Next.js web interface
 ├── backend/                    # Rust API + deposit tracker + redemption
 │   └── header-relayer/         # Bitcoin header sync (TypeScript)
 ├── frost_server/               # FROST threshold signing (BTC redemption)
@@ -141,7 +141,7 @@ zVault/
 ### Frontend
 
 ```bash
-cd zvault-app
+cd aegis-app
 bun install
 bun run dev
 ```
@@ -177,7 +177,7 @@ bash scripts/setup.sh
 
 | Program | Address |
 |---------|---------|
-| zVault | `25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM` |
+| Aegis | `25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM` |
 | BTC Light Client | `Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq` |
 | ChadBuffer | `C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF` |
 

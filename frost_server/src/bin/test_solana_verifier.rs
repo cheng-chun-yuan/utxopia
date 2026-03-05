@@ -13,7 +13,7 @@
 use clap::Parser;
 use frost_server::solana_verifier::{find_program_address, SolanaVerifier};
 
-/// Default devnet zVault program ID
+/// Default devnet Aegis program ID
 const DEVNET_PROGRAM_ID: &str = "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM";
 const DEVNET_RPC_URL: &str = "https://api.devnet.solana.com";
 
@@ -25,7 +25,7 @@ struct Args {
     #[arg(long, default_value = DEVNET_RPC_URL)]
     rpc_url: String,
 
-    /// zVault program ID (base58)
+    /// Aegis program ID (base58)
     #[arg(long, default_value = DEVNET_PROGRAM_ID)]
     program_id: String,
 

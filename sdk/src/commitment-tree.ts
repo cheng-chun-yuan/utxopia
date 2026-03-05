@@ -520,7 +520,7 @@ export function getCommitmentIndex(): CommitmentTreeIndex {
     // Try to load from localStorage if available
     if (typeof window !== "undefined" && window.localStorage) {
       try {
-        const stored = localStorage.getItem("zvault_commitment_index");
+        const stored = localStorage.getItem("aegis_commitment_index");
         if (stored) {
           globalIndex.import(JSON.parse(stored));
           console.log(
@@ -544,7 +544,7 @@ export function saveCommitmentIndex(): void {
   if (typeof window !== "undefined" && window.localStorage) {
     try {
       const data = globalIndex.export();
-      localStorage.setItem("zvault_commitment_index", JSON.stringify(data));
+      localStorage.setItem("aegis_commitment_index", JSON.stringify(data));
       console.log(`[CommitmentIndex] Saved ${globalIndex.size()} commitments`);
     } catch (e) {
       console.warn("[CommitmentIndex] Failed to save to storage:", e);
@@ -677,16 +677,16 @@ function toBase58(bytes: Uint8Array): string {
  * by storing the returned tree and only calling this when needed.
  *
  * @param rpc - RPC client (Connection or Helius)
- * @param programId - zVault program ID
+ * @param programId - Aegis program ID
  * @returns CommitmentTreeIndex with all on-chain commitments
  *
  * @example
  * ```typescript
- * import { buildCommitmentTreeFromChain } from '@zvault/sdk';
+ * import { buildCommitmentTreeFromChain } from '@aegis/sdk';
  * import { Connection } from '@solana/web3.js';
  *
  * const connection = new Connection('https://api.devnet.solana.com');
- * const tree = await buildCommitmentTreeFromChain(connection, ZVAULT_PROGRAM_ID);
+ * const tree = await buildCommitmentTreeFromChain(connection, AEGIS_PROGRAM_ID);
  * console.log(`Loaded ${tree.size()} commitments`);
  *
  * // Backend caching example:
@@ -801,7 +801,7 @@ export async function buildCommitmentTreeFromChain(
  * This function builds the full tree from chain to find the index.
  *
  * @param rpc - RPC client
- * @param programId - zVault program ID
+ * @param programId - Aegis program ID
  * @param commitment - Commitment to find
  * @returns Leaf index or -1 if not found
  */
@@ -829,7 +829,7 @@ export async function getLeafIndexForCommitment(
  * once and call getMerkleProof on the resulting tree.
  *
  * @param rpc - RPC client
- * @param programId - zVault program ID
+ * @param programId - Aegis program ID
  * @param commitment - Commitment to get proof for
  * @returns Merkle proof or null if commitment not found
  *

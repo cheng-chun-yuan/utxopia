@@ -3,7 +3,7 @@ use pinocchio::program_error::ProgramError;
 use crate::constants::BTC_LIGHT_CLIENT_DISCRIMINATOR;
 
 /// Bitcoin Light Client state (zero-copy layout)
-/// Must match zvault's BitcoinLightClient exactly.
+/// Must match aegis's BitcoinLightClient exactly.
 #[repr(C)]
 pub(crate) struct BitcoinLightClient {
     pub discriminator: u8,

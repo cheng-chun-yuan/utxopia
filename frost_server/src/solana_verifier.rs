@@ -33,7 +33,7 @@ pub enum SolanaVerifyError {
     BtcAddressMismatch { on_chain: String, expected: String },
 }
 
-/// RedemptionRequest account layout offsets (from contracts/programs/zvault/src/state/redemption.rs)
+/// RedemptionRequest account layout offsets (from contracts/programs/aegis/src/state/redemption.rs)
 ///
 /// Layout (90 bytes): disc(1) + status(1) + btc_script_len(1) + padding(1) +
 ///         processing_slot(4) + request_id(8) + requester(32) + amount_sats(8) + btc_script(34)
@@ -57,7 +57,7 @@ impl SolanaVerifier {
     ///
     /// # Arguments
     /// * `rpc_url` - Solana JSON-RPC URL (e.g., "http://localhost:8899")
-    /// * `program_id_base58` - zVault program ID in base58
+    /// * `program_id_base58` - Aegis program ID in base58
     pub fn new(rpc_url: String, program_id_base58: &str) -> Result<Self, SolanaVerifyError> {
         let program_id_bytes = bs58::decode(program_id_base58)
             .into_vec()
@@ -329,7 +329,7 @@ mod tests {
     #[test]
     fn test_pda_derivation_known_vector() {
         // Test with a known program ID and seeds
-        // Using the zVault program ID: 25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM
+        // Using the Aegis program ID: 25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM
         let program_id_bytes = bs58::decode("25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM")
             .into_vec()
             .unwrap();

@@ -5,7 +5,7 @@
  * 1. Submit a withdrawal request via the backend API
  * 2. Verify the redemption processor picks it up
  * 3. FROST-signed BTC transaction is built
- * 4. Transaction is broadcast to testnet (if ZVAULT_BROADCAST_MODE=real)
+ * 4. Transaction is broadcast to testnet (if AEGIS_BROADCAST_MODE=real)
  * 5. Confirm on Esplora
  *
  * Does NOT duplicate SDK proof generation unit tests.

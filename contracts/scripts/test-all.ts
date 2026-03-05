@@ -1,5 +1,5 @@
 /**
- * Comprehensive zVault Test Suite
+ * Comprehensive Aegis Test Suite
  *
  * Tests all instructions:
  * - INITIALIZE (0): Setup pool state and commitment tree
@@ -42,7 +42,7 @@ import {
   generateSplitProof,
   setCircuitPath,
   type SplitInputs,
-} from "@zvault/sdk/prover";
+} from "@aegis/sdk/prover";
 
 // SDK imports for demo stealth instruction
 import {
@@ -55,7 +55,7 @@ import {
   babyJubMul,
   BABYJUB_BASE8,
   randomFieldElement,
-} from "@zvault/sdk";
+} from "@aegis/sdk";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -75,7 +75,7 @@ function loadProgramId(): PublicKey {
     const configFile = NETWORK === "devnet" ? ".devnet-config.json" : ".localnet-config.json";
     const configPath = path.join(__dirname, "..", configFile);
     const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    return new PublicKey(config.programs.zVault);
+    return new PublicKey(config.programs.Aegis);
   } catch {
     return new PublicKey("3Df8Xv9hMtVVLRxagnbCsofvgn18yPzfCqTmbUEnx9KF");
   }
@@ -853,7 +853,7 @@ async function testSplitProofGeneration(): Promise<TestResult> {
 
 async function main() {
   console.log("============================================================");
-  console.log("zVault Comprehensive Test Suite");
+  console.log("Aegis Comprehensive Test Suite");
   console.log("============================================================");
   console.log(`RPC: ${RPC_URL}`);
   console.log(`Program: ${PROGRAM_ID.toBase58()}`);

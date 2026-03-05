@@ -1,4 +1,4 @@
-# zVault Backend API Reference
+# Aegis Backend API Reference
 
 ## Base URL
 
@@ -342,7 +342,7 @@ Manual announcement for self-custody mode.
 **Request Body**
 ```json
 {
-  "stealth_data": "zvault:1:eyJhbGciOiJI..."
+  "stealth_data": "aegis:1:eyJhbGciOiJI..."
 }
 ```
 

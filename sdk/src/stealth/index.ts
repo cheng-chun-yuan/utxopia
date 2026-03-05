@@ -1,7 +1,7 @@
 /**
  * Stealth Address Subpath
  *
- * EIP-5564/DKSAP stealth address implementation for ZVault.
+ * EIP-5564/DKSAP stealth address implementation for AEGIS.
  * Provides privacy-preserving deposit and receiving functionality.
  */
 

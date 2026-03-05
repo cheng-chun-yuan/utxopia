@@ -17,7 +17,7 @@ use pinocchio::{
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::constants::MAX_BTC_SCRIPT_LEN;
-use crate::error::ZVaultError;
+use crate::error::AegisError;
 use crate::state::{
     CommitmentTree, NullifierOperationType, NullifierRecord, PoolState,
     RedemptionRequest, RedemptionStatus, NULLIFIER_RECORD_DISCRIMINATOR,
@@ -71,7 +71,7 @@ impl RequestRedemptionData {
 
         let btc_script_len = data[136];
         if btc_script_len as usize > MAX_BTC_SCRIPT_LEN {
-            return Err(ZVaultError::InvalidBtcAddress.into());
+            return Err(AegisError::InvalidBtcAddress.into());
         }
 
         let addr_end = 137 + btc_script_len as usize;
@@ -163,7 +163,7 @@ pub fn process_request_redemption(
         let pool = PoolState::from_bytes(&pool_data)?;
 
         if pool.is_paused() {
-            return Err(ZVaultError::PoolPaused.into());
+            return Err(AegisError::PoolPaused.into());
         }
 
         (
@@ -175,18 +175,18 @@ pub fn process_request_redemption(
 
     // Validate amount
     if ix_data.amount_sats == 0 {
-        return Err(ZVaultError::ZeroAmount.into());
+        return Err(AegisError::ZeroAmount.into());
     }
     if ix_data.amount_sats < min_deposit {
-        return Err(ZVaultError::AmountTooSmall.into());
+        return Err(AegisError::AmountTooSmall.into());
     }
     if ix_data.amount_sats > total_shielded {
-        return Err(ZVaultError::InsufficientFunds.into());
+        return Err(AegisError::InsufficientFunds.into());
     }
 
     // Validate BTC address
     if ix_data.btc_script_len == 0 {
-        return Err(ZVaultError::InvalidBtcAddress.into());
+        return Err(AegisError::InvalidBtcAddress.into());
     }
 
     // SECURITY: Always verify root is valid in commitment tree
@@ -195,7 +195,7 @@ pub fn process_request_redemption(
         let tree = CommitmentTree::from_bytes(&tree_data)?;
 
         if !tree.is_valid_root(&ix_data.merkle_root) {
-            return Err(ZVaultError::InvalidRoot.into());
+            return Err(AegisError::InvalidRoot.into());
         }
     }
 
@@ -210,7 +210,7 @@ pub fn process_request_redemption(
     {
         let nullifier_data = accounts.nullifier_record.try_borrow_data()?;
         if !nullifier_data.is_empty() && nullifier_data[0] == NULLIFIER_RECORD_DISCRIMINATOR {
-            return Err(ZVaultError::NullifierAlreadyUsed.into());
+            return Err(AegisError::NullifierAlreadyUsed.into());
         }
     }
 
@@ -230,7 +230,7 @@ pub fn process_request_redemption(
     {
         let redemption_data = accounts.redemption_request.try_borrow_data()?;
         if !redemption_data.is_empty() && redemption_data[0] == REDEMPTION_REQUEST_DISCRIMINATOR {
-            return Err(ZVaultError::AlreadyInitialized.into());
+            return Err(AegisError::AlreadyInitialized.into());
         }
     }
 

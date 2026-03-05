@@ -1,6 +1,6 @@
 //! Read-only reader for btc-light-client's VerifiedTransaction and BitcoinLightClient accounts
 //!
-//! Lightweight module to read btc-light-client accounts from zvault.
+//! Lightweight module to read btc-light-client accounts from aegis.
 //! No Borsh, just zero-copy byte reading.
 
 use pinocchio::program_error::ProgramError;

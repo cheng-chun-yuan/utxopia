@@ -1,4 +1,4 @@
-# zVault Backend
+# Aegis Backend
 
 Rust backend for the privacy-preserving BTC-to-Solana bridge.
 

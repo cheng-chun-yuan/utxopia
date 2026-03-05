@@ -15,7 +15,7 @@ use super::tree_cache::TreeCache;
 pub struct EventIndexerConfig {
     /// Solana RPC URL
     pub rpc_url: String,
-    /// zVault program ID (base58)
+    /// Aegis program ID (base58)
     pub program_id: String,
     /// Poll interval in seconds
     pub poll_interval_secs: u64,

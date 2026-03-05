@@ -44,7 +44,7 @@ export interface PriorityFeeInstructions {
 // Constants
 // =============================================================================
 
-/** Default compute unit limit for zVault transactions */
+/** Default compute unit limit for Aegis transactions */
 export const DEFAULT_COMPUTE_UNITS = 200_000;
 
 /** Default priority fee in microLamports when estimation fails */

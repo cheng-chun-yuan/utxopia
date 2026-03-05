@@ -1,14 +1,14 @@
 /**
- * ZVault SDK v3.0 (JoinSplit Architecture)
+ * Aegis SDK v3.0 (JoinSplit Architecture)
  *
- * Complete client library for interacting with the ZVault protocol.
- * Privacy-preserving BTC to Solana bridge using ZK proofs.
+ * Complete client library for interacting with the Aegis protocol.
+ * Private Bitcoin on Solana using ZK proofs.
  *
  * Networks: Solana Devnet + Bitcoin Testnet3
  *
  * ## Quick Start
  * ```typescript
- * import { depositToNote, generateJoinSplitProof, buildTransactInstruction } from '@zvault/sdk';
+ * import { depositToNote, generateJoinSplitProof, buildTransactInstruction } from '@aegis/sdk';
  *
  * // 1. DEPOSIT: Generate credentials
  * const result = await depositToNote(100_000n); // 0.001 BTC
@@ -83,6 +83,8 @@ export {
   deriveKeysFromWallet,
   deriveKeysFromSignature,
   deriveKeysFromSeed,
+  deriveKeysFromSeedCircuit,
+  eddsaPoseidonSignWithScalar,
   eddsaGetPubKey,
   eddsaGetPrivScalar,
   eddsaPoseidonSign,
@@ -101,10 +103,10 @@ export {
   ViewPermissions,
   constantTimeCompare,
   clearKey,
-  clearZVaultKeys,
+  clearAegisKeys,
   clearDelegatedViewKey,
   extractViewOnlyBundle,
-  type ZVaultKeys,
+  type AegisKeys,
   type StealthMetaAddress,
   type SerializedStealthMetaAddress,
   type DelegatedViewKey,
@@ -322,7 +324,7 @@ export {
 // ==========================================================================
 
 export {
-  ZVAULT_PROGRAM_ID,
+  AEGIS_PROGRAM_ID,
   BTC_LIGHT_CLIENT_PROGRAM_ID,
   PDA_SEEDS,
   derivePoolStatePDA,

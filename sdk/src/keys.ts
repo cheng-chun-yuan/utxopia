@@ -1,5 +1,5 @@
 /**
- * Key Derivation for zVault (Baby Jubjub + Ed25519)
+ * Key Derivation for Aegis (Baby Jubjub + Ed25519)
  *
  * Dual-curve architecture (Railgun-style):
  * - Baby Jubjub spending key: SNARK-friendly, in-circuit verification via BabyPbk()
@@ -9,7 +9,7 @@
  * ```
  * Solana Wallet (Ed25519)
  *         │
- *         │ signs message: "zVault key derivation v1"
+ *         │ signs message: "Aegis key derivation v1"
  *         ▼
  *    Signature (64 bytes)
  *         │
@@ -51,17 +51,18 @@ import {
 import {
   ed25519GetPublicKey,
 } from "./crypto-ed25519";
-import { computeMPKSync } from "./poseidon";
+import { computeMPKSync, poseidonHashSync } from "./poseidon";
+import { BABYJUB_ORDER } from "./crypto-babyjub";
 import { buildEddsa, type Eddsa } from "circomlibjs";
 
 // ========== Types ==========
 
 /**
- * Complete zVault key hierarchy derived from Solana wallet
+ * Complete Aegis key hierarchy derived from Solana wallet
  *
  * Uses Baby Jubjub for spending keys and Ed25519 for viewing keys.
  */
-export interface ZVaultKeys {
+export interface AegisKeys {
   /** Solana public key (32 bytes) - user identity */
   solanaPublicKey: Uint8Array;
 
@@ -154,7 +155,7 @@ export interface DelegatedViewKey {
 
 /** Message to sign for key derivation */
 export const SPENDING_KEY_DERIVATION_MESSAGE =
-  "zVault key derivation v1";
+  "Aegis key derivation v1";
 
 /** Domain separator for spending key derivation */
 const SPENDING_KEY_DOMAIN = "spend";
@@ -259,6 +260,36 @@ export async function eddsaPoseidonSign(
   return [R8x, R8y, S];
 }
 
+/**
+ * Sign a message hash with EdDSA-Poseidon using a given private scalar directly.
+ *
+ * Unlike `eddsaPoseidonSign` which derives the scalar internally via circomlibjs's
+ * BLAKE-512 derivation, this function uses the provided scalar as-is.
+ * This is needed when the public key was derived via `scalarFromBytes` (sync)
+ * rather than circomlibjs's internal derivation.
+ *
+ * Returns [R8.x, R8.y, S] compatible with the EdDSAPoseidonVerifier circuit.
+ */
+export function eddsaPoseidonSignWithScalar(
+  privScalar: bigint,
+  pubKey: BabyJubPoint,
+  msgHash: bigint,
+): [bigint, bigint, bigint] {
+  // Deterministic nonce: r = Poseidon(privScalar, msgHash) mod BABYJUB_ORDER
+  const r = poseidonHashSync([privScalar, msgHash]) % BABYJUB_ORDER;
+
+  // R8 = r * BASE8
+  const R8 = babyJubMul(r, BABYJUB_BASE8);
+
+  // hm = Poseidon(R8.x, R8.y, pubKey.x, pubKey.y, msgHash)
+  const hm = poseidonHashSync([R8.x, R8.y, pubKey.x, pubKey.y, msgHash]);
+
+  // S = (r + privScalar * hm) mod BABYJUB_ORDER
+  const S = (r + privScalar * hm) % BABYJUB_ORDER;
+
+  return [R8.x, R8.y, S];
+}
+
 // ========== Wallet Adapter Interface ==========
 
 /**
@@ -273,14 +304,14 @@ export interface WalletSignerAdapter {
 // ========== Key Derivation ==========
 
 /**
- * Derive zVault keys from Solana wallet signature.
+ * Derive Aegis keys from Solana wallet signature.
  *
  * Uses circomlibjs EdDSA for spendingPubKey derivation so keys are
  * compatible with the EdDSAPoseidonVerifier circuit.
  */
 export async function deriveKeysFromWallet(
   wallet: WalletSignerAdapter
-): Promise<ZVaultKeys> {
+): Promise<AegisKeys> {
   if (!wallet.publicKey) {
     throw new Error("Wallet not connected");
   }
@@ -306,7 +337,7 @@ export async function deriveKeysFromWallet(
 }
 
 /**
- * Derive zVault keys from a signature
+ * Derive Aegis keys from a signature
  *
  * Spending key: SHA256(sig || "spend") → reduce mod BJJ_ORDER → babyJubMul(scalar, BASE8)
  * Viewing key: SHA256(sig || "view") → Ed25519 private key → ed25519.getPublicKey()
@@ -314,7 +345,7 @@ export async function deriveKeysFromWallet(
 export function deriveKeysFromSignature(
   signature: Uint8Array,
   solanaPublicKey: Uint8Array
-): ZVaultKeys {
+): AegisKeys {
   if (signature.length !== 64) {
     throw new Error("Signature must be 64 bytes");
   }
@@ -360,9 +391,9 @@ export function deriveKeysFromSignature(
 }
 
 /**
- * Derive keys from a seed phrase (for deterministic testing)
+ * Derive keys from a seed phrase (sync — for scanning/non-circuit use)
  */
-export function deriveKeysFromSeed(seed: Uint8Array): ZVaultKeys {
+export function deriveKeysFromSeed(seed: Uint8Array): AegisKeys {
   const fakeSig = new Uint8Array(64);
   const hash1 = sha256(seed);
   const hash2 = sha256(concatBytes(seed, new Uint8Array([1])));
@@ -372,14 +403,35 @@ export function deriveKeysFromSeed(seed: Uint8Array): ZVaultKeys {
   return deriveKeysFromSignature(fakeSig, new Uint8Array(32));
 }
 
+/**
+ * Derive keys from a seed phrase with circomlibjs-compatible spending keys.
+ *
+ * Must be used when the keys will be used for circuit proofs (EdDSA signing).
+ * The sync `deriveKeysFromSeed` uses a different scalar derivation that doesn't
+ * match circomlibjs's internal BLAKE-512 derivation used by `eddsaPoseidonSign`.
+ */
+export async function deriveKeysFromSeedCircuit(seed: Uint8Array): Promise<AegisKeys> {
+  const baseKeys = deriveKeysFromSeed(seed);
+
+  // Override spending keys with circomlibjs-derived versions (same as deriveKeysFromWallet)
+  const spendingPubKey = await eddsaGetPubKey(baseKeys.eddsaSeed);
+  const spendingPrivKey = await eddsaGetPrivScalar(baseKeys.eddsaSeed);
+
+  return {
+    ...baseKeys,
+    spendingPubKey,
+    spendingPrivKey,
+  };
+}
+
 // ========== Stealth Meta-Address ==========
 
 /**
- * Create a stealth meta-address from zVault keys
+ * Create a stealth meta-address from Aegis keys
  *
  * Size: 96 bytes (32 BJJ compressed + 32 Ed25519 + 32 MPK)
  */
-export function createStealthMetaAddress(keys: ZVaultKeys): StealthMetaAddress {
+export function createStealthMetaAddress(keys: AegisKeys): StealthMetaAddress {
   const mpk = computeMPKSync(
     keys.spendingPubKey.x,
     keys.spendingPubKey.y,
@@ -463,7 +515,7 @@ export function decodeStealthMetaAddress(encoded: string): StealthMetaAddress {
  * Create a delegated viewing key for auditors/compliance
  */
 export function createDelegatedViewKey(
-  keys: ZVaultKeys,
+  keys: AegisKeys,
   permissions: ViewPermissions = ViewPermissions.FULL,
   options: { expiresAt?: number; label?: string } = {}
 ): DelegatedViewKey {
@@ -670,9 +722,9 @@ export function clearKey(key: Uint8Array): void {
 }
 
 /**
- * Securely clear all sensitive keys from a ZVaultKeys object
+ * Securely clear all sensitive keys from an AegisKeys object
  */
-export function clearZVaultKeys(keys: ZVaultKeys): void {
+export function clearAegisKeys(keys: AegisKeys): void {
   (keys as { spendingPrivKey: bigint }).spendingPrivKey = 0n;
   (keys as { nullifyingKey: bigint }).nullifyingKey = 0n;
   clearKey(keys.viewingPrivKey);
@@ -690,7 +742,7 @@ export function clearDelegatedViewKey(key: DelegatedViewKey): void {
  * Derive a view-only key bundle (no spending key)
  * Safe to export/backup separately from spending key
  */
-export function extractViewOnlyBundle(keys: ZVaultKeys): {
+export function extractViewOnlyBundle(keys: AegisKeys): {
   solanaPublicKey: Uint8Array;
   spendingPubKey: Uint8Array;
   viewingPrivKey: Uint8Array;

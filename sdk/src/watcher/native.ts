@@ -35,7 +35,7 @@ let asyncStorageInstance: AsyncStorageStatic | null = null;
  * @example
  * ```typescript
  * import AsyncStorage from '@react-native-async-storage/async-storage';
- * import { setAsyncStorage, createNativeWatcher } from '@zvault/sdk/watcher/native';
+ * import { setAsyncStorage, createNativeWatcher } from '@aegis/sdk/watcher/native';
  *
  * setAsyncStorage(AsyncStorage);
  *
@@ -258,7 +258,7 @@ export class NativeDepositWatcher extends BaseDepositWatcher {
  * @example
  * ```typescript
  * import AsyncStorage from '@react-native-async-storage/async-storage';
- * import { setAsyncStorage, createNativeWatcher } from '@zvault/sdk/watcher/native';
+ * import { setAsyncStorage, createNativeWatcher } from '@aegis/sdk/watcher/native';
  *
  * setAsyncStorage(AsyncStorage);
  *

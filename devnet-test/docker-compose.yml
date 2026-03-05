@@ -1,5 +1,5 @@
 # =============================================================================
-# zVault Devnet Integration Test — Docker Compose
+# Aegis Devnet Integration Test — Docker Compose
 # =============================================================================
 # Orchestrates all 7 services for production-like testing.
 #
@@ -41,7 +41,7 @@ services:
     build:
       context: ../frost_server
       dockerfile: Dockerfile
-    command: ["--port", "8080", "--solana-rpc-url", "https://api.devnet.solana.com", "--zvault-program-id", "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM"]
+    command: ["--port", "8080", "--solana-rpc-url", "https://api.devnet.solana.com", "--aegis-program-id", "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM"]
     ports:
       - "8081:8080"
     environment:
@@ -61,7 +61,7 @@ services:
     build:
       context: ../frost_server
       dockerfile: Dockerfile
-    command: ["--port", "8080", "--solana-rpc-url", "https://api.devnet.solana.com", "--zvault-program-id", "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM"]
+    command: ["--port", "8080", "--solana-rpc-url", "https://api.devnet.solana.com", "--aegis-program-id", "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM"]
     ports:
       - "8082:8080"
     environment:
@@ -81,7 +81,7 @@ services:
     build:
       context: ../frost_server
       dockerfile: Dockerfile
-    command: ["--port", "8080", "--solana-rpc-url", "https://api.devnet.solana.com", "--zvault-program-id", "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM"]
+    command: ["--port", "8080", "--solana-rpc-url", "https://api.devnet.solana.com", "--aegis-program-id", "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM"]
     ports:
       - "8083:8080"
     environment:

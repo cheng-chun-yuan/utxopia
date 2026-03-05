@@ -1,12 +1,12 @@
 #!/usr/bin/env bun
 /**
- * Deploy and Initialize zVault on Localnet
+ * Deploy and Initialize Aegis on Localnet
  *
  * This script:
- * 1. Deploys both zVault and BTC Light Client programs
+ * 1. Deploys both Aegis and BTC Light Client programs
  * 2. Initializes the BTC Light Client with a test block
  * 3. Creates the zkBTC Token-2022 mint
- * 4. Initializes the zVault pool state and commitment tree
+ * 4. Initializes the Aegis pool state and commitment tree
  * 5. Adds demo notes for testing
  *
  * Prerequisites:
@@ -60,7 +60,7 @@ import {
   babyJubMul,
   BABYJUB_BASE8,
   randomFieldElement,
-} from "@zvault/sdk";
+} from "@aegis/sdk";
 import { execSync } from "child_process";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -78,8 +78,8 @@ const CONFIG_PATH = path.join(CONTRACTS_DIR, "config.json");
 // Load config to get program paths
 const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
 
-// Seeds for zVault PDAs
-const ZVaultSeeds = {
+// Seeds for Aegis PDAs
+const AEGISSeeds = {
   POOL_STATE: "pool_state",
   COMMITMENT_TREE: "commitment_tree",
 };
@@ -92,7 +92,7 @@ const BTCLCSeeds = {
 };
 
 // Instruction discriminators
-const ZVaultInstruction = {
+const AEGISInstruction = {
   INITIALIZE: 0,
   ADD_DEMO_STEALTH: 13,
 };
@@ -135,7 +135,7 @@ const TEST_BTC_BLOCK = {
 // =============================================================================
 
 interface DeployResult {
-  zvaultProgramId: PublicKey;
+  aegisProgramId: PublicKey;
   btcLightClientProgramId: PublicKey;
   chadbufferProgramId: PublicKey;
   groth16VerifierProgramId: PublicKey;
@@ -188,17 +188,17 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
   logSection("Program Deployment");
 
   // Get program IDs from keypairs
-  const zvaultKeypairPath = path.join(TARGET_DIR, "zvault_pinocchio-keypair.json");
+  const aegisKeypairPath = path.join(TARGET_DIR, "aegis_pinocchio-keypair.json");
   const btclcKeypairPath = path.join(TARGET_DIR, "btc_light_client-keypair.json");
   const chadbufferKeypairPath = path.join(CONTRACTS_DIR, "programs/chadbuffer/chadbuffer-keypair.json");
   const groth16KeypairPath = path.join(TARGET_DIR, "groth16_verifier-keypair.json");
   const chadbufferSoPath = path.join(CONTRACTS_DIR, "programs/chadbuffer/chadbuffer.so");
 
-  if (!fs.existsSync(zvaultKeypairPath) || !fs.existsSync(btclcKeypairPath)) {
+  if (!fs.existsSync(aegisKeypairPath) || !fs.existsSync(btclcKeypairPath)) {
     throw new Error("Program keypairs not found. Run 'cargo build-sbf' first.");
   }
 
-  const zvaultKeypair = await loadKeypair(zvaultKeypairPath);
+  const aegisKeypair = await loadKeypair(aegisKeypairPath);
   const btclcKeypair = await loadKeypair(btclcKeypairPath);
 
   // Load chadbuffer and groth16 keypairs
@@ -220,32 +220,32 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
     groth16Keypair = Keypair.generate();
   }
 
-  const zvaultProgramId = zvaultKeypair.publicKey;
+  const aegisProgramId = aegisKeypair.publicKey;
   const btcLightClientProgramId = btclcKeypair.publicKey;
   const chadbufferProgramId = chadbufferKeypair.publicKey;
   const groth16VerifierProgramId = groth16Keypair.publicKey;
 
-  log(`zVault Program ID: ${zvaultProgramId.toBase58()}`);
+  log(`Aegis Program ID: ${aegisProgramId.toBase58()}`);
   log(`BTC Light Client Program ID: ${btcLightClientProgramId.toBase58()}`);
   log(`ChadBuffer Program ID: ${chadbufferProgramId.toBase58()}`);
   log(`Groth16 Verifier Program ID: ${groth16VerifierProgramId.toBase58()}`);
 
   if (skipDeploy) {
     log("Skipping deployment (--skip-deploy flag)");
-    return { zvaultProgramId, btcLightClientProgramId, chadbufferProgramId, groth16VerifierProgramId };
+    return { aegisProgramId, btcLightClientProgramId, chadbufferProgramId, groth16VerifierProgramId };
   }
 
-  // Deploy zVault
-  log("Deploying zVault program...");
+  // Deploy Aegis
+  log("Deploying Aegis program...");
   try {
     execSync(
-      `solana program deploy ${TARGET_DIR}/zvault_pinocchio.so --program-id ${zvaultKeypairPath} -u localhost`,
+      `solana program deploy ${TARGET_DIR}/aegis_pinocchio.so --program-id ${aegisKeypairPath} -u localhost`,
       { stdio: "inherit" }
     );
-    log("zVault deployed successfully");
+    log("Aegis deployed successfully");
   } catch (e: any) {
     if (e.message?.includes("already in use")) {
-      log("zVault program already deployed");
+      log("Aegis program already deployed");
     } else {
       throw e;
     }
@@ -316,7 +316,7 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
   log("Waiting for programs to be ready...");
   await sleep(3000);
 
-  return { zvaultProgramId, btcLightClientProgramId, chadbufferProgramId, groth16VerifierProgramId };
+  return { aegisProgramId, btcLightClientProgramId, chadbufferProgramId, groth16VerifierProgramId };
 }
 
 // =============================================================================
@@ -325,14 +325,14 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
 
 function derivePoolStatePDA(programId: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from(ZVaultSeeds.POOL_STATE)],
+    [Buffer.from(AEGISSeeds.POOL_STATE)],
     programId
   );
 }
 
 function deriveCommitmentTreePDA(programId: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from(ZVaultSeeds.COMMITMENT_TREE)],
+    [Buffer.from(AEGISSeeds.COMMITMENT_TREE)],
     programId
   );
 }
@@ -394,7 +394,7 @@ function buildBTCLCInitializeIx(
   });
 }
 
-function buildZVaultInitializeIx(
+function buildAEGISInitializeIx(
   poolState: PublicKey,
   commitmentTree: PublicKey,
   zkbtcMint: PublicKey,
@@ -406,7 +406,7 @@ function buildZVaultInitializeIx(
   treeBump: number
 ): TransactionInstruction {
   const data = Buffer.alloc(3);
-  data[0] = ZVaultInstruction.INITIALIZE;
+  data[0] = AEGISInstruction.INITIALIZE;
   data[1] = poolBump;
   data[2] = treeBump;
 
@@ -517,12 +517,12 @@ async function initializeBTCRelay(
   return lightClientPda;
 }
 
-async function initializeZVault(
+async function initializeAEGIS(
   connection: Connection,
   authority: Keypair,
   programId: PublicKey
 ): Promise<InitResult> {
-  logSection("zVault Initialization");
+  logSection("Aegis Initialization");
 
   const [poolStatePda, poolBump] = derivePoolStatePDA(programId);
   const [commitmentTreePda, treeBump] = deriveCommitmentTreePDA(programId);
@@ -533,7 +533,7 @@ async function initializeZVault(
   // Check if already initialized
   const poolAccount = await connection.getAccountInfo(poolStatePda);
   if (poolAccount && poolAccount.data[0] === Discriminators.POOL_STATE) {
-    log("zVault already initialized, skipping...");
+    log("Aegis already initialized, skipping...");
 
     // Parse existing pool state to get mint and vault info
     // Pool state layout: discriminator(1) + bump(1) + flags(1) + padding(1) + authority(32) + zbtc_mint(32) + pool_vault(32) + ...
@@ -611,9 +611,9 @@ async function initializeZVault(
   );
   log(`Frost Vault: ${frostVault.address.toBase58()}`);
 
-  // Initialize zVault
-  log("Initializing zVault pool...");
-  const ix = buildZVaultInitializeIx(
+  // Initialize Aegis
+  log("Initializing Aegis pool...");
+  const ix = buildAEGISInitializeIx(
     poolStatePda,
     commitmentTreePda,
     zkbtcMint,
@@ -630,7 +630,7 @@ async function initializeZVault(
     commitment: "confirmed",
   });
 
-  log(`zVault initialized: ${sig}`);
+  log(`Aegis initialized: ${sig}`);
 
   return {
     poolStatePda,
@@ -736,7 +736,7 @@ function saveLocalnetConfig(
 
   // Update config.json with localnet values
   config.programs.localnet = {
-    zVault: deployResult.zvaultProgramId.toBase58(),
+    Aegis: deployResult.aegisProgramId.toBase58(),
     btc_light_client: deployResult.btcLightClientProgramId.toBase58(),
     chadbuffer: deployResult.chadbufferProgramId.toBase58(),
     groth16_verifier: deployResult.groth16VerifierProgramId.toBase58(),
@@ -750,7 +750,7 @@ function saveLocalnetConfig(
     network: "localnet",
     rpcUrl: RPC_URL,
     programs: {
-      zVault: deployResult.zvaultProgramId.toBase58(),
+      Aegis: deployResult.aegisProgramId.toBase58(),
       btcLightClient: deployResult.btcLightClientProgramId.toBase58(),
       chadbuffer: deployResult.chadbufferProgramId.toBase58(),
       groth16Verifier: deployResult.groth16VerifierProgramId.toBase58(),
@@ -785,7 +785,7 @@ async function main() {
   const skipDeploy = args.includes("--skip-deploy");
   const skipDemo = args.includes("--skip-demo");
 
-  logSection("zVault Localnet Deploy & Initialize");
+  logSection("Aegis Localnet Deploy & Initialize");
 
   log(`RPC URL: ${RPC_URL}`);
   log(`Skip Deploy: ${skipDeploy}`);
@@ -844,11 +844,11 @@ async function main() {
     deployResult.btcLightClientProgramId
   );
 
-  // Initialize zVault
-  const initResult = await initializeZVault(
+  // Initialize Aegis
+  const initResult = await initializeAEGIS(
     connection,
     authority,
-    deployResult.zvaultProgramId
+    deployResult.aegisProgramId
   );
   initResult.btcLightClientPda = btcLightClientPda;
 
@@ -859,7 +859,7 @@ async function main() {
     await addDemoNotes(
       connection,
       authority,
-      deployResult.zvaultProgramId,
+      deployResult.aegisProgramId,
       initResult.poolStatePda,
       initResult.commitmentTreePda,
       initResult.zkbtcMint,
@@ -876,7 +876,7 @@ async function main() {
   logSection("Deployment Complete!");
 
   console.log("Summary:");
-  console.log(`  zVault Program:       ${deployResult.zvaultProgramId.toBase58()}`);
+  console.log(`  Aegis Program:       ${deployResult.aegisProgramId.toBase58()}`);
   console.log(`  BTC Light Client:     ${deployResult.btcLightClientProgramId.toBase58()}`);
   console.log(`  ChadBuffer:           ${deployResult.chadbufferProgramId.toBase58()}`);
   console.log(`  Groth16 Verifier:   ${deployResult.groth16VerifierProgramId.toBase58()}`);

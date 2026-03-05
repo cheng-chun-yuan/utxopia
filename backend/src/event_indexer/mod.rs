@@ -1,4 +1,4 @@
-//! Event indexer for zVault sol_log_data events
+//! Event indexer for Aegis sol_log_data events
 //!
 //! Parses LeafInserted and NullifierSpent events from on-chain transaction logs,
 //! stores them in SQLite, and serves them via REST API endpoints.

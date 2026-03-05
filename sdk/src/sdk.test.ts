@@ -1,5 +1,5 @@
 /**
- * zVault SDK Tests (Consolidated) — JoinSplit Architecture
+ * Aegis SDK Tests (Consolidated) — JoinSplit Architecture
  *
  * Core tests for all SDK functionality:
  * - DEPOSIT: depositToNote
@@ -31,7 +31,7 @@ describe("DEPOSIT", () => {
 
     expect(result.note.amount).toBe(100_000n);
     expect(result.taprootAddress).toMatch(/^tb1p/);
-    expect(result.claimLink).toContain("zvault.app/claim");
+    expect(result.claimLink).toContain("aegis.app/claim");
     expect(result.displayAmount).toBe("0.00100000 BTC");
   });
 
@@ -55,7 +55,7 @@ describe("TRANSFER", () => {
     const note = generateNote(50_000n);
     const link = createClaimLink(note);
 
-    expect(link).toContain("zvault.app/claim");
+    expect(link).toContain("aegis.app/claim");
     const parsed = parseClaimLink(link);
     expect(parsed?.amount).toBe(note.amount);
   });

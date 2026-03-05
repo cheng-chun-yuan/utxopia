@@ -5,11 +5,11 @@
 
 import { Connection, PublicKey } from "@solana/web3.js";
 import {
-  ZVAULT_PROGRAM_ID,
+  AEGIS_PROGRAM_ID,
   BTC_LIGHT_CLIENT_PROGRAM_ID,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
-} from "@zvault/sdk";
+} from "@aegis/sdk";
 
 const RPC_URL = "https://api.devnet.solana.com";
 
@@ -22,17 +22,17 @@ async function main() {
 
   // Check SDK program ID
   console.log("\n=== Program IDs from SDK ===");
-  console.log(`zVault: ${ZVAULT_PROGRAM_ID}`);
+  console.log(`Aegis: ${AEGIS_PROGRAM_ID}`);
   console.log(`BTC Light Client: ${BTC_LIGHT_CLIENT_PROGRAM_ID}`);
 
   // Verify program is deployed
   console.log("\n=== Verifying on-chain ===");
 
-  const programInfo = await connection.getAccountInfo(new PublicKey(ZVAULT_PROGRAM_ID as string));
+  const programInfo = await connection.getAccountInfo(new PublicKey(AEGIS_PROGRAM_ID as string));
   if (programInfo) {
-    console.log(`✓ zVault program found (${programInfo.data.length} bytes)`);
+    console.log(`✓ Aegis program found (${programInfo.data.length} bytes)`);
   } else {
-    console.log(`✗ zVault program NOT found!`);
+    console.log(`✗ Aegis program NOT found!`);
   }
 
   // Derive PDAs using SDK

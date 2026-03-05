@@ -61,7 +61,7 @@ pub mod stealth;
 pub mod taproot;
 
 // Re-exports: Configuration
-pub use config::{ConfigError, Network, SigningMode, ZVaultConfig};
+pub use config::{ConfigError, Network, SigningMode, AEGISConfig};
 
 // Re-exports: Middleware
 pub use middleware::{

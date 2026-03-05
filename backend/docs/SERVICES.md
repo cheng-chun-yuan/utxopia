@@ -1,6 +1,6 @@
-# zVault Backend Services
+# Aegis Backend Services
 
-The zVault backend consists of three main services that run as background processes.
+The Aegis backend consists of three main services that run as background processes.
 
 ## Overview
 
@@ -380,7 +380,7 @@ All services use structured JSON logging:
 {
   "timestamp": "2024-01-01T00:00:00Z",
   "level": "INFO",
-  "target": "zvault::deposit_tracker",
+  "target": "aegis::deposit_tracker",
   "message": "Deposit confirmed",
   "deposit_id": "dep_...",
   "confirmations": 3
@@ -430,18 +430,18 @@ cargo run -- redemption
 Create service files for each component:
 
 ```ini
-# /etc/systemd/system/zvault-tracker.service
+# /etc/systemd/system/aegis-tracker.service
 [Unit]
-Description=zVault Deposit Tracker
+Description=Aegis Deposit Tracker
 After=network.target
 
 [Service]
 Type=simple
-User=zvault
-WorkingDirectory=/opt/zvault/backend
-ExecStart=/opt/zvault/backend/target/release/zbtc-api tracker
+User=aegis
+WorkingDirectory=/opt/aegis/backend
+ExecStart=/opt/aegis/backend/target/release/zbtc-api tracker
 Restart=always
-Environment=DEPOSIT_DB_PATH=/var/lib/zvault/deposits.db
+Environment=DEPOSIT_DB_PATH=/var/lib/aegis/deposits.db
 
 [Install]
 WantedBy=multi-user.target

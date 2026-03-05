@@ -1,12 +1,12 @@
 [package]
-name = "zvault-pinocchio"
+name = "aegis-pinocchio"
 version = "0.1.0"
-description = "zVault - Privacy-preserving BTC to Solana bridge (Pinocchio)"
+description = "Aegis - Privacy-preserving BTC to Solana bridge (Pinocchio)"
 edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "lib"]
-name = "zvault_pinocchio"
+name = "aegis_pinocchio"
 
 [features]
 default = []

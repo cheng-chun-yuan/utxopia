@@ -19,7 +19,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::error::ZVaultError;
+use crate::error::AegisError;
 use crate::state::{CommitmentTree, PoolState, StealthAnnouncement, STEALTH_ANNOUNCEMENT_DISCRIMINATOR};
 use crate::utils::{mint_zbtc, validate_program_owner, validate_system_program, validate_token_2022_owner, validate_token_program_key, create_pda_account, compute_deposit_commitment};
 
@@ -123,7 +123,7 @@ pub fn process_add_demo_stealth(
         let pool = PoolState::from_bytes(&pool_data)?;
 
         if authority.key().as_ref() != pool.authority {
-            return Err(ZVaultError::Unauthorized.into());
+            return Err(AegisError::Unauthorized.into());
         }
         pool.bump
     };
@@ -144,7 +144,7 @@ pub fn process_add_demo_stealth(
         let tree = CommitmentTree::from_bytes_mut(&mut tree_data)?;
 
         if !tree.has_capacity() {
-            return Err(ZVaultError::TreeFull.into());
+            return Err(AegisError::TreeFull.into());
         }
 
         tree.insert_leaf(&commitment)?

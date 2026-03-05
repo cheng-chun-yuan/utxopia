@@ -13,7 +13,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::error::ZVaultError;
+use crate::error::AegisError;
 use crate::state::PoolState;
 use crate::utils::{validate_program_owner, validate_account_writable};
 
@@ -46,7 +46,7 @@ pub fn process_admin_update_pool(
     let pool = PoolState::from_bytes_mut(&mut pool_data)?;
 
     if authority.key().as_ref() != pool.authority {
-        return Err(ZVaultError::Unauthorized.into());
+        return Err(AegisError::Unauthorized.into());
     }
 
     pool.set_min_deposit(min_deposit);

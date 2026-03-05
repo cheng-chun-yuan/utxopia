@@ -1,4 +1,4 @@
-//! Instruction handlers for zVault (JoinSplit Architecture)
+//! Instruction handlers for Aegis (JoinSplit Architecture)
 //!
 //! ## Core Operations
 //!

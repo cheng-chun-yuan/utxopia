@@ -2,7 +2,7 @@
 //!
 //! Submits sweep transactions for SPV verification on Solana.
 //! Uses btc-light-client's verify_transaction to create a VerifiedTransaction PDA,
-//! then calls zvault's verify_stealth_deposit with that PDA.
+//! then calls aegis's verify_stealth_deposit with that PDA.
 //!
 //! Raw Bitcoin transactions are uploaded to ChadBuffer accounts before verification.
 
@@ -43,9 +43,9 @@ const CHADBUFFER_WRITE_TX_OVERHEAD: usize = 176;
 /// Maximum data bytes per ChadBuffer write transaction
 const CHADBUFFER_MAX_DATA_PER_WRITE: usize = SOLANA_TX_SIZE_LIMIT - CHADBUFFER_WRITE_TX_OVERHEAD;
 
-/// Get zVault program ID from env or use devnet default
-fn zvault_program_id() -> String {
-    std::env::var("ZVAULT_PROGRAM_ID")
+/// Get Aegis program ID from env or use devnet default
+fn aegis_program_id() -> String {
+    std::env::var("AEGIS_PROGRAM_ID")
         .unwrap_or_else(|_| "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM".to_string())
 }
 
@@ -108,7 +108,7 @@ impl SpvVerifier {
             rpc: RpcClient::new_with_commitment(solana_rpc, CommitmentConfig::confirmed()),
             payer: None,
             watcher: AddressWatcher::from_network(crate::config::Network::Devnet),
-            program_id: Pubkey::from_str(&zvault_program_id()).unwrap(),
+            program_id: Pubkey::from_str(&aegis_program_id()).unwrap(),
             light_client_program_id: Pubkey::from_str(&btc_light_client_program_id()).unwrap(),
         }
     }
@@ -151,7 +151,7 @@ impl SpvVerifier {
     /// Verify a Bitcoin deposit via SPV proof on Solana.
     ///
     /// Uploads raw sweep + deposit transactions to ChadBuffer accounts, then sends
-    /// two instructions: btc-light-client verify_transaction + zvault verify_stealth_deposit.
+    /// two instructions: btc-light-client verify_transaction + aegis verify_stealth_deposit.
     pub async fn verify_deposit(
         &self,
         sweep_txid: &str,
@@ -473,7 +473,7 @@ impl SpvVerifier {
     /// Send the verify_deposit transaction to Solana (two instructions).
     ///
     /// 1. btc-light-client verify_transaction (disc 2) — creates VerifiedTransaction PDA
-    /// 2. zvault verify_stealth_deposit (disc 1) — reads ChadBuffer accounts, extracts npk
+    /// 2. aegis verify_stealth_deposit (disc 1) — reads ChadBuffer accounts, extracts npk
     #[allow(clippy::too_many_arguments)]
     async fn send_verify_deposit_tx(
         &self,
@@ -535,7 +535,7 @@ impl SpvVerifier {
             sweep_buffer,
         )?;
 
-        // --- Instruction 2: zvault verify_stealth_deposit (disc 1) ---
+        // --- Instruction 2: aegis verify_stealth_deposit (disc 1) ---
         // Layout: disc(1) + sweep_txid(32) + block_height(8) + sweep_tx_size(4) + deposit_tx_size(4) + deposit_txid(32)
         let mut deposit_data = Vec::with_capacity(81);
         deposit_data.push(1u8); // discriminator

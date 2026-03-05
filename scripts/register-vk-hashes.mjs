@@ -11,7 +11,7 @@ const PROGRAM_ID = new PublicKey('25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM')
 const POOL_STATE = new PublicKey('7Xr7MthZPc7YeHfU5SRmguxovhiDNhfestWgtPruUfjE');
 
 // Read keypair from .env.local
-const envContent = fs.readFileSync(path.join(ROOT, 'zvault-app/.env.local'), 'utf-8');
+const envContent = fs.readFileSync(path.join(ROOT, 'aegis-app/.env.local'), 'utf-8');
 const keypairMatch = envContent.match(/RELAYER_KEYPAIR=(\[.*?\])/);
 if (!keypairMatch) throw new Error('RELAYER_KEYPAIR not found in .env.local');
 const authority = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(keypairMatch[1])));

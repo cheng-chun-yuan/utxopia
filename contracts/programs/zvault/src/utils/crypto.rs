@@ -1,4 +1,4 @@
-//! Cryptographic utilities for zVault
+//! Cryptographic utilities for Aegis
 //!
 //! Provides Poseidon hashing for Merkle tree operations.
 //! Uses Solana's native Poseidon syscall for efficiency.

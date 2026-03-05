@@ -2,7 +2,7 @@
 /**
  * Full Localnet Test - Poseidon Migration Verification
  *
- * Tests the complete zVault flow on localnet:
+ * Tests the complete Aegis flow on localnet:
  * 1. Deploy programs
  * 2. Initialize pool and commitment tree
  * 3. Add demo deposit (commitment to tree)
@@ -30,7 +30,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 
-// SDK imports - all from main @zvault/sdk
+// SDK imports - all from main @aegis/sdk
 import {
   initProver,
   setCircuitPath,
@@ -47,7 +47,7 @@ import {
   encryptAmount,
   buildAddDemoStealthData,
   type ClaimInputs,
-} from "@zvault/sdk";
+} from "@aegis/sdk";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -255,7 +255,7 @@ async function setupLocalnet(): Promise<TestContext> {
   }
 
   const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-  const programId = new PublicKey(config.programs.zVault);
+  const programId = new PublicKey(config.programs.Aegis);
   const zkbtcMint = new PublicKey(config.accounts.zkbtcMint);
   const poolVault = new PublicKey(config.accounts.poolVault);
 
@@ -555,7 +555,7 @@ async function testVerifyProofStructure(
 
 async function main() {
   console.log("============================================================");
-  console.log("zVault Full Localnet Test - Poseidon Migration");
+  console.log("Aegis Full Localnet Test - Poseidon Migration");
   console.log("============================================================");
 
   const results: { name: string; passed: boolean }[] = [];

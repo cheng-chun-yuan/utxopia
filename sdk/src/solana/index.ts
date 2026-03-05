@@ -1,7 +1,7 @@
 /**
  * Solana Subpath (JoinSplit Architecture)
  *
- * Solana-related utilities for ZVault:
+ * Solana-related utilities for AEGIS:
  * - PDA derivation
  * - Instruction builders
  * - Network configuration
@@ -10,7 +10,7 @@
 
 // PDA derivation
 export {
-  ZVAULT_PROGRAM_ID,
+  AEGIS_PROGRAM_ID,
   BTC_LIGHT_CLIENT_PROGRAM_ID,
   PDA_SEEDS,
   derivePoolStatePDA,
