@@ -14,6 +14,7 @@ import type {
 } from "@simplewebauthn/browser";
 
 const CREDENTIAL_STORAGE_KEY = "aegis:passkey_credential_id";
+const SEED_STORAGE_KEY = "aegis:passkey_seed";
 const PRF_SALT = sha256(new TextEncoder().encode("aegis-passkey-prf-v1"));
 
 const RP_NAME = "Aegis";
@@ -42,31 +43,62 @@ function storeCredentialId(id: string): void {
 export function clearStoredCredential(): void {
   try {
     localStorage.removeItem(CREDENTIAL_STORAGE_KEY);
+    localStorage.removeItem(SEED_STORAGE_KEY);
   } catch {
     // ignore
   }
 }
 
+// ── Fallback seed storage (used when PRF is not available) ──
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function hexToBytes(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes;
+}
+
+function storeFallbackSeed(seed: Uint8Array): void {
+  try {
+    localStorage.setItem(SEED_STORAGE_KEY, bytesToHex(seed));
+  } catch {
+    // ignore
+  }
+}
+
+function loadFallbackSeed(): Uint8Array | null {
+  try {
+    const hex = localStorage.getItem(SEED_STORAGE_KEY);
+    if (!hex) return null;
+    return hexToBytes(hex);
+  } catch {
+    return null;
+  }
+}
+
+// ── PRF extraction ──
+
 /**
- * Extract PRF output from WebAuthn credential response.
- * Returns 32-byte Uint8Array seed.
+ * Try to extract PRF output from WebAuthn credential response.
+ * Returns 32-byte seed or null if PRF not supported.
  */
-function extractPrfOutput(
+function tryExtractPrfOutput(
   extensions: AuthenticationExtensionsClientOutputs | undefined,
-): Uint8Array {
-  if (!extensions) throw new Error("No extensions in credential response");
+): Uint8Array | null {
+  if (!extensions) return null;
 
   const prf = (extensions as Record<string, unknown>).prf as
     | { results?: { first?: ArrayBuffer } }
     | undefined;
-  if (!prf?.results?.first) {
-    throw new Error(
-      "PRF extension not supported by this browser/authenticator. " +
-        "Please use Chrome 116+, Safari 18+, or Android Chrome 132+.",
-    );
-  }
+  if (!prf?.results?.first) return null;
 
-  // Hash PRF output to get exactly 32 bytes
   return sha256(new Uint8Array(prf.results.first));
 }
 
@@ -130,7 +162,16 @@ export function usePasskey(): UsePasskeyReturn {
         optionsJSON: creationOptions,
       });
 
-      const seed = extractPrfOutput(credential.clientExtensionResults);
+      // Try PRF first
+      let seed = tryExtractPrfOutput(credential.clientExtensionResults);
+
+      if (!seed) {
+        // PRF not supported — generate random seed and store locally.
+        // The passkey serves as a biometric gate; the seed lives in localStorage.
+        seed = new Uint8Array(32);
+        crypto.getRandomValues(seed);
+        storeFallbackSeed(seed);
+      }
 
       storeCredentialId(credential.id);
       setHasCredential(true);
@@ -180,7 +221,19 @@ export function usePasskey(): UsePasskeyReturn {
         optionsJSON: requestOptions,
       });
 
-      const seed = extractPrfOutput(credential.clientExtensionResults);
+      // Try PRF first
+      let seed = tryExtractPrfOutput(credential.clientExtensionResults);
+
+      if (!seed) {
+        // PRF not available — load fallback seed from localStorage
+        seed = loadFallbackSeed();
+        if (!seed) {
+          throw new Error(
+            "No saved key found. This can happen if you registered on a different device. " +
+              "Please use the original device or connect a wallet instead.",
+          );
+        }
+      }
 
       if (!storedId) {
         storeCredentialId(credential.id);
