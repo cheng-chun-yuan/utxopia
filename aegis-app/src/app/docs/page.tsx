@@ -158,17 +158,19 @@ const variantStyles = {
 export default function DocsPage() {
   return (
     <main className="min-h-screen bg-background hacker-bg noise-overlay">
-      <div className="container mx-auto px-4 py-8 relative z-10">
+      <div className="container mx-auto px-4 py-8 relative z-10 max-w-5xl">
         {/* Header */}
         <header className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-[12px] bg-gradient-to-br from-btc/20 to-privacy/20 border border-btc/20">
-              <div className="relative">
-                <BitcoinIcon className="h-6 w-6 btc-glow" />
-                <Shield className="h-3 w-3 text-privacy absolute -bottom-1 -right-1" />
+            <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+              <div className="p-2 rounded-[12px] bg-gradient-to-br from-btc/20 to-privacy/20 border border-btc/20">
+                <div className="relative">
+                  <BitcoinIcon className="h-6 w-6 btc-glow" />
+                  <Shield className="h-3 w-3 text-privacy absolute -bottom-1 -right-1" />
+                </div>
               </div>
-            </div>
-            <span className="text-heading6 text-foreground">Aegis</span>
+              <span className="text-heading6 text-foreground">Aegis</span>
+            </Link>
           </div>
           <div className="flex items-center gap-4">
             <Link
@@ -179,10 +181,10 @@ export default function DocsPage() {
               <Search className="w-3 h-3" />
             </Link>
             <Link
-              href="/docs"
-              className="text-body2 text-foreground flex items-center gap-1"
+              href="/vault"
+              className="text-body2 text-gray hover:text-gray-light transition-colors"
             >
-              Docs
+              Vault
             </Link>
             <a
               href="https://github.com/cheng-chun-yuan/Aegis"
@@ -197,7 +199,7 @@ export default function DocsPage() {
         </header>
 
         {/* Content */}
-        <div className="max-w-[680px] mx-auto space-y-10">
+        <div className="max-w-4xl mx-auto space-y-10">
           {/* Back link */}
           <Link
             href="/"
@@ -262,7 +264,7 @@ export default function DocsPage() {
             {/* 3. How Aegis Works */}
             <section className="space-y-6">
               <h2 className="text-heading5 text-foreground">How Aegis Works</h2>
-              <div className="grid gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {steps.map((step) => {
                   const Icon = step.icon;
                   return (
@@ -386,16 +388,13 @@ export default function DocsPage() {
           {/* 8. Footer */}
           <footer className="pt-8 border-t border-gray/15">
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-              <div className="flex items-center gap-2">
-                <BitcoinIcon className="w-4 h-4" />
-                <span className="text-caption text-btc">Bitcoin</span>
-                <span className="text-caption text-gray">+</span>
-                <Shield className="w-4 h-4 text-privacy" />
-                <span className="text-caption text-privacy">Privacy</span>
-                <span className="text-caption text-gray">=</span>
-                <span className="text-caption text-foreground">Aegis</span>
-              </div>
               <div className="flex items-center gap-4">
+                <Link
+                  href="/"
+                  className="text-caption text-gray hover:text-gray-light transition-colors"
+                >
+                  Aegis
+                </Link>
                 <a
                   href="https://github.com/cheng-chun-yuan/Aegis"
                   target="_blank"
@@ -404,10 +403,10 @@ export default function DocsPage() {
                 >
                   GitHub
                 </a>
-                <span className="text-caption text-gray">
-                  Powered by Zeus Network
-                </span>
               </div>
+              <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption text-gray hover:text-gray-light transition-colors flex items-center gap-1.5">
+                Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network
+              </a>
             </div>
           </footer>
         </div>

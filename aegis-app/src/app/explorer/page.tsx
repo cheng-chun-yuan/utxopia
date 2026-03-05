@@ -175,13 +175,15 @@ function DepositsTab() {
     <div className="space-y-3">
       <div className="flex items-center justify-between px-1">
         <span className="text-caption text-gray">{deposits.length} deposit(s)</span>
-        <button onClick={refresh} className="text-caption text-gray hover:text-gray-light transition-colors">
+        <button onClick={refresh} className="text-caption text-gray hover:text-gray-light transition-colors cursor-pointer" aria-label="Refresh deposits">
           <RefreshCw className="w-3.5 h-3.5" />
         </button>
       </div>
-      {deposits.map((d) => (
-        <DepositRow key={d.pubkey} deposit={d} />
-      ))}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {deposits.map((d) => (
+          <DepositRow key={d.pubkey} deposit={d} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -267,13 +269,15 @@ function TransfersTab() {
     <div className="space-y-3">
       <div className="flex items-center justify-between px-1">
         <span className="text-caption text-gray">{events.length} event(s)</span>
-        <button onClick={refresh} className="text-caption text-gray hover:text-gray-light transition-colors">
+        <button onClick={refresh} className="text-caption text-gray hover:text-gray-light transition-colors cursor-pointer" aria-label="Refresh transfers">
           <RefreshCw className="w-3.5 h-3.5" />
         </button>
       </div>
-      {events.map((e, i) => (
-        <TransferEventRow key={`${e.pubkey}-${i}`} event={e} />
-      ))}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {events.map((e, i) => (
+          <TransferEventRow key={`${e.pubkey}-${i}`} event={e} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -366,13 +370,15 @@ function WithdrawalsTab() {
     <div className="space-y-3">
       <div className="flex items-center justify-between px-1">
         <span className="text-caption text-gray">{redemptions.length} withdrawal(s)</span>
-        <button onClick={refresh} className="text-caption text-gray hover:text-gray-light transition-colors">
+        <button onClick={refresh} className="text-caption text-gray hover:text-gray-light transition-colors cursor-pointer" aria-label="Refresh withdrawals">
           <RefreshCw className="w-3.5 h-3.5" />
         </button>
       </div>
-      {redemptions.map((r) => (
-        <RedemptionRow key={r.pubkey} redemption={r} />
-      ))}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {redemptions.map((r) => (
+          <RedemptionRow key={r.pubkey} redemption={r} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -450,7 +456,7 @@ function ExplorerContent() {
 export default function ExplorerPage() {
   return (
     <main className="min-h-screen bg-background hacker-bg noise-overlay">
-      <div className="container mx-auto px-4 py-8 relative z-10 max-w-3xl">
+      <div className="container mx-auto px-4 py-8 relative z-10 max-w-5xl">
         {/* Header */}
         <header className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-3">
@@ -471,13 +477,19 @@ export default function ExplorerPage() {
             >
               Vault
             </Link>
+            <Link
+              href="/docs"
+              className="text-body2 text-gray hover:text-gray-light transition-colors"
+            >
+              Docs
+            </Link>
             <a
-              href="https://docs.Aegis.xyz"
+              href="https://github.com/cheng-chun-yuan/Aegis"
               target="_blank"
               rel="noopener noreferrer"
               className="text-body2 text-gray hover:text-gray-light transition-colors flex items-center gap-1"
             >
-              Docs
+              GitHub
               <ExternalLink className="w-3 h-3" />
             </a>
           </div>
