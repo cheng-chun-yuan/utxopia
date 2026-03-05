@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { zBTCApi, zBTCApiClient, getDepositStatusFromMempool } from "../client";
+import { zkBTCApi, zkBTCApiClient, getDepositStatusFromMempool } from "../client";
 
 // Mock fetch
 global.fetch = vi.fn();
 
-describe("zBTCApiClient", () => {
+describe("zkBTCApiClient", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -22,7 +22,7 @@ describe("zBTCApiClient", () => {
         json: async () => mockResponse,
       });
 
-      const result = await zBTCApi.redeem(100_000_000, "bc1qtest", "solana_addr");
+      const result = await zkBTCApi.redeem(100_000_000, "bc1qtest", "solana_addr");
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
@@ -51,7 +51,7 @@ describe("zBTCApiClient", () => {
         json: async () => ({ error: "Invalid amount" }),
       });
 
-      await expect(zBTCApi.redeem(0, "bc1qtest", "solana")).rejects.toThrow();
+      await expect(zkBTCApi.redeem(0, "bc1qtest", "solana")).rejects.toThrow();
     });
   });
 
@@ -68,7 +68,7 @@ describe("zBTCApiClient", () => {
         json: async () => mockResponse,
       });
 
-      const result = await zBTCApi.getWithdrawalStatus("test_request_123");
+      const result = await zkBTCApi.getWithdrawalStatus("test_request_123");
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
@@ -93,7 +93,7 @@ describe("zBTCApiClient", () => {
         json: async () => mockResponse,
       });
 
-      const result = await zBTCApi.getWithdrawalStatus("pending_123");
+      const result = await zkBTCApi.getWithdrawalStatus("pending_123");
       expect(result.status).toBe("pending");
       expect(result.btc_txid).toBeNull();
     });
@@ -106,7 +106,7 @@ describe("zBTCApiClient", () => {
         json: async () => ({ error: "Withdrawal not found" }),
       });
 
-      await expect(zBTCApi.getWithdrawalStatus("invalid_id")).rejects.toThrow();
+      await expect(zkBTCApi.getWithdrawalStatus("invalid_id")).rejects.toThrow();
     });
   });
 
@@ -116,7 +116,7 @@ describe("zBTCApiClient", () => {
         new Error("Network error")
       );
 
-      await expect(zBTCApi.getWithdrawalStatus("test")).rejects.toThrow();
+      await expect(zkBTCApi.getWithdrawalStatus("test")).rejects.toThrow();
     });
 
     it("handles malformed JSON responses", async () => {
@@ -127,13 +127,13 @@ describe("zBTCApiClient", () => {
         json: async () => { throw new Error("Invalid JSON"); },
       });
 
-      await expect(zBTCApi.getWithdrawalStatus("test")).rejects.toThrow();
+      await expect(zkBTCApi.getWithdrawalStatus("test")).rejects.toThrow();
     });
   });
 
   describe("custom instance", () => {
     it("allows custom base URL", async () => {
-      const customClient = new zBTCApiClient("https://custom-api.example.com");
+      const customClient = new zkBTCApiClient("https://custom-api.example.com");
 
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: true,

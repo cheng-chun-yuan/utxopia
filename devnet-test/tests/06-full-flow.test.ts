@@ -218,7 +218,7 @@ describe("Phase 3: Private Transfer (JoinSplit)", () => {
     const { initPoseidon, generateNote, computeNoteCommitment } = await import("@aegis/sdk");
     await initPoseidon();
 
-    const ZBTC_TOKEN_ID = 0x7a627463;
+    const ZKBTC_TOKEN_ID = 0x7a627463;
 
     // This would use the actual deposit data to build JoinSplit inputs.
     // For the full flow, we need the commitment from the deposit record

@@ -648,7 +648,7 @@ beforeAll(async () => {
       if (fs.existsSync(configPath)) {
         const localConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
         if (localConfig.accounts?.zkbtcMint) {
-          (ctx.config as any).zbtcMint = localConfig.accounts.zkbtcMint;
+          (ctx.config as any).zkbtcMint = localConfig.accounts.zkbtcMint;
         }
         if (localConfig.accounts?.poolVault) {
           (ctx.config as any).poolVault = localConfig.accounts.poolVault;
@@ -925,7 +925,7 @@ describe("Real E2E Deposit Verification", () => {
       aegisProgramId,
       txidInternal
     );
-    const zbtcMint = new PublicKey(ctx.config.zbtcMint);
+    const zkbtcMint = new PublicKey(ctx.config.zkbtcMint);
     const poolVault = new PublicKey(ctx.config.poolVault);
     const TOKEN_2022_PROGRAM = new PublicKey(
       "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
@@ -953,7 +953,7 @@ describe("Real E2E Deposit Verification", () => {
         { pubkey: bufferPubkey, isSigner: false, isWritable: false },
         { pubkey: ctx.payer.publicKey, isSigner: true, isWritable: true },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-        { pubkey: zbtcMint, isSigner: false, isWritable: true },
+        { pubkey: zkbtcMint, isSigner: false, isWritable: true },
         { pubkey: poolVault, isSigner: false, isWritable: true },
         { pubkey: TOKEN_2022_PROGRAM, isSigner: false, isWritable: false },
       ],

@@ -88,9 +88,9 @@ function ClaimContent() {
           "glow-border cyber-corners relative z-10"
         )}
       >
-        <h1 className="text-heading5 text-foreground mb-2">Claim zBTC Tokens</h1>
+        <h1 className="text-heading5 text-foreground mb-2">Claim zkBTC Tokens</h1>
         <p className="text-body2 text-gray mb-6">
-          Enter your secret phrase to claim your zBTC.
+          Enter your secret phrase to claim your zkBTC.
         </p>
 
         {step === "input" && (

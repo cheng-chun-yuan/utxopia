@@ -15,7 +15,7 @@ interface PoolStateData {
   discriminator: number;
   bump: number;
   authority: string;
-  zbtcMint: string;
+  zkbtcMint: string;
   poolVault: string;
   minDeposit: string;
   totalMinted: string;
@@ -63,7 +63,7 @@ export async function GET() {
       discriminator: data[0],
       bump: data[1],
       authority: bs58.encode(data.slice(8, 40)),
-      zbtcMint: bs58.encode(data.slice(40, 72)),
+      zkbtcMint: bs58.encode(data.slice(40, 72)),
       poolVault: bs58.encode(data.slice(72, 104)),
       minDeposit: bytesToBigint(data.slice(104, 112)).toString(),
       totalMinted: bytesToBigint(data.slice(112, 120)).toString(),

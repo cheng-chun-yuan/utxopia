@@ -164,7 +164,7 @@ export interface RedemptionRequestInstructionOptions {
   /** Account addresses */
   accounts: {
     poolState: Address;
-    zbtcMint: Address;
+    zkbtcMint: Address;
     userTokenAccount: Address;
     user: Address;
   };
@@ -185,7 +185,7 @@ export function buildRedemptionRequestInstruction(
 
   const accounts: Instruction["accounts"] = [
     { address: options.accounts.poolState, role: AccountRole.WRITABLE },
-    { address: options.accounts.zbtcMint, role: AccountRole.WRITABLE },
+    { address: options.accounts.zkbtcMint, role: AccountRole.WRITABLE },
     { address: options.accounts.userTokenAccount, role: AccountRole.WRITABLE },
     { address: options.accounts.user, role: AccountRole.WRITABLE_SIGNER },
     { address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY },
@@ -218,7 +218,7 @@ export interface CompleteRedemptionInstructionOptions {
     verifiedTransaction: Address;
     lightClient: Address;
     txBuffer: Address;
-    zbtcMint: Address;
+    zkbtcMint: Address;
     poolVault: Address;
   };
 }
@@ -270,7 +270,7 @@ export function buildCompleteRedemptionInstruction(
     { address: options.accounts.verifiedTransaction, role: AccountRole.READONLY },
     { address: options.accounts.lightClient, role: AccountRole.READONLY },
     { address: options.accounts.txBuffer, role: AccountRole.READONLY },
-    { address: options.accounts.zbtcMint, role: AccountRole.WRITABLE },
+    { address: options.accounts.zkbtcMint, role: AccountRole.WRITABLE },
     { address: options.accounts.poolVault, role: AccountRole.WRITABLE },
     { address: TOKEN_2022_PROGRAM_ID, role: AccountRole.READONLY },
   ];
@@ -484,7 +484,7 @@ export interface UnshieldInstructionOptions {
     commitmentTree: Address;
     vkRegistry: Address;
     user: Address;
-    zbtcMint: Address;
+    zkbtcMint: Address;
     poolVault: Address;
     userTokenAccount: Address;
     /** Nullifier record PDAs (one per input) */
@@ -603,7 +603,7 @@ export function buildUnshieldInstructionData(options: {
  * 2. vk_registry (read)
  * 3. user (signer)
  * 4. system_program (read)
- * 5. zbtc_mint (writable)
+ * 5. zkbtc_mint (writable)
  * 6. pool_vault (writable)
  * 7. user_token_account (writable)
  * 8. token_program (read)
@@ -632,7 +632,7 @@ export function buildUnshieldInstruction(options: UnshieldInstructionOptions): I
     { address: options.accounts.vkRegistry, role: AccountRole.READONLY },
     { address: options.accounts.user, role: AccountRole.WRITABLE_SIGNER },
     { address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY },
-    { address: options.accounts.zbtcMint, role: AccountRole.WRITABLE },
+    { address: options.accounts.zkbtcMint, role: AccountRole.WRITABLE },
     { address: options.accounts.poolVault, role: AccountRole.WRITABLE },
     { address: options.accounts.userTokenAccount, role: AccountRole.WRITABLE },
     { address: TOKEN_2022_PROGRAM_ID, role: AccountRole.READONLY },
@@ -873,7 +873,7 @@ export interface PublicRedeemInstructionOptions {
   /** Account addresses */
   accounts: {
     poolState: Address;
-    zbtcMint: Address;
+    zkbtcMint: Address;
     userTokenAccount: Address;
     user: Address;
     /** Redemption request PDA */
@@ -930,7 +930,7 @@ export function buildPublicRedeemInstructionData(options: {
  *
  * Accounts:
  * 0. pool_state (writable)
- * 1. zbtc_mint (writable)
+ * 1. zkbtc_mint (writable)
  * 2. user_token_account (writable)
  * 3. user (signer)
  * 4. system_program (read)
@@ -948,7 +948,7 @@ export function buildPublicRedeemInstruction(options: PublicRedeemInstructionOpt
 
   const accounts: Instruction["accounts"] = [
     { address: options.accounts.poolState, role: AccountRole.WRITABLE },
-    { address: options.accounts.zbtcMint, role: AccountRole.WRITABLE },
+    { address: options.accounts.zkbtcMint, role: AccountRole.WRITABLE },
     { address: options.accounts.userTokenAccount, role: AccountRole.WRITABLE },
     { address: options.accounts.user, role: AccountRole.WRITABLE_SIGNER },
     { address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY },

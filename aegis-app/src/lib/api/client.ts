@@ -33,7 +33,7 @@ import { getConfig } from "@aegis/sdk";
  * - Use @/lib/solana/instructions for Solana transactions
  * - Use getDepositStatusFromMempool() for deposit status
  */
-class zBTCApiClient {
+class zkBTCApiClient {
   private baseUrl: string;
 
   constructor(baseUrl?: string) {
@@ -69,7 +69,7 @@ class zBTCApiClient {
   // ============ Redemption (Backend Required) ============
 
   /**
-   * Redeem zBTC tokens for BTC withdrawal
+   * Redeem zkBTC tokens for BTC withdrawal
    *
    * This is the main backend operation - BTC signing must happen server-side.
    * The backend redemption processor will:
@@ -79,7 +79,7 @@ class zBTCApiClient {
    *
    * @param amountSats - Amount to redeem in satoshis
    * @param btcAddress - Bitcoin address for withdrawal
-   * @param solanaAddress - Solana address that burned the zBTC
+   * @param solanaAddress - Solana address that burned the zkBTC
    */
   async redeem(
     amountSats: number,
@@ -170,10 +170,10 @@ class zBTCApiClient {
 }
 
 // Export singleton instance
-export const zBTCApi = new zBTCApiClient();
+export const zkBTCApi = new zkBTCApiClient();
 
 // Export class for custom instances
-export { zBTCApiClient };
+export { zkBTCApiClient };
 
 // ============ Mempool.space Direct API (No Backend Needed) ============
 

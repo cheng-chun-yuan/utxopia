@@ -134,7 +134,7 @@ for deposit in confirmed_deposits.filter(|d| d.can_sweep()) {
 #### 3. SPV Verifier
 - Generates Merkle proofs for sweep transactions
 - Submits proofs to Solana light client with `npk` and `ephemeral_pub`
-- On-chain: commitment computed as `Poseidon(npk, ZBTC_TOKEN_ID, amount)`
+- On-chain: commitment computed as `Poseidon(npk, ZKBTC_TOKEN_ID, amount)`
 - Creates StealthAnnouncement PDA (90 bytes, type=deposit) on Solana
 
 ```rust
@@ -439,7 +439,7 @@ After=network.target
 Type=simple
 User=aegis
 WorkingDirectory=/opt/aegis/backend
-ExecStart=/opt/aegis/backend/target/release/zbtc-api tracker
+ExecStart=/opt/aegis/backend/target/release/zkbtc-api tracker
 Restart=always
 Environment=DEPOSIT_DB_PATH=/var/lib/aegis/deposits.db
 
@@ -456,6 +456,6 @@ COPY . .
 RUN cargo build --release
 
 FROM debian:bookworm-slim
-COPY --from=builder /app/target/release/zbtc-api /usr/local/bin/
-CMD ["zbtc-api", "tracker"]
+COPY --from=builder /app/target/release/zkbtc-api /usr/local/bin/
+CMD ["zkbtc-api", "tracker"]
 ```

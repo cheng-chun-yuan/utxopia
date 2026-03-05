@@ -6,7 +6,7 @@ import { PublicKey, Transaction, TransactionInstruction, SystemProgram, ComputeB
 import { useConnection } from "@solana/wallet-adapter-react";
 import {
   CheckCircle2, Send, Wallet, Shield, Clock, AlertCircle, AlertTriangle,
-  Key, Copy, Check, Pencil, X, Loader2, Zap, Plus, Trash2, Bitcoin, FileText,
+  Key, Copy, Check, X, Loader2, Zap, Plus, Trash2, Bitcoin, FileText,
   Download, Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,10 @@ import { StealthRecipientInput } from "@/components/ui/stealth-recipient-input";
 import { BtcAddressInput } from "@/components/ui/btc-address-input";
 import { formatBtc, truncateMiddle } from "@/lib/utils/formatting";
 import { useAegis, type InboxNote } from "@/hooks/use-aegis";
+import { usePasskey } from "@/hooks/use-passkey";
+import { useAegisStore } from "@/stores/aegis-store";
+import { AuthModal } from "@/components/auth-modal";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useProver } from "@/hooks/use-prover";
 import {
   initPoseidon,
@@ -34,13 +38,10 @@ import {
   bytesToHex,
   AEGIS_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
-  ZBTC_MINT_ADDRESS,
+  ZKBTC_MINT_ADDRESS,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
-  deriveVkRegistryPDA,
-  deriveNullifierPDA,
   deriveRedemptionRequestPDA,
-  deriveTransferStealthAnnouncementPDA,
   getTokenAccountAddress,
   bigintTo32Bytes,
 } from "@/lib/solana/instructions";
@@ -58,7 +59,7 @@ function isValidSolanaAddress(address: string): boolean {
 
 // Constants
 const MIN_PAY_SATS = 1000;
-const ZBTC_TOKEN_ID = BigInt(0x7a627463);
+const ZKBTC_TOKEN_ID = BigInt(0x7a627463);
 const MAX_OUTPUTS = 12; // N+M<=14, need at least 1 input + 1 change
 
 // BN254 scalar field modulus (big-endian bytes)
@@ -292,6 +293,45 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
     refreshPublicBalance,
   } = useAegis();
   const prover = useProver();
+  const { setVisible: setWalletModalVisible } = useWalletModal();
+
+  // Auth modal (passkey + wallet)
+  const {
+    isSupported: passkeySupported,
+    hasCredential: hasPasskeyCredential,
+    isLoading: passkeyLoading,
+    error: passkeyError,
+    register: registerPasskey,
+    authenticate: authenticatePasskey,
+  } = usePasskey();
+  const deriveKeysFromPasskeySeed = useAegisStore((s) => s.deriveKeysFromPasskeySeed);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+
+  const handlePasskeyRegister = async () => {
+    const seed = await registerPasskey();
+    if (seed) {
+      await deriveKeysFromPasskeySeed(seed);
+      setAuthModalOpen(false);
+    }
+  };
+
+  const handlePasskeyAuthenticate = async () => {
+    const seed = await authenticatePasskey();
+    if (seed) {
+      await deriveKeysFromPasskeySeed(seed);
+      setAuthModalOpen(false);
+    }
+  };
+
+  // Auto-open auth modal when no keys
+  const authAutoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (!hasKeys && !authAutoOpenedRef.current) {
+      authAutoOpenedRef.current = true;
+      setAuthModalOpen(true);
+    }
+    if (hasKeys) authAutoOpenedRef.current = false;
+  }, [hasKeys]);
 
   const [step, setStep] = useState<PayStep>("connect");
   const [error, setError] = useState<string | null>(null);
@@ -627,7 +667,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
           programId: AEGIS_PROGRAM_ID,
           keys: [
             { pubkey: poolState, isSigner: false, isWritable: true },
-            { pubkey: ZBTC_MINT_ADDRESS, isSigner: false, isWritable: true },
+            { pubkey: ZKBTC_MINT_ADDRESS, isSigner: false, isWritable: true },
             { pubkey: userTokenAccount, isSigner: false, isWritable: true },
             { pubkey: publicKey!, isSigner: true, isWritable: true },
             { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
@@ -800,7 +840,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 
             // Verify commitment
             const derivedCommitment = computeJoinSplitCommitmentSync(
-              claimInputs.npk, ZBTC_TOKEN_ID, scannedNote.amount
+              claimInputs.npk, ZKBTC_TOKEN_ID, scannedNote.amount
             );
             const derivedHex = derivedCommitment.toString(16).padStart(64, "0");
             if (derivedHex !== note.commitmentHex.toLowerCase()) {
@@ -861,7 +901,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
           } as Awaited<ReturnType<typeof createStealthDepositWithKeys>>);
         } else if (output.mode === "public") {
           // Unshield output: use Solana recipient address as "npk"
-          // On-chain expects: commitment = Poseidon(reduce_to_field(solana_address), ZBTC_TOKEN_ID, amount)
+          // On-chain expects: commitment = Poseidon(reduce_to_field(solana_address), ZKBTC_TOKEN_ID, amount)
           // Must match on-chain reduce_to_field exactly (mask approach, not modular reduction)
           const addrBytes = new PublicKey(output.solanaAddress).toBytes();
           const addrReduced = reduceToFieldOnChain(addrBytes);
@@ -931,7 +971,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 
       // 4. Compute output commitments
       const outCommitments = recipientNpks.map((npk, i) =>
-        computeJoinSplitCommitmentSync(npk, ZBTC_TOKEN_ID, sendAmounts[i])
+        computeJoinSplitCommitmentSync(npk, ZKBTC_TOKEN_ID, sendAmounts[i])
       );
 
       // 5. Compute bound params hash
@@ -995,7 +1035,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         nOutputs: actualNOutputs,
         merkleRoot,
         boundParamsHash,
-        token: ZBTC_TOKEN_ID,
+        token: ZKBTC_TOKEN_ID,
         publicKey: proofPublicKey,
         signature: [sigR8x, sigR8y, sigS],
         nullifyingKey: proofNullifyingKey,
@@ -1033,72 +1073,32 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       let relayResult: { success: boolean; signature?: string; error?: string };
 
       if (isBtcRedeem && btcOutput) {
-        // BTC Redeem: build redeem instruction and have user sign directly
-        const { buildRedeemInstructionData } = await import("@aegis/sdk");
+        // BTC Redeem: submit via relayer API (same as transact/unshield)
         const redeemAmountSats = BigInt(parseSats(btcOutput.amount) ?? 0);
         const requestNonce = BigInt(Date.now());
 
-        // Tree outputs = all except the last (redeem output)
+        // Tree stealth data = all except the last (redeem output)
         const treeStealthData = stealthDataArrays.slice(0, -1);
 
-        const redeemIxData = buildRedeemInstructionData({
-          nInputs: effectiveNInputs,
-          nOutputs: actualNOutputs,
-          proofBytes,
-          merkleRoot: bigintTo32Bytes(merkleRoot),
-          boundParamsHash: bigintTo32Bytes(boundParamsHash),
-          nullifiers: allNullifiers.map(n => bigintTo32Bytes(n)),
-          commitmentsOut: outCommitments.map(c => bigintTo32Bytes(c)),
-          stealthData: treeStealthData,
-          redeemAmount: redeemAmountSats,
-          btcScript: btcOutput.btcScriptPubKey!,
-          requestNonce,
+        const redeemResponse = await fetch("/api/redeem", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nInputs: effectiveNInputs,
+            nOutputs: actualNOutputs,
+            proof: bytesToHex(proofBytes),
+            merkleRoot: merkleRootHex,
+            boundParamsHash: boundParamsHash.toString(16).padStart(64, "0"),
+            nullifiers: nullifierHexes,
+            commitmentsOut: commitmentHexes,
+            stealthData: treeStealthData.map((sd) => bytesToHex(sd)),
+            redeemAmount: redeemAmountSats.toString(),
+            btcScript: bytesToHex(btcOutput.btcScriptPubKey!),
+            requestNonce: requestNonce.toString(),
+          }),
         });
 
-        // Derive PDAs
-        const [poolState] = derivePoolStatePDA();
-        const [commitmentTree] = deriveCommitmentTreePDA();
-        const [vkRegistry] = deriveVkRegistryPDA(effectiveNInputs, actualNOutputs);
-        const [redemptionRequest] = deriveRedemptionRequestPDA(publicKey!, requestNonce);
-
-        const nullifierPDAs = allNullifiers.map(n => {
-          const [pda] = deriveNullifierPDA(bigintTo32Bytes(n));
-          return pda;
-        });
-
-        const stealthAnnouncementPDAs = treeStealthData.map(sd => {
-          const ephPub = sd.slice(0, 32);
-          const [pda] = deriveTransferStealthAnnouncementPDA(ephPub);
-          return pda;
-        });
-
-        const redeemAccounts = [
-          { pubkey: poolState, isSigner: false, isWritable: true },
-          { pubkey: commitmentTree, isSigner: false, isWritable: true },
-          { pubkey: vkRegistry, isSigner: false, isWritable: false },
-          { pubkey: publicKey!, isSigner: true, isWritable: true },
-          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-          ...nullifierPDAs.map(pda => ({ pubkey: pda, isSigner: false, isWritable: true })),
-          ...stealthAnnouncementPDAs.map(pda => ({ pubkey: pda, isSigner: false, isWritable: true })),
-          { pubkey: redemptionRequest, isSigner: false, isWritable: true },
-        ];
-
-        const redeemIx = new TransactionInstruction({
-          programId: AEGIS_PROGRAM_ID,
-          keys: redeemAccounts,
-          data: Buffer.from(redeemIxData),
-        });
-
-        const computeIx = ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 });
-        const tx = new Transaction().add(computeIx, redeemIx);
-        tx.feePayer = publicKey!;
-        const { blockhash } = await connection.getLatestBlockhash();
-        tx.recentBlockhash = blockhash;
-
-        const signed = await signTransaction!(tx);
-        const sig = await connection.sendRawTransaction(signed.serialize());
-        await connection.confirmTransaction(sig, "confirmed");
-        relayResult = { success: true, signature: sig };
+        relayResult = await redeemResponse.json();
       } else if (isPublicUnshield && unshieldRecipientAddress) {
         // Public unshield: call /api/unshield
         // The unshield output is the LAST commitment — stealth data is only for tree outputs (all except last)
@@ -1107,10 +1107,10 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         // Get or create associated token account for recipient
         const { getAssociatedTokenAddressSync } = await import("@solana/spl-token");
         const recipientPubkey = new PublicKey(publicOutput!.solanaAddress);
-        const zbtcMint = new PublicKey(DEVNET_CONFIG.zbtcMint);
+        const zkbtcMint = new PublicKey(DEVNET_CONFIG.zkbtcMint);
         const TOKEN_2022_PID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
         const recipientTokenAccount = getAssociatedTokenAddressSync(
-          zbtcMint, recipientPubkey, false, TOKEN_2022_PID
+          zkbtcMint, recipientPubkey, false, TOKEN_2022_PID
         );
 
         // Tree outputs = all except the last (unshield output)
@@ -1173,6 +1173,12 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       }
       setNoteOutputPhrases(notePhrases);
       setStep("success");
+
+      // Auto-refresh balances after successful transaction
+      setTimeout(() => {
+        refreshInbox();
+        if (publicKey) refreshPublicBalance?.(publicKey);
+      }, 2000);
     } catch (err) {
       console.error("[Pay] Error:", err);
       setError(err instanceof Error ? err.message : "Failed to process payment");
@@ -1200,20 +1206,44 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 
   // ===== CONNECT STEP =====
   if (step === "connect") {
-    if (connected && !hasKeys) {
+    if (!hasKeys) {
       return (
-        <div className="flex flex-col items-center justify-center py-8">
-          <div className="rounded-full bg-purple/10 p-4 mb-4">
-            <Key className="h-10 w-10 text-purple" />
+        <>
+          <div className="flex flex-col items-center justify-center py-8">
+            <div className="rounded-full bg-privacy/10 p-4 mb-4">
+              <Shield className="h-10 w-10 text-privacy" />
+            </div>
+            <p className="text-body2 text-gray text-center mb-4">
+              Unlock your vault to send and receive private Bitcoin
+            </p>
+            <button
+              onClick={() => setAuthModalOpen(true)}
+              className={cn(
+                "inline-flex items-center gap-2 px-6 py-3 rounded-[12px]",
+                "bg-privacy hover:bg-privacy/80",
+                "text-body2 text-background font-medium transition-all duration-200 cursor-pointer",
+                "hover:shadow-[0_0_24px_rgba(20,241,149,0.2)]"
+              )}
+            >
+              <Key className="w-4 h-4" />
+              Unlock Vault
+            </button>
           </div>
-          <p className="text-heading6 text-foreground mb-2">Derive Your Keys</p>
-          <p className="text-body2 text-gray text-center mb-6">
-            Sign a message to derive your stealth keys and scan for deposits
-          </p>
-          <button onClick={deriveKeys} disabled={keysLoading} className="btn-primary w-full justify-center">
-            {keysLoading ? "Deriving..." : "Derive Keys"}
-          </button>
-        </div>
+          <AuthModal
+            open={authModalOpen}
+            onOpenChange={setAuthModalOpen}
+            passkeySupported={passkeySupported}
+            hasPasskeyCredential={hasPasskeyCredential}
+            passkeyLoading={passkeyLoading}
+            walletLoading={keysLoading}
+            walletConnected={connected}
+            error={passkeyError}
+            onPasskeyRegister={handlePasskeyRegister}
+            onPasskeyAuthenticate={handlePasskeyAuthenticate}
+            onWalletConnect={() => { setAuthModalOpen(false); setWalletModalVisible(true); }}
+            onWalletDeriveKeys={async () => { await deriveKeys(); setAuthModalOpen(false); }}
+          />
+        </>
       );
     }
 
@@ -1492,9 +1522,9 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                 canRemove={outputs.length > 1}
                 onUpdate={(update) => updateOutput(output.id, update)}
                 onRemove={() => removeOutput(output.id)}
-                defaultAddress={publicKey?.toBase58() || ""}
-                disablePublic={outputs.some(o => o.id !== output.id && o.mode === "public")}
-                disableBtc={outputs.some(o => o.id !== output.id && o.mode === "btc")}
+                defaultAddress={keys?.solanaPublicKey.some(b => b !== 0) ? (publicKey?.toBase58() || "") : ""}
+                disablePublic={outputs.some(o => o.id !== output.id && (o.mode === "public" || o.mode === "btc"))}
+                disableBtc={outputs.some(o => o.id !== output.id && (o.mode === "public" || o.mode === "btc"))}
               />
             ))}
           </div>
@@ -1504,11 +1534,9 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
             <div className="mt-2 flex items-start gap-2 px-3 py-2 rounded-[10px] bg-btc/5 border border-btc/20">
               <AlertTriangle className="w-4 h-4 text-btc shrink-0 mt-0.5" />
               <p className="text-caption text-btc">
-                {hasPublicOutput && hasBtcOutput
-                  ? "Public and BTC outputs reveal your addresses on-chain — observers can link your Solana and Bitcoin accounts."
-                  : hasPublicOutput
-                    ? "Public outputs reveal your Solana address on-chain."
-                    : "BTC outputs reveal your Bitcoin withdrawal address on-chain."}
+                {hasPublicOutput
+                  ? "Public output reveals your Solana address on-chain."
+                  : "BTC output reveals your Bitcoin withdrawal address on-chain."}
               </p>
             </div>
           )}
@@ -1719,7 +1747,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
             ? "Redemption request created on-chain. BTC will be sent to your address."
             : hasStealth
               ? "Stealth payment submitted on-chain"
-              : "Your zBTC has been sent successfully"}
+              : "Your zkBTC has been sent successfully"}
         </p>
 
         <div className="w-full gradient-bg-card p-4 rounded-[12px] mb-4 space-y-3">
@@ -1858,9 +1886,6 @@ function OutputRowCard({
   disablePublic = false,
   disableBtc = false,
 }: OutputRowCardProps) {
-  const [isEditingAddress, setIsEditingAddress] = useState(false);
-
-  const isOwnWallet = output.solanaAddress === defaultAddress;
 
   return (
     <div className="p-4 rounded-[12px] bg-card border border-gray/15">
@@ -1873,7 +1898,7 @@ function OutputRowCard({
             {([
               { mode: "stealth" as const, label: "Stealth", activeClass: "bg-purple/20 text-purple", disabled: false },
               { mode: "note" as const, label: "Note", activeClass: "bg-btc/20 text-btc", disabled: false },
-              { mode: "public" as const, label: "Public", activeClass: "bg-privacy/20 text-privacy", disabled: disablePublic && output.mode !== "public" },
+              { mode: "public" as const, label: "SOL", activeClass: "bg-privacy/20 text-privacy", disabled: disablePublic && output.mode !== "public" },
               { mode: "btc" as const, label: "BTC", activeClass: "bg-btc/20 text-btc", disabled: disableBtc && output.mode !== "btc" },
             ] as const).map((tab) => (
               <button
@@ -1897,8 +1922,8 @@ function OutputRowCard({
                       : "text-gray hover:text-gray-light"
                 )}
                 title={
-                  tab.mode === "public" && tab.disabled ? "Max 1 public output per transaction" :
-                  tab.mode === "btc" && tab.disabled ? "Max 1 BTC output per transaction" :
+                  tab.mode === "public" && tab.disabled ? "Only 1 public/BTC output per transaction" :
+                  tab.mode === "btc" && tab.disabled ? "Only 1 public/BTC output per transaction" :
                   undefined
                 }
               >
@@ -1941,7 +1966,7 @@ function OutputRowCard({
               type="text"
               value={output.secretPhrase}
               onChange={(e) => onUpdate({ secretPhrase: e.target.value })}
-              placeholder="e.g. alpha-bravo-charlie-1234"
+              placeholder="alpha-bravo-charlie-1234"
               className={cn(
                 "w-full pl-10 pr-4 py-3 bg-muted border rounded-[10px]",
                 "text-body2 font-mono text-foreground placeholder:text-gray/40",
@@ -1968,67 +1993,44 @@ function OutputRowCard({
             resolvedName={output.resolvedName}
             error={output.stealthError}
             onError={(err) => onUpdate({ stealthError: err })}
+            icon={<Shield className="w-4 h-4 text-purple" />}
           />
         </div>
       ) : (
         <div className="mb-2">
           <label className="text-body2 text-gray-light pl-2 mb-2 block">
-            Recipient
+            Solana Recipient Address
           </label>
-          {isEditingAddress ? (
-            <div className="flex items-center gap-3">
-              <input
-                type="text"
-                value={output.solanaAddress}
-                onChange={(e) => onUpdate({ solanaAddress: e.target.value, addressError: null })}
-                placeholder="Solana address..."
-                className={cn(
-                  "flex-1 px-4 py-3 bg-muted border rounded-[10px]",
-                  "text-body2 font-mono text-gray-light placeholder:text-gray/40",
-                  "outline-none transition-colors",
-                  output.addressError ? "border-error/50" : "border-gray/20 focus:border-purple/40"
-                )}
-              />
-              <button
-                onClick={() => {
-                  if (isValidSolanaAddress(output.solanaAddress)) {
-                    setIsEditingAddress(false);
-                  } else {
-                    onUpdate({ addressError: "Invalid address" });
-                  }
-                }}
-                className="px-4 py-3 rounded-[10px] bg-privacy/10 hover:bg-privacy/20 text-privacy transition-colors"
-              >
-                <Check className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => {
-                  onUpdate({ solanaAddress: defaultAddress, addressError: null });
-                  setIsEditingAddress(false);
-                }}
-                className="px-4 py-3 rounded-[10px] bg-gray/10 hover:bg-gray/20 text-gray transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          ) : (
-            <div
-              onClick={() => setIsEditingAddress(true)}
+          <div className="relative">
+            <Wallet className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-privacy" />
+            <input
+              type="text"
+              value={output.solanaAddress}
+              onChange={(e) => onUpdate({ solanaAddress: e.target.value, addressError: null })}
+              placeholder="Solana address..."
               className={cn(
-                "flex items-center gap-2 px-4 py-3 rounded-[10px] cursor-pointer transition-colors",
-                "bg-muted border",
-                isOwnWallet ? "border-privacy/20 hover:border-privacy/40" : "border-purple/20 hover:border-purple/40"
+                "w-full pl-10 pr-4 py-3 bg-muted border rounded-[10px]",
+                "text-body2 font-mono text-foreground placeholder:text-gray/40",
+                "outline-none transition-colors",
+                output.addressError
+                  ? "border-error/50"
+                  : isValidSolanaAddress(output.solanaAddress)
+                    ? "border-privacy/40"
+                    : "border-gray/20 focus:border-privacy/40"
               )}
-            >
-              <div className={cn("w-1.5 h-1.5 rounded-full", isOwnWallet ? "bg-privacy" : "bg-purple")} />
-              <span className="flex-1 text-body2 font-mono text-gray-light truncate">
-                {output.solanaAddress ? truncateMiddle(output.solanaAddress, 6) : "Click to set address"}
-              </span>
-              <Pencil className="w-3 h-3 text-gray" />
+            />
+          </div>
+          {output.addressError && (
+            <div className="flex items-center gap-2 text-error pl-2 mt-1">
+              <AlertCircle className="w-3.5 h-3.5" />
+              <span className="text-caption">{output.addressError}</span>
             </div>
           )}
-          {output.addressError && (
-            <p className="text-caption text-error mt-1 pl-2">{output.addressError}</p>
+          {output.solanaAddress && isValidSolanaAddress(output.solanaAddress) && (
+            <p className="text-caption text-privacy pl-2 mt-1 flex items-center gap-1">
+              <Check className="w-3.5 h-3.5" />
+              Valid Solana address
+            </p>
           )}
         </div>
       )}

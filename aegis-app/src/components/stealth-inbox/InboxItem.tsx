@@ -80,7 +80,7 @@ export function InboxItem({ note }: InboxItemProps) {
             "text-heading5",
             note.isSpent ? "text-gray" : "text-privacy"
           )}>
-            {formatBtc(Number(note.amount))} zBTC
+            {formatBtc(Number(note.amount))} zkBTC
           </p>
           <p className="text-caption text-gray">
             {Number(note.amount).toLocaleString()} sats

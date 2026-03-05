@@ -184,7 +184,7 @@ Three horizontal swimlanes:
 - Steps:
   1. "Request Redemption"
   2. "Nullifier Published"
-  3. "zBTC Burned from Pool"
+  3. "zkBTC Burned from Pool"
   4. "FROST Server: 2-of-3 Signing"
   5. "BTC Transaction Broadcast"
   6. "Complete Redemption"

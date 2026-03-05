@@ -24,16 +24,16 @@ async function main() {
   const connection = new Connection(RPC_URL, "confirmed");
   const authority = loadKeypair("~/.config/solana/johnny.json");
 
-  const zbtcMint = new PublicKey("BdUFQhqKpzYVHVg8cQoh7JdpSoHFtwKM4A48AFAjKFAK");
+  const zkbtcMint = new PublicKey("BdUFQhqKpzYVHVg8cQoh7JdpSoHFtwKM4A48AFAjKFAK");
   const [poolStatePDA] = await derivePoolStatePDA();
 
-  console.log(`\nMint: ${zbtcMint.toBase58()}`);
+  console.log(`\nMint: ${zkbtcMint.toBase58()}`);
   console.log(`Current Authority: ${authority.publicKey.toBase58()}`);
   console.log(`New Authority (Pool PDA): ${poolStatePDA}`);
 
   // Create set authority instruction
   const ix = createSetAuthorityInstruction(
-    zbtcMint,
+    zkbtcMint,
     authority.publicKey,
     AuthorityType.MintTokens,
     new PublicKey(poolStatePDA as string),

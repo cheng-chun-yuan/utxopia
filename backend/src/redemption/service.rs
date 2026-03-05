@@ -1,6 +1,6 @@
 //! Redemption Service
 //!
-//! Main service that processes zBTC burns and triggers BTC withdrawals.
+//! Main service that processes zkBTC burns and triggers BTC withdrawals.
 
 use std::sync::Arc;
 use tokio::sync::RwLock;

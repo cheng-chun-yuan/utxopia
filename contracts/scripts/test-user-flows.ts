@@ -108,7 +108,7 @@ function loadProgramId(): PublicKey {
 let PROGRAM_ID = loadProgramId();
 
 // Constants
-const ZBTC_TOKEN_ID = 0x7a627463n; // "zbtc" as u32
+const ZKBTC_TOKEN_ID = 0x7a627463n; // "zkbtc" as u32
 const BN254_FIELD_PRIME = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
 
 // Instruction discriminators
@@ -482,7 +482,7 @@ function buildInitVkRegistryIx(
  *   5. tx_buffer (read, ChadBuffer)
  *   6. authority (signer, writable)
  *   7. system_program
- *   8. zbtc_mint (writable)
+ *   8. zkbtc_mint (writable)
  *   9. pool_vault (writable)
  *  10. token_program (Token-2022)
  */
@@ -494,7 +494,7 @@ function buildVerifyStealthDepositIx(
   depositRecord: PublicKey,
   txBuffer: PublicKey,
   authority: PublicKey,
-  zbtcMint: PublicKey,
+  zkbtcMint: PublicKey,
   poolVault: PublicKey,
   params: {
     txid: Uint8Array;
@@ -540,7 +540,7 @@ function buildVerifyStealthDepositIx(
       { pubkey: txBuffer, isSigner: false, isWritable: false },
       { pubkey: authority, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      { pubkey: zbtcMint, isSigner: false, isWritable: true },
+      { pubkey: zkbtcMint, isSigner: false, isWritable: true },
       { pubkey: poolVault, isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
     ],
@@ -746,9 +746,9 @@ async function main() {
     : 25_000n;
   const npk0 = poseidonHash([mpk, random0]);
   const npk0Bytes = bigintToBytes32BE(npk0);
-  // Commitment will be computed ON-CHAIN: Poseidon(npk, ZBTC_TOKEN_ID, amount)
+  // Commitment will be computed ON-CHAIN: Poseidon(npk, ZKBTC_TOKEN_ID, amount)
   // But we compute it locally for later verification in Parts 2-4
-  const commitment0 = poseidonHash([npk0, ZBTC_TOKEN_ID, amount0]);
+  const commitment0 = poseidonHash([npk0, ZKBTC_TOKEN_ID, amount0]);
 
   // Read tree state before deposit
   const treeBefore1 = await readOnChainTree(connection, commitmentTree);
@@ -1026,7 +1026,7 @@ async function main() {
   const random1 = randomFieldElement();
   const amount1 = 25_000n;
   const npk1 = poseidonHash([mpk, random1]);
-  const commitment1 = poseidonHash([npk1, ZBTC_TOKEN_ID, amount1]);
+  const commitment1 = poseidonHash([npk1, ZKBTC_TOKEN_ID, amount1]);
 
   // Compute nullifier
   const nullifier0 = poseidonHash([nullifyingKey, BigInt(leafIndex0)]);
@@ -1044,7 +1044,7 @@ async function main() {
     boundParamsHash: boundParamsHash.toString(),
     nullifiers: [nullifier0.toString()],
     commitmentsOut: [commitment1.toString()],
-    token: ZBTC_TOKEN_ID.toString(),
+    token: ZKBTC_TOKEN_ID.toString(),
     publicKey: [pubKeyX.toString(), pubKeyY.toString()],
     signature: [sigR8x2.toString(), sigR8y2.toString(), sigS2.toString()],
     nullifyingKey: nullifyingKey.toString(),
@@ -1138,12 +1138,12 @@ async function main() {
   const random2 = randomFieldElement();
   const amount2 = 15_000n;
   const npk2 = poseidonHash([mpk, random2]);
-  const commitment2 = poseidonHash([npk2, ZBTC_TOKEN_ID, amount2]);
+  const commitment2 = poseidonHash([npk2, ZKBTC_TOKEN_ID, amount2]);
 
   const random3 = randomFieldElement();
   const amount3 = 10_000n;
   const npk3 = poseidonHash([mpk, random3]);
-  const commitment3 = poseidonHash([npk3, ZBTC_TOKEN_ID, amount3]);
+  const commitment3 = poseidonHash([npk3, ZKBTC_TOKEN_ID, amount3]);
 
   // Nullifier for leaf 1
   const nullifier1 = poseidonHash([nullifyingKey, BigInt(leafIndex1)]);
@@ -1161,7 +1161,7 @@ async function main() {
     boundParamsHash: boundParamsHash.toString(),
     nullifiers: [nullifier1.toString()],
     commitmentsOut: [commitment2.toString(), commitment3.toString()],
-    token: ZBTC_TOKEN_ID.toString(),
+    token: ZKBTC_TOKEN_ID.toString(),
     publicKey: [pubKeyX.toString(), pubKeyY.toString()],
     signature: [sigR8x3.toString(), sigR8y3.toString(), sigS3.toString()],
     nullifyingKey: nullifyingKey.toString(),

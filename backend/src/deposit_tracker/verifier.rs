@@ -507,20 +507,20 @@ impl SpvVerifier {
         let (commitment_tree, _) =
             Pubkey::find_program_address(&[b"commitment_tree"], &self.program_id);
 
-        // Read zbtc_mint and pool_vault from pool state account (not PDAs)
+        // Read zkbtc_mint and pool_vault from pool state account (not PDAs)
         let pool_account = self
             .rpc
             .get_account(&pool_state)
             .map_err(|e| VerifierError::RpcError(format!("Failed to get pool state: {}", e)))?;
-        // PoolState layout: disc(1) + bump(1) + flags(1) + pad(1) + authority(32) + zbtc_mint(32) + pool_vault(32)
+        // PoolState layout: disc(1) + bump(1) + flags(1) + pad(1) + authority(32) + zkbtc_mint(32) + pool_vault(32)
         if pool_account.data.len() < 100 {
             return Err(VerifierError::VerificationFailed("pool state too small".to_string()));
         }
-        let zbtc_mint = Pubkey::try_from(&pool_account.data[36..68])
-            .map_err(|_| VerifierError::VerificationFailed("invalid zbtc_mint".to_string()))?;
+        let zkbtc_mint = Pubkey::try_from(&pool_account.data[36..68])
+            .map_err(|_| VerifierError::VerificationFailed("invalid zkbtc_mint".to_string()))?;
         let pool_vault = Pubkey::try_from(&pool_account.data[68..100])
             .map_err(|_| VerifierError::VerificationFailed("invalid pool_vault".to_string()))?;
-        println!("[verifier] zbtc_mint: {}, pool_vault: {}", zbtc_mint, pool_vault);
+        println!("[verifier] zkbtc_mint: {}, pool_vault: {}", zkbtc_mint, pool_vault);
 
         // --- Instruction 1: btc-light-client verify_transaction (disc 2) ---
         let verify_tx_ix = self.build_verify_transaction_ix(
@@ -555,7 +555,7 @@ impl SpvVerifier {
             AccountMeta::new_readonly(*sweep_buffer, false),            // 5: sweep_tx_buffer
             AccountMeta::new(payer.pubkey(), true),                     // 6: authority/payer
             AccountMeta::new_readonly(solana_sdk::system_program::ID, false), // 7: system_program
-            AccountMeta::new(zbtc_mint, false),                         // 8: zbtc_mint
+            AccountMeta::new(zkbtc_mint, false),                         // 8: zkbtc_mint
             AccountMeta::new(pool_vault, false),                        // 9: pool_vault
             AccountMeta::new_readonly(TOKEN_2022_PROGRAM_ID, false),    // 10: token_program
             AccountMeta::new_readonly(*deposit_buffer, false),          // 11: deposit_tx_buffer

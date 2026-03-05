@@ -1,11 +1,11 @@
 [package]
-name = "zbtc"
+name = "zkbtc"
 version = "0.1.0"
 edition = "2021"
 
 # Main binary - minimal launcher
 [[bin]]
-name = "zbtc-api"
+name = "zkbtc-api"
 path = "src/main.rs"
 
 # Redemption service binary

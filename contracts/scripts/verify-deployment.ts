@@ -75,16 +75,16 @@ async function main() {
 
   const mintInfo = await connection.getAccountInfo(new PublicKey("BdUFQhqKpzYVHVg8cQoh7JdpSoHFtwKM4A48AFAjKFAK"));
   if (mintInfo) {
-    console.log(`✓ zBTC Mint exists (${mintInfo.data.length} bytes, owner: Token-2022)`);
+    console.log(`✓ zkBTC Mint exists (${mintInfo.data.length} bytes, owner: Token-2022)`);
   } else {
-    console.log(`✗ zBTC Mint NOT found!`);
+    console.log(`✗ zkBTC Mint NOT found!`);
   }
 
   console.log("\n=== Summary ===");
   console.log("SDK v1.0.2 Program ID: DjnryiDxMsUY8pzYCgynVUGDgv45J9b3XbSDnp4qDYrq");
   console.log("Contract deployed: ✓");
   console.log("Pool initialized: ✓");
-  console.log("zBTC Mint created: ✓");
+  console.log("zkBTC Mint created: ✓");
   console.log("\nReady for use!");
 }
 

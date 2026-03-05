@@ -233,7 +233,6 @@ export default function VaultPage() {
                 <button
                   onClick={() => {
                     clearKeys(wallet.publicKey?.toBase58());
-                    clearPasskeyCredential();
                   }}
                   className="flex items-center gap-1.5 px-2 py-1 rounded-[6px] text-caption text-gray hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
                   title="Clear keys and log out"
@@ -463,7 +462,7 @@ export default function VaultPage() {
                           <span className="text-[22px] font-bold text-privacy font-mono tracking-tight">
                             {(Number(totalAmountSats) / 100_000_000).toFixed(8)}
                           </span>
-                          <span className="text-body2 text-gray">zBTC</span>
+                          <span className="text-body2 text-gray">zkBTC</span>
                           {depositCount > 0 && (
                             <span className="text-caption text-gray/60 ml-1">
                               ({depositCount} note{depositCount !== 1 ? "s" : ""})
@@ -526,7 +525,7 @@ export default function VaultPage() {
                 </p>
                 <p className="text-caption text-gray">
                   Your deposits and withdrawals are protected by zero-knowledge proofs.
-                  No one can link your Bitcoin deposits to zBTC claims.
+                  No one can link your Bitcoin deposits to zkBTC claims.
                 </p>
               </div>
             </div>

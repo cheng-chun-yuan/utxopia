@@ -15,7 +15,7 @@
 //! - `AEGIS_PROGRAM_ID` - Aegis program ID
 //! - `AEGIS_POOL_STATE` - Pool state PDA
 //! - `AEGIS_COMMITMENT_TREE` - Commitment tree PDA
-//! - `AEGIS_ZBTC_MINT` - zBTC mint address
+//! - `AEGIS_ZKBTC_MINT` - zkBTC mint address
 //!
 //! ## Signing Configuration
 //! - `AEGIS_SIGNING_MODE` - "single" (POC) or "frost" (production)
@@ -187,8 +187,8 @@ pub struct AEGISConfig {
     /// Commitment tree PDA
     pub commitment_tree: String,
 
-    /// zBTC mint address
-    pub zbtc_mint: String,
+    /// zkBTC mint address
+    pub zkbtc_mint: String,
 
     /// Signing configuration
     pub signing: SigningMode,
@@ -237,8 +237,8 @@ impl AEGISConfig {
             network,
         )?;
 
-        let zbtc_mint = get_required_or_devnet_default(
-            "AEGIS_ZBTC_MINT",
+        let zkbtc_mint = get_required_or_devnet_default(
+            "AEGIS_ZKBTC_MINT",
             "4pLu3qTY3kNWvvftPG22XzXxWuRPkg7GHWW8hcnoUPgd",
             network,
         )?;
@@ -272,7 +272,7 @@ impl AEGISConfig {
             program_id,
             pool_state,
             commitment_tree,
-            zbtc_mint,
+            zkbtc_mint,
             signing,
             deposit_limit_sats,
             demo_mode,

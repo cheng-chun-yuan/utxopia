@@ -69,7 +69,7 @@ export function ClaimProgressIndicator({ progress }: ClaimProgressIndicatorProps
           </div>
         </div>
         <div>
-          <p className="text-body2-semibold text-foreground">Claiming zBTC</p>
+          <p className="text-body2-semibold text-foreground">Claiming zkBTC</p>
           <p className="text-caption text-gray">{getProgressLabel(progress)}</p>
         </div>
       </div>

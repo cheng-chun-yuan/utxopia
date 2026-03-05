@@ -163,7 +163,7 @@ export function ClaimForm({
           <div className="p-3 bg-muted border border-gray/15 rounded-[12px]">
             <p className="text-caption text-gray mb-1">Amount to Claim</p>
             <p className="text-heading6 text-privacy">
-              {formatBtc(verifyResult.amountSats)} zBTC
+              {formatBtc(verifyResult.amountSats)} zkBTC
             </p>
           </div>
         </div>
@@ -257,7 +257,7 @@ export function ClaimForm({
                 />
               </div>
               <p className="text-caption text-gray mt-1 pl-2">
-                Unshields zBTC to a public Solana wallet
+                Unshields zkBTC to a public Solana wallet
               </p>
             </div>
           )}
@@ -304,7 +304,7 @@ export function ClaimForm({
           className="btn-primary w-full"
         >
           <Coins className="w-5 h-5" />
-          {recipientMode === "public" ? "Unshield zBTC" : "Claim zBTC"}
+          {recipientMode === "public" ? "Unshield zkBTC" : "Claim zkBTC"}
         </button>
       </div>
     </div>

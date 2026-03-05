@@ -412,7 +412,7 @@ bun run test      # Vitest tests
 | `AEGIS_PROGRAM_ID` | (devnet default) | Aegis program ID |
 | `AEGIS_POOL_STATE` | (devnet default) | Pool state PDA |
 | `AEGIS_COMMITMENT_TREE` | (devnet default) | Commitment tree PDA |
-| `AEGIS_ZBTC_MINT` | (devnet default) | zBTC mint address |
+| `AEGIS_ZKBTC_MINT` | (devnet default) | zkBTC mint address |
 | `AEGIS_SIGNING_MODE` | `single` (devnet) | `single` or `frost` |
 | `AEGIS_BTC_SIGNER_KEY` | — | Hex BTC private key (single mode) |
 | `AEGIS_FROST_THRESHOLD` | — | FROST threshold (e.g., 2) |
@@ -574,7 +574,7 @@ Full deposit → claim flow with real Groth16 proof generation. Requires compile
 4. **Header Relayer** syncs the block header to Solana light client
 5. **Deposit Tracker** detects the deposit, waits for confirmations
 6. **Deposit Tracker** sweeps funds to pool wallet and submits SPV proof to Solana
-7. **On-chain**: `verify_stealth_deposit` validates SPV proof, computes commitment on-chain (`Poseidon(npk, ZBTC_TOKEN_ID, amount)`), creates StealthAnnouncement PDA (90 bytes, type=deposit), adds commitment to Merkle tree
+7. **On-chain**: `verify_stealth_deposit` validates SPV proof, computes commitment on-chain (`Poseidon(npk, ZKBTC_TOKEN_ID, amount)`), creates StealthAnnouncement PDA (90 bytes, type=deposit), adds commitment to Merkle tree
 8. **SDK** generates JoinSplit(1,2) Groth16 claim proof (client-side, in browser)
 9. **On-chain**: `transact` verifies JoinSplit proof, inserts output commitments
 

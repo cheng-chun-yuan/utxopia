@@ -284,7 +284,7 @@ function buildAddDemoNoteInstruction(
 
 /**
  * Build ADD_DEMO_STEALTH instruction
- * Adds commitment to tree + creates stealth announcement + mints zBTC
+ * Adds commitment to tree + creates stealth announcement + mints zkBTC
  *
  * Contract expects 8 accounts:
  * 0. pool_state - Pool state PDA (writable)
@@ -292,7 +292,7 @@ function buildAddDemoNoteInstruction(
  * 2. stealth_announcement - Stealth announcement PDA (to create, writable)
  * 3. authority - Pool authority (signer, pays for announcement)
  * 4. system_program - System program
- * 5. zbtc_mint - zBTC Token-2022 mint (writable)
+ * 5. zkbtc_mint - zkBTC Token-2022 mint (writable)
  * 6. pool_vault - Pool vault token account (writable)
  * 7. token_program - Token-2022 program
  *
@@ -307,7 +307,7 @@ function buildAddDemoStealthInstruction(
   commitmentTree: PublicKey,
   stealthAnnouncement: PublicKey,
   authority: PublicKey,
-  zbtcMint: PublicKey,
+  zkbtcMint: PublicKey,
   poolVault: PublicKey,
   ephemeralPub: Uint8Array,  // 32-byte Ed25519
   commitment: Uint8Array,
@@ -331,7 +331,7 @@ function buildAddDemoStealthInstruction(
       { pubkey: stealthAnnouncement, isSigner: false, isWritable: true },
       { pubkey: authority, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      { pubkey: zbtcMint, isSigner: false, isWritable: true },
+      { pubkey: zkbtcMint, isSigner: false, isWritable: true },
       { pubkey: poolVault, isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
     ],
@@ -633,15 +633,15 @@ async function main() {
 
   // Load devnet config for mint and vault addresses
   const devnetConfigPath = path.join(__dirname, "..", ".devnet-config.json");
-  let zbtcMint: PublicKey | null = null;
+  let zkbtcMint: PublicKey | null = null;
   let poolVault: PublicKey | null = null;
 
   try {
     const devnetConfig = JSON.parse(fs.readFileSync(devnetConfigPath, "utf-8"));
-    zbtcMint = new PublicKey(devnetConfig.accounts.zkbtcMint);
+    zkbtcMint = new PublicKey(devnetConfig.accounts.zkbtcMint);
     poolVault = new PublicKey(devnetConfig.accounts.poolVault);
     console.log("\nLoaded devnet config:");
-    console.log("  zBTC Mint:", zbtcMint.toString());
+    console.log("  zkBTC Mint:", zkbtcMint.toString());
     console.log("  Pool Vault:", poolVault.toString());
   } catch (e) {
     console.log("Warning: Could not load .devnet-config.json");
@@ -659,14 +659,14 @@ async function main() {
   const [stealthAnnouncementPda] = deriveStealthAnnouncementPda(stealthDeposit.ephemeralPub);
   console.log("  Announcement PDA:", stealthAnnouncementPda.toString());
 
-  if (poolAccount && zbtcMint && poolVault) {
+  if (poolAccount && zkbtcMint && poolVault) {
     try {
       const stealthIx = buildAddDemoStealthInstruction(
         poolStatePda,
         commitmentTreePda,
         stealthAnnouncementPda,
         authority.publicKey,
-        zbtcMint,
+        zkbtcMint,
         poolVault,
         stealthDeposit.ephemeralPub,
         stealthDeposit.commitment,

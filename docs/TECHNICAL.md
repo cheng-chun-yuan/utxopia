@@ -272,10 +272,10 @@ RECIPIENT (Viewing Key)
 3. Derive random = SHA256(shared_secret || "random")
 4. Compute expected_NPK = Poseidon(own_MPK, random)
 5. type=0 (deposit): amount is plaintext; type=1 (transfer): XOR decrypt amount
-6. Verify: Poseidon(npk, ZBTC_TOKEN_ID, amount) == stored commitment → mine
+6. Verify: Poseidon(npk, ZKBTC_TOKEN_ID, amount) == stored commitment → mine
 ```
 
-**Key constant**: `ZBTC_TOKEN_ID = 0x7a627463` ("zbtc" as u32, used in commitment computation)
+**Key constant**: `ZKBTC_TOKEN_ID = 0x7a627463` ("zkbtc" as u32, used in commitment computation)
 
 ### On-Chain StealthAnnouncement (90 bytes, unified)
 

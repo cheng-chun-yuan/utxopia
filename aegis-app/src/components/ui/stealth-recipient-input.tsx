@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Check, AlertCircle, Loader2, Globe } from "lucide-react";
+import { Check, AlertCircle, Globe } from "lucide-react";
 import { getConnectionAdapter } from "@/lib/adapters/connection-adapter";
 import { cn } from "@/lib/utils";
 import {
@@ -18,6 +18,7 @@ interface StealthRecipientInputProps {
   error: string | null;
   onError: (error: string | null) => void;
   className?: string;
+  icon?: React.ReactNode;
 }
 
 export function StealthRecipientInput({
@@ -27,6 +28,7 @@ export function StealthRecipientInput({
   error,
   onError,
   className,
+  icon,
 }: StealthRecipientInputProps) {
   const [recipient, setRecipient] = useState("");
   const [resolving, setResolving] = useState(false);
@@ -48,10 +50,12 @@ export function StealthRecipientInput({
     const trimmed = recipient.trim();
 
     try {
-      const isLikelyHex = /^[0-9a-fA-F]{100,}$/.test(trimmed);
+      // Strip aegis: prefix if present
+      const raw = trimmed.startsWith("aegis:") ? trimmed.slice(6) : trimmed;
+      const isLikelyHex = /^[0-9a-fA-F]{100,}$/.test(raw);
 
       if (isLikelyHex) {
-        const meta = decodeStealthMetaAddress(trimmed);
+        const meta = decodeStealthMetaAddress(raw);
         if (!meta) {
           onError("Invalid stealth address format (expected 130 hex characters)");
           return;
@@ -99,34 +103,39 @@ export function StealthRecipientInput({
         <label className="text-body2 text-gray-light pl-2 mb-2 block">
           Recipient
         </label>
-        <div className="flex gap-3">
+        <div className="relative">
+          {icon && (
+            <div className="absolute left-4 top-1/2 -translate-y-1/2">
+              {icon}
+            </div>
+          )}
           <input
             type="text"
             value={recipient}
             onChange={(e) => handleInputChange(e.target.value)}
-            placeholder={`alice.${parentDomain}.sol or stealth address`}
+            placeholder={`alice.${parentDomain}.sol or aegis:...`}
             className={cn(
-              "flex-1 px-4 py-3 bg-muted border rounded-[10px]",
+              "w-full pr-4 py-3 bg-muted border rounded-[10px]",
               "text-body2 font-mono text-foreground placeholder:text-gray/40",
               "outline-none transition-colors",
+              icon ? "pl-10" : "pl-4",
               error
                 ? "border-red-500/50"
                 : resolvedMeta
                   ? "border-privacy/40"
                   : "border-gray/20 focus:border-purple/40"
             )}
+            onBlur={() => {
+              if (recipient.trim() && !resolvedMeta && !resolving) {
+                resolveRecipient();
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && recipient.trim() && !resolving) {
+                resolveRecipient();
+              }
+            }}
           />
-          <button
-            onClick={resolveRecipient}
-            disabled={!recipient.trim() || resolving}
-            className={cn(
-              "px-4 py-3 rounded-[10px] text-body2 transition-colors",
-              "bg-purple hover:bg-purple/80 text-white",
-              "disabled:bg-gray/30 disabled:text-gray disabled:cursor-not-allowed"
-            )}
-          >
-            {resolving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Resolve"}
-          </button>
         </div>
       </div>
 

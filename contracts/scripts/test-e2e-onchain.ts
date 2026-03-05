@@ -908,14 +908,14 @@ async function main() {
     : null;
 
   // Build claim instruction with proof buffer account
-  // Account order: pool_state, commitment_tree, nullifier, zbtc_mint, pool_vault, recipient_ata, user, token_program, system_program, groth16_verifier, proof_buffer
+  // Account order: pool_state, commitment_tree, nullifier, zkbtc_mint, pool_vault, recipient_ata, user, token_program, system_program, groth16_verifier, proof_buffer
   const claimIx = new TransactionInstruction({
     programId,
     keys: [
       { pubkey: poolStatePda, isWritable: true, isSigner: false },         // 0: pool_state
       { pubkey: commitmentTreePda, isWritable: false, isSigner: false },   // 1: commitment_tree
       { pubkey: nullifierPda, isWritable: true, isSigner: false },         // 2: nullifier_record
-      { pubkey: zkbtcMint, isWritable: true, isSigner: false },            // 3: zbtc_mint
+      { pubkey: zkbtcMint, isWritable: true, isSigner: false },            // 3: zkbtc_mint
       { pubkey: poolVault, isWritable: true, isSigner: false },            // 4: pool_vault
       { pubkey: recipientAta, isWritable: true, isSigner: false },         // 5: recipient_ata
       { pubkey: authority.publicKey, isWritable: true, isSigner: true },   // 6: user (signer)

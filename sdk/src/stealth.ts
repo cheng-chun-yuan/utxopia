@@ -188,11 +188,11 @@ export interface OnChainStealthAnnouncement {
 const STEALTH_KEY_DOMAIN = new TextEncoder().encode("Aegis-stealth-v1");
 
 /**
- * ZBTC token identifier for JoinSplit commitments.
- * This is a fixed constant — Poseidon(npk, ZBTC_TOKEN_ID, amount).
- * Value: SHA256("zbtc") mod BN254_SCALAR_FIELD, truncated to fit.
+ * ZKBTC token identifier for JoinSplit commitments.
+ * This is a fixed constant — Poseidon(npk, ZKBTC_TOKEN_ID, amount).
+ * Value: SHA256("zkbtc") mod BN254_SCALAR_FIELD, truncated to fit.
  */
-export const ZBTC_TOKEN_ID = 0x7a627463n; // "zbtc" as u32 (simple, deterministic)
+export const ZKBTC_TOKEN_ID = 0x7a627463n; // "zkbtc" as u32 (simple, deterministic)
 
 /**
  * Derive stealth scalar from X25519 shared secret
@@ -246,7 +246,7 @@ function deriveStealthPrivKey(
  * 4. stealthMPK = Poseidon(stealthPub.x, stealthPub.y, nullifyingKey)
  *    (sender uses recipientMPK from meta-address for stealth deposits)
  * 5. npk = Poseidon(recipientMPK, random)
- * 6. commitment = Poseidon(npk, ZBTC_TOKEN_ID, amount)
+ * 6. commitment = Poseidon(npk, ZKBTC_TOKEN_ID, amount)
  * 7. encryptedAmount = amount XOR sha256(sharedSecret)[0..8]
  */
 export async function createStealthDeposit(
@@ -270,7 +270,7 @@ export async function createStealthDeposit(
   const npk = computeNPKSync(recipientMPK, stealthScalar);
 
   // Compute JoinSplit commitment = Poseidon(npk, token, amount)
-  const commitmentBigint = computeJoinSplitCommitmentSync(npk, ZBTC_TOKEN_ID, amountSats);
+  const commitmentBigint = computeJoinSplitCommitmentSync(npk, ZKBTC_TOKEN_ID, amountSats);
   const commitment = bigintToBytes(commitmentBigint);
 
   // Encrypt amount
@@ -308,7 +308,7 @@ export async function createStealthDepositWithKeys(
   const recipientMPK = bytesToBigint(recipientMeta.mpk);
   const npk = computeNPKSync(recipientMPK, stealthScalar);
 
-  const commitmentBigint = computeJoinSplitCommitmentSync(npk, ZBTC_TOKEN_ID, amountSats);
+  const commitmentBigint = computeJoinSplitCommitmentSync(npk, ZKBTC_TOKEN_ID, amountSats);
   const commitment = bigintToBytes(commitmentBigint);
   const encryptedAmount = encryptAmount(amountSats, sharedSecret);
 
@@ -435,7 +435,7 @@ export async function scanAnnouncements(
 
       // Compute expected NPK and commitment (JoinSplit format)
       const npk = computeNPKSync(mpk, stealthScalar);
-      const expectedCommitment = computeJoinSplitCommitmentSync(npk, ZBTC_TOKEN_ID, amount);
+      const expectedCommitment = computeJoinSplitCommitmentSync(npk, ZKBTC_TOKEN_ID, amount);
       const actualCommitment = bytesToBigint(ann.commitment);
 
       if (expectedCommitment !== actualCommitment) {
@@ -518,7 +518,7 @@ export async function scanAnnouncementsViewOnly(
 
       const stealthScalar = deriveStealthScalar(sharedSecret);
       const npk = computeNPKSync(mpk, stealthScalar);
-      const expectedCommitment = computeJoinSplitCommitmentSync(npk, ZBTC_TOKEN_ID, amount);
+      const expectedCommitment = computeJoinSplitCommitmentSync(npk, ZKBTC_TOKEN_ID, amount);
       const actualCommitment = bytesToBigint(ann.commitment);
 
       if (expectedCommitment !== actualCommitment) {
@@ -674,7 +674,7 @@ export function parseStealthAnnouncement(
  * - type=0 (deposit): amount is plaintext u64 LE in amount_bytes
  * - type=1 (transfer): amount is XOR-encrypted in amount_bytes
  *
- * Commitment is computed locally: Poseidon(npk, ZBTC_TOKEN_ID, amount).
+ * Commitment is computed locally: Poseidon(npk, ZKBTC_TOKEN_ID, amount).
  * For deposits, we verify the derived NPK produces a valid commitment.
  * For transfers, we verify the decrypted amount is in a valid range.
  */
@@ -712,7 +712,7 @@ export async function scanUnifiedNotes(
       // Derive stealth scalar and expected NPK + commitment (computed locally)
       const stealthScalar = deriveStealthScalar(sharedSecret);
       const npk = computeNPKSync(mpk, stealthScalar);
-      const commitmentBigint = computeJoinSplitCommitmentSync(npk, ZBTC_TOKEN_ID, amount);
+      const commitmentBigint = computeJoinSplitCommitmentSync(npk, ZKBTC_TOKEN_ID, amount);
 
       // For deposits (type=0), amount is plaintext so any key reads valid amount.
       // Must verify commitment to filter out deposits that don't belong to us.
@@ -850,7 +850,7 @@ export async function createStealthOutput(
   const mpk = computeMPKSync(keys.spendingPubKey.x, keys.spendingPubKey.y, keys.nullifyingKey);
   const npk = computeNPKSync(mpk, stealthScalar);
 
-  const commitmentBigint = computeJoinSplitCommitmentSync(npk, ZBTC_TOKEN_ID, amountSats);
+  const commitmentBigint = computeJoinSplitCommitmentSync(npk, ZKBTC_TOKEN_ID, amountSats);
   const commitment = bigintToBytes(commitmentBigint);
   const encryptedAmount = encryptAmount(amountSats, sharedSecret);
 
@@ -875,7 +875,7 @@ export async function createStealthOutputWithKeys(
   const mpk = computeMPKSync(keys.spendingPubKey.x, keys.spendingPubKey.y, keys.nullifyingKey);
   const npk = computeNPKSync(mpk, stealthScalar);
 
-  const commitmentBigint = computeJoinSplitCommitmentSync(npk, ZBTC_TOKEN_ID, amountSats);
+  const commitmentBigint = computeJoinSplitCommitmentSync(npk, ZKBTC_TOKEN_ID, amountSats);
   const commitment = bigintToBytes(commitmentBigint);
   const encryptedAmount = encryptAmount(amountSats, sharedSecret);
 

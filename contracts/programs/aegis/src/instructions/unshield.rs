@@ -2,7 +2,7 @@
 //!
 //! Converts shielded zkBTC back to public SPL tokens on Solana.
 //! User proves ownership via JoinSplit ZK proof, nullifiers are created,
-//! and pool vault transfers public zBTC to the user's token account.
+//! and pool vault transfers public zkBTC to the user's token account.
 //!
 //! The last output commitment is the "unshield output" — verified in ZK proof
 //! but NOT inserted into the Merkle tree. Instead, the unshield amount is
@@ -27,7 +27,7 @@
 //! 2. vk_registry          (read)
 //! 3. user                 (signer, payer)
 //! 4. system_program       (read)
-//! 5. zbtc_mint            (writable)
+//! 5. zkbtc_mint            (writable)
 //! 6. pool_vault           (writable)
 //! 7. user_token_account   (writable)
 //! 8. token_program        (read)
@@ -54,7 +54,7 @@ use crate::utils::{
     create_pda_account, validate_account_writable, validate_program_owner,
     validate_system_program, validate_token_2022_owner, validate_token_program_key,
 };
-use crate::utils::token::{transfer_zbtc, validate_token_account};
+use crate::utils::token::{transfer_zkbtc, validate_token_account};
 
 /// Maximum supported N + M
 const MAX_JOINSPLIT_SIZE: usize = crate::constants::MAX_SAFE_JOINSPLIT_SIZE;
@@ -160,7 +160,7 @@ pub fn process_unshield(
     let vk_registry_info = &accounts[2];
     let user = &accounts[3];
     let system_program = &accounts[4];
-    let zbtc_mint = &accounts[5];
+    let zkbtc_mint = &accounts[5];
     let pool_vault = &accounts[6];
     let user_token_account = &accounts[7];
     let token_program = &accounts[8];
@@ -170,12 +170,12 @@ pub fn process_unshield(
     validate_program_owner(commitment_tree_info, program_id)?;
     validate_program_owner(vk_registry_info, program_id)?;
     validate_system_program(system_program)?;
-    validate_token_2022_owner(zbtc_mint)?;
+    validate_token_2022_owner(zkbtc_mint)?;
     validate_token_2022_owner(pool_vault)?;
     validate_token_program_key(token_program)?;
     validate_account_writable(pool_state_info)?;
     validate_account_writable(commitment_tree_info)?;
-    validate_account_writable(zbtc_mint)?;
+    validate_account_writable(zkbtc_mint)?;
     validate_account_writable(pool_vault)?;
     validate_account_writable(user_token_account)?;
 
@@ -192,9 +192,9 @@ pub fn process_unshield(
             return Err(AegisError::PoolPaused.into());
         }
 
-        // Verify zbtc_mint matches pool
-        if zbtc_mint.key().as_ref() != pool.zbtc_mint {
-            debug_msg!("zBTC mint mismatch");
+        // Verify zkbtc_mint matches pool
+        if zkbtc_mint.key().as_ref() != pool.zkbtc_mint {
+            debug_msg!("zkBTC mint mismatch");
             return Err(ProgramError::InvalidAccountData);
         }
 
@@ -216,7 +216,7 @@ pub fn process_unshield(
 
     // Validate user token account: owned by Token-2022, correct mint
     let unshield_recipient = Pubkey::from(*unshield_address);
-    validate_token_account(user_token_account, zbtc_mint.key(), &unshield_recipient)?;
+    validate_token_account(user_token_account, zkbtc_mint.key(), &unshield_recipient)?;
 
     // Validate VK registry for this (N, M) variant
     {
@@ -263,7 +263,7 @@ pub fn process_unshield(
 
     debug_msg!("Unshield JoinSplit proof verified");
 
-    // Verify unshield commitment: last output = Poseidon(unshield_address, ZBTC_TOKEN_ID, unshield_amount)
+    // Verify unshield commitment: last output = Poseidon(unshield_address, ZKBTC_TOKEN_ID, unshield_amount)
     {
         let expected_commitment = crate::utils::crypto::compute_deposit_commitment(
             unshield_address,
@@ -399,7 +399,7 @@ pub fn process_unshield(
         let pool_bump_bytes = [pool_bump];
         let pool_signer_seeds: &[&[u8]] = &[PoolState::SEED, &pool_bump_bytes];
 
-        transfer_zbtc(
+        transfer_zkbtc(
             token_program,
             pool_vault,
             user_token_account,

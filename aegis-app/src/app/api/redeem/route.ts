@@ -117,8 +117,9 @@ function deriveRedemptionRequestPDA(
   nonce: bigint,
   programId: PublicKey = AEGIS_PROGRAM_ID
 ): [PublicKey, number] {
-  const nonceBytes = Buffer.alloc(8);
-  nonceBytes.writeBigUInt64LE(nonce);
+  const nonceBytes = new Uint8Array(8);
+  const view = new DataView(nonceBytes.buffer);
+  view.setBigUint64(0, nonce, true);
   return PublicKey.findProgramAddressSync(
     [Buffer.from("redemption"), user.toBuffer(), nonceBytes],
     programId

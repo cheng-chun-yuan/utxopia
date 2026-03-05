@@ -53,10 +53,10 @@ export interface NetworkConfig {
   /** Commitment Tree PDA address */
   commitmentTreePda: Address;
 
-  /** zBTC Mint address (Token-2022) */
-  zbtcMint: Address;
+  /** zkBTC Mint address (Token-2022) */
+  zkbtcMint: Address;
 
-  /** Pool Vault (ATA for pool holding zBTC) */
+  /** Pool Vault (ATA for pool holding zkBTC) */
   poolVault: Address;
 
   // -------------------------------------------------------------------------
@@ -191,7 +191,7 @@ export const DEVNET_CONFIG: NetworkConfig = {
   // Deployed Accounts (fresh deployment 2026-03-03)
   poolStatePda: address("7Xr7MthZPc7YeHfU5SRmguxovhiDNhfestWgtPruUfjE"),
   commitmentTreePda: address("76bh2QB7c9L73yHea8AV7vthsDsuDCp2QqQToGcA3JdK"),
-  zbtcMint: address("8wCJtuj6ir9VxvjJ14EK4KpFffx4gSKV5ZJ1jYSdRzxN"),
+  zkbtcMint: address("8wCJtuj6ir9VxvjJ14EK4KpFffx4gSKV5ZJ1jYSdRzxN"),
   poolVault: address("ELFqueP7akYfkM7nTfWs3tTS5MJpGnbvMuBUxayKT6zb"),
 
   // RPC Endpoints
@@ -258,7 +258,7 @@ export const MAINNET_CONFIG: NetworkConfig = {
   // Deployed Accounts (placeholder - update when deployed)
   poolStatePda: address("11111111111111111111111111111111"),
   commitmentTreePda: address("11111111111111111111111111111111"),
-  zbtcMint: address("11111111111111111111111111111111"),
+  zkbtcMint: address("11111111111111111111111111111111"),
   poolVault: address("11111111111111111111111111111111"),
 
   // RPC Endpoints
@@ -314,7 +314,7 @@ export const LOCALNET_CONFIG: NetworkConfig = {
   // Deployed Accounts (synced with .localnet-config.json 2026-02-23)
   poolStatePda: address("E6DVestxC5dn5ixvLa3FcYodcVtwUAyanpVPbs4y3p16"),
   commitmentTreePda: address("JCiGqC1a1rjfqk2dqcybU2e3FQjAQ19x8ts9fQCtTFCq"),
-  zbtcMint: address("CHg1f85uxw4HrVkj3ianLezVAJTv29VcCWiBxjZ4YFdF"),
+  zkbtcMint: address("CHg1f85uxw4HrVkj3ianLezVAJTv29VcCWiBxjZ4YFdF"),
   poolVault: address("7vpuYKngG75Km1bbZ5TZJZzRn2BBtkh9BaqPS814tPLg"),
 
   // RPC Endpoints

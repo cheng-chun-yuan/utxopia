@@ -19,7 +19,7 @@ export default function DepositPage() {
       ]}
       titleIcon={<ArrowDownToLine className="w-full h-full" />}
       title="Deposit BTC"
-      description="Send BTC to receive private zBTC tokens"
+      description="Send BTC to receive private zkBTC tokens"
     >
       <DepositFlow />
     </FlowPageLayout>

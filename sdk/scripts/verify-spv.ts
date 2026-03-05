@@ -42,7 +42,7 @@ const AEGIS_PROGRAM_ID = new PublicKey("25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1t
 const BTC_LIGHT_CLIENT_PROGRAM_ID = new PublicKey("Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq");
 const CHADBUFFER_PROGRAM_ID = new PublicKey("C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF");
 const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
-const ZBTC_MINT = new PublicKey("4pLu3qTY3kNWvvftPG22XzXxWuRPkg7GHWW8hcnoUPgd");
+const ZKBTC_MINT = new PublicKey("4pLu3qTY3kNWvvftPG22XzXxWuRPkg7GHWW8hcnoUPgd");
 
 // Merkle proof from mempool.space
 const MERKLE_PROOF = {
@@ -201,7 +201,7 @@ async function main() {
     BTC_LIGHT_CLIENT_PROGRAM_ID
   );
   const poolVaultATA = getAssociatedTokenAddressSync(
-    ZBTC_MINT, poolStatePDA, true, TOKEN_2022_PROGRAM_ID
+    ZKBTC_MINT, poolStatePDA, true, TOKEN_2022_PROGRAM_ID
   );
 
   console.log("\n--- PDAs ---");
@@ -440,7 +440,7 @@ async function main() {
       { pubkey: bufferKeypair.publicKey, isSigner: false, isWritable: false },
       { pubkey: relayer.publicKey, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      { pubkey: ZBTC_MINT, isSigner: false, isWritable: true },
+      { pubkey: ZKBTC_MINT, isSigner: false, isWritable: true },
       { pubkey: poolVaultATA, isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
     ],

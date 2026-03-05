@@ -1,4 +1,4 @@
-//! zBTC Backend - Minimal Services
+//! zkBTC Backend - Minimal Services
 //!
 //! Server-side services:
 //! 1. Header Relay (TypeScript) - Submits Bitcoin headers to Solana light client
@@ -14,13 +14,13 @@
 //!   cargo run -- tracker         - Start deposit tracker (background)
 //!   cargo run -- demo            - Run interactive demo
 
-use zbtc::api_server as api;
-use zbtc::config::AEGISConfig;
-use zbtc::deposit_tracker::{self, TrackerConfig};
-use zbtc::event_indexer::{EventIndexerConfig, EventIndexerService, EventStore, TreeCache, event_indexer_router};
-use zbtc::redemption::{MpcSigner, RedemptionConfig, RedemptionService, SingleKeySigner};
-use zbtc::stealth::StealthDepositService;
-use zbtc::units;
+use zkbtc::api_server as api;
+use zkbtc::config::AEGISConfig;
+use zkbtc::deposit_tracker::{self, TrackerConfig};
+use zkbtc::event_indexer::{EventIndexerConfig, EventIndexerService, EventStore, TreeCache, event_indexer_router};
+use zkbtc::redemption::{MpcSigner, RedemptionConfig, RedemptionService, SingleKeySigner};
+use zkbtc::stealth::StealthDepositService;
+use zkbtc::units;
 use std::env;
 use std::sync::Arc;
 
@@ -47,13 +47,13 @@ async fn main() {
 }
 
 fn print_usage() {
-    println!("zBTC Backend - Server-Side Services");
+    println!("zkBTC Backend - Server-Side Services");
     println!();
     println!("Usage:");
-    println!("  zbtc-api api [--port <port>]               Start REST API server (default: 3001)");
-    println!("  zbtc-api redemption [--interval <secs>]    Start redemption processor");
-    println!("  zbtc-api tracker [options]                 Start deposit tracker");
-    println!("  zbtc-api demo                              Run interactive demo");
+    println!("  zkbtc-api api [--port <port>]               Start REST API server (default: 3001)");
+    println!("  zkbtc-api redemption [--interval <secs>]    Start redemption processor");
+    println!("  zkbtc-api tracker [options]                 Start deposit tracker");
+    println!("  zkbtc-api demo                              Run interactive demo");
     println!();
     println!("Tracker Options:");
     println!("  --interval <secs>       Poll interval (default: 30)");
@@ -187,7 +187,7 @@ async fn run_redemption_service(args: &[String]) {
 
     let service = create_service(config.clone());
 
-    println!("=== zBTC Redemption Processor ===");
+    println!("=== zkBTC Redemption Processor ===");
     println!();
     println!("Configuration:");
     println!("  Check Interval: {} seconds", config.check_interval_secs);
@@ -345,7 +345,7 @@ async fn run_tracker_service(args: &[String]) {
                         .map_err(|e| format!("invalid keypair: {}", e))
                 })
         } else {
-            zbtc::load_keypair_from_file(&keypair_val)
+            zkbtc::load_keypair_from_file(&keypair_val)
                 .map_err(|e| format!("{}", e))
         };
         match keypair_result {
@@ -368,7 +368,7 @@ async fn run_tracker_service(args: &[String]) {
         .and_then(|p| p.parse().ok())
         .unwrap_or(3001);
 
-    println!("=== zBTC Deposit Tracker ===");
+    println!("=== zkBTC Deposit Tracker ===");
     println!();
     println!("Configuration:");
     println!("  Poll Interval: {} seconds", config.poll_interval_secs);
@@ -501,10 +501,10 @@ fn configure_frost_sweeper(
 }
 
 async fn run_demo() {
-    use zbtc::taproot::{generate_deposit_address, PoolKeys};
+    use zkbtc::taproot::{generate_deposit_address, PoolKeys};
     use bitcoin::Network;
 
-    println!("\n=== zBTC Demo ===\n");
+    println!("\n=== zkBTC Demo ===\n");
     println!("Note: In production, use the SDK for client-side operations.");
     println!();
 
@@ -535,10 +535,10 @@ async fn run_demo() {
     println!("2. CLAIM (Client-side via SDK):");
     println!("   - SDK generates Groth16 ZK proof locally");
     println!("   - SDK submits claim transaction to Solana");
-    println!("   - zBTC minted to user's wallet");
+    println!("   - zkBTC minted to user's wallet");
     println!();
     println!("3. WITHDRAW (Server-side redemption processor):");
-    println!("   - User burns zBTC via SDK (creates RedemptionRequest PDA)");
+    println!("   - User burns zkBTC via SDK (creates RedemptionRequest PDA)");
     println!("   - Redemption processor detects request");
     println!("   - Processor signs and broadcasts BTC transaction");
     println!("   - Processor calls complete_redemption after confirms");

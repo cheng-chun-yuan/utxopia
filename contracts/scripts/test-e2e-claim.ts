@@ -50,7 +50,7 @@ const __dirname = path.dirname(__filename);
 
 // Constants
 const RPC_URL = "https://api.devnet.solana.com";
-const ZBTC_MINT = new PublicKey("BdUFQhqKpzYVHVg8cQoh7JdpSoHFtwKM4A48AFAjKFAK");
+const ZKBTC_MINT = new PublicKey("BdUFQhqKpzYVHVg8cQoh7JdpSoHFtwKM4A48AFAjKFAK");
 const PROGRAM_ID = new PublicKey(AEGIS_PROGRAM_ID);
 const TREE_DEPTH = 20;
 
@@ -261,7 +261,7 @@ async function main() {
 
   // Get pool vault (ATA of pool state)
   const poolVault = getAssociatedTokenAddressSync(
-    ZBTC_MINT,
+    ZKBTC_MINT,
     new PublicKey(poolState),
     true,
     TOKEN_2022_PROGRAM_ID
@@ -281,7 +281,7 @@ async function main() {
       { pubkey: stealthAnnouncementPDA, isWritable: true, isSigner: false },
       { pubkey: authority.publicKey, isWritable: true, isSigner: true },
       { pubkey: SystemProgram.programId, isWritable: false, isSigner: false },
-      { pubkey: ZBTC_MINT, isWritable: true, isSigner: false },
+      { pubkey: ZKBTC_MINT, isWritable: true, isSigner: false },
       { pubkey: poolVault, isWritable: true, isSigner: false },
       { pubkey: TOKEN_2022_PROGRAM_ID, isWritable: false, isSigner: false },
     ],

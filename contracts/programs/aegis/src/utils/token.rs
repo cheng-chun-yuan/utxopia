@@ -18,15 +18,15 @@ mod token_instruction {
     pub const TRANSFER: u8 = 3;
 }
 
-/// Mint zBTC tokens to a user account
+/// Mint zkBTC tokens to a user account
 ///
 /// # Arguments
-/// * `mint` - The zBTC mint account
+/// * `mint` - The zkBTC mint account
 /// * `destination` - The user's token account
 /// * `authority` - The mint authority (pool PDA)
 /// * `amount` - Amount to mint (in satoshis)
 /// * `signer_seeds` - PDA signer seeds
-pub fn mint_zbtc(
+pub fn mint_zkbtc(
     _token_program: &AccountInfo,
     mint: &AccountInfo,
     destination: &AccountInfo,
@@ -64,14 +64,14 @@ pub fn mint_zbtc(
     invoke_signed(&instruction, &[mint, destination, authority], &signers)
 }
 
-/// Burn zBTC tokens from a user account
+/// Burn zkBTC tokens from a user account
 ///
 /// # Arguments
-/// * `mint` - The zBTC mint account
+/// * `mint` - The zkBTC mint account
 /// * `source` - The user's token account to burn from
 /// * `authority` - The token account authority (user)
 /// * `amount` - Amount to burn (in satoshis)
-pub fn burn_zbtc(
+pub fn burn_zkbtc(
     _token_program: &AccountInfo,
     mint: &AccountInfo,
     source: &AccountInfo,
@@ -99,15 +99,15 @@ pub fn burn_zbtc(
     invoke(&instruction, &[source, mint, authority])
 }
 
-/// Burn zBTC tokens from a PDA-controlled account (e.g., pool vault)
+/// Burn zkBTC tokens from a PDA-controlled account (e.g., pool vault)
 ///
 /// # Arguments
-/// * `mint` - The zBTC mint account
+/// * `mint` - The zkBTC mint account
 /// * `source` - The PDA-controlled token account to burn from
 /// * `authority` - The PDA authority
 /// * `amount` - Amount to burn (in satoshis)
 /// * `signer_seeds` - PDA signer seeds
-pub fn burn_zbtc_signed(
+pub fn burn_zkbtc_signed(
     _token_program: &AccountInfo,
     mint: &AccountInfo,
     source: &AccountInfo,
@@ -143,7 +143,7 @@ pub fn burn_zbtc_signed(
     invoke_signed(&instruction, &[source, mint, authority], &signers)
 }
 
-/// Transfer zBTC tokens between accounts
+/// Transfer zkBTC tokens between accounts
 ///
 /// # Arguments
 /// * `source` - The source token account
@@ -151,7 +151,7 @@ pub fn burn_zbtc_signed(
 /// * `authority` - The source account authority
 /// * `amount` - Amount to transfer
 /// * `signer_seeds` - Optional PDA signer seeds
-pub fn transfer_zbtc(
+pub fn transfer_zkbtc(
     _token_program: &AccountInfo,
     source: &AccountInfo,
     destination: &AccountInfo,

@@ -3,7 +3,7 @@
  *
  * Handles relaying unshield transactions. Same as /api/relay but:
  * - Uses UNSHIELD discriminator (15) instead of TRANSACT (14)
- * - Passes extra accounts: zbtc_mint, pool_vault, user_token_account, token_program
+ * - Passes extra accounts: zkbtc_mint, pool_vault, user_token_account, token_program
  * - Appends unshield_amount and unshield_address to instruction data
  * - Creates stealth announcements only for tree outputs (n_outputs - 1)
  *
@@ -35,7 +35,7 @@ import {
 import {
   AEGIS_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
-  ZBTC_MINT_ADDRESS,
+  ZKBTC_MINT_ADDRESS,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
   deriveNullifierPDA,
@@ -281,7 +281,7 @@ export async function POST(request: NextRequest) {
       { pubkey: vkRegistryPDA, isSigner: false, isWritable: false },
       { pubkey: relayer.publicKey, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      { pubkey: ZBTC_MINT_ADDRESS, isSigner: false, isWritable: true },
+      { pubkey: ZKBTC_MINT_ADDRESS, isSigner: false, isWritable: true },
       { pubkey: poolVault, isSigner: false, isWritable: true },
       { pubkey: recipientTokenPubkey, isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
@@ -309,7 +309,7 @@ export async function POST(request: NextRequest) {
         relayer.publicKey,       // payer
         recipientTokenPubkey,    // associated token account
         recipientPubkey,         // owner
-        ZBTC_MINT_ADDRESS,       // mint
+        ZKBTC_MINT_ADDRESS,       // mint
         TOKEN_2022_PROGRAM_ID,   // token program
       );
       const ataTx = new Transaction().add(createAtaIx);

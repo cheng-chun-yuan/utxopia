@@ -15,7 +15,7 @@ const RPC_URL = "https://api.devnet.solana.com";
 const AEGIS_PROGRAM = new PublicKey("zKeyrLmpT8W9o8iRvhizuSihLAFLhfAGBvfM638Pbw8");
 const POOL_STATE = new PublicKey("ELGSdquznDBd6uUkWsBAmguMBmtuur7D5kapwoyZq44J");
 const COMMITMENT_TREE = new PublicKey("5p7WERgzB6AHcga19QehvaTfbiVoM1Bg6drkwzYHYamq");
-const ZBTC_MINT = new PublicKey("56gihX59Zy3coM9B1PYXLPoFEzjNuPEVhskCZcKq3VKx");
+const ZKBTC_MINT = new PublicKey("56gihX59Zy3coM9B1PYXLPoFEzjNuPEVhskCZcKq3VKx");
 const POOL_VAULT = new PublicKey("J3dRjxc441qNitZBhPNrrmS5moWY89Fp1g97ayuQSDSj");
 const TOKEN_2022 = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
@@ -76,7 +76,7 @@ async function main() {
       { pubkey: announcementPda, isSigner: false, isWritable: true },
       { pubkey: payer.publicKey, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      { pubkey: ZBTC_MINT, isSigner: false, isWritable: true },
+      { pubkey: ZKBTC_MINT, isSigner: false, isWritable: true },
       { pubkey: POOL_VAULT, isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022, isSigner: false, isWritable: false },
     ],

@@ -21,7 +21,7 @@ import { fetchAccountInfo, getRpc } from "@/lib/adapters/connection-adapter";
 import { address } from "@solana/kit";
 
 export interface PoolStats {
-  /** Total zBTC currently in shielded commitments (sats) — "Vault" */
+  /** Total zkBTC currently in shielded commitments (sats) — "Vault" */
   totalShielded: bigint;
   /** Number of stealth announcement PDAs on-chain — "Deposits" */
   stealthAnnouncementCount: number;

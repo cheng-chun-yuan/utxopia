@@ -1,8 +1,8 @@
 //! Aegis - Privacy-Preserving BTC to Solana Bridge (Pinocchio)
 //!
 //! SHIELDED-ONLY ARCHITECTURE (JoinSplit Model):
-//! - zBTC exists only as commitments in Merkle tree
-//! - Users never hold public zBTC tokens
+//! - zkBTC exists only as commitments in Merkle tree
+//! - Users never hold public zkBTC tokens
 //! - Amount revealed ONLY at BTC withdrawal
 //! - All deposits use stealth announcements for recipient discovery
 //! - All transfers use JoinSplit(N,M) proofs with EdDSA-Poseidon signatures
@@ -85,7 +85,7 @@ pub mod instruction {
     // Redeem: JoinSplit N→M with BTC redemption (last output → RedemptionRequest)
     pub const REDEEM: u8 = 16;
 
-    // Public redeem: burn SPL zBTC → RedemptionRequest (no ZK proof)
+    // Public redeem: burn SPL zkBTC → RedemptionRequest (no ZK proof)
     pub const PUBLIC_REDEEM: u8 = 17;
 
     // Admin: close any program-owned PDA (devnet only)

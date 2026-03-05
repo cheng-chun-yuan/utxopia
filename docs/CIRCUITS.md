@@ -62,7 +62,7 @@ Single parameterized template generating all circuit variants.
 
 | Signal | Type | Description |
 |--------|------|-------------|
-| `token` | Field | Token identifier (`ZBTC_TOKEN_ID = 0x7a627463`) |
+| `token` | Field | Token identifier (`ZKBTC_TOKEN_ID = 0x7a627463`) |
 | `publicKey[2]` | [x, y] | Baby Jubjub spending public key |
 | `signature[3]` | [R8x, R8y, S] | EdDSA-Poseidon signature |
 | `nullifyingKey` | Field | BN254 scalar for nullifier generation |
@@ -145,7 +145,7 @@ Commitment = Poseidon(npk, token, amount)
 | Input | Description |
 |-------|-------------|
 | `npk` | Note public key (Poseidon(MPK, random)) |
-| `token` | Token identifier (0x7a627463 for zBTC) |
+| `token` | Token identifier (0x7a627463 for zkBTC) |
 | `amount` | Amount in satoshis |
 | **Output** | `commitment` (BN254 field element) |
 

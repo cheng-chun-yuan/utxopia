@@ -370,7 +370,7 @@ async function testClaimZkBTC(
   const [commitmentTree] = await deriveCommitmentTreePDA(config.aegisProgramId);
   const nullifierHash = bigintToBytes32(computeNullifier(note.nullifier, BigInt(note.leafIndex)));
   const [nullifierRecord] = await deriveNullifierRecordPDA(nullifierHash, config.aegisProgramId);
-  const recipientAta = await deriveATA(payer.address, config.zbtcMint);
+  const recipientAta = await deriveATA(payer.address, config.zkbtcMint);
 
   log.info("Building claim instruction:");
   log.data("Amount", formatSats(note.amount));
@@ -387,7 +387,7 @@ async function testClaimZkBTC(
       poolState,
       commitmentTree,
       nullifierRecord,
-      zbtcMint: config.zbtcMint,
+      zkbtcMint: config.zkbtcMint,
       poolVault: config.poolVault,
       recipientAta,
       user: payer.address,

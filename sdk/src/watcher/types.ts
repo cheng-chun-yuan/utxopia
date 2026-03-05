@@ -17,7 +17,7 @@ export type DepositStatus =
   | "confirmed" // Required confirmations reached
   | "verifying" // Verifying on Solana
   | "verified" // Verified on Solana, ready to claim
-  | "claimed" // zBTC claimed
+  | "claimed" // zkBTC claimed
   | "failed"; // Something went wrong
 
 /**
@@ -89,7 +89,7 @@ export interface WatcherCallbacks {
   onVerified?: (deposit: PendingDeposit) => void;
 
   /**
-   * Called when zBTC is claimed
+   * Called when zkBTC is claimed
    */
   onClaimed?: (deposit: PendingDeposit) => void;
 

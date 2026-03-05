@@ -38,7 +38,7 @@ import {
   createStealthDeposit,
   scanAnnouncements,
   prepareClaimInputs,
-  ZBTC_TOKEN_ID,
+  ZKBTC_TOKEN_ID,
 } from "../../src/stealth";
 
 // Commitment tree

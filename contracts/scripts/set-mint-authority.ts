@@ -25,16 +25,16 @@ async function main() {
 
   // Load config
   const devnetConfig = JSON.parse(fs.readFileSync(".devnet-config.json", "utf-8"));
-  const zbtcMint = new PublicKey(devnetConfig.accounts.zkbtcMint);
+  const zkbtcMint = new PublicKey(devnetConfig.accounts.zkbtcMint);
   const poolStatePDA = new PublicKey(devnetConfig.accounts.poolState);
 
   console.log(`\nCurrent Authority: ${authority.publicKey.toBase58()}`);
-  console.log(`zkBTC Mint: ${zbtcMint.toBase58()}`);
+  console.log(`zkBTC Mint: ${zkbtcMint.toBase58()}`);
   console.log(`New Authority (Pool State PDA): ${poolStatePDA.toBase58()}`);
 
   // Create set authority instruction
   const ix = createSetAuthorityInstruction(
-    zbtcMint,                    // mint
+    zkbtcMint,                    // mint
     authority.publicKey,         // current authority
     AuthorityType.MintTokens,    // authority type
     poolStatePDA,                // new authority

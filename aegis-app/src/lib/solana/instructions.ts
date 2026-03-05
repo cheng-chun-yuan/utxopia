@@ -53,8 +53,8 @@ export const BTC_LIGHT_CLIENT_PROGRAM_ID = new PublicKey(DEVNET_CONFIG.btcLightC
 /** Token-2022 Program ID */
 export const TOKEN_2022_PROGRAM_ID = new PublicKey(DEVNET_CONFIG.token2022ProgramId);
 
-/** zBTC Mint Address */
-export const ZBTC_MINT_ADDRESS = new PublicKey(DEVNET_CONFIG.zbtcMint);
+/** zkBTC Mint Address */
+export const ZKBTC_MINT_ADDRESS = new PublicKey(DEVNET_CONFIG.zkbtcMint);
 
 /** Groth16 Verifier Program ID */
 export const GROTH16_VERIFIER_PROGRAM_ID = new PublicKey(DEVNET_CONFIG.groth16VerifierProgramId);
@@ -141,10 +141,10 @@ export function deriveBlockHeaderPDA(
 }
 
 /**
- * Get zBTC Mint address
+ * Get zkBTC Mint address
  */
-export function getzBTCMintAddress(): PublicKey {
-  return ZBTC_MINT_ADDRESS;
+export function getzkBTCMintAddress(): PublicKey {
+  return ZKBTC_MINT_ADDRESS;
 }
 
 /**
@@ -155,7 +155,7 @@ export function derivePoolVaultATA(
 ): PublicKey {
   const [poolState] = derivePoolStatePDA(programId);
   return getAssociatedTokenAddressSync(
-    ZBTC_MINT_ADDRESS,
+    ZKBTC_MINT_ADDRESS,
     poolState,
     true,
     TOKEN_2022_PROGRAM_ID
@@ -186,8 +186,9 @@ export function deriveRedemptionRequestPDA(
   nonce: bigint,
   programId: PublicKey = AEGIS_PROGRAM_ID
 ): [PublicKey, number] {
-  const nonceBytes = Buffer.alloc(8);
-  nonceBytes.writeBigUInt64LE(nonce);
+  const nonceBytes = new Uint8Array(8);
+  const view = new DataView(nonceBytes.buffer);
+  view.setBigUint64(0, nonce, true);
   return PublicKey.findProgramAddressSync(
     [Buffer.from("redemption"), userPubkey.toBytes(), nonceBytes],
     programId
@@ -239,7 +240,7 @@ export async function buildRedeemTransaction(
     programId: AEGIS_PROGRAM_ID,
     keys: [
       { pubkey: poolState, isSigner: false, isWritable: true },
-      { pubkey: ZBTC_MINT_ADDRESS, isSigner: false, isWritable: true },
+      { pubkey: ZKBTC_MINT_ADDRESS, isSigner: false, isWritable: true },
       { pubkey: userTokenAccount, isSigner: false, isWritable: true },
       { pubkey: userPubkey, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
@@ -268,11 +269,11 @@ export async function buildRedeemTransaction(
 // =============================================================================
 
 /**
- * Get user's zBTC token account address
+ * Get user's zkBTC token account address
  */
 export function getTokenAccountAddress(userPubkey: PublicKey): PublicKey {
   return getAssociatedTokenAddressSync(
-    ZBTC_MINT_ADDRESS,
+    ZKBTC_MINT_ADDRESS,
     userPubkey,
     false,
     TOKEN_2022_PROGRAM_ID
@@ -435,7 +436,7 @@ export function buildVerifyStealthDepositInstruction(params: {
   stealthAnnouncementPDA: PublicKey;
   chadBuffer: PublicKey;
   authority: PublicKey; // signer, must match pool.authority
-  zbtcMint: PublicKey;
+  zkbtcMint: PublicKey;
   poolVaultATA: PublicKey;
   instructionData: Buffer;
 }): TransactionInstruction {
@@ -450,7 +451,7 @@ export function buildVerifyStealthDepositInstruction(params: {
       { pubkey: params.chadBuffer, isSigner: false, isWritable: false },
       { pubkey: params.authority, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      { pubkey: params.zbtcMint, isSigner: false, isWritable: true },
+      { pubkey: params.zkbtcMint, isSigner: false, isWritable: true },
       { pubkey: params.poolVaultATA, isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
     ],

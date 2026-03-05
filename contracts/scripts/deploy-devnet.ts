@@ -371,7 +371,7 @@ function buildAddDemoStealthIx(
   commitmentTree: PublicKey,
   stealthAnnouncement: PublicKey,
   authority: PublicKey,
-  zbtcMint: PublicKey,
+  zkbtcMint: PublicKey,
   poolVault: PublicKey,
   programId: PublicKey,
   ephemeralPub: Uint8Array,
@@ -388,7 +388,7 @@ function buildAddDemoStealthIx(
       { pubkey: stealthAnnouncement, isSigner: false, isWritable: true },
       { pubkey: authority, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      { pubkey: zbtcMint, isSigner: false, isWritable: true },
+      { pubkey: zkbtcMint, isSigner: false, isWritable: true },
       { pubkey: poolVault, isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
     ],
@@ -500,8 +500,8 @@ async function initializeAEGIS(
     };
   }
 
-  // Create zBTC Token-2022 mint
-  log("Creating zBTC Token-2022 mint...");
+  // Create zkBTC Token-2022 mint
+  log("Creating zkBTC Token-2022 mint...");
   const zkbtcMint = await createMint(
     connection,
     authority,
@@ -512,7 +512,7 @@ async function initializeAEGIS(
     undefined,
     TOKEN_2022_PROGRAM_ID
   );
-  log(`zBTC Mint: ${zkbtcMint.toBase58()}`);
+  log(`zkBTC Mint: ${zkbtcMint.toBase58()}`);
 
   // Transfer mint authority to pool PDA (required for CPI minting)
   log("Transferring mint authority to pool PDA...");
@@ -595,14 +595,14 @@ async function addDemoNotes(
   programId: PublicKey,
   poolStatePda: PublicKey,
   commitmentTreePda: PublicKey,
-  zbtcMint: PublicKey,
+  zkbtcMint: PublicKey,
   poolVault: PublicKey,
   count: number = 3
 ): Promise<void> {
   logSection("Adding Demo Stealth Notes");
 
   log(`Adding ${count} demo stealth notes to commitment tree...`);
-  log(`zBTC will be minted to pool vault: ${poolVault.toBase58()}`);
+  log(`zkBTC will be minted to pool vault: ${poolVault.toBase58()}`);
 
   // Demo amount: 0.0001 BTC = 10,000 sats (matches DEMO_MINT_AMOUNT_SATS in contract)
   const demoAmount = 10_000n;
@@ -638,7 +638,7 @@ async function addDemoNotes(
       commitmentTreePda,
       stealthAnnouncement,
       authority.publicKey,
-      zbtcMint,
+      zkbtcMint,
       poolVault,
       programId,
       ephemeralPub,
@@ -722,7 +722,7 @@ function saveDevnetConfig(
   console.log(`NEXT_PUBLIC_BTC_LIGHT_CLIENT=${deployResult.btcLightClientProgramId.toBase58()}`);
   console.log(`NEXT_PUBLIC_POOL_STATE=${initResult.poolStatePda.toBase58()}`);
   console.log(`NEXT_PUBLIC_COMMITMENT_TREE=${initResult.commitmentTreePda.toBase58()}`);
-  console.log(`NEXT_PUBLIC_ZBTC_MINT=${initResult.zkbtcMint.toBase58()}`);
+  console.log(`NEXT_PUBLIC_ZKBTC_MINT=${initResult.zkbtcMint.toBase58()}`);
   console.log("");
 }
 

@@ -21,7 +21,7 @@ import {
   type TransactionInfo,
 } from "@/lib/spv/mempool";
 import { formatBlockHeaderForChain, formatMerkleProofForChain } from "@/lib/spv/verify";
-import { zBTCApi } from "@/lib/api/client";
+import { zkBTCApi } from "@/lib/api/client";
 import { getEsploraApiUrl, getMempoolExplorerUrl } from "@/lib/btc-network";
 import { getConfig } from "@aegis/sdk";
 
@@ -184,7 +184,7 @@ export function ManualVerify() {
       console.log("[Header] Hash:", header.hash);
 
       // Call relayer API to publish header on-chain
-      const result = await zBTCApi.submitHeader(
+      const result = await zkBTCApi.submitHeader(
         header.height,
         header.hash,
         header.rawHeader,

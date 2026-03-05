@@ -38,7 +38,7 @@ import {
   createStealthDeposit,
   scanAnnouncements,
   prepareClaimInputs,
-  ZBTC_TOKEN_ID,
+  ZKBTC_TOKEN_ID,
 } from "../src/stealth";
 
 // Commitment tree
@@ -144,7 +144,7 @@ describe("JoinSplit commitment model", () => {
   const pkY = 987654321n;
   const nk = 111222333n;
   const random = 444555666n;
-  const token = ZBTC_TOKEN_ID;
+  const token = ZKBTC_TOKEN_ID;
   const amount = 100_000n;
 
   test("MPK deterministic", () => {
@@ -549,7 +549,7 @@ describe("Stealth claim preparation", () => {
       pathIndices: merkleProof.indices,
     });
 
-    const recomputed = computeJoinSplitCommitmentSync(claim.npk, ZBTC_TOKEN_ID, claim.amount);
+    const recomputed = computeJoinSplitCommitmentSync(claim.npk, ZKBTC_TOKEN_ID, claim.amount);
     expect(recomputed).toBe(commitmentBigint);
   });
 

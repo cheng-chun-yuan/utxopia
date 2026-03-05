@@ -34,7 +34,7 @@ import {
   type JoinSplitProofInputs,
 } from "@aegis/sdk";
 import {
-  ZBTC_MINT_ADDRESS,
+  ZKBTC_MINT_ADDRESS,
   TOKEN_2022_PROGRAM_ID,
   AEGIS_PROGRAM_ID,
 } from "@/lib/solana/instructions";
@@ -49,8 +49,8 @@ import type {
   SplitResult,
 } from "../types";
 
-/** ZBTC token ID used in Poseidon commitment */
-const ZBTC_TOKEN_ID = BigInt(0x7a627463);
+/** ZKBTC token ID used in Poseidon commitment */
+const ZKBTC_TOKEN_ID = BigInt(0x7a627463);
 
 /** BN254 scalar field modulus (big-endian bytes) */
 const BN254_FR_MODULUS = [
@@ -192,7 +192,7 @@ export function useClaimFlow(initialNote?: string) {
       const note = deriveNote(secretPhrase.trim(), 0, BigInt(0));
 
       // Find commitment in index by trying common amounts
-      // On-chain commitment = Poseidon(npk, ZBTC_TOKEN_ID, amount)
+      // On-chain commitment = Poseidon(npk, ZKBTC_TOKEN_ID, amount)
       const commitmentIndex = getCommitmentIndex();
       let foundAmount: number | null = null;
       let foundLeafIndex: bigint = 0n;
@@ -202,7 +202,7 @@ export function useClaimFlow(initialNote?: string) {
       const exported = commitmentIndex.export();
       for (const [commitHex, entry] of exported.commitments) {
         const amt = BigInt(entry.amount);
-        const testCommitment = computeJoinSplitCommitmentSync(pubKeyX, ZBTC_TOKEN_ID, amt);
+        const testCommitment = computeJoinSplitCommitmentSync(pubKeyX, ZKBTC_TOKEN_ID, amt);
         const testHex = testCommitment.toString(16).padStart(64, "0");
         if (testHex === commitHex) {
           foundAmount = Number(amt);
@@ -252,7 +252,7 @@ export function useClaimFlow(initialNote?: string) {
         }
       }
 
-      const commitment = computeJoinSplitCommitmentSync(pubKeyX, ZBTC_TOKEN_ID, BigInt(foundAmount));
+      const commitment = computeJoinSplitCommitmentSync(pubKeyX, ZKBTC_TOKEN_ID, BigInt(foundAmount));
       const commitmentHex = commitment.toString(16).padStart(64, "0");
 
       setVerifyResult({
@@ -329,7 +329,7 @@ export function useClaimFlow(initialNote?: string) {
       }
 
       // Look up commitment in local index (on-chain: Poseidon(npk, token, amount))
-      const commitment = computeJoinSplitCommitmentSync(pubKeyX, ZBTC_TOKEN_ID, BigInt(amountSats));
+      const commitment = computeJoinSplitCommitmentSync(pubKeyX, ZKBTC_TOKEN_ID, BigInt(amountSats));
       const commitmentHex = commitment.toString(16).padStart(64, "0");
       const indexEntry = commitmentIndex.getCommitment(commitmentHex);
 
@@ -392,7 +392,7 @@ export function useClaimFlow(initialNote?: string) {
         boundParamsHashValue = computeBoundParamsHash(DEFAULT_BOUND_PARAMS);
       }
 
-      const outputCommitment = computeJoinSplitCommitmentSync(outputNpk, ZBTC_TOKEN_ID, amountBig);
+      const outputCommitment = computeJoinSplitCommitmentSync(outputNpk, ZKBTC_TOKEN_ID, amountBig);
 
       // Compute EdDSA-Poseidon signature
       // msgHash = Poseidon(merkleRoot, boundParamsHash, nullifier, outputCommitment)
@@ -404,7 +404,7 @@ export function useClaimFlow(initialNote?: string) {
         nOutputs: 1,
         merkleRoot,
         boundParamsHash: boundParamsHashValue,
-        token: ZBTC_TOKEN_ID,
+        token: ZKBTC_TOKEN_ID,
         publicKey: [pubKeyPoint.x, pubKeyPoint.y],
         signature: [sigR8x, sigR8y, sigS],
         nullifyingKey: note.nullifier,
@@ -448,10 +448,10 @@ export function useClaimFlow(initialNote?: string) {
       if (isPublicUnshield) {
         // Public unshield: call /api/unshield
         const recipientPubkey = new PublicKey(solanaAddress.trim());
-        const zbtcMint = new PublicKey(DEVNET_CONFIG.zbtcMint);
+        const zkbtcMint = new PublicKey(DEVNET_CONFIG.zkbtcMint);
         const TOKEN_2022_PID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
         const recipientTokenAccount = getAssociatedTokenAddressSync(
-          zbtcMint, recipientPubkey, false, TOKEN_2022_PID
+          zkbtcMint, recipientPubkey, false, TOKEN_2022_PID
         );
 
         const relayResponse = await fetch("/api/unshield", {

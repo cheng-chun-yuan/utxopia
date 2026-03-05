@@ -18,7 +18,7 @@
 End-to-end lifecycle as 3 horizontal swimlanes:
 - **Deposit (green)**: Generate Keys → Taproot Addr → Send BTC → 6+ Confirms → Header Relay → SPV Verify → Stealth Announcement → Scan → JoinSplit 1x2 Claim → Commitment in Tree
 - **Private Transfer (blue)**: Commitment → JoinSplit 2x2 proof → Transact → Nullifiers burned → New commitments → Stealth announcement
-- **Withdrawal (red)**: Request Redemption → Nullifier → zBTC burned → FROST 2-of-3 signing → BTC broadcast → Complete
+- **Withdrawal (red)**: Request Redemption → Nullifier → zkBTC burned → FROST 2-of-3 signing → BTC broadcast → Complete
 
 ### 3. `crypto-key-model.excalidraw`
 Two sections:

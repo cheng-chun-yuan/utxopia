@@ -57,7 +57,7 @@ export function ClaimSuccess({
         <div className="p-3 bg-muted border border-gray/15 rounded-[12px]">
           <p className="text-caption text-gray mb-1">Amount Claimed</p>
           <p className="text-heading6 text-privacy">
-            {formatBtc(result.claimedAmount)} zBTC
+            {formatBtc(result.claimedAmount)} zkBTC
           </p>
         </div>
 
@@ -158,12 +158,12 @@ export function ClaimSuccess({
                   <div className="flex justify-between text-caption mb-1">
                     <span className="text-gray">You keep:</span>
                     <span className="text-foreground">
-                      {formatBtc(result.claimedAmount - parseInt(splitAmount, 10))} zBTC
+                      {formatBtc(result.claimedAmount - parseInt(splitAmount, 10))} zkBTC
                     </span>
                   </div>
                   <div className="flex justify-between text-caption">
                     <span className="text-gray">Send to friend:</span>
-                    <span className="text-sol">{formatBtc(parseInt(splitAmount, 10))} zBTC</span>
+                    <span className="text-sol">{formatBtc(parseInt(splitAmount, 10))} zkBTC</span>
                   </div>
                 </div>
               )}
@@ -246,7 +246,7 @@ export function ClaimSuccess({
               </code>
             </div>
             <p className="text-caption text-gray mt-2">
-              Share this link with the person you want to send zBTC to!
+              Share this link with the person you want to send zkBTC to!
             </p>
           </div>
         </div>

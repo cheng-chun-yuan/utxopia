@@ -33,7 +33,7 @@ import {
   scanAnnouncementsViewOnly,
   exportViewOnlyKeys,
   prepareClaimInputs,
-  ZBTC_TOKEN_ID,
+  ZKBTC_TOKEN_ID,
 } from "../src/stealth";
 
 // Taproot
@@ -165,7 +165,7 @@ describe("Demo: Full deposit flow walkthrough", () => {
     // 9. Verify commitment formula matches
     const expectedCommitment = computeJoinSplitCommitmentSync(
       claimInputs.npk,
-      ZBTC_TOKEN_ID,
+      ZKBTC_TOKEN_ID,
       depositAmount,
     );
     expect(expectedCommitment).toBe(commitmentBigint);

@@ -1,8 +1,8 @@
-//! Request redemption instruction — locks zBTC in escrow, queues BTC withdrawal
+//! Request redemption instruction — locks zkBTC in escrow, queues BTC withdrawal
 //!
 //! ESCROW-BASED ARCHITECTURE:
 //! - User proves ownership of commitment via ZK proof
-//! - zBTC is locked (sub_shielded) but NOT burned yet
+//! - zkBTC is locked (sub_shielded) but NOT burned yet
 //! - Burn happens in complete_redemption after SPV-verified BTC delivery
 //! - User can cancel (cancel_redemption) while status is Pending
 
@@ -137,7 +137,7 @@ impl<'a> RequestRedemptionAccounts<'a> {
 
 /// Process redemption request (escrow-based architecture)
 ///
-/// Locks zBTC by decrementing total_shielded. Does NOT burn tokens.
+/// Locks zkBTC by decrementing total_shielded. Does NOT burn tokens.
 /// Burn happens later in complete_redemption after SPV-verified BTC delivery.
 pub fn process_request_redemption(
     program_id: &Pubkey,

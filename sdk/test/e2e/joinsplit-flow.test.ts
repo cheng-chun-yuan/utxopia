@@ -94,7 +94,7 @@ setDefaultTimeout(PROOF_TIMEOUT);
 // Constants
 // =============================================================================
 
-const ZBTC_TOKEN_ID = 0x7a627463n; // "zbtc" as u32
+const ZKBTC_TOKEN_ID = 0x7a627463n; // "zkbtc" as u32
 
 // =============================================================================
 // EdDSA-Poseidon Helpers (via circomlibjs)
@@ -237,7 +237,7 @@ describe("JoinSplit Full Flow — SDK-driven E2E", () => {
 
     const inputRandom = randomFieldElement();
     const npkIn = poseidonHashSync([mpk, inputRandom]);
-    const commitmentIn = computeJoinSplitCommitmentSync(npkIn, ZBTC_TOKEN_ID, inputAmount);
+    const commitmentIn = computeJoinSplitCommitmentSync(npkIn, ZKBTC_TOKEN_ID, inputAmount);
     console.log(`   Input random: ${inputRandom.toString(16).slice(0, 20)}...`);
     console.log(`   Input NPK: ${npkIn.toString(16).slice(0, 20)}...`);
     console.log(`   Input commitment: ${commitmentIn.toString(16).slice(0, 20)}...`);
@@ -257,7 +257,7 @@ describe("JoinSplit Full Flow — SDK-driven E2E", () => {
     const programId = new PublicKey(config.aegisProgramId.toString());
     const poolState = new PublicKey(config.poolStatePda.toString());
     const commitmentTree = new PublicKey(config.commitmentTreePda.toString());
-    const zkbtcMint = new PublicKey(config.zbtcMint.toString());
+    const zkbtcMint = new PublicKey(config.zkbtcMint.toString());
     const poolVault = new PublicKey(config.poolVault.toString());
     const TOKEN_2022_PROGRAM = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
@@ -364,7 +364,7 @@ describe("JoinSplit Full Flow — SDK-driven E2E", () => {
     // Output note: same amount, new random (1-in-1-out private refresh)
     const outputRandom = randomFieldElement();
     const npkOut = poseidonHashSync([mpk, outputRandom]);
-    const commitmentOut = computeJoinSplitCommitmentSync(npkOut, ZBTC_TOKEN_ID, inputAmount);
+    const commitmentOut = computeJoinSplitCommitmentSync(npkOut, ZKBTC_TOKEN_ID, inputAmount);
     console.log(`   Output NPK: ${npkOut.toString(16).slice(0, 20)}...`);
     console.log(`   Output commitment: ${commitmentOut.toString(16).slice(0, 20)}...`);
 
@@ -397,7 +397,7 @@ describe("JoinSplit Full Flow — SDK-driven E2E", () => {
       nOutputs: 1,
       merkleRoot,
       boundParamsHash,
-      token: ZBTC_TOKEN_ID,
+      token: ZKBTC_TOKEN_ID,
       publicKey: [pubKeyX, pubKeyY],
       signature: [sigR8x, sigR8y, sigS],
       nullifyingKey,

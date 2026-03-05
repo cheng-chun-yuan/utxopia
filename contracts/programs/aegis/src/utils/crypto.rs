@@ -260,13 +260,13 @@ pub fn compute_bound_params_hash_redeem(chain_id: u64) -> [u8; 32] {
     reduce_to_field_exact(&hash)
 }
 
-/// ZBTC token identifier: "zbtc" as u32 = 0x7a627463
-pub const ZBTC_TOKEN_ID: u32 = 0x7a627463;
+/// ZKBTC token identifier: "zkbtc" as u32 = 0x7a627463
+pub const ZKBTC_TOKEN_ID: u32 = 0x7a627463;
 
-/// Compute deposit commitment on-chain: Poseidon(npk, ZBTC_TOKEN_ID, amount_sats)
+/// Compute deposit commitment on-chain: Poseidon(npk, ZKBTC_TOKEN_ID, amount_sats)
 pub fn compute_deposit_commitment(npk: &[u8; 32], amount_sats: u64) -> Result<[u8; 32], ProgramError> {
     let mut token_id = [0u8; 32];
-    token_id[28..32].copy_from_slice(&ZBTC_TOKEN_ID.to_be_bytes());
+    token_id[28..32].copy_from_slice(&ZKBTC_TOKEN_ID.to_be_bytes());
 
     let mut amount = [0u8; 32];
     amount[24..32].copy_from_slice(&amount_sats.to_be_bytes());

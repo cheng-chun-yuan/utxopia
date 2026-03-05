@@ -74,7 +74,7 @@ const ix = buildTransactInstruction({
 
 ### JoinSplit Model
 
-All zBTC exists as commitments in a Merkle tree (depth 16). No public tokens.
+All zkBTC exists as commitments in a Merkle tree (depth 16). No public tokens.
 
 | Operation | Amount Visible? |
 |-----------|-----------------|
@@ -182,7 +182,7 @@ interface NonInteractiveDepositResult {
 ```typescript
 interface JoinSplitNote {
   npk: bigint;         // Poseidon(MPK, random)
-  token: bigint;       // ZBTC_TOKEN_ID (0x7a627463)
+  token: bigint;       // ZKBTC_TOKEN_ID (0x7a627463)
   amount: bigint;      // satoshis
   random: bigint;      // blinding factor
   leafIndex: number;   // Merkle tree position
@@ -317,7 +317,7 @@ const proof = await generateJoinSplitProof({
   nOutputs: 2,
   merkleRoot: currentRoot,
   boundParamsHash: boundHash,
-  token: ZBTC_TOKEN_ID,
+  token: ZKBTC_TOKEN_ID,
   publicKey: [myPubX, myPubY],
   signature: [r8x, r8y, s],
   nullifyingKey: myNullifyingKey,
@@ -400,7 +400,7 @@ setConfig('devnet');  // or 'localnet', 'mainnet'
 
 | Constant | Value | Description |
 |----------|-------|-------------|
-| `ZBTC_TOKEN_ID` | `0x7a627463n` | "zbtc" as u32, used in commitment computation |
+| `ZKBTC_TOKEN_ID` | `0x7a627463n` | "zkbtc" as u32, used in commitment computation |
 | `DEPOSIT_OP_RETURN_SIZE` | `64` | OP_RETURN payload: ephemeralPub (32) + npk (32) |
 | `TREE_DEPTH` | `16` | Merkle tree depth (65,536 leaves max) |
 

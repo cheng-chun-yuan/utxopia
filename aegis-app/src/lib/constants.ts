@@ -26,6 +26,6 @@ export const BTC_ADDRESS_REGEX = /^(bc1|[13]|tb1)[a-zA-HJ-NP-Z0-9]{25,62}$/;
 export const BTC_LIGHT_CLIENT_ID = DEVNET_CONFIG.btcLightClientProgramId;
 export const POOL_STATE_ADDRESS = DEVNET_CONFIG.poolStatePda;
 export const COMMITMENT_TREE_ADDRESS = DEVNET_CONFIG.commitmentTreePda;
-export const ZBTC_MINT_ADDRESS = DEVNET_CONFIG.zbtcMint;
+export const ZKBTC_MINT_ADDRESS = DEVNET_CONFIG.zkbtcMint;
 export const POOL_VAULT_ADDRESS = DEVNET_CONFIG.poolVault;
 export const CHADBUFFER_PROGRAM_ID = DEVNET_CONFIG.chadbufferProgramId;

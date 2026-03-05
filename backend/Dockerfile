@@ -28,7 +28,7 @@ COPY src ./src
 RUN touch src/main.rs src/lib.rs src/bin/redemption.rs
 
 # Build the actual binary
-RUN cargo build --release --bin zbtc-api
+RUN cargo build --release --bin zkbtc-api
 
 # Stage 2: Create minimal runtime image
 FROM debian:bookworm-slim
@@ -42,7 +42,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the binary from builder
-COPY --from=builder /app/target/release/zbtc-api /app/zbtc-api
+COPY --from=builder /app/target/release/zkbtc-api /app/zkbtc-api
 
 # Create data directory and non-root user
 RUN mkdir -p /app/data && \
@@ -58,4 +58,4 @@ ENV RUST_LOG=info
 EXPOSE 3001
 
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["/app/zbtc-api", "api", "--port", "3001"]
+CMD ["/app/zkbtc-api", "api", "--port", "3001"]

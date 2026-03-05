@@ -7,7 +7,7 @@ include "circomlib/circuits/poseidon.circom";
  * commitment = Poseidon(npk, token, amount)
  *
  * @input npk - Note public key (Poseidon(MPK, random))
- * @input token - Token identifier (ZBTC_TOKEN_ID)
+ * @input token - Token identifier (ZKBTC_TOKEN_ID)
  * @input amount - Amount in satoshis
  * @output commitment - The commitment hash
  */

@@ -3,23 +3,24 @@
 import { useAegisKeys } from "@/hooks/use-aegis";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
+import { Key, Shield } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 /**
  * Component to display and manage stealth address
  *
  * Shows:
  * - Connect wallet prompt if not connected
- * - Derive keys button if connected but no keys
+ * - Unlock Vault button if connected but no keys
  * - Stealth address with copy button if keys derived
  */
-export function StealthAddressCard() {
+export function StealthAddressCard({ onUnlock }: { onUnlock?: () => void }) {
   const wallet = useWallet();
   const {
     keys,
     stealthAddressEncoded,
     isLoading,
     error,
-    deriveKeys,
   } = useAegisKeys();
   const { copy, copied } = useCopyToClipboard();
 
@@ -47,18 +48,22 @@ export function StealthAddressCard() {
       <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-6">
         <h3 className="text-lg font-medium text-white mb-2">Stealth Address</h3>
         <p className="text-zinc-400 text-sm mb-4">
-          Sign a message with your wallet to derive your private Aegis keys.
-          This signature is used to generate your stealth address.
+          Unlock your vault to access your private stealth address.
         </p>
         {error && (
           <p className="text-red-400 text-sm mb-4">{error}</p>
         )}
         <button
-          onClick={deriveKeys}
+          onClick={onUnlock}
           disabled={isLoading}
-          className="w-full py-2 px-4 bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-700 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+          className={cn(
+            "w-full inline-flex items-center justify-center gap-2 py-2 px-4 rounded-lg transition-colors",
+            "bg-privacy hover:bg-privacy/80 text-background font-medium",
+            "disabled:opacity-50 disabled:cursor-not-allowed"
+          )}
         >
-          {isLoading ? "Signing..." : "Derive Keys"}
+          <Key className="w-4 h-4" />
+          {isLoading ? "Unlocking..." : "Unlock Vault"}
         </button>
       </div>
     );
@@ -100,18 +105,22 @@ export function StealthAddressCard() {
 /**
  * Compact version for header/nav
  */
-export function StealthAddressBadge() {
-  const { keys, stealthAddressEncoded, deriveKeys, isLoading } = useAegisKeys();
+export function StealthAddressBadge({ onUnlock }: { onUnlock?: () => void }) {
+  const { keys, stealthAddressEncoded, isLoading } = useAegisKeys();
   const { copy, copied } = useCopyToClipboard();
 
   if (!keys) {
     return (
       <button
-        onClick={deriveKeys}
+        onClick={onUnlock}
         disabled={isLoading}
-        className="px-3 py-1.5 text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition-colors"
+        className={cn(
+          "inline-flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors",
+          "bg-privacy/10 hover:bg-privacy/20 text-privacy"
+        )}
       >
-        {isLoading ? "..." : "Derive Keys"}
+        <Key className="w-3.5 h-3.5" />
+        {isLoading ? "..." : "Unlock"}
       </button>
     );
   }

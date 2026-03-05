@@ -22,7 +22,7 @@ pub mod deposit {
 pub mod redemption {
     //! Redemption/withdrawal services
     //!
-    //! Processes zBTC burns and sends BTC back to users.
+    //! Processes zkBTC burns and sends BTC back to users.
 
     pub use crate::redemption::*;
 }

@@ -289,7 +289,7 @@ export async function verifyStealthDeposit(
       { address: bufferAddress, role: AccountRole.READONLY },       // 5
       { address: payer.address, role: AccountRole.WRITABLE_SIGNER }, // 6
       { address: SYSTEM_PROGRAM_ID, role: AccountRole.READONLY },   // 7
-      // zBTC mint and pool vault would be added by the caller
+      // zkBTC mint and pool vault would be added by the caller
     ],
     data: new Uint8Array(instructionData),
   };

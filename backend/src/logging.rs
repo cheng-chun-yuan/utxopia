@@ -9,7 +9,7 @@
 //! # Usage
 //!
 //! ```rust,ignore
-//! use zbtc::logging::{init_logging, LogLevel};
+//! use zkbtc::logging::{init_logging, LogLevel};
 //!
 //! // Initialize at startup
 //! init_logging(LogLevel::Info, true)?; // JSON mode for production
@@ -326,7 +326,7 @@ pub fn log_withdrawal_event(
 ///
 /// # Example
 /// ```rust,ignore
-/// use zbtc::logging::{init_logging, LogLevel};
+/// use zkbtc::logging::{init_logging, LogLevel};
 /// init_logging(LogLevel::Info, true)?; // JSON for production
 /// init_logging(LogLevel::Debug, false)?; // Pretty print for development
 /// ```

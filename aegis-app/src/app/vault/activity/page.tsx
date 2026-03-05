@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -16,6 +16,11 @@ import { cn } from "@/lib/utils";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { BalanceView } from "@/components/btc-widget/balance-view";
 import { useAegisKeys, useStealthInbox } from "@/hooks/use-aegis";
+import { usePasskey } from "@/hooks/use-passkey";
+import { useAegisStore } from "@/stores/aegis-store";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
+import { AuthModal } from "@/components/auth-modal";
 import { InboxList, EmptyInbox } from "@/components/stealth-inbox";
 
 type TabType = "deposits" | "notes";
@@ -87,7 +92,7 @@ function BalanceBar() {
 }
 
 function NotesTab() {
-  const { hasKeys, deriveKeys, isLoading: keysLoading } = useAegisKeys();
+  const { hasKeys } = useAegisKeys();
   const { notes, isLoading, error, refresh } = useStealthInbox();
 
   return (
@@ -95,14 +100,16 @@ function NotesTab() {
       {/* Balance bar */}
       <BalanceBar />
 
-      {/* Claim with Link button */}
-      <Link
-        href="/claim"
-        className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-[12px] bg-sol/10 border border-sol/20 text-sol hover:bg-sol/20 transition-colors"
-      >
-        <Link2 className="w-4 h-4" />
-        Claim with Link
-      </Link>
+      {/* Claim with Link button — only show when logged in */}
+      {hasKeys && (
+        <Link
+          href="/claim"
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-[12px] bg-sol/10 border border-sol/20 text-sol hover:bg-sol/20 transition-colors"
+        >
+          <Link2 className="w-4 h-4" />
+          Claim with Link
+        </Link>
+      )}
 
       {/* Error state */}
       {error && (
@@ -121,9 +128,9 @@ function NotesTab() {
         </div>
       )}
 
-      {/* Empty or no keys */}
-      {!isLoading && (notes.length === 0 || !hasKeys) && (
-        <EmptyInbox hasKeys={hasKeys} onDeriveKeys={deriveKeys} onRefresh={refresh} isLoading={keysLoading} />
+      {/* Empty or no keys — handled by parent ActivityContent */}
+      {!isLoading && hasKeys && notes.length === 0 && (
+        <EmptyInbox hasKeys={true} onRefresh={refresh} />
       )}
 
       {/* Inbox list - show ALL notes (spent and spendable) */}
@@ -151,6 +158,45 @@ function ActivityContent() {
   const tabParam = searchParams.get("tab") as TabType | null;
   const [activeTab, setActiveTab] = useState<TabType>(tabParam || "notes");
   const { notes } = useStealthInbox();
+  const { hasKeys, isLoading: keysLoading, deriveKeys } = useAegisKeys();
+
+  // Auth modal state
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const { connected } = useWallet();
+  const { setVisible: setWalletModalVisible } = useWalletModal();
+  const {
+    isSupported: passkeySupported,
+    hasCredential: hasPasskeyCredential,
+    isLoading: passkeyLoading,
+    error: passkeyError,
+    register: passkeyRegister,
+    authenticate: passkeyAuthenticate,
+  } = usePasskey();
+  const deriveKeysFromPasskeySeed = useAegisStore((s) => s.deriveKeysFromPasskeySeed);
+
+  const handlePasskeyRegister = async () => {
+    const seed = await passkeyRegister();
+    if (seed) {
+      await deriveKeysFromPasskeySeed(seed);
+      setAuthModalOpen(false);
+    }
+  };
+  const handlePasskeyAuthenticate = async () => {
+    const seed = await passkeyAuthenticate();
+    if (seed) {
+      await deriveKeysFromPasskeySeed(seed);
+      setAuthModalOpen(false);
+    }
+  };
+
+  // Auto-open auth modal on mount when not logged in
+  const autoOpenRef = useRef(false);
+  useEffect(() => {
+    if (!hasKeys && !autoOpenRef.current) {
+      autoOpenRef.current = true;
+      setAuthModalOpen(true);
+    }
+  }, [hasKeys]);
 
   // Badge shows spendable notes only (exclude spent)
   const notesCount = notes.filter((n) => !n.isSpent).length;
@@ -181,11 +227,34 @@ function ActivityContent() {
         />
       </div>
 
-      {/* Tab Content */}
-      <ErrorBoundary>
-        {activeTab === "deposits" && <BalanceView />}
-        {activeTab === "notes" && <NotesTab />}
-      </ErrorBoundary>
+      {/* Show unlock screen when no keys */}
+      {!hasKeys && (
+        <>
+          <EmptyInbox hasKeys={false} onUnlock={() => setAuthModalOpen(true)} isLoading={keysLoading} />
+          <AuthModal
+            open={authModalOpen}
+            onOpenChange={setAuthModalOpen}
+            passkeySupported={passkeySupported}
+            hasPasskeyCredential={hasPasskeyCredential}
+            passkeyLoading={passkeyLoading}
+            walletLoading={keysLoading}
+            walletConnected={connected}
+            error={passkeyError}
+            onPasskeyRegister={handlePasskeyRegister}
+            onPasskeyAuthenticate={handlePasskeyAuthenticate}
+            onWalletConnect={() => { setAuthModalOpen(false); setWalletModalVisible(true); }}
+            onWalletDeriveKeys={async () => { await deriveKeys(); setAuthModalOpen(false); }}
+          />
+        </>
+      )}
+
+      {/* Tab Content — only when keys available */}
+      {hasKeys && (
+        <ErrorBoundary>
+          {activeTab === "deposits" && <BalanceView />}
+          {activeTab === "notes" && <NotesTab />}
+        </ErrorBoundary>
+      )}
     </>
   );
 }
@@ -225,7 +294,7 @@ export default function ActivityPage() {
           <div>
             <h1 className="text-heading6 text-foreground">Your Notes</h1>
             <p className="text-caption text-gray">
-              View and spend your private zBTC notes
+              View and spend your private zkBTC notes
             </p>
           </div>
         </div>

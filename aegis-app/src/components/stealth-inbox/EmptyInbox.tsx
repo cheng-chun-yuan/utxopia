@@ -1,31 +1,41 @@
 "use client";
 
-import { Inbox, Shield, RefreshCw } from "lucide-react";
+import { Inbox, Shield, RefreshCw, Key } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface EmptyInboxProps {
   hasKeys: boolean;
-  onDeriveKeys?: () => void;
+  onUnlock?: () => void;
   onRefresh?: () => void;
   isLoading?: boolean;
 }
 
-export function EmptyInbox({ hasKeys, onDeriveKeys, onRefresh, isLoading }: EmptyInboxProps) {
+export function EmptyInbox({ hasKeys, onUnlock, onRefresh, isLoading }: EmptyInboxProps) {
   if (!hasKeys) {
     return (
       <div className="flex flex-col items-center justify-center py-8 text-center">
         <div className="rounded-full bg-privacy/10 p-4 mb-4">
           <Shield className="h-10 w-10 text-privacy" />
         </div>
-        <p className="text-heading6 text-foreground mb-2">Derive Your Keys</p>
-        <p className="text-body2 text-gray mb-4">
-          Sign a message to derive your viewing keys and check for incoming deposits
+        <p className="text-heading6 text-foreground mb-2">Unlock Your Vault</p>
+        <p className="text-body2 text-gray mb-1.5">
+          Use a passkey or wallet to access your funds
+        </p>
+        <p className="text-caption text-gray/60 mb-5">
+          Your keys never leave your device
         </p>
         <button
-          onClick={onDeriveKeys}
+          onClick={onUnlock}
           disabled={isLoading}
-          className="btn-primary px-6"
+          className={cn(
+            "inline-flex items-center gap-2 px-6 py-3 rounded-[12px]",
+            "bg-privacy hover:bg-privacy/80",
+            "text-body2 text-background font-medium transition-all duration-200 cursor-pointer",
+            "hover:shadow-[0_0_24px_rgba(20,241,149,0.2)]"
+          )}
         >
-          {isLoading ? "Signing..." : "Derive Keys"}
+          <Key className="w-4 h-4" />
+          {isLoading ? "Unlocking..." : "Unlock Vault"}
         </button>
       </div>
     );
@@ -38,7 +48,7 @@ export function EmptyInbox({ hasKeys, onDeriveKeys, onRefresh, isLoading }: Empt
       </div>
       <p className="text-heading6 text-foreground mb-2">No Incoming Deposits</p>
       <p className="text-body2 text-gray mb-4">
-        When someone sends you zBTC via stealth address, it will appear here
+        When someone sends you zkBTC via stealth address, it will appear here
       </p>
       {onRefresh && (
         <button

@@ -21,7 +21,7 @@ use pinocchio::{
 
 use crate::error::AegisError;
 use crate::state::{CommitmentTree, PoolState, StealthAnnouncement, STEALTH_ANNOUNCEMENT_DISCRIMINATOR};
-use crate::utils::{mint_zbtc, validate_program_owner, validate_system_program, validate_token_2022_owner, validate_token_program_key, create_pda_account, compute_deposit_commitment};
+use crate::utils::{mint_zkbtc, validate_program_owner, validate_system_program, validate_token_2022_owner, validate_token_program_key, create_pda_account, compute_deposit_commitment};
 
 /// Add demo stealth instruction data (npk-based, matches real deposits)
 ///
@@ -65,7 +65,7 @@ impl AddDemoStealthData {
 ///
 /// Creates a private deposit that user can find with viewing key
 /// and spend with spending key. No real BTC required.
-/// Also mints zBTC to pool vault so users can claim.
+/// Also mints zkBTC to pool vault so users can claim.
 ///
 /// Accounts:
 /// 0. pool_state - Pool state PDA (writable)
@@ -73,7 +73,7 @@ impl AddDemoStealthData {
 /// 2. stealth_announcement - Stealth announcement PDA (to create, writable)
 /// 3. authority - Pool authority (signer, pays for announcement)
 /// 4. system_program - System program
-/// 5. zbtc_mint - zBTC Token-2022 mint (writable)
+/// 5. zkbtc_mint - zkBTC Token-2022 mint (writable)
 /// 6. pool_vault - Pool vault token account (writable)
 /// 7. token_program - Token-2022 program
 pub fn process_add_demo_stealth(
@@ -90,7 +90,7 @@ pub fn process_add_demo_stealth(
     let stealth_announcement = &accounts[2];
     let authority = &accounts[3];
     let system_program = &accounts[4];
-    let zbtc_mint = &accounts[5];
+    let zkbtc_mint = &accounts[5];
     let pool_vault = &accounts[6];
     let token_program = &accounts[7];
 
@@ -106,13 +106,13 @@ pub fn process_add_demo_stealth(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    // Compute commitment on-chain: Poseidon(npk, ZBTC_TOKEN_ID, amount_sats)
+    // Compute commitment on-chain: Poseidon(npk, ZKBTC_TOKEN_ID, amount_sats)
     let commitment = compute_deposit_commitment(&ix_data.npk, ix_data.amount_sats)?;
 
     // Validate account owners
     validate_program_owner(pool_state, program_id)?;
     validate_program_owner(commitment_tree, program_id)?;
-    validate_token_2022_owner(zbtc_mint)?;
+    validate_token_2022_owner(zkbtc_mint)?;
     validate_token_2022_owner(pool_vault)?;
     validate_token_program_key(token_program)?;
     validate_system_program(system_program)?;
@@ -194,13 +194,13 @@ pub fn process_add_demo_stealth(
     // Emit leaf inserted event
     crate::utils::events::emit_leaf_inserted(&commitment, clock.unix_timestamp);
 
-    // Mint zBTC to pool vault so users can claim
+    // Mint zkBTC to pool vault so users can claim
     let bump_bytes = [pool_bump];
     let pool_signer_seeds: &[&[u8]] = &[PoolState::SEED, &bump_bytes];
 
-    mint_zbtc(
+    mint_zkbtc(
         token_program,
-        zbtc_mint,
+        zkbtc_mint,
         pool_vault,
         pool_state,
         ix_data.amount_sats,

@@ -201,7 +201,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
       });
 
       const meta = createStealthMetaAddress(derivedKeys);
-      const encoded = encodeStealthMetaAddress(meta);
+      const encoded = "aegis:" + encodeStealthMetaAddress(meta);
 
       // Persist to localStorage for session hydration
       persistKeys(wallet.publicKey.toBase58(), derivedKeys);
@@ -258,7 +258,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
     try {
       const derivedKeys = await deriveKeysFromSeedCircuit(seed);
       const meta = createStealthMetaAddress(derivedKeys);
-      const encoded = encodeStealthMetaAddress(meta);
+      const encoded = "aegis:" + encodeStealthMetaAddress(meta);
 
       // Persist with "passkey:" prefix
       const credentialId = typeof window !== "undefined"
@@ -292,7 +292,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
       if (!restored) return false;
 
       const meta = createStealthMetaAddress(restored);
-      const encoded = encodeStealthMetaAddress(meta);
+      const encoded = "aegis:" + encodeStealthMetaAddress(meta);
 
       set({
         keys: restored,
@@ -310,17 +310,8 @@ export const useAegisStore = create<AegisState>((set, get) => ({
     if (walletPubkey) {
       removeKeys(walletPubkey);
     }
-    // Also clear passkey keys if present
-    try {
-      const credentialId = typeof window !== "undefined"
-        ? localStorage.getItem("aegis:passkey_credential_id")
-        : null;
-      if (credentialId) {
-        removeKeys("passkey:" + credentialId);
-      }
-    } catch {
-      // ignore
-    }
+    // Don't clear passkey seed/credential — they must persist across logout
+    // so the same passkey produces the same keys on re-login.
     set({
       keys: null,
       stealthAddress: null,
@@ -495,7 +486,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
     }
     try {
       const rpcUrl = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.devnet.solana.com";
-      // Fetch token accounts for the zBTC mint under Token-2022
+      // Fetch token accounts for the zkBTC mint under Token-2022
       const response = await fetch(rpcUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -505,7 +496,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
           method: "getTokenAccountsByOwner",
           params: [
             walletPubkey.toBase58(),
-            { mint: DEVNET_CONFIG.zbtcMint },
+            { mint: DEVNET_CONFIG.zkbtcMint },
             { encoding: "jsonParsed", commitment: "confirmed" },
           ],
         }),

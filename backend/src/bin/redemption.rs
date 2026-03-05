@@ -1,6 +1,6 @@
 //! Redemption Service Binary
 //!
-//! Processes zBTC burns and sends BTC withdrawals.
+//! Processes zkBTC burns and sends BTC withdrawals.
 //!
 //! Usage:
 //!   redemption run [--interval <secs>]
@@ -9,10 +9,10 @@
 //!   redemption requests
 //!   redemption process <id>
 
-use zbtc::redemption::{
+use zkbtc::redemption::{
     PoolUtxo, RedemptionConfig, RedemptionService, SingleKeySigner, TxSigner,
 };
-use zbtc::units;
+use zkbtc::units;
 use std::env;
 
 #[tokio::main]

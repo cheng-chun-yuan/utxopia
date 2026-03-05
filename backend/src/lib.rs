@@ -1,4 +1,4 @@
-//! zBTC Backend - Minimal Server-Side Services
+//! zkBTC Backend - Minimal Server-Side Services
 //!
 //! This backend only contains the server-side components that cannot run
 //! on the client. All other functionality is handled by the SDK.

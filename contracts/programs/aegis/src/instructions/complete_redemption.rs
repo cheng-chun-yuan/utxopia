@@ -1,9 +1,9 @@
-//! Complete redemption instruction — verify BTC delivery via VerifiedTransaction PDA, burn zBTC, close PDA
+//! Complete redemption instruction — verify BTC delivery via VerifiedTransaction PDA, burn zkBTC, close PDA
 //!
 //! ESCROW-BASED ARCHITECTURE:
 //! - Authority provides btc_txid matching a VerifiedTransaction PDA (btc-light-client verified SPV)
 //! - On-chain: parse raw tx from ChadBuffer, verify output pays correct address/amount
-//! - On success: burn zBTC from pool vault, close RedemptionRequest PDA
+//! - On success: burn zkBTC from pool vault, close RedemptionRequest PDA
 //! - NullifierRecord is NOT closed — it must persist forever to prevent double-spend
 
 use pinocchio::{
@@ -22,7 +22,7 @@ use crate::state::{
 use crate::utils::bitcoin::{compute_tx_hash, ParsedTransaction};
 use crate::utils::chadbuffer::read_transaction_from_buffer;
 use crate::utils::{
-    burn_zbtc_signed, close_account_securely, validate_account_writable, validate_program_owner,
+    burn_zkbtc_signed, close_account_securely, validate_account_writable, validate_program_owner,
     validate_token_2022_owner, validate_token_program_key,
 };
 
@@ -72,7 +72,7 @@ impl CompleteRedemptionData {
 /// 4.  `[]`         VerifiedTransaction PDA (owned by btc-light-client)
 /// 5.  `[]`         Light client (owned by btc-light-client, for confirmation count)
 /// 6.  `[]`         Transaction buffer (ChadBuffer)
-/// 7.  `[writable]` zBTC mint
+/// 7.  `[writable]` zkBTC mint
 /// 8.  `[writable]` Pool vault
 /// 9.  `[]`         Token-2022 program
 pub fn process_complete_redemption(
@@ -91,7 +91,7 @@ pub fn process_complete_redemption(
     let verified_tx_info = &accounts[4];
     let light_client_info = &accounts[5];
     let tx_buffer_info = &accounts[6];
-    let zbtc_mint = &accounts[7];
+    let zkbtc_mint = &accounts[7];
     let pool_vault = &accounts[8];
     let token_program = &accounts[9];
 
@@ -111,14 +111,14 @@ pub fn process_complete_redemption(
     };
     validate_program_owner(verified_tx_info, btc_lc_id)?;
     validate_program_owner(light_client_info, btc_lc_id)?;
-    validate_token_2022_owner(zbtc_mint)?;
+    validate_token_2022_owner(zkbtc_mint)?;
     validate_token_2022_owner(pool_vault)?;
     validate_token_program_key(token_program)?;
 
     // Validate writable accounts
     validate_account_writable(pool_state_info)?;
     validate_account_writable(redemption_info)?;
-    validate_account_writable(zbtc_mint)?;
+    validate_account_writable(zkbtc_mint)?;
     validate_account_writable(pool_vault)?;
 
     // Validate authority and get pool state
@@ -209,13 +209,13 @@ pub fn process_complete_redemption(
         return Err(AegisError::RedemptionOutputMismatch.into());
     }
 
-    // --- Burn zBTC from pool vault ---
+    // --- Burn zkBTC from pool vault ---
     let bump_bytes = [pool_bump];
     let pool_signer_seeds: &[&[u8]] = &[PoolState::SEED, &bump_bytes];
 
-    burn_zbtc_signed(
+    burn_zkbtc_signed(
         token_program,
-        zbtc_mint,
+        zkbtc_mint,
         pool_vault,
         pool_state_info,
         amount_sats,

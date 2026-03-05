@@ -62,7 +62,7 @@ function ClaimRedirect() {
             <Shield className="w-5 h-5 text-privacy" />
           </div>
           <div>
-            <h1 className="text-heading6 text-foreground">Claim zBTC</h1>
+            <h1 className="text-heading6 text-foreground">Claim zkBTC</h1>
             <p className="text-caption text-gray">
               Enter your secret phrase to claim your note
             </p>

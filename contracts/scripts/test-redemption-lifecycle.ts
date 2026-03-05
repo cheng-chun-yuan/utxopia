@@ -176,7 +176,7 @@ function buildCancelRedemptionIx(
 /**
  * complete_redemption (disc=6)
  * Accounts: pool_state(w), redemption_request(w), authority(s), rent_recipient(w),
- *           light_client(r), block_header(r), tx_buffer(r), zbtc_mint(w), pool_vault(w), token_2022
+ *           light_client(r), block_header(r), tx_buffer(r), zkbtc_mint(w), pool_vault(w), token_2022
  * Data: disc(1) + btc_txid(32) + block_height(8) + tx_size(4) + TxMerkleProof
  *
  * TxMerkleProof for single-tx block: txid(32) + path_bits(4) + path_len(1) + tx_index(4)
@@ -189,7 +189,7 @@ function buildCompleteRedemptionIx(
   lightClient: PublicKey,
   blockHeader: PublicKey,
   txBuffer: PublicKey,
-  zbtcMint: PublicKey,
+  zkbtcMint: PublicKey,
   poolVault: PublicKey,
   params: {
     btcTxid: Uint8Array;
@@ -222,7 +222,7 @@ function buildCompleteRedemptionIx(
       { pubkey: lightClient, isSigner: false, isWritable: false },
       { pubkey: blockHeader, isSigner: false, isWritable: false },
       { pubkey: txBuffer, isSigner: false, isWritable: false },
-      { pubkey: zbtcMint, isSigner: false, isWritable: true },
+      { pubkey: zkbtcMint, isSigner: false, isWritable: true },
       { pubkey: poolVault, isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
     ],

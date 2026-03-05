@@ -8,7 +8,7 @@
 //! 2. Service polls Esplora for incoming transactions
 //! 3. Once confirmed (configurable blocks), sweeps UTXO to pool wallet
 //! 4. After sweep confirms (2 blocks), submits SPV proof to Solana
-//! 5. User can claim zBTC once status is "ready"
+//! 5. User can claim zkBTC once status is "ready"
 //!
 //! # Persistence:
 //! Uses SQLite for durable storage. Service can restart and resume processing.

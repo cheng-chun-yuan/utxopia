@@ -73,7 +73,7 @@ function loadProgramId(): PublicKey {
 const PROGRAM_ID = loadProgramId();
 
 // Constants
-const ZBTC_TOKEN_ID = 0x7a627463n; // "zbtc" as u32
+const ZKBTC_TOKEN_ID = 0x7a627463n; // "zkbtc" as u32
 const BN254_FIELD_PRIME = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
 const BABYJUB_ORDER = 2736030358979909402780800718157159386076813972158567259200215660948447373041n;
 const TREE_DEPTH = 16;
@@ -731,7 +731,7 @@ async function main() {
   const inputRandom = randomFieldElement();
   const inputAmount = 10_000n; // 10,000 sats
   const npkIn = poseidonHash([mpk, inputRandom]);
-  const commitmentIn = poseidonHash([npkIn, ZBTC_TOKEN_ID, inputAmount]);
+  const commitmentIn = poseidonHash([npkIn, ZKBTC_TOKEN_ID, inputAmount]);
   console.log(`   Input commitment: ${commitmentIn.toString(16).slice(0, 16)}...`);
 
   // Add deposit to on-chain tree
@@ -794,7 +794,7 @@ async function main() {
   // Output note: same amount, new random (1-in-1-out private refresh)
   const outputRandom = randomFieldElement();
   const npkOut = poseidonHash([mpk, outputRandom]);
-  const commitmentOut = poseidonHash([npkOut, ZBTC_TOKEN_ID, inputAmount]);
+  const commitmentOut = poseidonHash([npkOut, ZKBTC_TOKEN_ID, inputAmount]);
 
   // Compute nullifier = Poseidon(nullifyingKey, leafIndex)
   const nullifier = poseidonHash([nullifyingKey, BigInt(ourLeafIndex)]);
@@ -824,7 +824,7 @@ async function main() {
     boundParamsHash: boundParamsHash.toString(),
     nullifiers: [nullifier.toString()],
     commitmentsOut: [commitmentOut.toString()],
-    token: ZBTC_TOKEN_ID.toString(),
+    token: ZKBTC_TOKEN_ID.toString(),
     publicKey: [pubKeyX.toString(), pubKeyY.toString()],
     signature: [sigR8x.toString(), sigR8y.toString(), sigS.toString()],
     nullifyingKey: nullifyingKey.toString(),
@@ -964,7 +964,7 @@ async function main() {
   // New random output for error test
   const errorOutputRandom = randomFieldElement();
   const errorNpkOut = poseidonHash([mpk, errorOutputRandom]);
-  const errorCommitmentOut = poseidonHash([errorNpkOut, ZBTC_TOKEN_ID, inputAmount]);
+  const errorCommitmentOut = poseidonHash([errorNpkOut, ZKBTC_TOKEN_ID, inputAmount]);
   const errorNullifier = poseidonHash([nullifyingKey, BigInt(ourLeafIndex + 1000)]); // Different nullifier
   const errorEphemeralPub = new Uint8Array(32);
   crypto.getRandomValues(errorEphemeralPub);

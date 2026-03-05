@@ -16,7 +16,7 @@ BTC Deposit ──► Sweep ──► SPV Verify ──► Merkle Commitment
 ```
 
 All value lives as **shielded commitments** in a Poseidon Merkle tree (depth 16, 65,536 leaves).
-There are no public zBTC tokens — only commitments and nullifiers.
+There are no public zkBTC tokens — only commitments and nullifiers.
 
 ---
 
@@ -89,7 +89,7 @@ On-chain logic:
 6. Compute commitment: **`Poseidon(npk, 0x7a627463, amount_sats)`**
 7. Insert commitment into Merkle tree → get `leaf_index`
 8. Create `StealthAnnouncement` PDA: `["stealth", sweep_txid]`
-9. Mint zBTC to pool vault
+9. Mint zkBTC to pool vault
 
 ### 1.5 StealthAnnouncement (90 bytes)
 
@@ -189,7 +189,7 @@ Signature: EdDSA-Poseidon(spendingKey, H(merkleRoot, boundParamsHash, nullifiers
 ```typescript
 const proof = await generateJoinSplitProof({
   nInputs: 2, nOutputs: 2,
-  token: 0x7a627463n, // ZBTC_TOKEN_ID
+  token: 0x7a627463n, // ZKBTC_TOKEN_ID
   publicKey: [spendingPub.x, spendingPub.y],
   signature: [R8x, R8y, S],
   nullifyingKey,
@@ -235,7 +235,7 @@ The only mode that sends BTC back to the user. Requires a ZK proof of commitment
 request_redemption ──► mark_processing ──► FROST signs BTC tx ──► complete_redemption
        │                                                                    │
        │ (timeout 7 days)                                                   │
-       └──► cancel_redemption (funds re-minted to tree)                     └──► PDA closed, zBTC burned
+       └──► cancel_redemption (funds re-minted to tree)                     └──► PDA closed, zkBTC burned
 ```
 
 #### Step 1: `request_redemption` (disc 5)
@@ -278,7 +278,7 @@ After BTC tx has 6+ confirmations:
 
 1. Verify `VerifiedTransaction` PDA (SPV-verified BTC txid)
 2. Read raw BTC tx from ChadBuffer → verify output pays correct address with correct amount
-3. **Burn zBTC** from pool vault (irreversible)
+3. **Burn zkBTC** from pool vault (irreversible)
 4. Close `RedemptionRequest` PDA (return rent)
 
 #### Step 5 (alternative): `cancel_redemption` (disc 3)
@@ -287,11 +287,11 @@ User can cancel if:
 - Status is still `Pending`, OR
 - Processing has timed out (~7 days)
 
-Cancellation re-mints the amount as a new commitment: `Poseidon(npk, ZBTC_TOKEN_ID, amount)`.
+Cancellation re-mints the amount as a new commitment: `Poseidon(npk, ZKBTC_TOKEN_ID, amount)`.
 
 ### 4.2 Unshield: Shielded → Public SPL Tokens
 
-Converts shielded zBTC to public SPL tokens on Solana. This is a JoinSplit where the **last output** becomes a public token transfer instead of a tree commitment.
+Converts shielded zkBTC to public SPL tokens on Solana. This is a JoinSplit where the **last output** becomes a public token transfer instead of a tree commitment.
 
 #### `unshield` (disc 15)
 
@@ -355,10 +355,10 @@ The backend FROST pipeline auto-discovers and processes the PDA identically to `
 
 ### 4.4 Public Redeem: SPL → BTC (disc 17)
 
-Burns public SPL zBTC tokens and creates a `RedemptionRequest` PDA. No ZK proof needed — user signs as token account authority.
+Burns public SPL zkBTC tokens and creates a `RedemptionRequest` PDA. No ZK proof needed — user signs as token account authority.
 
 ```
-User's SPL zBTC  ──►  Token-2022 burn  ──►  RedemptionRequest PDA  ──►  FROST signs  ──►  BTC
+User's SPL zkBTC  ──►  Token-2022 burn  ──►  RedemptionRequest PDA  ──►  FROST signs  ──►  BTC
 ```
 
 Instruction data (variable length):
@@ -369,7 +369,7 @@ Instruction data (variable length):
 [..]       request_nonce (8 bytes)
 ```
 
-Accounts: `pool_state, zbtc_mint, user_token_account, user(signer), system_program, token_program, redemption_request`
+Accounts: `pool_state, zkbtc_mint, user_token_account, user(signer), system_program, token_program, redemption_request`
 
 On-chain logic:
 1. Validate pool not paused, verify mint matches
@@ -401,7 +401,7 @@ On-chain logic:
 
 | Constant | Value | Used In |
 |----------|-------|---------|
-| `ZBTC_TOKEN_ID` | `0x7a627463` ("zbtc") | Commitment computation |
+| `ZKBTC_TOKEN_ID` | `0x7a627463` ("zkbtc") | Commitment computation |
 | `TREE_DEPTH` | 16 | Merkle tree (65,536 leaves) |
 | `ROOT_HISTORY_SIZE` | 100 | Anti-front-running buffer |
 | `DEPOSIT_OP_RETURN_SIZE` | 64 bytes | ephemeralPub + npk |

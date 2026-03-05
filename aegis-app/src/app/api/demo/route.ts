@@ -9,7 +9,7 @@ import { buildAddDemoStealthTransaction } from "@/lib/solana/demo-instructions";
 import {
   AEGIS_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
-  ZBTC_MINT_ADDRESS,
+  ZKBTC_MINT_ADDRESS,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
   derivePoolVaultATA,
@@ -99,14 +99,14 @@ export async function POST(request: NextRequest) {
     console.log("[Demo API] Checking required accounts...");
     console.log("[Demo API] Pool State PDA:", poolState.toBase58());
     console.log("[Demo API] Commitment Tree PDA:", commitmentTree.toBase58());
-    console.log("[Demo API] zBTC Mint:", ZBTC_MINT_ADDRESS.toBase58());
+    console.log("[Demo API] zkBTC Mint:", ZKBTC_MINT_ADDRESS.toBase58());
     console.log("[Demo API] Pool Vault ATA:", poolVault.toBase58());
 
     // Fetch account info for all required accounts
     const [poolInfo, treeInfo, mintInfo, vaultInfo] = await Promise.all([
       connection.getAccountInfo(poolState),
       connection.getAccountInfo(commitmentTree),
-      connection.getAccountInfo(ZBTC_MINT_ADDRESS),
+      connection.getAccountInfo(ZKBTC_MINT_ADDRESS),
       connection.getAccountInfo(poolVault),
     ]);
 
@@ -147,16 +147,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate zBTC mint exists and is owned by Token-2022
+    // Validate zkBTC mint exists and is owned by Token-2022
     if (!mintInfo) {
       return NextResponse.json(
-        { success: false, error: "zBTC mint not created. Run initialization script first." },
+        { success: false, error: "zkBTC mint not created. Run initialization script first." },
         { status: 500 }
       );
     }
     if (!mintInfo.owner.equals(TOKEN_2022_PROGRAM_ID)) {
       return NextResponse.json(
-        { success: false, error: `zBTC mint has wrong owner. Expected Token-2022 (${TOKEN_2022_PROGRAM_ID.toBase58()}), got ${mintInfo.owner.toBase58()}` },
+        { success: false, error: `zkBTC mint has wrong owner. Expected Token-2022 (${TOKEN_2022_PROGRAM_ID.toBase58()}), got ${mintInfo.owner.toBase58()}` },
         { status: 500 }
       );
     }

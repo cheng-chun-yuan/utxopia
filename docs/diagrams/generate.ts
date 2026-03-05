@@ -736,7 +736,7 @@ function generateDepositWithdrawFlow() {
   );
   els.push(arrow(1390, spvY + 27, [[0, 0], [20, 0]], { strokeColor: "#1b5e20" }));
   els.push(
-    ...labeledRect(1410, spvY, 150, 55, "Mint zBTC\nto Pool Vault\n(Token-2022)", {
+    ...labeledRect(1410, spvY, 150, 55, "Mint zkBTC\nto Pool Vault\n(Token-2022)", {
       backgroundColor: "#a5d6a7",
       strokeColor: "#1b5e20",
       fontSize: 11,
@@ -745,7 +745,7 @@ function generateDepositWithdrawFlow() {
 
   // SPV accounts annotation
   els.push(
-    text(50, spvY + 65, "Accounts: pool_state | light_client | block_header | commitment_tree | deposit_record | chadbuffer | authority | system | zbtc_mint | pool_vault | token-2022 | btc_light_client_program", {
+    text(50, spvY + 65, "Accounts: pool_state | light_client | block_header | commitment_tree | deposit_record | chadbuffer | authority | system | zkbtc_mint | pool_vault | token-2022 | btc_light_client_program", {
       fontSize: 10,
       strokeColor: "#666",
       textAlign: "left",
@@ -876,7 +876,7 @@ function generateDepositWithdrawFlow() {
   const withdrawSteps = [
     "Request\nRedemption\n(ZK proof)",
     "Nullifier\nPublished\n(no double-spend)",
-    "zBTC Burned\nfrom Pool\n(Token-2022)",
+    "zkBTC Burned\nfrom Pool\n(Token-2022)",
     "FROST Server\n2-of-3 Signing\n(policy checked)",
     "BTC Transaction\nBroadcast\n(Schnorr BIP-340)",
     "Complete\nRedemption\n(relayer confirms)",
@@ -1031,7 +1031,7 @@ function generateCryptoKeyModel() {
 
   // Commitment & Nullifier
   els.push(
-    ...labeledRect(40, 490, 320, 65, "Commitment = Poseidon(NPK, token, amount)\ntoken = ZBTC_TOKEN_ID (0x7a627463)", {
+    ...labeledRect(40, 490, 320, 65, "Commitment = Poseidon(NPK, token, amount)\ntoken = ZKBTC_TOKEN_ID (0x7a627463)", {
       backgroundColor: "#e8eaf6",
       strokeColor: "#283593",
       fontSize: 12,
@@ -1675,7 +1675,7 @@ function generateStealthAnnouncement() {
     { name: "announcement_type", size: 1, offset: 1, value: "0=deposit, 1=transfer", color: "#fff3e0", border: "#e65100" },
     { name: "ephemeral_pub", size: 32, offset: 2, value: "Ed25519 ephemeral public key (ECDH scanning)", color: "#e8f5e9", border: "#2e7d32" },
     { name: "amount_bytes", size: 8, offset: 34, value: "plaintext u64 LE (type=0) | XOR-encrypted (type=1)", color: "#fff9c4", border: "#f57f17" },
-    { name: "commitment", size: 32, offset: 42, value: "Poseidon(npk, ZBTC_TOKEN_ID, amount)", color: "#f3e5f5", border: "#6a1b9a" },
+    { name: "commitment", size: 32, offset: 42, value: "Poseidon(npk, ZKBTC_TOKEN_ID, amount)", color: "#f3e5f5", border: "#6a1b9a" },
     { name: "leaf_index", size: 8, offset: 74, value: "Merkle tree position (u64 LE)", color: "#e3f2fd", border: "#1565c0" },
     { name: "created_at", size: 8, offset: 82, value: "Unix timestamp (i64 LE)", color: "#efebe9", border: "#795548" },
   ];
@@ -2222,7 +2222,7 @@ function generateScanningFlow() {
   // --- Step 7: Verify commitment ---
   const s7Y = branchY + 65;
   els.push(
-    ...labeledRect(branchX - 40, s7Y, 340, 50, "7. Verify: Poseidon(npk, ZBTC_TOKEN_ID, amount)\n== stored commitment → MATCH = mine!", {
+    ...labeledRect(branchX - 40, s7Y, 340, 50, "7. Verify: Poseidon(npk, ZKBTC_TOKEN_ID, amount)\n== stored commitment → MATCH = mine!", {
       backgroundColor: "#c8e6c9",
       strokeColor: "#2e7d32",
       fontSize: 12,

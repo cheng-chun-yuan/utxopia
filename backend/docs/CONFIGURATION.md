@@ -51,7 +51,7 @@ Priority: CLI args > Environment variables > `.env` file > Defaults
 | `AEGIS_PROGRAM_ID` | No*** | `AtztELZfz3GHA8hFQCv7aT9Mt47Xhknv3ZCNb3fmXsgf` | Aegis program ID |
 | `AEGIS_POOL_STATE` | No*** | `8bbcVecB619HHsHn2TQMraJ8R8WjQjApdZY7h9JCJW7b` | Pool state PDA |
 | `AEGIS_COMMITMENT_TREE` | No*** | `HtfDXZ5mBQNBdZrDxJMbXCDkyUqFdTDj7zAqo3aqrqiA` | Commitment tree PDA |
-| `AEGIS_ZBTC_MINT` | No*** | `HiDyAcEBTS7SRiLA49BZ5B6XMBAksgwLEAHpvteR8vbV` | zBTC mint address |
+| `AEGIS_ZKBTC_MINT` | No*** | `HiDyAcEBTS7SRiLA49BZ5B6XMBAksgwLEAHpvteR8vbV` | zkBTC mint address |
 
 *Solana RPC defaults: devnet=`https://api.devnet.solana.com`, testnet=`https://api.testnet.solana.com`, mainnet=`https://api.mainnet-beta.solana.com`.
 
@@ -333,8 +333,8 @@ env | grep -E "^(AEGIS|POOL|SOLANA|DEPOSIT)"
 Configuration can also be created programmatically in Rust:
 
 ```rust
-use zbtc::common::AEGISConfig;
-use zbtc::deposit_tracker::TrackerConfig;
+use zkbtc::common::AEGISConfig;
+use zkbtc::deposit_tracker::TrackerConfig;
 
 // Load from environment
 let config = AEGISConfig::from_env()?;

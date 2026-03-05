@@ -169,7 +169,7 @@ export async function submitDemoStealthDeposit(
   // Create instruction
   // Account order must match program expectation:
   // 1. poolState, 2. commitmentTree, 3. stealthAnnouncement, 4. authority (signer)
-  // 5. systemProgram, 6. zbtcMint, 7. poolVault, 8. token2022Program
+  // 5. systemProgram, 6. zkbtcMint, 7. poolVault, 8. token2022Program
   const instruction = new TransactionInstruction({
     keys: [
       { pubkey: poolStatePda, isSigner: false, isWritable: true },

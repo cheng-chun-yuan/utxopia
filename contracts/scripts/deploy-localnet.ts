@@ -430,7 +430,7 @@ function buildAddDemoStealthIx(
   commitmentTree: PublicKey,
   stealthAnnouncement: PublicKey,
   authority: PublicKey,
-  zbtcMint: PublicKey,
+  zkbtcMint: PublicKey,
   poolVault: PublicKey,
   programId: PublicKey,
   ephemeralPub: Uint8Array,
@@ -447,7 +447,7 @@ function buildAddDemoStealthIx(
       { pubkey: stealthAnnouncement, isSigner: false, isWritable: true },
       { pubkey: authority, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      { pubkey: zbtcMint, isSigner: false, isWritable: true },
+      { pubkey: zkbtcMint, isSigner: false, isWritable: true },
       { pubkey: poolVault, isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
     ],
@@ -536,9 +536,9 @@ async function initializeAEGIS(
     log("Aegis already initialized, skipping...");
 
     // Parse existing pool state to get mint and vault info
-    // Pool state layout: discriminator(1) + bump(1) + flags(1) + padding(1) + authority(32) + zbtc_mint(32) + pool_vault(32) + ...
+    // Pool state layout: discriminator(1) + bump(1) + flags(1) + padding(1) + authority(32) + zkbtc_mint(32) + pool_vault(32) + ...
     const mintPubkey = new PublicKey(poolAccount.data.subarray(36, 68));
-    // pool_vault is at offset 68 (after zbtc_mint)
+    // pool_vault is at offset 68 (after zkbtc_mint)
     const poolVaultPubkey = new PublicKey(poolAccount.data.subarray(68, 100));
 
     log(`Existing mint: ${mintPubkey.toBase58()}`);
@@ -648,14 +648,14 @@ async function addDemoNotes(
   programId: PublicKey,
   poolStatePda: PublicKey,
   commitmentTreePda: PublicKey,
-  zbtcMint: PublicKey,
+  zkbtcMint: PublicKey,
   poolVault: PublicKey,
   count: number = 3
 ): Promise<void> {
   logSection("Adding Demo Stealth Notes");
 
   log(`Adding ${count} demo stealth notes to commitment tree...`);
-  log(`zBTC will be minted to pool vault: ${poolVault.toBase58()}`);
+  log(`zkBTC will be minted to pool vault: ${poolVault.toBase58()}`);
 
   // Demo amount: 0.0001 BTC = 10,000 sats (matches DEMO_MINT_AMOUNT_SATS in contract)
   const demoAmount = 10_000n;
@@ -694,7 +694,7 @@ async function addDemoNotes(
       commitmentTreePda,
       stealthAnnouncement,
       authority.publicKey,
-      zbtcMint,
+      zkbtcMint,
       poolVault,
       programId,
       ephemeralPub,
@@ -852,7 +852,7 @@ async function main() {
   );
   initResult.btcLightClientPda = btcLightClientPda;
 
-  // Add demo notes (now also mints zBTC to pool vault)
+  // Add demo notes (now also mints zkBTC to pool vault)
   if (!skipDemo) {
     // Initialize Poseidon before computing commitments
     await initPoseidon();

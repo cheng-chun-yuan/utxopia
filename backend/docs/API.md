@@ -114,7 +114,7 @@ Register a new deposit for tracking (npk-based flow).
 | `commitment` | string | Yes | 32-byte commitment hash (64 hex chars) |
 | `amount_sats` | number | Yes | Expected deposit amount in satoshis |
 
-> **Note**: The `npk` and `ephemeral_pub` fields are extracted automatically from the deposit transaction's 64-byte OP_RETURN (`ephemeral_pub(32) + npk(32)`) during sweep processing. The on-chain commitment is computed as `Poseidon(npk, ZBTC_TOKEN_ID, amount)`.
+> **Note**: The `npk` and `ephemeral_pub` fields are extracted automatically from the deposit transaction's 64-byte OP_RETURN (`ephemeral_pub(32) + npk(32)`) during sweep processing. The on-chain commitment is computed as `Poseidon(npk, ZKBTC_TOKEN_ID, amount)`.
 
 **Response (Success)**
 ```json

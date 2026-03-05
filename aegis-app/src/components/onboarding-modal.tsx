@@ -33,7 +33,7 @@ const steps: OnboardingStep[] = [
   {
     title: "Welcome to Aegis",
     description:
-      "Aegis is a privacy layer for Bitcoin on Solana. Deposit BTC to receive private zBTC tokens that can be transferred without revealing your identity.",
+      "Aegis is a privacy layer for Bitcoin on Solana. Deposit BTC to receive private zkBTC tokens that can be transferred without revealing your identity.",
     icon: <Shield className="w-8 h-8" />,
   },
   {

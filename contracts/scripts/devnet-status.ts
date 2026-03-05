@@ -64,8 +64,8 @@ async function main() {
 
   // Check zkBTC Mint
   console.log("\n🪙 zkBTC Mint:");
-  const zbtcMint = new PublicKey(devnetConfig.accounts.zkbtcMint);
-  const mintInfo = await connection.getAccountInfo(zbtcMint);
+  const zkbtcMint = new PublicKey(devnetConfig.accounts.zkbtcMint);
+  const mintInfo = await connection.getAccountInfo(zkbtcMint);
   if (mintInfo) {
     console.log(`  ✓ Account exists (${mintInfo.data.length} bytes)`);
     // Token-2022 mint layout: 4 bytes option + 32 bytes authority

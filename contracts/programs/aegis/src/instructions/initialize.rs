@@ -36,7 +36,7 @@ impl InitializeData {
 pub struct InitializeAccounts<'a> {
     pub pool_state: &'a AccountInfo,
     pub commitment_tree: &'a AccountInfo,
-    pub zbtc_mint: &'a AccountInfo,
+    pub zkbtc_mint: &'a AccountInfo,
     pub pool_vault: &'a AccountInfo,
     pub frost_vault: &'a AccountInfo,
     pub authority: &'a AccountInfo,
@@ -51,7 +51,7 @@ impl<'a> InitializeAccounts<'a> {
 
         let pool_state = &accounts[0];
         let commitment_tree = &accounts[1];
-        let zbtc_mint = &accounts[2];
+        let zkbtc_mint = &accounts[2];
         let pool_vault = &accounts[3];
         let frost_vault = &accounts[4];
         let authority = &accounts[5];
@@ -65,7 +65,7 @@ impl<'a> InitializeAccounts<'a> {
         Ok(Self {
             pool_state,
             commitment_tree,
-            zbtc_mint,
+            zkbtc_mint,
             pool_vault,
             frost_vault,
             authority,
@@ -83,8 +83,8 @@ pub fn process_initialize(
     let accounts = InitializeAccounts::from_accounts(accounts)?;
     let _ix_data = InitializeData::from_bytes(data)?;
 
-    // Validate zbtc_mint is owned by Token-2022
-    validate_token_2022_owner(accounts.zbtc_mint)?;
+    // Validate zkbtc_mint is owned by Token-2022
+    validate_token_2022_owner(accounts.zkbtc_mint)?;
     validate_system_program(accounts.system_program)?;
 
     // Verify pool_state PDA
@@ -158,7 +158,7 @@ pub fn process_initialize(
 
         pool.bump = pool_bump;
         pool.authority.copy_from_slice(accounts.authority.key().as_ref());
-        pool.zbtc_mint.copy_from_slice(accounts.zbtc_mint.key().as_ref());
+        pool.zkbtc_mint.copy_from_slice(accounts.zkbtc_mint.key().as_ref());
         pool.pool_vault.copy_from_slice(accounts.pool_vault.key().as_ref());
         pool.frost_vault.copy_from_slice(accounts.frost_vault.key().as_ref());
         pool.set_min_deposit(MIN_DEPOSIT_SATS);

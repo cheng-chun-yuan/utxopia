@@ -1,6 +1,6 @@
 //! Public Redeem instruction (disc 17)
 //!
-//! Burns public SPL zBTC tokens and creates a RedemptionRequest PDA
+//! Burns public SPL zkBTC tokens and creates a RedemptionRequest PDA
 //! for BTC withdrawal. No ZK proof needed — user signs as token authority.
 //!
 //! Instruction Data Layout:
@@ -11,7 +11,7 @@
 //!
 //! Accounts:
 //! 0. pool_state           (writable)
-//! 1. zbtc_mint            (writable)
+//! 1. zkbtc_mint            (writable)
 //! 2. user_token_account   (writable)
 //! 3. user                 (signer)
 //! 4. system_program       (read)
@@ -32,7 +32,7 @@ use crate::state::{
     PoolState, RedemptionRequest, RedemptionStatus,
     REDEMPTION_REQUEST_DISCRIMINATOR,
 };
-use crate::utils::token::{burn_zbtc, validate_token_account};
+use crate::utils::token::{burn_zkbtc, validate_token_account};
 use crate::utils::{
     create_pda_account, validate_account_writable, validate_program_owner,
     validate_system_program, validate_token_2022_owner, validate_token_program_key,
@@ -72,7 +72,7 @@ pub fn process_public_redeem(
     }
 
     let pool_state_info = &accounts[0];
-    let zbtc_mint = &accounts[1];
+    let zkbtc_mint = &accounts[1];
     let user_token_account = &accounts[2];
     let user = &accounts[3];
     let system_program = &accounts[4];
@@ -82,11 +82,11 @@ pub fn process_public_redeem(
     // Validate core accounts
     validate_program_owner(pool_state_info, program_id)?;
     validate_system_program(system_program)?;
-    validate_token_2022_owner(zbtc_mint)?;
+    validate_token_2022_owner(zkbtc_mint)?;
     validate_token_2022_owner(user_token_account)?;
     validate_token_program_key(token_program)?;
     validate_account_writable(pool_state_info)?;
-    validate_account_writable(zbtc_mint)?;
+    validate_account_writable(zkbtc_mint)?;
     validate_account_writable(user_token_account)?;
     validate_account_writable(redemption_request_info)?;
 
@@ -102,9 +102,9 @@ pub fn process_public_redeem(
             return Err(AegisError::PoolPaused.into());
         }
 
-        // Verify zbtc_mint matches pool
-        if zbtc_mint.key().as_ref() != pool.zbtc_mint {
-            debug_msg!("zBTC mint mismatch");
+        // Verify zkbtc_mint matches pool
+        if zkbtc_mint.key().as_ref() != pool.zkbtc_mint {
+            debug_msg!("zkBTC mint mismatch");
             return Err(ProgramError::InvalidAccountData);
         }
 
@@ -117,10 +117,10 @@ pub fn process_public_redeem(
     }
 
     // Validate token account: owned by Token-2022, correct mint, owned by user
-    validate_token_account(user_token_account, zbtc_mint.key(), user.key())?;
+    validate_token_account(user_token_account, zkbtc_mint.key(), user.key())?;
 
     // Burn tokens — user signs as authority (no PDA signer needed)
-    burn_zbtc(token_program, zbtc_mint, user_token_account, user, amount_sats)?;
+    burn_zkbtc(token_program, zkbtc_mint, user_token_account, user, amount_sats)?;
 
     debug_msg!("Public redeem: burned tokens");
 

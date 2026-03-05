@@ -16,7 +16,7 @@ const TOKEN_2022 = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 const ACCOUNTS = {
   poolState: new PublicKey("DfUsWNKFfYZyEkupTpq5PEvxB1aQ8Wg2ZWVNeFuRvFcJ"),
   commitmentTree: new PublicKey("FdS67pn6wXCzjQ9Kc8asXMADEtHD1qZigbQ2i4wpbPKh"),
-  zbtcMint: new PublicKey("Bz4B3TYBEJigE9xLxQArbDH96LEZJ7Dj1AGL9BiQU63r"),
+  zkbtcMint: new PublicKey("Bz4B3TYBEJigE9xLxQArbDH96LEZJ7Dj1AGL9BiQU63r"),
   poolVault: new PublicKey("5hsETnbpmDrewrhjuo9f6JjL9E4qjJqoR7U8XSTArLLw"),
 };
 
@@ -54,7 +54,7 @@ async function main() {
       if (name === "poolState" || name === "commitmentTree") {
         expectedOwner = AEGIS_PROGRAM.toBase58();
         status = owner === expectedOwner ? "✓" : "✗";
-      } else if (name === "zbtcMint" || name === "poolVault") {
+      } else if (name === "zkbtcMint" || name === "poolVault") {
         expectedOwner = TOKEN_2022.toBase58();
         status = owner === expectedOwner ? "✓" : "✗";
       }

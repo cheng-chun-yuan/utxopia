@@ -13,10 +13,10 @@
 //! - Reads deposit TX from its ChadBuffer, extracts npk + ephemeral_pub from OP_RETURN
 //! - Verifies sweep TX has an input spending from the deposit TX (proves linkage)
 //! - Extracts deposit amount trustlessly from the SPV-verified sweep raw transaction
-//! - Computes commitment ON-CHAIN: Poseidon(npk, ZBTC_TOKEN_ID, amount)
+//! - Computes commitment ON-CHAIN: Poseidon(npk, ZKBTC_TOKEN_ID, amount)
 //! - Inserts commitment into Merkle tree
 //! - Creates unified StealthAnnouncement (type=0, plaintext amount) with PDA ["stealth", sweep_txid]
-//! - Mints zBTC to pool vault
+//! - Mints zkBTC to pool vault
 //!
 //! Instruction Data (80 bytes, fixed):
 //! - [0-31]   sweep_txid        (32 bytes) - Sweep tx ID (internal byte order)
@@ -45,7 +45,7 @@ use crate::utils::crypto::compute_deposit_commitment;
 use crate::utils::bitcoin::{compute_tx_hash, DepositOpReturn, ParsedTransaction};
 use crate::utils::chadbuffer::read_transaction_from_buffer;
 use crate::utils::{
-    mint_zbtc, validate_program_owner, validate_system_program, validate_token_2022_owner,
+    mint_zkbtc, validate_program_owner, validate_system_program, validate_token_2022_owner,
     validate_token_program_key, validate_account_writable,
 };
 
@@ -58,7 +58,7 @@ pub const DEMO_REQUIRED_CONFIRMATIONS: u64 = 6;
 
 /// Instruction data for verify_stealth_deposit (trustless npk extraction)
 ///
-/// The commitment is computed ON-CHAIN: Poseidon(npk, ZBTC_TOKEN_ID, amount)
+/// The commitment is computed ON-CHAIN: Poseidon(npk, ZKBTC_TOKEN_ID, amount)
 /// npk + ephemeral_pub are extracted ON-CHAIN from the deposit TX's OP_RETURN.
 /// Amount is extracted from the SPV-verified sweep TX.
 pub struct VerifyStealthDepositData {
@@ -112,7 +112,7 @@ impl VerifyStealthDepositData {
 /// 5.  `[]` Sweep TX buffer (ChadBuffer)
 /// 6.  `[signer]` Authority (pool authority, pays for storage)
 /// 7.  `[]` System program
-/// 8.  `[writable]` zBTC mint
+/// 8.  `[writable]` zkBTC mint
 /// 9.  `[writable]` Pool vault token account
 /// 10. `[]` Token-2022 program
 /// 11. `[]` Deposit TX buffer (ChadBuffer)
@@ -136,7 +136,7 @@ pub fn process_verify_stealth_deposit(
     let tx_buffer_info = &accounts[5];
     let authority = &accounts[6];
     let system_program = &accounts[7];
-    let zbtc_mint = &accounts[8];
+    let zkbtc_mint = &accounts[8];
     let pool_vault = &accounts[9];
     let token_program = &accounts[10];
     let deposit_tx_buffer_info = &accounts[11];
@@ -153,7 +153,7 @@ pub fn process_verify_stealth_deposit(
     validate_program_owner(verified_tx_info, btc_lc_id)?;
     validate_program_owner(light_client_info, btc_lc_id)?;
     validate_program_owner(commitment_tree_info, program_id)?;
-    validate_token_2022_owner(zbtc_mint)?;
+    validate_token_2022_owner(zkbtc_mint)?;
     validate_token_2022_owner(pool_vault)?;
     validate_token_program_key(token_program)?;
     validate_system_program(system_program)?;
@@ -162,7 +162,7 @@ pub fn process_verify_stealth_deposit(
     validate_account_writable(pool_state_info)?;
     validate_account_writable(commitment_tree_info)?;
     validate_account_writable(stealth_announcement_info)?;
-    validate_account_writable(zbtc_mint)?;
+    validate_account_writable(zkbtc_mint)?;
     validate_account_writable(pool_vault)?;
 
     // Authority must be signer
@@ -302,7 +302,7 @@ pub fn process_verify_stealth_deposit(
         owner: program_id,
     }.invoke_signed(&stealth_signer)?;
 
-    // Compute commitment ON-CHAIN: Poseidon(npk, ZBTC_TOKEN_ID, amount)
+    // Compute commitment ON-CHAIN: Poseidon(npk, ZKBTC_TOKEN_ID, amount)
     // npk is trustlessly extracted from the deposit TX's OP_RETURN
     let commitment = compute_deposit_commitment(&npk, amount_sats)?;
 
@@ -335,13 +335,13 @@ pub fn process_verify_stealth_deposit(
     // Emit leaf inserted event (commitment + timestamp for indexer)
     crate::utils::events::emit_leaf_inserted(&commitment, clock.unix_timestamp);
 
-    // Mint zBTC to pool vault
+    // Mint zkBTC to pool vault
     let pool_bump_bytes = [pool_bump];
     let pool_signer_seeds: &[&[u8]] = &[PoolState::SEED, &pool_bump_bytes];
 
-    mint_zbtc(
+    mint_zkbtc(
         token_program,
-        zbtc_mint,
+        zkbtc_mint,
         pool_vault,
         pool_state_info,
         amount_sats,

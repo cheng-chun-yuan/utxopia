@@ -677,9 +677,9 @@ export function stealthNoteHasComputedHashes(note: StealthNote): boolean {
 // ============================================================================
 
 /**
- * ZBTC token identifier for JoinSplit commitments
+ * ZKBTC token identifier for JoinSplit commitments
  */
-export const ZBTC_TOKEN_ID = 0x7a627463n; // "zbtc" as u32
+export const ZKBTC_TOKEN_ID = 0x7a627463n; // "zkbtc" as u32
 
 /**
  * JoinSplit note structure
@@ -691,7 +691,7 @@ export const ZBTC_TOKEN_ID = 0x7a627463n; // "zbtc" as u32
 export interface JoinSplitNote {
   /** Note public key: Poseidon(MPK, random) */
   npk: bigint;
-  /** Token identifier (ZBTC_TOKEN_ID) */
+  /** Token identifier (ZKBTC_TOKEN_ID) */
   token: bigint;
   /** Amount in satoshis */
   amount: bigint;
@@ -713,11 +713,11 @@ export function createJoinSplitNote(
   leafIndex: number = -1,
 ): JoinSplitNote {
   const npk = computeNPKSync(mpk, random);
-  const commitment = computeJoinSplitCommitmentSync(npk, ZBTC_TOKEN_ID, amount);
+  const commitment = computeJoinSplitCommitmentSync(npk, ZKBTC_TOKEN_ID, amount);
 
   return {
     npk,
-    token: ZBTC_TOKEN_ID,
+    token: ZKBTC_TOKEN_ID,
     amount,
     random,
     leafIndex,

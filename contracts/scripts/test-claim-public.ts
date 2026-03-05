@@ -37,7 +37,7 @@ import {
 import * as fs from "fs";
 
 const RPC_URL = "https://api.devnet.solana.com";
-const ZBTC_MINT = new PublicKey("BdUFQhqKpzYVHVg8cQoh7JdpSoHFtwKM4A48AFAjKFAK");
+const ZKBTC_MINT = new PublicKey("BdUFQhqKpzYVHVg8cQoh7JdpSoHFtwKM4A48AFAjKFAK");
 
 // Instruction discriminators
 const DISCRIMINATOR = {
@@ -176,7 +176,7 @@ async function main() {
     connection,
     authority,
     authority.publicKey,
-    ZBTC_MINT
+    ZKBTC_MINT
   );
 
   // Derive nullifier record PDA
@@ -212,7 +212,7 @@ async function main() {
       { pubkey: new PublicKey(poolStatePDA as string), isSigner: false, isWritable: true },
       { pubkey: new PublicKey(commitmentTreePDA as string), isSigner: false, isWritable: false },
       { pubkey: new PublicKey(nullifierRecordPDA as string), isSigner: false, isWritable: true },
-      { pubkey: ZBTC_MINT, isSigner: false, isWritable: true },
+      { pubkey: ZKBTC_MINT, isSigner: false, isWritable: true },
       { pubkey: poolVault, isSigner: false, isWritable: true },
       { pubkey: recipientAta, isSigner: false, isWritable: true },
       { pubkey: authority.publicKey, isSigner: true, isWritable: true },

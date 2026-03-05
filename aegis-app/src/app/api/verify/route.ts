@@ -35,7 +35,7 @@ import {
   AEGIS_PROGRAM_ID,
   BTC_LIGHT_CLIENT_PROGRAM_ID,
   CHADBUFFER_PROGRAM_ID,
-  ZBTC_MINT_ADDRESS,
+  ZKBTC_MINT_ADDRESS,
   AUTHORITY_SIZE,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
@@ -436,7 +436,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
       stealthAnnouncementPDA,
       chadBuffer: bufferPubkey,
       authority: relayer.publicKey,
-      zbtcMint: ZBTC_MINT_ADDRESS,
+      zkbtcMint: ZKBTC_MINT_ADDRESS,
       poolVaultATA,
       instructionData: verifyDepositData,
     });

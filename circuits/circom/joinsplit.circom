@@ -21,7 +21,7 @@ include "./lib/mpk.circom";
  *   commitmentsOut[M]- One commitment per output
  *
  * Private signals:
- *   token            - Token identifier (ZBTC_TOKEN_ID)
+ *   token            - Token identifier (ZKBTC_TOKEN_ID)
  *   publicKey[2]     - Baby Jubjub spending public key (x, y)
  *   signature[3]     - EdDSA-Poseidon signature (R8x, R8y, S)
  *   nullifyingKey    - Nullifying key from 3-key model

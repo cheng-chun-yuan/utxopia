@@ -317,7 +317,7 @@ export async function createTestContext(): Promise<E2ETestContext> {
           : LOCALNET_CONFIG.groth16VerifierProgramId,
         poolStatePda: kitAddress(localnetConfig.accounts.poolState),
         commitmentTreePda: kitAddress(localnetConfig.accounts.commitmentTree),
-        zbtcMint: kitAddress(localnetConfig.accounts.zkbtcMint),
+        zkbtcMint: kitAddress(localnetConfig.accounts.zkbtcMint),
         poolVault: kitAddress(localnetConfig.accounts.poolVault),
       });
       setConfig(customConfig);
@@ -408,7 +408,7 @@ export async function createTestContext(): Promise<E2ETestContext> {
     accounts: {
       poolState: config.poolStatePda.toString(),
       commitmentTree: config.commitmentTreePda.toString(),
-      zkbtcMint: config.zbtcMint.toString(),
+      zkbtcMint: config.zkbtcMint.toString(),
       poolVault: config.poolVault.toString(),
     },
   };

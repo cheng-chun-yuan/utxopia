@@ -399,7 +399,7 @@ export function useDepositWatcher(
  *       )}
  *
  *       {isConfirmed && (
- *         <button onClick={handleClaim}>Claim zBTC!</button>
+ *         <button onClick={handleClaim}>Claim zkBTC!</button>
  *       )}
  *     </div>
  *   );

@@ -104,7 +104,7 @@ Single parameterized `JoinSplit(N, M, 16)` template producing circuit variants:
 
 | Feature | Description |
 |---------|-------------|
-| **Shielded-Only** | zBTC exists only as commitments — no public tokens |
+| **Shielded-Only** | zkBTC exists only as commitments — no public tokens |
 | **JoinSplit Proofs** | Groth16 (~256 byte proofs) for all transfers |
 | **3-Key Model** | Spending (BJJ) + Nullifying (BN254) + Viewing (Ed25519) |
 | **Stealth Addresses** | Unlinkable one-time addresses via DKSAP (EIP-5564) |
@@ -160,7 +160,7 @@ Spending Key (Baby Jubjub) ─► Signs JoinSplit transactions (EdDSA-Poseidon)
 |---------------|-------------|---------|
 | 0 | `initialize` | Setup pool state and commitment tree |
 | 1 | `verify_stealth_deposit` | Verify BTC via SPV, compute commitment on-chain (npk-based, 11 accounts) |
-| 5 | `request_redemption` | Burn zBTC, queue BTC withdrawal |
+| 5 | `request_redemption` | Burn zkBTC, queue BTC withdrawal |
 | 6 | `complete_redemption` | Relayer marks redemption complete |
 | 7 | `set_paused` | Admin pause/unpause |
 | 11-12 | VK registry | Init/update verification key hashes |
@@ -196,7 +196,7 @@ const ix = buildTransactInstruction(options);
 ## Non-Interactive Deposit (OP_RETURN)
 
 npk-based deposits: user sends BTC with OP_RETURN containing `ephemeralPub(32) + npk(32)` = 64 bytes.
-Commitment is computed ON-CHAIN: `Poseidon(npk, ZBTC_TOKEN_ID, amount)`.
+Commitment is computed ON-CHAIN: `Poseidon(npk, ZKBTC_TOKEN_ID, amount)`.
 Both deposits and transfers use a unified `StealthAnnouncement` PDA (90 bytes) with a `type` field:
 - `type = 0` (deposit): `amount_bytes` is plaintext u64 LE
 - `type = 1` (transfer): `amount_bytes` is XOR-encrypted
@@ -204,7 +204,7 @@ Both deposits and transfers use a unified `StealthAnnouncement` PDA (90 bytes) w
 Sweep transactions have no OP_RETURN — Solana verifies everything via the VerifiedTransaction PDA.
 
 Key constants:
-- `ZBTC_TOKEN_ID = 0x7a627463` ("zbtc" as u32)
+- `ZKBTC_TOKEN_ID = 0x7a627463` ("zkbtc" as u32)
 - `DEPOSIT_OP_RETURN_SIZE = 64`
 - `StealthAnnouncement::SIZE = 90`
 

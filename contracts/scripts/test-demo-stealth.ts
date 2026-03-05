@@ -75,13 +75,13 @@ async function main() {
   );
   console.log(`Stealth Announcement PDA: ${stealthAnnouncementPDA.toBase58()}`);
 
-  // Get zBTC mint and pool vault
-  const zbtcMint = new PublicKey("BdUFQhqKpzYVHVg8cQoh7JdpSoHFtwKM4A48AFAjKFAK");
+  // Get zkBTC mint and pool vault
+  const zkbtcMint = new PublicKey("BdUFQhqKpzYVHVg8cQoh7JdpSoHFtwKM4A48AFAjKFAK");
   const [poolVault] = PublicKey.findProgramAddressSync(
     [
       new PublicKey(poolStatePDA as string).toBuffer(),
       TOKEN_2022_PROGRAM_ID.toBuffer(),
-      zbtcMint.toBuffer(),
+      zkbtcMint.toBuffer(),
     ],
     new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
   );
@@ -102,7 +102,7 @@ async function main() {
       { pubkey: stealthAnnouncementPDA, isSigner: false, isWritable: true },
       { pubkey: authority.publicKey, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      { pubkey: zbtcMint, isSigner: false, isWritable: true },
+      { pubkey: zkbtcMint, isSigner: false, isWritable: true },
       { pubkey: poolVault, isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
     ],

@@ -14,10 +14,10 @@
 //! Usage: cargo run --bin test_frost_redemption
 
 use bitcoin::{TapTweakHash, XOnlyPublicKey};
-use zbtc::frost_client::FrostClient;
-use zbtc::redemption::builder::{TxBuilder};
-use zbtc::redemption::signer::{MpcSigner, TxSigner};
-use zbtc::redemption::types::{PoolUtxo, WithdrawalRequest};
+use zkbtc::frost_client::FrostClient;
+use zkbtc::redemption::builder::{TxBuilder};
+use zkbtc::redemption::signer::{MpcSigner, TxSigner};
+use zkbtc::redemption::types::{PoolUtxo, WithdrawalRequest};
 
 const ESPLORA_URL: &str = "http://localhost:3000/regtest/api";
 const SIGNER_URLS: &[&str] = &["http://localhost:9001", "http://localhost:9002"];

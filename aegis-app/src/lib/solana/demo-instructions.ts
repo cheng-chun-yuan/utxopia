@@ -26,7 +26,7 @@ import {
 import {
   AEGIS_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
-  ZBTC_MINT_ADDRESS,
+  ZKBTC_MINT_ADDRESS,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
   derivePoolVaultATA,
@@ -89,7 +89,7 @@ export function buildAddDemoStealthInstruction(
       { pubkey: stealthAnnouncement, isSigner: false, isWritable: true },
       { pubkey: payer, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      { pubkey: ZBTC_MINT_ADDRESS, isSigner: false, isWritable: true },
+      { pubkey: ZKBTC_MINT_ADDRESS, isSigner: false, isWritable: true },
       { pubkey: poolVault, isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
     ],

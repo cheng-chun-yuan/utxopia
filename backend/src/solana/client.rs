@@ -4,8 +4,8 @@
 //! All logic (merkle tree, token minting) is handled by the contract.
 //!
 //! Flow:
-//! 1. BTC deposit confirmed → call record_deposit (contract stores commitment + mints zBTC to vault)
-//! 2. User withdraws → call withdraw (contract verifies proof + transfers zBTC from vault to user)
+//! 1. BTC deposit confirmed → call record_deposit (contract stores commitment + mints zkBTC to vault)
+//! 2. User withdraws → call withdraw (contract verifies proof + transfers zkBTC from vault to user)
 
 use solana_client::rpc_client::RpcClient;
 use solana_sdk::{
@@ -54,14 +54,14 @@ pub const DEVNET_POOL_STATE: &str = "8bbcVecB619HHsHn2TQMraJ8R8WjQjApdZY7h9JCJW7
 /// Commitment tree PDA (devnet default)
 pub const DEVNET_COMMITMENT_TREE: &str = "HtfDXZ5mBQNBdZrDxJMbXCDkyUqFdTDj7zAqo3aqrqiA";
 
-/// zBTC mint address (devnet default)
-pub const DEVNET_ZBTC_MINT: &str = "HiDyAcEBTS7SRiLA49BZ5B6XMBAksgwLEAHpvteR8vbV";
+/// zkBTC mint address (devnet default)
+pub const DEVNET_ZKBTC_MINT: &str = "HiDyAcEBTS7SRiLA49BZ5B6XMBAksgwLEAHpvteR8vbV";
 
 // Legacy aliases for backward compatibility
 pub const PROGRAM_ID: &str = DEVNET_PROGRAM_ID;
 pub const POOL_STATE: &str = DEVNET_POOL_STATE;
 pub const COMMITMENT_TREE: &str = DEVNET_COMMITMENT_TREE;
-pub const ZBTC_MINT: &str = DEVNET_ZBTC_MINT;
+pub const ZKBTC_MINT: &str = DEVNET_ZKBTC_MINT;
 
 // ============================================================================
 // Helper Functions
@@ -137,7 +137,7 @@ pub struct SolClient {
     program_id: Pubkey,
     pool_state: Pubkey,
     commitment_tree: Pubkey,
-    zbtc_mint: Pubkey,
+    zkbtc_mint: Pubkey,
 }
 
 impl SolClient {
@@ -151,7 +151,7 @@ impl SolClient {
             program_id: parse_pubkey(DEVNET_PROGRAM_ID).unwrap(),
             pool_state: parse_pubkey(DEVNET_POOL_STATE).unwrap(),
             commitment_tree: parse_pubkey(DEVNET_COMMITMENT_TREE).unwrap(),
-            zbtc_mint: parse_pubkey(DEVNET_ZBTC_MINT).unwrap(),
+            zkbtc_mint: parse_pubkey(DEVNET_ZKBTC_MINT).unwrap(),
         }
     }
 
@@ -168,7 +168,7 @@ impl SolClient {
             program_id: parse_pubkey(&config.program_id)?,
             pool_state: parse_pubkey(&config.pool_state)?,
             commitment_tree: parse_pubkey(&config.commitment_tree)?,
-            zbtc_mint: parse_pubkey(&config.zbtc_mint)?,
+            zkbtc_mint: parse_pubkey(&config.zkbtc_mint)?,
         })
     }
 
@@ -228,7 +228,7 @@ impl SolClient {
     // ========================================================================
 
     /// Call contract's record_deposit instruction
-    /// Contract handles: store commitment in merkle tree + mint zBTC to vault
+    /// Contract handles: store commitment in merkle tree + mint zkBTC to vault
     pub async fn record_deposit(
         &self,
         commitment: &[u8; 32],
@@ -237,12 +237,12 @@ impl SolClient {
     ) -> Result<String, SolError> {
         let payer = self.payer.as_ref().ok_or(SolError::NoPayerSet)?;
 
-        // Derive vault PDA (holds zBTC backing all commitments)
+        // Derive vault PDA (holds zkBTC backing all commitments)
         let (vault, _) = Pubkey::find_program_address(
-            &[b"vault", self.zbtc_mint.as_ref()],
+            &[b"vault", self.zkbtc_mint.as_ref()],
             &self.program_id,
         );
-        let vault_ata = get_ata(&vault, &self.zbtc_mint);
+        let vault_ata = get_ata(&vault, &self.zkbtc_mint);
 
         // Derive deposit record PDA
         let (deposit_record, _) = Pubkey::find_program_address(
@@ -269,7 +269,7 @@ impl SolClient {
             AccountMeta::new(self.pool_state, false),
             AccountMeta::new(self.commitment_tree, false),
             AccountMeta::new(deposit_record, false),
-            AccountMeta::new(self.zbtc_mint, false),
+            AccountMeta::new(self.zkbtc_mint, false),
             AccountMeta::new(vault, false),
             AccountMeta::new(vault_ata, false),
             AccountMeta::new(payer.pubkey(), true),
@@ -288,7 +288,7 @@ impl SolClient {
     }
 
     /// Call contract's withdraw instruction
-    /// Contract handles: verify ZK proof + transfer zBTC from vault to user
+    /// Contract handles: verify ZK proof + transfer zkBTC from vault to user
     pub async fn withdraw(
         &self,
         proof: &[u8],
@@ -302,13 +302,13 @@ impl SolClient {
 
         // Derive vault PDA
         let (vault, _) = Pubkey::find_program_address(
-            &[b"vault", self.zbtc_mint.as_ref()],
+            &[b"vault", self.zkbtc_mint.as_ref()],
             &self.program_id,
         );
-        let vault_ata = get_ata(&vault, &self.zbtc_mint);
+        let vault_ata = get_ata(&vault, &self.zkbtc_mint);
 
-        // User's ATA for zBTC
-        let user_ata = get_ata(&recipient_pubkey, &self.zbtc_mint);
+        // User's ATA for zkBTC
+        let user_ata = get_ata(&recipient_pubkey, &self.zkbtc_mint);
 
         // Nullifier record PDA (prevents double-spend)
         let (nullifier_record, _) = Pubkey::find_program_address(
@@ -331,7 +331,7 @@ impl SolClient {
             AccountMeta::new(self.pool_state, false),
             AccountMeta::new_readonly(self.commitment_tree, false),
             AccountMeta::new(nullifier_record, false),
-            AccountMeta::new(self.zbtc_mint, false),
+            AccountMeta::new(self.zkbtc_mint, false),
             AccountMeta::new(vault, false),
             AccountMeta::new(vault_ata, false),
             AccountMeta::new(user_ata, false),
@@ -532,13 +532,13 @@ impl SolClient {
     // Read Operations
     // ========================================================================
 
-    /// Get vault zBTC balance (total backing for all commitments)
+    /// Get vault zkBTC balance (total backing for all commitments)
     pub async fn get_vault_balance(&self) -> Result<u64, SolError> {
         let (vault, _) = Pubkey::find_program_address(
-            &[b"vault", self.zbtc_mint.as_ref()],
+            &[b"vault", self.zkbtc_mint.as_ref()],
             &self.program_id,
         );
-        let vault_ata = get_ata(&vault, &self.zbtc_mint);
+        let vault_ata = get_ata(&vault, &self.zkbtc_mint);
 
         match self.rpc.get_token_account_balance(&vault_ata) {
             Ok(balance) => Ok(balance.amount.parse().unwrap_or(0)),
@@ -546,10 +546,10 @@ impl SolClient {
         }
     }
 
-    /// Get user's zBTC balance
+    /// Get user's zkBTC balance
     pub async fn get_user_balance(&self, address: &str) -> Result<u64, SolError> {
         let owner = parse_pubkey(address)?;
-        let user_ata = get_ata(&owner, &self.zbtc_mint);
+        let user_ata = get_ata(&owner, &self.zkbtc_mint);
 
         match self.rpc.get_token_account_balance(&user_ata) {
             Ok(balance) => Ok(balance.amount.parse().unwrap_or(0)),

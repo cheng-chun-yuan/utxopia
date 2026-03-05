@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type JSX } from "react";
+import { useEffect, useRef, useCallback, type JSX } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useBitcoinWalletStore } from "./bitcoin-wallet-store";
 import { useAegisStore } from "./aegis-store";
@@ -21,6 +21,7 @@ export function StoreHydration(): JSX.Element {
   const inboxNotesLength = useAegisStore((s) => s.inboxNotes.length);
   const refreshInbox = useAegisStore((s) => s.refreshInbox);
 
+  const refreshPublicBalance = useAegisStore((s) => s.refreshPublicBalance);
   const { publicKey: walletPubkey } = useWallet();
 
   // Track if we've already triggered a refresh
@@ -72,6 +73,32 @@ export function StoreHydration(): JSX.Element {
       hasRefreshedRef.current = false;
     }
   }, [keys]);
+
+  // Auto-refresh balances every 30s when keys are available and page is visible
+  const refreshAll = useCallback(() => {
+    if (!keys) return;
+    refreshInbox();
+    if (walletPubkey) refreshPublicBalance(walletPubkey);
+  }, [keys, refreshInbox, walletPubkey, refreshPublicBalance]);
+
+  useEffect(() => {
+    if (!keys) return;
+
+    const interval = setInterval(() => {
+      if (!document.hidden) refreshAll();
+    }, 30_000);
+
+    // Also refresh when tab becomes visible after being hidden
+    const onVisibility = () => {
+      if (!document.hidden) refreshAll();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [keys, refreshAll]);
 
   return <></>;
 }

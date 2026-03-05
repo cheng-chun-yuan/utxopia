@@ -11,7 +11,7 @@ import { toast } from "sonner";
  */
 export function notifyDepositConfirmed(claimLink?: string) {
   toast.success("Deposit Confirmed!", {
-    description: "Your BTC deposit has been verified. You can now claim your zBTC.",
+    description: "Your BTC deposit has been verified. You can now claim your zkBTC.",
     action: claimLink
       ? {
           label: "Claim Now",
@@ -40,8 +40,8 @@ export function notifyDepositDetected(confirmations: number, required: number) {
  */
 export function notifyClaimSuccess(amount: number) {
   const btcAmount = (amount / 100_000_000).toFixed(8);
-  toast.success("zBTC Claimed!", {
-    description: `${btcAmount} zBTC has been added to your wallet`,
+  toast.success("zkBTC Claimed!", {
+    description: `${btcAmount} zkBTC has been added to your wallet`,
     duration: 8000,
   });
 }
@@ -93,7 +93,7 @@ export function notifyInfo(title: string, message: string) {
 export function notifyStealthReceived(amount: number) {
   const btcAmount = (amount / 100_000_000).toFixed(8);
   toast.success("Stealth Deposit Received!", {
-    description: `You received ${btcAmount} zBTC via stealth address`,
+    description: `You received ${btcAmount} zkBTC via stealth address`,
     action: {
       label: "View Inbox",
       onClick: () => {

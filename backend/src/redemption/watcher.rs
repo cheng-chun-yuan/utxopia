@@ -1,6 +1,6 @@
 //! Solana Burn Event Watcher
 //!
-//! Watches Solana for zBTC burn events.
+//! Watches Solana for zkBTC burn events.
 
 use crate::redemption::types::BurnEvent;
 use crate::sol_client::{SolClient, SolConfig};
@@ -58,7 +58,7 @@ impl BurnWatcher {
     #[allow(dead_code)]
     fn parse_burn_event(&self, _logs: &[String]) -> Option<BurnEvent> {
         // In production:
-        // - Parse "Program log: Burn zBTC: amount=X, address=Y"
+        // - Parse "Program log: Burn zkBTC: amount=X, address=Y"
         // - Extract structured data
         None
     }
