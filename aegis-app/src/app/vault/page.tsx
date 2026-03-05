@@ -125,12 +125,18 @@ export default function VaultPage() {
 
   const handlePasskeyRegister = async () => {
     const seed = await registerPasskey();
-    if (seed) await deriveKeysFromPasskeySeed(seed);
+    if (seed) {
+      await deriveKeysFromPasskeySeed(seed);
+      setAuthModalOpen(false);
+    }
   };
 
   const handlePasskeyAuthenticate = async () => {
     const seed = await authenticatePasskey();
-    if (seed) await deriveKeysFromPasskeySeed(seed);
+    if (seed) {
+      await deriveKeysFromPasskeySeed(seed);
+      setAuthModalOpen(false);
+    }
   };
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -575,7 +581,7 @@ export default function VaultPage() {
         onPasskeyRegister={handlePasskeyRegister}
         onPasskeyAuthenticate={handlePasskeyAuthenticate}
         onWalletConnect={() => { setAuthModalOpen(false); setVisible(true); }}
-        onWalletDeriveKeys={deriveKeys}
+        onWalletDeriveKeys={async () => { await deriveKeys(); setAuthModalOpen(false); }}
       />
     </main>
   );
