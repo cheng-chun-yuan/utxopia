@@ -1500,26 +1500,6 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
           </div>
         </div>
 
-        {/* === PUBLIC zkBTC BALANCE === */}
-        {publicZkbtcBalance > 0n && (
-          <div className="mb-4 p-3 rounded-[12px] bg-privacy/5 border border-privacy/20">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Wallet className="w-4 h-4 text-privacy" />
-                <span className="text-body2 text-gray-light">Public zkBTC</span>
-              </div>
-              <span className="text-body2-semibold text-privacy">
-                {formatBtc(Number(publicZkbtcBalance))} zkBTC
-              </span>
-            </div>
-            {hasBtcOutput && (
-              <p className="text-[11px] text-gray mt-1.5 pl-6">
-                Can be redeemed to BTC without ZK proof via Public Redeem
-              </p>
-            )}
-          </div>
-        )}
-
         <div className="border-t border-gray/10 my-2" />
 
         {/* === SUMMARY === */}
