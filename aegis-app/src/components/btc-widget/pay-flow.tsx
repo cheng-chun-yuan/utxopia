@@ -296,7 +296,6 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   const [step, setStep] = useState<PayStep>("connect");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [privacyConfirmed, setPrivacyConfirmed] = useState(false);
   const [requestId, setRequestId] = useState<string | null>(null);
   const [changeAmountSats, setChangeAmountSats] = useState<number>(0);
   const [proofStatus, setProofStatus] = useState<string>("");
@@ -356,8 +355,6 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   // Derived flags
   const hasBtcOutput = outputs.some(o => o.mode === "btc");
   const hasPublicOutput = outputs.some(o => o.mode === "public");
-  const publicOutputCount = outputs.filter(o => o.mode === "public" || o.mode === "btc").length;
-  const needsPrivacyConfirm = publicOutputCount > 2;
 
   // Circuit shape
   const nInputs = hasImportedNotes ? activeImportedNotes.length : selectedNotes.length;
@@ -467,7 +464,6 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 
   const updateOutput = useCallback(
     (id: string, update: Partial<OutputRow>) => {
-      if (update.mode) setPrivacyConfirmed(false);
       setOutputs((prev) =>
         prev.map((o) => (o.id === id ? { ...o, ...update } : o))
       );
@@ -589,7 +585,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
     return errors;
   }, [selectedNotes, outputs, totalOutputSats, totalInputSats, changeSats, nInputs, nOutputs, publicZkbtcBalance, hasImportedNotes]);
 
-  const canSubmit = validationErrors.length === 0 && !loading && (!needsPrivacyConfirm || privacyConfirmed);
+  const canSubmit = validationErrors.length === 0 && !loading;
 
   // ===== Main pay handler =====
 
@@ -1497,28 +1493,23 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                 onUpdate={(update) => updateOutput(output.id, update)}
                 onRemove={() => removeOutput(output.id)}
                 defaultAddress={publicKey?.toBase58() || ""}
+                disablePublic={outputs.some(o => o.id !== output.id && o.mode === "public")}
+                disableBtc={outputs.some(o => o.id !== output.id && o.mode === "btc")}
               />
             ))}
           </div>
 
-          {/* Privacy warning: >2 public/BTC outputs */}
-          {needsPrivacyConfirm && (
-            <div className="mt-2 rounded-[10px] bg-btc/5 border border-btc/20 p-3">
-              <div className="flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-btc shrink-0 mt-0.5" />
-                <p className="text-caption text-btc">
-                  You have {publicOutputCount} public outputs (Public/BTC). This reduces privacy — observers may link your accounts.
-                </p>
-              </div>
-              <label className="flex items-center gap-2 mt-2 ml-6 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={privacyConfirmed}
-                  onChange={(e) => setPrivacyConfirmed(e.target.checked)}
-                  className="w-4 h-4 rounded border-btc/40 accent-btc"
-                />
-                <span className="text-caption text-btc font-medium">I understand the privacy risk</span>
-              </label>
+          {/* Privacy info: public/BTC outputs reduce privacy */}
+          {(hasPublicOutput || hasBtcOutput) && (
+            <div className="mt-2 flex items-start gap-2 px-3 py-2 rounded-[10px] bg-btc/5 border border-btc/20">
+              <AlertTriangle className="w-4 h-4 text-btc shrink-0 mt-0.5" />
+              <p className="text-caption text-btc">
+                {hasPublicOutput && hasBtcOutput
+                  ? "Public and BTC outputs reveal your addresses on-chain — observers can link your Solana and Bitcoin accounts."
+                  : hasPublicOutput
+                    ? "Public outputs reveal your Solana address on-chain."
+                    : "BTC outputs reveal your Bitcoin withdrawal address on-chain."}
+              </p>
             </div>
           )}
         </div>
@@ -1853,6 +1844,8 @@ interface OutputRowCardProps {
   onUpdate: (update: Partial<OutputRow>) => void;
   onRemove: () => void;
   defaultAddress: string;
+  disablePublic?: boolean;
+  disableBtc?: boolean;
 }
 
 function OutputRowCard({
@@ -1862,6 +1855,8 @@ function OutputRowCard({
   onUpdate,
   onRemove,
   defaultAddress,
+  disablePublic = false,
+  disableBtc = false,
 }: OutputRowCardProps) {
   const [isEditingAddress, setIsEditingAddress] = useState(false);
 
@@ -1876,14 +1871,15 @@ function OutputRowCard({
           {/* Mode toggle — segmented control */}
           <div className="flex p-0.5 bg-muted rounded-[8px] border border-gray/10">
             {([
-              { mode: "stealth" as const, label: "Stealth", activeClass: "bg-purple/20 text-purple" },
-              { mode: "note" as const, label: "Note", activeClass: "bg-btc/20 text-btc" },
-              { mode: "public" as const, label: "Public", activeClass: "bg-privacy/20 text-privacy" },
-              { mode: "btc" as const, label: "BTC", activeClass: "bg-btc/20 text-btc" },
+              { mode: "stealth" as const, label: "Stealth", activeClass: "bg-purple/20 text-purple", disabled: false },
+              { mode: "note" as const, label: "Note", activeClass: "bg-btc/20 text-btc", disabled: false },
+              { mode: "public" as const, label: "Public", activeClass: "bg-privacy/20 text-privacy", disabled: disablePublic && output.mode !== "public" },
+              { mode: "btc" as const, label: "BTC", activeClass: "bg-btc/20 text-btc", disabled: disableBtc && output.mode !== "btc" },
             ] as const).map((tab) => (
               <button
                 key={tab.mode}
                 onClick={() => {
+                  if (tab.disabled) return;
                   const reset: Partial<OutputRow> = { mode: tab.mode };
                   if (tab.mode === "public") { reset.stealthError = null; reset.solanaAddress = defaultAddress; }
                   else if (tab.mode === "stealth") { reset.addressError = null; }
@@ -1891,12 +1887,20 @@ function OutputRowCard({
                   else { reset.addressError = null; reset.stealthError = null; }
                   onUpdate(reset);
                 }}
+                disabled={tab.disabled}
                 className={cn(
                   "px-2.5 py-1 rounded-[6px] text-[11px] font-medium transition-colors min-w-[48px] text-center",
                   output.mode === tab.mode
                     ? tab.activeClass
-                    : "text-gray hover:text-gray-light"
+                    : tab.disabled
+                      ? "text-gray/30 cursor-not-allowed"
+                      : "text-gray hover:text-gray-light"
                 )}
+                title={
+                  tab.mode === "public" && tab.disabled ? "Max 1 public output per transaction" :
+                  tab.mode === "btc" && tab.disabled ? "Max 1 BTC output per transaction" :
+                  undefined
+                }
               >
                 {tab.label}
               </button>
