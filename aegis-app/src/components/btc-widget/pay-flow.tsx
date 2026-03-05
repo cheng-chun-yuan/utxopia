@@ -1874,60 +1874,43 @@ function OutputRowCard({
       <div className="flex items-center justify-between mb-2">
         <span className="text-caption text-gray">Output {index + 1}</span>
         <div className="flex items-center gap-2">
-          {/* Mode toggle */}
-          <div className="flex gap-1">
-            <button
-              onClick={() => onUpdate({ mode: "stealth", addressError: null })}
-              className={cn(
-                "px-2 py-1 rounded-[6px] text-[11px] font-medium transition-colors",
-                output.mode === "stealth"
-                  ? "bg-purple/20 text-purple"
-                  : "text-gray hover:text-gray-light"
-              )}
-            >
-              Stealth
-            </button>
-            <button
-              onClick={() => onUpdate({ mode: "note", addressError: null, stealthError: null })}
-              className={cn(
-                "px-2 py-1 rounded-[6px] text-[11px] font-medium transition-colors",
-                output.mode === "note"
-                  ? "bg-btc/20 text-btc"
-                  : "text-gray hover:text-gray-light"
-              )}
-            >
-              Note
-            </button>
-            <button
-              onClick={() => !disablePublic && onUpdate({ mode: "public", stealthError: null, solanaAddress: defaultAddress })}
-              disabled={disablePublic && output.mode !== "public"}
-              className={cn(
-                "px-2 py-1 rounded-[6px] text-[11px] font-medium transition-colors",
-                output.mode === "public"
-                  ? "bg-privacy/20 text-privacy"
-                  : disablePublic
-                    ? "text-gray/30 cursor-not-allowed"
-                    : "text-gray hover:text-gray-light"
-              )}
-              title={disablePublic && output.mode !== "public" ? "Only 1 public output allowed" : undefined}
-            >
-              Public
-            </button>
-            <button
-              onClick={() => !disableBtc && onUpdate({ mode: "btc", addressError: null, stealthError: null })}
-              disabled={disableBtc && output.mode !== "btc"}
-              className={cn(
-                "px-2 py-1 rounded-[6px] text-[11px] font-medium transition-colors",
-                output.mode === "btc"
-                  ? "bg-btc/20 text-btc"
-                  : disableBtc
-                    ? "text-gray/30 cursor-not-allowed"
-                    : "text-gray hover:text-gray-light"
-              )}
-              title={disableBtc && output.mode !== "btc" ? "Only 1 BTC/public output allowed" : undefined}
-            >
-              BTC
-            </button>
+          {/* Mode toggle — segmented control */}
+          <div className="flex p-0.5 bg-muted rounded-[8px] border border-gray/10">
+            {([
+              { mode: "stealth" as const, label: "Stealth", activeClass: "bg-purple/20 text-purple", disabled: false },
+              { mode: "note" as const, label: "Note", activeClass: "bg-btc/20 text-btc", disabled: false },
+              { mode: "public" as const, label: "Public", activeClass: "bg-privacy/20 text-privacy", disabled: disablePublic && output.mode !== "public" },
+              { mode: "btc" as const, label: "BTC", activeClass: "bg-btc/20 text-btc", disabled: disableBtc && output.mode !== "btc" },
+            ] as const).map((tab) => (
+              <button
+                key={tab.mode}
+                onClick={() => {
+                  if (tab.disabled) return;
+                  const reset: Partial<OutputRow> = { mode: tab.mode };
+                  if (tab.mode === "public") { reset.stealthError = null; reset.solanaAddress = defaultAddress; }
+                  else if (tab.mode === "stealth") { reset.addressError = null; }
+                  else if (tab.mode === "note") { reset.addressError = null; reset.stealthError = null; }
+                  else { reset.addressError = null; reset.stealthError = null; }
+                  onUpdate(reset);
+                }}
+                disabled={tab.disabled}
+                className={cn(
+                  "px-2.5 py-1 rounded-[6px] text-[11px] font-medium transition-colors min-w-[48px] text-center",
+                  output.mode === tab.mode
+                    ? tab.activeClass
+                    : tab.disabled
+                      ? "text-gray/30 cursor-not-allowed"
+                      : "text-gray hover:text-gray-light"
+                )}
+                title={
+                  tab.mode === "public" && tab.disabled ? "Only 1 public output allowed" :
+                  tab.mode === "btc" && tab.disabled ? "Only 1 BTC/public output allowed" :
+                  undefined
+                }
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
           {/* Remove */}
           {canRemove && (
