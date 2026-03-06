@@ -221,18 +221,20 @@ const DepositCard = memo(({ deposit }: { deposit: TrackerDepositStatus }) => {
               <span className="text-xs text-btc">BTC</span>
             </span>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-gray">Receive</span>
-            <span className="flex items-center gap-1.5">
-              <Image src="/zkbtc.png" alt="zkBTC" width={16} height={16} className="rounded-full" />
-              <span className="text-base font-semibold text-white">{formatBtc(deposit.minted_sats ?? deposit.amount_sats)}</span>
-              <span className="text-xs text-purple">zkBTC</span>
-            </span>
-          </div>
+          {(deposit.minted_sats != null || deposit.sweep_fee_sats != null) && (
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray">Receive</span>
+              <span className="flex items-center gap-1.5">
+                <Image src="/zkbtc.png" alt="zkBTC" width={16} height={16} className="rounded-full" />
+                <span className="text-base font-semibold text-white">{formatBtc(deposit.minted_sats ?? (deposit.amount_sats - deposit.sweep_fee_sats!))}</span>
+                <span className="text-xs text-purple">zkBTC</span>
+              </span>
+            </div>
+          )}
           {deposit.sweep_fee_sats != null && (
             <div className="flex items-center justify-between pt-1 border-t border-gray/10">
               <span className="text-[10px] text-gray">Network Fee</span>
-              <span className="text-[10px] text-gray">{formatSats(deposit.sweep_fee_sats)} sats</span>
+              <span className="text-[10px] text-gray">-{formatSats(deposit.sweep_fee_sats)} sats</span>
             </div>
           )}
         </div>
@@ -550,7 +552,7 @@ export function BalanceView() {
                     <span className="text-xs flex items-center gap-1">
                       <span className="text-btc">{formatBtc(lookupResult.amount_sats)} BTC</span>
                       <ArrowRight className="w-2.5 h-2.5 text-gray" />
-                      <span className="text-purple">{formatBtc(lookupResult.minted_sats ?? lookupResult.amount_sats)} zkBTC</span>
+                      <span className="text-purple">{formatBtc(lookupResult.minted_sats ?? (lookupResult.sweep_fee_sats != null ? lookupResult.amount_sats - lookupResult.sweep_fee_sats : lookupResult.amount_sats))} zkBTC</span>
                     </span>
                   </div>
                 )}

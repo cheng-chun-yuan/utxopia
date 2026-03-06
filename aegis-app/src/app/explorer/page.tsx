@@ -566,15 +566,6 @@ export default function ExplorerPage() {
             >
               Docs
             </Link>
-            <a
-              href="https://github.com/cheng-chun-yuan/Aegis"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-body2 text-gray hover:text-gray-light transition-colors flex items-center gap-1"
-            >
-              GitHub
-              <ExternalLink className="w-3 h-3" />
-            </a>
           </div>
         </header>
 
@@ -620,14 +611,6 @@ export default function ExplorerPage() {
               >
                 Aegis
               </Link>
-              <a
-                href="https://github.com/cheng-chun-yuan/Aegis"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-caption text-gray hover:text-gray-light transition-colors"
-              >
-                GitHub
-              </a>
             </div>
             <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption text-gray hover:text-gray-light transition-colors flex items-center gap-1.5">Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network</a>
           </div>

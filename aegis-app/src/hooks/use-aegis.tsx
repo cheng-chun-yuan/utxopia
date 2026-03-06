@@ -56,6 +56,7 @@ export function useAegis() {
 
     // Keys
     keys: store.keys,
+    isViewOnly: store.isViewOnly,
     stealthAddress: store.stealthAddress,
     stealthAddressEncoded: store.stealthAddressEncoded,
     isLoading: store.isLoading,
@@ -86,6 +87,7 @@ export function useAegisKeys() {
   const ctx = useAegis();
   return {
     keys: ctx.keys,
+    isViewOnly: ctx.isViewOnly,
     stealthAddress: ctx.stealthAddress,
     stealthAddressEncoded: ctx.stealthAddressEncoded,
     isLoading: ctx.isLoading,

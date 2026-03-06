@@ -98,12 +98,6 @@ const AVAILABLE_CIRCUITS = new Set([
 
 type PayStep = "connect" | "compose" | "proving" | "success";
 
-const PAY_STEPS: { key: PayStep; label: string }[] = [
-  { key: "connect", label: "Connect" },
-  { key: "compose", label: "Compose" },
-  { key: "proving", label: "Prove" },
-  { key: "success", label: "Complete" },
-];
 
 const PROVING_SUB_STEPS = [
   { match: "Initializing", label: "Initializing" },
@@ -155,60 +149,6 @@ function ProvingSubSteps({ status }: { status: string }) {
             >
               {sub.label}
             </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function StepIndicator({ current }: { current: PayStep }) {
-  const currentIdx = PAY_STEPS.findIndex((s) => s.key === current);
-
-  return (
-    <div className="flex items-center justify-between mb-6 px-2">
-      {PAY_STEPS.map((s, i) => {
-        const isComplete = i < currentIdx;
-        const isCurrent = i === currentIdx;
-
-        return (
-          <div key={s.key} className="flex items-center flex-1 last:flex-none">
-            {/* Step circle + label */}
-            <div className="flex flex-col items-center gap-1">
-              <div
-                className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold transition-all",
-                  isComplete && "bg-success text-black",
-                  isCurrent && "bg-purple text-white ring-2 ring-purple/30",
-                  !isComplete && !isCurrent && "bg-muted text-gray border border-gray/20",
-                )}
-              >
-                {isComplete ? (
-                  <Check className="w-4 h-4" />
-                ) : (
-                  i + 1
-                )}
-              </div>
-              <span
-                className={cn(
-                  "text-[10px] font-medium whitespace-nowrap",
-                  isComplete && "text-success",
-                  isCurrent && "text-purple",
-                  !isComplete && !isCurrent && "text-gray",
-                )}
-              >
-                {s.label}
-              </span>
-            </div>
-            {/* Connector line */}
-            {i < PAY_STEPS.length - 1 && (
-              <div
-                className={cn(
-                  "flex-1 h-[2px] mx-2 mt-[-16px] transition-all",
-                  i < currentIdx ? "bg-success" : "bg-gray/20",
-                )}
-              />
-            )}
           </div>
         );
       })}
@@ -1676,8 +1616,6 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 
     return (
       <div className="flex flex-col items-center py-6">
-        <StepIndicator current={step} />
-
         <div className="relative w-16 h-16 mb-4">
           <div className="absolute inset-0 rounded-full border-4 border-gray/15" />
           <div
@@ -1730,19 +1668,18 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 
     return (
       <div className="flex flex-col items-center">
-        <StepIndicator current={step} />
-        <div className={cn("rounded-full p-4 mb-4", successBtcOutput ? "bg-btc/10" : "bg-success/10")}>
+        <div className={cn("rounded-full p-5 mb-5", successBtcOutput ? "bg-btc/10" : "bg-success/10")}>
           {successBtcOutput ? (
-            <Bitcoin className="h-12 w-12 text-btc" />
+            <Bitcoin className="h-14 w-14 text-btc" />
           ) : (
-            <CheckCircle2 className="h-12 w-12 text-success" />
+            <CheckCircle2 className="h-14 w-14 text-success" />
           )}
         </div>
 
-        <p className="text-heading6 text-foreground mb-2">
+        <p className="text-heading6 text-foreground mb-1.5">
           {successBtcOutput ? "BTC Withdrawal Submitted!" : "Payment Complete!"}
         </p>
-        <p className="text-body2 text-gray text-center mb-6">
+        <p className="text-body2 text-gray text-center mb-5">
           {successBtcOutput
             ? "Redemption request created on-chain. BTC will be sent to your address."
             : hasStealth
@@ -1752,12 +1689,12 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 
         <div className="w-full gradient-bg-card p-4 rounded-[12px] mb-4 space-y-3">
           <div className="flex justify-between items-center text-body2">
-            <span className="text-gray-light">Transaction</span>
+            <span className="text-gray">Transaction</span>
             <a
               href={`https://orbmarkets.io/tx/${requestId}?cluster=devnet`}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-mono text-privacy text-xs hover:underline flex items-center gap-1"
+              className="font-mono text-gray-light text-xs hover:text-foreground transition-colors flex items-center gap-1"
             >
               {truncateMiddle(requestId, 8)}
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1766,44 +1703,47 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
             </a>
           </div>
           <div className="flex justify-between items-center text-body2">
-            <span className="text-gray-light">Sent</span>
-            <span className="text-privacy">{totalOutputSats.toLocaleString()} sats</span>
+            <span className="text-gray">Sent</span>
+            <span className="text-foreground">{totalOutputSats.toLocaleString()} sats</span>
           </div>
           {changeAmountSats > 0 && (
             <div className="flex justify-between items-center text-body2">
-              <span className="text-gray-light">Change</span>
+              <span className="text-gray">Change</span>
               <span className="text-foreground">{formatBtc(changeAmountSats)} zkBTC</span>
             </div>
           )}
           {successBtcOutput && (
             <div className="flex justify-between items-center text-body2">
-              <span className="text-gray-light">BTC Address</span>
+              <span className="text-gray">BTC Address</span>
               <span className="font-mono text-btc text-xs">
                 {truncateMiddle(successBtcOutput.btcAddress || "", 8)}
               </span>
             </div>
           )}
           <div className="flex justify-between items-center text-body2 pt-2 border-t border-gray/15">
-            <span className="text-gray-light">Privacy</span>
-            <span className="font-mono text-purple text-xs">
-              ZK Proof
-              {successBtcOutput && " + BTC Withdraw"}
-            </span>
+            <span className="text-gray">Privacy</span>
+            <span className="font-mono text-success text-xs">ZK Proof</span>
           </div>
         </div>
 
         {/* Claim links for Note outputs */}
         {noteOutputPhrases.length > 0 && (
           <div className="w-full mb-4 space-y-2">
+            <div className="flex items-center gap-3 p-3 bg-warning/10 border border-warning/25 rounded-[12px]">
+              <AlertCircle className="w-5 h-5 text-warning shrink-0" />
+              <p className="text-caption text-warning">
+                Save these note links securely. They cannot be recovered if lost.
+              </p>
+            </div>
             {noteOutputPhrases.map((np, i) => (
               <NoteClaimLink key={i} phrase={np.phrase} amount={np.amount} />
             ))}
           </div>
         )}
 
-        <div className="w-full flex items-center gap-3 p-3 bg-privacy/10 border border-privacy/20 rounded-[12px] mb-6">
-          <CheckCircle2 className="w-5 h-5 text-privacy shrink-0" />
-          <p className="text-caption text-gray-light">
+        <div className="w-full flex items-center gap-3 p-3 bg-muted border border-gray/15 rounded-[12px] mb-6">
+          <CheckCircle2 className="w-5 h-5 text-gray shrink-0" />
+          <p className="text-caption text-gray">
             {hasStealth
               ? "Recipient can scan and claim using their stealth keys"
               : "Deposit created on-chain. You can scan and claim it in Notes."}
@@ -1837,24 +1777,24 @@ function NoteClaimLink({ phrase, amount }: { phrase: string; amount: number }) {
   };
 
   return (
-    <div className="p-3 rounded-[12px] bg-btc/5 border border-btc/20">
+    <div className="p-3 rounded-[12px] bg-muted border border-gray/15">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <FileText className="w-4 h-4 text-btc" />
+          <FileText className="w-4 h-4 text-gray-light" />
           <span className="text-body2-semibold text-foreground">
             Note: {formatBtc(amount)} zkBTC
           </span>
         </div>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1 text-caption text-btc hover:text-btc/80 transition-colors"
+          className="flex items-center gap-1 text-caption text-purple hover:text-purple/80 transition-colors"
         >
           {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
           {copied ? "Copied!" : "Copy Link"}
         </button>
       </div>
       <div className="p-2 bg-background rounded-[8px] break-all">
-        <code className="text-[11px] font-mono text-gray-light">{claimUrl}</code>
+        <code className="text-[11px] font-mono text-gray">{claimUrl}</code>
       </div>
       <p className="text-[11px] text-gray mt-1.5">
         Share this link to let someone claim this note

@@ -2,7 +2,7 @@
 
 import React, { memo } from "react";
 import Link from "next/link";
-import { Bitcoin, Shield, Zap, Lock, ExternalLink, ArrowRight, EyeOff, Fingerprint, ShieldCheck, Loader2, Search } from "lucide-react";
+import { Bitcoin, Shield, Zap, Lock, ArrowRight, EyeOff, Fingerprint, ShieldCheck, Loader2, Search } from "lucide-react";
 import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
 import { usePoolStats, PoolStats } from "@/hooks/use-pool-stats";
 
@@ -131,15 +131,6 @@ export default function Home() {
             >
               Docs
             </Link>
-            <a
-              href="https://github.com/cheng-chun-yuan/Aegis"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-body2 text-gray hover:text-gray-light transition-colors flex items-center gap-1"
-            >
-              GitHub
-              <ExternalLink className="w-3 h-3" />
-            </a>
           </div>
         </header>
 

@@ -50,12 +50,10 @@ export function StealthRecipientInput({
     const trimmed = recipient.trim();
 
     try {
-      // Strip aegis: prefix if present
-      const raw = trimmed.startsWith("aegis:") ? trimmed.slice(6) : trimmed;
-      const isLikelyHex = /^[0-9a-fA-F]{100,}$/.test(raw);
+      const isStealthAddress = trimmed.startsWith("aegis:") || /^[0-9a-fA-F]{100,}$/.test(trimmed);
 
-      if (isLikelyHex) {
-        const meta = decodeStealthMetaAddress(raw);
+      if (isStealthAddress) {
+        const meta = decodeStealthMetaAddress(trimmed);
         if (!meta) {
           onError("Invalid stealth address format (expected 130 hex characters)");
           return;

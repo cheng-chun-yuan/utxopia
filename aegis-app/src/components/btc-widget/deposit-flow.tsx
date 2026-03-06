@@ -149,9 +149,9 @@ export function DepositFlow() {
     const trimmed = recipient.trim();
 
     try {
-      const isLikelyHex = /^[0-9a-fA-F]{100,}$/.test(trimmed);
+      const isStealthAddress = trimmed.startsWith("aegis:") || /^[0-9a-fA-F]{100,}$/.test(trimmed);
 
-      if (isLikelyHex) {
+      if (isStealthAddress) {
         // Try as raw stealth address first
         const meta = decodeStealthMetaAddress(trimmed);
         if (meta) {

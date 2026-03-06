@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -14,9 +14,9 @@ import {
   Loader2,
   LogOut,
   Search,
-  ExternalLink,
   Globe,
   RefreshCw,
+  Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FeatureCard, type FeatureCardColor } from "@/components/ui/feature-card";
@@ -29,11 +29,11 @@ import { useAegisStore } from "@/stores";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useSnsName } from "@/hooks/use-sns-name";
 import { useStealthInbox } from "@/hooks/use-aegis";
-import { getConfig } from "@aegis/sdk";
+import { getConfig, exportViewOnlyKeys, encodeViewOnlyKeys } from "@aegis/sdk";
 import { notifyCopied } from "@/lib/notifications";
-import { TooltipText } from "@/components/ui/tooltip";
 import { OnboardingModal } from "@/components/onboarding-modal";
 import { AuthModal } from "@/components/auth-modal";
+import { HoldButton } from "@/components/ui/hold-button";
 
 interface FeatureConfig {
   icon: React.ReactNode;
@@ -86,6 +86,7 @@ export default function VaultPage() {
   const { setVisible } = useWalletModal();
   const {
     keys,
+    isViewOnly,
     stealthAddressEncoded,
     isLoading,
     error,
@@ -94,6 +95,7 @@ export default function VaultPage() {
   } = useAegisKeys();
   const { copied: snsCopied, copy: copySns } = useCopyToClipboard();
   const { copied: stealthCopied, copy: copyStealth } = useCopyToClipboard();
+  const { copied: viewKeyCopied, copy: copyViewKey } = useCopyToClipboard();
   const {
     registeredSnsName,
     hasRegisteredSnsName,
@@ -122,6 +124,7 @@ export default function VaultPage() {
   } = usePasskey();
 
   const deriveKeysFromPasskeySeed = useAegisStore((s) => s.deriveKeysFromPasskeySeed);
+  const loadViewOnlyKeys = useAegisStore((s) => s.loadViewOnlyKeys);
 
   const handlePasskeyRegister = async () => {
     const seed = await registerPasskey();
@@ -140,6 +143,7 @@ export default function VaultPage() {
   };
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [viewKeyModalOpen, setViewKeyModalOpen] = useState(false);
 
   const isPasskeyUser = keys && keys.solanaPublicKey.every(b => b === 0);
 
@@ -219,17 +223,18 @@ export default function VaultPage() {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 rounded-[8px] bg-privacy/10">
-                  <Key className="w-4 h-4 text-privacy" />
+                  {isViewOnly ? <Eye className="w-4 h-4 text-btc" /> : <Key className="w-4 h-4 text-privacy" />}
                 </div>
                 <h2 className="text-body1 text-foreground">
-                  Your{" "}
-                  <TooltipText
-                    text="Stealth Address"
-                    tooltip="A one-time address that hides your identity. Only you can scan and claim funds sent to it."
-                  />
+                  {isViewOnly ? "View Only Mode" : "Your Stealth Address"}
                 </h2>
+                {isViewOnly && (
+                  <span className="px-2 py-0.5 rounded-full bg-btc/10 border border-btc/20 text-[10px] text-btc font-semibold uppercase">
+                    Read Only
+                  </span>
+                )}
               </div>
-              {keys && (
+              {(keys || isViewOnly) && (
                 <button
                   onClick={() => {
                     clearKeys(wallet.publicKey?.toBase58());
@@ -243,7 +248,7 @@ export default function VaultPage() {
               )}
             </div>
 
-            {!keys ? (
+            {!keys && !isViewOnly ? (
               <div className="text-center py-6">
                 <p className="text-body2 text-gray mb-1.5">
                   Unlock your vault to send and receive private Bitcoin
@@ -264,6 +269,10 @@ export default function VaultPage() {
                   Unlock Vault
                 </button>
               </div>
+            ) : isViewOnly ? (
+              <p className="text-caption text-btc">
+                Watching balances with viewing key. Cannot send or spend.
+              </p>
             ) : (
               <div>
                 {/* Address bar — shows SNS name (green) if available, stealth address otherwise */}
@@ -420,15 +429,27 @@ export default function VaultPage() {
                   </div>
                 )}
 
-                <p className="text-caption text-gray mt-2">
-                  Share this address to receive private payments. Only you can claim funds sent here.
-                </p>
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-caption text-gray">
+                    Share this address to receive private payments.
+                  </p>
+                  {keys && (
+                    <button
+                      onClick={() => setViewKeyModalOpen(true)}
+                      className="flex items-center gap-1.5 px-2 py-1 rounded-[6px] text-caption text-btc/70 hover:text-btc hover:bg-btc/10 transition-colors cursor-pointer shrink-0"
+                      title="Export viewing key"
+                    >
+                      <Eye className="w-3 h-3" />
+                      Export Viewing Key
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>
 
           {/* Claimable Notes Summary — gradient accent */}
-          {keys && (
+          {(keys || isViewOnly) && (
             <div className={cn(
               "mb-6 p-5 rounded-[16px] relative overflow-hidden",
               "bg-gradient-to-r from-privacy/5 via-muted/80 to-purple/5",
@@ -500,7 +521,9 @@ export default function VaultPage() {
 
           {/* Feature Cards Grid - 2x2 */}
           <div className="grid grid-cols-2 gap-4 mb-8">
-            {features.map((feature) => (
+            {features
+              .filter((f) => !isViewOnly || f.title === "My Funds" || f.title === "Explorer")
+              .map((feature) => (
               <FeatureCard
                 key={feature.title}
                 icon={feature.icon}
@@ -543,31 +566,16 @@ export default function VaultPage() {
           <div className="flex flex-row justify-between items-center gap-2 mt-6 text-gray pt-4 border-t border-gray/10">
             <div className="flex flex-row items-center gap-4">
               <a
-                href="https://Aegis.xyz"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 hover:text-gray-light transition-colors text-caption cursor-pointer"
+                href="/docs"
+                className="hover:text-gray-light transition-colors text-caption cursor-pointer"
               >
                 Aegis
-                <ExternalLink className="w-3 h-3 opacity-50" />
               </a>
               <a
-                href="https://github.com/cheng-chun-yuan/Aegis"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 hover:text-gray-light transition-colors text-caption cursor-pointer"
-              >
-                GitHub
-                <ExternalLink className="w-3 h-3 opacity-50" />
-              </a>
-              <a
-                href="https://docs.Aegis.xyz"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 hover:text-gray-light transition-colors text-caption cursor-pointer"
+                href="/docs"
+                className="hover:text-gray-light transition-colors text-caption cursor-pointer"
               >
                 Docs
-                <ExternalLink className="w-3 h-3 opacity-50" />
               </a>
             </div>
             <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption text-gray/50 hover:text-gray-light transition-colors flex items-center gap-1.5">Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network</a>
@@ -592,7 +600,62 @@ export default function VaultPage() {
         onPasskeyAuthenticate={handlePasskeyAuthenticate}
         onWalletConnect={() => { setAuthModalOpen(false); setVisible(true); }}
         onWalletDeriveKeys={async () => { await deriveKeys(); setAuthModalOpen(false); }}
+        onViewOnlyLogin={(viewingKey) => { loadViewOnlyKeys(viewingKey); setAuthModalOpen(false); }}
       />
+
+      {/* Export Viewing Key modal */}
+      {viewKeyModalOpen && keys && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-md"
+            onClick={() => setViewKeyModalOpen(false)}
+          />
+          <div className={cn(
+            "relative w-[90vw] max-w-[380px] rounded-[20px] p-6",
+            "bg-card/95 backdrop-blur-xl border border-gray/20",
+            "shadow-[0_0_80px_rgba(245,158,11,0.06)]",
+            "animate-in fade-in-0 zoom-in-95 duration-200"
+          )}>
+            <div className="text-center mb-5">
+              <div className="inline-flex p-3 rounded-full bg-btc/10 border border-btc/20 mb-3">
+                <Eye className="w-5 h-5 text-btc" />
+              </div>
+              <h3 className="text-body1 font-bold text-foreground mb-1">Export Viewing Key</h3>
+              <p className="text-caption text-gray">
+                This key grants read-only access to your balances and transaction history. Do not share it publicly.
+              </p>
+            </div>
+
+            <HoldButton
+              onComplete={() => {
+                const voKeys = exportViewOnlyKeys(keys);
+                const encoded = encodeViewOnlyKeys(voKeys);
+                copyViewKey(encoded);
+                notifyCopied("Viewing key");
+                setViewKeyModalOpen(false);
+              }}
+              holdDuration={1500}
+              className={cn(
+                "w-full flex items-center justify-center gap-2 px-4 py-3 rounded-[12px]",
+                "bg-btc/10 hover:bg-btc/20 border border-btc/20",
+                "text-body2 text-btc font-medium transition-all cursor-pointer"
+              )}
+              progressClassName="bg-btc"
+              title="Hold to copy viewing key"
+            >
+              {viewKeyCopied ? <Check className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              {viewKeyCopied ? "Copied!" : "Hold to Copy"}
+            </HoldButton>
+
+            <button
+              onClick={() => setViewKeyModalOpen(false)}
+              className="w-full mt-3 px-4 py-2 rounded-[10px] text-caption text-gray hover:text-gray-light hover:bg-gray/10 transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

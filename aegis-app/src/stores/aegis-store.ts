@@ -12,10 +12,14 @@ import {
   hexToBytes,
   computeNullifierHashForNote,
   deriveNullifierRecordPDA,
+  decodeViewOnlyKeys,
+  scanAnnouncementsViewOnly,
+  computeJoinSplitNullifierSync,
+  bigintToBytes,
   DEVNET_CONFIG,
   type AegisKeys,
   type StealthMetaAddress,
-  type ScannedNote,
+  type ViewOnlyKeys,
 } from "@aegis/sdk";
 
 // ============================================================================
@@ -99,7 +103,12 @@ let lastAnnouncementCachedAt = 0;
 // Types
 // ============================================================================
 
-export interface InboxNote extends ScannedNote {
+export interface InboxNote {
+  amount: bigint;
+  ephemeralPub: Uint8Array;
+  leafIndex: number;
+  commitment: Uint8Array;
+  stealthPub?: { x: bigint; y: bigint };
   id: string;
   createdAt: number;
   commitmentHex: string;
@@ -126,6 +135,8 @@ interface AegisState {
 
   // Keys
   keys: AegisKeys | null;
+  viewOnlyKeys: ViewOnlyKeys | null;
+  isViewOnly: boolean;
   stealthAddress: StealthMetaAddress | null;
   stealthAddressEncoded: string | null;
   isLoading: boolean;
@@ -154,6 +165,7 @@ interface AegisState {
   hydrateKeys: (walletPubkey: PublicKey) => boolean;
   deriveKeysFromPasskeySeed: (seed: Uint8Array) => Promise<void>;
   hydratePasskeyKeys: () => boolean;
+  loadViewOnlyKeys: (encoded: string) => void;
   clearKeys: (walletPubkey?: string) => void;
   refreshInbox: (connection?: Connection) => Promise<void>;
   refreshPublicBalance: (walletPubkey?: PublicKey) => Promise<void>;
@@ -169,6 +181,8 @@ export const useAegisStore = create<AegisState>((set, get) => ({
   // Initial state
   isPoseidonReady: false,
   keys: null,
+  viewOnlyKeys: null,
+  isViewOnly: false,
   stealthAddress: null,
   stealthAddressEncoded: null,
   isLoading: false,
@@ -201,7 +215,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
       });
 
       const meta = createStealthMetaAddress(derivedKeys);
-      const encoded = "aegis:" + encodeStealthMetaAddress(meta);
+      const encoded = encodeStealthMetaAddress(meta);
 
       // Persist to localStorage for session hydration
       persistKeys(wallet.publicKey.toBase58(), derivedKeys);
@@ -258,7 +272,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
     try {
       const derivedKeys = await deriveKeysFromSeedCircuit(seed);
       const meta = createStealthMetaAddress(derivedKeys);
-      const encoded = "aegis:" + encodeStealthMetaAddress(meta);
+      const encoded = encodeStealthMetaAddress(meta);
 
       // Persist with "passkey:" prefix
       const credentialId = typeof window !== "undefined"
@@ -292,7 +306,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
       if (!restored) return false;
 
       const meta = createStealthMetaAddress(restored);
-      const encoded = "aegis:" + encodeStealthMetaAddress(meta);
+      const encoded = encodeStealthMetaAddress(meta);
 
       set({
         keys: restored,
@@ -306,14 +320,32 @@ export const useAegisStore = create<AegisState>((set, get) => ({
     }
   },
 
+  loadViewOnlyKeys: (encoded: string) => {
+    try {
+      const voKeys = decodeViewOnlyKeys(encoded);
+      set({
+        keys: null,
+        viewOnlyKeys: voKeys,
+        isViewOnly: true,
+        stealthAddress: null,
+        stealthAddressEncoded: null,
+        hasKeys: true,
+        isLoading: false,
+        error: null,
+      });
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : "Invalid viewing key" });
+    }
+  },
+
   clearKeys: (walletPubkey?: string) => {
     if (walletPubkey) {
       removeKeys(walletPubkey);
     }
-    // Don't clear passkey seed/credential — they must persist across logout
-    // so the same passkey produces the same keys on re-login.
     set({
       keys: null,
+      viewOnlyKeys: null,
+      isViewOnly: false,
       stealthAddress: null,
       stealthAddressEncoded: null,
       error: null,
@@ -327,8 +359,8 @@ export const useAegisStore = create<AegisState>((set, get) => ({
   },
 
   refreshInbox: async (_connection) => {
-    const { keys } = get();
-    if (!keys) {
+    const { keys, viewOnlyKeys, isViewOnly } = get();
+    if (!keys && !viewOnlyKeys) {
       set({ inboxNotes: [], inboxTotalSats: 0n, inboxDepositCount: 0 });
       return;
     }
@@ -379,17 +411,25 @@ export const useAegisStore = create<AegisState>((set, get) => ({
         }));
 
         // Scan locally for privacy (server doesn't know which are ours)
-        const scanned = await scanUnifiedNotes(keys, announcements);
+        const scanned = isViewOnly && viewOnlyKeys
+          ? await scanAnnouncementsViewOnly(viewOnlyKeys, announcements)
+          : await scanUnifiedNotes(keys!, announcements);
 
         // Check which notes are spent — batch all nullifier PDAs into a single getMultipleAccounts RPC call
         const rpcUrl = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.devnet.solana.com";
 
         // Pre-compute all nullifier PDAs
+        const nullifyingKey = isViewOnly && viewOnlyKeys
+          ? viewOnlyKeys.nullifyingKey
+          : keys!.nullifyingKey;
+
         const nullifierData = await Promise.all(
           scanned.map(async (note) => {
-            const nullifierHashBytes = computeNullifierHashForNote(keys, note);
+            const hashBytes = isViewOnly
+              ? bigintToBytes(computeJoinSplitNullifierSync(nullifyingKey, BigInt(note.leafIndex)))
+              : computeNullifierHashForNote(keys!, note as any);
             const [nullifierPda] = await deriveNullifierRecordPDA(
-              nullifierHashBytes,
+              hashBytes,
               DEVNET_CONFIG.aegisProgramId
             );
             return { note, nullifierPda: nullifierPda.toString() };
@@ -397,7 +437,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
         );
 
         // Single batched RPC call for all nullifier checks
-        let notesWithSpentStatus: (ScannedNote & { isSpent: boolean })[];
+        let notesWithSpentStatus: (typeof scanned[number] & { isSpent: boolean })[];
         if (nullifierData.length === 0) {
           notesWithSpentStatus = [];
         } else {

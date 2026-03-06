@@ -51,11 +51,8 @@ const Footer = memo(function Footer() {
   return (
     <div className="flex justify-between items-center gap-2 mt-4 text-gray px-2 text-xs">
       <div className="flex items-center gap-4">
-        <a href="https://Aegis.xyz" target="_blank" rel="noopener noreferrer" className="hover:text-gray-light">
+        <a href="/docs" className="hover:text-gray-light">
           Aegis
-        </a>
-        <a href="https://github.com/cheng-chun-yuan/Aegis" target="_blank" rel="noopener noreferrer" className="hover:text-gray-light">
-          GitHub
         </a>
       </div>
       <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-light flex items-center gap-1.5">Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network</a>

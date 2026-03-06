@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Fingerprint, Wallet, X, Shield } from "lucide-react";
+import { Fingerprint, Wallet, X, Shield, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface AuthModalProps {
@@ -17,6 +18,7 @@ interface AuthModalProps {
   onPasskeyAuthenticate: () => void;
   onWalletConnect: () => void;
   onWalletDeriveKeys: () => void;
+  onViewOnlyLogin?: (viewingKey: string) => void;
 }
 
 export function AuthModal({
@@ -32,8 +34,11 @@ export function AuthModal({
   onPasskeyAuthenticate,
   onWalletConnect,
   onWalletDeriveKeys,
+  onViewOnlyLogin,
 }: AuthModalProps) {
   const isLoading = passkeyLoading || walletLoading;
+  const [showViewOnly, setShowViewOnly] = useState(false);
+  const [viewingKeyInput, setViewingKeyInput] = useState("");
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -120,17 +125,6 @@ export function AuthModal({
               </button>
             )}
 
-            {/* Divider */}
-            {passkeySupported && (
-              <div className="flex items-center gap-3 py-1">
-                <div className="flex-1 h-px bg-gray/15" />
-                <span className="text-caption text-gray/40 uppercase tracking-widest text-[10px]">
-                  or
-                </span>
-                <div className="flex-1 h-px bg-gray/15" />
-              </div>
-            )}
-
             {/* Wallet */}
             <button
               onClick={walletConnected ? onWalletDeriveKeys : onWalletConnect}
@@ -159,6 +153,84 @@ export function AuthModal({
                 </p>
               </div>
             </button>
+
+            {/* Divider */}
+            <div className="flex items-center gap-3 py-1">
+              <div className="flex-1 h-px bg-gray/15" />
+              <span className="text-caption text-gray/40 uppercase tracking-widest text-[10px]">
+                or
+              </span>
+              <div className="flex-1 h-px bg-gray/15" />
+            </div>
+
+            {/* View Only */}
+            {!showViewOnly ? (
+              <button
+                onClick={() => setShowViewOnly(true)}
+                disabled={isLoading}
+                className={cn(
+                  "w-full flex items-center gap-4 p-4 rounded-[14px]",
+                  "bg-btc/8 hover:bg-btc/15 border border-btc/15",
+                  "hover:border-btc/30 disabled:opacity-40",
+                  "transition-all duration-200 cursor-pointer group",
+                  "hover:shadow-[0_0_24px_rgba(245,158,11,0.08)]",
+                )}
+              >
+                <div className="p-2.5 rounded-[10px] bg-btc/12 group-hover:bg-btc/20 transition-colors shrink-0">
+                  <Eye className="w-5 h-5 text-btc" />
+                </div>
+                <div className="text-left min-w-0">
+                  <p className="text-body2-semibold text-btc">
+                    View Only
+                  </p>
+                  <p className="text-caption text-gray mt-0.5">
+                    Enter a viewing key to watch balances
+                  </p>
+                </div>
+              </button>
+            ) : (
+              <div className="p-4 rounded-[14px] bg-btc/8 border border-btc/15 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-btc shrink-0" />
+                  <span className="text-body2-semibold text-btc">View Only Mode</span>
+                </div>
+                <input
+                  type="text"
+                  value={viewingKeyInput}
+                  onChange={(e) => setViewingKeyInput(e.target.value.trim())}
+                  placeholder="Paste viewing key (192 hex chars)"
+                  className={cn(
+                    "w-full px-3 py-2 bg-muted border border-gray/20 rounded-[8px]",
+                    "text-caption font-mono text-foreground placeholder:text-gray/40",
+                    "outline-none focus:border-btc/40 transition-colors"
+                  )}
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      if (viewingKeyInput && onViewOnlyLogin) {
+                        onViewOnlyLogin(viewingKeyInput);
+                      }
+                    }}
+                    disabled={!viewingKeyInput}
+                    className={cn(
+                      "flex-1 px-3 py-2 rounded-[8px]",
+                      "bg-btc hover:bg-btc/80 text-background",
+                      "disabled:bg-gray/30 disabled:text-gray disabled:cursor-not-allowed",
+                      "transition-colors text-caption cursor-pointer"
+                    )}
+                  >
+                    Enter
+                  </button>
+                  <button
+                    onClick={() => { setShowViewOnly(false); setViewingKeyInput(""); }}
+                    className="px-3 py-2 rounded-[8px] bg-gray/20 hover:bg-gray/30 text-gray-light text-caption transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </Dialog.Content>
       </Dialog.Portal>

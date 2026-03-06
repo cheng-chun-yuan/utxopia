@@ -12,8 +12,6 @@ import {
   ArrowLeft,
   Zap,
   ShieldCheck,
-  GitBranch,
-  ExternalLink,
   Search,
 } from "lucide-react";
 import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
@@ -129,7 +127,6 @@ const securityItems = [
   { icon: ShieldCheck, text: "Trustless \u2014 BTC verified via SPV proofs on Solana, no custodian" },
   { icon: Key, text: "Self-custody \u2014 only you hold the keys to your private notes" },
   { icon: Shield, text: "OFAC Compliant \u2014 built-in screening at deposit to ensure regulatory compliance" },
-  { icon: GitBranch, text: "Open Source \u2014 all code publicly auditable on GitHub" },
 ];
 
 const variantStyles = {
@@ -186,15 +183,6 @@ export default function DocsPage() {
             >
               Vault
             </Link>
-            <a
-              href="https://github.com/cheng-chun-yuan/Aegis"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-body2 text-gray hover:text-gray-light transition-colors flex items-center gap-1"
-            >
-              GitHub
-              <ExternalLink className="w-3 h-3" />
-            </a>
           </div>
         </header>
 
@@ -395,14 +383,6 @@ export default function DocsPage() {
                 >
                   Aegis
                 </Link>
-                <a
-                  href="https://github.com/cheng-chun-yuan/Aegis"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-caption text-gray hover:text-gray-light transition-colors"
-                >
-                  GitHub
-                </a>
               </div>
               <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption text-gray hover:text-gray-light transition-colors flex items-center gap-1.5">
                 Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network

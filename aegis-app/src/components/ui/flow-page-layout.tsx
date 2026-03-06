@@ -103,20 +103,10 @@ function Footer() {
     <div className="flex flex-row justify-between items-center gap-2 mt-4 text-gray px-2 pt-4 border-t border-gray/15">
       <div className="flex flex-row items-center gap-4">
         <a
-          href="https://Aegis.xyz"
-          target="_blank"
-          rel="noopener noreferrer"
+          href="/docs"
           className="hover:text-gray-light transition-colors text-caption"
         >
           Aegis
-        </a>
-        <a
-          href="https://github.com/cheng-chun-yuan/Aegis"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="hover:text-gray-light transition-colors text-caption"
-        >
-          GitHub
         </a>
       </div>
       <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption hover:text-gray-light transition-colors flex items-center gap-1.5">Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network</a>
