@@ -16,7 +16,7 @@ import {
 
 import { generateNote, computeNoteCommitment, type Note, formatBtc } from "./note";
 import { deriveTaprootAddress } from "./taproot";
-import { createClaimLink } from "./claim-link";
+import { encodeClaimLink } from "./claim-link";
 
 // ============================================================================
 // Types
@@ -129,7 +129,10 @@ export async function depositToNote(
     network
   );
 
-  const claimLink = createClaimLink(note, baseUrl);
+  // Encode nullifier+secret as claim link
+  const claimLink = `${baseUrl || "https://aegis.app"}/claim#note=${encodeClaimLink(
+    `${note.nullifier.toString(16)}.${note.secret.toString(16)}`
+  )}`;
 
   return {
     note,
@@ -144,7 +147,7 @@ export async function depositToNote(
 // ============================================================================
 
 export { generateNote, createNoteFromSecrets, deriveNote, deriveNotes, estimateSeedStrength } from "./note";
-export { parseClaimLink } from "./claim-link";
+export { parseClaimUrl } from "./claim-link";
 export {
   scanAnnouncements,
   prepareClaimInputs,

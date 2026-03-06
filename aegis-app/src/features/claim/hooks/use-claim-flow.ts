@@ -10,7 +10,6 @@ import {
   decodeClaimLink,
   deriveNote,
   deriveMasterKey,
-  createNote,
   initPoseidon,
   initProver,
   generateJoinSplitProof,
@@ -123,8 +122,8 @@ export function useClaimFlow(initialNote?: string) {
   // Parse claim link from text
   const parseClaimLink = useCallback(
     (text: string): boolean => {
-      if (text.includes("?note=") || text.includes("&note=")) {
-        const match = text.match(/[?&]note=([^&\s]+)/);
+      if (text.includes("#note=") || text.includes("?note=") || text.includes("&note=")) {
+        const match = text.match(/[#?&]note=([^&#\s]+)/);
         if (match) {
           const decoded = decodeClaimLink(match[1]);
           if (decoded && typeof decoded === "string") {
@@ -133,11 +132,6 @@ export function useClaimFlow(initialNote?: string) {
             return true;
           }
         }
-      }
-
-      if (text.includes("?n=") && text.includes("&s=")) {
-        setError("Legacy claim link format not supported.");
-        return false;
       }
 
       const decoded = decodeClaimLink(text.trim());
@@ -547,17 +541,14 @@ export function useClaimFlow(initialNote?: string) {
         await initPoseidon();
 
         const keepAmountSats = claimResult.claimedAmount - sendAmountSats;
-        const keepNote = createNote(BigInt(keepAmountSats));
-        const sendNote = createNote(BigInt(sendAmountSats));
 
-        const keepLink = encodeClaimLink(
-          keepNote.nullifier.toString(),
-          keepNote.secret.toString()
-        );
-        const sendLink = encodeClaimLink(
-          sendNote.nullifier.toString(),
-          sendNote.secret.toString()
-        );
+        // Generate random seed phrases for split notes
+        const randomBytes = (n: number) => Array.from(crypto.getRandomValues(new Uint8Array(n)), b => b.toString(16).padStart(2, "0")).join("");
+        const keepSeed = `split-keep-${randomBytes(16)}`;
+        const sendSeed = `split-send-${randomBytes(16)}`;
+
+        const keepLink = encodeClaimLink(keepSeed);
+        const sendLink = encodeClaimLink(sendSeed);
 
         setSplitResult({
           keepLink,
@@ -590,7 +581,7 @@ export function useClaimFlow(initialNote?: string) {
   // Get claim link URL
   const getClaimLinkUrl = useCallback(() => {
     if (secretPhrase.trim().length < 8) return null;
-    return `${typeof window !== "undefined" ? window.location.origin : ""}/claim?note=${encodeURIComponent(secretPhrase.trim())}`;
+    return `${typeof window !== "undefined" ? window.location.origin : ""}/claim#note=${encodeURIComponent(secretPhrase.trim())}`;
   }, [secretPhrase]);
 
   return {

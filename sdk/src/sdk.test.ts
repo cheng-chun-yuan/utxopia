@@ -3,7 +3,7 @@
  *
  * Core tests for all SDK functionality:
  * - DEPOSIT: depositToNote
- * - TRANSFER: createClaimLink
+ * - TRANSFER: encodeClaimLink / decodeClaimLink
  * - KEYS: deriveKeysFromSeed, createStealthMetaAddress
  */
 
@@ -13,7 +13,7 @@ import { address, createSolanaRpc, getProgramDerivedAddress, type Address } from
 // Core SDK imports
 import { depositToNote } from "./api";
 import { generateNote, formatBtc, parseBtc } from "./note";
-import { createClaimLink, parseClaimLink } from "./claim-link";
+import { encodeClaimLink, decodeClaimLink } from "./claim-link";
 import { deriveKeysFromSeed, createStealthMetaAddress, encodeStealthMetaAddress, decodeStealthMetaAddress } from "./keys";
 import { createStealthDeposit, scanAnnouncements } from "./stealth";
 import { createEmptyMerkleProof, TREE_DEPTH } from "./merkle";
@@ -51,29 +51,18 @@ describe("DEPOSIT", () => {
 // ============================================================================
 
 describe("TRANSFER", () => {
-  test("createClaimLink() creates parseable link", () => {
-    const note = generateNote(50_000n);
-    const link = createClaimLink(note);
-
-    expect(link).toContain("aegis.app/claim");
-    const parsed = parseClaimLink(link);
-    expect(parsed?.amount).toBe(note.amount);
+  test("encodeClaimLink() creates decodeable link", () => {
+    const seed = "test-seed-phrase-12345";
+    const encoded = encodeClaimLink(seed);
+    const decoded = decodeClaimLink(encoded);
+    expect(decoded).toBe(seed);
   });
 
-  test("note serialization roundtrip", () => {
-    const note = generateNote(100_000n);
-    const link = createClaimLink(note);
-    const parsed = parseClaimLink(link);
-
-    expect(parsed?.nullifier).toBe(note.nullifier);
-    expect(parsed?.secret).toBe(note.secret);
-  });
-
-  test("claim link roundtrip", () => {
-    const note = generateNote(75_000n);
-    const link = createClaimLink(note);
-    const parsed = parseClaimLink(link);
-    expect(parsed?.amount).toBe(75_000n);
+  test("claim link roundtrip with special chars", () => {
+    const seed = "my secret phrase with spaces & symbols!";
+    const encoded = encodeClaimLink(seed);
+    const decoded = decodeClaimLink(encoded);
+    expect(decoded).toBe(seed);
   });
 });
 

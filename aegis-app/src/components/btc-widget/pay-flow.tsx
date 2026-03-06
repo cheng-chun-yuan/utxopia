@@ -1766,7 +1766,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 function NoteClaimLink({ phrase, amount }: { phrase: string; amount: number }) {
   const [copied, setCopied] = useState(false);
   const claimUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/claim?note=${encodeURIComponent(phrase)}`
+    ? `${window.location.origin}/claim#note=${encodeURIComponent(phrase)}`
     : "";
 
   const handleCopy = () => {

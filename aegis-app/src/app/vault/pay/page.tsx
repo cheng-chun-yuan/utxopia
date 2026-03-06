@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { Send } from "lucide-react";
 import { FlowPageLayout } from "@/components/ui/flow-page-layout";
@@ -13,7 +13,24 @@ function PayFlowWithParams() {
   const commitment = searchParams.get("commitment");
   const leafIndex = searchParams.get("leafIndex");
   const amount = searchParams.get("amount");
-  const noteParam = searchParams.get("note");
+
+  // Read note from hash fragment (#note=) — never sent to server
+  // Fall back to query param (?note=) for backward compatibility
+  const [noteParam, setNoteParam] = useState<string | null>(null);
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.includes("note=")) {
+      const match = hash.match(/note=([^&#]+)/);
+      if (match) {
+        setNoteParam(decodeURIComponent(match[1]));
+        return;
+      }
+    }
+    // Legacy fallback
+    const qp = searchParams.get("note");
+    if (qp) setNoteParam(qp);
+  }, [searchParams]);
 
   return (
     <PayFlow

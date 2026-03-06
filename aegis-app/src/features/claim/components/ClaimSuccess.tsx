@@ -43,7 +43,7 @@ export function ClaimSuccess({
   };
 
   const getFullUrl = (link: string) =>
-    `${typeof window !== "undefined" ? window.location.origin : ""}/claim?note=${link}`;
+    `${typeof window !== "undefined" ? window.location.origin : ""}/claim#note=${link}`;
 
   return (
     <div className="space-y-4">

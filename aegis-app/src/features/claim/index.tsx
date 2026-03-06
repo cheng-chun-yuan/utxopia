@@ -9,11 +9,26 @@ import { ErrorCard } from "@/features/shared/components";
 import { ClaimForm, ClaimProgressIndicator, ClaimSuccess } from "./components";
 import { useClaimFlow } from "./hooks/use-claim-flow";
 import { parseClaimUrl } from "@aegis/sdk";
+import { useState, useEffect } from "react";
 
 function ClaimContent() {
   const searchParams = useSearchParams();
-  const parsed = parseClaimUrl(searchParams);
-  const initialNote = typeof parsed === "string" ? parsed : undefined;
+  // Read from hash fragment first, fall back to query params
+  const [initialNote, setInitialNote] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.includes("note=")) {
+      const parsed = parseClaimUrl(window.location.href);
+      if (typeof parsed === "string") {
+        setInitialNote(parsed);
+        return;
+      }
+    }
+    // Legacy fallback
+    const parsed = parseClaimUrl(searchParams);
+    if (typeof parsed === "string") setInitialNote(parsed);
+  }, [searchParams]);
 
   const {
     step,
@@ -46,8 +61,8 @@ function ClaimContent() {
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     const pastedText = e.clipboardData.getData("text");
     if (
+      pastedText.includes("#note=") ||
       pastedText.includes("note=") ||
-      pastedText.includes("?n=") ||
       pastedText.includes("/claim")
     ) {
       e.preventDefault();

@@ -22,7 +22,7 @@ import {
 } from "./types";
 import { generateNote, initPoseidon } from "../note";
 import { deriveTaprootAddress } from "../taproot";
-import { createClaimLink } from "../claim-link";
+import { encodeClaimLink } from "../claim-link";
 import { bytesToHex, bigintToBytes } from "../crypto";
 
 /**
@@ -181,7 +181,9 @@ export abstract class BaseDepositWatcher {
     const { address } = await deriveTaprootAddress(placeholderCommitment, network);
 
     // Create claim link
-    const claimLink = createClaimLink(note, baseUrl);
+    const claimLink = `${baseUrl || "https://aegis.app"}/claim#note=${encodeClaimLink(
+      `${note.nullifier.toString(16)}.${note.secret.toString(16)}`
+    )}`;
 
     // Create pending deposit record
     const deposit: PendingDeposit = {

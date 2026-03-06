@@ -70,7 +70,7 @@ export async function createDepositFromSeed(
   const claimLink = encodeClaimLink(seed);
 
   const base = baseUrl || (typeof window !== "undefined" ? window.location.origin : "https://zkbtc.app");
-  const claimUrl = `${base}/claim?note=${claimLink}`;
+  const claimUrl = `${base}/claim#note=${claimLink}`;
 
   const serializedNote = serializeNote(note);
 
@@ -113,107 +113,6 @@ export interface DepositStatus {
 // Deposit Functions
 // =============================================================================
 
-/**
- * Create a new deposit with all necessary credentials.
- *
- * Generates:
- * 1. Random note (nullifier + secret + amount)
- * 2. Taproot address bound to commitment
- * 3. Claim link for sharing/backup
- *
- * @param amountSats - Amount in satoshis to deposit
- * @param network - Bitcoin network ('testnet' | 'mainnet')
- * @param baseUrl - Base URL for claim links (default: window.location.origin)
- * @returns Complete deposit credentials
- */
-export async function createDeposit(
-  amountSats: bigint,
-  network: "testnet" | "mainnet" = "testnet",
-  baseUrl?: string
-): Promise<DepositCredentials> {
-  // Initialize Poseidon (no-op for circom, but kept for API compatibility)
-  await initPoseidon();
-
-  // Generate random note
-  const note = generateNote(amountSats);
-
-  // Derive taproot address from commitment
-  const { address: taprootAddress } = await deriveTaprootAddress(
-    note.commitmentBytes,
-    network
-  );
-
-  // Generate claim link
-  const claimLink = encodeClaimLink(
-    note.nullifier.toString(),
-    note.secret.toString()
-  );
-
-  // Build full claim URL
-  const base = baseUrl || (typeof window !== "undefined" ? window.location.origin : "https://zkbtc.app");
-  const claimUrl = `${base}/claim?note=${claimLink}`;
-
-  // Serialize for storage
-  const serializedNote = serializeNote(note);
-
-  return {
-    note,
-    serializedNote,
-    taprootAddress,
-    claimLink,
-    claimUrl,
-  };
-}
-
-/**
- * Create a deterministic deposit from a seed phrase.
- *
- * Useful for wallet-based derivation where deposits can be recovered
- * from the seed + index.
- *
- * @param seed - Seed phrase or name
- * @param index - Note index
- * @param amountSats - Amount in satoshis
- * @param network - Bitcoin network
- * @param baseUrl - Base URL for claim links
- */
-export async function createDeterministicDeposit(
-  seed: string,
-  index: number,
-  amountSats: bigint,
-  network: "testnet" | "mainnet" = "testnet",
-  baseUrl?: string
-): Promise<DepositCredentials> {
-  await initPoseidon();
-
-  // Derive note from seed + index
-  const note = deriveNote(seed, index, amountSats);
-
-  // Derive taproot address
-  const { address: taprootAddress } = await deriveTaprootAddress(
-    note.commitmentBytes,
-    network
-  );
-
-  // Generate claim link
-  const claimLink = encodeClaimLink(
-    note.nullifier.toString(),
-    note.secret.toString()
-  );
-
-  const base = baseUrl || (typeof window !== "undefined" ? window.location.origin : "https://zkbtc.app");
-  const claimUrl = `${base}/claim?note=${claimLink}`;
-
-  const serializedNote = serializeNote(note);
-
-  return {
-    note,
-    serializedNote,
-    taprootAddress,
-    claimLink,
-    claimUrl,
-  };
-}
 
 // =============================================================================
 // Deposit Status Functions (via Esplora)
@@ -316,9 +215,9 @@ export async function checkDepositStatus(
  * Parse a claim link and extract note data.
  *
  * Supports multiple formats:
- * - Seed: ?note=<url-encoded-seed>
- * - Full URL: https://example.com/claim?note=<base64>
- * - Query string: ?note=<base64>
+ * - Fragment: #note=<url-encoded-seed> (preferred, not sent to server)
+ * - Query: ?note=<url-encoded-seed> (legacy)
+ * - Full URL: https://example.com/claim#note=<base64>
  * - Raw base64: <base64>
  * - Legacy format: ?n=<nullifier>&s=<secret>
  *
@@ -345,7 +244,7 @@ export function parseClaimLinkData(
 
   // Try extracting from URL
   if (link.includes("note=")) {
-    const match = link.match(/note=([^&\s]+)/);
+    const match = link.match(/note=([^&#\s]+)/);
     if (match) {
       const decoded = decodeClaimLink(match[1]);
       if (decoded) {

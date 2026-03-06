@@ -16,7 +16,7 @@ export function notifyDepositConfirmed(claimLink?: string) {
       ? {
           label: "Claim Now",
           onClick: () => {
-            window.location.href = `/claim?note=${encodeURIComponent(claimLink)}`;
+            window.location.href = `/claim#note=${encodeURIComponent(claimLink)}`;
           },
         }
       : undefined,

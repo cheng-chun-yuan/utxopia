@@ -20,17 +20,9 @@ export {
 
 // Claim link utilities
 export {
-  createClaimLink,
-  parseClaimLink,
-  isValidClaimLinkFormat,
-  shortenClaimLink,
-  createProtectedClaimLink,
-  extractAmountFromClaimLink,
   encodeClaimLink,
   decodeClaimLink,
-  generateClaimUrl,
   parseClaimUrl,
-  type ClaimLinkData,
 } from "../claim-link";
 
 // Esplora API client

@@ -1,8 +1,7 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect } from "react";
 import { ArrowLeft, Key, Shield } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -10,12 +9,28 @@ import { cn } from "@/lib/utils";
 function ClaimRedirect() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const noteParam = searchParams.get("note");
+  // Read from hash fragment (#note=) — never sent to server
+  // Fall back to query param (?note=) for backward compatibility
+  const [noteParam, setNoteParam] = useState<string | null>(null);
 
-  // If ?note= param present, redirect to Pay with the phrase
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.includes("note=")) {
+      const match = hash.match(/note=([^&#]+)/);
+      if (match) {
+        setNoteParam(decodeURIComponent(match[1]));
+        return;
+      }
+    }
+    // Legacy fallback: ?note= query param
+    const qp = searchParams.get("note");
+    if (qp) setNoteParam(qp);
+  }, [searchParams]);
+
+  // If note param present, redirect to Pay with the phrase in hash
   useEffect(() => {
     if (noteParam) {
-      router.replace(`/vault/pay?note=${encodeURIComponent(noteParam)}`);
+      router.replace(`/vault/pay#note=${encodeURIComponent(noteParam)}`);
     }
   }, [noteParam, router]);
 
@@ -23,7 +38,7 @@ function ClaimRedirect() {
 
   const handleGo = () => {
     if (phrase.trim().length >= 8) {
-      router.push(`/vault/pay?note=${encodeURIComponent(phrase.trim())}`);
+      router.push(`/vault/pay#note=${encodeURIComponent(phrase.trim())}`);
     }
   };
 
