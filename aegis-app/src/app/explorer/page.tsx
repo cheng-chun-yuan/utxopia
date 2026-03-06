@@ -388,10 +388,10 @@ function WithdrawalsTab() {
       <TableWrapper>
         <TableHeader>
           <Th>Status</Th>
-          <Th>Relayer</Th>
-          <Th>Amount</Th>
+          <Th>Request Account</Th>
           <Th>Receiver</Th>
-          <Th>Request</Th>
+          <Th>Amount</Th>
+          <Th>Relayer</Th>
           <Th className="w-[40px]" />
         </TableHeader>
         <tbody className="divide-y divide-gray/10">
@@ -408,16 +408,10 @@ function WithdrawalsTab() {
                 <Td>
                   <div className="flex items-center gap-1.5">
                     <code className="text-caption font-mono text-foreground">
-                      {truncate(r.requester, 6, 4)}
+                      {truncate(r.pubkey, 6, 4)}
                     </code>
-                    <CopyButton text={r.requester} label="Relayer" variant="default" iconSize="sm" />
+                    <CopyButton text={r.pubkey} label="Request Account" variant="default" iconSize="sm" />
                   </div>
-                </Td>
-                <Td>
-                  <span className="text-body2 text-foreground font-mono">
-                    {formatBtc(r.amountSats)}
-                  </span>
-                  <span className="text-caption text-gray ml-1">BTC</span>
                 </Td>
                 <Td>
                   {btcAddr ? (
@@ -439,7 +433,18 @@ function WithdrawalsTab() {
                   )}
                 </Td>
                 <Td>
-                  <span className="text-caption text-foreground font-mono">#{r.requestId.toString()}</span>
+                  <span className="text-body2 text-foreground font-mono">
+                    {formatBtc(r.amountSats)}
+                  </span>
+                  <span className="text-caption text-gray ml-1">BTC</span>
+                </Td>
+                <Td>
+                  <div className="flex items-center gap-1.5">
+                    <code className="text-caption font-mono text-foreground">
+                      {truncate(r.requester, 6, 4)}
+                    </code>
+                    <CopyButton text={r.requester} label="Relayer" variant="default" iconSize="sm" />
+                  </div>
                 </Td>
                 <Td>
                   <a
