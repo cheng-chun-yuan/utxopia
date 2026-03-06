@@ -14,7 +14,7 @@
 //! Usage: cargo run --bin test_frost_redemption
 
 use bitcoin::{TapTweakHash, XOnlyPublicKey};
-use zkbtc::frost_client::FrostClient;
+use zkbtc::bitcoin::frost_client::FrostClient;
 use zkbtc::redemption::builder::{TxBuilder};
 use zkbtc::redemption::signer::{MpcSigner, TxSigner};
 use zkbtc::redemption::types::{PoolUtxo, WithdrawalRequest};

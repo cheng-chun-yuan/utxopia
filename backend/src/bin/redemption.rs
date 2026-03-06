@@ -7,11 +7,11 @@
 //!   redemption withdraw <sol_tx> <user> <amount> <btc_addr>
 //!   redemption status
 //!   redemption requests
-//!   redemption process <id>
 
 use zkbtc::redemption::{
     PoolUtxo, RedemptionConfig, RedemptionService, SingleKeySigner, TxSigner,
 };
+use zkbtc::solana::client::{SolClient, SolConfig};
 use zkbtc::units;
 use std::env;
 
@@ -29,7 +29,6 @@ async fn main() {
         "withdraw" => cmd_withdraw(&args[2..]).await,
         "status" => cmd_status().await,
         "requests" => cmd_requests().await,
-        "process" => cmd_process(&args[2..]).await,
         "add-utxo" => cmd_add_utxo(&args[2..]).await,
         "keygen" => cmd_keygen(),
         "help" | "--help" | "-h" => print_usage(),
@@ -45,7 +44,6 @@ fn print_usage() {
     println!("  redemption withdraw <sol_tx> <user> <amt> <addr> Submit withdrawal");
     println!("  redemption status                                Show service status");
     println!("  redemption requests                              List withdrawal requests");
-    println!("  redemption process <id>                          Process specific request");
     println!("  redemption add-utxo <txid> <vout> <amount> <script>");
     println!("  redemption keygen                                Generate new signing key");
     println!();
@@ -61,11 +59,18 @@ fn print_usage() {
 }
 
 fn get_service() -> RedemptionService {
+    let sol_config = SolConfig::default();
+    let sol_client = SolClient::new(sol_config);
+
     // Check for signing key in environment
     if let Ok(key_hex) = env::var("POOL_SIGNING_KEY") {
         match SingleKeySigner::from_hex(&key_hex) {
             Ok(signer) => {
-                return RedemptionService::new_with_signer(RedemptionConfig::default(), signer);
+                return RedemptionService::new_with_signer(
+                    RedemptionConfig::default(),
+                    signer,
+                    sol_client,
+                );
             }
             Err(e) => {
                 eprintln!("Warning: Invalid POOL_SIGNING_KEY: {}", e);
@@ -143,8 +148,6 @@ async fn cmd_withdraw(args: &[String]) {
             println!("  ID: {}", id);
             println!("  Amount: {}", units::format_sats(amount));
             println!("  Destination: {}", btc_address);
-            println!();
-            println!("Use 'redemption process {}' to process it.", id);
         }
         Err(e) => {
             println!("Error: {}", e);
@@ -203,43 +206,6 @@ async fn cmd_requests() {
             println!("Error: {}", err);
         }
         println!();
-    }
-}
-
-async fn cmd_process(args: &[String]) {
-    if args.is_empty() {
-        println!("Usage: redemption process <request_id>");
-        return;
-    }
-
-    let id = &args[0];
-    let service = get_service();
-
-    // Check if request exists
-    match service.get_request(id).await {
-        Some(req) => {
-            println!("Processing request: {}", id);
-            println!("Amount: {}", units::format_sats(req.amount_sats));
-            println!();
-        }
-        None => {
-            println!("Error: Request not found: {}", id);
-            return;
-        }
-    }
-
-    match service.process_withdrawal(id).await {
-        Ok(result) => {
-            println!("Withdrawal processed!");
-            println!("  Request ID: {}", result.request_id);
-            println!("  BTC TXID: {}", result.btc_txid);
-            println!("  Fee: {}", units::format_sats(result.fee));
-            println!();
-            println!("Transaction broadcasted (simulated). Waiting for confirmations...");
-        }
-        Err(e) => {
-            println!("Error: {}", e);
-        }
     }
 }
 

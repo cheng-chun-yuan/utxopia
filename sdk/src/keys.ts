@@ -486,19 +486,20 @@ export function parseStealthMetaAddress(meta: StealthMetaAddress): {
 }
 
 /**
- * Encode stealth meta-address as a single string (96 bytes → hex)
- * Format: spendingPubKey (32 bytes) || viewingPubKey (32 bytes) || mpk (32 bytes)
+ * Encode stealth meta-address as a single string with aegis: prefix
+ * Format: "aegis:" + hex(spendingPubKey (32) || viewingPubKey (32) || mpk (32))
  */
 export function encodeStealthMetaAddress(meta: StealthMetaAddress): string {
   const combined = concatBytes(meta.spendingPubKey, meta.viewingPubKey, meta.mpk);
-  return bytesToHex(combined);
+  return "aegis:" + bytesToHex(combined);
 }
 
 /**
- * Decode stealth meta-address from a single string
+ * Decode stealth meta-address from a string (with or without aegis: prefix)
  */
 export function decodeStealthMetaAddress(encoded: string): StealthMetaAddress {
-  const bytes = hexToBytes(encoded);
+  const hex = encoded.startsWith("aegis:") ? encoded.slice(6) : encoded;
+  const bytes = hexToBytes(hex);
   if (bytes.length !== 96) {
     throw new Error("Invalid stealth meta-address length (expected 96 bytes)");
   }

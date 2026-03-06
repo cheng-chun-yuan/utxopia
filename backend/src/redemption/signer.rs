@@ -11,7 +11,7 @@ use bitcoin::{
     Amount, TapTweakHash, Transaction, TxOut, Witness, XOnlyPublicKey,
 };
 
-use crate::frost_client::{FrostClient, PrevoutInfo, SigningContext};
+use crate::bitcoin::frost_client::{FrostClient, PrevoutInfo, SigningContext};
 use crate::redemption::builder::UnsignedTx;
 
 /// Trait for transaction signers

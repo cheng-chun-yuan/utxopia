@@ -106,7 +106,10 @@ fn create_service(config: RedemptionConfig) -> RedemptionService {
     // Single-key mode
     if let Ok(key_hex) = env::var("POOL_SIGNING_KEY") {
         match SingleKeySigner::from_hex(&key_hex) {
-            Ok(signer) => RedemptionService::new_with_signer(config, signer),
+            Ok(signer) => {
+                let sol_client = zkbtc::solana::client::SolClient::new(zkbtc::solana::client::SolConfig::default());
+                RedemptionService::new_with_signer(config, signer, sol_client)
+            }
             Err(e) => {
                 eprintln!("Warning: Invalid POOL_SIGNING_KEY: {}", e);
                 RedemptionService::new_testnet()
@@ -137,7 +140,8 @@ fn create_frost_service(config: RedemptionConfig) -> Result<RedemptionService, S
         .map_err(|e| format!("invalid group pubkey: {}", e))?;
 
     let signer = MpcSigner::new(frost_client, group_pubkey);
-    Ok(RedemptionService::new_with_signer(config, signer))
+    let sol_client = zkbtc::solana::client::SolClient::new(zkbtc::solana::client::SolConfig::default());
+    Ok(RedemptionService::new_with_signer(config, signer, sol_client))
 }
 
 async fn run_api_server(args: &[String]) {
@@ -501,7 +505,7 @@ fn configure_frost_sweeper(
 }
 
 async fn run_demo() {
-    use zkbtc::taproot::{generate_deposit_address, PoolKeys};
+    use zkbtc::bitcoin::taproot::{generate_deposit_address, PoolKeys};
     use bitcoin::Network;
 
     println!("\n=== zkBTC Demo ===\n");

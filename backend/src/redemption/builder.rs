@@ -9,7 +9,7 @@ use bitcoin::{
 };
 use std::str::FromStr;
 
-use crate::frost_client::SolanaVerification;
+use crate::bitcoin::frost_client::SolanaVerification;
 use crate::redemption::types::{PoolUtxo, WithdrawalRequest};
 
 /// Builds unsigned BTC transactions

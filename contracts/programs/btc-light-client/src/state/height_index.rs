@@ -13,7 +13,6 @@ pub(crate) struct HeightIndex {
     pub height: [u8; 8],
 }
 
-#[allow(dead_code)]
 impl HeightIndex {
     pub const LEN: usize = core::mem::size_of::<Self>(); // 48 bytes
 

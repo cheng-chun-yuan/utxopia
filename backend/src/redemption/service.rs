@@ -1,26 +1,50 @@
 //! Redemption Service
 //!
-//! Main service that processes zkBTC burns and triggers BTC withdrawals.
+//! Main service that scans on-chain RedemptionRequest PDAs and triggers BTC withdrawals.
+//! Uses a 3-phase tick loop:
+//!   Phase 1: Scan PDAs
+//!   Phase 2: Process new (Pending) PDAs
+//!   Phase 3: Try to complete (Processing) PDAs
 
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{Notify, RwLock};
 
-use crate::esplora::EsploraClient;
+use crate::bitcoin::client::EsploraClient;
 use crate::redemption::builder::TxBuilder;
 use crate::redemption::queue::WithdrawalQueue;
 use crate::redemption::signer::{SingleKeySigner, TxSigner};
+use crate::redemption::tracking::TrackingStore;
 use crate::redemption::types::*;
-use crate::redemption::watcher::BurnWatcher;
+use crate::redemption::watcher::RedemptionScanner;
+use crate::redemption::ws_redemption::RedemptionWsListener;
+use crate::solana::client::SolClient;
+
+/// Convert raw BTC scriptPubKey bytes to a bech32 address string.
+fn script_to_address(script: &[u8], network: bitcoin::Network) -> Result<String, String> {
+    let script_buf = bitcoin::ScriptBuf::from_bytes(script.to_vec());
+    bitcoin::Address::from_script(&script_buf, network)
+        .map(|addr| addr.to_string())
+        .map_err(|e| format!("script_to_address: {}", e))
+}
 
 /// Redemption service
 pub struct RedemptionService {
     /// Configuration
     config: RedemptionConfig,
 
-    /// Burn event watcher
-    watcher: Arc<RwLock<BurnWatcher>>,
+    /// PDA scanner
+    scanner: RedemptionScanner,
 
-    /// Withdrawal queue
+    /// Local tracking store (PDA -> BTC txid mapping)
+    tracking: TrackingStore,
+
+    /// Solana client (shared with scanner)
+    sol_client: Arc<SolClient>,
+
+    /// WebSocket notify handle — poked when a PDA change is detected
+    ws_notify: Arc<Notify>,
+
+    /// Withdrawal queue (kept for submit_withdrawal / get_all_requests compatibility)
     queue: WithdrawalQueue,
 
     /// Transaction builder
@@ -29,7 +53,7 @@ pub struct RedemptionService {
     /// Transaction signer
     signer: Arc<dyn TxSigner>,
 
-    /// Esplora client for broadcasting
+    /// Esplora client for broadcasting and confirmation checks
     esplora: EsploraClient,
 
     /// Pool UTXOs (simplified for POC)
@@ -44,9 +68,21 @@ pub struct RedemptionService {
 
 impl RedemptionService {
     /// Create a new redemption service with any TxSigner implementation
-    pub fn new_with_signer(config: RedemptionConfig, signer: impl TxSigner + 'static) -> Self {
+    pub fn new_with_signer(
+        config: RedemptionConfig,
+        signer: impl TxSigner + 'static,
+        sol_client: SolClient,
+    ) -> Self {
+        let sol_client = Arc::new(sol_client);
+        let scanner = RedemptionScanner::new(SolClient::new(crate::solana::client::SolConfig::default()));
+        let tracking = TrackingStore::new("redemption_tracking.json");
+        let ws_notify = Arc::new(Notify::new());
+
         Self {
-            watcher: Arc::new(RwLock::new(BurnWatcher::new_devnet())),
+            scanner,
+            tracking,
+            sol_client,
+            ws_notify,
             queue: WithdrawalQueue::default(),
             builder: TxBuilder::new_testnet(),
             signer: Arc::new(signer),
@@ -61,10 +97,11 @@ impl RedemptionService {
     /// Create with generated signer (for testing)
     pub fn new_testnet() -> Self {
         let signer = SingleKeySigner::generate();
-        Self::new_with_signer(RedemptionConfig::default(), signer)
+        let sol_client = SolClient::new(crate::solana::client::SolConfig::default());
+        Self::new_with_signer(RedemptionConfig::default(), signer, sol_client)
     }
 
-    /// Submit a withdrawal request
+    /// Submit a withdrawal request (legacy API, kept for manual/test submissions)
     pub async fn submit_withdrawal(
         &self,
         solana_burn_tx: String,
@@ -123,69 +160,150 @@ impl RedemptionService {
         self.pool_utxos.write().await.push(utxo);
     }
 
-    /// Process a single pending withdrawal
-    pub async fn process_withdrawal(&self, id: &str) -> Result<ProcessResult, ServiceError> {
-        // Get request
-        let mut request = self
-            .queue
-            .get(id)
+    // ========================================================================
+    // 3-Phase Tick Pipeline
+    // ========================================================================
+
+    /// Run one tick of the 3-phase pipeline.
+    pub async fn tick(&self) -> Result<TickResult, ServiceError> {
+        let mut result = TickResult::default();
+
+        // Phase 1: Scan all RedemptionRequest PDAs
+        let scan = self
+            .scanner
+            .scan()
+            .map_err(|e| ServiceError::WatcherError(e.to_string()))?;
+
+        result.pending_pdas = scan.pending.len();
+
+        // Reconcile tracking store — remove entries for PDAs that no longer exist on-chain
+        let active_addrs = scan.all_addresses();
+        self.tracking.reconcile(&active_addrs).await;
+
+        // Phase 2: Process new Pending PDAs
+        for pda in &scan.pending {
+            if self.tracking.contains(&pda.pda_address).await {
+                continue; // already being handled
+            }
+            match self.process_new_redemption(pda).await {
+                Ok(_) => result.withdrawals_processed += 1,
+                Err(e) => {
+                    eprintln!(
+                        "[tick] Error processing PDA {}: {}",
+                        &pda.pda_address[..8],
+                        e
+                    );
+                }
+            }
+        }
+
+        // Phase 3: Try to complete Processing PDAs that have a btc_txid in tracking
+        for pda in &scan.processing {
+            match self.try_complete_redemption(pda).await {
+                Ok(true) => result.withdrawals_completed += 1,
+                Ok(false) => {} // not ready yet
+                Err(e) => {
+                    eprintln!(
+                        "[tick] Error completing PDA {}: {}",
+                        &pda.pda_address[..8],
+                        e
+                    );
+                }
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// Phase 2: Process a newly-discovered Pending PDA.
+    ///
+    /// 1. send_mark_processing on-chain
+    /// 2. Build WithdrawalRequest from PDA data
+    /// 3. Build unsigned tx, sign, broadcast
+    /// 4. Store tracking entry
+    async fn process_new_redemption(
+        &self,
+        pda: &ParsedRedemption,
+    ) -> Result<ProcessResult, ServiceError> {
+        let pda_pubkey = pda
+            .pda_address
+            .parse::<solana_sdk::pubkey::Pubkey>()
+            .map_err(|e| ServiceError::BuildError(format!("invalid PDA pubkey: {}", e)))?;
+
+        // Step 1: Mark processing on-chain (transitions Pending -> Processing)
+        self.sol_client
+            .send_mark_processing(&pda_pubkey)
             .await
-            .ok_or_else(|| ServiceError::NotFound(id.to_string()))?;
+            .map_err(|e| ServiceError::BuildError(format!("send_mark_processing: {}", e)))?;
 
-        // Get available UTXOs
+        println!(
+            "[redemption] Marked PDA {} as Processing (amount={})",
+            &pda.pda_address[..8],
+            pda.amount_sats
+        );
+
+        // Step 2: Convert PDA data to a WithdrawalRequest
+        let btc_address = script_to_address(&pda.btc_script, bitcoin::Network::Testnet)
+            .map_err(|e| ServiceError::InvalidAddress(e))?;
+
+        let mut request = WithdrawalRequest::new(
+            String::new(), // no solana burn tx — we have the PDA
+            pda.requester.clone(),
+            pda.amount_sats,
+            btc_address,
+        );
+        request.redemption_nonce = Some(pda.request_id);
+
+        // Step 3: Get UTXOs and build tx
         let utxos = self.pool_utxos.read().await.clone();
-
         if utxos.is_empty() {
+            // Store a tracking entry so we don't retry every tick
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+            let entry = RedemptionTracking {
+                pda_address: pda.pda_address.clone(),
+                btc_txid: None,
+                local_status: LocalRedemptionStatus::Failed,
+                retry_count: 0,
+                created_at: now,
+                last_updated: now,
+                error: Some("no UTXOs available".to_string()),
+            };
+            self.tracking.upsert(entry).await;
             return Err(ServiceError::NoUtxos);
         }
 
-        // Update status to building
-        request.mark_building();
-        self.queue.update(request.clone()).await.ok();
-
-        // Build transaction
         let mut unsigned = self
             .builder
             .build_withdrawal(&request, &utxos)
             .map_err(|e| ServiceError::BuildError(e.to_string()))?;
 
-        // Attach Solana verification data for FROST signers (if nonce is available)
+        // Attach Solana verification data for FROST signers
         if let Some(nonce) = request.redemption_nonce {
-            unsigned.solana_verification = Some(crate::frost_client::SolanaVerification::Withdrawal {
-                requester: request.user_solana_address.clone(),
-                nonce,
-                expected_amount_sats: request.amount_sats,
-                expected_btc_address: request.btc_address.clone(),
-            });
+            unsigned.solana_verification =
+                Some(crate::bitcoin::frost_client::SolanaVerification::Withdrawal {
+                    requester: request.user_solana_address.clone(),
+                    nonce,
+                    expected_amount_sats: request.amount_sats,
+                    expected_btc_address: request.btc_address.clone(),
+                });
         }
 
-        // TODO: Send mark_processing Solana instruction (disc=2) to transition
-        // RedemptionRequest PDA from Pending→Processing before FROST signing.
-        // This blocks user cancellation and is required by the FROST verifier.
-        // Requires SolClient integration into RedemptionService.
-
-        // Update status to signing
-        request.mark_signing();
-        self.queue.update(request.clone()).await.ok();
-
-        // Sign transaction
+        // Step 4: Sign
         let signed_tx = self
             .signer
             .sign(&unsigned)
             .await
             .map_err(|e| ServiceError::SignError(e.to_string()))?;
 
-        // Serialize for broadcasting
         let tx_hex = bitcoin::consensus::encode::serialize_hex(&signed_tx);
         let txid = signed_tx.compute_txid().to_string();
 
-        // Update status to broadcasting
-        request.mark_broadcasting();
-        self.queue.update(request.clone()).await.ok();
-
-        // Broadcast mode controlled by AEGIS_BROADCAST_MODE env var
-        let broadcast_mode = std::env::var("AEGIS_BROADCAST_MODE")
-            .unwrap_or_else(|_| "simulated".to_string());
+        // Step 5: Broadcast
+        let broadcast_mode =
+            std::env::var("AEGIS_BROADCAST_MODE").unwrap_or_else(|_| "simulated".to_string());
 
         if broadcast_mode == "real" {
             println!("=== Broadcasting Transaction (Real) ===");
@@ -203,114 +321,145 @@ impl RedemptionService {
             println!("Fee: {} sats", unsigned.fee);
         }
 
-        // Update status to confirming
-        request.mark_confirming(txid.clone());
-        self.queue.update(request.clone()).await.ok();
+        // Step 6: Store tracking entry
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let entry = RedemptionTracking {
+            pda_address: pda.pda_address.clone(),
+            btc_txid: Some(txid.clone()),
+            local_status: LocalRedemptionStatus::AwaitingConfirmation,
+            retry_count: 0,
+            created_at: now,
+            last_updated: now,
+            error: None,
+        };
+        self.tracking.upsert(entry).await;
 
         // Update stats
         let mut stats = self.stats.write().await;
-        stats.pending = stats.pending.saturating_sub(1);
+        stats.total_requests += 1;
         stats.processing += 1;
         stats.total_sats_withdrawn += request.amount_sats;
         stats.total_fees_paid += unsigned.fee;
 
         Ok(ProcessResult {
-            request_id: id.to_string(),
+            request_id: pda.pda_address.clone(),
             btc_txid: txid,
             tx_hex,
             fee: unsigned.fee,
         })
     }
 
-    /// Check confirming transactions and mark complete
-    pub async fn check_confirmations(&self) -> Result<Vec<String>, ServiceError> {
-        let mut completed = Vec::new();
-        let confirming = self.queue.get_by_status(WithdrawalStatus::Confirming).await;
+    /// Phase 3: Try to complete a Processing PDA.
+    ///
+    /// Returns Ok(true) if completed, Ok(false) if not ready yet.
+    async fn try_complete_redemption(
+        &self,
+        pda: &ParsedRedemption,
+    ) -> Result<bool, ServiceError> {
+        let tracking = match self.tracking.get(&pda.pda_address).await {
+            Some(t) => t,
+            None => return Ok(false), // not tracked by us
+        };
 
-        for mut request in confirming {
-            if let Some(ref txid) = request.btc_txid {
-                // Check confirmations
-                match self.esplora.get_confirmations(txid).await {
-                    Ok(confs) if confs >= self.config.required_confirmations => {
-                        request.mark_complete(confs);
-                        self.queue.update(request.clone()).await.ok();
-                        completed.push(request.id.clone());
-
-                        // Update stats
-                        let mut stats = self.stats.write().await;
-                        stats.processing = stats.processing.saturating_sub(1);
-                        stats.complete += 1;
-                    }
-                    Ok(confs) => {
-                        // Update confirmation count
-                        request.btc_confirmations = confs;
-                        self.queue.update(request).await.ok();
-                    }
-                    Err(e) => {
-                        eprintln!("Error checking confirmations for {}: {}", txid, e);
-                    }
-                }
-            }
+        // Already completed locally?
+        if tracking.local_status == LocalRedemptionStatus::Completed {
+            return Ok(false);
         }
 
-        Ok(completed)
-    }
+        let btc_txid = match &tracking.btc_txid {
+            Some(txid) => txid.clone(),
+            None => return Ok(false), // no txid yet
+        };
 
-    /// Process all pending withdrawals
-    pub async fn process_all_pending(&self) -> Result<Vec<ProcessResult>, ServiceError> {
-        let pending = self.queue.get_pending().await;
-        let mut results = Vec::new();
-
-        for request in pending {
-            match self.process_withdrawal(&request.id).await {
-                Ok(result) => results.push(result),
-                Err(e) => {
-                    eprintln!("Error processing {}: {}", request.id, e);
-
-                    // Mark as failed
-                    if let Some(mut req) = self.queue.get(&request.id).await {
-                        req.mark_failed(e.to_string());
-                        self.queue.update(req).await.ok();
-
-                        let mut stats = self.stats.write().await;
-                        stats.pending = stats.pending.saturating_sub(1);
-                        stats.failed += 1;
-                    }
-                }
+        // Check BTC confirmations (need >= 6)
+        let confirmations = match self.esplora.get_confirmations(&btc_txid).await {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!(
+                    "[redemption] Error checking confirmations for {}: {}",
+                    btc_txid, e
+                );
+                return Ok(false);
             }
+        };
+
+        if confirmations < 6 {
+            return Ok(false);
         }
 
-        Ok(results)
-    }
+        // Check if VerifiedTransaction PDA exists
+        // We need block_hash from esplora to derive the PDA
+        let tx_status = match self.esplora.get_tx_status(&btc_txid).await {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!(
+                    "[redemption] Error getting tx status for {}: {}",
+                    btc_txid, e
+                );
+                return Ok(false);
+            }
+        };
 
-    /// Run one tick of the service
-    pub async fn tick(&self) -> Result<TickResult, ServiceError> {
-        let mut result = TickResult::default();
+        let block_hash_hex = match &tx_status.block_hash {
+            Some(h) => h.clone(),
+            None => return Ok(false),
+        };
 
-        // Check for burn events
-        let burns = self.watcher.write().await.check_burns().await.ok().unwrap_or_default();
-        result.burns_detected = burns.len();
+        // Decode block_hash and txid to bytes for PDA derivation
+        let block_hash_bytes: [u8; 32] = hex::decode(&block_hash_hex)
+            .ok()
+            .and_then(|b| <[u8; 32]>::try_from(b).ok())
+            .unwrap_or_default();
 
-        // Convert burns to withdrawal requests
-        for burn in burns {
-            match self
-                .submit_withdrawal(burn.signature, burn.user, burn.amount, burn.btc_address, None)
-                .await
-            {
-                Ok(_) => result.requests_created += 1,
-                Err(e) => eprintln!("Error creating withdrawal from burn: {}", e),
+        let txid_bytes: [u8; 32] = hex::decode(&btc_txid)
+            .ok()
+            .and_then(|b| <[u8; 32]>::try_from(b).ok())
+            .unwrap_or_default();
+
+        let verified_tx_pda = SolClient::derive_verified_tx_pda(&block_hash_bytes, &txid_bytes);
+
+        match self.sol_client.account_exists(&verified_tx_pda) {
+            Ok(true) => {
+                // VerifiedTransaction PDA exists — ready to complete
+                println!(
+                    "[redemption] PDA {} confirmed ({} confs), marking complete",
+                    &pda.pda_address[..8],
+                    confirmations
+                );
+
+                // TODO: Actually call send_complete_redemption once ChadBuffer is available.
+                // For now, just update local tracking.
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs();
+                let mut entry = tracking;
+                entry.local_status = LocalRedemptionStatus::Completed;
+                entry.last_updated = now;
+                self.tracking.upsert(entry).await;
+
+                // Update stats
+                let mut stats = self.stats.write().await;
+                stats.processing = stats.processing.saturating_sub(1);
+                stats.complete += 1;
+
+                Ok(true)
+            }
+            Ok(false) => {
+                // Not yet verified on Solana
+                Ok(false)
+            }
+            Err(e) => {
+                eprintln!(
+                    "[redemption] Error checking verified_tx PDA: {}",
+                    e
+                );
+                Ok(false)
             }
         }
-
-        // Process pending withdrawals
-        let processed = self.process_all_pending().await?;
-        result.withdrawals_processed = processed.len();
-
-        // Check confirmations
-        let completed = self.check_confirmations().await?;
-        result.withdrawals_completed = completed.len();
-
-        Ok(result)
     }
 
     /// Run the service loop
@@ -325,6 +474,20 @@ impl RedemptionService {
         println!("Signer type: {}", self.signer.signer_type());
         println!("Pool public key: {}", self.signer.public_key());
         println!();
+
+        // Spawn WebSocket listener for real-time PDA change notifications
+        let ws_notify = self.ws_notify.clone();
+        let ws_url = self
+            .config
+            .solana_rpc
+            .replace("https://", "wss://")
+            .replace("http://", "ws://");
+        let program_id = self.sol_client.program_id_str();
+
+        tokio::spawn(async move {
+            let listener = RedemptionWsListener::new(ws_url, program_id, ws_notify);
+            listener.run().await;
+        });
 
         loop {
             {
@@ -345,10 +508,14 @@ impl RedemptionService {
                 }
             }
 
-            tokio::time::sleep(tokio::time::Duration::from_secs(
-                self.config.check_interval_secs,
-            ))
-            .await;
+            // Wait for either the poll interval or a WS notification
+            let poll_duration = tokio::time::Duration::from_secs(self.config.check_interval_secs);
+            tokio::select! {
+                _ = tokio::time::sleep(poll_duration) => {}
+                _ = self.ws_notify.notified() => {
+                    println!("[redemption] WS notification received, scanning immediately");
+                }
+            }
         }
 
         println!("=== Redemption Service Stopped ===");
@@ -366,12 +533,12 @@ impl RedemptionService {
         self.stats.read().await.clone()
     }
 
-    /// Get all withdrawal requests
+    /// Get all withdrawal requests (from legacy queue)
     pub async fn get_all_requests(&self) -> Vec<WithdrawalRequest> {
         self.queue.get_all().await
     }
 
-    /// Get request by ID
+    /// Get request by ID (from legacy queue)
     pub async fn get_request(&self, id: &str) -> Option<WithdrawalRequest> {
         self.queue.get(id).await
     }
@@ -399,16 +566,14 @@ pub struct ProcessResult {
 /// Result of a service tick
 #[derive(Debug, Default)]
 pub struct TickResult {
-    pub burns_detected: usize,
-    pub requests_created: usize,
+    pub pending_pdas: usize,
     pub withdrawals_processed: usize,
     pub withdrawals_completed: usize,
 }
 
 impl TickResult {
     pub fn has_activity(&self) -> bool {
-        self.burns_detected > 0
-            || self.requests_created > 0
+        self.pending_pdas > 0
             || self.withdrawals_processed > 0
             || self.withdrawals_completed > 0
     }
@@ -418,9 +583,8 @@ impl std::fmt::Display for TickResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "burns: {}, created: {}, processed: {}, completed: {}",
-            self.burns_detected,
-            self.requests_created,
+            "pending_pdas: {}, processed: {}, completed: {}",
+            self.pending_pdas,
             self.withdrawals_processed,
             self.withdrawals_completed
         )
@@ -504,5 +668,16 @@ mod tests {
             .await;
 
         assert!(matches!(result, Err(ServiceError::AmountTooSmall { .. })));
+    }
+
+    #[test]
+    fn test_tick_result_display() {
+        let result = TickResult {
+            pending_pdas: 3,
+            withdrawals_processed: 1,
+            withdrawals_completed: 0,
+        };
+        let s = format!("{}", result);
+        assert!(s.contains("pending_pdas: 3"));
     }
 }

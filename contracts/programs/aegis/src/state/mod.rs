@@ -6,8 +6,7 @@
 //! |---------|---------|
 //! | `PoolState` | Global pool config and statistics |
 //! | `CommitmentTree` | Merkle tree of shielded commitments |
-//! | `DepositRecord` | Individual BTC deposit record |
-//! | `NullifierRecord` | Spent nullifiers (prevents double-spend) |
+//!| `NullifierRecord` | Spent nullifiers (prevents double-spend) |
 //! | `RedemptionRequest` | Pending BTC withdrawal request |
 //! | `StealthAnnouncement` | Stealth address announcement (dual-key ECDH) |
 //!
@@ -20,7 +19,6 @@
 
 // Core state
 pub mod commitment_tree;
-pub mod deposit;
 pub mod nullifier;
 pub mod pool;
 pub mod redemption;
@@ -31,7 +29,6 @@ pub mod vk_registry;
 
 // Re-exports
 pub use commitment_tree::*;
-pub use deposit::*;
 pub use nullifier::*;
 pub use pool::*;
 pub use redemption::*;

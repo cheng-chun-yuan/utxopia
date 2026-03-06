@@ -356,6 +356,8 @@ export {
   scanAnnouncements,
   scanAnnouncementsViewOnly,
   exportViewOnlyKeys,
+  encodeViewOnlyKeys,
+  decodeViewOnlyKeys,
   prepareClaimInputs,
   parseStealthAnnouncement,
   scanUnifiedNotes,

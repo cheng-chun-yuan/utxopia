@@ -125,7 +125,7 @@ impl DepositTrackerService {
     /// Set up sweeper with FROST threshold signing
     pub fn with_frost_sweeper(
         mut self,
-        frost_client: crate::frost_client::FrostClient,
+        frost_client: crate::bitcoin::frost_client::FrostClient,
         group_pubkey: bitcoin::XOnlyPublicKey,
         network: bitcoin::Network,
     ) -> Self {

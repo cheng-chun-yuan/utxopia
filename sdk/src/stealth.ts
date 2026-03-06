@@ -54,6 +54,8 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import {
   bigintToBytes,
   bytesToBigint,
+  bytesToHex,
+  hexToBytes,
   BN254_FIELD_PRIME,
   babyJubMul,
   babyJubAdd,
@@ -486,11 +488,13 @@ export interface ViewOnlyScannedNote {
 }
 
 /**
- * Scan announcements with VIEW-ONLY keys
+ * Scan announcements with VIEW-ONLY keys.
+ * Supports both legacy format and unified format (with announcementType).
  */
 export async function scanAnnouncementsViewOnly(
   viewOnlyKeys: ViewOnlyKeys,
   announcements: {
+    announcementType?: number;
     ephemeralPub: Uint8Array;
     encryptedAmount: Uint8Array;
     commitment: Uint8Array;
@@ -500,7 +504,6 @@ export async function scanAnnouncementsViewOnly(
   const found: ViewOnlyScannedNote[] = [];
   const MAX_SATS = 21_000_000n * 100_000_000n;
 
-  // Compute MPK for this key set
   const mpk = computeMPKSync(
     viewOnlyKeys.spendingPubKey.x,
     viewOnlyKeys.spendingPubKey.y,
@@ -510,7 +513,15 @@ export async function scanAnnouncementsViewOnly(
   for (const ann of announcements) {
     try {
       const sharedSecret = x25519Ecdh(viewOnlyKeys.viewingPrivKey, ann.ephemeralPub);
-      const amount = decryptAmount(ann.encryptedAmount, sharedSecret);
+
+      // Get amount based on announcement type
+      let amount: bigint;
+      if (ann.announcementType === ANNOUNCEMENT_TYPE_DEPOSIT) {
+        const view = new DataView(ann.encryptedAmount.buffer, ann.encryptedAmount.byteOffset, 8);
+        amount = view.getBigUint64(0, true);
+      } else {
+        amount = decryptAmount(ann.encryptedAmount, sharedSecret);
+      }
 
       if (amount <= 0n || amount > MAX_SATS) {
         continue;
@@ -521,18 +532,24 @@ export async function scanAnnouncementsViewOnly(
       const expectedCommitment = computeJoinSplitCommitmentSync(npk, ZKBTC_TOKEN_ID, amount);
       const actualCommitment = bytesToBigint(ann.commitment);
 
-      if (expectedCommitment !== actualCommitment) {
-        continue;
+      // For deposits, must verify commitment to filter non-matching
+      if (ann.announcementType === ANNOUNCEMENT_TYPE_DEPOSIT) {
+        if (expectedCommitment !== actualCommitment) {
+          continue;
+        }
       }
+
+      // For transfers, wrong key → garbage amount already filtered above
 
       found.push({
         amount,
         leafIndex: ann.leafIndex,
-        commitment: ann.commitment,
+        commitment: ann.announcementType === ANNOUNCEMENT_TYPE_DEPOSIT
+          ? bigintToBytes(expectedCommitment)
+          : new Uint8Array(ann.commitment),
         ephemeralPub: ann.ephemeralPub,
       });
     } catch (error) {
-      // Re-throw programming errors; only skip data/crypto mismatches
       if (error instanceof TypeError || error instanceof RangeError) {
         throw error;
       }
@@ -552,6 +569,35 @@ export function exportViewOnlyKeys(keys: AegisKeys): ViewOnlyKeys {
     spendingPubKey: keys.spendingPubKey,
     nullifyingKey: keys.nullifyingKey,
   };
+}
+
+/**
+ * Encode view-only keys as a hex string for sharing
+ * Format: viewingPrivKey(32) + compressedSpendingPub(32) + nullifyingKey(32) = 96 bytes
+ */
+export function encodeViewOnlyKeys(keys: ViewOnlyKeys): string {
+  const compressed = babyJubCompress(keys.spendingPubKey);
+  const nullBytes = bigintToBytes(keys.nullifyingKey);
+  const combined = new Uint8Array(96);
+  combined.set(keys.viewingPrivKey, 0);
+  combined.set(compressed, 32);
+  combined.set(nullBytes, 64);
+  return bytesToHex(combined);
+}
+
+/**
+ * Decode view-only keys from a hex string
+ */
+export function decodeViewOnlyKeys(encoded: string): ViewOnlyKeys {
+  const bytes = hexToBytes(encoded);
+  if (bytes.length !== 96) {
+    throw new Error("Invalid view-only key length (expected 96 bytes)");
+  }
+  const viewingPrivKey = bytes.slice(0, 32);
+  const compressed = bytes.slice(32, 64);
+  const spendingPubKey = babyJubDecompress(compressed);
+  const nullifyingKey = bytesToBigint(bytes.slice(64, 96));
+  return { viewingPrivKey, spendingPubKey, nullifyingKey };
 }
 
 // ========== Claim Preparation (Spending Key Required) ==========

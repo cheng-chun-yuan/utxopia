@@ -16,7 +16,10 @@ pub mod taproot;
 pub use client::{
     BlockHeaderInfo, EsploraClient, EsploraError, EsploraTxStatus, MerkleProofInfo, UtxoInfo,
 };
-pub use frost_client::{derive_frost_taproot_address, FrostClient, FrostClientError};
+pub use frost_client::{
+    derive_frost_taproot_address, FrostClient, FrostError, PrevoutInfo, SigningContext,
+    SolanaVerification,
+};
 pub use signer::{FrostConfig, Signer, SignerError, SingleKeySigner};
 pub use spv::{
     txid_to_bytes, BlockHeader, SpvError, SpvProof, SpvProofGenerator, TxDetails, TxMerkleProof,

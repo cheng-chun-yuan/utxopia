@@ -118,30 +118,6 @@ function createCloseInstructionData(): Buffer {
 }
 
 /**
- * Create instruction data for ChadBuffer (legacy helper)
- * @deprecated Use specific instruction data functions
- */
-function createInstructionData(
-  instruction: ChadBufferInstruction,
-  data?: Uint8Array
-): Buffer {
-  if (instruction === ChadBufferInstruction.Create && data) {
-    return createInitInstructionData(data);
-  }
-  if (instruction === ChadBufferInstruction.Close) {
-    return createCloseInstructionData();
-  }
-  // Fallback for other cases
-  if (data) {
-    const buffer = Buffer.alloc(1 + data.length);
-    buffer.writeUInt8(instruction, 0);
-    buffer.set(data, 1);
-    return buffer;
-  }
-  return Buffer.from([instruction]);
-}
-
-/**
  * Upload raw Bitcoin transaction to ChadBuffer
  *
  * @param rpc - Solana RPC client

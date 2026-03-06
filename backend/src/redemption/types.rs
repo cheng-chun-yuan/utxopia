@@ -267,3 +267,56 @@ impl PoolUtxo {
         format!("{}:{}", self.txid, self.vout)
     }
 }
+
+/// Parsed on-chain RedemptionRequest PDA
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParsedRedemption {
+    /// PDA address (base58)
+    pub pda_address: String,
+    /// On-chain status: 0=Pending, 1=Processing, 2=Failed
+    pub status: u8,
+    /// Requester's Solana pubkey (base58)
+    pub requester: String,
+    /// Withdrawal amount in satoshis
+    pub amount_sats: u64,
+    /// Raw scriptPubKey bytes for the BTC destination
+    pub btc_script: Vec<u8>,
+    /// On-chain request nonce
+    pub request_id: u64,
+    /// Slot when processing started
+    pub processing_slot: u32,
+}
+
+/// Local tracking state for in-flight redemptions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RedemptionTracking {
+    /// PDA address being tracked
+    pub pda_address: String,
+    /// BTC transaction ID once broadcast
+    pub btc_txid: Option<String>,
+    /// Backend-side status
+    pub local_status: LocalRedemptionStatus,
+    /// Number of retry attempts
+    pub retry_count: u32,
+    /// Unix timestamp when first detected
+    pub created_at: u64,
+    /// Unix timestamp of last status change
+    pub last_updated: u64,
+    /// Error message if failed
+    pub error: Option<String>,
+}
+
+/// Backend-side redemption status
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LocalRedemptionStatus {
+    /// PDA detected on-chain
+    Detected,
+    /// FROST signing in progress
+    Signing,
+    /// BTC transaction broadcast, waiting for confirmations
+    AwaitingConfirmation,
+    /// Fully confirmed and complete_redemption called
+    Completed,
+    /// Terminal failure
+    Failed,
+}

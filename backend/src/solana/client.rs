@@ -8,6 +8,9 @@
 //! 2. User withdraws → call withdraw (contract verifies proof + transfers zkBTC from vault to user)
 
 use solana_client::rpc_client::RpcClient;
+use solana_client::rpc_config::RpcProgramAccountsConfig;
+use solana_client::rpc_filter::{Memcmp, RpcFilterType};
+use solana_account_decoder::UiAccountEncoding;
 use solana_sdk::{
     commitment_config::CommitmentConfig,
     instruction::{AccountMeta, Instruction},
@@ -24,6 +27,7 @@ fn double_sha256_header(data: &[u8]) -> [u8; 32] {
 }
 
 use crate::config::AEGISConfig;
+use crate::redemption::types::ParsedRedemption;
 
 // ============================================================================
 // Constants
@@ -39,6 +43,10 @@ pub const TOKEN_2022_PROGRAM_ID: Pubkey =
 /// Associated Token Account program ID
 pub const ATA_PROGRAM_ID: Pubkey =
     solana_sdk::pubkey!("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+
+/// BTC Light Client program ID
+pub const BTC_LIGHT_CLIENT_PROGRAM_ID: Pubkey =
+    solana_sdk::pubkey!("Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq");
 
 // ============================================================================
 // Devnet Defaults (used when AEGIS_NETWORK=devnet and no env vars set)
@@ -555,6 +563,176 @@ impl SolClient {
             Ok(balance) => Ok(balance.amount.parse().unwrap_or(0)),
             Err(_) => Ok(0),
         }
+    }
+
+    // ========================================================================
+    // Redemption Instructions
+    // ========================================================================
+
+    /// Fetch all on-chain RedemptionRequest PDAs (90-byte accounts with discriminator 0x04)
+    pub fn fetch_redemption_pdas(&self) -> Result<Vec<ParsedRedemption>, SolError> {
+        let config = RpcProgramAccountsConfig {
+            filters: Some(vec![
+                RpcFilterType::DataSize(90),
+                RpcFilterType::Memcmp(Memcmp::new_raw_bytes(0, vec![0x04])),
+            ]),
+            account_config: solana_client::rpc_config::RpcAccountInfoConfig {
+                encoding: Some(UiAccountEncoding::Base64),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let accounts = self
+            .rpc
+            .get_program_accounts_with_config(&self.program_id, config)
+            .map_err(|e| SolError::RpcError(e.to_string()))?;
+
+        let mut results = Vec::new();
+        for (pubkey, account) in accounts {
+            let data = &account.data;
+            if data.len() < 90 {
+                continue;
+            }
+
+            let status = data[1];
+            let btc_script_len = data[2] as usize;
+            // data[3] is padding
+            let processing_slot = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
+            let request_id = u64::from_le_bytes([
+                data[8], data[9], data[10], data[11],
+                data[12], data[13], data[14], data[15],
+            ]);
+            let requester = Pubkey::try_from(&data[16..48])
+                .map_err(|e| SolError::RpcError(format!("invalid requester pubkey: {}", e)))?;
+            let amount_sats = u64::from_le_bytes([
+                data[48], data[49], data[50], data[51],
+                data[52], data[53], data[54], data[55],
+            ]);
+            let script_end = 56 + btc_script_len.min(34);
+            let btc_script = data[56..script_end].to_vec();
+
+            results.push(ParsedRedemption {
+                pda_address: pubkey.to_string(),
+                status,
+                requester: requester.to_string(),
+                amount_sats,
+                btc_script,
+                request_id,
+                processing_slot,
+            });
+        }
+
+        Ok(results)
+    }
+
+    /// Check if a Solana account exists on-chain
+    pub fn account_exists(&self, pubkey: &Pubkey) -> Result<bool, SolError> {
+        match self.rpc.get_account(pubkey) {
+            Ok(_) => Ok(true),
+            Err(e) => {
+                let err_str = e.to_string();
+                if err_str.contains("AccountNotFound")
+                    || err_str.contains("could not find account")
+                {
+                    Ok(false)
+                } else {
+                    Err(SolError::RpcError(err_str))
+                }
+            }
+        }
+    }
+
+    /// Return the program ID as a base58 string
+    pub fn program_id_str(&self) -> String {
+        self.program_id.to_string()
+    }
+
+    /// Send mark_processing instruction (disc=0x02) for a RedemptionRequest PDA
+    pub async fn send_mark_processing(
+        &self,
+        redemption_pda: &Pubkey,
+    ) -> Result<String, SolError> {
+        let payer = self.payer.as_ref().ok_or(SolError::NoPayerSet)?;
+
+        let data = vec![0x02u8];
+
+        let accounts = vec![
+            AccountMeta::new(self.pool_state, false),
+            AccountMeta::new(*redemption_pda, false),
+            AccountMeta::new(payer.pubkey(), true),
+        ];
+
+        let ix = Instruction {
+            program_id: self.program_id,
+            accounts,
+            data,
+        };
+
+        self.send_transaction(&[ix], &[payer]).await
+    }
+
+    /// Send complete_redemption instruction (disc=0x06) for a RedemptionRequest PDA
+    pub async fn send_complete_redemption(
+        &self,
+        redemption_pda: &Pubkey,
+        btc_txid: &[u8; 32],
+        verified_tx_pda: &Pubkey,
+        tx_buffer: &Pubkey,
+        tx_size: u32,
+    ) -> Result<String, SolError> {
+        let payer = self.payer.as_ref().ok_or(SolError::NoPayerSet)?;
+
+        // Data: [0x06] + btc_txid(32) + tx_size(4) = 37 bytes
+        let mut data = Vec::with_capacity(37);
+        data.push(0x06u8);
+        data.extend_from_slice(btc_txid);
+        data.extend_from_slice(&tx_size.to_le_bytes());
+
+        // Derive light_client PDA under BTC_LIGHT_CLIENT_PROGRAM_ID
+        let (light_client_pda, _) = Pubkey::find_program_address(
+            &[b"btc_light_client"],
+            &BTC_LIGHT_CLIENT_PROGRAM_ID,
+        );
+
+        // Derive pool_vault PDA
+        let (pool_vault, _) = Pubkey::find_program_address(
+            &[b"vault", self.zkbtc_mint.as_ref()],
+            &self.program_id,
+        );
+
+        let accounts = vec![
+            AccountMeta::new(self.pool_state, false),                   // 0: pool_state (writable)
+            AccountMeta::new(*redemption_pda, false),                   // 1: redemption_pda (writable)
+            AccountMeta::new(payer.pubkey(), true),                     // 2: payer/authority (signer)
+            AccountMeta::new_readonly(payer.pubkey(), false),           // 3: payer (rent recipient)
+            AccountMeta::new_readonly(*verified_tx_pda, false),        // 4: verified_tx_pda
+            AccountMeta::new_readonly(light_client_pda, false),        // 5: light_client PDA
+            AccountMeta::new_readonly(*tx_buffer, false),              // 6: tx_buffer
+            AccountMeta::new(self.zkbtc_mint, false),                  // 7: zkbtc_mint (writable)
+            AccountMeta::new(pool_vault, false),                       // 8: pool_vault (writable)
+            AccountMeta::new_readonly(TOKEN_2022_PROGRAM_ID, false),   // 9: TOKEN_2022
+        ];
+
+        let ix = Instruction {
+            program_id: self.program_id,
+            accounts,
+            data,
+        };
+
+        self.send_transaction(&[ix], &[payer]).await
+    }
+
+    /// Derive the verified_tx PDA from block_hash and txid
+    pub fn derive_verified_tx_pda(
+        block_hash: &[u8; 32],
+        txid: &[u8; 32],
+    ) -> Pubkey {
+        let (pda, _) = Pubkey::find_program_address(
+            &[b"verified_tx", block_hash, txid],
+            &BTC_LIGHT_CLIENT_PROGRAM_ID,
+        );
+        pda
     }
 
     // ========================================================================

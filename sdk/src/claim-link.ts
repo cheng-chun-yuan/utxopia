@@ -233,8 +233,7 @@ export function extractAmountFromClaimLink(link: string): bigint | null {
  */
 export function encodeClaimLink(seed: string): string;
 /**
- * Legacy: Encode nullifier + secret (for backwards compatibility)
- * @deprecated Use single seed parameter instead
+ * Encode nullifier + secret as a claim link
  */
 export function encodeClaimLink(nullifier: string | bigint, secret: string | bigint): string;
 export function encodeClaimLink(seedOrNullifier: string | bigint, secret?: string | bigint): string {

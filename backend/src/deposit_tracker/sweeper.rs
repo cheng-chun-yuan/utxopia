@@ -23,7 +23,7 @@ use sha2::{Digest, Sha256};
 use std::str::FromStr;
 use thiserror::Error;
 
-use crate::frost_client::{FrostClient, PrevoutInfo, SigningContext};
+use crate::bitcoin::frost_client::{FrostClient, PrevoutInfo, SigningContext};
 
 use super::watcher::{AddressWatcher, Utxo, WatcherError};
 

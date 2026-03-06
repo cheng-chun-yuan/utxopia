@@ -58,8 +58,10 @@ pub mod builder;
 pub mod queue;
 pub mod service;
 pub mod signer;
+pub mod tracking;
 pub mod types;
 pub mod watcher;
+pub mod ws_redemption;
 
 // Re-exports
 pub use builder::{BuilderError, TxBuilder, UnsignedTx};
@@ -69,4 +71,6 @@ pub use signer::{MpcSigner, SignerError, SingleKeySigner, TxSigner};
 pub use types::{
     BurnEvent, PoolUtxo, RedemptionConfig, RedemptionStats, WithdrawalRequest, WithdrawalStatus,
 };
-pub use watcher::{BurnWatcher, WatcherError};
+pub use tracking::TrackingStore;
+pub use watcher::{RedemptionScanner, ScanResult, ScannerError};
+pub use ws_redemption::RedemptionWsListener;

@@ -15,7 +15,7 @@
 use bitcoin::XOnlyPublicKey;
 use sha2::{Digest, Sha256};
 use zkbtc::deposit_tracker::sweeper::UtxoSweeper;
-use zkbtc::frost_client::FrostClient;
+use zkbtc::bitcoin::frost_client::FrostClient;
 
 const ESPLORA_URL: &str = "http://localhost:3000/regtest/api";
 const SIGNER_URLS: &[&str] = &["http://localhost:9001", "http://localhost:9002"];

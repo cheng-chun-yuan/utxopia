@@ -1,107 +1,98 @@
-//! Solana Burn Event Watcher
+//! Redemption PDA Scanner
 //!
-//! Watches Solana for zkBTC burn events.
+//! Scans Solana for RedemptionRequest PDAs and returns parsed state.
 
-use crate::redemption::types::BurnEvent;
-use crate::sol_client::{SolClient, SolConfig};
+use crate::redemption::types::ParsedRedemption;
+use crate::solana::client::SolClient;
 
-/// Watches Solana for burn events
-pub struct BurnWatcher {
-    /// Solana client
+/// Scans Solana for on-chain RedemptionRequest PDAs
+pub struct RedemptionScanner {
     sol_client: SolClient,
-    /// Program ID to watch
-    _program_id: String,
-    /// Last processed slot
-    last_slot: u64,
 }
 
-impl BurnWatcher {
-    /// Create a new burn watcher
-    pub fn new(sol_config: SolConfig, program_id: String) -> Self {
-        Self {
-            sol_client: SolClient::new(sol_config),
-            _program_id: program_id,
-            last_slot: 0,
-        }
+impl RedemptionScanner {
+    /// Create a new scanner with the given Solana client
+    pub fn new(sol_client: SolClient) -> Self {
+        Self { sol_client }
     }
 
-    /// Create for devnet with default program
-    pub fn new_devnet() -> Self {
-        Self::new(
-            SolConfig::default(),
-            "StBrdg1111111111111111111111111111111111111".to_string(),
-        )
-    }
-
-    /// Check for new burn events
-    pub async fn check_burns(&mut self) -> Result<Vec<BurnEvent>, WatcherError> {
-        // For POC: Simulate burn event detection
-        // In production, this would:
-        // 1. Query Solana for recent transactions to the program
-        // 2. Parse transaction logs for burn events
-        // 3. Extract burn details (amount, user, btc_address)
-
-        // Get current slot
-        let current_slot = self
+    /// Scan all RedemptionRequest PDAs, group by status
+    pub fn scan(&self) -> Result<ScanResult, ScannerError> {
+        let all = self
             .sol_client
-            .get_slot()
-            .map_err(|e| WatcherError::SolanaError(e.to_string()))?;
+            .fetch_redemption_pdas()
+            .map_err(|e| ScannerError::RpcError(e.to_string()))?;
 
-        // Update last processed slot
-        self.last_slot = current_slot;
+        let mut pending = Vec::new();
+        let mut processing = Vec::new();
+        let mut failed = Vec::new();
 
-        // Return empty for now (simulation)
-        Ok(vec![])
-    }
-
-    /// Parse a burn event from transaction logs (placeholder)
-    #[allow(dead_code)]
-    fn parse_burn_event(&self, _logs: &[String]) -> Option<BurnEvent> {
-        // In production:
-        // - Parse "Program log: Burn zkBTC: amount=X, address=Y"
-        // - Extract structured data
-        None
-    }
-
-    /// Get last processed slot
-    pub fn last_slot(&self) -> u64 {
-        self.last_slot
-    }
-
-    /// Manually add a burn event (for testing/manual processing)
-    pub fn create_manual_burn(
-        &self,
-        signature: String,
-        user: String,
-        amount: u64,
-        btc_address: String,
-    ) -> BurnEvent {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        BurnEvent {
-            signature,
-            user,
-            amount,
-            btc_address,
-            slot: self.last_slot,
-            timestamp: now,
+        for r in all {
+            match r.status {
+                0 => pending.push(r),
+                1 => processing.push(r),
+                2 => failed.push(r),
+                _ => {
+                    // Unknown status — treat as parse error but skip silently
+                    tracing::warn!(
+                        status = r.status,
+                        pda = %r.pda_address,
+                        "Unknown redemption status"
+                    );
+                }
+            }
         }
+
+        Ok(ScanResult {
+            pending,
+            processing,
+            failed,
+        })
     }
 
     /// Check connection to Solana
     pub fn is_connected(&self) -> bool {
         self.sol_client.is_connected()
     }
+
+    /// Access the underlying Solana client
+    pub fn sol_client(&self) -> &SolClient {
+        &self.sol_client
+    }
 }
 
-/// Watcher errors
+/// Result of a redemption PDA scan, grouped by status
+pub struct ScanResult {
+    /// Status 0: pending redemptions waiting to be picked up
+    pub pending: Vec<ParsedRedemption>,
+    /// Status 1: redemptions currently being processed
+    pub processing: Vec<ParsedRedemption>,
+    /// Status 2: failed redemptions eligible for retry
+    pub failed: Vec<ParsedRedemption>,
+}
+
+impl ScanResult {
+    /// Total number of redemption PDAs found
+    pub fn total(&self) -> usize {
+        self.pending.len() + self.processing.len() + self.failed.len()
+    }
+
+    /// Collect all PDA addresses (useful for reconciliation)
+    pub fn all_addresses(&self) -> Vec<String> {
+        self.pending
+            .iter()
+            .chain(self.processing.iter())
+            .chain(self.failed.iter())
+            .map(|r| r.pda_address.clone())
+            .collect()
+    }
+}
+
+/// Scanner errors
 #[derive(Debug, thiserror::Error)]
-pub enum WatcherError {
-    #[error("solana error: {0}")]
-    SolanaError(String),
+pub enum ScannerError {
+    #[error("RPC error: {0}")]
+    RpcError(String),
 
     #[error("parse error: {0}")]
     ParseError(String),
@@ -112,17 +103,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_manual_burn_creation() {
-        let watcher = BurnWatcher::new_devnet();
+    fn test_scan_result_total() {
+        let result = ScanResult {
+            pending: vec![],
+            processing: vec![],
+            failed: vec![],
+        };
+        assert_eq!(result.total(), 0);
+    }
 
-        let burn = watcher.create_manual_burn(
-            "sig123".to_string(),
-            "user_pubkey".to_string(),
-            100_000,
-            "tb1qtest".to_string(),
-        );
+    #[test]
+    fn test_scan_result_all_addresses() {
+        let make = |addr: &str| ParsedRedemption {
+            pda_address: addr.to_string(),
+            status: 0,
+            requester: String::new(),
+            amount_sats: 0,
+            btc_script: vec![],
+            request_id: 0,
+            processing_slot: 0,
+        };
 
-        assert_eq!(burn.amount, 100_000);
-        assert_eq!(burn.btc_address, "tb1qtest");
+        let result = ScanResult {
+            pending: vec![make("aaa")],
+            processing: vec![make("bbb")],
+            failed: vec![make("ccc"), make("ddd")],
+        };
+        assert_eq!(result.total(), 4);
+        let addrs = result.all_addresses();
+        assert_eq!(addrs, vec!["aaa", "bbb", "ccc", "ddd"]);
     }
 }

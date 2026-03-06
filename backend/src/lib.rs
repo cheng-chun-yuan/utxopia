@@ -43,50 +43,42 @@ pub mod event_indexer;
 pub mod merkle_tree;
 
 // =============================================================================
-// Legacy Modules (for backward compatibility)
+// Active Domain Modules
 // =============================================================================
 
 pub mod api_server;
-pub mod btc_client;
-pub mod btc_spv;
 pub mod config;
 pub mod deposit_tracker;
-pub mod esplora;
-pub mod frost_client;
-pub mod logging;
-pub mod middleware;
 pub mod redemption;
-pub mod sol_client;
 pub mod stealth;
-pub mod taproot;
 
 // Re-exports: Configuration
 pub use config::{ConfigError, Network, SigningMode, AEGISConfig};
 
-// Re-exports: Middleware
-pub use middleware::{
+// Re-exports: Middleware (from api module)
+pub use api::middleware::{
     create_rate_limiter, validate_btc_address, validate_solana_address, validate_amount_sats,
     validate_hex, ApiError, RateLimitConfig, SharedRateLimiter, ValidationResult,
 };
 
-// Re-exports: Logging
-pub use logging::{
+// Re-exports: Logging (from common module)
+pub use common::logging::{
     init_logging, init_from_config, log_api_request, log_api_response, log_deposit_event,
     log_security_event, log_withdrawal_event, generate_correlation_id, EventCategory,
     LogEvent, LogLevel, LoggingError,
 };
 
 // Re-exports: Bitcoin signer
-pub use btc_client::{FrostConfig, Signer, SignerError, SingleKeySigner};
+pub use bitcoin::signer::{FrostConfig, Signer, SignerError, SingleKeySigner};
 
 // Re-exports: Solana client
-pub use sol_client::{
+pub use solana::client::{
     generate_keypair as generate_sol_keypair, load_keypair_from_file, SolClient, SolConfig,
     SolError, DEVNET_RPC,
 };
 
 // Re-exports: Esplora client
-pub use esplora::{EsploraClient, EsploraError, EsploraTxStatus};
+pub use bitcoin::client::{EsploraClient, EsploraError, EsploraTxStatus};
 
 // Re-exports: Redemption service
 pub use redemption::{
@@ -95,10 +87,10 @@ pub use redemption::{
 };
 
 // Re-exports: Bitcoin SPV
-pub use btc_spv::{BlockHeader, SpvError, SpvProof, SpvProofGenerator, TxDetails, TxMerkleProof};
+pub use bitcoin::spv::{BlockHeader, SpvError, SpvProof, SpvProofGenerator, TxDetails, TxMerkleProof};
 
 // Re-exports: Taproot
-pub use taproot::{
+pub use bitcoin::taproot::{
     generate_deposit_address, get_unlock_criteria, PoolKeys, TaprootDeposit, TaprootError,
     UnlockCriteria,
 };

@@ -143,10 +143,10 @@ pub enum SigningMode {
 impl SigningMode {
     /// Create a FrostClient from FROST signing config.
     /// Returns None if this is SingleKey mode.
-    pub fn frost_client(&self) -> Option<crate::frost_client::FrostClient> {
+    pub fn frost_client(&self) -> Option<crate::bitcoin::frost_client::FrostClient> {
         match self {
             SigningMode::Frost { threshold, signer_urls, api_key, .. } => {
-                Some(crate::frost_client::FrostClient::new(
+                Some(crate::bitcoin::frost_client::FrostClient::new(
                     signer_urls.clone(),
                     *threshold as usize,
                     api_key.clone(),

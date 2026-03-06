@@ -298,6 +298,9 @@ pub fn validate_hex(input: &str, expected_len: Option<usize>, field_name: &str) 
 /// Shared rate limiter state
 pub type RateLimitState = Arc<RateLimiter>;
 
+/// Backward-compatible alias
+pub type SharedRateLimiter = RateLimitState;
+
 /// Create a new rate limiter with default config
 pub fn create_rate_limiter() -> RateLimitState {
     Arc::new(RateLimiter::new(RateLimitConfig::default()))
@@ -322,6 +325,9 @@ pub fn extract_client_ip(headers: &HeaderMap) -> Option<String> {
 
     None
 }
+
+/// Backward-compatible alias
+pub type ApiError = ValidationError;
 
 /// Error response for API errors
 #[derive(Serialize)]
