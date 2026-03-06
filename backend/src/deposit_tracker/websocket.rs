@@ -91,7 +91,7 @@ async fn handle_socket(socket: WebSocket, deposit_id: String, state: SharedWebSo
                     Err(_) => continue,
                 };
 
-                if sender.send(Message::Text(json)).await.is_err() {
+                if sender.send(Message::Text(json.into())).await.is_err() {
                     break;
                 }
             }
@@ -157,7 +157,7 @@ async fn handle_socket_all(socket: WebSocket, state: SharedWebSocketState) {
                 Err(_) => continue,
             };
 
-            if sender.send(Message::Text(json)).await.is_err() {
+            if sender.send(Message::Text(json.into())).await.is_err() {
                 break;
             }
         }

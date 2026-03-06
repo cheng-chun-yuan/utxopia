@@ -267,7 +267,7 @@ async fn handle_tree_socket(socket: WebSocket, tree_cache: Arc<TreeCache>) {
                 Ok(j) => j,
                 Err(_) => continue,
             };
-            if sender.send(Message::Text(json)).await.is_err() {
+            if sender.send(Message::Text(json.into())).await.is_err() {
                 break;
             }
         }
