@@ -414,16 +414,11 @@ pub fn generate_correlation_id() -> String {
     )
 }
 
-// Simple random number generation without external crate
+// Cryptographically secure random using rand crate
 mod rand {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
     pub fn random<T: From<u16>>() -> T {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .subsec_nanos();
-        T::from((nanos % 65536) as u16)
+        use ::rand::Rng;
+        T::from(::rand::thread_rng().gen::<u16>())
     }
 }
 

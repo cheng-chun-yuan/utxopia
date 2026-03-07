@@ -7,7 +7,7 @@ use axum::{
 };
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 
 use super::service::{SharedStealthService, StealthDepositService};
 use super::types::{
@@ -23,20 +23,41 @@ pub struct AppState {
 }
 
 pub fn create_stealth_router(service: StealthDepositService) -> Router {
+    use crate::api::middleware::{create_rate_limiter, rate_limit_middleware};
+
     let state = Arc::new(AppState {
         stealth: Arc::new(RwLock::new(service)),
     });
 
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    let cors = match std::env::var("ALLOWED_ORIGIN") {
+        Ok(origin) if !origin.is_empty() => {
+            let origins: Vec<_> = origin
+                .split(',')
+                .filter_map(|o| o.trim().parse().ok())
+                .collect();
+            CorsLayer::new()
+                .allow_origin(AllowOrigin::list(origins))
+                .allow_methods(Any)
+                .allow_headers(Any)
+        }
+        _ => {
+            tracing::warn!("ALLOWED_ORIGIN not set — CORS allows any origin (not safe for production)");
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any)
+        }
+    };
 
     Router::new()
         .route("/api/stealth/prepare", post(handle_prepare))
-        .route("/api/stealth/status/:id", get(handle_status))
+        .route("/api/stealth/status/{id}", get(handle_status))
         .route("/api/stealth/announce", post(handle_announce))
         .route("/api/stealth/health", get(handle_health))
+        .layer(axum::middleware::from_fn_with_state(
+            create_rate_limiter(),
+            rate_limit_middleware,
+        ))
         .layer(cors)
         .with_state(state)
 }
@@ -163,7 +184,7 @@ pub async fn start_stealth_server(
     println!();
     println!("Endpoints:");
     println!("  POST /api/stealth/prepare     - Prepare stealth deposit");
-    println!("  GET  /api/stealth/status/:id  - Get deposit status");
+    println!("  GET  /api/stealth/status/{{id}}  - Get deposit status");
     println!("  POST /api/stealth/announce    - Manual announcement");
     println!("  GET  /api/stealth/health      - Health check");
     println!();

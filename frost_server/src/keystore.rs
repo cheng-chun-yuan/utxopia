@@ -1,15 +1,15 @@
 //! Encrypted key share storage
 //!
-//! Key shares are encrypted at rest using AES-256-GCM with a password-derived key.
+//! Key shares are encrypted at rest using AES-256-GCM with an Argon2id-derived key.
 
 use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
 };
+use argon2::Argon2;
 use frost_secp256k1_tr as frost;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::path::Path;
 use thiserror::Error;
 
@@ -35,8 +35,6 @@ pub enum KeystoreError {
 /// Encrypted key file format
 #[derive(Debug, Serialize, Deserialize)]
 struct EncryptedKeyFile {
-    /// Version for future format changes
-    version: u8,
     /// Signer identifier
     signer_id: u16,
     /// Salt for key derivation (hex-encoded)
@@ -80,16 +78,19 @@ impl Keystore {
         self.key_path.exists()
     }
 
-    /// Derive encryption key from password using SHA-256
+    /// Derive encryption key using Argon2id
     fn derive_key(password: &str, salt: &[u8]) -> [u8; 32] {
-        let mut hasher = Sha256::new();
-        hasher.update(password.as_bytes());
-        hasher.update(salt);
-        hasher.update(b"frost-keystore-v1");
-        hasher.finalize().into()
+        use argon2::Params;
+        let mut key = [0u8; 32];
+        let params = Params::new(65536, 4, 2, Some(32))
+            .expect("valid Argon2 params");
+        Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params)
+            .hash_password_into(password.as_bytes(), salt, &mut key)
+            .expect("Argon2 key derivation failed");
+        key
     }
 
-    /// Save key share encrypted with password
+    /// Save key share encrypted with password (always uses v2 Argon2id)
     pub fn save(
         &self,
         key_package: &frost::keys::KeyPackage,
@@ -135,7 +136,6 @@ impl Keystore {
 
         // Create encrypted file
         let encrypted = EncryptedKeyFile {
-            version: 1,
             signer_id: self.signer_id,
             salt: hex::encode(salt),
             nonce: hex::encode(nonce_bytes),
@@ -162,7 +162,8 @@ impl Keystore {
         Ok(())
     }
 
-    /// Load key share decrypted with password
+    /// Load key share decrypted with password.
+    /// Supports both v1 (SHA-256) and v2 (Argon2id) key files.
     pub fn load(
         &self,
         password: &str,
@@ -190,8 +191,9 @@ impl Keystore {
         let ciphertext = hex::decode(&encrypted.ciphertext)
             .map_err(|e| KeystoreError::Decryption(e.to_string()))?;
 
-        // Derive key and decrypt
+        // Derive key
         let key = Self::derive_key(password, &salt);
+
         let cipher = Aes256Gcm::new_from_slice(&key)
             .map_err(|e| KeystoreError::Decryption(e.to_string()))?;
         let nonce = Nonce::from_slice(&nonce_bytes);
@@ -230,6 +232,7 @@ impl Keystore {
 
         Ok(encrypted.group_public_key)
     }
+
 }
 
 #[cfg(test)]
@@ -240,11 +243,11 @@ mod tests {
 
     #[test]
     fn test_key_derivation_deterministic() {
-        let key1 = Keystore::derive_key("password123", b"salt");
-        let key2 = Keystore::derive_key("password123", b"salt");
+        let key1 = Keystore::derive_key("password123", b"salt_at_least_8b");
+        let key2 = Keystore::derive_key("password123", b"salt_at_least_8b");
         assert_eq!(key1, key2);
 
-        let key3 = Keystore::derive_key("password123", b"different_salt");
+        let key3 = Keystore::derive_key("password123", b"different_salt!!");
         assert_ne!(key1, key3);
     }
 

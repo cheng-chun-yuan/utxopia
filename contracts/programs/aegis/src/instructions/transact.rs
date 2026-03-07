@@ -3,13 +3,23 @@
 //! Unified instruction that replaces claim, spend_split, and spend_partial_public.
 //! Supports N inputs and M outputs with a single Groth16 proof.
 //!
+//! Supports two modes:
+//! - **Inline proof**: proof_source=0, proof is in instruction data
+//! - **Buffer proof**: proof_source=1, proof omitted from ix data, read from
+//!   proof_buffer account (ChadBuffer) appended after stealth accounts.
+//!   Saves 256 bytes of instruction data for large JoinSplits.
+//!
 //! Instruction Data Layout:
 //! - [0]     n_inputs:         u8
 //! - [1]     n_outputs:        u8
-//! - [2..258]  proof:          [u8; 256]  (Groth16 proof)
-//! - [258..290] merkle_root:   [u8; 32]
-//! - [290..322] bound_params_hash: [u8; 32]
-//! - [322..]  nullifiers:      [[u8; 32]; n_inputs]
+//! - [2]     proof_source:     u8  (0=inline, 1=buffer account)
+//! - If proof_source=0:
+//!   - [3..259]  proof:        [u8; 256]  (Groth16 proof)
+//! - If proof_source=1:
+//!   - proof is read from the proof_buffer account (last account)
+//! - [..]     merkle_root:     [u8; 32]
+//! - [..]     bound_params_hash: [u8; 32]
+//! - [..]     nullifiers:      [[u8; 32]; n_inputs]
 //! - [..]     commitments_out: [[u8; 32]; n_outputs]
 //! - [..]     stealth_data:    [ephemeral_pub(32) + encrypted_amount(8)] × n_outputs
 //!
@@ -20,7 +30,8 @@
 //! 3. user               (signer, payer)
 //! 4. system_program     (read)
 //! 5..5+n_inputs         nullifier_records (writable, PDA)
-//! 5+n_inputs..          stealth_announcements (writable, PDA)
+//! [optional]            relayer (signer, payer — if present after nullifiers)
+//! [optional]            proof_buffer (read, only when proof_source=1, last account)
 
 use pinocchio::{
     account_info::AccountInfo,
@@ -34,8 +45,7 @@ use crate::debug_msg;
 use crate::error::AegisError;
 use crate::state::{
     CommitmentTree, NullifierOperationType, NullifierRecord, PoolState,
-    StealthAnnouncement, VkRegistry, NULLIFIER_RECORD_DISCRIMINATOR,
-    STEALTH_ANNOUNCEMENT_DISCRIMINATOR,
+    VkRegistry, NULLIFIER_RECORD_DISCRIMINATOR,
 };
 use crate::utils::groth16::GROTH16_PROOF_SIZE;
 use crate::utils::{
@@ -49,18 +59,22 @@ const MAX_JOINSPLIT_SIZE: usize = crate::constants::MAX_SAFE_JOINSPLIT_SIZE;
 /// Stealth data per output: ephemeral_pub (32) + encrypted_amount (8)
 const STEALTH_DATA_PER_OUTPUT: usize = 40;
 
+/// Authority prefix size in ChadBuffer accounts
+const CHADBUFFER_AUTHORITY_SIZE: usize = 32;
+
 pub fn process_transact(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     data: &[u8],
 ) -> ProgramResult {
     // Parse header
-    if data.len() < 2 {
+    if data.len() < 3 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
     let n_inputs = data[0] as usize;
     let n_outputs = data[1] as usize;
+    let proof_source = data[2]; // 0 = inline, 1 = buffer account
 
     if n_inputs == 0 || n_outputs == 0 || n_inputs + n_outputs > MAX_JOINSPLIT_SIZE {
         debug_msg!("Invalid JoinSplit dimensions");
@@ -68,7 +82,8 @@ pub fn process_transact(
     }
 
     // Calculate expected data length
-    let header_size = 2 + GROTH16_PROOF_SIZE + 32 + 32; // n_inputs + n_outputs + proof + root + boundParamsHash
+    let proof_data_size = if proof_source == 0 { GROTH16_PROOF_SIZE } else { 0 };
+    let header_size = 3 + proof_data_size + 32 + 32;
     let nullifiers_size = n_inputs * 32;
     let commitments_size = n_outputs * 32;
     let stealth_size = n_outputs * STEALTH_DATA_PER_OUTPUT;
@@ -80,10 +95,29 @@ pub fn process_transact(
     }
 
     // Parse instruction data
-    let mut offset = 2;
+    let mut offset = 3;
 
-    let proof_bytes = &data[offset..offset + GROTH16_PROOF_SIZE];
-    offset += GROTH16_PROOF_SIZE;
+    // Read proof: inline or from buffer account
+    let proof_buf: [u8; GROTH16_PROOF_SIZE];
+    let proof_bytes: &[u8] = if proof_source == 0 {
+        let p = &data[offset..offset + GROTH16_PROOF_SIZE];
+        offset += GROTH16_PROOF_SIZE;
+        p
+    } else {
+        // proof_source == 1: read from last account (proof_buffer)
+        let buf_idx = accounts.len() - 1;
+        let buf_info = &accounts[buf_idx];
+        // Validate buffer is owned by ChadBuffer program
+        crate::utils::chadbuffer::validate_chadbuffer_owner(buf_info)?;
+        let buf_data = buf_info.try_borrow_data()?;
+        if buf_data.len() < CHADBUFFER_AUTHORITY_SIZE + GROTH16_PROOF_SIZE {
+            debug_msg!("Proof buffer too small");
+            return Err(ProgramError::InvalidAccountData);
+        }
+        let src = &buf_data[CHADBUFFER_AUTHORITY_SIZE..CHADBUFFER_AUTHORITY_SIZE + GROTH16_PROOF_SIZE];
+        proof_buf = src.try_into().unwrap();
+        &proof_buf
+    };
 
     let merkle_root: &[u8; 32] = data[offset..offset + 32].try_into().unwrap();
     offset += 32;
@@ -121,8 +155,8 @@ pub fn process_transact(
     // Parse stealth data
     let stealth_data_start = offset;
 
-    // Validate account count
-    let min_accounts = 5 + n_inputs + n_outputs;
+    // Validate account count: 5 fixed + n_inputs nullifiers
+    let min_accounts = 5 + n_inputs;
     if accounts.len() < min_accounts {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
@@ -133,6 +167,28 @@ pub fn process_transact(
     let user = &accounts[3];
     let system_program = &accounts[4];
 
+    // Check for optional relayer account (after nullifiers, before optional proof_buffer)
+    // Account layout: [5..5+N nullifiers] [optional relayer] [optional proof_buffer]
+    let extra_accounts_after_nullifiers = accounts.len() - (5 + n_inputs);
+    let has_proof_buffer = proof_source == 1;
+    let has_relayer = if has_proof_buffer {
+        extra_accounts_after_nullifiers > 1
+    } else {
+        extra_accounts_after_nullifiers > 0
+    };
+    let payer = if has_relayer {
+        let relayer = &accounts[5 + n_inputs];
+        if !relayer.is_signer() {
+            return Err(ProgramError::MissingRequiredSignature);
+        }
+        relayer
+    } else {
+        if !user.is_signer() {
+            return Err(ProgramError::MissingRequiredSignature);
+        }
+        user
+    };
+
     // Validate accounts
     validate_program_owner(pool_state_info, program_id)?;
     validate_program_owner(commitment_tree_info, program_id)?;
@@ -140,10 +196,6 @@ pub fn process_transact(
     validate_system_program(system_program)?;
     validate_account_writable(pool_state_info)?;
     validate_account_writable(commitment_tree_info)?;
-
-    if !user.is_signer() {
-        return Err(ProgramError::MissingRequiredSignature);
-    }
 
     // Validate pool is not paused
     {
@@ -235,7 +287,7 @@ pub fn process_transact(
         ];
 
         create_pda_account(
-            user,
+            payer,
             nullifier_info,
             program_id,
             rent.minimum_balance(NullifierRecord::LEN),
@@ -259,7 +311,7 @@ pub fn process_transact(
         );
     }
 
-    // Insert output commitments into Merkle tree and create stealth announcements
+    // Insert output commitments into Merkle tree and emit stealth events
     {
         let mut tree_data = commitment_tree_info.try_borrow_mut_data()?;
         let tree = CommitmentTree::from_bytes_mut(&mut tree_data)?;
@@ -274,55 +326,18 @@ pub fn process_transact(
             let ephemeral_pub: &[u8; 32] = data[stealth_offset..stealth_offset + 32]
                 .try_into()
                 .unwrap();
-            let encrypted_amount: [u8; 8] = data[stealth_offset + 32..stealth_offset + 40]
+            let encrypted_amount: &[u8; 8] = data[stealth_offset + 32..stealth_offset + 40]
                 .try_into()
                 .unwrap();
 
-            // Create stealth announcement PDA
-            let announcement_info = &accounts[5 + n_inputs + i];
-            validate_account_writable(announcement_info)?;
-
-            let ann_seeds: &[&[u8]] = &[StealthAnnouncement::SEED, ephemeral_pub.as_ref()];
-            let (expected_ann_pda, ann_bump) = find_program_address(ann_seeds, program_id);
-            if announcement_info.key() != &expected_ann_pda {
-                debug_msg!("Invalid stealth announcement PDA");
-                return Err(ProgramError::InvalidSeeds);
-            }
-
-            // Check not already initialized
-            {
-                let ann_data = announcement_info.try_borrow_data()?;
-                if !ann_data.is_empty() && ann_data[0] == STEALTH_ANNOUNCEMENT_DISCRIMINATOR {
-                    return Err(ProgramError::AccountAlreadyInitialized);
-                }
-            }
-
-            let ann_bump_bytes = [ann_bump];
-            let ann_signer_seeds: &[&[u8]] = &[
-                StealthAnnouncement::SEED,
-                ephemeral_pub.as_ref(),
-                &ann_bump_bytes,
-            ];
-
-            create_pda_account(
-                user,
-                announcement_info,
-                program_id,
-                rent.minimum_balance(StealthAnnouncement::SIZE),
-                StealthAnnouncement::SIZE as u64,
-                ann_signer_seeds,
-            )?;
-
-            // Initialize stealth announcement
-            {
-                let mut ann_data = announcement_info.try_borrow_mut_data()?;
-                let announcement = StealthAnnouncement::init(&mut ann_data)?;
-                announcement.announcement_type = crate::state::ANNOUNCEMENT_TYPE_TRANSFER;
-                announcement.ephemeral_pub = *ephemeral_pub;
-                announcement.set_amount_bytes(encrypted_amount);
-                announcement.commitment.copy_from_slice(commitments_out[i]);
-                announcement.set_leaf_index(leaf_index);
-            }
+            // Emit stealth announcement as log event (replaces PDA creation)
+            crate::utils::events::emit_stealth_announcement(
+                crate::state::ANNOUNCEMENT_TYPE_TRANSFER,
+                ephemeral_pub,
+                encrypted_amount,
+                commitments_out[i],
+                leaf_index as u32,
+            );
 
             // Emit leaf inserted event
             crate::utils::events::emit_leaf_inserted(commitments_out[i], clock.unix_timestamp);

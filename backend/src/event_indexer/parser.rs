@@ -9,6 +9,7 @@ use base64::Engine;
 /// Event discriminators matching on-chain events.rs
 const EVENT_LEAF_INSERTED: u8 = 0x01;
 const EVENT_NULLIFIER_SPENT: u8 = 0x02;
+const EVENT_STEALTH_ANNOUNCEMENT: u8 = 0x03;
 
 /// Parsed leaf inserted event
 #[derive(Debug, Clone)]
@@ -26,11 +27,22 @@ pub struct NullifierSpentEvent {
     pub spent_by: [u8; 32],
 }
 
+/// Parsed stealth announcement event
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct StealthAnnouncementEvent {
+    pub announcement_type: u8,
+    pub ephemeral_pub: [u8; 32],
+    pub encrypted_amount: [u8; 8],
+    pub commitment: [u8; 32],
+    pub leaf_index: u32,
+}
+
 /// Union of all program events
 #[derive(Debug, Clone)]
 pub enum ProgramEvent {
     LeafInserted(LeafInsertedEvent),
     NullifierSpent(NullifierSpentEvent),
+    StealthAnnouncement(StealthAnnouncementEvent),
 }
 
 /// Parse program events from transaction log messages.
@@ -71,6 +83,11 @@ pub fn parse_program_events(logs: &[String]) -> Vec<ProgramEvent> {
             EVENT_NULLIFIER_SPENT => {
                 if let Some(event) = parse_nullifier_spent(&segments) {
                     events.push(ProgramEvent::NullifierSpent(event));
+                }
+            }
+            EVENT_STEALTH_ANNOUNCEMENT => {
+                if let Some(event) = parse_stealth_announcement(&segments) {
+                    events.push(ProgramEvent::StealthAnnouncement(event));
                 }
             }
             _ => {}
@@ -123,6 +140,34 @@ fn parse_nullifier_spent(segments: &[Vec<u8>]) -> Option<NullifierSpentEvent> {
         operation_type,
         spent_at,
         spent_by,
+    })
+}
+
+fn parse_stealth_announcement(segments: &[Vec<u8>]) -> Option<StealthAnnouncementEvent> {
+    // disc(1) + type(1) + ephemeral_pub(32) + encrypted_amount(8) + commitment(32) + leaf_index(4)
+    if segments.len() < 6 {
+        return None;
+    }
+    if segments[1].len() != 1 || segments[2].len() != 32 || segments[3].len() != 8
+        || segments[4].len() != 32 || segments[5].len() != 4
+    {
+        return None;
+    }
+
+    let mut ephemeral_pub = [0u8; 32];
+    ephemeral_pub.copy_from_slice(&segments[2]);
+    let mut encrypted_amount = [0u8; 8];
+    encrypted_amount.copy_from_slice(&segments[3]);
+    let mut commitment = [0u8; 32];
+    commitment.copy_from_slice(&segments[4]);
+    let leaf_index = u32::from_le_bytes(segments[5][..4].try_into().ok()?);
+
+    Some(StealthAnnouncementEvent {
+        announcement_type: segments[1][0],
+        ephemeral_pub,
+        encrypted_amount,
+        commitment,
+        leaf_index,
     })
 }
 
@@ -181,6 +226,33 @@ mod tests {
                 assert_eq!(e.operation_type, 2);
                 assert_eq!(e.spent_at, spent_at);
                 assert_eq!(e.spent_by, spent_by);
+            }
+            _ => panic!("wrong event type"),
+        }
+    }
+
+    #[test]
+    fn test_parse_stealth_announcement() {
+        let ephemeral = [0xAAu8; 32];
+        let amount = 5000u64.to_le_bytes();
+        let commitment = [0xBBu8; 32];
+        let leaf_index = 42u32.to_le_bytes();
+
+        let log = encode_segments(&[
+            &[EVENT_STEALTH_ANNOUNCEMENT],
+            &[1u8],
+            &ephemeral,
+            &amount,
+            &commitment,
+            &leaf_index,
+        ]);
+        let events = parse_program_events(&[log]);
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            ProgramEvent::StealthAnnouncement(e) => {
+                assert_eq!(e.announcement_type, 1);
+                assert_eq!(e.ephemeral_pub, ephemeral);
+                assert_eq!(e.leaf_index, 42);
             }
             _ => panic!("wrong event type"),
         }

@@ -218,6 +218,7 @@ pub fn process_verify_stealth_deposit(
     }
 
     // --- Read and verify sweep TX from ChadBuffer ---
+    crate::utils::chadbuffer::validate_chadbuffer_owner(tx_buffer_info)?;
     let sweep_buffer_data = tx_buffer_info
         .try_borrow_data()
         .map_err(|_| AegisError::InvalidBlockHeader)?;
@@ -235,6 +236,7 @@ pub fn process_verify_stealth_deposit(
         .map_err(|_| AegisError::InvalidSpvProof)?;
 
     // --- Read and verify deposit TX from ChadBuffer ---
+    crate::utils::chadbuffer::validate_chadbuffer_owner(deposit_tx_buffer_info)?;
     let deposit_buffer_data = deposit_tx_buffer_info
         .try_borrow_data()
         .map_err(|_| AegisError::InvalidBlockHeader)?;

@@ -12,12 +12,23 @@ use std::str::FromStr;
 use crate::bitcoin::frost_client::SolanaVerification;
 use crate::redemption::types::{PoolUtxo, WithdrawalRequest};
 
+/// Minimum output value (dust threshold).
+/// Configurable via `DUST_THRESHOLD_SATS` env var — keep low on testnet, raise in production.
+fn dust_threshold() -> u64 {
+    std::env::var("DUST_THRESHOLD_SATS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(330)
+}
+
 /// Builds unsigned BTC transactions
 pub struct TxBuilder {
     /// Network (mainnet, testnet, signet)
     network: Network,
     /// Default fee rate (sats/vbyte)
     default_fee_rate: u64,
+    /// Flat service fee per withdrawal (sats)
+    service_fee_sats: u64,
 }
 
 impl TxBuilder {
@@ -26,6 +37,7 @@ impl TxBuilder {
         Self {
             network,
             default_fee_rate: 10,
+            service_fee_sats: 0,
         }
     }
 
@@ -39,7 +51,12 @@ impl TxBuilder {
         self.default_fee_rate = rate;
     }
 
-    /// Build an unsigned withdrawal transaction
+    /// Set service fee
+    pub fn set_service_fee(&mut self, fee: u64) {
+        self.service_fee_sats = fee;
+    }
+
+    /// Build an unsigned withdrawal transaction with UTXO selection and change output.
     pub fn build_withdrawal(
         &self,
         request: &WithdrawalRequest,
@@ -51,27 +68,58 @@ impl TxBuilder {
             .require_network(self.network)
             .map_err(|e| BuilderError::InvalidAddress(e.to_string()))?;
 
-        // Calculate total input value
-        let total_input: u64 = utxos.iter().map(|u| u.amount_sats).sum();
+        // send_amount = amount_sats - service_fee - miner_fee
+        // UTXO selection: sort by value descending, pick enough to cover the full amount
+        let after_service_fee = request.amount_sats.saturating_sub(self.service_fee_sats);
 
-        // Estimate transaction size for fee calculation
-        // P2TR input: ~58 vbytes, P2TR output: ~43 vbytes
-        let estimated_vsize = 10 + (utxos.len() * 58) + 43 + 43; // 2 outputs (dest + change)
+        let mut sorted_utxos: Vec<&PoolUtxo> = utxos.iter().collect();
+        sorted_utxos.sort_by(|a, b| b.amount_sats.cmp(&a.amount_sats));
+
+        let mut selected: Vec<&PoolUtxo> = Vec::new();
+        let mut selected_total: u64 = 0;
+
+        for utxo in &sorted_utxos {
+            selected.push(utxo);
+            selected_total += utxo.amount_sats;
+
+            // Estimate fee with current selection (2 outputs: dest + change)
+            let estimated_vsize = 10 + (selected.len() * 58) + 43 + 43;
+            let estimated_fee = (estimated_vsize as u64) * self.default_fee_rate;
+
+            // Pool UTXOs need to cover: after_service_fee (user receive + miner fee) + change
+            if selected_total >= after_service_fee + estimated_fee {
+                break;
+            }
+        }
+
+        // Final fee calculation with selected UTXOs
+        let estimated_vsize = 10 + (selected.len() * 58) + 43 + 43;
         let fee = (estimated_vsize as u64) * self.default_fee_rate;
 
-        // Calculate amounts
-        let send_amount = request.net_amount();
-        let change_amount = total_input.saturating_sub(send_amount).saturating_sub(fee);
-
-        if total_input < send_amount + fee {
-            return Err(BuilderError::InsufficientFunds {
-                required: send_amount + fee,
-                available: total_input,
+        // send_amount = amount_sats - service_fee - miner_fee
+        let send_amount = after_service_fee.saturating_sub(fee);
+        let dust = dust_threshold();
+        if send_amount < dust {
+            return Err(BuilderError::AmountTooSmall {
+                send: send_amount,
+                dust,
+                request: request.amount_sats,
+                service_fee: self.service_fee_sats,
+                miner_fee: fee,
             });
         }
 
-        // Build inputs
-        let inputs: Result<Vec<TxIn>, BuilderError> = utxos
+        if selected_total < after_service_fee {
+            return Err(BuilderError::InsufficientFunds {
+                required: after_service_fee,
+                available: selected_total,
+            });
+        }
+
+        let change_amount = selected_total - send_amount - fee;
+
+        // Build inputs from selected UTXOs
+        let inputs: Result<Vec<TxIn>, BuilderError> = selected
             .iter()
             .map(|utxo| {
                 let txid = Txid::from_str(&utxo.txid)
@@ -92,21 +140,25 @@ impl TxBuilder {
         let inputs = inputs?;
 
         // Build outputs
-        let outputs = vec![
-            // Destination output
+        let mut outputs = vec![
             TxOut {
                 value: Amount::from_sat(send_amount),
                 script_pubkey: dest_address.script_pubkey(),
             },
         ];
 
-        // Add change output if significant
-        if change_amount > 546 {
-            // Dust threshold
-            // For POC, we'll need a change address from the pool
-            // For now, we'll skip change (send all to destination)
-            // In production, this would go back to pool
+        // Add change output back to pool (same address as input)
+        if change_amount > dust_threshold() {
+            let change_script = hex::decode(&selected[0].script_pubkey)
+                .map(ScriptBuf::from_bytes)
+                .unwrap_or_else(|_| ScriptBuf::new());
+            outputs.push(TxOut {
+                value: Amount::from_sat(change_amount),
+                script_pubkey: change_script,
+            });
         }
+
+        let selected_utxos: Vec<PoolUtxo> = selected.into_iter().cloned().collect();
 
         let tx = Transaction {
             version: Version::TWO,
@@ -117,9 +169,10 @@ impl TxBuilder {
 
         Ok(UnsignedTx {
             tx,
-            utxos: utxos.to_vec(),
+            utxos: selected_utxos,
             fee,
             send_amount,
+            service_fee: self.service_fee_sats,
             solana_verification: None,
         })
     }
@@ -146,10 +199,12 @@ pub struct UnsignedTx {
     pub tx: Transaction,
     /// UTXOs being spent
     pub utxos: Vec<PoolUtxo>,
-    /// Fee in satoshis
+    /// Miner fee in satoshis
     pub fee: u64,
-    /// Amount being sent
+    /// Amount being sent to user
     pub send_amount: u64,
+    /// Service fee deducted (for logging)
+    pub service_fee: u64,
     /// Optional Solana verification data for FROST signers
     pub solana_verification: Option<SolanaVerification>,
 }
@@ -186,8 +241,14 @@ pub enum BuilderError {
     #[error("no UTXOs provided")]
     NoUtxos,
 
-    #[error("amount too small")]
-    AmountTooSmall,
+    #[error("amount too small (send={send} < dust={dust}, request={request}, service_fee={service_fee}, miner_fee={miner_fee})")]
+    AmountTooSmall {
+        send: u64,
+        dust: u64,
+        request: u64,
+        service_fee: u64,
+        miner_fee: u64,
+    },
 }
 
 #[cfg(test)]

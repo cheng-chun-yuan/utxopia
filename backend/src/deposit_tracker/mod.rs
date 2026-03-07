@@ -53,7 +53,6 @@ pub use websocket::{
     create_ws_state, ws_all_deposits_handler, ws_deposit_handler, DepositUpdatePublisher,
     SharedWebSocketState, WebSocketState,
 };
-pub use db::DbError;
 pub use header_relayer::HeaderRelayer;
 pub use sqlite_db::{SqliteDepositStore, SqliteError};
 pub use ws_listener::{MempoolWsListener, WsEvent};

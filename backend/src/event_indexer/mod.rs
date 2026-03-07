@@ -9,9 +9,11 @@ pub mod storage;
 pub mod service;
 pub mod routes;
 pub mod tree_cache;
+pub mod solana_ws;
 
-pub use parser::{ProgramEvent, LeafInsertedEvent, NullifierSpentEvent};
+pub use parser::{ProgramEvent, LeafInsertedEvent, NullifierSpentEvent, StealthAnnouncementEvent};
 pub use storage::EventStore;
 pub use service::{EventIndexerConfig, EventIndexerService};
 pub use routes::event_indexer_router;
 pub use tree_cache::TreeCache;
+pub use solana_ws::{SolanaWsConfig, SolanaWsSubscriber};

@@ -32,7 +32,6 @@
 //! 7. user_token_account   (writable)
 //! 8. token_program        (read)
 //! 9..9+n_inputs           nullifier_records (writable, PDA)
-//! 9+n_inputs..            stealth_announcements (writable, PDA) — only for tree outputs
 
 use pinocchio::{
     account_info::AccountInfo,
@@ -46,8 +45,7 @@ use crate::debug_msg;
 use crate::error::AegisError;
 use crate::state::{
     CommitmentTree, NullifierOperationType, NullifierRecord, PoolState,
-    StealthAnnouncement, VkRegistry, NULLIFIER_RECORD_DISCRIMINATOR,
-    STEALTH_ANNOUNCEMENT_DISCRIMINATOR,
+    VkRegistry, NULLIFIER_RECORD_DISCRIMINATOR,
 };
 use crate::utils::groth16::GROTH16_PROOF_SIZE;
 use crate::utils::{
@@ -149,8 +147,8 @@ pub fn process_unshield(
         }
     }
 
-    // Validate account count
-    let min_accounts = FIXED_ACCOUNTS + n_inputs + n_tree_outputs;
+    // Validate account count: fixed + nullifiers (no stealth PDA accounts)
+    let min_accounts = FIXED_ACCOUNTS + n_inputs;
     if accounts.len() < min_accounts {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
@@ -343,52 +341,18 @@ pub fn process_unshield(
             let ephemeral_pub: &[u8; 32] = data[stealth_offset..stealth_offset + 32]
                 .try_into()
                 .unwrap();
-            let encrypted_amount: [u8; 8] = data[stealth_offset + 32..stealth_offset + 40]
+            let encrypted_amount: &[u8; 8] = data[stealth_offset + 32..stealth_offset + 40]
                 .try_into()
                 .unwrap();
 
-            let announcement_info = &accounts[FIXED_ACCOUNTS + n_inputs + i];
-            validate_account_writable(announcement_info)?;
-
-            let ann_seeds: &[&[u8]] = &[StealthAnnouncement::SEED, ephemeral_pub.as_ref()];
-            let (expected_ann_pda, ann_bump) = find_program_address(ann_seeds, program_id);
-            if announcement_info.key() != &expected_ann_pda {
-                debug_msg!("Invalid stealth announcement PDA");
-                return Err(ProgramError::InvalidSeeds);
-            }
-
-            {
-                let ann_data = announcement_info.try_borrow_data()?;
-                if !ann_data.is_empty() && ann_data[0] == STEALTH_ANNOUNCEMENT_DISCRIMINATOR {
-                    return Err(ProgramError::AccountAlreadyInitialized);
-                }
-            }
-
-            let ann_bump_bytes = [ann_bump];
-            let ann_signer_seeds: &[&[u8]] = &[
-                StealthAnnouncement::SEED,
-                ephemeral_pub.as_ref(),
-                &ann_bump_bytes,
-            ];
-
-            create_pda_account(
-                user,
-                announcement_info,
-                program_id,
-                rent.minimum_balance(StealthAnnouncement::SIZE),
-                StealthAnnouncement::SIZE as u64,
-                ann_signer_seeds,
-            )?;
-
-            {
-                let mut ann_data = announcement_info.try_borrow_mut_data()?;
-                let announcement = StealthAnnouncement::init(&mut ann_data)?;
-                announcement.announcement_type = crate::state::ANNOUNCEMENT_TYPE_TRANSFER;
-                announcement.ephemeral_pub = *ephemeral_pub;
-                announcement.set_amount_bytes(encrypted_amount);
-                announcement.commitment.copy_from_slice(commitments_out[i]);
-                announcement.set_leaf_index(leaf_index);
-            }
+            // Emit stealth announcement as log event (replaces PDA creation)
+            crate::utils::events::emit_stealth_announcement(
+                crate::state::ANNOUNCEMENT_TYPE_TRANSFER,
+                ephemeral_pub,
+                encrypted_amount,
+                commitments_out[i],
+                leaf_index as u32,
+            );
 
             crate::utils::events::emit_leaf_inserted(commitments_out[i], clock.unix_timestamp);
         }

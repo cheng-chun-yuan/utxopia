@@ -1,10 +1,10 @@
 //! Deposit Tracker API Endpoints
 //!
 //! REST and WebSocket endpoints for deposit tracking:
-//! - GET /api/deposits/:id - Get deposit status
+//! - GET /api/deposits/{id} - Get deposit status
 //! - GET /api/deposits - List all deposits
 //! - GET /api/pool/info - Pool config for SDK
-//! - WS /ws/deposits/:id - Subscribe to status updates
+//! - WS /ws/deposits/{id} - Subscribe to status updates
 //! - WS /ws/deposits - Subscribe to all updates
 //!
 //! Deposits are auto-detected via block scanning (no registration API needed).
@@ -18,8 +18,9 @@ use axum::{
 };
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 
+use crate::api::middleware::{api_key_auth_middleware, create_rate_limiter, rate_limit_middleware};
 use super::service::DepositTrackerService;
 use super::types::DepositStatusResponse;
 use super::websocket::{
@@ -58,37 +59,63 @@ pub fn create_deposit_router(tracker: DepositTrackerService) -> Router {
     });
 
     // CORS configuration
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    let cors = match std::env::var("ALLOWED_ORIGIN") {
+        Ok(origin) if !origin.is_empty() => {
+            let origins: Vec<_> = origin
+                .split(',')
+                .filter_map(|o| o.trim().parse().ok())
+                .collect();
+            CorsLayer::new()
+                .allow_origin(AllowOrigin::list(origins))
+                .allow_methods(Any)
+                .allow_headers(Any)
+        }
+        _ => {
+            tracing::warn!("ALLOWED_ORIGIN not set — defaulting to localhost:3000 (set ALLOWED_ORIGIN for production)");
+            CorsLayer::new()
+                .allow_origin(AllowOrigin::list(
+                    vec!["http://localhost:3000".parse().unwrap()]
+                ))
+                .allow_methods(Any)
+                .allow_headers(Any)
+        }
+    };
 
-    Router::new()
-        // Deposit registration and query endpoints
-        .route("/api/deposits", get(handle_list_deposits).post(handle_register_deposit))
+    let authed = Router::new()
+        .route("/api/deposits", post(handle_register_deposit))
+        .route("/api/tracker/retry/{id}", post(handle_retry_deposit))
+        .layer(axum::middleware::from_fn(api_key_auth_middleware))
+        .with_state(state.clone());
+
+    let public = Router::new()
+        .route("/api/deposits", get(handle_list_deposits))
         .route("/api/deposits/verified", get(handle_verified_deposits))
-        .route("/api/deposits/:id", get(handle_get_deposit))
-        .route("/api/deposits/by-address/:address", get(handle_get_by_address))
-        // WebSocket endpoints
-        .route("/ws/deposits/:id", get(ws_deposit_handler_wrapper))
+        .route("/api/deposits/{id}", get(handle_get_deposit))
+        .route("/api/deposits/by-address/{address}", get(handle_get_by_address))
+        .route("/ws/deposits/{id}", get(ws_deposit_handler_wrapper))
         .route("/ws/deposits", get(ws_all_deposits_handler_wrapper))
-        // Pool info (for SDK non-interactive deposits)
         .route("/api/pool/info", get(handle_pool_info))
-        // Health check and monitoring
         .route("/api/tracker/health", get(handle_health))
         .route("/api/tracker/stats", get(handle_tracker_stats))
         .route("/api/tracker/pending", get(handle_pending_deposits))
         .route("/api/tracker/failed", get(handle_failed_deposits))
-        .route("/api/tracker/retry/:id", post(handle_retry_deposit))
+        .with_state(state);
+
+    Router::new()
+        .merge(authed)
+        .merge(public)
+        .layer(axum::middleware::from_fn_with_state(
+            create_rate_limiter(),
+            rate_limit_middleware,
+        ))
         .layer(cors)
-        .with_state(state)
 }
 
 // =============================================================================
 // REST Handlers
 // =============================================================================
 
-/// GET /api/deposits/:id
+/// GET /api/deposits/{id}
 ///
 /// Get the status of a specific deposit.
 async fn handle_get_deposit(
@@ -191,7 +218,7 @@ async fn handle_register_deposit(
     }
 }
 
-/// GET /api/deposits/by-address/:address
+/// GET /api/deposits/by-address/{address}
 ///
 /// Look up a deposit by its taproot address.
 async fn handle_get_by_address(
@@ -304,7 +331,7 @@ async fn handle_failed_deposits(State(state): State<SharedAppState>) -> impl Int
     }))
 }
 
-/// POST /api/tracker/retry/:id
+/// POST /api/tracker/retry/{id}
 ///
 /// Manually retry a failed deposit.
 async fn handle_retry_deposit(
@@ -371,9 +398,9 @@ pub async fn start_tracker_server(
     println!("  POST /api/deposits                   - Register deposit for tracking");
     println!("  GET  /api/deposits                   - List all deposits");
     println!("  GET  /api/deposits/verified           - List verified deposits (ready/claimed)");
-    println!("  GET  /api/deposits/:id               - Get deposit status by ID");
-    println!("  GET  /api/deposits/by-address/:addr  - Get deposit by taproot address");
-    println!("  WS   /ws/deposits/:id                - Subscribe to deposit updates");
+    println!("  GET  /api/deposits/{{id}}               - Get deposit status by ID");
+    println!("  GET  /api/deposits/by-address/{{addr}}  - Get deposit by taproot address");
+    println!("  WS   /ws/deposits/{{id}}                - Subscribe to deposit updates");
     println!("  WS   /ws/deposits                    - Subscribe to all updates");
     println!();
     println!("Pool Info:");
@@ -384,7 +411,7 @@ pub async fn start_tracker_server(
     println!("  GET  /api/tracker/stats     - Get tracker statistics");
     println!("  GET  /api/tracker/pending   - List pending deposits");
     println!("  GET  /api/tracker/failed    - List failed deposits");
-    println!("  POST /api/tracker/retry/:id - Retry a failed deposit");
+    println!("  POST /api/tracker/retry/{{id}} - Retry a failed deposit");
     println!();
 
     let listener = tokio::net::TcpListener::bind(addr).await?;

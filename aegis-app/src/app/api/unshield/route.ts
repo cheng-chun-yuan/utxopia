@@ -98,16 +98,6 @@ function validateHexField(value: string | undefined, name: string, expectedBytes
   return bytes;
 }
 
-function deriveStealthAnnouncementPDA(
-  seed: Uint8Array,
-  programId: PublicKey = AEGIS_PROGRAM_ID
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from(PDA_SEEDS.STEALTH), seed],
-    programId
-  );
-}
-
 function deriveVkRegistryPDA(
   nInputs: number,
   nOutputs: number,
@@ -209,13 +199,6 @@ export async function POST(request: NextRequest) {
 
     // Derive PDAs
     const nullifierPDAs = nullifierBytes.map((n) => deriveNullifierPDA(n)[0]);
-
-    // Stealth announcement PDAs for tree outputs only
-    const stealthAnnouncementPDAs = stealthDataBytes.map((sd) => {
-      const ephemeralPub = sd.slice(0, 32);
-      return deriveStealthAnnouncementPDA(ephemeralPub)[0];
-    });
-
     const [vkRegistryPDA] = deriveVkRegistryPDA(nInputs, nOutputs);
     const [poolState] = derivePoolStatePDA();
     const [commitmentTree] = deriveCommitmentTreePDA();
@@ -291,9 +274,7 @@ export async function POST(request: NextRequest) {
       keys.push({ pubkey: nullifierPDA, isSigner: false, isWritable: true });
     }
 
-    for (const stealthPDA of stealthAnnouncementPDAs) {
-      keys.push({ pubkey: stealthPDA, isSigner: false, isWritable: true });
-    }
+    // No stealth announcement PDAs — emitted as events now
 
     const unshieldIx = new TransactionInstruction({
       programId: AEGIS_PROGRAM_ID,

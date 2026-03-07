@@ -132,6 +132,12 @@ impl DkgParticipant {
         let mut id_to_signer: BTreeMap<frost::Identifier, u16> = BTreeMap::new();
 
         for (signer_id, package_hex) in &request.round1_packages {
+            // Validate signer ID is non-zero (FROST identifiers start at 1)
+            if *signer_id == 0 {
+                return Err(DkgError::FrostError(
+                    "signer_id 0 is invalid (FROST identifiers start at 1)".to_string(),
+                ));
+            }
             if *signer_id == self.signer_id {
                 continue;
             }
@@ -281,7 +287,7 @@ impl DkgParticipant {
     }
 
     pub fn cleanup_ceremonies(&self) {
-        let timeout = std::time::Duration::from_secs(3600);
+        let timeout = std::time::Duration::from_secs(600); // 10 minutes
         let mut ceremonies = self.ceremonies.write().unwrap();
         ceremonies.retain(|_, ceremony| ceremony.created_at.elapsed() < timeout);
     }

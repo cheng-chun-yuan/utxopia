@@ -56,8 +56,8 @@ import {
 
 import {
   reverseBytes,
-  hexToBytes as spvHexToBytes,
 } from "@/lib/spv/mempool";
+import { hexToBytes as spvHexToBytes } from "@aegis/sdk";
 
 import {
   buildMerkleProofPath,

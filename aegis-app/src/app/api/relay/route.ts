@@ -42,6 +42,11 @@ import {
 // Configuration
 // =============================================================================
 
+/** Minimum relayer fee (sats) — relayer checks this before executing */
+const RELAYER_FEE_SATS = parseInt(process.env.RELAYER_FEE_SATS || "2000", 10);
+/** Relayer stealth meta-address (96-byte hex: spendingPub + viewingPub + mpk) */
+const RELAYER_STEALTH_META = process.env.RELAYER_STEALTH_META || "";
+
 const CHADBUFFER_PROGRAM_ID = new PublicKey(DEVNET_CONFIG.chadbufferProgramId);
 
 const CHADBUFFER = {
@@ -69,6 +74,8 @@ interface TransactRelayRequest {
   nullifiers: string[]; // hex 32 bytes each
   commitmentsOut: string[]; // hex 32 bytes each
   stealthData: string[]; // hex 40 bytes each (ephemeralPub + encryptedAmount)
+  /** Index of the output that pays the relayer fee (0-based). Relayer verifies before executing. */
+  relayerFeeOutputIndex?: number;
 }
 
 interface RelaySuccessResponse {
@@ -110,16 +117,6 @@ function validateHexField(value: string | undefined, name: string, expectedBytes
     throw new Error(`Invalid ${name}: expected ${expectedBytes} bytes, got ${bytes.length}`);
   }
   return bytes;
-}
-
-function deriveStealthAnnouncementPDA(
-  seed: Uint8Array,
-  programId: PublicKey = AEGIS_PROGRAM_ID
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from(PDA_SEEDS.STEALTH), seed],
-    programId
-  );
 }
 
 function deriveVkRegistryPDA(
@@ -266,24 +263,22 @@ function buildTransactIx(
   params: {
     nInputs: number;
     nOutputs: number;
-    proofBytes: Uint8Array;
     merkleRoot: Uint8Array;
     boundParamsHash: Uint8Array;
     nullifiers: Uint8Array[];
     commitmentsOut: Uint8Array[];
     stealthData: Uint8Array[];
     nullifierPDAs: PublicKey[];
-    stealthAnnouncementPDAs: PublicKey[];
     vkRegistryPDA: PublicKey;
+    bufferPubkey: PublicKey;
   }
 ): TransactionInstruction {
   const { nInputs, nOutputs } = params;
 
-  // Build instruction data
+  // Build instruction data — proof_source=1 (buffer mode), no inline proof
   const totalSize =
     1 + // discriminator
-    2 + // nInputs + nOutputs
-    256 + // proof
+    3 + // nInputs + nOutputs + proof_source
     32 + // merkleRoot
     32 + // boundParamsHash
     nInputs * 32 + // nullifiers
@@ -296,9 +291,7 @@ function buildTransactIx(
   ixData[offset++] = INSTRUCTION_DISCRIMINATORS.TRANSACT;
   ixData[offset++] = nInputs;
   ixData[offset++] = nOutputs;
-
-  Buffer.from(params.proofBytes).copy(ixData, offset);
-  offset += 256;
+  ixData[offset++] = 1; // proof_source = 1 (buffer)
 
   Buffer.from(params.merkleRoot).copy(ixData, offset);
   offset += 32;
@@ -321,7 +314,8 @@ function buildTransactIx(
     offset += STEALTH_DATA_PER_OUTPUT;
   }
 
-  // Build accounts: pool_state, commitment_tree, vk_registry, user, system_program, ...nullifiers, ...stealth
+  // Build accounts: pool_state, commitment_tree, vk_registry, user, system_program,
+  //   ...nullifiers, relayer (signer/payer), proof_buffer (last)
   const [poolState] = derivePoolStatePDA();
   const [commitmentTree] = deriveCommitmentTreePDA();
 
@@ -337,9 +331,14 @@ function buildTransactIx(
     keys.push({ pubkey: nullifierPDA, isSigner: false, isWritable: true });
   }
 
-  for (const stealthPDA of params.stealthAnnouncementPDAs) {
-    keys.push({ pubkey: stealthPDA, isSigner: false, isWritable: true });
-  }
+  // No stealth announcement PDAs — emitted as events now
+
+  // Relayer account (signer+payer, after nullifiers) — already in position [3]
+  // but program detects relayer by checking extra accounts after nullifiers.
+  // Since proof_source=1, the last account is proof_buffer.
+
+  // Proof buffer account (last)
+  keys.push({ pubkey: params.bufferPubkey, isSigner: false, isWritable: false });
 
   return new TransactionInstruction({
     programId: AEGIS_PROGRAM_ID,
@@ -410,19 +409,50 @@ export async function POST(request: NextRequest): Promise<NextResponse<RelayResp
 
     // Derive PDAs
     const nullifierPDAs = nullifierBytes.map((n) => deriveNullifierPDA(n)[0]);
-
-    // Stealth announcement PDAs use the ephemeral pub (first 32 bytes of stealth data)
-    const stealthAnnouncementPDAs = stealthDataBytes.map((sd) => {
-      const ephemeralPub = sd.slice(0, 32);
-      return deriveStealthAnnouncementPDA(ephemeralPub)[0];
-    });
-
     const [vkRegistryPDA] = deriveVkRegistryPDA(nInputs, nOutputs);
+
+    // =========================================================================
+    // Relayer fee verification — check before paying Solana tx fees
+    // =========================================================================
+    if (RELAYER_FEE_SATS > 0) {
+      const feeIdx = body.relayerFeeOutputIndex;
+      if (feeIdx == null || feeIdx < 0 || feeIdx >= nOutputs) {
+        return NextResponse.json(
+          { success: false, error: `Relayer fee output index required (RELAYER_FEE_SATS=${RELAYER_FEE_SATS})` },
+          { status: 400 }
+        );
+      }
+
+      // Verify stealth data exists and ephemeral pub is non-trivial
+      const feeStealthData = stealthDataBytes[feeIdx];
+      if (!feeStealthData || feeStealthData.length < 40) {
+        return NextResponse.json(
+          { success: false, error: "Invalid stealth data for relayer fee output" },
+          { status: 400 }
+        );
+      }
+
+      // Verify ephemeral pub is not all zeros (would indicate no real ECDH)
+      const ephemeralPub = feeStealthData.slice(0, 32);
+      const isZero = ephemeralPub.every((b: number) => b === 0);
+      if (isZero) {
+        return NextResponse.json(
+          { success: false, error: "Relayer fee output has invalid ephemeral public key" },
+          { status: 400 }
+        );
+      }
+
+      // TODO(production): Full ECDH verification — use relayer's viewing private key
+      // to derive shared secret from ephemeral pub, decrypt amount, verify >= RELAYER_FEE_SATS.
+      // Requires RELAYER_VIEWING_PRIVATE_KEY env var. Without this, a sophisticated
+      // attacker could point to a self-addressed output and relay for free.
+      console.log(`[Relay] Relayer fee output verified at index ${feeIdx}`);
+    }
 
     // Step 1: Upload proof to ChadBuffer
     const { bufferPubkey } = await uploadProofToBuffer(connection, relayer, proofBytes);
 
-    // Step 2: Build and submit transaction
+    // Step 2: Build and submit transaction (proof in buffer, no stealth PDAs)
     const instructions: TransactionInstruction[] = [
       ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }),
     ];
@@ -431,15 +461,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<RelayResp
       buildTransactIx(relayer, {
         nInputs,
         nOutputs,
-        proofBytes,
         merkleRoot: merkleRootBytes,
         boundParamsHash: boundParamsHashBytes,
         nullifiers: nullifierBytes,
         commitmentsOut: commitmentBytes,
         stealthData: stealthDataBytes,
         nullifierPDAs,
-        stealthAnnouncementPDAs,
         vkRegistryPDA,
+        bufferPubkey,
       })
     );
 

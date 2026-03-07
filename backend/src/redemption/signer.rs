@@ -188,10 +188,6 @@ impl TxSigner for MpcSigner {
 
         let prevouts_ref = Prevouts::All(&prevouts);
 
-        // Taproot tweak using the group public key (standard BIP-341 tweak)
-        let tweak = TapTweakHash::from_key_and_tweak(self.public_key, None);
-        let tweak_bytes = tweak.to_byte_array();
-
         // Build signing context for signer-side verification
         let raw_tx_hex = hex::encode(bitcoin::consensus::encode::serialize(&tx));
         let context_prevouts: Vec<PrevoutInfo> = unsigned
@@ -225,13 +221,11 @@ impl TxSigner for MpcSigner {
             let solana_verification = unsigned.solana_verification.clone();
 
             // Call FROST signers to get threshold signature.
-            // Pass merkle_root: Some(&[]) to trigger BIP-341 key-only tweak during
-            // FROST aggregate. Empty bytes = H_TapTweak(P) = key-only spend.
-            // Without this, aggregate produces a signature for the raw group key,
-            // but the pool address uses the tweaked output key.
+            // The pool address uses the RAW group key (no BIP-341 tweak),
+            // so we sign without merkle_root to produce a signature for the untweaked key.
             let sig_bytes = self
                 .frost_client
-                .sign_sighash_tweaked(&sighash_bytes, Some(&tweak_bytes), Some(signing_context), Some(&[]), solana_verification)
+                .sign_sighash_tweaked(&sighash_bytes, None, Some(signing_context), None, solana_verification)
                 .await
                 .map_err(|e| SignerError::FrostSigningFailed(e.to_string()))?;
 

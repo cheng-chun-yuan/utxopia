@@ -16,6 +16,7 @@ import {
   scanAnnouncementsViewOnly,
   computeJoinSplitNullifierSync,
   bigintToBytes,
+  AnnouncementClient,
   DEVNET_CONFIG,
   type AegisKeys,
   type StealthMetaAddress,
@@ -23,10 +24,10 @@ import {
 } from "@aegis/sdk";
 
 // ============================================================================
-// localStorage Key Persistence (devnet only)
+// localStorage Key Persistence (AES-256-GCM encrypted)
 // ============================================================================
 
-const KEYS_STORAGE_PREFIX = "aegis:keys_v2:";
+const KEYS_STORAGE_PREFIX = "aegis:keys:";
 
 function bytesToHexLocal(bytes: Uint8Array): string {
   return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
@@ -41,7 +42,50 @@ function hexToBytesLocal(hex: string): Uint8Array {
   return bytes;
 }
 
-function persistKeys(walletPubkey: string, keys: AegisKeys): void {
+async function deriveStorageKey(walletPubkey: string): Promise<CryptoKey> {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(walletPubkey + ":aegis-storage-key"),
+    "PBKDF2",
+    false,
+    ["deriveKey"],
+  );
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt: enc.encode("aegis-v4:" + walletPubkey), iterations: 600_000, hash: "SHA-256" },
+    keyMaterial,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"],
+  );
+}
+
+async function encryptData(key: CryptoKey, plaintext: string): Promise<string> {
+  const enc = new TextEncoder();
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    enc.encode(plaintext),
+  );
+  // Store as iv(24 hex) + ciphertext(hex)
+  return bytesToHexLocal(iv) + bytesToHexLocal(new Uint8Array(ciphertext));
+}
+
+async function decryptData(key: CryptoKey, encrypted: string): Promise<string> {
+  const ivHex = encrypted.slice(0, 24);
+  const ctHex = encrypted.slice(24);
+  const iv = hexToBytesLocal(ivHex);
+  const ciphertext = hexToBytesLocal(ctHex);
+  const plaintext = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: iv as BufferSource },
+    key,
+    ciphertext as BufferSource,
+  );
+  return new TextDecoder().decode(plaintext);
+}
+
+async function persistKeys(walletPubkey: string, keys: AegisKeys): Promise<void> {
   try {
     const data = {
       eddsaSeedHex: bytesToHexLocal(keys.eddsaSeed),
@@ -52,19 +96,23 @@ function persistKeys(walletPubkey: string, keys: AegisKeys): void {
       spendingPubKeyX: keys.spendingPubKey.x.toString(),
       spendingPubKeyY: keys.spendingPubKey.y.toString(),
     };
-    localStorage.setItem(KEYS_STORAGE_PREFIX + walletPubkey, JSON.stringify(data));
+    const storageKey = await deriveStorageKey(walletPubkey);
+    const encrypted = await encryptData(storageKey, JSON.stringify(data));
+    localStorage.setItem(KEYS_STORAGE_PREFIX + walletPubkey, encrypted);
   } catch {
-    // localStorage may be unavailable
+    // localStorage or Web Crypto may be unavailable
   }
 }
 
-function loadKeys(walletPubkey: string, solanaPublicKey: Uint8Array): AegisKeys | null {
+async function loadKeys(walletPubkey: string, solanaPublicKey: Uint8Array): Promise<AegisKeys | null> {
   try {
     const raw = localStorage.getItem(KEYS_STORAGE_PREFIX + walletPubkey);
     if (!raw) return null;
-    const data = JSON.parse(raw);
 
-    // Restore spendingPubKey from stored coordinates (avoids calling circomlibjs WASM)
+    const storageKey = await deriveStorageKey(walletPubkey);
+    const decrypted = await decryptData(storageKey, raw);
+    const data = JSON.parse(decrypted);
+
     const spendingPubKey = {
       x: BigInt(data.spendingPubKeyX),
       y: BigInt(data.spendingPubKeyY),
@@ -97,7 +145,23 @@ let inboxFetchPromise: Promise<void> | null = null;
 
 // Cache last announcement count to skip re-scan when nothing changed
 let lastAnnouncementCount = -1;
-let lastAnnouncementCachedAt = 0;
+
+// Singleton AnnouncementClient
+let announcementClient: AnnouncementClient | null = null;
+
+function getAnnouncementClient(): AnnouncementClient {
+  if (!announcementClient) {
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
+    const wsUrl = backendUrl.replace("http://", "ws://").replace("https://", "wss://");
+    announcementClient = new AnnouncementClient({
+      backendUrl,
+      backendWsUrl: wsUrl,
+      solanaRpcUrl: process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.devnet.solana.com",
+      programId: DEVNET_CONFIG.aegisProgramId,
+    });
+  }
+  return announcementClient;
+}
 
 // ============================================================================
 // Types
@@ -162,12 +226,13 @@ interface AegisState {
     publicKey: PublicKey;
     signMessage: (message: Uint8Array) => Promise<Uint8Array>;
   }) => Promise<void>;
-  hydrateKeys: (walletPubkey: PublicKey) => boolean;
+  hydrateKeys: (walletPubkey: PublicKey) => Promise<boolean>;
   deriveKeysFromPasskeySeed: (seed: Uint8Array) => Promise<void>;
-  hydratePasskeyKeys: () => boolean;
+  hydratePasskeyKeys: () => Promise<boolean>;
   loadViewOnlyKeys: (encoded: string) => void;
   clearKeys: (walletPubkey?: string) => void;
   refreshInbox: (connection?: Connection) => Promise<void>;
+  startRealtimeInbox: () => () => void;
   refreshPublicBalance: (walletPubkey?: PublicKey) => Promise<void>;
   submitWithdrawal: (withdrawal: Omit<ActiveWithdrawal, "id" | "createdAt" | "updatedAt">) => string;
   updateWithdrawal: (id: string, update: Partial<ActiveWithdrawal>) => void;
@@ -250,9 +315,9 @@ export const useAegisStore = create<AegisState>((set, get) => ({
     }
   },
 
-  hydrateKeys: (walletPubkey: PublicKey) => {
+  hydrateKeys: async (walletPubkey: PublicKey) => {
     const pubkeyStr = walletPubkey.toBase58();
-    const restored = loadKeys(pubkeyStr, walletPubkey.toBytes());
+    const restored = await loadKeys(pubkeyStr, walletPubkey.toBytes());
     if (!restored) return false;
 
     const meta = createStealthMetaAddress(restored);
@@ -295,14 +360,14 @@ export const useAegisStore = create<AegisState>((set, get) => ({
     }
   },
 
-  hydratePasskeyKeys: () => {
+  hydratePasskeyKeys: async () => {
     try {
       const credentialId = typeof window !== "undefined"
         ? localStorage.getItem("aegis:passkey_credential_id")
         : null;
       if (!credentialId) return false;
 
-      const restored = loadKeys("passkey:" + credentialId, new Uint8Array(32));
+      const restored = await loadKeys("passkey:" + credentialId, new Uint8Array(32));
       if (!restored) return false;
 
       const meta = createStealthMetaAddress(restored);
@@ -374,41 +439,20 @@ export const useAegisStore = create<AegisState>((set, get) => ({
 
     const doFetch = async () => {
       try {
-        // Fetch from cached API instead of direct RPC
-        const response = await fetch("/api/stealth/announcements");
-        const data = await response.json();
+        // Fetch via AnnouncementClient (backend WS/REST → RPC fallback)
+        const client = getAnnouncementClient();
+        const announcements = await client.fetchAll();
 
-        if (!data.success) {
-          throw new Error(data.error || "Failed to fetch announcements");
-        }
-
-        // Skip re-scan if announcements haven't changed (same count + same cache timestamp)
+        // Skip re-scan if announcement count hasn't changed
         const currentNotes = get().inboxNotes;
         if (
-          data.count === lastAnnouncementCount &&
-          data.cachedAt === lastAnnouncementCachedAt &&
+          announcements.length === lastAnnouncementCount &&
           currentNotes.length > 0
         ) {
           set({ inboxLoading: false });
           return;
         }
-        lastAnnouncementCount = data.count;
-        lastAnnouncementCachedAt = data.cachedAt;
-
-        // Convert API response to scan format
-        const announcements = data.announcements.map((ann: {
-          announcementType: number;
-          ephemeralPub: string;
-          encryptedAmount: string;
-          commitment: string;
-          leafIndex: number;
-        }) => ({
-          announcementType: ann.announcementType,
-          ephemeralPub: hexToBytes(ann.ephemeralPub),
-          encryptedAmount: hexToBytes(ann.encryptedAmount),
-          commitment: hexToBytes(ann.commitment),
-          leafIndex: ann.leafIndex,
-        }));
+        lastAnnouncementCount = announcements.length;
 
         // Scan locally for privacy (server doesn't know which are ours)
         const scanned = isViewOnly && viewOnlyKeys
@@ -469,10 +513,6 @@ export const useAegisStore = create<AegisState>((set, get) => ({
         }
 
         const notes: InboxNote[] = notesWithSpentStatus.map((note, index) => {
-          const originalAnn = announcements.find((a: { commitment: Uint8Array }) =>
-            Buffer.from(a.commitment).equals(Buffer.from(note.commitment))
-          );
-
           // Convert commitment bytes to hex (big-endian bytes to hex string)
           // This should match bigint.toString(16).padStart(64, "0")
           const rawHex = Buffer.from(note.commitment).toString("hex");
@@ -482,9 +522,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
           return {
             ...note,
             id: `${commitmentHex.slice(0, 16)}-${index}`,
-            createdAt: originalAnn?.createdAt
-              ? originalAnn.createdAt * 1000
-              : Date.now(),
+            createdAt: Date.now(),
             commitmentHex,
           };
         });
@@ -517,6 +555,25 @@ export const useAegisStore = create<AegisState>((set, get) => ({
 
     inboxFetchPromise = doFetch();
     return inboxFetchPromise;
+  },
+
+  startRealtimeInbox: () => {
+    const client = getAnnouncementClient();
+    client.start().catch((err) => {
+      console.warn("[Aegis] AnnouncementClient start failed:", err);
+    });
+    const unsub = client.onAnnouncement(() => {
+      // New announcements arrived via WS — trigger inbox refresh
+      const store = get();
+      if (store.keys || store.viewOnlyKeys) {
+        store.refreshInbox();
+      }
+    });
+    return () => {
+      unsub();
+      client.close();
+      announcementClient = null;
+    };
   },
 
   refreshPublicBalance: async (walletPubkey?: PublicKey) => {
@@ -609,6 +666,7 @@ export function useStealthInbox() {
     isLoading: store.inboxLoading,
     error: store.inboxError,
     refresh: store.refreshInbox,
+    startRealtime: store.startRealtimeInbox,
     hasKeys: store.hasKeys,
   };
 }

@@ -344,14 +344,10 @@ impl SpvProofGenerator {
 #[derive(Debug, Deserialize)]
 struct EsploraBlockInfo {
     height: u64,
-    #[allow(dead_code)]
-    id: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct EsploraTxInfo {
-    #[allow(dead_code)]
-    txid: String,
     vout: Vec<EsploraTxOutput>,
     status: Option<EsploraTxStatus>,
 }

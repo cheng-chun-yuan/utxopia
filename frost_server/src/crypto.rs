@@ -3,6 +3,7 @@
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::Aes256Gcm;
 use hkdf::Hkdf;
+use rand::RngCore;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use thiserror::Error;
@@ -76,7 +77,8 @@ pub fn encrypt_for_recipient(
     let shared = own_private.diffie_hellman(target_public);
     let key = derive_key(shared.as_bytes());
     let cipher = Aes256Gcm::new_from_slice(&key).map_err(|e| CryptoError::EncryptionFailed(e.to_string()))?;
-    let nonce_bytes: [u8; NONCE_SIZE] = rand::random();
+    let mut nonce_bytes = [0u8; NONCE_SIZE];
+    rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
     let nonce = aes_gcm::Nonce::from_slice(&nonce_bytes);
     let ct = cipher.encrypt(nonce, plaintext).map_err(|e| CryptoError::EncryptionFailed(e.to_string()))?;
     let mut out = Vec::with_capacity(NONCE_SIZE + ct.len());

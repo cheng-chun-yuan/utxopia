@@ -57,8 +57,16 @@ pub struct PoolState {
     /// Total zkBTC in shielded pool (users hold commitments, not public tokens)
     total_shielded: [u8; 8],
 
+    /// Flat service fee per BTC withdrawal (satoshis) — deducted from withdrawal amount,
+    /// protocol revenue goes to pool. Separate from relayer fee (which is a shielded note).
+    service_fee_sats: [u8; 8],
+
+    /// Cumulative protocol revenue collected from withdrawal service fees (satoshis).
+    /// fee_pool = sum(service_fee - miner_fee) across all completed withdrawals.
+    fee_pool: [u8; 8],
+
     /// Reserved for future use
-    _reserved: [u8; 72],
+    _reserved: [u8; 56],
 }
 
 impl PoolState {
@@ -138,6 +146,14 @@ impl PoolState {
         u64::from_le_bytes(self.total_shielded)
     }
 
+    pub fn service_fee_sats(&self) -> u64 {
+        u64::from_le_bytes(self.service_fee_sats)
+    }
+
+    pub fn fee_pool(&self) -> u64 {
+        u64::from_le_bytes(self.fee_pool)
+    }
+
     // Setters
     pub fn set_paused(&mut self, paused: bool) {
         if paused {
@@ -179,6 +195,14 @@ impl PoolState {
         self.total_shielded = value.to_le_bytes();
     }
 
+    pub fn set_service_fee_sats(&mut self, value: u64) {
+        self.service_fee_sats = value.to_le_bytes();
+    }
+
+    pub fn set_fee_pool(&mut self, value: u64) {
+        self.fee_pool = value.to_le_bytes();
+    }
+
     // Increment helpers with overflow check
     pub fn increment_deposit_count(&mut self) -> Result<(), ProgramError> {
         let count = self.deposit_count();
@@ -207,6 +231,12 @@ impl PoolState {
     pub fn sub_shielded(&mut self, amount: u64) -> Result<(), ProgramError> {
         let total = self.total_shielded();
         self.set_total_shielded(total.checked_sub(amount).ok_or(ProgramError::ArithmeticOverflow)?);
+        Ok(())
+    }
+
+    pub fn add_fee_pool(&mut self, amount: u64) -> Result<(), ProgramError> {
+        let total = self.fee_pool();
+        self.set_fee_pool(total.checked_add(amount).ok_or(ProgramError::ArithmeticOverflow)?);
         Ok(())
     }
 }

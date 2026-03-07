@@ -118,7 +118,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\nData for Sweep (save this!):");
     println!("  User Pubkey: {}", hex::encode(user_pubkey.serialize()));
-    println!("  Output Key: {}", hex::encode(output_key.to_inner().serialize()));
+    println!("  Output Key: {}", hex::encode(output_key.to_x_only_public_key().serialize()));
     if let Some(mr) = merkle_root {
         println!("  Merkle Root: {}", hex::encode(mr.to_byte_array()));
     }

@@ -15,7 +15,12 @@ import type {
 
 const CREDENTIAL_STORAGE_KEY = "aegis:passkey_credential_id";
 const SEED_STORAGE_KEY = "aegis:passkey_seed";
-const PRF_SALT = sha256(new TextEncoder().encode("aegis-passkey-prf-v1"));
+/** Derive per-user PRF salt by mixing domain separator with credential ID */
+function getPrfSalt(credentialId?: string | null): Uint8Array {
+  const base = "aegis-passkey-prf-v1";
+  const input = credentialId ? `${base}:${credentialId}` : base;
+  return sha256(new TextEncoder().encode(input));
+}
 
 const RP_NAME = "Aegis";
 
@@ -65,19 +70,51 @@ function hexToBytes(hex: string): Uint8Array {
   return bytes;
 }
 
-function storeFallbackSeed(seed: Uint8Array): void {
+/** Derive AES-GCM key from credential ID for encrypting fallback seed at rest */
+async function deriveStorageKey(credentialId: string): Promise<CryptoKey> {
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(`aegis-seed-enc:${credentialId}`),
+    "HKDF",
+    false,
+    ["deriveKey"],
+  );
+  return crypto.subtle.deriveKey(
+    { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(32), info: new TextEncoder().encode("aegis-fallback-seed") },
+    keyMaterial,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"],
+  );
+}
+
+async function storeFallbackSeed(seed: Uint8Array, credentialId: string): Promise<void> {
   try {
-    localStorage.setItem(SEED_STORAGE_KEY, bytesToHex(seed));
+    const key = await deriveStorageKey(credentialId);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const seedCopy = new Uint8Array(seed).buffer as ArrayBuffer;
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, seedCopy));
+    // Store as iv(12) || ciphertext
+    const combined = new Uint8Array(iv.length + ct.length);
+    combined.set(iv);
+    combined.set(ct, iv.length);
+    localStorage.setItem(SEED_STORAGE_KEY, bytesToHex(combined));
   } catch {
     // ignore
   }
 }
 
-function loadFallbackSeed(): Uint8Array | null {
+async function loadFallbackSeed(credentialId: string): Promise<Uint8Array | null> {
   try {
     const hex = localStorage.getItem(SEED_STORAGE_KEY);
     if (!hex) return null;
-    return hexToBytes(hex);
+    const data = hexToBytes(hex);
+    if (data.length < 28) return null; // iv(12) + tag(16) minimum
+    const key = await deriveStorageKey(credentialId);
+    const iv = data.slice(0, 12);
+    const ct = data.slice(12);
+    const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
+    return new Uint8Array(plaintext);
   } catch {
     return null;
   }
@@ -135,6 +172,9 @@ export function usePasskey(): UsePasskeyReturn {
     try {
       const rpId = getRpId();
 
+      // Use base PRF salt for registration (no credential ID yet)
+      const prfSalt = getPrfSalt();
+
       const creationOptions: PublicKeyCredentialCreationOptionsJSON = {
         rp: { name: RP_NAME, id: rpId },
         user: {
@@ -153,7 +193,7 @@ export function usePasskey(): UsePasskeyReturn {
         },
         extensions: {
           prf: {
-            eval: { first: PRF_SALT.buffer as ArrayBuffer },
+            eval: { first: prfSalt.buffer as ArrayBuffer },
           },
         } as Record<string, unknown>,
       };
@@ -166,11 +206,11 @@ export function usePasskey(): UsePasskeyReturn {
       let seed = tryExtractPrfOutput(credential.clientExtensionResults);
 
       if (!seed) {
-        // PRF not supported — generate random seed and store locally.
-        // The passkey serves as a biometric gate; the seed lives in localStorage.
+        // PRF not supported — generate random seed and encrypt in localStorage.
+        // The passkey serves as a biometric gate; the seed is encrypted at rest.
         seed = new Uint8Array(32);
         crypto.getRandomValues(seed);
-        storeFallbackSeed(seed);
+        await storeFallbackSeed(seed, credential.id);
       }
 
       storeCredentialId(credential.id);
@@ -203,6 +243,9 @@ export function usePasskey(): UsePasskeyReturn {
       const rpId = getRpId();
       const storedId = getStoredCredentialId();
 
+      // Use per-user PRF salt when credential ID is known
+      const prfSalt = getPrfSalt(storedId);
+
       const requestOptions: PublicKeyCredentialRequestOptionsJSON = {
         rpId,
         challenge: randomBase64URL(32),
@@ -212,7 +255,7 @@ export function usePasskey(): UsePasskeyReturn {
         userVerification: "required",
         extensions: {
           prf: {
-            eval: { first: PRF_SALT.buffer as ArrayBuffer },
+            eval: { first: prfSalt.buffer as ArrayBuffer },
           },
         } as Record<string, unknown>,
       };
@@ -225,8 +268,9 @@ export function usePasskey(): UsePasskeyReturn {
       let seed = tryExtractPrfOutput(credential.clientExtensionResults);
 
       if (!seed) {
-        // PRF not available — load fallback seed from localStorage
-        seed = loadFallbackSeed();
+        // PRF not available — load encrypted fallback seed from localStorage
+        const credId = storedId || credential.id;
+        seed = await loadFallbackSeed(credId);
         if (!seed) {
           throw new Error(
             "No saved key found. This can happen if you registered on a different device. " +

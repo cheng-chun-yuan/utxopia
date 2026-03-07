@@ -61,6 +61,8 @@ function isValidSolanaAddress(address: string): boolean {
 const MIN_PAY_SATS = 1000;
 const ZKBTC_TOKEN_ID = BigInt(0x7a627463);
 const MAX_OUTPUTS = 12; // N+M<=14, need at least 1 input + 1 change
+const SERVICE_FEE_SATS = 2000; // Flat service fee for BTC withdrawals (goes to pool)
+const RELAYER_FEE_SATS = 2000; // Flat relayer fee for private sends (goes to relayer as note)
 
 // BN254 scalar field modulus (big-endian bytes)
 const BN254_FR_MODULUS = [
@@ -91,10 +93,12 @@ function reduceToFieldOnChain(bytes: Uint8Array): bigint {
 }
 
 // Available circuit variants (tier-1 + tier-2 — must match files in public/circuits/groth16/)
-const AVAILABLE_CIRCUITS = new Set([
-  "1x1", "1x2", "2x1", "2x2",  // tier-1
-  "1x3", "3x1", "2x3", "3x2", "1x4", "4x1",  // tier-2
-]);
+// All 91 JoinSplit(N,M) circuits where N>=1, M>=1, N+M<=14
+const AVAILABLE_CIRCUITS = new Set(
+  Array.from({ length: 13 }, (_, n) =>
+    Array.from({ length: 14 - n - 1 }, (_, m) => `${n + 1}x${m + 1}`)
+  ).flat()
+);
 
 type PayStep = "connect" | "compose" | "proving" | "success";
 
@@ -293,11 +297,38 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   const [importError, setImportError] = useState<string | null>(null);
   const importAutoTriggered = useRef(false);
 
+  // Relayer config (fetched from backend)
+  const [relayerMeta, setRelayerMeta] = useState<{
+    stealthMeta: string | null;
+    relayerFeeSats: number;
+    serviceFeeSats: number;
+  } | null>(null);
+  const [relayerEnabled, setRelayerEnabled] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/relayer/meta")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) {
+          setRelayerMeta({
+            stealthMeta: data.stealth_meta || null,
+            relayerFeeSats: data.relayer_fee_sats ?? RELAYER_FEE_SATS,
+            serviceFeeSats: data.service_fee_sats ?? SERVICE_FEE_SATS,
+          });
+        }
+      })
+      .catch(() => {}); // silently fail — use defaults
+  }, []);
+
   // Output rows state — default first output based on initialMode
   const defaultOutputMode: OutputMode = initialMode === "btc_withdraw" ? "btc" : (initialMode === "public" ? "public" : "stealth");
   const [outputs, setOutputs] = useState<OutputRow[]>([
     createOutputRow(defaultOutputMode),
   ]);
+
+  const isPurePrivateSend = !outputs.some(o => o.mode === "btc" || o.mode === "public");
+  const effectiveRelayerFee = relayerEnabled ? (relayerMeta?.relayerFeeSats ?? RELAYER_FEE_SATS) : 0;
+  const effectiveServiceFee = relayerMeta?.serviceFeeSats ?? SERVICE_FEE_SATS;
 
   // Available unspent notes
   const availableNotes = useMemo(() => {
@@ -321,13 +352,15 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
     return selectedNotes.reduce((sum, n) => sum + Number(n.amount), 0);
   }, [selectedNotes, activeImportedNotes, hasImportedNotes]);
 
-  // Total output sats (sum of all output amounts)
+  // Total output sats (sum of all output amounts + relayer fee when enabled)
   const totalOutputSats = useMemo(() => {
-    return outputs.reduce((sum, o) => {
+    const userOutputs = outputs.reduce((sum, o) => {
       const sats = parseSats(o.amount);
       return sum + (sats ?? 0);
     }, 0);
-  }, [outputs]);
+    // Relayer fee is an extra output note — must be included in total for ALL modes
+    return userOutputs + effectiveRelayerFee;
+  }, [outputs, effectiveRelayerFee]);
 
   // Change = input - output
   const changeSats = totalInputSats - totalOutputSats;
@@ -338,7 +371,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 
   // Circuit shape
   const nInputs = hasImportedNotes ? activeImportedNotes.length : selectedNotes.length;
-  const nOutputs = outputs.length + (changeSats > 0 ? 1 : 0); // +1 for change
+  const nOutputs = outputs.length + (changeSats > 0 ? 1 : 0) + (effectiveRelayerFee > 0 ? 1 : 0); // +1 for change, +1 for relayer fee
 
   // Initialize default recipient address when wallet connects
   const recipientInitializedRef = useRef(false);
@@ -497,6 +530,11 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         errors.push(`Each output must be at least ${MIN_PAY_SATS} sats`);
         break;
       }
+      // BTC withdrawal must cover service fee + dust + estimated miner fee
+      if (o.mode === "btc" && sats <= effectiveServiceFee + 546 + 1000) {
+        errors.push(`BTC withdrawal must be at least ${(effectiveServiceFee + 546 + 1000).toLocaleString()} sats (fee + dust + miner fee)`);
+        break;
+      }
     }
 
     if (totalOutputSats > totalInputSats) {
@@ -651,7 +689,9 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       const { computeJoinSplitCommitmentSync, createStealthDepositWithKeys,
               eddsaPoseidonSign, computeBoundParamsHash, DEFAULT_BOUND_PARAMS,
               createUnshieldBoundParams, poseidonHashSync,
-              getCommitmentIndex: getCommitmentIndexSdk } = await import("@aegis/sdk");
+              getCommitmentIndex: getCommitmentIndexSdk,
+              hexToBytes: sdkHexToBytes,
+              decodeStealthMetaAddress } = await import("@aegis/sdk");
 
       // Build input data: either from imported note or from inbox notes
       let inputsData: {
@@ -876,6 +916,29 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         }
       }
 
+      // Add relayer fee output (for all modes when relayer is enabled)
+      let relayerFeeOutputIndex: number | undefined;
+      if (effectiveRelayerFee > 0 && relayerMeta?.stealthMeta) {
+        setProofStatus("Adding relayer fee output...");
+        // Parse relayer stealth meta-address (96 bytes: spendingPub + viewingPub + mpk)
+        const relayerMetaAddr = decodeStealthMetaAddress(relayerMeta.stealthMeta);
+        const feeAmount = BigInt(effectiveRelayerFee);
+        const feeResult = await createStealthDepositWithKeys(relayerMetaAddr, feeAmount);
+        if (hasSpecialLastOutput) {
+          // Insert BEFORE the unshield/redeem output (which is currently last)
+          const insertIdx = sendAmounts.length - 1;
+          relayerFeeOutputIndex = insertIdx;
+          sendAmounts.splice(insertIdx, 0, feeAmount);
+          recipientNpks.splice(insertIdx, 0, feeResult.stealthPubKeyX);
+          stealthResults.splice(insertIdx, 0, feeResult);
+        } else {
+          relayerFeeOutputIndex = sendAmounts.length;
+          sendAmounts.push(feeAmount);
+          recipientNpks.push(feeResult.stealthPubKeyX);
+          stealthResults.push(feeResult);
+        }
+      }
+
       // Add change output — always goes BEFORE the unshield output
       // For unshield: stealth outputs → change → unshield (last)
       const changeAmount = BigInt(changeSats);
@@ -994,7 +1057,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         })),
       };
 
-      const { proofBytes } = await prover.generateProof(joinsplitInputs);
+      const { proof: proofData, proofBytes } = await prover.generateProof(joinsplitInputs);
 
       // 7. Build stealth data and submit
       setProofStatus("Submitting transaction...");
@@ -1006,9 +1069,27 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         return sd;
       });
 
-      const merkleRootHex = merkleRoot.toString(16).padStart(64, "0");
-      const nullifierHexes = allNullifiers.map((n) => n.toString(16).padStart(64, "0"));
-      const commitmentHexes = outCommitments.map((c) => c.toString(16).padStart(64, "0"));
+      // Use publicSignals from snarkjs (guaranteed to match the proof)
+      // Order: [merkleRoot, boundParamsHash, nullifiers[0..N], commitmentsOut[0..M]]
+      const publicSignals = proofData.publicInputs;
+      const merkleRootHex = BigInt(publicSignals[0]).toString(16).padStart(64, "0");
+      const boundParamsHashHex = BigInt(publicSignals[1]).toString(16).padStart(64, "0");
+      const nullifierHexes = publicSignals.slice(2, 2 + effectiveNInputs).map(
+        (s: string) => BigInt(s).toString(16).padStart(64, "0")
+      );
+      const commitmentHexes = publicSignals.slice(2 + effectiveNInputs, 2 + effectiveNInputs + actualNOutputs).map(
+        (s: string) => BigInt(s).toString(16).padStart(64, "0")
+      );
+
+      // Debug: compare snarkjs public signals with client-computed values
+      const clientMerkleRootHex = merkleRoot.toString(16).padStart(64, "0");
+      const clientBoundParamsHex = boundParamsHash.toString(16).padStart(64, "0");
+      const clientNullifierHexes = allNullifiers.map((n) => n.toString(16).padStart(64, "0"));
+      const clientCommitmentHexes = outCommitments.map((c) => c.toString(16).padStart(64, "0"));
+      if (merkleRootHex !== clientMerkleRootHex) console.warn("[Pay] MISMATCH merkleRoot:", { snarkjs: merkleRootHex, client: clientMerkleRootHex });
+      if (boundParamsHashHex !== clientBoundParamsHex) console.warn("[Pay] MISMATCH boundParamsHash:", { snarkjs: boundParamsHashHex, client: clientBoundParamsHex });
+      nullifierHexes.forEach((h, i) => { if (h !== clientNullifierHexes[i]) console.warn(`[Pay] MISMATCH nullifier[${i}]:`, { snarkjs: h, client: clientNullifierHexes[i] }); });
+      commitmentHexes.forEach((h, i) => { if (h !== clientCommitmentHexes[i]) console.warn(`[Pay] MISMATCH commitment[${i}]:`, { snarkjs: h, client: clientCommitmentHexes[i] }); });
 
       let relayResult: { success: boolean; signature?: string; error?: string };
 
@@ -1028,7 +1109,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
             nOutputs: actualNOutputs,
             proof: bytesToHex(proofBytes),
             merkleRoot: merkleRootHex,
-            boundParamsHash: boundParamsHash.toString(16).padStart(64, "0"),
+            boundParamsHash: boundParamsHashHex,
             nullifiers: nullifierHexes,
             commitmentsOut: commitmentHexes,
             stealthData: treeStealthData.map((sd) => bytesToHex(sd)),
@@ -1064,7 +1145,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
             nOutputs: actualNOutputs,
             proof: bytesToHex(proofBytes),
             merkleRoot: merkleRootHex,
-            boundParamsHash: boundParamsHash.toString(16).padStart(64, "0"),
+            boundParamsHash: boundParamsHashHex,
             nullifiers: nullifierHexes,
             commitmentsOut: commitmentHexes,
             stealthData: treeStealthData.map((sd) => bytesToHex(sd)),
@@ -1085,10 +1166,11 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
             nOutputs: actualNOutputs,
             proof: bytesToHex(proofBytes),
             merkleRoot: merkleRootHex,
-            boundParamsHash: boundParamsHash.toString(16).padStart(64, "0"),
+            boundParamsHash: boundParamsHashHex,
             nullifiers: nullifierHexes,
             commitmentsOut: commitmentHexes,
             stealthData: stealthDataArrays.map((sd) => bytesToHex(sd)),
+            relayerFeeOutputIndex,
           }),
         });
 
@@ -1096,6 +1178,8 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       }
 
       if (!relayResult.success) {
+        const logs = (relayResult as any).logs;
+        if (logs) console.error("[Pay] Program logs:", logs);
         throw new Error(relayResult.error || "Transaction failed");
       }
 
@@ -1507,16 +1591,34 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                   </span>
                 </div>
               )}
-              {hasBtcOutput && (
-                <div className="flex justify-between items-center text-body2 mb-1">
-                  <span className="text-gray flex items-center gap-1.5">
-                    <Bitcoin className="w-3.5 h-3.5 text-btc" /> BTC Withdrawal
-                  </span>
-                  <span className="text-btc font-semibold">
-                    {outputs.filter(o => o.mode === "btc").reduce((s, o) => s + (parseSats(o.amount) ?? 0), 0).toLocaleString()} sats
-                  </span>
-                </div>
-              )}
+              {hasBtcOutput && (() => {
+                const btcTotalSats = outputs.filter(o => o.mode === "btc").reduce((s, o) => s + (parseSats(o.amount) ?? 0), 0);
+                const userReceives = btcTotalSats - effectiveServiceFee;
+                return (
+                  <>
+                    <div className="flex justify-between items-center text-body2 mb-1">
+                      <span className="text-gray flex items-center gap-1.5">
+                        <Bitcoin className="w-3.5 h-3.5 text-btc" /> BTC Withdrawal
+                      </span>
+                      <span className="text-btc font-semibold">
+                        {btcTotalSats.toLocaleString()} sats
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-caption mb-1 ml-5">
+                      <span className="text-gray/60">Service fee (to pool)</span>
+                      <span className="text-gray/60">−{effectiveServiceFee.toLocaleString()} sats</span>
+                    </div>
+                    <div className="flex justify-between items-center text-caption mb-1 ml-5">
+                      <span className="text-gray/60">Est. miner fee</span>
+                      <span className="text-gray/60">~1,000-3,000 sats</span>
+                    </div>
+                    <div className="flex justify-between items-center text-caption mb-1 ml-5">
+                      <span className="text-gray/80">You receive</span>
+                      <span className="text-btc font-medium">~{Math.max(0, userReceives - 2000).toLocaleString()}-{Math.max(0, userReceives).toLocaleString()} sats</span>
+                    </div>
+                  </>
+                );
+              })()}
               <div className="border-t border-gray/10 my-1" />
             </>
           )}
@@ -1528,6 +1630,24 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
               {totalOutputSats.toLocaleString()} sats
             </span>
           </div>
+          {/* Relayer fee — paid as a shielded note to relayer */}
+          {!isPublicRedeem && (
+            <div className="flex justify-between items-center text-caption mb-1">
+              <span className="text-gray/60 flex items-center gap-1">
+                Relayer fee (shielded note → relayer)
+                <button
+                  type="button"
+                  onClick={() => setRelayerEnabled(prev => !prev)}
+                  className="text-purple/70 hover:text-purple underline text-[10px] ml-1"
+                >
+                  {relayerEnabled ? "disable" : "enable"}
+                </button>
+              </span>
+              <span className={cn("text-gray/60", !relayerEnabled && "line-through")}>
+                {(relayerMeta?.relayerFeeSats ?? RELAYER_FEE_SATS).toLocaleString()} sats
+              </span>
+            </div>
+          )}
           {!isPublicRedeem && (
             <div className="flex justify-between items-center text-body2 mb-1">
               <span className="text-gray">{hasImportedNotes ? "Change (as Note)" : "Change (kept shielded)"}</span>

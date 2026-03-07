@@ -4,99 +4,14 @@
 
 use pinocchio::program_error::ProgramError;
 
-use crate::error::AegisError;
-
 /// OP_RETURN opcode
 pub const OP_RETURN: u8 = 0x6a;
 
 /// Commitment size (32 bytes)
 pub const COMMITMENT_SIZE: usize = 32;
 
-/// Magic byte for stealth OP_RETURN
-pub const STEALTH_OP_RETURN_MAGIC: u8 = 0x7A; // 'z' for Aegis stealth
-
-/// Current version for stealth OP_RETURN format (simplified)
-pub const STEALTH_OP_RETURN_VERSION: u8 = 2;
-
-/// Legacy version for backward compatibility
-pub const STEALTH_OP_RETURN_VERSION_V1: u32 = 1;
-
 /// Deposit OP_RETURN data size: ephemeralPub(32) + npk(32) = 64 bytes
 pub const DEPOSIT_OP_RETURN_SIZE: usize = 64;
-
-/// Total size of stealth OP_RETURN data (SIMPLIFIED - 99 bytes)
-/// = 1 (magic) + 1 (version) + 32 (view pub) + 32 (spend pub) + 32 (commitment)
-pub const STEALTH_OP_RETURN_SIZE: usize = 98;
-
-/// Legacy size for V1 format
-pub const STEALTH_OP_RETURN_SIZE_V1: usize = 142;
-
-/// Parsed stealth data from OP_RETURN
-pub struct StealthOpReturnData {
-    pub version: u8,
-    pub ephemeral_view_pub: [u8; 32],
-    pub ephemeral_spend_pub: [u8; 32],
-    pub commitment: [u8; 32],
-}
-
-impl StealthOpReturnData {
-    /// Parse stealth data from OP_RETURN output data
-    /// Supports both V2 (98 bytes) and V1 (142 bytes) formats.
-    pub fn parse(data: &[u8]) -> Result<Self, ProgramError> {
-        if data.len() < STEALTH_OP_RETURN_SIZE {
-            return Err(AegisError::InvalidStealthOpReturn.into());
-        }
-
-        if data[0] != STEALTH_OP_RETURN_MAGIC {
-            return Err(AegisError::InvalidStealthOpReturn.into());
-        }
-
-        let version = data[1];
-
-        if version == STEALTH_OP_RETURN_VERSION {
-            // V2: Simplified format (98 bytes)
-            let mut ephemeral_view_pub = [0u8; 32];
-            ephemeral_view_pub.copy_from_slice(&data[2..34]);
-
-            let mut ephemeral_spend_pub = [0u8; 32];
-            ephemeral_spend_pub.copy_from_slice(&data[34..66]);
-
-            let mut commitment = [0u8; 32];
-            commitment.copy_from_slice(&data[66..98]);
-
-            Ok(Self {
-                version,
-                ephemeral_view_pub,
-                ephemeral_spend_pub,
-                commitment,
-            })
-        } else if data.len() >= STEALTH_OP_RETURN_SIZE_V1 {
-            // V1: Legacy format (142 bytes)
-            let version_v1 = u32::from_le_bytes(data[1..5].try_into().unwrap());
-            if version_v1 != STEALTH_OP_RETURN_VERSION_V1 {
-                return Err(AegisError::InvalidStealthOpReturn.into());
-            }
-
-            let mut ephemeral_view_pub = [0u8; 32];
-            ephemeral_view_pub.copy_from_slice(&data[5..37]);
-
-            let mut ephemeral_spend_pub = [0u8; 32];
-            ephemeral_spend_pub.copy_from_slice(&data[37..69]);
-
-            let mut commitment = [0u8; 32];
-            commitment.copy_from_slice(&data[109..141]);
-
-            Ok(Self {
-                version: 1,
-                ephemeral_view_pub,
-                ephemeral_spend_pub,
-                commitment,
-            })
-        } else {
-            Err(AegisError::InvalidStealthOpReturn.into())
-        }
-    }
-}
 
 /// Parsed deposit OP_RETURN data: ephemeralPub(32) + npk(32)
 pub struct DepositOpReturn {
@@ -373,23 +288,6 @@ impl<'a> TxOutput<'a> {
         Some(commitment)
     }
 
-    /// Check if this is a stealth OP_RETURN (starts with magic byte 0x7A)
-    /// Supports both V2 (99 bytes) and V1 (142 bytes) formats.
-    pub fn is_stealth_op_return(&self) -> bool {
-        if !self.is_op_return() || self.script_pubkey.len() < 3 {
-            return false;
-        }
-
-        let push_len = self.script_pubkey[1] as usize;
-        // Accept both V2 (99 bytes) and V1 (142 bytes) sizes
-        if self.script_pubkey.len() < 2 + push_len || push_len < STEALTH_OP_RETURN_SIZE {
-            return false;
-        }
-
-        // Check magic byte
-        self.script_pubkey[2] == STEALTH_OP_RETURN_MAGIC
-    }
-
     /// Parse deposit OP_RETURN: exactly 64 bytes = ephemeralPub(32) + npk(32)
     /// Handles both direct push (0x6a 0x40 <64 bytes>) and PUSHDATA1 (0x6a 0x4c 0x40 <64 bytes>)
     pub fn get_deposit_op_return(&self) -> Option<DepositOpReturn> {
@@ -418,20 +316,6 @@ impl<'a> TxOutput<'a> {
         npk.copy_from_slice(&data_slice[32..64]);
 
         Some(DepositOpReturn { ephemeral_pub, npk })
-    }
-
-    /// Get raw OP_RETURN data (after opcode and push length)
-    pub fn get_op_return_data(&self) -> Option<&'a [u8]> {
-        if !self.is_op_return() || self.script_pubkey.len() < 2 {
-            return None;
-        }
-
-        let push_len = self.script_pubkey[1] as usize;
-        if self.script_pubkey.len() < 2 + push_len {
-            return None;
-        }
-
-        Some(&self.script_pubkey[2..2 + push_len])
     }
 }
 
@@ -591,19 +475,6 @@ impl<'a> ParsedTransaction<'a> {
         false
     }
 
-    /// Find stealth OP_RETURN and parse stealth data
-    pub fn find_stealth_op_return(&self) -> Option<StealthOpReturnData> {
-        for output in self.outputs() {
-            if output.is_stealth_op_return() {
-                if let Some(data) = output.get_op_return_data() {
-                    if let Ok(stealth_data) = StealthOpReturnData::parse(data) {
-                        return Some(stealth_data);
-                    }
-                }
-            }
-        }
-        None
-    }
 }
 
 /// Iterator over transaction outputs

@@ -19,6 +19,7 @@ import {
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import {
+  DEVNET_CONFIG,
   INSTRUCTION_DISCRIMINATORS,
   hexToBytes,
   PDA_SEEDS,
@@ -36,6 +37,11 @@ import {
 // =============================================================================
 
 const STEALTH_DATA_PER_OUTPUT = 40;
+const CHADBUFFER_PROGRAM_ID = new PublicKey(DEVNET_CONFIG.chadbufferProgramId);
+const CHADBUFFER = { INIT: 0, WRITE: 2, CLOSE: 3 } as const;
+const AUTHORITY_SIZE = 32;
+const MAX_CHUNK_SIZE = 950;
+const FIRST_CHUNK_SIZE = 800;
 
 // =============================================================================
 // Types
@@ -87,16 +93,6 @@ function validateHexField(value: string | undefined, name: string, expectedBytes
   return bytes;
 }
 
-function deriveStealthAnnouncementPDA(
-  seed: Uint8Array,
-  programId: PublicKey = AEGIS_PROGRAM_ID
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from(PDA_SEEDS.STEALTH), seed],
-    programId
-  );
-}
-
 function deriveVkRegistryPDA(
   nInputs: number,
   nOutputs: number,
@@ -124,6 +120,117 @@ function deriveRedemptionRequestPDA(
     [Buffer.from("redemption"), user.toBuffer(), nonceBytes],
     programId
   );
+}
+
+// =============================================================================
+// ChadBuffer Operations
+// =============================================================================
+
+async function uploadProofToBuffer(
+  connection: Connection,
+  relayer: Keypair,
+  proof: Uint8Array
+): Promise<{ bufferPubkey: PublicKey; bufferKeypair: Keypair }> {
+  const bufferKeypair = Keypair.generate();
+  const bufferSize = AUTHORITY_SIZE + proof.length;
+  const rentExemption = await connection.getMinimumBalanceForRentExemption(bufferSize);
+
+  const firstChunkSize = Math.min(FIRST_CHUNK_SIZE, proof.length);
+  const firstChunk = proof.slice(0, firstChunkSize);
+
+  const createAccountIx = SystemProgram.createAccount({
+    fromPubkey: relayer.publicKey,
+    newAccountPubkey: bufferKeypair.publicKey,
+    lamports: rentExemption,
+    space: bufferSize,
+    programId: CHADBUFFER_PROGRAM_ID,
+  });
+
+  const initData = Buffer.alloc(1 + firstChunk.length);
+  initData[0] = CHADBUFFER.INIT;
+  Buffer.from(firstChunk).copy(initData, 1);
+
+  const initIx = new TransactionInstruction({
+    programId: CHADBUFFER_PROGRAM_ID,
+    keys: [
+      { pubkey: relayer.publicKey, isSigner: true, isWritable: true },
+      { pubkey: bufferKeypair.publicKey, isSigner: true, isWritable: true },
+    ],
+    data: initData,
+  });
+
+  const { blockhash } = await connection.getLatestBlockhash();
+  const tx = new Transaction();
+  tx.add(createAccountIx, initIx);
+  tx.feePayer = relayer.publicKey;
+  tx.recentBlockhash = blockhash;
+
+  await sendAndConfirmTransaction(connection, tx, [relayer, bufferKeypair], {
+    commitment: "confirmed",
+  });
+
+  let dataOffset = firstChunkSize;
+  while (dataOffset < proof.length) {
+    const chunkSize = Math.min(MAX_CHUNK_SIZE, proof.length - dataOffset);
+    const chunk = proof.slice(dataOffset, dataOffset + chunkSize);
+    const bufferOffset = AUTHORITY_SIZE + dataOffset;
+
+    const writeData = Buffer.alloc(4 + chunk.length);
+    writeData[0] = CHADBUFFER.WRITE;
+    writeData[1] = bufferOffset & 0xff;
+    writeData[2] = (bufferOffset >> 8) & 0xff;
+    writeData[3] = (bufferOffset >> 16) & 0xff;
+    Buffer.from(chunk).copy(writeData, 4);
+
+    const writeIx = new TransactionInstruction({
+      programId: CHADBUFFER_PROGRAM_ID,
+      keys: [
+        { pubkey: relayer.publicKey, isSigner: true, isWritable: true },
+        { pubkey: bufferKeypair.publicKey, isSigner: false, isWritable: true },
+      ],
+      data: writeData,
+    });
+
+    const { blockhash: wbh } = await connection.getLatestBlockhash();
+    const writeTx = new Transaction();
+    writeTx.add(writeIx);
+    writeTx.feePayer = relayer.publicKey;
+    writeTx.recentBlockhash = wbh;
+
+    await sendAndConfirmTransaction(connection, writeTx, [relayer], {
+      commitment: "confirmed",
+    });
+    dataOffset += chunkSize;
+  }
+
+  console.log(`[Redeem] Uploaded proof to buffer (${proof.length} bytes)`);
+  return { bufferPubkey: bufferKeypair.publicKey, bufferKeypair };
+}
+
+async function closeBuffer(
+  connection: Connection,
+  relayer: Keypair,
+  bufferPubkey: PublicKey
+): Promise<void> {
+  const closeIx = new TransactionInstruction({
+    programId: CHADBUFFER_PROGRAM_ID,
+    keys: [
+      { pubkey: relayer.publicKey, isSigner: true, isWritable: true },
+      { pubkey: bufferPubkey, isSigner: false, isWritable: true },
+    ],
+    data: Buffer.from([CHADBUFFER.CLOSE]),
+  });
+
+  const { blockhash } = await connection.getLatestBlockhash();
+  const closeTx = new Transaction();
+  closeTx.add(closeIx);
+  closeTx.feePayer = relayer.publicKey;
+  closeTx.recentBlockhash = blockhash;
+
+  await sendAndConfirmTransaction(connection, closeTx, [relayer], {
+    commitment: "confirmed",
+  });
+  console.log("[Redeem] Buffer closed, rent reclaimed");
 }
 
 // =============================================================================
@@ -219,21 +326,18 @@ export async function POST(request: NextRequest) {
 
     // Derive PDAs
     const nullifierPDAs = nullifierBytes.map((n) => deriveNullifierPDA(n)[0]);
-    const stealthAnnouncementPDAs = stealthDataBytes.map((sd) => {
-      const ephemeralPub = sd.slice(0, 32);
-      return deriveStealthAnnouncementPDA(ephemeralPub)[0];
-    });
-
     const [vkRegistryPDA] = deriveVkRegistryPDA(nInputs, nOutputs);
     const [poolState] = derivePoolStatePDA();
     const [commitmentTree] = deriveCommitmentTreePDA();
     const [redemptionRequestPDA] = deriveRedemptionRequestPDA(relayer.publicKey, requestNonceBigint);
 
-    // Build redeem instruction data (variable btc_script length)
+    // Step 1: Upload proof to ChadBuffer
+    const { bufferPubkey } = await uploadProofToBuffer(connection, relayer, proofBytes);
+
+    // Step 2: Build redeem instruction data — proof_source=1 (buffer mode), no inline proof
     const totalSize =
       1 + // discriminator
-      2 + // nInputs + nOutputs
-      256 + // proof
+      3 + // nInputs + nOutputs + proof_source
       32 + // merkleRoot
       32 + // boundParamsHash
       nInputs * 32 + // nullifiers
@@ -250,9 +354,7 @@ export async function POST(request: NextRequest) {
     ixData[offset++] = INSTRUCTION_DISCRIMINATORS.REDEEM;
     ixData[offset++] = nInputs;
     ixData[offset++] = nOutputs;
-
-    Buffer.from(proofBytes).copy(ixData, offset);
-    offset += 256;
+    ixData[offset++] = 1; // proof_source = 1 (buffer)
 
     Buffer.from(merkleRootBytes).copy(ixData, offset);
     offset += 32;
@@ -291,7 +393,7 @@ export async function POST(request: NextRequest) {
     nonceBuf.writeBigUInt64LE(requestNonceBigint);
     nonceBuf.copy(ixData, offset);
 
-    // Build accounts
+    // Build accounts: no stealth PDAs, buffer as last account
     const keys = [
       { pubkey: poolState, isSigner: false, isWritable: true },
       { pubkey: commitmentTree, isSigner: false, isWritable: true },
@@ -304,11 +406,10 @@ export async function POST(request: NextRequest) {
       keys.push({ pubkey: nullifierPDA, isSigner: false, isWritable: true });
     }
 
-    for (const stealthPDA of stealthAnnouncementPDAs) {
-      keys.push({ pubkey: stealthPDA, isSigner: false, isWritable: true });
-    }
+    // No stealth announcement PDAs — emitted as events now
 
     keys.push({ pubkey: redemptionRequestPDA, isSigner: false, isWritable: true });
+    keys.push({ pubkey: bufferPubkey, isSigner: false, isWritable: false });
 
     const redeemIx = new TransactionInstruction({
       programId: AEGIS_PROGRAM_ID,
@@ -328,9 +429,34 @@ export async function POST(request: NextRequest) {
     tx.feePayer = relayer.publicKey;
     tx.recentBlockhash = blockhash;
 
+    // Simulate first to capture logs on failure
+    console.log(`[Redeem] Simulating transaction (ixData ${ixData.length} bytes, ${keys.length} accounts)...`);
+    const simResult = await connection.simulateTransaction(tx);
+    if (simResult.value.err) {
+      console.error("[Redeem] Simulation failed:", JSON.stringify(simResult.value.err));
+      console.error("[Redeem] Logs:", simResult.value.logs);
+      console.error("[Redeem] Units consumed:", simResult.value.unitsConsumed);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Simulation failed: ${JSON.stringify(simResult.value.err)}`,
+          logs: simResult.value.logs,
+          unitsConsumed: simResult.value.unitsConsumed,
+        },
+        { status: 400 }
+      );
+    }
+
     const signature = await sendAndConfirmTransaction(connection, tx, [relayer], {
       commitment: "confirmed",
     });
+
+    // Step 3: Close buffer and reclaim rent
+    try {
+      await closeBuffer(connection, relayer, bufferPubkey);
+    } catch (closeErr) {
+      console.warn("[Redeem] Failed to close buffer (non-critical):", closeErr);
+    }
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);
     console.log(`[Redeem] Complete in ${duration}s: ${signature}`);
@@ -341,10 +467,13 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("[Redeem] Error:", error);
+    // Extract logs from SendTransactionError if available
+    const logs = (error as any)?.logs ?? (error as any)?.transactionError?.logs ?? null;
     return NextResponse.json(
       {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
+        logs,
       },
       { status: 500 }
     );

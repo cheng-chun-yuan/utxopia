@@ -16,13 +16,15 @@ import {
   DEFAULT_PRIORITY_FEE,
 } from "@aegis/sdk";
 
-const HELIUS_API_KEY = process.env.NEXT_PUBLIC_HELIUS_API_KEY || "";
+// Use NEXT_PUBLIC_HELIUS_RPC_URL (full URL, no API key exposed to client)
+// or fall back to plain devnet. Do NOT use NEXT_PUBLIC_HELIUS_API_KEY.
+const HELIUS_RPC_URL = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "";
 
 /** Helius RPC endpoint for devnet */
-export const HELIUS_RPC_DEVNET = getHeliusRpcUrl("devnet", HELIUS_API_KEY || undefined);
+export const HELIUS_RPC_DEVNET = HELIUS_RPC_URL || getHeliusRpcUrl("devnet");
 
 /** Helius RPC endpoint for mainnet */
-export const HELIUS_RPC_MAINNET = getHeliusRpcUrl("mainnet", HELIUS_API_KEY || undefined);
+export const HELIUS_RPC_MAINNET = getHeliusRpcUrl("mainnet");
 
 /**
  * Get priority fee instructions for a transaction
@@ -37,7 +39,7 @@ export async function getPriorityFeeInstructions(
   accountKeys: string[]
 ): Promise<TransactionInstruction[]> {
   const estimate = await estimatePriorityFee(accountKeys, {
-    heliusApiKey: HELIUS_API_KEY || undefined,
+    rpcEndpoint: HELIUS_RPC_URL || undefined,
     defaultComputeUnits: DEFAULT_COMPUTE_UNITS,
     defaultPriorityFee: DEFAULT_PRIORITY_FEE,
   });

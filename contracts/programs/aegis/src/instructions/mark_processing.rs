@@ -14,7 +14,7 @@ use pinocchio::{
 
 use crate::error::AegisError;
 use crate::state::{PoolState, RedemptionRequest, RedemptionStatus};
-use crate::utils::validate_program_owner;
+use crate::utils::{validate_program_owner, validate_account_writable};
 
 /// Process mark_processing instruction
 ///
@@ -40,9 +40,10 @@ pub fn process_mark_processing(
         return Err(ProgramError::MissingRequiredSignature);
     }
 
-    // Validate account owners
+    // Validate account owners and writable
     validate_program_owner(pool_state_info, program_id)?;
     validate_program_owner(redemption_info, program_id)?;
+    validate_account_writable(redemption_info)?;
 
     // Validate authority matches pool
     {

@@ -7,7 +7,7 @@
 //! - Security headers
 
 use axum::{
-    extract::Request,
+    extract::{Request, State},
     http::{HeaderMap, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
@@ -298,8 +298,6 @@ pub fn validate_hex(input: &str, expected_len: Option<usize>, field_name: &str) 
 /// Shared rate limiter state
 pub type RateLimitState = Arc<RateLimiter>;
 
-/// Backward-compatible alias
-pub type SharedRateLimiter = RateLimitState;
 
 /// Create a new rate limiter with default config
 pub fn create_rate_limiter() -> RateLimitState {
@@ -326,9 +324,6 @@ pub fn extract_client_ip(headers: &HeaderMap) -> Option<String> {
     None
 }
 
-/// Backward-compatible alias
-pub type ApiError = ValidationError;
-
 /// Error response for API errors
 #[derive(Serialize)]
 pub struct ValidationError {
@@ -345,6 +340,8 @@ impl IntoResponse for ValidationError {
     fn into_response(self) -> Response {
         let status = if self.code.as_deref() == Some("RATE_LIMITED") {
             StatusCode::TOO_MANY_REQUESTS
+        } else if self.code.as_deref() == Some("AUTH_ERROR") {
+            StatusCode::UNAUTHORIZED
         } else if self.code.as_deref() == Some("VALIDATION_ERROR") {
             StatusCode::BAD_REQUEST
         } else {
@@ -355,10 +352,10 @@ impl IntoResponse for ValidationError {
     }
 }
 
-/// Rate limiting middleware
+/// Rate limiting middleware (use with `axum::middleware::from_fn_with_state`)
 pub async fn rate_limit_middleware(
+    State(rate_limiter): State<RateLimitState>,
     headers: HeaderMap,
-    rate_limiter: RateLimitState,
     request: Request,
     next: Next,
 ) -> Result<Response, ValidationError> {
@@ -373,6 +370,36 @@ pub async fn rate_limit_middleware(
             code: Some("RATE_LIMITED".to_string()),
             details: vec![],
             retry_after: Some(retry_after),
+        }),
+    }
+}
+
+/// API key authentication middleware.
+/// Checks `X-API-Key` header against `BACKEND_API_KEY` env var.
+/// If `BACKEND_API_KEY` is not set, all requests are rejected (fail-closed).
+pub async fn api_key_auth_middleware(
+    headers: HeaderMap,
+    request: Request,
+    next: Next,
+) -> Result<Response, ValidationError> {
+    let expected = std::env::var("BACKEND_API_KEY").unwrap_or_default();
+    if expected.is_empty() {
+        tracing::error!("BACKEND_API_KEY not set — rejecting request");
+        return Err(ValidationError {
+            error: "Service unavailable".to_string(),
+            code: Some("AUTH_ERROR".to_string()),
+            details: vec![],
+            retry_after: None,
+        });
+    }
+
+    match headers.get("x-api-key").and_then(|v| v.to_str().ok()) {
+        Some(key) if key == expected => Ok(next.run(request).await),
+        _ => Err(ValidationError {
+            error: "Unauthorized".to_string(),
+            code: Some("AUTH_ERROR".to_string()),
+            details: vec![],
+            retry_after: None,
         }),
     }
 }

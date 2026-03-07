@@ -21,8 +21,10 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tower_http::trace::TraceLayer;
@@ -77,6 +79,59 @@ impl AppState {
     }
 }
 
+/// Simple in-memory rate limiter for signing endpoints
+pub struct SigningRateLimiter {
+    entries: RwLock<HashMap<String, (u32, Instant)>>,
+    max_requests: u32,
+    window: Duration,
+}
+
+impl SigningRateLimiter {
+    pub fn new(max_requests: u32, window_secs: u64) -> Self {
+        Self {
+            entries: RwLock::new(HashMap::new()),
+            max_requests,
+            window: Duration::from_secs(window_secs),
+        }
+    }
+
+    pub async fn check(&self, client_id: &str) -> bool {
+        let mut entries = self.entries.write().await;
+        let now = Instant::now();
+        let entry = entries.entry(client_id.to_string()).or_insert((0, now));
+        if now.duration_since(entry.1) >= self.window {
+            *entry = (1, now);
+            return true;
+        }
+        if entry.0 < self.max_requests {
+            entry.0 += 1;
+            true
+        } else {
+            false
+        }
+    }
+}
+
+/// Rate limiting middleware for signing endpoints (20 requests/minute)
+async fn signing_rate_limit(
+    State(limiter): State<Arc<SigningRateLimiter>>,
+    headers: HeaderMap,
+    request: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    let client_id = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.split(',').next().unwrap_or("unknown").trim().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    if !limiter.check(&client_id).await {
+        tracing::warn!(client = %client_id, "signing rate limit exceeded");
+        return Err(StatusCode::TOO_MANY_REQUESTS);
+    }
+    Ok(next.run(request).await)
+}
+
 /// Create the router with all endpoints
 pub fn create_router(state: Arc<AppState>) -> Router {
     // CORS: configurable via FROST_ALLOWED_ORIGIN env var
@@ -92,9 +147,11 @@ pub fn create_router(state: Arc<AppState>) -> Router {
                 .allow_headers(Any)
         }
         _ => {
-            // Default: allow any origin (development mode)
+            tracing::warn!("FROST_ALLOWED_ORIGIN not set — defaulting to localhost only");
             CorsLayer::new()
-                .allow_origin(Any)
+                .allow_origin(AllowOrigin::list(
+                    vec!["http://localhost:3000".parse().unwrap()]
+                ))
                 .allow_methods(Any)
                 .allow_headers(Any)
         }
@@ -104,19 +161,29 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     let public_routes = Router::new()
         .route("/health", get(health_handler));
 
-    // Protected routes (API key auth if configured)
-    let protected_routes = Router::new()
-        .route("/info", get(info_handler))
+    // Rate limiter for signing endpoints (20 signing requests per minute)
+    let signing_limiter = Arc::new(SigningRateLimiter::new(20, 60));
+
+    // Signing routes (auth + rate limit)
+    let signing_routes = Router::new()
         .route("/round1", post(round1_handler))
         .route("/round2", post(round2_handler))
-        .route("/verify-commitments", post(verify_commitments_handler))
         .route("/aggregate", post(aggregate_handler))
+        .layer(middleware::from_fn_with_state(signing_limiter, signing_rate_limit))
+        .layer(middleware::from_fn(api_key_auth))
+        .with_state(state.clone());
+
+    // Other protected routes (auth only, no rate limit)
+    let protected_routes = Router::new()
+        .route("/info", get(info_handler))
+        .route("/verify-commitments", post(verify_commitments_handler))
         .route("/dkg/round1", post(dkg_round1_handler))
         .route("/dkg/round2", post(dkg_round2_handler))
         .route("/dkg/finalize", post(dkg_finalize_handler))
         .layer(middleware::from_fn(api_key_auth));
 
     public_routes
+        .merge(signing_routes)
         .merge(protected_routes)
         .with_state(state)
         .layer(cors)
@@ -126,7 +193,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
 /// API key authentication middleware
 ///
 /// Checks `X-API-Key` header against `FROST_API_KEY` env var.
-/// If `FROST_API_KEY` is not set, authentication is disabled (dev mode).
+/// FROST_API_KEY must be set — server logs a warning on every request if missing.
 async fn api_key_auth(headers: HeaderMap, request: Request, next: Next) -> Result<Response, StatusCode> {
     match env::var("FROST_API_KEY") {
         Ok(expected_key) if !expected_key.is_empty() => {
@@ -135,13 +202,24 @@ async fn api_key_auth(headers: HeaderMap, request: Request, next: Next) -> Resul
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or("");
 
-            if provided != expected_key {
+            // Constant-time comparison to prevent timing attacks
+            let expected_bytes = expected_key.as_bytes();
+            let provided_bytes = provided.as_bytes();
+            let matches = expected_bytes.len() == provided_bytes.len()
+                && expected_bytes
+                    .iter()
+                    .zip(provided_bytes.iter())
+                    .fold(0u8, |acc, (a, b)| acc | (a ^ b))
+                    == 0;
+
+            if !matches {
                 tracing::warn!("rejected request with invalid API key");
                 return Err(StatusCode::UNAUTHORIZED);
             }
         }
         _ => {
-            // No API key configured — auth disabled (dev mode)
+            tracing::error!("FROST_API_KEY not set — rejecting request (set FROST_API_KEY env var)");
+            return Err(StatusCode::UNAUTHORIZED);
         }
     }
 

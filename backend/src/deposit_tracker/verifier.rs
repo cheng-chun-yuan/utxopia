@@ -12,9 +12,9 @@ use solana_sdk::{
     instruction::{AccountMeta, Instruction},
     pubkey::Pubkey,
     signature::{Keypair, Signer as SolanaSigner},
-    system_instruction,
     transaction::Transaction,
 };
+use solana_system_interface::instruction as system_instruction;
 use solana_sdk::pubkey;
 use std::str::FromStr;
 use thiserror::Error;

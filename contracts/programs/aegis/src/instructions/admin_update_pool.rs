@@ -1,6 +1,6 @@
-//! Admin Update Pool — Allows pool authority to update min/max deposit bounds.
+//! Admin Update Pool — Allows pool authority to update min/max deposit bounds and service fee.
 //!
-//! Instruction data: min_deposit(u64 LE) + max_deposit(u64 LE) = 16 bytes
+//! Instruction data: min_deposit(u64 LE) + max_deposit(u64 LE) + service_fee_sats(u64 LE) = 24 bytes
 //!
 //! Accounts:
 //!   0. [writable] Pool state
@@ -25,7 +25,7 @@ pub fn process_admin_update_pool(
     if accounts.len() < 2 {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
-    if data.len() < 16 {
+    if data.len() < 24 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
@@ -41,6 +41,15 @@ pub fn process_admin_update_pool(
 
     let min_deposit = u64::from_le_bytes(data[0..8].try_into().unwrap());
     let max_deposit = u64::from_le_bytes(data[8..16].try_into().unwrap());
+    let service_fee = u64::from_le_bytes(data[16..24].try_into().unwrap());
+
+    // Validate bounds: min <= max, max <= 21M BTC in sats
+    if min_deposit > max_deposit {
+        return Err(ProgramError::InvalidInstructionData);
+    }
+    if max_deposit > 2_100_000_000_000_000 {
+        return Err(ProgramError::InvalidInstructionData);
+    }
 
     let mut pool_data = pool_state_info.try_borrow_mut_data()?;
     let pool = PoolState::from_bytes_mut(&mut pool_data)?;
@@ -51,6 +60,7 @@ pub fn process_admin_update_pool(
 
     pool.set_min_deposit(min_deposit);
     pool.set_max_deposit(max_deposit);
+    pool.set_service_fee_sats(service_fee);
 
     Ok(())
 }

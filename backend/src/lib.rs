@@ -58,7 +58,7 @@ pub use config::{ConfigError, Network, SigningMode, AEGISConfig};
 // Re-exports: Middleware (from api module)
 pub use api::middleware::{
     create_rate_limiter, validate_btc_address, validate_solana_address, validate_amount_sats,
-    validate_hex, ApiError, RateLimitConfig, SharedRateLimiter, ValidationResult,
+    validate_hex, RateLimitConfig, RateLimitState, ValidationError, ValidationResult,
 };
 
 // Re-exports: Logging (from common module)

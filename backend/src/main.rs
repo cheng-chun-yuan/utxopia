@@ -17,7 +17,7 @@
 use zkbtc::api_server as api;
 use zkbtc::config::AEGISConfig;
 use zkbtc::deposit_tracker::{self, TrackerConfig};
-use zkbtc::event_indexer::{EventIndexerConfig, EventIndexerService, EventStore, TreeCache, event_indexer_router};
+use zkbtc::event_indexer::{EventIndexerConfig, EventIndexerService, EventStore, TreeCache, event_indexer_router, SolanaWsConfig, SolanaWsSubscriber};
 use zkbtc::redemption::{MpcSigner, RedemptionConfig, RedemptionService, SingleKeySigner};
 use zkbtc::stealth::StealthDepositService;
 use zkbtc::units;
@@ -104,12 +104,16 @@ fn create_service(config: RedemptionConfig) -> RedemptionService {
     }
 
     // Single-key mode
+    let sol_client = match AEGISConfig::from_env() {
+        Ok(cfg) => zkbtc::solana::client::SolClient::from_config(&cfg).unwrap_or_else(|_| {
+            zkbtc::solana::client::SolClient::new(zkbtc::solana::client::SolConfig::default())
+        }),
+        Err(_) => zkbtc::solana::client::SolClient::new(zkbtc::solana::client::SolConfig::default()),
+    };
+
     if let Ok(key_hex) = env::var("POOL_SIGNING_KEY") {
         match SingleKeySigner::from_hex(&key_hex) {
-            Ok(signer) => {
-                let sol_client = zkbtc::solana::client::SolClient::new(zkbtc::solana::client::SolConfig::default());
-                RedemptionService::new_with_signer(config, signer, sol_client)
-            }
+            Ok(signer) => RedemptionService::new_with_signer(config, signer, sol_client),
             Err(e) => {
                 eprintln!("Warning: Invalid POOL_SIGNING_KEY: {}", e);
                 RedemptionService::new_testnet()
@@ -140,7 +144,33 @@ fn create_frost_service(config: RedemptionConfig) -> Result<RedemptionService, S
         .map_err(|e| format!("invalid group pubkey: {}", e))?;
 
     let signer = MpcSigner::new(frost_client, group_pubkey);
-    let sol_client = zkbtc::solana::client::SolClient::new(zkbtc::solana::client::SolConfig::default());
+    let mut sol_client = zkbtc::solana::client::SolClient::from_config(&aegis_config)
+        .map_err(|e| format!("SolClient config error: {}", e))?;
+
+    // Set payer keypair for on-chain transactions (mark_processing, complete_redemption)
+    if let Ok(keypair_val) = env::var("RELAYER_KEYPAIR").or_else(|_| env::var("VERIFIER_KEYPAIR")) {
+        let keypair_result = if keypair_val.starts_with('[') {
+            serde_json::from_str::<Vec<u8>>(&keypair_val)
+                .map_err(|e| format!("parse keypair JSON: {}", e))
+                .and_then(|bytes| {
+                    solana_sdk::signer::keypair::Keypair::try_from(bytes.as_slice())
+                        .map_err(|e| format!("invalid keypair: {}", e))
+                })
+        } else {
+            zkbtc::load_keypair_from_file(&keypair_val)
+                .map_err(|e| format!("{}", e))
+        };
+        match keypair_result {
+            Ok(keypair) => {
+                println!("Redemption service: payer keypair set");
+                sol_client.set_payer(keypair);
+            }
+            Err(e) => {
+                eprintln!("Warning: Failed to load payer keypair for redemption: {}", e);
+            }
+        }
+    }
+
     Ok(RedemptionService::new_with_signer(config, signer, sol_client))
 }
 
@@ -425,6 +455,8 @@ async fn run_tracker_service(args: &[String]) {
     let indexer_router = event_indexer_router(event_store.clone(), tree_cache.clone());
 
     // Start the event indexer service in background
+    let solana_rpc_clone = solana_rpc.clone();
+    let aegis_program_id_clone = aegis_program_id.clone();
     let indexer_config = EventIndexerConfig {
         rpc_url: solana_rpc,
         program_id: aegis_program_id,
@@ -439,15 +471,40 @@ async fn run_tracker_service(args: &[String]) {
         svc.run().await;
     });
 
+    // Start Solana logsSubscribe for real-time event detection
+    let solana_ws_url = env::var("SOLANA_WS_URL").unwrap_or_else(|_| {
+        solana_rpc_clone.replace("https://", "wss://").replace("http://", "ws://")
+    });
+    let ws_subscriber = SolanaWsSubscriber::new(
+        SolanaWsConfig {
+            ws_url: solana_ws_url,
+            program_id: aegis_program_id_clone,
+        },
+        event_store.clone(),
+        tree_cache.clone(),
+    );
+    tokio::spawn(async move {
+        ws_subscriber.run().await;
+    });
+
     // Create stealth + redemption services (previously in backend-api)
     let redemption_config = RedemptionConfig::default();
-    let redemption = create_service(redemption_config);
+    let redemption_api = create_service(redemption_config.clone());
     let stealth = StealthDepositService::new_testnet();
+
+    // Spawn the redemption watcher (PDA scanner loop) in background
+    let redemption_watcher = create_service(redemption_config);
+    tokio::spawn(async move {
+        println!("=== Redemption Watcher Started ===");
+        if let Err(e) = redemption_watcher.run().await {
+            eprintln!("Redemption watcher error: {}", e);
+        }
+    });
 
     // Spawn the unified API server (deposit tracker + event indexer + stealth/redeem) in background
     tokio::spawn(async move {
         let deposit_router = deposit_tracker::api::create_deposit_router(api_tracker);
-        let api_router = api::create_combined_router(redemption, stealth);
+        let api_router = api::create_combined_router(redemption_api, stealth);
         let merged = api_router.merge(deposit_router).merge(indexer_router);
 
         let addr = std::net::SocketAddr::from(([0, 0, 0, 0], api_port));

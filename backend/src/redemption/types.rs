@@ -206,6 +206,10 @@ pub struct RedemptionConfig {
     pub esplora_url: String,
     /// Enable auto-processing
     pub auto_process: bool,
+    /// Pool BTC address (for fetching UTXOs from Esplora)
+    pub pool_address: String,
+    /// Flat service fee per withdrawal (sats) — deducted from amount before sending BTC
+    pub service_fee_sats: u64,
 }
 
 impl Default for RedemptionConfig {
@@ -219,6 +223,11 @@ impl Default for RedemptionConfig {
             solana_rpc: "https://api.devnet.solana.com".to_string(),
             esplora_url: String::new(),
             auto_process: true,
+            pool_address: std::env::var("POOL_RECEIVE_ADDRESS").unwrap_or_default(),
+            service_fee_sats: std::env::var("SERVICE_FEE_SATS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(500),
         }
     }
 }

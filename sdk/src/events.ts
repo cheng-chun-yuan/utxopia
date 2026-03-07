@@ -9,6 +9,7 @@
 /** Event discriminators matching contracts/programs/aegis/src/utils/events.rs */
 export const EVENT_LEAF_INSERTED = 0x01;
 export const EVENT_NULLIFIER_SPENT = 0x02;
+export const EVENT_STEALTH_ANNOUNCEMENT = 0x03;
 
 /** Parsed leaf inserted event */
 export interface LeafInsertedEvent {
@@ -26,7 +27,17 @@ export interface NullifierSpentEvent {
   spentBy: Uint8Array; // 32 bytes (pubkey)
 }
 
-export type ProgramEvent = LeafInsertedEvent | NullifierSpentEvent;
+/** Parsed stealth announcement event */
+export interface StealthAnnouncementEvent {
+  type: "stealth_announcement";
+  announcementType: number; // 0=deposit, 1=transfer
+  ephemeralPub: Uint8Array; // 32 bytes
+  encryptedAmount: Uint8Array; // 8 bytes
+  commitment: Uint8Array; // 32 bytes
+  leafIndex: number;
+}
+
+export type ProgramEvent = LeafInsertedEvent | NullifierSpentEvent | StealthAnnouncementEvent;
 
 /**
  * Parse a leaf inserted event from decoded sol_log_data segments.
@@ -78,6 +89,41 @@ export function parseNullifierSpentEvent(segments: Uint8Array[]): NullifierSpent
   };
 }
 
+/**
+ * Parse a stealth announcement event from decoded sol_log_data segments.
+ * Expected: disc(1) + type(1) + ephemeral_pub(32) + encrypted_amount(8) + commitment(32) + leaf_index(4)
+ */
+export function parseStealthAnnouncementEvent(segments: Uint8Array[]): StealthAnnouncementEvent | null {
+  if (segments.length < 6) return null;
+  if (segments[0].length !== 1 || segments[0][0] !== EVENT_STEALTH_ANNOUNCEMENT) return null;
+
+  const atype = segments[1];
+  if (atype.length !== 1) return null;
+
+  const ephemeralPub = segments[2];
+  if (ephemeralPub.length !== 32) return null;
+
+  const encryptedAmount = segments[3];
+  if (encryptedAmount.length !== 8) return null;
+
+  const commitment = segments[4];
+  if (commitment.length !== 32) return null;
+
+  const liBytes = segments[5];
+  if (liBytes.length !== 4) return null;
+  const view = new DataView(liBytes.buffer, liBytes.byteOffset, 4);
+  const leafIndex = view.getUint32(0, true);
+
+  return {
+    type: "stealth_announcement",
+    announcementType: atype[0],
+    ephemeralPub,
+    encryptedAmount,
+    commitment,
+    leafIndex,
+  };
+}
+
 function decodeBase64(b64: string): Uint8Array {
   if (typeof atob === "function") {
     return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -113,6 +159,9 @@ export function parseProgramEvents(logs: string[], programId?: string): ProgramE
       if (event) events.push(event);
     } else if (disc === EVENT_NULLIFIER_SPENT) {
       const event = parseNullifierSpentEvent(segments);
+      if (event) events.push(event);
+    } else if (disc === EVENT_STEALTH_ANNOUNCEMENT) {
+      const event = parseStealthAnnouncementEvent(segments);
       if (event) events.push(event);
     }
   }

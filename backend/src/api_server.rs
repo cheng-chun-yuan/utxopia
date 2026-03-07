@@ -16,8 +16,33 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 
+fn configured_cors() -> CorsLayer {
+    match std::env::var("ALLOWED_ORIGIN") {
+        Ok(origin) if !origin.is_empty() => {
+            let origins: Vec<_> = origin
+                .split(',')
+                .filter_map(|o| o.trim().parse().ok())
+                .collect();
+            CorsLayer::new()
+                .allow_origin(AllowOrigin::list(origins))
+                .allow_methods(Any)
+                .allow_headers(Any)
+        }
+        _ => {
+            tracing::warn!("ALLOWED_ORIGIN not set — defaulting to localhost:3000 (set ALLOWED_ORIGIN for production)");
+            CorsLayer::new()
+                .allow_origin(AllowOrigin::list(
+                    vec!["http://localhost:3000".parse().unwrap()]
+                ))
+                .allow_methods(Any)
+                .allow_headers(Any)
+        }
+    }
+}
+
+use crate::api::middleware::{api_key_auth_middleware, create_rate_limiter, rate_limit_middleware, security_headers_middleware};
 use crate::redemption::{RedemptionService, WithdrawalStatus};
 use crate::stealth::{
     ManualAnnounceRequest, ManualAnnounceResponse, PrepareStealthRelayResponse,
@@ -88,6 +113,24 @@ async fn handle_redeem(
     State(service): State<AppState>,
     Json(req): Json<RedeemRequest>,
 ) -> impl IntoResponse {
+    use crate::api::middleware::{validate_btc_address, validate_solana_address, validate_amount_sats};
+
+    // Validate inputs
+    let btc_val = validate_btc_address(&req.btc_address);
+    let sol_val = validate_solana_address(&req.solana_address);
+    let amt_val = validate_amount_sats(req.amount_sats, 546, 2_100_000_000_000_000);
+    if !btc_val.is_valid || !sol_val.is_valid || !amt_val.is_valid {
+        let mut errors = btc_val.errors;
+        errors.extend(sol_val.errors);
+        errors.extend(amt_val.errors);
+        let response = RedeemResponse {
+            success: false,
+            request_id: None,
+            message: Some(errors.join("; ")),
+        };
+        return (StatusCode::BAD_REQUEST, Json(response));
+    }
+
     let service = service.read().await;
 
     match service
@@ -109,10 +152,11 @@ async fn handle_redeem(
             (StatusCode::OK, Json(response))
         }
         Err(e) => {
+            tracing::warn!(error = %e, "Redeem request failed");
             let response = RedeemResponse {
                 success: false,
                 request_id: None,
-                message: Some(e.to_string()),
+                message: Some("Withdrawal request failed".to_string()),
             };
             (StatusCode::BAD_REQUEST, Json(response))
         }
@@ -274,18 +318,62 @@ async fn handle_stealth_announce(
 
 pub fn create_router(service: RedemptionService) -> Router {
     let state: AppState = Arc::new(RwLock::new(service));
+    let rate_limiter = create_rate_limiter();
 
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    let authed = Router::new()
+        .route("/api/redeem", post(handle_redeem))
+        .route("/api/withdrawal/status/{id}", get(handle_withdrawal_status))
+        .layer(axum::middleware::from_fn(api_key_auth_middleware))
+        .with_state(state.clone());
+
+    let public = Router::new()
+        .route("/api/health", get(handle_health));
 
     Router::new()
-        .route("/api/health", get(handle_health))
-        .route("/api/redeem", post(handle_redeem))
-        .route("/api/withdrawal/status/:id", get(handle_withdrawal_status))
-        .layer(cors)
-        .with_state(state)
+        .merge(authed)
+        .merge(public)
+        .layer(axum::middleware::from_fn_with_state(
+            rate_limiter,
+            rate_limit_middleware,
+        ))
+        .layer(axum::middleware::from_fn(security_headers_middleware))
+        .layer(configured_cors())
+}
+
+/// GET /api/relayer/meta — returns relayer config and fee structure
+///
+/// Two separate fees:
+/// - `relayer_fee_sats`: paid to the relayer as a shielded note (for submitting Solana txs
+///   on behalf of users during private JoinSplit transfers)
+/// - `service_fee_sats`: deducted from BTC withdrawal amount, goes to the pool as protocol revenue
+async fn handle_relayer_meta() -> impl IntoResponse {
+    #[derive(Serialize)]
+    struct RelayerMetaResponse {
+        /// Relayer's stealth meta-address (hex). Users send a fee note to this address.
+        stealth_meta: Option<String>,
+        /// Flat fee for private sends — paid to relayer as a shielded output note
+        relayer_fee_sats: u64,
+        /// Flat fee for BTC withdrawals — deducted from amount, protocol revenue to pool
+        service_fee_sats: u64,
+    }
+
+    let relayer_fee_sats: u64 = std::env::var("RELAYER_FEE_SATS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(500);
+
+    let service_fee_sats: u64 = std::env::var("SERVICE_FEE_SATS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(500);
+
+    let stealth_meta = std::env::var("RELAYER_STEALTH_META").ok();
+
+    Json(RelayerMetaResponse {
+        stealth_meta,
+        relayer_fee_sats,
+        service_fee_sats,
+    })
 }
 
 pub fn create_combined_router(
@@ -296,19 +384,28 @@ pub fn create_combined_router(
         redemption: Arc::new(RwLock::new(redemption)),
         stealth: Arc::new(RwLock::new(stealth)),
     });
+    let rate_limiter = create_rate_limiter();
 
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    let authed = Router::new()
+        .route("/api/stealth/prepare", post(handle_stealth_prepare))
+        .route("/api/stealth/status/{id}", get(handle_stealth_status))
+        .route("/api/stealth/announce", post(handle_stealth_announce))
+        .layer(axum::middleware::from_fn(api_key_auth_middleware))
+        .with_state(state.clone());
+
+    let public = Router::new()
+        .route("/api/health", get(handle_health))
+        .route("/api/relayer/meta", get(handle_relayer_meta));
 
     Router::new()
-        .route("/api/health", get(handle_health))
-        .route("/api/stealth/prepare", post(handle_stealth_prepare))
-        .route("/api/stealth/status/:id", get(handle_stealth_status))
-        .route("/api/stealth/announce", post(handle_stealth_announce))
-        .layer(cors)
-        .with_state(state)
+        .merge(authed)
+        .merge(public)
+        .layer(axum::middleware::from_fn_with_state(
+            rate_limiter,
+            rate_limit_middleware,
+        ))
+        .layer(axum::middleware::from_fn(security_headers_middleware))
+        .layer(configured_cors())
 }
 
 pub async fn start_server(service: RedemptionService, port: u16) -> Result<(), std::io::Error> {
@@ -342,7 +439,7 @@ pub async fn start_combined_server(
     println!("Endpoints:");
     println!("  GET  /api/health              - Health check");
     println!("  POST /api/stealth/prepare     - Prepare stealth deposit");
-    println!("  GET  /api/stealth/status/:id  - Get stealth deposit status");
+    println!("  GET  /api/stealth/status/{{id}}  - Get stealth deposit status");
     println!("  POST /api/stealth/announce    - Manual announcement");
     println!();
 

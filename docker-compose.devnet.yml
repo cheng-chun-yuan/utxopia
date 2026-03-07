@@ -1,4 +1,6 @@
-# Aegis Devnet Stack — Backend + FROST Signers + Header Relayer
+# Aegis Devnet Stack — Backend + FROST Signers
+#
+# Frontend runs separately (Vercel, standalone Docker, or `bun run dev`)
 #
 # Usage:
 #   docker compose -f docker-compose.devnet.yml up --build -d
@@ -14,7 +16,8 @@ x-frost-common: &frost-common
     - ./frost_server/logs:/app/logs
   environment: &frost-env
     RUST_LOG: info,frost_server=debug
-    FROST_KEY_PASSWORD: test
+    FROST_KEY_PASSWORD: "${FROST_KEY_PASSWORD:-test}"
+    FROST_API_KEY: "${FROST_API_KEY}"
   restart: unless-stopped
 
 services:
@@ -22,32 +25,31 @@ services:
   frost-signer-1:
     <<: *frost-common
     container_name: aegis-frost-1
-    ports:
-      - "9001:9001"
+    expose:
+      - "9001"
     command: >
       run --bind 0.0.0.0:9001 --id 1
-      --password test --network testnet4
+      --password "${FROST_KEY_PASSWORD:-test}" --network testnet4
 
   frost-signer-2:
     <<: *frost-common
     container_name: aegis-frost-2
-    ports:
-      - "9002:9002"
+    expose:
+      - "9002"
     command: >
       run --bind 0.0.0.0:9002 --id 2
-      --password test --network testnet4
+      --password "${FROST_KEY_PASSWORD:-test}" --network testnet4
 
   frost-signer-3:
     <<: *frost-common
     container_name: aegis-frost-3
-    ports:
-      - "9003:9003"
+    expose:
+      - "9003"
     command: >
       run --bind 0.0.0.0:9003 --id 3
-      --password test --network testnet4
+      --password "${FROST_KEY_PASSWORD:-test}" --network testnet4
 
   # ─── Unified Backend (API + Deposit Tracker + Event Indexer) ──────
-  # Single service: stealth/redeem API + deposit tracking + tree cache + header relay
   backend:
     build:
       context: ./backend
@@ -60,12 +62,14 @@ services:
       - tracker-data:/app/data
     environment:
       RUST_LOG: info,zkbtc=debug
+      ALLOWED_ORIGIN: "${ALLOWED_ORIGIN:-https://aegis.amidoggy.xyz}"
       AEGIS_NETWORK: devnet
       AEGIS_SOLANA_RPC: https://api.devnet.solana.com
       AEGIS_BITCOIN_RPC: https://mempool.space/testnet4/api
       AEGIS_SIGNING_MODE: frost
       AEGIS_FROST_THRESHOLD: "2"
       AEGIS_FROST_PARTICIPANTS: "3"
+      AEGIS_FROST_API_KEY: "${FROST_API_KEY}"
       AEGIS_FROST_SIGNER_URLS: http://frost-signer-1:9001,http://frost-signer-2:9002,http://frost-signer-3:9003
       AEGIS_FROST_KEY_SHARE: placeholder
       AEGIS_FROST_GROUP_PUBKEY: d857a067bec0ae2027a6026ef73d2905f108b1a66de6d12d23a3feb42013b1dd
@@ -74,45 +78,25 @@ services:
       ESPLORA_URL: https://mempool.space/testnet4/api
       SOLANA_RPC_URL: https://api.devnet.solana.com
       DEPOSIT_DB_PATH: /app/data/deposits.db
-      # Event indexer + Merkle tree cache
       INDEXER_DB_PATH: /app/data/events.db
       INDEXER_POLL_INTERVAL_SECS: "10"
       AEGIS_PROGRAM_ID: 25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM
       TRACKER_API_PORT: "3001"
-      # Real-time WebSocket detection (mempool.space)
       MEMPOOL_WS_ENABLED: "true"
       MEMPOOL_WS_URL: wss://mempool.space/testnet4/api/v1/ws
-      # Integrated header relay (replaces separate header-relayer service)
       HEADER_RELAY_ENABLED: "true"
       BTC_LIGHT_CLIENT_PROGRAM_ID: Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq
       RELAYER_KEYPAIR: "${RELAYER_KEYPAIR}"
+      SERVICE_FEE_SATS: "500"
+      RELAYER_FEE_SATS: "500"
+      RELAYER_STEALTH_META: "${RELAYER_STEALTH_META:-}"
+      AEGIS_BROADCAST_MODE: real
       VERIFIER_KEYPAIR: "${RELAYER_KEYPAIR}"
       HEADER_BATCH_SIZE: "5"
     depends_on:
       - frost-signer-1
       - frost-signer-2
       - frost-signer-3
-    restart: unless-stopped
-
-  # ─── Frontend (Next.js) ──────────────────────────────────────────
-  aegis-app:
-    build:
-      context: .
-      dockerfile: aegis-app/Dockerfile
-    container_name: aegis-app
-    ports:
-      - "3000:3000"
-    environment:
-      NEXT_PUBLIC_NETWORK: devnet
-      NEXT_PUBLIC_ZKBTC_API_URL: https://api.amidoggy.xyz
-      NEXT_PUBLIC_SOLANA_RPC_URL: https://api.devnet.solana.com
-      NEXT_PUBLIC_CIRCUIT_CDN_URL: https://circuits.amidoggy.xyz
-      # Backend API (unified: stealth + tree cache + tracker)
-      TRACKER_API_URL: http://backend:3001
-      ADMIN_KEYPAIR: "${ADMIN_KEYPAIR}"
-      RELAYER_KEYPAIR: "${RELAYER_KEYPAIR}"
-    depends_on:
-      - backend
     restart: unless-stopped
 
   # ─── Cloudflare Tunnel ───────────────────────────────────────────
@@ -123,7 +107,6 @@ services:
     volumes:
       - /Users/chengchunyuan/.cloudflared:/etc/cloudflared:ro
     depends_on:
-      - aegis-app
       - backend
     restart: unless-stopped
 

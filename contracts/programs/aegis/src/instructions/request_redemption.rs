@@ -158,7 +158,7 @@ pub fn process_request_redemption(
     validate_account_writable(accounts.redemption_request)?;
 
     // Load and validate pool state
-    let (min_deposit, pending_redemptions, total_shielded) = {
+    let (min_deposit, pending_redemptions, total_shielded, service_fee) = {
         let pool_data = accounts.pool_state.try_borrow_data()?;
         let pool = PoolState::from_bytes(&pool_data)?;
 
@@ -170,6 +170,7 @@ pub fn process_request_redemption(
             pool.min_deposit(),
             pool.pending_redemptions(),
             pool.total_shielded(),
+            pool.service_fee_sats(),
         )
     };
 
@@ -178,6 +179,10 @@ pub fn process_request_redemption(
         return Err(AegisError::ZeroAmount.into());
     }
     if ix_data.amount_sats < min_deposit {
+        return Err(AegisError::AmountTooSmall.into());
+    }
+    // Validate amount covers service fee + dust (546 sats)
+    if service_fee > 0 && ix_data.amount_sats <= service_fee + 546 {
         return Err(AegisError::AmountTooSmall.into());
     }
     if ix_data.amount_sats > total_shielded {

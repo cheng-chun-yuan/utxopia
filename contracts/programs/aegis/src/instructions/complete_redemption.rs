@@ -179,6 +179,7 @@ pub fn process_complete_redemption(
     }
 
     // Read raw transaction from ChadBuffer
+    crate::utils::chadbuffer::validate_chadbuffer_owner(tx_buffer_info)?;
     let buffer_data = tx_buffer_info
         .try_borrow_data()
         .map_err(|_| AegisError::RedemptionSpvFailed)?;
@@ -196,11 +197,24 @@ pub fn process_complete_redemption(
         .map_err(|_| AegisError::RedemptionSpvFailed)?;
 
     let expected_script_slice = &expected_script[..expected_script_len];
-    let min_amount = amount_sats.saturating_sub(MAX_FEE_SATS);
 
+    // Read service fee from pool state for fee accounting
+    let service_fee = {
+        let pool_data = pool_state_info.try_borrow_data()?;
+        let pool = PoolState::from_bytes(&pool_data)?;
+        pool.service_fee_sats()
+    };
+
+    // expected_send = amount_sats - service_fee (what we intended to send to user)
+    let expected_send = amount_sats.saturating_sub(service_fee);
+    let min_amount = expected_send.saturating_sub(MAX_FEE_SATS);
+
+    // Find the matching output and capture the actual value sent
+    let mut actual_received: u64 = 0;
     let mut found = false;
     for output in parsed_tx.outputs() {
         if output.script_pubkey == expected_script_slice && output.value >= min_amount {
+            actual_received = output.value;
             found = true;
             break;
         }
@@ -210,6 +224,7 @@ pub fn process_complete_redemption(
     }
 
     // --- Burn zkBTC from pool vault ---
+    // Burn the full amount_sats (what was locked in request_redemption)
     let bump_bytes = [pool_bump];
     let pool_signer_seeds: &[&[u8]] = &[PoolState::SEED, &bump_bytes];
 
@@ -222,13 +237,24 @@ pub fn process_complete_redemption(
         pool_signer_seeds,
     )?;
 
-    // --- Update pool state ---
+    // --- Update pool state with exact accounting ---
     let clock = Clock::get()?;
     {
         let mut pool_data = pool_state_info.try_borrow_mut_data()?;
         let pool = PoolState::from_bytes_mut(&mut pool_data)?;
 
+        // total_burned matches the token burn (full amount_sats locked in request_redemption)
+        // This keeps the invariant: total_minted - total_burned = circulating supply
         pool.add_burned(amount_sats)?;
+
+        // Service fee → pool (protocol revenue). Separate from relayer fee (shielded note).
+        // protocol_revenue = service_fee - miner_fee (what the pool actually keeps)
+        if service_fee > 0 {
+            let miner_fee = expected_send.saturating_sub(actual_received);
+            let protocol_revenue = service_fee.saturating_sub(miner_fee);
+            pool.add_fee_pool(protocol_revenue)?;
+        }
+
         pool.set_pending_redemptions(pending_redemptions.saturating_sub(1));
         pool.set_last_update(clock.unix_timestamp);
     }

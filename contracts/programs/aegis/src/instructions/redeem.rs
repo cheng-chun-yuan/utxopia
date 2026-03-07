@@ -8,13 +8,23 @@
 //! the backend FROST signing pipeline to process.
 //! Remaining M-1 outputs go into the tree as normal (change notes).
 //!
+//! Supports two modes:
+//! - **Inline proof**: proof is in instruction data (legacy, small JoinSplits)
+//! - **Buffer proof**: proof_source=1, proof omitted from ix data, read from
+//!   proof_buffer account (ChadBuffer) appended after redemption_request.
+//!   Saves 256 bytes of instruction data for large JoinSplits.
+//!
 //! Instruction Data Layout:
 //! - [0]     n_inputs:           u8
 //! - [1]     n_outputs:          u8  (includes redeem output as last)
-//! - [2..258]  proof:            [u8; 256]  (Groth16 proof)
-//! - [258..290] merkle_root:     [u8; 32]
-//! - [290..322] bound_params_hash: [u8; 32]
-//! - [322..]  nullifiers:        [[u8; 32]; n_inputs]
+//! - [2]     proof_source:       u8  (0=inline, 1=buffer account)
+//! - If proof_source=0:
+//!   - [3..259]  proof:          [u8; 256]  (Groth16 proof)
+//! - If proof_source=1:
+//!   - proof is read from the proof_buffer account (last account)
+//! - [..]     merkle_root:       [u8; 32]
+//! - [..]     bound_params_hash: [u8; 32]
+//! - [..]     nullifiers:        [[u8; 32]; n_inputs]
 //! - [..]     commitments_out:   [[u8; 32]; n_outputs]  (last = redeem)
 //! - [..]     stealth_data:      [ephemeral_pub(32) + encrypted_amount(8)] × (n_outputs - 1)
 //! - [..]     redeem_amount:     u64 (8 bytes LE)
@@ -29,8 +39,8 @@
 //! 3. user                 (signer, payer)
 //! 4. system_program       (read)
 //! 5..5+N                  nullifier_records (writable PDA)
-//! 5+N..5+N+(M-1)          stealth_announcements (writable PDA)
-//! 5+N+(M-1)               redemption_request (writable PDA)
+//! 5+N                     redemption_request (writable PDA)
+//! [optional]              proof_buffer (read, only when proof_source=1, last account)
 
 use pinocchio::{
     account_info::AccountInfo,
@@ -44,9 +54,8 @@ use crate::debug_msg;
 use crate::error::AegisError;
 use crate::state::{
     CommitmentTree, NullifierOperationType, NullifierRecord, PoolState,
-    RedemptionRequest, RedemptionStatus, StealthAnnouncement, VkRegistry,
+    RedemptionRequest, RedemptionStatus, VkRegistry,
     NULLIFIER_RECORD_DISCRIMINATOR, REDEMPTION_REQUEST_DISCRIMINATOR,
-    STEALTH_ANNOUNCEMENT_DISCRIMINATOR,
 };
 use crate::utils::groth16::GROTH16_PROOF_SIZE;
 use crate::utils::{
@@ -63,18 +72,22 @@ const STEALTH_DATA_PER_OUTPUT: usize = 40;
 /// Number of fixed accounts before nullifiers
 const FIXED_ACCOUNTS: usize = 5;
 
+/// Authority prefix size in ChadBuffer accounts
+const CHADBUFFER_AUTHORITY_SIZE: usize = 32;
+
 pub fn process_redeem(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     data: &[u8],
 ) -> ProgramResult {
     // Parse header
-    if data.len() < 2 {
+    if data.len() < 3 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
     let n_inputs = data[0] as usize;
     let n_outputs = data[1] as usize;
+    let proof_source = data[2]; // 0 = inline, 1 = buffer account
 
     // n_outputs must be >= 1 (the redeem output itself)
     if n_inputs == 0 || n_outputs == 0 || n_inputs + n_outputs > MAX_JOINSPLIT_SIZE {
@@ -85,8 +98,9 @@ pub fn process_redeem(
     // Tree outputs = n_outputs - 1 (last output is redeem, not inserted)
     let n_tree_outputs = n_outputs - 1;
 
-    // Calculate minimum data length (btc_script_len is variable)
-    let header_size = 2 + GROTH16_PROOF_SIZE + 32 + 32;
+    // Calculate minimum data length based on proof source
+    let proof_data_size = if proof_source == 0 { GROTH16_PROOF_SIZE } else { 0 };
+    let header_size = 3 + proof_data_size + 32 + 32;
     let nullifiers_size = n_inputs * 32;
     let commitments_size = n_outputs * 32;
     let stealth_size = n_tree_outputs * STEALTH_DATA_PER_OUTPUT;
@@ -99,10 +113,30 @@ pub fn process_redeem(
     }
 
     // Parse instruction data
-    let mut offset = 2;
+    let mut offset = 3;
 
-    let proof_bytes = &data[offset..offset + GROTH16_PROOF_SIZE];
-    offset += GROTH16_PROOF_SIZE;
+    // Read proof: inline or from buffer account
+    let proof_buf: [u8; GROTH16_PROOF_SIZE];
+    let proof_bytes: &[u8] = if proof_source == 0 {
+        let p = &data[offset..offset + GROTH16_PROOF_SIZE];
+        offset += GROTH16_PROOF_SIZE;
+        p
+    } else {
+        // proof_source == 1: read from last account (proof_buffer)
+        let buf_idx = accounts.len() - 1;
+        let buf_info = &accounts[buf_idx];
+        // Validate buffer is owned by ChadBuffer program
+        crate::utils::chadbuffer::validate_chadbuffer_owner(buf_info)?;
+        let buf_data = buf_info.try_borrow_data()?;
+        // ChadBuffer layout: authority(32) + data(256)
+        if buf_data.len() < CHADBUFFER_AUTHORITY_SIZE + GROTH16_PROOF_SIZE {
+            debug_msg!("Proof buffer too small");
+            return Err(ProgramError::InvalidAccountData);
+        }
+        let src = &buf_data[CHADBUFFER_AUTHORITY_SIZE..CHADBUFFER_AUTHORITY_SIZE + GROTH16_PROOF_SIZE];
+        proof_buf = src.try_into().unwrap();
+        &proof_buf
+    };
 
     let merkle_root: &[u8; 32] = data[offset..offset + 32].try_into().unwrap();
     offset += 32;
@@ -164,8 +198,8 @@ pub fn process_redeem(
         }
     }
 
-    // Validate account count: fixed + nullifiers + tree_outputs stealth + 1 redemption
-    let min_accounts = FIXED_ACCOUNTS + n_inputs + n_tree_outputs + 1;
+    // Validate account count: fixed + nullifiers + 1 redemption_request
+    let min_accounts = FIXED_ACCOUNTS + n_inputs + 1;
     if accounts.len() < min_accounts {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
@@ -319,52 +353,18 @@ pub fn process_redeem(
             let ephemeral_pub: &[u8; 32] = data[stealth_offset..stealth_offset + 32]
                 .try_into()
                 .unwrap();
-            let encrypted_amount: [u8; 8] = data[stealth_offset + 32..stealth_offset + 40]
+            let encrypted_amount: &[u8; 8] = data[stealth_offset + 32..stealth_offset + 40]
                 .try_into()
                 .unwrap();
 
-            let announcement_info = &accounts[FIXED_ACCOUNTS + n_inputs + i];
-            validate_account_writable(announcement_info)?;
-
-            let ann_seeds: &[&[u8]] = &[StealthAnnouncement::SEED, ephemeral_pub.as_ref()];
-            let (expected_ann_pda, ann_bump) = find_program_address(ann_seeds, program_id);
-            if announcement_info.key() != &expected_ann_pda {
-                debug_msg!("Invalid stealth announcement PDA");
-                return Err(ProgramError::InvalidSeeds);
-            }
-
-            {
-                let ann_data = announcement_info.try_borrow_data()?;
-                if !ann_data.is_empty() && ann_data[0] == STEALTH_ANNOUNCEMENT_DISCRIMINATOR {
-                    return Err(ProgramError::AccountAlreadyInitialized);
-                }
-            }
-
-            let ann_bump_bytes = [ann_bump];
-            let ann_signer_seeds: &[&[u8]] = &[
-                StealthAnnouncement::SEED,
-                ephemeral_pub.as_ref(),
-                &ann_bump_bytes,
-            ];
-
-            create_pda_account(
-                user,
-                announcement_info,
-                program_id,
-                rent.minimum_balance(StealthAnnouncement::SIZE),
-                StealthAnnouncement::SIZE as u64,
-                ann_signer_seeds,
-            )?;
-
-            {
-                let mut ann_data = announcement_info.try_borrow_mut_data()?;
-                let announcement = StealthAnnouncement::init(&mut ann_data)?;
-                announcement.announcement_type = crate::state::ANNOUNCEMENT_TYPE_TRANSFER;
-                announcement.ephemeral_pub = *ephemeral_pub;
-                announcement.set_amount_bytes(encrypted_amount);
-                announcement.commitment.copy_from_slice(commitments_out[i]);
-                announcement.set_leaf_index(leaf_index);
-            }
+            // Emit stealth announcement as log event (replaces PDA creation)
+            crate::utils::events::emit_stealth_announcement(
+                crate::state::ANNOUNCEMENT_TYPE_TRANSFER,
+                ephemeral_pub,
+                encrypted_amount,
+                commitments_out[i],
+                leaf_index as u32,
+            );
 
             crate::utils::events::emit_leaf_inserted(commitments_out[i], clock.unix_timestamp);
         }
@@ -372,7 +372,7 @@ pub fn process_redeem(
 
     // Create RedemptionRequest PDA — same pattern as request_redemption.rs
     {
-        let redemption_info = &accounts[FIXED_ACCOUNTS + n_inputs + n_tree_outputs];
+        let redemption_info = &accounts[FIXED_ACCOUNTS + n_inputs];
         validate_account_writable(redemption_info)?;
 
         let nonce_bytes = request_nonce.to_le_bytes();

@@ -17,7 +17,7 @@ use bitcoin::opcodes::all::*;
 use bitcoin::script::Builder as ScriptBuilder;
 use bitcoin::secp256k1::schnorr::Signature as SchnorrSignature;
 use bitcoin::sighash::{Prevouts, SighashCache, TapSighashType};
-use bitcoin::taproot::{LeafVersion, TaprootBuilder, Signature as TaprootSignature};
+use bitcoin::taproot::{TaprootBuilder, Signature as TaprootSignature};
 use bitcoin::{
     absolute, transaction, Address, Amount, Network, OutPoint, ScriptBuf, Sequence, Transaction,
     TxIn, TxOut, Txid, Witness, XOnlyPublicKey,
@@ -121,7 +121,6 @@ struct AggregateRequest {
 #[derive(Debug, Deserialize)]
 struct AggregateResponse {
     signature: String,
-    group_public_key: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -136,12 +135,6 @@ struct EsploraUtxo {
 struct EsploraStatus {
     confirmed: bool,
     block_height: Option<u64>,
-}
-
-#[derive(Debug, Deserialize)]
-struct EsploraTx {
-    txid: String,
-    status: EsploraStatus,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -159,7 +152,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 "#);
 
     // Step 1: Get or generate user keypair
-    let (user_secret, user_pubkey) = if args.generate_keypair {
+    let (_user_secret, user_pubkey) = if args.generate_keypair {
         println!("Generating test keypair for user...\n");
         let mut seed = [0u8; 32];
         getrandom::getrandom(&mut seed)?;

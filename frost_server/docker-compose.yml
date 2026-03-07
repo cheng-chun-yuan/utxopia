@@ -14,7 +14,8 @@ x-frost-common: &frost-common
     - ./logs:/app/logs
   environment: &frost-env
     RUST_LOG: info,frost_server=debug
-    FROST_KEY_PASSWORD: test
+    FROST_KEY_PASSWORD: "${FROST_KEY_PASSWORD:-test}"
+    FROST_API_KEY: "${FROST_API_KEY}"
   restart: unless-stopped
 
 services:

@@ -5,7 +5,7 @@ use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
 use std::path::Path;
 
-use super::parser::{LeafInsertedEvent, NullifierSpentEvent};
+use super::parser::{LeafInsertedEvent, NullifierSpentEvent, StealthAnnouncementEvent};
 
 /// SQLite-backed event store
 pub struct EventStore {
@@ -29,6 +29,17 @@ pub struct NullifierRow {
     pub operation_type: i64,
     pub spent_at: i64,
     pub spent_by: String, // base58
+    pub tx_signature: String,
+    pub slot: i64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AnnouncementRow {
+    pub leaf_index: i64,
+    pub announcement_type: i64,
+    pub ephemeral_pub: String,   // hex
+    pub encrypted_amount: String, // hex
+    pub commitment: String,       // hex
     pub tx_signature: String,
     pub slot: i64,
 }
@@ -85,6 +96,16 @@ impl EventStore {
                 operation_type INTEGER NOT NULL,
                 spent_at INTEGER NOT NULL,
                 spent_by TEXT NOT NULL,
+                tx_signature TEXT NOT NULL,
+                slot INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS stealth_announcements (
+                leaf_index INTEGER PRIMARY KEY,
+                announcement_type INTEGER NOT NULL,
+                ephemeral_pub BLOB NOT NULL,
+                encrypted_amount BLOB NOT NULL,
+                commitment BLOB NOT NULL,
                 tx_signature TEXT NOT NULL,
                 slot INTEGER NOT NULL
             );
@@ -259,6 +280,87 @@ impl EventStore {
         .map_err(|e| format!("update error: {}", e))?;
         Ok(())
     }
+
+    pub fn insert_announcement(
+        &self,
+        event: &StealthAnnouncementEvent,
+        tx_signature: &str,
+        slot: i64,
+    ) -> Result<bool, String> {
+        let conn = self.conn()?;
+        let result = conn.execute(
+            "INSERT OR IGNORE INTO stealth_announcements
+             (leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                event.leaf_index as i64,
+                event.announcement_type as i64,
+                event.ephemeral_pub.as_slice(),
+                event.encrypted_amount.as_slice(),
+                event.commitment.as_slice(),
+                tx_signature,
+                slot,
+            ],
+        );
+        match result {
+            Ok(n) => Ok(n > 0),
+            Err(e) => Err(format!("insert announcement error: {}", e)),
+        }
+    }
+
+    pub fn get_announcements(&self, since_leaf_index: Option<i64>) -> Result<Vec<AnnouncementRow>, String> {
+        let conn = self.conn()?;
+        if let Some(since) = since_leaf_index {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot
+                     FROM stealth_announcements WHERE leaf_index > ?1 ORDER BY leaf_index",
+                )
+                .map_err(|e| format!("query error: {}", e))?;
+            let rows = stmt
+                .query_map(params![since], Self::map_announcement_row)
+                .map_err(|e| format!("query error: {}", e))?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| format!("row error: {}", e))
+        } else {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot
+                     FROM stealth_announcements ORDER BY leaf_index",
+                )
+                .map_err(|e| format!("query error: {}", e))?;
+            let rows = stmt
+                .query_map([], Self::map_announcement_row)
+                .map_err(|e| format!("query error: {}", e))?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| format!("row error: {}", e))
+        }
+    }
+
+    pub fn get_announcement_count(&self) -> Result<i64, String> {
+        let conn = self.conn()?;
+        conn.query_row("SELECT COUNT(*) FROM stealth_announcements", [], |row| row.get(0))
+            .map_err(|e| format!("query error: {}", e))
+    }
+
+    pub fn get_latest_announcement_leaf_index(&self) -> Result<Option<i64>, String> {
+        let conn = self.conn()?;
+        conn.query_row("SELECT MAX(leaf_index) FROM stealth_announcements", [], |row| row.get(0))
+            .map_err(|e| format!("query error: {}", e))
+    }
+
+    fn map_announcement_row(row: &rusqlite::Row) -> rusqlite::Result<AnnouncementRow> {
+        let ephemeral_blob: Vec<u8> = row.get(2)?;
+        let amount_blob: Vec<u8> = row.get(3)?;
+        let commitment_blob: Vec<u8> = row.get(4)?;
+        Ok(AnnouncementRow {
+            leaf_index: row.get(0)?,
+            announcement_type: row.get(1)?,
+            ephemeral_pub: hex::encode(&ephemeral_blob),
+            encrypted_amount: hex::encode(&amount_blob),
+            commitment: hex::encode(&commitment_blob),
+            tx_signature: row.get(5)?,
+            slot: row.get(6)?,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -283,6 +385,31 @@ mod tests {
         assert_eq!(leaves[0].created_at, 1700000000);
 
         assert_eq!(store.get_next_leaf_index().unwrap(), 1);
+    }
+
+    #[test]
+    fn test_insert_and_query_announcements() {
+        let store = EventStore::in_memory().unwrap();
+        let event = StealthAnnouncementEvent {
+            announcement_type: 1,
+            ephemeral_pub: [0xAA; 32],
+            encrypted_amount: [0x01; 8],
+            commitment: [0xBB; 32],
+            leaf_index: 5,
+        };
+        assert!(store.insert_announcement(&event, "sig1", 100).unwrap());
+        assert!(!store.insert_announcement(&event, "sig1", 100).unwrap()); // dup
+
+        let rows = store.get_announcements(None).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].leaf_index, 5);
+        assert_eq!(rows[0].announcement_type, 1);
+
+        let rows_since = store.get_announcements(Some(5)).unwrap();
+        assert_eq!(rows_since.len(), 0);
+
+        assert_eq!(store.get_announcement_count().unwrap(), 1);
+        assert_eq!(store.get_latest_announcement_leaf_index().unwrap(), Some(5));
     }
 
     #[test]

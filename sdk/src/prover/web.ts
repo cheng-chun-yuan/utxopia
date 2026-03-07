@@ -16,6 +16,7 @@ import {
   computeJoinSplitNullifierSync,
 } from "../poseidon";
 import { BN254_FIELD_PRIME } from "../crypto";
+import { TREE_DEPTH } from "../merkle";
 import { getConfig } from "../config";
 import type { Address } from "@solana/kit";
 
@@ -180,9 +181,11 @@ async function generateProofViaNodeSubprocess(
   artifacts: CircuitArtifact,
   inputs: InputMap
 ): Promise<{ proof: any; publicSignals: string[] }> {
-  const { execSync } = await import("child_process");
-  const fs = await import("fs");
-  const path = await import("path");
+  // Use new Function to prevent bundlers from statically resolving Node.js built-ins
+  const _require = new Function("m", "return require(m)") as (m: string) => any;
+  const { execFileSync } = _require("child_process");
+  const fs = _require("fs");
+  const path = _require("path");
 
   const wasmPath = path.resolve(artifacts.wasmPath);
   const zkeyPath = path.resolve(artifacts.zkeyPath);
@@ -195,24 +198,22 @@ async function generateProofViaNodeSubprocess(
   fs.writeFileSync(tmpInput, JSON.stringify(inputs));
 
   try {
-    execSync(
-      `node -e "
-        const snarkjs = require('snarkjs');
-        const fs = require('fs');
-        (async () => {
-          const input = JSON.parse(fs.readFileSync('${tmpInput}', 'utf8'));
-          const { proof, publicSignals } = await snarkjs.groth16.fullProve(
-            input,
-            '${wasmPath}',
-            '${zkeyPath}'
-          );
-          fs.writeFileSync('${tmpProof}', JSON.stringify(proof));
-          fs.writeFileSync('${tmpPublic}', JSON.stringify(publicSignals));
-          process.exit(0);
-        })().catch(e => { console.error(e); process.exit(1); });
-      "`,
-      { timeout: 120000 }
-    );
+    // Use execFileSync to avoid shell injection via file paths
+    const script = `
+      const snarkjs = require('snarkjs');
+      const fs = require('fs');
+      const [,, inputPath, wasmP, zkeyP, proofPath, publicPath] = process.argv;
+      (async () => {
+        const input = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
+        const { proof, publicSignals } = await snarkjs.groth16.fullProve(input, wasmP, zkeyP);
+        fs.writeFileSync(proofPath, JSON.stringify(proof));
+        fs.writeFileSync(publicPath, JSON.stringify(publicSignals));
+        process.exit(0);
+      })().catch(e => { console.error(e); process.exit(1); });
+    `;
+    execFileSync("node", ["-e", script, tmpInput, wasmPath, zkeyPath, tmpProof, tmpPublic], {
+      timeout: 120000,
+    });
 
     const proof = JSON.parse(fs.readFileSync(tmpProof, "utf8"));
     const publicSignals: string[] = JSON.parse(fs.readFileSync(tmpPublic, "utf8"));
@@ -322,6 +323,14 @@ export async function generateJoinSplitProof(inputs: JoinSplitProofInputs): Prom
     throw new Error(`Invalid JoinSplit dimensions: ${nInputs}x${nOutputs} (N+M must be 2..14)`);
   }
 
+  // Validate array lengths match declared dimensions
+  if (inputs.inputs.length !== nInputs) {
+    throw new Error(`Expected ${nInputs} inputs, got ${inputs.inputs.length}`);
+  }
+  if (inputs.outputs.length !== nOutputs) {
+    throw new Error(`Expected ${nOutputs} outputs, got ${inputs.outputs.length}`);
+  }
+
   validateFieldInputs({
     merkleRoot: inputs.merkleRoot,
     boundParamsHash: inputs.boundParamsHash,
@@ -330,6 +339,41 @@ export async function generateJoinSplitProof(inputs: JoinSplitProofInputs): Prom
     publicKeyY: inputs.publicKey[1],
     nullifyingKey: inputs.nullifyingKey,
   });
+
+  // Validate input amounts and Merkle proof depths
+  let totalIn = 0n;
+  for (let i = 0; i < inputs.inputs.length; i++) {
+    const inp = inputs.inputs[i];
+    validateAmount(inp.value, `input[${i}].value`);
+    validateFieldInputs({ [`input[${i}].random`]: inp.random });
+    if (inp.merkleProof.siblings.length !== TREE_DEPTH) {
+      throw new Error(
+        `input[${i}].merkleProof: expected ${TREE_DEPTH} siblings, got ${inp.merkleProof.siblings.length}`
+      );
+    }
+    if (inp.merkleProof.indices.length !== TREE_DEPTH) {
+      throw new Error(
+        `input[${i}].merkleProof: expected ${TREE_DEPTH} indices, got ${inp.merkleProof.indices.length}`
+      );
+    }
+    totalIn += inp.value;
+  }
+
+  // Validate output amounts
+  let totalOut = 0n;
+  for (let i = 0; i < inputs.outputs.length; i++) {
+    const out = inputs.outputs[i];
+    validateAmount(out.value, `output[${i}].value`);
+    validateFieldInputs({ [`output[${i}].npk`]: out.npk });
+    totalOut += out.value;
+  }
+
+  // Validate conservation of value (inputs must equal outputs)
+  if (totalIn !== totalOut) {
+    throw new Error(
+      `Value mismatch: inputs sum to ${totalIn} sats but outputs sum to ${totalOut} sats`
+    );
+  }
 
   // Compute nullifiers
   const nullifiers: bigint[] = [];
@@ -393,22 +437,24 @@ export async function generateJoinSplitProof(inputs: JoinSplitProofInputs): Prom
  * Check if circuit artifacts exist for a given circuit type
  */
 export async function circuitExists(circuitType: CircuitType): Promise<boolean> {
-  if (isBrowser) {
-    try {
-      const artifacts = getCircuitArtifactPaths(circuitType);
-      const response = await fetch(artifacts.wasmPath, { method: "HEAD" });
-      return response.ok;
-    } catch {
-      return false;
+  try {
+    const artifacts = getCircuitArtifactPaths(circuitType);
+    const isUrl = artifacts.wasmPath.startsWith("http://") || artifacts.wasmPath.startsWith("https://");
+
+    if (isBrowser || isUrl) {
+      // Browser or remote URL (S3, CDN) — use fetch
+      const [wasmRes, zkeyRes] = await Promise.all([
+        fetch(artifacts.wasmPath, { method: "HEAD" }),
+        fetch(artifacts.zkeyPath, { method: "HEAD" }),
+      ]);
+      return wasmRes.ok && zkeyRes.ok;
     }
-  } else {
-    try {
-      const fs = await import("fs");
-      const artifacts = getCircuitArtifactPaths(circuitType);
-      return fs.existsSync(artifacts.wasmPath) && fs.existsSync(artifacts.zkeyPath);
-    } catch {
-      return false;
-    }
+    // Node/Bun with local paths
+    const _require = new Function("m", "return require(m)") as (m: string) => any;
+    const { existsSync } = _require("fs");
+    return existsSync(artifacts.wasmPath) && existsSync(artifacts.zkeyPath);
+  } catch {
+    return false;
   }
 }
 

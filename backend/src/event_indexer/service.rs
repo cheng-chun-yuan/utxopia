@@ -186,6 +186,15 @@ impl EventIndexerService {
                         "Indexed nullifier"
                     );
                 }
+                ProgramEvent::StealthAnnouncement(e) => {
+                    let inserted = self.store.insert_announcement(&e, signature, slot)?;
+                    if inserted {
+                        if let Some(ref cache) = self.tree_cache {
+                            cache.broadcast_announcement(&e);
+                        }
+                    }
+                    tracing::debug!(leaf_index = e.leaf_index, "Indexed stealth announcement");
+                }
             }
         }
 

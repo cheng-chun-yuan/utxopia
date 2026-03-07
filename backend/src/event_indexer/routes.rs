@@ -84,6 +84,29 @@ pub struct NullifierResponse {
     pub data: Option<super::storage::NullifierRow>,
 }
 
+/// Query params for announcements endpoint
+#[derive(Debug, Deserialize)]
+pub struct AnnouncementsQuery {
+    pub since: Option<i64>,
+}
+
+/// Response for GET /api/announcements
+#[derive(Debug, Serialize)]
+pub struct AnnouncementsResponse {
+    pub success: bool,
+    pub announcements: Vec<super::storage::AnnouncementRow>,
+    pub count: usize,
+    pub latest_leaf_index: Option<i64>,
+}
+
+/// Response for GET /api/announcements/status
+#[derive(Debug, Serialize)]
+pub struct AnnouncementsStatusResponse {
+    pub count: i64,
+    pub latest_leaf_index: Option<i64>,
+    pub tree_next_index: u64,
+}
+
 /// Response for POST /api/tree/sync
 #[derive(Debug, Serialize)]
 pub struct SyncResponse {
@@ -108,6 +131,9 @@ pub fn event_indexer_router(store: Arc<EventStore>, tree_cache: Arc<TreeCache>) 
         .route("/api/tree/sync", post(post_sync))
         .route("/api/nullifiers/{hash}", get(get_nullifier))
         .route("/ws/tree", get(ws_tree_handler))
+        .route("/api/announcements", get(get_announcements))
+        .route("/api/announcements/status", get(get_announcements_status))
+        .route("/ws/announcements", get(ws_announcements_handler))
         .with_state(state)
 }
 
@@ -243,8 +269,48 @@ async fn get_nullifier(
     }
 }
 
+async fn get_announcements(
+    State(state): State<IndexerAppState>,
+    Query(params): Query<AnnouncementsQuery>,
+) -> Json<AnnouncementsResponse> {
+    match state.store.get_announcements(params.since) {
+        Ok(announcements) => {
+            let count = announcements.len();
+            let latest = state.store.get_latest_announcement_leaf_index().ok().flatten();
+            Json(AnnouncementsResponse {
+                success: true,
+                announcements,
+                count,
+                latest_leaf_index: latest,
+            })
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to get announcements");
+            Json(AnnouncementsResponse {
+                success: true,
+                announcements: vec![],
+                count: 0,
+                latest_leaf_index: None,
+            })
+        }
+    }
+}
+
+async fn get_announcements_status(
+    State(state): State<IndexerAppState>,
+) -> Json<AnnouncementsStatusResponse> {
+    let count = state.store.get_announcement_count().unwrap_or(0);
+    let latest = state.store.get_latest_announcement_leaf_index().ok().flatten();
+    let tree_status = state.tree_cache.get_status().await;
+    Json(AnnouncementsStatusResponse {
+        count,
+        latest_leaf_index: latest,
+        tree_next_index: tree_status.next_index,
+    })
+}
+
 // =============================================================================
-// WebSocket Handler
+// WebSocket Handlers
 // =============================================================================
 
 async fn ws_tree_handler(
@@ -274,6 +340,45 @@ async fn handle_tree_socket(socket: WebSocket, tree_cache: Arc<TreeCache>) {
     });
 
     // Handle incoming messages (ping/pong, close)
+    let recv_task = tokio::spawn(async move {
+        while let Some(msg) = receiver.next().await {
+            match msg {
+                Ok(Message::Close(_)) => break,
+                Err(_) => break,
+                _ => {}
+            }
+        }
+    });
+
+    tokio::select! {
+        _ = send_task => {},
+        _ = recv_task => {},
+    }
+}
+
+async fn ws_announcements_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<IndexerAppState>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_announcements_socket(socket, state.tree_cache))
+}
+
+async fn handle_announcements_socket(socket: WebSocket, tree_cache: Arc<TreeCache>) {
+    let (mut sender, mut receiver) = socket.split();
+    let mut rx = tree_cache.subscribe_announcements();
+
+    let send_task = tokio::spawn(async move {
+        while let Ok(update) = rx.recv().await {
+            let json = match serde_json::to_string(&update) {
+                Ok(j) => j,
+                Err(_) => continue,
+            };
+            if sender.send(Message::Text(json.into())).await.is_err() {
+                break;
+            }
+        }
+    });
+
     let recv_task = tokio::spawn(async move {
         while let Some(msg) = receiver.next().await {
             match msg {

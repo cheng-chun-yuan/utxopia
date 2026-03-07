@@ -8,15 +8,15 @@ import { Connection, PublicKey } from "@solana/web3.js";
 import type { WalletContextState } from "@solana/wallet-adapter-react";
 import {
   getSPVProofData,
-  hexToBytes,
   reverseBytes,
   type BlockHeader,
   type MerkleProof,
 } from "./mempool";
+import { hexToBytes } from "@aegis/sdk";
 
-// BTC Light Client Program ID (devnet) — light client PDAs live under this program
+// BTC Light Client Program ID — uses env var, falls back to devnet for dev
 const BTC_LIGHT_CLIENT_ID = new PublicKey(
-  "Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"
+  process.env.NEXT_PUBLIC_BTC_LIGHT_CLIENT_PROGRAM_ID || "Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"
 );
 
 // Minimum confirmations for SPV verification

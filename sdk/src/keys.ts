@@ -536,26 +536,17 @@ export async function serializeDelegatedViewKey(
   password?: string
 ): Promise<string> {
   if (!password) {
-    console.warn(
-      "WARNING: Serializing viewing key without encryption. " +
-      "This is a security risk. Provide a password for encryption."
+    throw new Error(
+      "Password required for viewing key serialization. " +
+      "Unencrypted export is not permitted for security."
     );
-    const obj = {
-      version: 1,
-      encrypted: false,
-      viewingPrivKey: bytesToHex(key.viewingPrivKey),
-      permissions: key.permissions,
-      expiresAt: key.expiresAt,
-      label: key.label,
-    };
-    return JSON.stringify(obj);
   }
 
   const passwordBytes = new TextEncoder().encode(password);
   const salt = new Uint8Array(16);
   crypto.getRandomValues(salt);
 
-  const PBKDF2_ITERATIONS = 150_000;
+  const PBKDF2_ITERATIONS = 600_000;
   const encryptionKey = pbkdf2(sha256, passwordBytes, salt, { c: PBKDF2_ITERATIONS, dkLen: 32 });
 
   const nonce = new Uint8Array(12);

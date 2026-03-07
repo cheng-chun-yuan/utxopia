@@ -227,19 +227,19 @@ impl AEGISConfig {
 
         let pool_state = get_required_or_devnet_default(
             "AEGIS_POOL_STATE",
-            "D2fPWueWrn5H3fazLz7QYydxpBMnL7iqkaxEpFPion5i",
+            "7Xr7MthZPc7YeHfU5SRmguxovhiDNhfestWgtPruUfjE",
             network,
         )?;
 
         let commitment_tree = get_required_or_devnet_default(
             "AEGIS_COMMITMENT_TREE",
-            "3t2wuqAE2mDa5du64Edfie5PYh22eQXqSVvxboPr1kLs",
+            "76bh2QB7c9L73yHea8AV7vthsDsuDCp2QqQToGcA3JdK",
             network,
         )?;
 
         let zkbtc_mint = get_required_or_devnet_default(
             "AEGIS_ZKBTC_MINT",
-            "4pLu3qTY3kNWvvftPG22XzXxWuRPkg7GHWW8hcnoUPgd",
+            "9vUoNHsZUrz25pV1Df7vZSp4yiy3LtPwjqERrvmMSqJv",
             network,
         )?;
 

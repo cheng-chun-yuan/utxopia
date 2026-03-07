@@ -626,12 +626,25 @@ export {
   parseProgramEvents,
   parseLeafInsertedEvent,
   parseNullifierSpentEvent,
+  parseStealthAnnouncementEvent,
   EVENT_LEAF_INSERTED,
   EVENT_NULLIFIER_SPENT,
+  EVENT_STEALTH_ANNOUNCEMENT,
   type LeafInsertedEvent,
   type NullifierSpentEvent,
+  type StealthAnnouncementEvent,
   type ProgramEvent,
 } from "./events";
+
+// ==========================================================================
+// Announcement Client (WS + REST + RPC fallback)
+// ==========================================================================
+
+export {
+  AnnouncementClient,
+  type AnnouncementClientConfig,
+  type AnnouncementListener,
+} from "./announcement-client";
 
 // ==========================================================================
 // Demo Instructions (devnet/localnet only)

@@ -6,6 +6,7 @@
 //!   Phase 2: Process new (Pending) PDAs
 //!   Phase 3: Try to complete (Processing) PDAs
 
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::{Notify, RwLock};
 
@@ -73,10 +74,13 @@ impl RedemptionService {
         signer: impl TxSigner + 'static,
         sol_client: SolClient,
     ) -> Self {
+        let scanner = RedemptionScanner::new(SolClient::new_like(&sol_client));
         let sol_client = Arc::new(sol_client);
-        let scanner = RedemptionScanner::new(SolClient::new(crate::solana::client::SolConfig::default()));
         let tracking = TrackingStore::new("redemption_tracking.json");
         let ws_notify = Arc::new(Notify::new());
+
+        let mut builder = TxBuilder::new_testnet();
+        builder.set_service_fee(config.service_fee_sats);
 
         Self {
             scanner,
@@ -84,7 +88,7 @@ impl RedemptionService {
             sol_client,
             ws_notify,
             queue: WithdrawalQueue::default(),
-            builder: TxBuilder::new_testnet(),
+            builder,
             signer: Arc::new(signer),
             esplora: EsploraClient::from_network(crate::config::Network::Devnet),
             pool_utxos: Arc::new(RwLock::new(Vec::new())),
@@ -101,7 +105,7 @@ impl RedemptionService {
         Self::new_with_signer(RedemptionConfig::default(), signer, sol_client)
     }
 
-    /// Submit a withdrawal request (legacy API, kept for manual/test submissions)
+    /// Submit a withdrawal request
     pub async fn submit_withdrawal(
         &self,
         solana_burn_tx: String,
@@ -164,9 +168,57 @@ impl RedemptionService {
     // 3-Phase Tick Pipeline
     // ========================================================================
 
+    /// Refresh pool UTXOs from Esplora
+    async fn refresh_pool_utxos(&self) -> Result<(), ServiceError> {
+        if self.config.pool_address.is_empty() {
+            return Ok(());
+        }
+
+        let utxos_info = self
+            .esplora
+            .get_address_utxos(&self.config.pool_address)
+            .await
+            .map_err(|e| ServiceError::BuildError(format!("fetch UTXOs: {}", e)))?;
+
+        // Derive script_pubkey from pool address
+        let address = bitcoin::Address::from_str(&self.config.pool_address)
+            .map_err(|e| ServiceError::BuildError(format!("invalid pool address: {}", e)))?
+            .assume_checked();
+        let script_hex = hex::encode(address.script_pubkey().as_bytes());
+
+        let pool_utxos: Vec<PoolUtxo> = utxos_info
+            .into_iter()
+            .filter(|u| u.confirmations > 0) // only confirmed UTXOs
+            .map(|u| PoolUtxo {
+                txid: u.txid,
+                vout: u.vout,
+                amount_sats: u.value,
+                script_pubkey: script_hex.clone(),
+            })
+            .collect();
+
+        let count = pool_utxos.len();
+        let total: u64 = pool_utxos.iter().map(|u| u.amount_sats).sum();
+        *self.pool_utxos.write().await = pool_utxos;
+
+        if count > 0 {
+            println!(
+                "[redemption] Refreshed pool UTXOs: {} UTXOs, {} sats total",
+                count, total
+            );
+        }
+
+        Ok(())
+    }
+
     /// Run one tick of the 3-phase pipeline.
     pub async fn tick(&self) -> Result<TickResult, ServiceError> {
         let mut result = TickResult::default();
+
+        // Phase 0: Refresh pool UTXOs from Esplora
+        if let Err(e) = self.refresh_pool_utxos().await {
+            eprintln!("[tick] Warning: failed to refresh UTXOs: {}", e);
+        }
 
         // Phase 1: Scan all RedemptionRequest PDAs
         let scan = self
@@ -180,10 +232,14 @@ impl RedemptionService {
         let active_addrs = scan.all_addresses();
         self.tracking.reconcile(&active_addrs).await;
 
-        // Phase 2: Process new Pending PDAs
+        // Phase 2: Process new Pending PDAs (or retry previously failed ones)
         for pda in &scan.pending {
-            if self.tracking.contains(&pda.pda_address).await {
-                continue; // already being handled
+            if let Some(entry) = self.tracking.get(&pda.pda_address).await {
+                if entry.local_status != LocalRedemptionStatus::Failed {
+                    continue; // already being handled
+                }
+                // Failed entries can be retried — remove stale tracking
+                self.tracking.remove(&pda.pda_address).await;
             }
             match self.process_new_redemption(pda).await {
                 Ok(_) => result.withdrawals_processed += 1,
@@ -197,8 +253,40 @@ impl RedemptionService {
             }
         }
 
-        // Phase 3: Try to complete Processing PDAs that have a btc_txid in tracking
+        // Phase 3: Try to complete Processing PDAs that have a btc_txid in tracking,
+        //          or retry BTC tx build for Processing PDAs that failed locally.
         for pda in &scan.processing {
+            // Check if this Processing PDA failed locally (no btc_txid) — retry BTC build
+            if let Some(entry) = self.tracking.get(&pda.pda_address).await {
+                if entry.local_status == LocalRedemptionStatus::Failed && entry.btc_txid.is_none() {
+                    self.tracking.remove(&pda.pda_address).await;
+                    match self.build_sign_broadcast(pda).await {
+                        Ok(_) => result.withdrawals_processed += 1,
+                        Err(e) => {
+                            eprintln!(
+                                "[tick] Retry failed for Processing PDA {}: {}",
+                                &pda.pda_address[..8],
+                                e
+                            );
+                        }
+                    }
+                    continue;
+                }
+            } else {
+                // Processing on-chain but not tracked locally — try to build BTC tx
+                match self.build_sign_broadcast(pda).await {
+                    Ok(_) => result.withdrawals_processed += 1,
+                    Err(e) => {
+                        eprintln!(
+                            "[tick] Error building tx for untracked Processing PDA {}: {}",
+                            &pda.pda_address[..8],
+                            e
+                        );
+                    }
+                }
+                continue;
+            }
+
             match self.try_complete_redemption(pda).await {
                 Ok(true) => result.withdrawals_completed += 1,
                 Ok(false) => {} // not ready yet
@@ -218,9 +306,7 @@ impl RedemptionService {
     /// Phase 2: Process a newly-discovered Pending PDA.
     ///
     /// 1. send_mark_processing on-chain
-    /// 2. Build WithdrawalRequest from PDA data
-    /// 3. Build unsigned tx, sign, broadcast
-    /// 4. Store tracking entry
+    /// 2. Build, sign, broadcast BTC tx
     async fn process_new_redemption(
         &self,
         pda: &ParsedRedemption,
@@ -242,22 +328,33 @@ impl RedemptionService {
             pda.amount_sats
         );
 
-        // Step 2: Convert PDA data to a WithdrawalRequest
+        // Step 2: Build, sign, broadcast BTC transaction
+        self.build_sign_broadcast(pda).await
+    }
+
+    /// Build, sign, and broadcast a BTC transaction for a PDA already marked Processing.
+    ///
+    /// This is used both for newly-processed PDAs (after mark_processing) and for
+    /// retrying Processing PDAs that failed the BTC tx step.
+    async fn build_sign_broadcast(
+        &self,
+        pda: &ParsedRedemption,
+    ) -> Result<ProcessResult, ServiceError> {
+        // Convert PDA data to a WithdrawalRequest
         let btc_address = script_to_address(&pda.btc_script, bitcoin::Network::Testnet)
             .map_err(|e| ServiceError::InvalidAddress(e))?;
 
         let mut request = WithdrawalRequest::new(
-            String::new(), // no solana burn tx — we have the PDA
+            String::new(),
             pda.requester.clone(),
             pda.amount_sats,
             btc_address,
         );
         request.redemption_nonce = Some(pda.request_id);
 
-        // Step 3: Get UTXOs and build tx
+        // Get UTXOs and build tx
         let utxos = self.pool_utxos.read().await.clone();
         if utxos.is_empty() {
-            // Store a tracking entry so we don't retry every tick
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
@@ -291,7 +388,7 @@ impl RedemptionService {
                 });
         }
 
-        // Step 4: Sign
+        // Sign
         let signed_tx = self
             .signer
             .sign(&unsigned)
@@ -301,7 +398,7 @@ impl RedemptionService {
         let tx_hex = bitcoin::consensus::encode::serialize_hex(&signed_tx);
         let txid = signed_tx.compute_txid().to_string();
 
-        // Step 5: Broadcast
+        // Broadcast
         let broadcast_mode =
             std::env::var("AEGIS_BROADCAST_MODE").unwrap_or_else(|_| "simulated".to_string());
 
@@ -309,7 +406,8 @@ impl RedemptionService {
             println!("=== Broadcasting Transaction (Real) ===");
             println!("TXID: {}", txid);
             println!("Size: {} bytes", tx_hex.len() / 2);
-            println!("Fee: {} sats", unsigned.fee);
+            println!("Miner fee: {} sats | Service fee: {} sats | Send: {} sats",
+                unsigned.fee, unsigned.service_fee, unsigned.send_amount);
             self.esplora
                 .broadcast_tx(&tx_hex)
                 .await
@@ -318,10 +416,11 @@ impl RedemptionService {
             println!("=== Broadcasting Transaction (Simulated) ===");
             println!("TXID: {}", txid);
             println!("Size: {} bytes", tx_hex.len() / 2);
-            println!("Fee: {} sats", unsigned.fee);
+            println!("Miner fee: {} sats | Service fee: {} sats | Send: {} sats",
+                unsigned.fee, unsigned.service_fee, unsigned.send_amount);
         }
 
-        // Step 6: Store tracking entry
+        // Store tracking entry
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -533,12 +632,12 @@ impl RedemptionService {
         self.stats.read().await.clone()
     }
 
-    /// Get all withdrawal requests (from legacy queue)
+    /// Get all withdrawal requests
     pub async fn get_all_requests(&self) -> Vec<WithdrawalRequest> {
         self.queue.get_all().await
     }
 
-    /// Get request by ID (from legacy queue)
+    /// Get request by ID
     pub async fn get_request(&self, id: &str) -> Option<WithdrawalRequest> {
         self.queue.get(id).await
     }

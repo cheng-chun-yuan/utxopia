@@ -1,7 +1,10 @@
 /**
  * Stealth Announcements API
  *
- * Fetches and caches all stealth announcements from chain.
+ * Fetches stealth announcements from two sources:
+ * 1. Legacy on-chain PDA accounts (for deposits and older transfers)
+ * 2. Transaction log events (disc=0x03) for new transfers (post-event migration)
+ *
  * Clients scan locally for privacy (server doesn't know which belong to whom).
  */
 
@@ -12,6 +15,8 @@ import {
   STEALTH_ANNOUNCEMENT_SIZE,
   parseStealthAnnouncement,
   parseCommitmentTreeData,
+  parseProgramEvents,
+  type StealthAnnouncementEvent,
 } from "@aegis/sdk";
 import { getHeliusConnection } from "@/lib/helius-server";
 
@@ -20,12 +25,12 @@ import { getHeliusConnection } from "@/lib/helius-server";
 // =============================================================================
 
 interface CachedAnnouncement {
-  pubkey: string;
   announcementType: number; // 0=deposit, 1=transfer
   ephemeralPub: string; // hex
   encryptedAmount: string; // hex
   commitment: string; // hex
   leafIndex: number;
+  source: "pda" | "event"; // where this announcement was found
 }
 
 interface CacheData {
@@ -45,16 +50,117 @@ const AEGIS_PROGRAM_ID = new PublicKey(DEVNET_CONFIG.aegisProgramId);
 let announcementCache: CacheData | null = null;
 let fetchPromise: Promise<CacheData> | null = null;
 
+// Track the last signature we've seen for incremental event fetching
+let lastEventSignature: string | undefined;
+
 // =============================================================================
 // Fetch Logic
 // =============================================================================
 
+/**
+ * Fetch stealth announcements from legacy on-chain PDA accounts.
+ */
+async function fetchPdaAnnouncements(
+  connection: ReturnType<typeof getHeliusConnection>,
+  treeNextIndex: number,
+): Promise<CachedAnnouncement[]> {
+  const accounts = await connection.getProgramAccounts(AEGIS_PROGRAM_ID, {
+    filters: [{ dataSize: STEALTH_ANNOUNCEMENT_SIZE }],
+  });
+
+  console.log(`[StealthAPI] Found ${accounts.length} stealth PDA accounts`);
+
+  const announcements: CachedAnnouncement[] = [];
+  for (const account of accounts) {
+    try {
+      const parsed = parseStealthAnnouncement(new Uint8Array(account.account.data));
+      if (parsed) {
+        if (parsed.leafIndex >= treeNextIndex) continue;
+        announcements.push({
+          announcementType: parsed.announcementType,
+          ephemeralPub: Buffer.from(parsed.ephemeralPub).toString("hex"),
+          encryptedAmount: Buffer.from(parsed.encryptedAmount).toString("hex"),
+          commitment: Buffer.from(parsed.commitment).toString("hex"),
+          leafIndex: parsed.leafIndex,
+          source: "pda",
+        });
+      }
+    } catch (e) {
+      console.warn("[StealthAPI] Failed to parse PDA announcement:", e);
+    }
+  }
+
+  return announcements;
+}
+
+/**
+ * Fetch stealth announcements from transaction log events (disc=0x03).
+ */
+async function fetchEventAnnouncements(
+  connection: ReturnType<typeof getHeliusConnection>,
+  treeNextIndex: number,
+): Promise<CachedAnnouncement[]> {
+  const announcements: CachedAnnouncement[] = [];
+
+  // Fetch recent transaction signatures for the program
+  const signatures = await connection.getSignaturesForAddress(
+    AEGIS_PROGRAM_ID,
+    { limit: 200, until: lastEventSignature },
+    "confirmed",
+  );
+
+  if (signatures.length === 0) return announcements;
+
+  // Update cursor for next incremental fetch
+  lastEventSignature = signatures[signatures.length - 1].signature;
+
+  console.log(`[StealthAPI] Scanning ${signatures.length} transactions for stealth events...`);
+
+  // Process in batches to avoid rate limits
+  const BATCH_SIZE = 20;
+  for (let i = 0; i < signatures.length; i += BATCH_SIZE) {
+    const batch = signatures.slice(i, i + BATCH_SIZE);
+    const txResults = await Promise.all(
+      batch.map((sig) =>
+        connection.getTransaction(sig.signature, {
+          commitment: "confirmed",
+          maxSupportedTransactionVersion: 0,
+        })
+      )
+    );
+
+    for (const tx of txResults) {
+      if (!tx?.meta?.logMessages) continue;
+
+      const events = parseProgramEvents(tx.meta.logMessages);
+      for (const event of events) {
+        if (event.type !== "stealth_announcement") continue;
+        const sa = event as StealthAnnouncementEvent;
+
+        if (sa.leafIndex >= treeNextIndex) continue;
+
+        announcements.push({
+          announcementType: sa.announcementType,
+          ephemeralPub: Buffer.from(sa.ephemeralPub).toString("hex"),
+          encryptedAmount: Buffer.from(sa.encryptedAmount).toString("hex"),
+          commitment: Buffer.from(sa.commitment).toString("hex"),
+          leafIndex: sa.leafIndex,
+          source: "event",
+        });
+      }
+    }
+  }
+
+  console.log(`[StealthAPI] Found ${announcements.length} stealth events from tx logs`);
+  return announcements;
+}
+
 async function fetchAnnouncements(): Promise<CacheData> {
   const connection = getHeliusConnection("devnet");
 
-  console.log("[StealthAPI] Fetching stealth announcements from chain...");
+  console.log("[StealthAPI] Fetching stealth announcements...");
 
-  // Fetch tree state to get current nextIndex (filters out stale pre-reset announcements)
+  // Fetch tree state to get current nextIndex
   let treeNextIndex = Number.MAX_SAFE_INTEGER;
   try {
     const commitmentTreePda = new PublicKey(DEVNET_CONFIG.commitmentTreePda);
@@ -68,85 +174,50 @@ async function fetchAnnouncements(): Promise<CacheData> {
     console.warn("[StealthAPI] Failed to fetch tree state, skipping filter:", e);
   }
 
-  const accounts = await connection.getProgramAccounts(AEGIS_PROGRAM_ID, {
-    filters: [{ dataSize: STEALTH_ANNOUNCEMENT_SIZE }],
-  });
+  // Fetch from both sources in parallel
+  const [pdaAnnouncements, eventAnnouncements] = await Promise.all([
+    fetchPdaAnnouncements(connection, treeNextIndex),
+    fetchEventAnnouncements(connection, treeNextIndex),
+  ]);
 
-  console.log(`[StealthAPI] Found ${accounts.length} stealth announcement accounts`);
-
-  const announcements: CachedAnnouncement[] = [];
-
-  for (const account of accounts) {
-    try {
-      const parsed = parseStealthAnnouncement(new Uint8Array(account.account.data));
-      if (parsed) {
-        // Skip stale announcements from before a tree reset
-        if (parsed.leafIndex >= treeNextIndex) {
-          console.log(`[StealthAPI] Skipping stale announcement: leafIndex=${parsed.leafIndex} >= treeNextIndex=${treeNextIndex}`);
-          continue;
-        }
-        announcements.push({
-          pubkey: account.pubkey.toBase58(),
-          announcementType: parsed.announcementType,
-          ephemeralPub: Buffer.from(parsed.ephemeralPub).toString("hex"),
-          encryptedAmount: Buffer.from(parsed.encryptedAmount).toString("hex"),
-          commitment: Buffer.from(parsed.commitment).toString("hex"),
-          leafIndex: parsed.leafIndex,
-        });
-      }
-    } catch (e) {
-      console.warn("[StealthAPI] Failed to parse announcement:", e);
-    }
+  // Merge and deduplicate by leafIndex (event takes priority over PDA)
+  const byLeafIndex = new Map<number, CachedAnnouncement>();
+  for (const ann of pdaAnnouncements) {
+    byLeafIndex.set(ann.leafIndex, ann);
+  }
+  for (const ann of eventAnnouncements) {
+    byLeafIndex.set(ann.leafIndex, ann); // event overwrites PDA if duplicate
   }
 
-  // Sort by leafIndex for consistent ordering
-  announcements.sort((a, b) => a.leafIndex - b.leafIndex);
-
-  // Check for duplicate leafIndex values (indicates stale announcements from pre-reset)
-  const seen = new Set<number>();
-  const deduped: CachedAnnouncement[] = [];
-  for (const ann of announcements) {
-    if (seen.has(ann.leafIndex)) {
-      console.warn(`[StealthAPI] Duplicate leafIndex ${ann.leafIndex}, keeping latest`);
-      // Replace with the latest one (later in sorted order)
-      const idx = deduped.findIndex(a => a.leafIndex === ann.leafIndex);
-      if (idx >= 0) deduped[idx] = ann;
-    } else {
-      seen.add(ann.leafIndex);
-      deduped.push(ann);
-    }
-  }
+  const merged = Array.from(byLeafIndex.values());
+  merged.sort((a, b) => a.leafIndex - b.leafIndex);
 
   const cacheData: CacheData = {
-    announcements: deduped,
+    announcements: merged,
     fetchedAt: Date.now(),
-    count: deduped.length,
+    count: merged.length,
   };
 
-  console.log(`[StealthAPI] Cached ${deduped.length} announcements (filtered ${announcements.length - deduped.length} duplicates)`);
-
+  console.log(`[StealthAPI] Cached ${merged.length} announcements (${pdaAnnouncements.length} PDA + ${eventAnnouncements.length} events)`);
   return cacheData;
 }
 
 async function getAnnouncementsWithCache(forceRefresh = false): Promise<CacheData> {
   const now = Date.now();
 
-  // Force refresh clears the cache
   if (forceRefresh) {
     announcementCache = null;
+    lastEventSignature = undefined;
   }
 
-  // Return cache if still valid
   if (announcementCache && now - announcementCache.fetchedAt < CACHE_TTL_MS) {
     return announcementCache;
   }
 
-  // If already fetching, wait for that promise
   if (fetchPromise) {
     return fetchPromise;
   }
 
-  // Start new fetch
   fetchPromise = fetchAnnouncements()
     .then((data) => {
       announcementCache = data;
@@ -167,10 +238,40 @@ async function getAnnouncementsWithCache(forceRefresh = false): Promise<CacheDat
 
 export async function GET(request: Request) {
   try {
-    // Check for refresh query param
     const url = new URL(request.url);
     const forceRefresh = url.searchParams.get('refresh') === 'true';
 
+    // Try backend indexer first (faster, has full history from SQLite)
+    if (!forceRefresh) {
+      try {
+        const backendUrl = process.env.BACKEND_URL || "http://localhost:8080";
+        const backendResp = await fetch(`${backendUrl}/api/announcements`, {
+          signal: AbortSignal.timeout(3000),
+        });
+        if (backendResp.ok) {
+          const data = await backendResp.json();
+          return NextResponse.json({
+            success: true,
+            announcements: data.announcements.map((a: { leaf_index: number; announcement_type: number; ephemeral_pub: string; encrypted_amount: string; commitment: string }) => ({
+              announcementType: a.announcement_type,
+              ephemeralPub: a.ephemeral_pub,
+              encryptedAmount: a.encrypted_amount,
+              commitment: a.commitment,
+              leafIndex: a.leaf_index,
+              source: "backend",
+            })),
+            count: data.count,
+            cachedAt: Date.now(),
+            cacheAge: 0,
+            source: "backend",
+          });
+        }
+      } catch {
+        console.warn("[StealthAPI] Backend unavailable, falling back to direct RPC");
+      }
+    }
+
+    // Fallback: direct RPC (legacy PDA + event scanning)
     const data = await getAnnouncementsWithCache(forceRefresh);
 
     return NextResponse.json({
@@ -179,6 +280,7 @@ export async function GET(request: Request) {
       count: data.count,
       cachedAt: data.fetchedAt,
       cacheAge: Date.now() - data.fetchedAt,
+      source: "rpc",
     });
   } catch (error) {
     console.error("[StealthAPI] Error fetching announcements:", error);
@@ -195,9 +297,9 @@ export async function GET(request: Request) {
 // Force refresh endpoint
 export async function POST() {
   try {
-    // Clear cache and force refresh
     announcementCache = null;
     fetchPromise = null;
+    lastEventSignature = undefined;
 
     const data = await getAnnouncementsWithCache();
 

@@ -17,7 +17,7 @@ import {
 export type BlockHeader = SdkBlockHeader;
 export type TransactionInfo = SdkTransactionInfo;
 export { MempoolClient, mempoolTestnet, mempoolMainnet };
-export { hexToBytes, bytesToHex } from "@aegis/sdk";
+export { bytesToHex } from "@aegis/sdk";
 export const reverseBytes = sdkReverseBytes;
 
 // Local interface for merkle proof (matches original API)

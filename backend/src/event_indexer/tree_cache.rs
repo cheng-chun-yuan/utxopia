@@ -8,6 +8,7 @@ use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 
 use crate::merkle_tree::{MerkleProof, MerkleTree, TreeStatus};
+use super::parser::StealthAnnouncementEvent;
 use super::storage::EventStore;
 
 /// Update broadcast when a leaf is inserted
@@ -20,12 +21,25 @@ pub struct TreeUpdate {
     pub new_root: String,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AnnouncementUpdate {
+    #[serde(rename = "type")]
+    pub update_type: String,
+    pub announcement_type: u8,
+    pub ephemeral_pub: String,
+    pub encrypted_amount: String,
+    pub commitment: String,
+    pub leaf_index: u32,
+}
+
 /// Cached Merkle tree with read/write locking
 pub struct TreeCache {
     tree: RwLock<MerkleTree>,
     store: Arc<EventStore>,
     /// Broadcast channel for tree update notifications
     update_tx: broadcast::Sender<TreeUpdate>,
+    /// Broadcast channel for stealth announcement notifications
+    announcement_tx: broadcast::Sender<AnnouncementUpdate>,
 }
 
 impl TreeCache {
@@ -47,6 +61,7 @@ impl TreeCache {
 
         let tree = MerkleTree::build_from_leaves(&commitments)?;
         let (update_tx, _) = broadcast::channel(256);
+        let (announcement_tx, _) = broadcast::channel(256);
 
         tracing::info!(
             leaves = commitments.len(),
@@ -58,6 +73,7 @@ impl TreeCache {
             tree: RwLock::new(tree),
             store,
             update_tx,
+            announcement_tx,
         })
     }
 
@@ -144,5 +160,23 @@ impl TreeCache {
     /// Subscribe to tree updates (for WebSocket broadcast)
     pub fn subscribe(&self) -> broadcast::Receiver<TreeUpdate> {
         self.update_tx.subscribe()
+    }
+
+    /// Broadcast a stealth announcement event to subscribers
+    pub fn broadcast_announcement(&self, event: &StealthAnnouncementEvent) {
+        let update = AnnouncementUpdate {
+            update_type: "stealth_announcement".to_string(),
+            announcement_type: event.announcement_type,
+            ephemeral_pub: hex::encode(event.ephemeral_pub),
+            encrypted_amount: hex::encode(event.encrypted_amount),
+            commitment: hex::encode(event.commitment),
+            leaf_index: event.leaf_index,
+        };
+        let _ = self.announcement_tx.send(update);
+    }
+
+    /// Subscribe to stealth announcement updates (for WebSocket broadcast)
+    pub fn subscribe_announcements(&self) -> broadcast::Receiver<AnnouncementUpdate> {
+        self.announcement_tx.subscribe()
     }
 }

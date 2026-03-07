@@ -54,22 +54,16 @@ pub const BTC_LIGHT_CLIENT_PROGRAM_ID: Pubkey =
 // ============================================================================
 
 /// Aegis program ID (devnet default)
-pub const DEVNET_PROGRAM_ID: &str = "AtztELZfz3GHA8hFQCv7aT9Mt47Xhknv3ZCNb3fmXsgf";
+pub const DEVNET_PROGRAM_ID: &str = "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM";
 
 /// Pool state PDA (devnet default)
-pub const DEVNET_POOL_STATE: &str = "8bbcVecB619HHsHn2TQMraJ8R8WjQjApdZY7h9JCJW7b";
+pub const DEVNET_POOL_STATE: &str = "7Xr7MthZPc7YeHfU5SRmguxovhiDNhfestWgtPruUfjE";
 
 /// Commitment tree PDA (devnet default)
-pub const DEVNET_COMMITMENT_TREE: &str = "HtfDXZ5mBQNBdZrDxJMbXCDkyUqFdTDj7zAqo3aqrqiA";
+pub const DEVNET_COMMITMENT_TREE: &str = "76bh2QB7c9L73yHea8AV7vthsDsuDCp2QqQToGcA3JdK";
 
 /// zkBTC mint address (devnet default)
-pub const DEVNET_ZKBTC_MINT: &str = "HiDyAcEBTS7SRiLA49BZ5B6XMBAksgwLEAHpvteR8vbV";
-
-// Legacy aliases for backward compatibility
-pub const PROGRAM_ID: &str = DEVNET_PROGRAM_ID;
-pub const POOL_STATE: &str = DEVNET_POOL_STATE;
-pub const COMMITMENT_TREE: &str = DEVNET_COMMITMENT_TREE;
-pub const ZKBTC_MINT: &str = DEVNET_ZKBTC_MINT;
+pub const DEVNET_ZKBTC_MINT: &str = "9vUoNHsZUrz25pV1Df7vZSp4yiy3LtPwjqERrvmMSqJv";
 
 // ============================================================================
 // Helper Functions
@@ -160,6 +154,22 @@ impl SolClient {
             pool_state: parse_pubkey(DEVNET_POOL_STATE).unwrap(),
             commitment_tree: parse_pubkey(DEVNET_COMMITMENT_TREE).unwrap(),
             zkbtc_mint: parse_pubkey(DEVNET_ZKBTC_MINT).unwrap(),
+        }
+    }
+
+    /// Create a new client with the same config (program IDs, RPC) but no payer.
+    pub fn new_like(other: &SolClient) -> Self {
+        let rpc = RpcClient::new_with_commitment(
+            other.rpc.url(),
+            CommitmentConfig::confirmed(),
+        );
+        Self {
+            rpc,
+            payer: None,
+            program_id: other.program_id,
+            pool_state: other.pool_state,
+            commitment_tree: other.commitment_tree,
+            zkbtc_mint: other.zkbtc_mint,
         }
     }
 
