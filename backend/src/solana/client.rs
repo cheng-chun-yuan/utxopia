@@ -54,16 +54,16 @@ pub const BTC_LIGHT_CLIENT_PROGRAM_ID: Pubkey =
 // ============================================================================
 
 /// Aegis program ID (devnet default)
-pub const DEVNET_PROGRAM_ID: &str = "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM";
+pub const DEVNET_PROGRAM_ID: &str = "8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim";
 
 /// Pool state PDA (devnet default)
-pub const DEVNET_POOL_STATE: &str = "7Xr7MthZPc7YeHfU5SRmguxovhiDNhfestWgtPruUfjE";
+pub const DEVNET_POOL_STATE: &str = "9XASi9bFNFLgDgdVG13UNg4Q9vzWC8XydnEBbdsd4dVt";
 
 /// Commitment tree PDA (devnet default)
-pub const DEVNET_COMMITMENT_TREE: &str = "76bh2QB7c9L73yHea8AV7vthsDsuDCp2QqQToGcA3JdK";
+pub const DEVNET_COMMITMENT_TREE: &str = "CbaDvGVVQqskcu4cz6Fsu3i2q8eWG8GjeqpZiKgPiCaW";
 
 /// zkBTC mint address (devnet default)
-pub const DEVNET_ZKBTC_MINT: &str = "9vUoNHsZUrz25pV1Df7vZSp4yiy3LtPwjqERrvmMSqJv";
+pub const DEVNET_ZKBTC_MINT: &str = "Ga8NYnpoZyNHJG85H8jiRxtcNYE337A25LWtzZ1FFFR1";
 
 // ============================================================================
 // Helper Functions

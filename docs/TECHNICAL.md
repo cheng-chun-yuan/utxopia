@@ -379,7 +379,7 @@ Frontend falls back to RPC log scanning when indexer is unavailable.
 
 | Program | Address |
 |---------|---------|
-| Aegis | `25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM` |
+| Aegis | `8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim` |
 | BTC Light Client | `Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq` |
 | ChadBuffer | `6VrJmWbhN9WbEkg87JizunVMpL6CHKGVmzWCf3o3LRgy` |
 

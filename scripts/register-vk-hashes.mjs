@@ -7,8 +7,8 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 
-const PROGRAM_ID = new PublicKey('25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM');
-const POOL_STATE = new PublicKey('7Xr7MthZPc7YeHfU5SRmguxovhiDNhfestWgtPruUfjE');
+const PROGRAM_ID = new PublicKey('8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim');
+const POOL_STATE = new PublicKey('9XASi9bFNFLgDgdVG13UNg4Q9vzWC8XydnEBbdsd4dVt');
 
 // Read keypair from .env.local
 const envContent = fs.readFileSync(path.join(ROOT, 'aegis-app/.env.local'), 'utf-8');

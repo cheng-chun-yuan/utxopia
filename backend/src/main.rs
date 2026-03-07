@@ -442,7 +442,7 @@ async fn run_tracker_service(args: &[String]) {
     let solana_rpc = env::var("SOLANA_RPC_URL")
         .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
     let aegis_program_id = env::var("AEGIS_PROGRAM_ID")
-        .unwrap_or_else(|_| "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM".to_string());
+        .unwrap_or_else(|_| "8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim".to_string());
 
     let event_store = Arc::new(
         EventStore::new(&indexer_db_path).expect("Failed to create event store")

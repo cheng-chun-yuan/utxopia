@@ -86,7 +86,7 @@ export function StoreHydration(): JSX.Element {
 
     const interval = setInterval(() => {
       if (!document.hidden) refreshAll();
-    }, 30_000);
+    }, 60_000);
 
     // Also refresh when tab becomes visible after being hidden
     const onVisibility = () => {

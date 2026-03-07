@@ -46,7 +46,7 @@ const CHADBUFFER_MAX_DATA_PER_WRITE: usize = SOLANA_TX_SIZE_LIMIT - CHADBUFFER_W
 /// Get Aegis program ID from env or use devnet default
 fn aegis_program_id() -> String {
     std::env::var("AEGIS_PROGRAM_ID")
-        .unwrap_or_else(|_| "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM".to_string())
+        .unwrap_or_else(|_| "8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim".to_string())
 }
 
 /// Get BTC light client program ID from env or use devnet default

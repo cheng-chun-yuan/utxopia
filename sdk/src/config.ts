@@ -176,23 +176,23 @@ export const LOCALNET_CHADBUFFER_PROGRAM_ID: Address = address(
  * Fresh deployment 2026-03-03:
  * - Slim accounts: NullifierRecord 1B; stealth announcements emitted as events
  * - Event emission via sol_log_data
- * - Program ID: 25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM
+ * - Program ID: 8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim
  */
 export const DEVNET_CONFIG: NetworkConfig = {
   network: "devnet",
 
   // Program IDs (fresh deployment 2026-03-03)
-  aegisProgramId: address("25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM"),
+  aegisProgramId: address("8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim"),
   btcLightClientProgramId: address("Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"),
   chadbufferProgramId: CHADBUFFER_PROGRAM_ID,
   token2022ProgramId: TOKEN_2022_PROGRAM_ID,
   ataProgramId: ATA_PROGRAM_ID,
 
-  // Deployed Accounts (fresh deployment 2026-03-03)
-  poolStatePda: address("7Xr7MthZPc7YeHfU5SRmguxovhiDNhfestWgtPruUfjE"),
-  commitmentTreePda: address("76bh2QB7c9L73yHea8AV7vthsDsuDCp2QqQToGcA3JdK"),
-  zkbtcMint: address("8wCJtuj6ir9VxvjJ14EK4KpFffx4gSKV5ZJ1jYSdRzxN"),
-  poolVault: address("ELFqueP7akYfkM7nTfWs3tTS5MJpGnbvMuBUxayKT6zb"),
+  // Deployed Accounts (fresh deployment 2026-03-08)
+  poolStatePda: address("9XASi9bFNFLgDgdVG13UNg4Q9vzWC8XydnEBbdsd4dVt"),
+  commitmentTreePda: address("CbaDvGVVQqskcu4cz6Fsu3i2q8eWG8GjeqpZiKgPiCaW"),
+  zkbtcMint: address("Ga8NYnpoZyNHJG85H8jiRxtcNYE337A25LWtzZ1FFFR1"),
+  poolVault: address("4ywyvYDUL1CEyaN3GxsnN4jwxk6BWvt9qvsU34TMcawe"),
 
   // RPC Endpoints
   solanaRpcUrl: "https://api.devnet.solana.com",
@@ -206,7 +206,7 @@ export const DEVNET_CONFIG: NetworkConfig = {
   circuitCdnUrl: "https://circuits.amidoggy.xyz",
 
   // Groth16 Verifier: verification is inline in the Aegis program (no separate verifier program)
-  groth16VerifierProgramId: address("25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM"),
+  groth16VerifierProgramId: address("8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim"),
 
   // VK Hashes (SHA256 of serialized VK bytes, generated from circom trusted setup)
   vkHashes: {

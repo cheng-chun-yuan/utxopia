@@ -329,8 +329,8 @@ mod tests {
     #[test]
     fn test_pda_derivation_known_vector() {
         // Test with a known program ID and seeds
-        // Using the Aegis program ID: 25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM
-        let program_id_bytes = bs58::decode("25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM")
+        // Using the Aegis program ID: 8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim
+        let program_id_bytes = bs58::decode("8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim")
             .into_vec()
             .unwrap();
         let mut program_id = [0u8; 32];
@@ -353,7 +353,7 @@ mod tests {
     #[test]
     fn test_pda_with_redemption_seeds() {
         // Simulate a real redemption PDA derivation
-        let program_id_bytes = bs58::decode("25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM")
+        let program_id_bytes = bs58::decode("8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim")
             .into_vec()
             .unwrap();
         let mut program_id = [0u8; 32];

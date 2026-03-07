@@ -136,7 +136,7 @@ Two on-chain programs:
 
 | Program | ID (devnet) | Purpose |
 |---------|-------------|---------|
-| Aegis | `25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM` | Main bridge logic (12 instructions) |
+| Aegis | `8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim` | Main bridge logic (12 instructions) |
 | BTC Light Client | `Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq` | Bitcoin header verification |
 
 ```bash

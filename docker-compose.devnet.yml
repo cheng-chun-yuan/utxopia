@@ -80,7 +80,7 @@ services:
       DEPOSIT_DB_PATH: /app/data/deposits.db
       INDEXER_DB_PATH: /app/data/events.db
       INDEXER_POLL_INTERVAL_SECS: "10"
-      AEGIS_PROGRAM_ID: 25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM
+      AEGIS_PROGRAM_ID: 8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim
       TRACKER_API_PORT: "3001"
       MEMPOOL_WS_ENABLED: "true"
       MEMPOOL_WS_URL: wss://mempool.space/testnet4/api/v1/ws

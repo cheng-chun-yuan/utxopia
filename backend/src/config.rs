@@ -221,25 +221,25 @@ impl AEGISConfig {
         // Program IDs (required for non-devnet)
         let program_id = get_required_or_devnet_default(
             "AEGIS_PROGRAM_ID",
-            "25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM",
+            "8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim",
             network,
         )?;
 
         let pool_state = get_required_or_devnet_default(
             "AEGIS_POOL_STATE",
-            "7Xr7MthZPc7YeHfU5SRmguxovhiDNhfestWgtPruUfjE",
+            "9XASi9bFNFLgDgdVG13UNg4Q9vzWC8XydnEBbdsd4dVt",
             network,
         )?;
 
         let commitment_tree = get_required_or_devnet_default(
             "AEGIS_COMMITMENT_TREE",
-            "76bh2QB7c9L73yHea8AV7vthsDsuDCp2QqQToGcA3JdK",
+            "CbaDvGVVQqskcu4cz6Fsu3i2q8eWG8GjeqpZiKgPiCaW",
             network,
         )?;
 
         let zkbtc_mint = get_required_or_devnet_default(
             "AEGIS_ZKBTC_MINT",
-            "9vUoNHsZUrz25pV1Df7vZSp4yiy3LtPwjqERrvmMSqJv",
+            "Ga8NYnpoZyNHJG85H8jiRxtcNYE337A25LWtzZ1FFFR1",
             network,
         )?;
 

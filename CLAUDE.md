@@ -151,7 +151,7 @@ Spending Key (Baby Jubjub) ─► Signs JoinSplit transactions (EdDSA-Poseidon)
 
 ## Key Program IDs
 
-- **Aegis (devnet)**: `25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM`
+- **Aegis (devnet)**: `8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim`
 - **BTC Light Client**: `Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq`
 
 ## On-Chain Instructions

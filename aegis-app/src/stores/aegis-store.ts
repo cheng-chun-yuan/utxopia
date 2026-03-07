@@ -443,21 +443,27 @@ export const useAegisStore = create<AegisState>((set, get) => ({
         const client = getAnnouncementClient();
         const announcements = await client.fetchAll();
 
-        // Skip re-scan if announcement count hasn't changed
+        // Skip only the expensive scan step if announcement count is unchanged,
+        // but ALWAYS re-check nullifiers (spent status may have changed)
         const currentNotes = get().inboxNotes;
-        if (
-          announcements.length === lastAnnouncementCount &&
-          currentNotes.length > 0
-        ) {
-          set({ inboxLoading: false });
-          return;
-        }
+        const announcementsUnchanged =
+          announcements.length === lastAnnouncementCount && currentNotes.length > 0;
         lastAnnouncementCount = announcements.length;
 
         // Scan locally for privacy (server doesn't know which are ours)
-        const scanned = isViewOnly && viewOnlyKeys
-          ? await scanAnnouncementsViewOnly(viewOnlyKeys, announcements)
-          : await scanUnifiedNotes(keys!, announcements);
+        // Re-use previous scan results if announcements unchanged (skip expensive decrypt),
+        // but always re-check nullifier spent status below
+        const scanned = announcementsUnchanged
+          ? currentNotes.map(n => ({
+              commitment: hexToBytesLocal(n.commitmentHex),
+              amount: n.amount,
+              leafIndex: n.leafIndex,
+              ephemeralPub: (n as any).ephemeralPub,
+              npk: (n as any).npk,
+            }))
+          : isViewOnly && viewOnlyKeys
+            ? await scanAnnouncementsViewOnly(viewOnlyKeys, announcements)
+            : await scanUnifiedNotes(keys!, announcements);
 
         // Check which notes are spent — batch all nullifier PDAs into a single getMultipleAccounts RPC call
         const rpcUrl = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.devnet.solana.com";
