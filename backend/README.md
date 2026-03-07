@@ -19,7 +19,7 @@ The backend provides server-side services that cannot run on the client:
 4. Sweeper moves funds to pool wallet (single-key or FROST signing)
 5. SPV Verifier submits proof to Solana with npk + ephemeral_pub
 6. On-chain: commitment = Poseidon(npk, ZKBTC_TOKEN_ID, amount) → Merkle tree
-7. Recipient scans StealthAnnouncement PDAs using viewing key
+7. Recipient scans stealth announcement events using viewing key
 ```
 
 ## Quick Start

@@ -557,17 +557,6 @@ export function saveCommitmentIndex(): void {
 // ============================================================================
 
 /**
- * Stealth announcement account discriminator
- */
-const STEALTH_ANNOUNCEMENT_DISCRIMINATOR = 0x08;
-
-/**
- * Stealth announcement account size
- * Layout: 1 (disc) + 1 (type) + 32 (ephemeral Ed25519) + 8 (amount) + 32 (commitment) + 8 (leaf_idx)
- */
-const STEALTH_ANNOUNCEMENT_SIZE = 82;
-
-/**
  * RPC client interface for on-chain queries
  * Compatible with @solana/web3.js Connection and Helius enhanced RPC
  */
@@ -601,204 +590,53 @@ export interface OnChainMerkleProof {
 }
 
 /**
- * Parse stealth announcement account data
- */
-function parseAnnouncementData(data: Uint8Array): {
-  leafIndex: number;
-  commitment: Uint8Array;
-  encryptedAmount: Uint8Array;
-} | null {
-  if (data.length < STEALTH_ANNOUNCEMENT_SIZE) {
-    return null;
-  }
-
-  if (data[0] !== STEALTH_ANNOUNCEMENT_DISCRIMINATOR) {
-    return null;
-  }
-
-  // Layout: disc(1) + type(1) + ephemeral(32) + amount(8) + commitment(32) + leaf_index(8) = 82
-  const encryptedAmount = data.slice(2 + 32, 2 + 32 + 8);
-  const commitment = data.slice(42, 74);
-
-  // Leaf index at offset 74
-  const leafIndexOffset = 74;
-  const leafIndexView = new DataView(data.buffer, data.byteOffset + leafIndexOffset, 8);
-  const leafIndex = Number(leafIndexView.getBigUint64(0, true));
-
-  return { leafIndex, commitment, encryptedAmount };
-}
-
-/**
- * Convert Uint8Array to bigint (big-endian, for commitment)
- */
-function bytesToBigintBE(bytes: Uint8Array): bigint {
-  let result = 0n;
-  for (let i = 0; i < bytes.length; i++) {
-    result = (result << 8n) | BigInt(bytes[i]);
-  }
-  return result;
-}
-
-/**
- * Encode bytes to base58 for RPC filter
- */
-function toBase58(bytes: Uint8Array): string {
-  const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  let num = 0n;
-  for (const byte of bytes) {
-    num = num * 256n + BigInt(byte);
-  }
-
-  let str = "";
-  while (num > 0n) {
-    str = ALPHABET[Number(num % 58n)] + str;
-    num = num / 58n;
-  }
-
-  // Handle leading zeros
-  for (const byte of bytes) {
-    if (byte === 0) {
-      str = "1" + str;
-    } else {
-      break;
-    }
-  }
-
-  return str || "1";
-}
-
-/**
- * Build commitment tree from on-chain stealth announcements
+ * Build commitment tree from indexed commitment data.
  *
- * Fetches all stealth announcement accounts and builds local merkle tree.
- * Uses Helius-compatible getProgramAccounts with filters for efficiency.
+ * Stealth announcements are now emitted as events, not stored as PDAs.
+ * This function accepts a commitments map (leafIndex → commitment bigint)
+ * from the event indexer and builds the local Merkle tree.
  *
- * Note: The SDK does not cache - backends should implement their own caching
- * by storing the returned tree and only calling this when needed.
- *
- * @param rpc - RPC client (Connection or Helius)
- * @param programId - Aegis program ID
- * @returns CommitmentTreeIndex with all on-chain commitments
- *
- * @example
- * ```typescript
- * import { buildCommitmentTreeFromChain } from '@aegis/sdk';
- * import { Connection } from '@solana/web3.js';
- *
- * const connection = new Connection('https://api.devnet.solana.com');
- * const tree = await buildCommitmentTreeFromChain(connection, AEGIS_PROGRAM_ID);
- * console.log(`Loaded ${tree.size()} commitments`);
- *
- * // Backend caching example:
- * let cachedTree = null;
- * let lastFetch = 0;
- * const CACHE_TTL = 60_000; // 1 minute
- *
- * async function getTree() {
- *   if (!cachedTree || Date.now() - lastFetch > CACHE_TTL) {
- *     cachedTree = await buildCommitmentTreeFromChain(connection, programId);
- *     lastFetch = Date.now();
- *   }
- *   return cachedTree;
- * }
- * ```
+ * @param _rpc - RPC client (unused, kept for API compatibility)
+ * @param _programId - Aegis program ID (unused)
+ * @param options - commitments map from indexer
  */
 export async function buildCommitmentTreeFromChain(
-  rpc: RpcClient,
-  programId: string,
+  _rpc: RpcClient,
+  _programId: string,
   options?: { maxLeafIndex?: number; commitments?: Map<number, bigint> }
 ): Promise<CommitmentTreeIndex> {
-  console.log("[CommitmentTree] Fetching stealth announcements from chain...");
-
-  // Use discriminator filter to only get StealthAnnouncement accounts
-  // This is efficient with Helius and standard RPC
-  const accounts = await rpc.getProgramAccounts(programId, {
-    filters: [
-      { memcmp: { offset: 0, bytes: toBase58(new Uint8Array([STEALTH_ANNOUNCEMENT_DISCRIMINATOR])) } },
-      { dataSize: STEALTH_ANNOUNCEMENT_SIZE },
-    ],
-    encoding: "base64",
-  });
-
-  console.log(`[CommitmentTree] Found ${accounts.length} stealth announcements`);
-
-  // With slim layout, commitments are no longer stored on-chain.
-  // To build the tree, we need commitments from the indexer API.
-  // If a commitments map is provided via options, use it.
-  // Otherwise, this function returns a tree built from indexer data only.
   const commitmentsByIndex = options?.commitments ?? new Map<number, bigint>();
 
-  // Parse leaf indices from on-chain accounts
-  const announcements: Array<{ commitment: bigint; leafIndex: number }> = [];
+  // Sort by leaf index
+  const sorted = Array.from(commitmentsByIndex.entries()).sort((a, b) => a[0] - b[0]);
 
-  for (const { account } of accounts) {
-    let data: Uint8Array;
-    if (typeof account.data === "string") {
-      data = Uint8Array.from(atob(account.data), (c) => c.charCodeAt(0));
-    } else {
-      data = account.data;
-    }
-
-    const parsed = parseAnnouncementData(data);
-    if (parsed) {
-      if (options?.maxLeafIndex !== undefined && parsed.leafIndex >= options.maxLeafIndex) {
-        continue;
-      }
-      // Use on-chain commitment (self-sovereign), fall back to indexer
-      const onChainCommitment = bytesToBigintBE(parsed.commitment);
-      const commitment = onChainCommitment !== 0n
-        ? onChainCommitment
-        : (commitmentsByIndex.get(parsed.leafIndex) ?? 0n);
-      announcements.push({ commitment, leafIndex: parsed.leafIndex });
+  if (options?.maxLeafIndex !== undefined) {
+    const max = options.maxLeafIndex;
+    while (sorted.length > 0 && sorted[sorted.length - 1][0] >= max) {
+      sorted.pop();
     }
   }
 
-  // Sort by leaf index to insert in correct order
-  announcements.sort((a, b) => a.leafIndex - b.leafIndex);
-
-  // Deduplicate by leafIndex (stale pre-reset announcements may share indices with current ones)
-  const deduped: Array<{ commitment: bigint; leafIndex: number }> = [];
-  for (const ann of announcements) {
-    if (deduped.length > 0 && deduped[deduped.length - 1].leafIndex === ann.leafIndex) {
-      console.warn(`[CommitmentTree] Duplicate leafIndex ${ann.leafIndex}, replacing`);
-      deduped[deduped.length - 1] = ann;
-    } else {
-      deduped.push(ann);
-    }
-  }
-
-  if (deduped.length < announcements.length) {
-    console.log(`[CommitmentTree] Filtered ${announcements.length - deduped.length} duplicate announcements`);
-  }
-
-  // Build tree
   const tree = new CommitmentTreeIndex();
 
-  for (const { commitment, leafIndex } of deduped) {
-    // Verify leaf indices are sequential
-    if (BigInt(leafIndex) !== tree.getNextIndex()) {
-      console.warn(
-        `[CommitmentTree] Gap in leaf indices: expected ${tree.getNextIndex()}, got ${leafIndex}`
-      );
-      // Fill gaps with zero commitments (shouldn't happen in practice)
-      while (tree.getNextIndex() < BigInt(leafIndex)) {
-        tree.addCommitment(0n, 0n);
-      }
+  for (const [leafIndex, commitment] of sorted) {
+    // Fill gaps with zero commitments
+    while (tree.getNextIndex() < BigInt(leafIndex)) {
+      tree.addCommitment(0n, 0n);
     }
-    tree.addCommitment(commitment, 0n); // Amount unknown without decryption
+    tree.addCommitment(commitment, 0n);
   }
 
   console.log(`[CommitmentTree] Built tree with ${tree.size()} leaves, root: ${tree.getRoot().toString(16).slice(0, 16)}...`);
-
   return tree;
 }
 
 /**
  * Get leaf index for a commitment.
  *
- * With slim StealthAnnouncement layout, commitment is no longer stored on-chain.
+ * Commitments are emitted as sol_log_data events (not stored in PDAs).
  * Use scanUnifiedNotes() to get leafIndex for your notes, or query the indexer API.
- * This function builds the full tree from chain to find the index.
+ * This function builds the full tree from provided commitments to find the index.
  *
  * @param rpc - RPC client
  * @param programId - Aegis program ID

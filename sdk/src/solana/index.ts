@@ -16,8 +16,6 @@ export {
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
   deriveNullifierRecordPDA,
-  deriveStealthAnnouncementPDA,
-  deriveDepositStealthPDA,
   deriveLightClientPDA,
   deriveBlockHeaderPDA,
   deriveHeightIndexPDA,

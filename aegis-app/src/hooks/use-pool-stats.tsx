@@ -17,21 +17,18 @@
 
 import useSWR from "swr";
 import { DEVNET_CONFIG } from "@aegis/sdk";
-import { fetchAccountInfo, getRpc } from "@/lib/adapters/connection-adapter";
-import { address } from "@solana/kit";
+import { fetchAccountInfo } from "@/lib/adapters/connection-adapter";
 
 export interface PoolStats {
   /** Total zkBTC currently in shielded commitments (sats) — "Vault" */
   totalShielded: bigint;
-  /** Number of stealth announcement PDAs on-chain — "Deposits" */
-  stealthAnnouncementCount: number;
-  /** Total transaction volume: deposit_count + total_minted + total_burned (sats) — "Volume" */
+  /** Number of deposits (from pool state counter) — "Deposits" */
+  depositCount: number;
+  /** Total transaction volume: total_minted + total_burned (sats) — "Volume" */
   volume: bigint;
 }
 
 const POOL_STATE_ADDRESS = DEVNET_CONFIG.poolStatePda;
-const AEGIS_PROGRAM_ID = DEVNET_CONFIG.aegisProgramId;
-const STEALTH_ANNOUNCEMENT_SIZE = 82;
 
 /**
  * Fetch pool stats from on-chain data.
@@ -41,7 +38,6 @@ async function fetchPoolStats(): Promise<PoolStats> {
   let depositCount = 0n;
   let totalMinted = 0n;
   let totalBurned = 0n;
-  let stealthAnnouncementCount = 0;
 
   // Fetch pool state for counters
   const poolInfo = await fetchAccountInfo(POOL_STATE_ADDRESS);
@@ -58,26 +54,10 @@ async function fetchPoolStats(): Promise<PoolStats> {
     totalShielded = view.getBigUint64(188, true);
   }
 
-  // Count stealth announcements (deposits + transfers) via getProgramAccounts
-  try {
-    const rpc = getRpc();
-    const accounts = await rpc
-      .getProgramAccounts(address(AEGIS_PROGRAM_ID), {
-        dataSlice: { offset: 0, length: 1 },
-        filters: [{ dataSize: BigInt(STEALTH_ANNOUNCEMENT_SIZE) }],
-        encoding: "base64",
-      })
-      .send();
-    stealthAnnouncementCount = accounts.length;
-  } catch {
-    // Fall back to deposit_count if getProgramAccounts fails
-    stealthAnnouncementCount = Number(depositCount);
-  }
-
   // Volume = total minted + total burned (represents all BTC flow through the bridge)
   const volume = totalMinted + totalBurned;
 
-  return { totalShielded, stealthAnnouncementCount, volume };
+  return { totalShielded, depositCount: Number(depositCount), volume };
 }
 
 /**

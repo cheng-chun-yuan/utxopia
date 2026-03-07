@@ -1,51 +1,32 @@
-//! zkBTC Backend - Minimal Server-Side Services
+//! Aegis Backend
 //!
-//! This backend only contains the server-side components that cannot run
-//! on the client. All other functionality is handled by the SDK.
+//! Server-side services for the privacy-preserving Bitcoin-to-Solana bridge.
 //!
-//! ## Server-Side Services
+//! ## Services
 //!
-//! 1. **Header Relay (TypeScript)** - Submits Bitcoin headers to Solana light client
-//! 2. **Redemption Processor** - Signs and broadcasts BTC withdrawals
-//!
-//! ## Client-Side (SDK)
-//!
-//! All deposit, claim, and verification logic is handled by the SDK:
-//! - Note generation (nullifier + secret)
-//! - Taproot address derivation
-//! - Groth16 ZK proof generation
-//! - Merkle tree operations
-//! - Transaction building and signing
+//! - **Deposit Tracker** - Watches BTC deposits, sweeps UTXOs, submits SPV proofs
+//! - **Header Relayer** - Submits Bitcoin headers to Solana light client
+//! - **Redemption Processor** - Signs and broadcasts BTC withdrawals
+//! - **Event Indexer** - Indexes on-chain Merkle tree events
+//! - **Stealth Service** - Stealth deposit address preparation
 //!
 //! ## Module Organization
 //!
-//! The codebase is organized into these layers:
-//! - `common/` - Configuration, logging, error handling
+//! - `common/` - Logging, error handling
 //! - `bitcoin/` - Esplora client, signing, taproot, SPV
 //! - `solana/` - Solana RPC client
-//! - `storage/` - Storage traits and implementations
-//! - `types/` - Shared data types
-//! - `services/` - Domain services (deposit, redemption, stealth)
-//! - `api/` - HTTP server, routes, middleware, WebSocket
-
-// =============================================================================
-// New Module Organization
-// =============================================================================
+//! - `api/` - Middleware and validation
+//! - `deposit_tracker/` - Full deposit lifecycle
+//! - `redemption/` - BTC withdrawal processing
+//! - `event_indexer/` - On-chain event indexing
+//! - `stealth/` - Stealth deposit service
 
 pub mod common;
 pub mod bitcoin;
 pub mod solana;
-pub mod storage;
-pub mod types;
-pub mod services;
 pub mod api;
 pub mod event_indexer;
 pub mod merkle_tree;
-
-// =============================================================================
-// Active Domain Modules
-// =============================================================================
-
 pub mod api_server;
 pub mod config;
 pub mod deposit_tracker;

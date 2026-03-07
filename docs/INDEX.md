@@ -66,7 +66,7 @@ Privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs.
 |----------|-------|---------|
 | `ZKBTC_TOKEN_ID` | `0x7a627463` ("zkbtc" as u32) | Commitment computation |
 | `DEPOSIT_OP_RETURN_SIZE` | 64 bytes | `ephemeralPub(32) + npk(32)` |
-| `StealthAnnouncement` size | 90 bytes | Unified on-chain PDA (type: 0=deposit, 1=transfer) |
+| Stealth announcements | sol_log_data events | disc=0x03, type: 0=deposit, 1=transfer |
 | Merkle tree depth | 16 (65,536 leaves) | Commitment storage |
 | Groth16 proof size | 256 bytes | 2 G1 + 1 G2 on BN254 |
 | FROST threshold | 2-of-3 | BTC custody signing |

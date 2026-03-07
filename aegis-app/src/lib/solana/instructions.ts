@@ -101,19 +101,6 @@ export function deriveNullifierPDA(
 }
 
 /**
- * Derive Deposit Stealth Announcement PDA (unified: ["stealth", txid])
- */
-export function deriveDepositStealthPDA(
-  txidBytes: Uint8Array,
-  programId: PublicKey = AEGIS_PROGRAM_ID
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from(PDA_SEEDS.STEALTH), txidBytes],
-    programId
-  );
-}
-
-/**
  * Derive Light Client PDA
  */
 export function deriveLightClientPDA(
@@ -191,20 +178,6 @@ export function deriveRedemptionRequestPDA(
   view.setBigUint64(0, nonce, true);
   return PublicKey.findProgramAddressSync(
     [Buffer.from("redemption"), userPubkey.toBytes(), nonceBytes],
-    programId
-  );
-}
-
-/**
- * Derive Transfer Stealth Announcement PDA
- * Seeds: ["stealth", ephemeralPub(32)]
- */
-export function deriveTransferStealthAnnouncementPDA(
-  ephemeralPub: Uint8Array,
-  programId: PublicKey = AEGIS_PROGRAM_ID
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from(PDA_SEEDS.STEALTH), ephemeralPub],
     programId
   );
 }
@@ -427,17 +400,19 @@ export function buildVerifyTransactionInstruction(params: {
 
 /**
  * Build verify_stealth_deposit TransactionInstruction (11 accounts)
+ *
+ * Stealth announcement is emitted as sol_log_data event (no PDA account needed).
  */
 export function buildVerifyStealthDepositInstruction(params: {
   poolStatePDA: PublicKey;
   verifiedTxPDA: PublicKey;
   lightClientPDA: PublicKey;
   commitmentTreePDA: PublicKey;
-  stealthAnnouncementPDA: PublicKey;
-  chadBuffer: PublicKey;
+  sweepTxBuffer: PublicKey;
   authority: PublicKey; // signer, must match pool.authority
   zkbtcMint: PublicKey;
   poolVaultATA: PublicKey;
+  depositTxBuffer: PublicKey;
   instructionData: Buffer;
 }): TransactionInstruction {
   return new TransactionInstruction({
@@ -447,13 +422,13 @@ export function buildVerifyStealthDepositInstruction(params: {
       { pubkey: params.verifiedTxPDA, isSigner: false, isWritable: false },
       { pubkey: params.lightClientPDA, isSigner: false, isWritable: false },
       { pubkey: params.commitmentTreePDA, isSigner: false, isWritable: true },
-      { pubkey: params.stealthAnnouncementPDA, isSigner: false, isWritable: true },
-      { pubkey: params.chadBuffer, isSigner: false, isWritable: false },
+      { pubkey: params.sweepTxBuffer, isSigner: false, isWritable: false },
       { pubkey: params.authority, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       { pubkey: params.zkbtcMint, isSigner: false, isWritable: true },
       { pubkey: params.poolVaultATA, isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: params.depositTxBuffer, isSigner: false, isWritable: false },
     ],
     data: params.instructionData,
   });

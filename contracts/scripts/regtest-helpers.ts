@@ -16,7 +16,7 @@ const PROJECT_ROOT = path.resolve(__dirname, "../..");
 const COMPOSE_FILE = path.join(PROJECT_ROOT, "docker-compose.regtest.yml");
 const CONTAINER_NAME = "aegis-esplora-regtest";
 
-const DEFAULT_ESPLORA_URL = "http://localhost:3000/regtest/api";
+const DEFAULT_ESPLORA_URL = "http://localhost:3002/regtest/api";
 
 // bitcoin-cli path inside the blockstream/esplora container
 let bitcoinCliPath = "/srv/explorer/bitcoin/bin/bitcoin-cli";

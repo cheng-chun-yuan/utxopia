@@ -34,23 +34,25 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
+//! ```rust,no_run
 //! use zkbtc::redemption::RedemptionService;
 //!
 //! #[tokio::main]
-//! async fn main() {
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     let service = RedemptionService::new_testnet();
 //!
 //!     // Submit withdrawal request
 //!     let id = service.submit_withdrawal(
-//!         "sol_burn_tx",
-//!         "user_pubkey",
+//!         "sol_burn_tx".to_string(),
+//!         "user_pubkey".to_string(),
 //!         100_000, // sats
-//!         "tb1q...",
+//!         "tb1q...".to_string(),
+//!         None,
 //!     ).await?;
 //!
 //!     // Run the service
 //!     service.run().await?;
+//!     Ok(())
 //! }
 //! ```
 

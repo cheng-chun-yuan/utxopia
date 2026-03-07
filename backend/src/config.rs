@@ -103,7 +103,7 @@ impl Network {
             Network::Mainnet => "https://mempool.space/api",
             Network::Testnet => "https://mempool.space/testnet/api",
             Network::Devnet => "https://mempool.space/testnet4/api",
-            Network::Regtest => "http://localhost:2140",
+            Network::Regtest => "http://localhost:3002/regtest/api",
         }
     }
 

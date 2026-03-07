@@ -73,7 +73,7 @@ const StatsDisplay = memo(function StatsDisplay({
   }
 
   const vaultBtc = (Number(stats?.totalShielded ?? 0n) / 100_000_000).toFixed(4);
-  const leafCount = (stats?.stealthAnnouncementCount ?? 0).toLocaleString();
+  const leafCount = (stats?.depositCount ?? 0).toLocaleString();
   const volumeBtc = (Number(stats?.volume ?? 0n) / 100_000_000).toFixed(4);
 
   return (

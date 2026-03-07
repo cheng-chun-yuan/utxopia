@@ -51,7 +51,6 @@ export const PDA_SEEDS = {
   VERIFIED_TX: "verified_tx",
   DEPOSIT: "deposit",
   NULLIFIER: "nullifier",
-  STEALTH: "stealth",
   VK_REGISTRY: "vk_registry",
 } as const;
 
@@ -95,37 +94,6 @@ export async function deriveNullifierRecordPDA(
   const result = await getProgramDerivedAddress({
     programAddress: programId,
     seeds: [new TextEncoder().encode(PDA_SEEDS.NULLIFIER), nullifierHash],
-  });
-  return [result[0], result[1]];
-}
-
-/**
- * Derive Stealth Announcement PDA
- */
-export async function deriveStealthAnnouncementPDA(
-  ephemeralPubOrCommitment: Uint8Array,
-  programId: Address = AEGIS_PROGRAM_ID
-): Promise<[Address, number]> {
-  const result = await getProgramDerivedAddress({
-    programAddress: programId,
-    seeds: [new TextEncoder().encode(PDA_SEEDS.STEALTH), ephemeralPubOrCommitment],
-  });
-  return [result[0], result[1]];
-}
-
-/**
- * Derive Deposit Stealth Announcement PDA (unified: ["stealth", txid])
- *
- * For deposits, the PDA is seeded by txid to prevent double-verification.
- * For transfers, use deriveStealthAnnouncementPDA(ephemeralPub) instead.
- */
-export async function deriveDepositStealthPDA(
-  txid: Uint8Array,
-  programId: Address = AEGIS_PROGRAM_ID
-): Promise<[Address, number]> {
-  const result = await getProgramDerivedAddress({
-    programAddress: programId,
-    seeds: [new TextEncoder().encode(PDA_SEEDS.STEALTH), txid],
   });
   return [result[0], result[1]];
 }

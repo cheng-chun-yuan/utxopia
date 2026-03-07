@@ -197,7 +197,7 @@ const ix = buildTransactInstruction(options);
 
 npk-based deposits: user sends BTC with OP_RETURN containing `ephemeralPub(32) + npk(32)` = 64 bytes.
 Commitment is computed ON-CHAIN: `Poseidon(npk, ZKBTC_TOKEN_ID, amount)`.
-Both deposits and transfers use a unified `StealthAnnouncement` PDA (90 bytes) with a `type` field:
+Stealth announcements are emitted as `sol_log_data` events (disc=0x03), not stored as PDAs:
 - `type = 0` (deposit): `amount_bytes` is plaintext u64 LE
 - `type = 1` (transfer): `amount_bytes` is XOR-encrypted
 
@@ -206,7 +206,6 @@ Sweep transactions have no OP_RETURN — Solana verifies everything via the Veri
 Key constants:
 - `ZKBTC_TOKEN_ID = 0x7a627463` ("zkbtc" as u32)
 - `DEPOSIT_OP_RETURN_SIZE = 64`
-- `StealthAnnouncement::SIZE = 90`
 
 ## Development Notes
 

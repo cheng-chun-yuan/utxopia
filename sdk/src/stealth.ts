@@ -34,14 +34,6 @@
 
 // ========== Constants (defined before imports to ensure availability) ==========
 
-/** StealthAnnouncement account size (82 bytes)
- * Layout: 1 (disc) + 1 (type) + 32 (ephemeral) + 8 (amount) + 32 (commitment) + 8 (leaf_idx)
- * Removed: created_at (8B, emitted as event) */
-export const STEALTH_ANNOUNCEMENT_SIZE = 82;
-
-/** Discriminator for StealthAnnouncement */
-export const STEALTH_ANNOUNCEMENT_DISCRIMINATOR = 0x08;
-
 /** Announcement type: deposit (plaintext amount) */
 export const ANNOUNCEMENT_TYPE_DEPOSIT = 0;
 
@@ -654,63 +646,6 @@ export async function prepareClaimInputs(
   };
 }
 
-// ========== On-chain Parsing ==========
-
-/**
- * Parse a StealthAnnouncement account data (slim format)
- *
- * Layout (50 bytes):
- * - discriminator (1 byte) = 0x08
- * - announcement_type (1 byte): 0=deposit (plaintext), 1=transfer (encrypted)
- * - ephemeral_pub (32 bytes) - Ed25519 key
- * - amount_bytes (8 bytes) - plaintext if type=0, encrypted if type=1
- * - commitment (32 bytes) - Poseidon hash stored on-chain
- * - leaf_index (8 bytes)
- */
-export function parseStealthAnnouncement(
-  data: Uint8Array
-): OnChainStealthAnnouncement | null {
-  if (data.length < STEALTH_ANNOUNCEMENT_SIZE) {
-    return null;
-  }
-
-  if (data[0] !== STEALTH_ANNOUNCEMENT_DISCRIMINATOR) {
-    return null;
-  }
-
-  const announcementType = data[1];
-
-  let offset = 2; // Skip discriminator and announcement_type
-
-  const ephemeralPub = data.slice(offset, offset + 32);
-  offset += 32;
-
-  const encryptedAmount = data.slice(offset, offset + 8);
-  offset += 8;
-
-  const commitment = data.slice(offset, offset + 32);
-  offset += 32;
-
-  const leafIndexView = new DataView(
-    data.buffer,
-    data.byteOffset + offset,
-    8
-  );
-  const leafIndexBigInt = leafIndexView.getBigUint64(0, true);
-  if (leafIndexBigInt > BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new Error("Leaf index overflow - value exceeds safe integer range");
-  }
-  const leafIndex = Number(leafIndexBigInt);
-
-  return {
-    announcementType,
-    ephemeralPub,
-    encryptedAmount,
-    commitment,
-    leafIndex,
-  };
-}
-
 // ========== Unified Note Scanning ==========
 
 /**
@@ -966,32 +901,6 @@ export function computeNullifierHashForNote(
   // No extra hash layer — the nullifier IS the public output
   const nullifier = computeJoinSplitNullifierSync(keys.nullifyingKey, BigInt(note.leafIndex));
   return bigintToBytes(nullifier);
-}
-
-/**
- * Derive StealthAnnouncement PDA address from ephemeral pubkey
- *
- * PDA seed: ["stealth", ephemeral_pub] (full 32 bytes for Ed25519)
- */
-export function deriveStealthAnnouncementPda(
-  ephemeralPub: Uint8Array,
-  programId: string
-): string {
-  if (ephemeralPub.length !== 32) {
-    throw new Error("Ephemeral pubkey must be 32 bytes (Ed25519)");
-  }
-
-  const { getProgramDerivedAddress, address } = require("@solana/kit");
-
-  const [pda] = getProgramDerivedAddress({
-    programAddress: address(programId),
-    seeds: [
-      new TextEncoder().encode("stealth"),
-      ephemeralPub,
-    ],
-  });
-
-  return pda.toString();
 }
 
 // ========== Deposit Ownership Check ==========

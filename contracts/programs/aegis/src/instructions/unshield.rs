@@ -347,7 +347,7 @@ pub fn process_unshield(
 
             // Emit stealth announcement as log event (replaces PDA creation)
             crate::utils::events::emit_stealth_announcement(
-                crate::state::ANNOUNCEMENT_TYPE_TRANSFER,
+                crate::utils::events::ANNOUNCEMENT_TYPE_TRANSFER,
                 ephemeral_pub,
                 encrypted_amount,
                 commitments_out[i],

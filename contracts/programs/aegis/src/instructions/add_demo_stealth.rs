@@ -8,20 +8,21 @@
 //! 2. Client sends ephemeralPub(32) + npk(32) + amount_sats(u64)
 //! 3. This instruction computes commitment ON-CHAIN: Poseidon(npk, token, amount)
 //! 4. Commitment is inserted into Merkle tree
-//! 5. StealthAnnouncement created with type=DEPOSIT (plaintext amount)
+//! 5. Stealth announcement emitted as sol_log_data event (type=0, plaintext amount)
 //! 6. User scans announcements with viewing key to detect deposits
 
 use pinocchio::{
     account_info::AccountInfo,
     program_error::ProgramError,
-    pubkey::{find_program_address, Pubkey},
-    sysvars::{clock::Clock, rent::Rent, Sysvar},
+    pubkey::Pubkey,
+    sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
 
 use crate::error::AegisError;
-use crate::state::{CommitmentTree, PoolState, StealthAnnouncement, STEALTH_ANNOUNCEMENT_DISCRIMINATOR};
-use crate::utils::{mint_zkbtc, validate_program_owner, validate_system_program, validate_token_2022_owner, validate_token_program_key, create_pda_account, compute_deposit_commitment};
+use crate::state::{CommitmentTree, PoolState};
+use crate::utils::events::ANNOUNCEMENT_TYPE_DEPOSIT;
+use crate::utils::{mint_zkbtc, validate_program_owner, validate_system_program, validate_token_2022_owner, validate_token_program_key, compute_deposit_commitment};
 
 /// Add demo stealth instruction data (npk-based, matches real deposits)
 ///
@@ -70,29 +71,27 @@ impl AddDemoStealthData {
 /// Accounts:
 /// 0. pool_state - Pool state PDA (writable)
 /// 1. commitment_tree - Commitment tree PDA (writable)
-/// 2. stealth_announcement - Stealth announcement PDA (to create, writable)
-/// 3. authority - Pool authority (signer, pays for announcement)
-/// 4. system_program - System program
-/// 5. zkbtc_mint - zkBTC Token-2022 mint (writable)
-/// 6. pool_vault - Pool vault token account (writable)
-/// 7. token_program - Token-2022 program
+/// 2. authority - Pool authority (signer, pays for announcement)
+/// 3. system_program - System program
+/// 4. zkbtc_mint - zkBTC Token-2022 mint (writable)
+/// 5. pool_vault - Pool vault token account (writable)
+/// 6. token_program - Token-2022 program
 pub fn process_add_demo_stealth(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     data: &[u8],
 ) -> ProgramResult {
-    if accounts.len() < 8 {
+    if accounts.len() < 7 {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
     let pool_state = &accounts[0];
     let commitment_tree = &accounts[1];
-    let stealth_announcement = &accounts[2];
-    let authority = &accounts[3];
-    let system_program = &accounts[4];
-    let zkbtc_mint = &accounts[5];
-    let pool_vault = &accounts[6];
-    let token_program = &accounts[7];
+    let authority = &accounts[2];
+    let system_program = &accounts[3];
+    let zkbtc_mint = &accounts[4];
+    let pool_vault = &accounts[5];
+    let token_program = &accounts[6];
 
     let ix_data = AddDemoStealthData::from_bytes(data)?;
 
@@ -128,14 +127,6 @@ pub fn process_add_demo_stealth(
         pool.bump
     };
 
-    // Verify stealth announcement PDA
-    // Ed25519 ephemeral pub is already 32 bytes, use directly as PDA seed
-    let seeds: &[&[u8]] = &[StealthAnnouncement::SEED, &ix_data.ephemeral_pub];
-    let (expected_pda, bump) = find_program_address(seeds, program_id);
-    if stealth_announcement.key() != &expected_pda {
-        return Err(ProgramError::InvalidSeeds);
-    }
-
     let clock = Clock::get()?;
 
     // Insert commitment into Merkle tree
@@ -150,46 +141,15 @@ pub fn process_add_demo_stealth(
         tree.insert_leaf(&commitment)?
     };
 
-    // Create stealth announcement PDA if it doesn't exist
-    let account_data_len = stealth_announcement.data_len();
-    if account_data_len > 0 {
-        let ann_data = stealth_announcement.try_borrow_data()?;
-        if ann_data[0] == STEALTH_ANNOUNCEMENT_DISCRIMINATOR {
-            return Err(ProgramError::AccountAlreadyInitialized);
-        }
-    } else {
-        let rent = Rent::get()?;
-        let lamports = rent.minimum_balance(StealthAnnouncement::SIZE);
-
-        let bump_bytes = [bump];
-        let signer_seeds: &[&[u8]] = &[
-            StealthAnnouncement::SEED,
-            &ix_data.ephemeral_pub,
-            &bump_bytes,
-        ];
-
-        create_pda_account(
-            authority,
-            stealth_announcement,
-            program_id,
-            lamports,
-            StealthAnnouncement::SIZE as u64,
-            signer_seeds,
-        )?;
-    }
-
-    // Initialize stealth announcement
-    {
-        let mut ann_data = stealth_announcement.try_borrow_mut_data()?;
-        let announcement = StealthAnnouncement::init(&mut ann_data)?;
-
-        announcement.announcement_type = crate::state::ANNOUNCEMENT_TYPE_DEPOSIT;
-        announcement.ephemeral_pub = ix_data.ephemeral_pub;
-        // Store plaintext amount (type=0 deposit, not XOR-encrypted)
-        announcement.set_amount_sats(ix_data.amount_sats);
-        announcement.commitment = commitment;
-        announcement.set_leaf_index(leaf_index);
-    }
+    // Emit stealth announcement as log event (replaces PDA creation)
+    let amount_bytes = ix_data.amount_sats.to_le_bytes();
+    crate::utils::events::emit_stealth_announcement(
+        ANNOUNCEMENT_TYPE_DEPOSIT,
+        &ix_data.ephemeral_pub,
+        &amount_bytes,
+        &commitment,
+        leaf_index as u32,
+    );
 
     // Emit leaf inserted event
     crate::utils::events::emit_leaf_inserted(&commitment, clock.unix_timestamp);

@@ -312,8 +312,6 @@ export interface TransactInstructionOptions {
     user: Address;
     /** Nullifier record PDAs (one per input) */
     nullifierRecords: Address[];
-    /** Stealth announcement PDAs (one per output) */
-    stealthAnnouncements: Address[];
   };
 }
 
@@ -411,7 +409,6 @@ export function buildTransactInstructionData(options: {
  * 3. user (signer)
  * 4. system_program (read)
  * 5..5+N nullifier_records (writable)
- * 5+N..5+N+M stealth_announcements (writable)
  */
 export function buildTransactInstruction(options: TransactInstructionOptions): Instruction {
   const config = getConfig();
@@ -438,11 +435,6 @@ export function buildTransactInstruction(options: TransactInstructionOptions): I
   // Nullifier records (writable PDAs)
   for (const nr of options.accounts.nullifierRecords) {
     accounts.push({ address: nr, role: AccountRole.WRITABLE });
-  }
-
-  // Stealth announcements (writable PDAs)
-  for (const sa of options.accounts.stealthAnnouncements) {
-    accounts.push({ address: sa, role: AccountRole.WRITABLE });
   }
 
   return {
@@ -489,8 +481,6 @@ export interface UnshieldInstructionOptions {
     userTokenAccount: Address;
     /** Nullifier record PDAs (one per input) */
     nullifierRecords: Address[];
-    /** Stealth announcement PDAs (one per tree output, n_outputs - 1) */
-    stealthAnnouncements: Address[];
   };
 }
 
@@ -608,7 +598,6 @@ export function buildUnshieldInstructionData(options: {
  * 7. user_token_account (writable)
  * 8. token_program (read)
  * 9..9+N nullifier_records (writable)
- * 9+N.. stealth_announcements (writable, tree outputs only)
  */
 export function buildUnshieldInstruction(options: UnshieldInstructionOptions): Instruction {
   const config = getConfig();
@@ -641,11 +630,6 @@ export function buildUnshieldInstruction(options: UnshieldInstructionOptions): I
   // Nullifier records (writable PDAs)
   for (const nr of options.accounts.nullifierRecords) {
     accounts.push({ address: nr, role: AccountRole.WRITABLE });
-  }
-
-  // Stealth announcements for tree outputs only (writable PDAs)
-  for (const sa of options.accounts.stealthAnnouncements) {
-    accounts.push({ address: sa, role: AccountRole.WRITABLE });
   }
 
   return {
@@ -691,8 +675,6 @@ export interface RedeemInstructionOptions {
     user: Address;
     /** Nullifier record PDAs (one per input) */
     nullifierRecords: Address[];
-    /** Stealth announcement PDAs (one per tree output, n_outputs - 1) */
-    stealthAnnouncements: Address[];
     /** Redemption request PDA */
     redemptionRequest: Address;
   };
@@ -810,8 +792,7 @@ export function buildRedeemInstructionData(options: {
  * 3. user (signer)
  * 4. system_program (read)
  * 5..5+N nullifier_records (writable)
- * 5+N..5+N+(M-1) stealth_announcements (writable)
- * 5+N+(M-1) redemption_request (writable)
+ * 5+N redemption_request (writable)
  */
 export function buildRedeemInstruction(options: RedeemInstructionOptions): Instruction {
   const config = getConfig();
@@ -841,11 +822,6 @@ export function buildRedeemInstruction(options: RedeemInstructionOptions): Instr
   // Nullifier records
   for (const nr of options.accounts.nullifierRecords) {
     accounts.push({ address: nr, role: AccountRole.WRITABLE });
-  }
-
-  // Stealth announcements (tree outputs only)
-  for (const sa of options.accounts.stealthAnnouncements) {
-    accounts.push({ address: sa, role: AccountRole.WRITABLE });
   }
 
   // Redemption request PDA

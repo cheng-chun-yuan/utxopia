@@ -164,7 +164,7 @@ const noirProof = proofToNoirFormat(proof);
 | `createStealthDeposit(recipient, amount)` | Create stealth deposit for recipient |
 | `scanAnnouncements(keys, announcements)` | Scan for deposits using viewing key |
 | `prepareClaimInputs(keys, note, proof)` | Prepare inputs for ZK claim proof |
-| `parseStealthAnnouncement(data)` | Parse on-chain announcement data |
+| `scanUnifiedNotes(keys, announcements)` | Scan announcement events for owned notes |
 | `resolveSnsName(conn, name)` | Look up .btcpro.sol name to stealth address |
 
 ### Demo Module
@@ -175,7 +175,7 @@ const noirProof = proofToNoirFormat(proof);
 | `buildAddDemoStealthData(ephemeral, commit, amount)` | Build demo stealth data |
 | `getPoolStatePDASeeds()` | Get pool state PDA seeds |
 | `getCommitmentTreePDASeeds()` | Get commitment tree PDA seeds |
-| `getStealthAnnouncementPDASeeds(ephemeral)` | Get stealth PDA seeds |
+| `parseProgramEvents(logs)` | Parse sol_log_data events from tx logs |
 | `getDemoNoteAccountMetas()` | Get account metas for demo note |
 | `getDemoStealthAccountMetas()` | Get account metas for demo stealth |
 
@@ -200,9 +200,6 @@ CHADBUFFER_PROGRAM_ID    // ChadBuffer for SPV proofs
 TREE_DEPTH              // 20
 MAX_LEAVES              // 2^20
 ZERO_VALUE              // Empty leaf value
-
-// Account Sizes
-STEALTH_ANNOUNCEMENT_SIZE         // 90 bytes
 
 // Demo Instructions
 DEMO_INSTRUCTION.ADD_DEMO_NOTE    // 21

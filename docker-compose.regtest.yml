@@ -4,7 +4,7 @@ services:
     container_name: aegis-esplora-regtest
     command: ["/srv/explorer/run.sh", "bitcoin-regtest", "explorer"]
     ports:
-      - "3000:80"       # Esplora REST API (nginx)
+      - "3002:80"       # Esplora REST API (nginx) — port 3000 reserved for Next.js
     volumes:
       - esplora-regtest-data:/data
     healthcheck:

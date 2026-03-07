@@ -77,19 +77,6 @@ export function deriveHeightIndexPDA(
 }
 
 /**
- * Derive PDA for deposit stealth announcement (unified: ["stealth", txid])
- */
-export function deriveDepositStealthPDA(
-  txidBytes: Uint8Array,
-  programId: PublicKey
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from("stealth"), txidBytes],
-    programId
-  );
-}
-
-/**
  * Check if a block header exists on-chain at the given height
  */
 export async function checkBlockHeaderExists(

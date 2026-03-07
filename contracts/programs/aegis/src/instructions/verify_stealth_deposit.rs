@@ -15,7 +15,7 @@
 //! - Extracts deposit amount trustlessly from the SPV-verified sweep raw transaction
 //! - Computes commitment ON-CHAIN: Poseidon(npk, ZKBTC_TOKEN_ID, amount)
 //! - Inserts commitment into Merkle tree
-//! - Creates unified StealthAnnouncement (type=0, plaintext amount) with PDA ["stealth", sweep_txid]
+//! - Emits stealth announcement as sol_log_data event (type=0, plaintext amount)
 //! - Mints zkBTC to pool vault
 //!
 //! Instruction Data (80 bytes, fixed):
@@ -27,20 +27,18 @@
 
 use pinocchio::{
     account_info::AccountInfo,
-    instruction::{Seed, Signer},
     program_error::ProgramError,
     pubkey::Pubkey,
     ProgramResult,
-    sysvars::{clock::Clock, rent::Rent, Sysvar},
+    sysvars::{clock::Clock, Sysvar},
 };
-use pinocchio_system::instructions::CreateAccount;
 
 use crate::error::AegisError;
 use crate::state::{
-    CommitmentTree, PoolState, StealthAnnouncement,
+    CommitmentTree, PoolState,
     VerifiedTransactionView, light_client_tip_height,
-    ANNOUNCEMENT_TYPE_DEPOSIT,
 };
+use crate::utils::events::ANNOUNCEMENT_TYPE_DEPOSIT;
 use crate::utils::crypto::compute_deposit_commitment;
 use crate::utils::bitcoin::{compute_tx_hash, DepositOpReturn, ParsedTransaction};
 use crate::utils::chadbuffer::read_transaction_from_buffer;
@@ -101,21 +99,20 @@ impl VerifyStealthDepositData {
 ///
 /// Trustlessly extracts npk + ephemeral_pub from the deposit TX's OP_RETURN.
 /// Verifies the sweep TX spends from the deposit TX (input linkage).
-/// Computes commitment on-chain, inserts into Merkle tree, creates unified StealthAnnouncement.
+/// Computes commitment on-chain, inserts into Merkle tree, emits stealth announcement event.
 ///
 /// # Accounts
 /// 0.  `[writable]` Pool state
 /// 1.  `[]` VerifiedTransaction PDA (owned by btc-light-client)
 /// 2.  `[]` Light client (owned by btc-light-client, for confirmation count)
 /// 3.  `[writable]` Commitment tree
-/// 4.  `[writable]` Stealth announcement (PDA to be created, seeded by ["stealth", sweep_txid])
-/// 5.  `[]` Sweep TX buffer (ChadBuffer)
-/// 6.  `[signer]` Authority (pool authority, pays for storage)
-/// 7.  `[]` System program
-/// 8.  `[writable]` zkBTC mint
-/// 9.  `[writable]` Pool vault token account
-/// 10. `[]` Token-2022 program
-/// 11. `[]` Deposit TX buffer (ChadBuffer)
+/// 4.  `[]` Sweep TX buffer (ChadBuffer)
+/// 5.  `[signer]` Authority (pool authority, pays for storage)
+/// 6.  `[]` System program
+/// 7.  `[writable]` zkBTC mint
+/// 8.  `[writable]` Pool vault token account
+/// 9.  `[]` Token-2022 program
+/// 10. `[]` Deposit TX buffer (ChadBuffer)
 ///
 /// # Instruction data
 /// - VerifyStealthDepositData (80 bytes, fixed)
@@ -124,7 +121,7 @@ pub fn process_verify_stealth_deposit(
     accounts: &[AccountInfo],
     data: &[u8],
 ) -> ProgramResult {
-    if accounts.len() < 12 {
+    if accounts.len() < 11 {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
@@ -132,14 +129,13 @@ pub fn process_verify_stealth_deposit(
     let verified_tx_info = &accounts[1];
     let light_client_info = &accounts[2];
     let commitment_tree_info = &accounts[3];
-    let stealth_announcement_info = &accounts[4];
-    let tx_buffer_info = &accounts[5];
-    let authority = &accounts[6];
-    let system_program = &accounts[7];
-    let zkbtc_mint = &accounts[8];
-    let pool_vault = &accounts[9];
-    let token_program = &accounts[10];
-    let deposit_tx_buffer_info = &accounts[11];
+    let tx_buffer_info = &accounts[4];
+    let authority = &accounts[5];
+    let system_program = &accounts[6];
+    let zkbtc_mint = &accounts[7];
+    let pool_vault = &accounts[8];
+    let token_program = &accounts[9];
+    let deposit_tx_buffer_info = &accounts[10];
 
     // Parse instruction data (no trailing merkle proof)
     let ix_data = VerifyStealthDepositData::from_bytes(data)?;
@@ -161,7 +157,6 @@ pub fn process_verify_stealth_deposit(
     // SECURITY: Validate writable accounts
     validate_account_writable(pool_state_info)?;
     validate_account_writable(commitment_tree_info)?;
-    validate_account_writable(stealth_announcement_info)?;
     validate_account_writable(zkbtc_mint)?;
     validate_account_writable(pool_vault)?;
 
@@ -277,33 +272,6 @@ pub fn process_verify_stealth_deposit(
         return Err(AegisError::AmountTooLarge.into());
     }
 
-    // Derive stealth announcement PDA: ["stealth", sweep_txid]
-    let (expected_stealth_pda, stealth_bump) = pinocchio::pubkey::find_program_address(
-        &[StealthAnnouncement::SEED, &ix_data.sweep_txid],
-        program_id,
-    );
-
-    if stealth_announcement_info.key() != &expected_stealth_pda {
-        return Err(ProgramError::InvalidSeeds);
-    }
-
-    // Create stealth announcement account (90 bytes instead of 200)
-    let stealth_bump_bytes = [stealth_bump];
-    let stealth_signer_seeds: [Seed; 3] = [
-        Seed::from(StealthAnnouncement::SEED),
-        Seed::from(ix_data.sweep_txid.as_slice()),
-        Seed::from(&stealth_bump_bytes),
-    ];
-    let stealth_signer = [Signer::from(&stealth_signer_seeds)];
-
-    CreateAccount {
-        from: authority,
-        to: stealth_announcement_info,
-        lamports: Rent::get()?.minimum_balance(StealthAnnouncement::SIZE),
-        space: StealthAnnouncement::SIZE as u64,
-        owner: program_id,
-    }.invoke_signed(&stealth_signer)?;
-
     // Compute commitment ON-CHAIN: Poseidon(npk, ZKBTC_TOKEN_ID, amount)
     // npk is trustlessly extracted from the deposit TX's OP_RETURN
     let commitment = compute_deposit_commitment(&npk, amount_sats)?;
@@ -322,17 +290,15 @@ pub fn process_verify_stealth_deposit(
 
     let clock = Clock::get()?;
 
-    // Record the deposit as a unified StealthAnnouncement (type=0, plaintext amount)
-    {
-        let mut ann_data = stealth_announcement_info.try_borrow_mut_data()?;
-        let announcement = StealthAnnouncement::init(&mut ann_data)?;
-
-        announcement.announcement_type = ANNOUNCEMENT_TYPE_DEPOSIT;
-        announcement.ephemeral_pub = ephemeral_pub;
-        announcement.set_amount_sats(amount_sats); // plaintext for deposits
-        announcement.commitment = commitment;
-        announcement.set_leaf_index(leaf_index);
-    }
+    // Emit stealth announcement as log event (replaces PDA creation)
+    let amount_bytes = amount_sats.to_le_bytes();
+    crate::utils::events::emit_stealth_announcement(
+        ANNOUNCEMENT_TYPE_DEPOSIT,
+        &ephemeral_pub,
+        &amount_bytes,
+        &commitment,
+        leaf_index as u32,
+    );
 
     // Emit leaf inserted event (commitment + timestamp for indexer)
     crate::utils::events::emit_leaf_inserted(&commitment, clock.unix_timestamp);

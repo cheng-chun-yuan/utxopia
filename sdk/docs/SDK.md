@@ -139,15 +139,13 @@ import {
 
   // === Stealth & Scanning ===
   createStealthDeposit,             // Create stealth deposit (interactive)
-  scanUnifiedNotes,                 // Scan StealthAnnouncement PDAs (unified: deposits + transfers)
+  scanUnifiedNotes,                 // Scan stealth announcement events (unified: deposits + transfers)
   scanAnnouncements,                // Scan stealth announcements (legacy)
-  parseStealthAnnouncement,         // Parse on-chain StealthAnnouncement (90 bytes)
 
   // === PDA ===
   deriveVkRegistryPDA,              // VK registry for JoinSplit(N,M)
   derivePoolStatePDA,               // Pool state
   deriveCommitmentTreePDA,          // Commitment tree
-  deriveDepositStealthPDA,          // Deposit stealth announcement by txid (["stealth", txid])
 
   // === Types ===
   type JoinSplitProofInputs,
@@ -276,15 +274,12 @@ console.log('OP_RETURN payload (64 bytes):', deposit.opReturnPayload);
 ### 2. Scan for Incoming Deposits & Transfers
 
 ```typescript
-import { scanUnifiedNotes, parseStealthAnnouncement } from '@aegis/sdk';
+import { scanUnifiedNotes } from '@aegis/sdk';
+import { AnnouncementClient } from '@aegis/sdk';
 
-// Fetch StealthAnnouncement PDAs from Solana (disc 0x08, 90 bytes)
-const rawAnnouncements = await fetchStealthAnnouncementAccounts(connection);
-
-// Parse on-chain data (90 bytes each)
-const announcements = rawAnnouncements
-  .map(r => parseStealthAnnouncement(r.data))
-  .filter(Boolean);
+// Fetch stealth announcements from backend indexer (or fallback to RPC log scanning)
+const client = new AnnouncementClient({ backendUrl: 'http://localhost:8080' });
+const announcements = await client.fetchAll();
 
 // Unified scan: handles both deposits (type=0, plaintext amount) and transfers (type=1, encrypted)
 const myNotes = await scanUnifiedNotes(myKeys, announcements);
@@ -357,32 +352,31 @@ for (const note of notes) {
 
 ## On-Chain Data Parsing
 
-### parseStealthAnnouncement (90 bytes, unified)
+### Stealth Announcement Events (sol_log_data, disc=0x03)
 
-Parses an on-chain `StealthAnnouncement` PDA into structured data. Both deposits and transfers use the same 90-byte layout:
+Stealth announcements are emitted as `sol_log_data` events (no on-chain PDAs). Both deposits and transfers emit the same event structure:
 
 ```typescript
-import { parseStealthAnnouncement } from '@aegis/sdk';
+import { parseStealthAnnouncementEvent, parseProgramEvents } from '@aegis/sdk';
 
-const ann = parseStealthAnnouncement(accountData);
-// Returns: { announcementType, ephemeralPub, amountBytes, commitment, leafIndex, createdAt }
-// announcementType: 0 = deposit (plaintext amount), 1 = transfer (XOR-encrypted)
+// Parse events from transaction logs
+const events = parseProgramEvents(txLogMessages);
+const stealthEvents = events.filter(e => e.type === 'stealth_announcement');
 ```
 
-**Layout:**
+**Event layout (sol_log_data segments):**
 
 ```
-Offset   Field              Size
-0        discriminator       1     (0x08)
+Segment  Field              Size
+0        discriminator       1     (0x03)
 1        announcement_type   1     0=deposit (plaintext), 1=transfer (encrypted)
 2        ephemeral_pub      32     Ed25519 ephemeral key (for ECDH scanning)
-34       amount_bytes        8     Plaintext u64 LE (type=0) or XOR-encrypted (type=1)
-42       commitment         32     Poseidon(npk, token, amount)
-74       leaf_index          8     u64 LE
-82       created_at          8     i64 LE
+3        amount_bytes        8     Plaintext u64 LE (type=0) or XOR-encrypted (type=1)
+4        commitment         32     Poseidon(npk, token, amount)
+5        leaf_index          4     u32 LE
 ```
 
-**PDA seeds**: Deposits use `["stealth", txid]`, transfers use `["stealth", ephemeral_pub]`.
+Events are indexed by the backend event indexer and served via REST/WebSocket.
 
 ---
 

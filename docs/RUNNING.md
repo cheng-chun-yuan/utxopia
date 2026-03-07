@@ -574,7 +574,7 @@ Full deposit → claim flow with real Groth16 proof generation. Requires compile
 4. **Header Relayer** syncs the block header to Solana light client
 5. **Deposit Tracker** detects the deposit, waits for confirmations
 6. **Deposit Tracker** sweeps funds to pool wallet and submits SPV proof to Solana
-7. **On-chain**: `verify_stealth_deposit` validates SPV proof, computes commitment on-chain (`Poseidon(npk, ZKBTC_TOKEN_ID, amount)`), creates StealthAnnouncement PDA (90 bytes, type=deposit), adds commitment to Merkle tree
+7. **On-chain**: `verify_stealth_deposit` validates SPV proof, computes commitment on-chain (`Poseidon(npk, ZKBTC_TOKEN_ID, amount)`), emits stealth announcement event, adds commitment to Merkle tree
 8. **SDK** generates JoinSplit(1,2) Groth16 claim proof (client-side, in browser)
 9. **On-chain**: `transact` verifies JoinSplit proof, inserts output commitments
 

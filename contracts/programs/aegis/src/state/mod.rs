@@ -8,7 +8,6 @@
 //! | `CommitmentTree` | Merkle tree of shielded commitments |
 //!| `NullifierRecord` | Spent nullifiers (prevents double-spend) |
 //! | `RedemptionRequest` | Pending BTC withdrawal request |
-//! | `StealthAnnouncement` | Stealth address announcement (dual-key ECDH) |
 //!
 //! ## External Account Readers (btc-light-client)
 //!
@@ -22,17 +21,14 @@ pub mod commitment_tree;
 pub mod nullifier;
 pub mod pool;
 pub mod redemption;
-pub mod stealth_announcement;
 pub mod verified_tx_reader;
 pub mod vk_registry;
-
 
 // Re-exports
 pub use commitment_tree::*;
 pub use nullifier::*;
 pub use pool::*;
 pub use redemption::*;
-pub use stealth_announcement::*;
 pub use verified_tx_reader::*;
 pub use vk_registry::*;
 

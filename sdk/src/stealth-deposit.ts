@@ -54,7 +54,6 @@ import {
   derivePoolStatePDA,
   deriveLightClientPDA,
   deriveCommitmentTreePDA,
-  deriveDepositStealthPDA,
   deriveVerifiedTransactionPDA,
 } from "./pda";
 
@@ -189,26 +188,6 @@ export function parseStealthOpReturn(
 // ========== On-chain Verification ==========
 
 /**
- * Derive stealth announcement PDA
- *
- * Uses Ed25519 ephemeral public key (32 bytes) as seed.
- */
-export async function deriveStealthAnnouncementPDA(
-  programId: Address,
-  ephemeralPub: Uint8Array
-): Promise<[Address, number]> {
-  const seeds = [
-    new TextEncoder().encode("stealth"),
-    ephemeralPub,
-  ];
-  const [pda, bump] = await getProgramDerivedAddress({
-    seeds,
-    programAddress: programId,
-  });
-  return [pda, bump];
-}
-
-/**
  * Verify a stealth deposit on Solana
  *
  * IMPORTANT: Before calling this, the caller must first call btc-light-client's
@@ -255,14 +234,12 @@ export async function verifyStealthDeposit(
   const [poolState] = await derivePoolStatePDA(programId);
   const [lightClient] = await deriveLightClientPDA(BTC_LIGHT_CLIENT_PROGRAM_ID);
   const [commitmentTree] = await deriveCommitmentTreePDA(programId);
-  const [depositRecord] = await deriveDepositStealthPDA(txidBytes, programId);
 
   console.log("PDAs derived:");
   console.log(`  Pool: ${poolState}`);
   console.log(`  VerifiedTx: ${verifiedTransactionPda}`);
   console.log(`  Light Client: ${lightClient}`);
   console.log(`  Commitment Tree: ${commitmentTree}`);
-  console.log(`  Deposit Record: ${depositRecord}`);
 
   const instructionData = buildVerifyStealthDepositData({
     txid: txidBytes,
@@ -285,11 +262,10 @@ export async function verifyStealthDeposit(
       { address: verifiedTransactionPda, role: AccountRole.READONLY }, // 1
       { address: lightClient, role: AccountRole.READONLY },         // 2
       { address: commitmentTree, role: AccountRole.WRITABLE },      // 3
-      { address: depositRecord, role: AccountRole.WRITABLE },       // 4
-      { address: bufferAddress, role: AccountRole.READONLY },       // 5
-      { address: payer.address, role: AccountRole.WRITABLE_SIGNER }, // 6
-      { address: SYSTEM_PROGRAM_ID, role: AccountRole.READONLY },   // 7
-      // zkBTC mint and pool vault would be added by the caller
+      { address: bufferAddress, role: AccountRole.READONLY },       // 4
+      { address: payer.address, role: AccountRole.WRITABLE_SIGNER }, // 5
+      { address: SYSTEM_PROGRAM_ID, role: AccountRole.READONLY },   // 6
+      // zkBTC mint, pool vault, token_program, deposit_tx_buffer added by caller
     ],
     data: new Uint8Array(instructionData),
   };

@@ -8,7 +8,7 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
+//! ```text
 //! use crate::common::logging::{init_logging, LogLevel};
 //!
 //! // Initialize at startup
@@ -327,7 +327,7 @@ pub fn log_withdrawal_event(
 /// * `json_format` - Use JSON format (recommended for production)
 ///
 /// # Example
-/// ```rust,ignore
+/// ```text
 /// init_logging(LogLevel::Info, true)?; // JSON for production
 /// init_logging(LogLevel::Debug, false)?; // Pretty print for development
 /// ```

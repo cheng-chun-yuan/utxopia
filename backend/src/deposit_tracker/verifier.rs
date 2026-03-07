@@ -229,8 +229,8 @@ impl SpvVerifier {
 
         let solana_tx = result?;
 
-        // Get leaf index from the stealth announcement PDA
-        let leaf_index = self.get_leaf_index(&sweep_txid_internal).await?;
+        // Get leaf index from the transaction's log events
+        let leaf_index = self.get_leaf_index_from_tx(&solana_tx).await?;
 
         Ok(VerificationResult {
             solana_tx,
@@ -432,42 +432,69 @@ impl SpvVerifier {
     // Verification Transaction
     // =========================================================================
 
-    /// Get leaf index for a verified deposit
-    async fn get_leaf_index(&self, txid: &[u8; 32]) -> Result<u64, VerifierError> {
-        let (stealth_pda, _) = Pubkey::find_program_address(
-            &[b"stealth", txid],
-            &self.program_id,
-        );
+    /// Get leaf index from a verify_stealth_deposit transaction's log events.
+    ///
+    /// Parses the stealth_announcement event (disc=0x03) emitted by the program.
+    /// Event layout: disc(1) + type(1) + ephemeral_pub(32) + encrypted_amount(8) + commitment(32) + leaf_index(4)
+    async fn get_leaf_index_from_tx(&self, signature: &str) -> Result<u64, VerifierError> {
+        use base64::Engine;
 
-        let account = self
-            .rpc
-            .get_account(&stealth_pda)
-            .map_err(|e| VerifierError::RpcError(format!("Failed to get stealth announcement: {}", e)))?;
+        // Use raw JSON-RPC (same approach as event_indexer) to avoid solana-transaction-status dep
+        let client = reqwest::Client::new();
+        let body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getTransaction",
+            "params": [
+                signature,
+                { "encoding": "json", "maxSupportedTransactionVersion": 0, "commitment": "confirmed" }
+            ],
+        });
 
-        // StealthAnnouncement layout (82 bytes):
-        //   discriminator: u8          (offset 0)
-        //   announcement_type: u8      (offset 1)
-        //   ephemeral_pub: [u8; 32]    (offset 2)
-        //   amount_bytes: [u8; 8]      (offset 34)
-        //   commitment: [u8; 32]       (offset 42)
-        //   leaf_index: [u8; 8]        (offset 74)
-        const LEAF_INDEX_OFFSET: usize = 74;
-        const LEAF_INDEX_END: usize = LEAF_INDEX_OFFSET + 8;
+        let resp = client
+            .post(self.rpc.url())
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| VerifierError::RpcError(format!("Failed to fetch tx: {}", e)))?;
 
-        if account.data.len() < LEAF_INDEX_END {
-            return Err(VerifierError::VerificationFailed(format!(
-                "stealth announcement too small: {} bytes, need at least {}",
-                account.data.len(),
-                LEAF_INDEX_END
-            )));
+        let json: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| VerifierError::RpcError(format!("Failed to parse tx response: {}", e)))?;
+
+        let logs = json["result"]["meta"]["logMessages"]
+            .as_array()
+            .ok_or_else(|| VerifierError::VerificationFailed("No log messages in tx".to_string()))?;
+
+        for log_val in logs {
+            let line = log_val.as_str().unwrap_or("");
+            if let Some(b64) = line.strip_prefix("Program data: ") {
+                let segments: Vec<Vec<u8>> = b64
+                    .split_whitespace()
+                    .filter_map(|s| base64::engine::general_purpose::STANDARD.decode(s).ok())
+                    .collect();
+
+                // Check disc segment = 0x03 (stealth announcement)
+                if segments.is_empty() || segments[0].len() != 1 || segments[0][0] != 0x03 {
+                    continue;
+                }
+                if segments.len() < 6 {
+                    continue;
+                }
+
+                // leaf_index is segment[5], 4 bytes LE (u32)
+                let li_bytes = &segments[5];
+                if li_bytes.len() == 4 {
+                    let leaf_index = u32::from_le_bytes(li_bytes[..4].try_into().unwrap());
+                    return Ok(leaf_index as u64);
+                }
+            }
         }
 
-        let leaf_index = u64::from_le_bytes(
-            account.data[LEAF_INDEX_OFFSET..LEAF_INDEX_END]
-                .try_into()
-                .map_err(|_| VerifierError::VerificationFailed("Invalid leaf_index bytes".to_string()))?,
-        );
-        Ok(leaf_index)
+        Err(VerifierError::VerificationFailed(
+            "No stealth announcement event found in transaction logs".to_string(),
+        ))
     }
 
     /// Send the verify_deposit transaction to Solana (two instructions).
@@ -502,8 +529,6 @@ impl SpvVerifier {
             &[b"verified_tx", block_hash, sweep_txid],
             &self.light_client_program_id,
         );
-        let (stealth_announcement, _) =
-            Pubkey::find_program_address(&[b"stealth", sweep_txid], &self.program_id);
         let (commitment_tree, _) =
             Pubkey::find_program_address(&[b"commitment_tree"], &self.program_id);
 
@@ -545,20 +570,19 @@ impl SpvVerifier {
         deposit_data.extend_from_slice(&deposit_tx_size.to_le_bytes());
         deposit_data.extend_from_slice(deposit_txid);
 
-        // 12 accounts for verify_stealth_deposit
+        // 11 accounts for verify_stealth_deposit (stealth PDA removed, events instead)
         let deposit_accounts = vec![
             AccountMeta::new(pool_state, false),                        // 0: pool_state
             AccountMeta::new_readonly(verified_tx_pda, false),          // 1: verified_tx
             AccountMeta::new_readonly(light_client, false),             // 2: light_client
             AccountMeta::new(commitment_tree, false),                   // 3: commitment_tree
-            AccountMeta::new(stealth_announcement, false),              // 4: stealth_announcement
-            AccountMeta::new_readonly(*sweep_buffer, false),            // 5: sweep_tx_buffer
-            AccountMeta::new(payer.pubkey(), true),                     // 6: authority/payer
-            AccountMeta::new_readonly(solana_sdk::system_program::ID, false), // 7: system_program
-            AccountMeta::new(zkbtc_mint, false),                         // 8: zkbtc_mint
-            AccountMeta::new(pool_vault, false),                        // 9: pool_vault
-            AccountMeta::new_readonly(TOKEN_2022_PROGRAM_ID, false),    // 10: token_program
-            AccountMeta::new_readonly(*deposit_buffer, false),          // 11: deposit_tx_buffer
+            AccountMeta::new_readonly(*sweep_buffer, false),            // 4: sweep_tx_buffer
+            AccountMeta::new(payer.pubkey(), true),                     // 5: authority/payer
+            AccountMeta::new_readonly(solana_sdk::system_program::ID, false), // 6: system_program
+            AccountMeta::new(zkbtc_mint, false),                        // 7: zkbtc_mint
+            AccountMeta::new(pool_vault, false),                        // 8: pool_vault
+            AccountMeta::new_readonly(TOKEN_2022_PROGRAM_ID, false),    // 9: token_program
+            AccountMeta::new_readonly(*deposit_buffer, false),          // 10: deposit_tx_buffer
         ];
 
         let deposit_ix = Instruction {

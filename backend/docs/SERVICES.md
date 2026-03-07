@@ -135,7 +135,7 @@ for deposit in confirmed_deposits.filter(|d| d.can_sweep()) {
 - Generates Merkle proofs for sweep transactions
 - Submits proofs to Solana light client with `npk` and `ephemeral_pub`
 - On-chain: commitment computed as `Poseidon(npk, ZKBTC_TOKEN_ID, amount)`
-- Creates StealthAnnouncement PDA (90 bytes, type=deposit) on Solana
+- Emits stealth announcement event (sol_log_data, disc=0x03) on Solana
 
 ```rust
 // Verify swept deposits (passes npk + ephemeral_pub to on-chain program)

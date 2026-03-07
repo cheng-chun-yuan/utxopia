@@ -17,14 +17,11 @@ export {
   scanAnnouncementsViewOnly,
   exportViewOnlyKeys,
   prepareClaimInputs,
-  parseStealthAnnouncement,
   scanUnifiedNotes,
   // Amount encryption utilities
   encryptAmount,
   decryptAmount,
   // Constants
-  STEALTH_ANNOUNCEMENT_SIZE,
-  STEALTH_ANNOUNCEMENT_DISCRIMINATOR,
   ANNOUNCEMENT_TYPE_DEPOSIT,
   ANNOUNCEMENT_TYPE_TRANSFER,
   // Types

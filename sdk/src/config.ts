@@ -174,7 +174,7 @@ export const LOCALNET_CHADBUFFER_PROGRAM_ID: Address = address(
  * Devnet Configuration (v3.3.0)
  *
  * Fresh deployment 2026-03-03:
- * - Slim accounts: StealthAnnouncement 82B, NullifierRecord 1B
+ * - Slim accounts: NullifierRecord 1B; stealth announcements emitted as events
  * - Event emission via sol_log_data
  * - Program ID: 25eTdotdeY9EqfJy5tfXSAD5Dg8XTL29sQYVgz1tJkTM
  */

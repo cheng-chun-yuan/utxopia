@@ -19,7 +19,6 @@ import { getPriorityFeeInstructions } from "@/lib/helius";
 import {
   buildAddDemoStealthData,
   DEMO_INSTRUCTION,
-  PDA_SEEDS,
 } from "@aegis/sdk";
 
 // Import PDA functions from instructions.ts (single source of truth)
@@ -36,26 +35,6 @@ import {
 export { DEMO_INSTRUCTION };
 
 // =============================================================================
-// Stealth Announcement PDA (specific to demo - uses ephemeral key)
-// =============================================================================
-
-/**
- * Derive Stealth Announcement PDA
- *
- * Ed25519 ephemeral pub is 32 bytes — use directly as PDA seed.
- * Must match on-chain derivation: seeds = ["stealth", ephemeral_pub]
- */
-export function deriveStealthAnnouncementPDA(
-  ephemeralPub: Uint8Array,
-  programId: PublicKey = AEGIS_PROGRAM_ID
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from(PDA_SEEDS.STEALTH), ephemeralPub],
-    programId
-  );
-}
-
-// =============================================================================
 // Demo Instruction Builder
 // =============================================================================
 
@@ -68,6 +47,8 @@ export interface AddDemoStealthParams {
 
 /**
  * Build ADD_DEMO_STEALTH instruction (npk-based, matches real deposits)
+ *
+ * Stealth announcement is emitted as sol_log_data event (no PDA account needed).
  */
 export function buildAddDemoStealthInstruction(
   params: AddDemoStealthParams
@@ -76,7 +57,6 @@ export function buildAddDemoStealthInstruction(
 
   const [poolState] = derivePoolStatePDA();
   const [commitmentTree] = deriveCommitmentTreePDA();
-  const [stealthAnnouncement] = deriveStealthAnnouncementPDA(ephemeralPub);
   const poolVault = derivePoolVaultATA();
 
   // Use SDK's data builder
@@ -86,7 +66,6 @@ export function buildAddDemoStealthInstruction(
     keys: [
       { pubkey: poolState, isSigner: false, isWritable: true },
       { pubkey: commitmentTree, isSigner: false, isWritable: true },
-      { pubkey: stealthAnnouncement, isSigner: false, isWritable: true },
       { pubkey: payer, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       { pubkey: ZKBTC_MINT_ADDRESS, isSigner: false, isWritable: true },

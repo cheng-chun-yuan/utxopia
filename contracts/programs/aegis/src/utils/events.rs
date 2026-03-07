@@ -14,10 +14,15 @@ const EVENT_NULLIFIER_SPENT: u8 = 0x02;
 /// Event discriminator: stealth announcement (replaces on-chain PDA)
 const EVENT_STEALTH_ANNOUNCEMENT: u8 = 0x03;
 
+/// Announcement type: deposit (plaintext amount from BTC deposit verification)
+pub const ANNOUNCEMENT_TYPE_DEPOSIT: u8 = 0;
+
+/// Announcement type: transfer (XOR-encrypted amount from JoinSplit transact)
+pub const ANNOUNCEMENT_TYPE_TRANSFER: u8 = 1;
+
 /// Emit when a commitment is inserted into the Merkle tree.
 ///
 /// Layout: disc(1) + commitment(32) + created_at(8) = 41 bytes
-/// leaf_index is stored on the StealthAnnouncement account.
 pub fn emit_leaf_inserted(commitment: &[u8; 32], created_at: i64) {
     let disc = [EVENT_LEAF_INSERTED];
     let ts = created_at.to_le_bytes();

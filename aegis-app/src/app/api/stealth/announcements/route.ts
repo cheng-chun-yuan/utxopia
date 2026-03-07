@@ -1,9 +1,8 @@
 /**
  * Stealth Announcements API
  *
- * Fetches stealth announcements from two sources:
- * 1. Legacy on-chain PDA accounts (for deposits and older transfers)
- * 2. Transaction log events (disc=0x03) for new transfers (post-event migration)
+ * Fetches stealth announcements from transaction log events (disc=0x03).
+ * Primary source is the backend event indexer (SQLite); fallback is direct RPC log scanning.
  *
  * Clients scan locally for privacy (server doesn't know which belong to whom).
  */
@@ -12,8 +11,6 @@ import { NextResponse } from "next/server";
 import { PublicKey } from "@solana/web3.js";
 import {
   DEVNET_CONFIG,
-  STEALTH_ANNOUNCEMENT_SIZE,
-  parseStealthAnnouncement,
   parseCommitmentTreeData,
   parseProgramEvents,
   type StealthAnnouncementEvent,
@@ -56,42 +53,6 @@ let lastEventSignature: string | undefined;
 // =============================================================================
 // Fetch Logic
 // =============================================================================
-
-/**
- * Fetch stealth announcements from legacy on-chain PDA accounts.
- */
-async function fetchPdaAnnouncements(
-  connection: ReturnType<typeof getHeliusConnection>,
-  treeNextIndex: number,
-): Promise<CachedAnnouncement[]> {
-  const accounts = await connection.getProgramAccounts(AEGIS_PROGRAM_ID, {
-    filters: [{ dataSize: STEALTH_ANNOUNCEMENT_SIZE }],
-  });
-
-  console.log(`[StealthAPI] Found ${accounts.length} stealth PDA accounts`);
-
-  const announcements: CachedAnnouncement[] = [];
-  for (const account of accounts) {
-    try {
-      const parsed = parseStealthAnnouncement(new Uint8Array(account.account.data));
-      if (parsed) {
-        if (parsed.leafIndex >= treeNextIndex) continue;
-        announcements.push({
-          announcementType: parsed.announcementType,
-          ephemeralPub: Buffer.from(parsed.ephemeralPub).toString("hex"),
-          encryptedAmount: Buffer.from(parsed.encryptedAmount).toString("hex"),
-          commitment: Buffer.from(parsed.commitment).toString("hex"),
-          leafIndex: parsed.leafIndex,
-          source: "pda",
-        });
-      }
-    } catch (e) {
-      console.warn("[StealthAPI] Failed to parse PDA announcement:", e);
-    }
-  }
-
-  return announcements;
-}
 
 /**
  * Fetch stealth announcements from transaction log events (disc=0x03).
@@ -174,31 +135,17 @@ async function fetchAnnouncements(): Promise<CacheData> {
     console.warn("[StealthAPI] Failed to fetch tree state, skipping filter:", e);
   }
 
-  // Fetch from both sources in parallel
-  const [pdaAnnouncements, eventAnnouncements] = await Promise.all([
-    fetchPdaAnnouncements(connection, treeNextIndex),
-    fetchEventAnnouncements(connection, treeNextIndex),
-  ]);
-
-  // Merge and deduplicate by leafIndex (event takes priority over PDA)
-  const byLeafIndex = new Map<number, CachedAnnouncement>();
-  for (const ann of pdaAnnouncements) {
-    byLeafIndex.set(ann.leafIndex, ann);
-  }
-  for (const ann of eventAnnouncements) {
-    byLeafIndex.set(ann.leafIndex, ann); // event overwrites PDA if duplicate
-  }
-
-  const merged = Array.from(byLeafIndex.values());
-  merged.sort((a, b) => a.leafIndex - b.leafIndex);
+  // Fetch from transaction log events
+  const announcements = await fetchEventAnnouncements(connection, treeNextIndex);
+  announcements.sort((a, b) => a.leafIndex - b.leafIndex);
 
   const cacheData: CacheData = {
-    announcements: merged,
+    announcements,
     fetchedAt: Date.now(),
-    count: merged.length,
+    count: announcements.length,
   };
 
-  console.log(`[StealthAPI] Cached ${merged.length} announcements (${pdaAnnouncements.length} PDA + ${eventAnnouncements.length} events)`);
+  console.log(`[StealthAPI] Cached ${announcements.length} announcements from events`);
   return cacheData;
 }
 

@@ -2,13 +2,12 @@
  * Explorer utilities for AEGIS
  *
  * Types, parsers, and fetchers for browsing on-chain Aegis activity:
- * - Deposits (StealthAnnouncement with plaintext amounts)
- * - Transfers (StealthAnnouncement with encrypted amounts + NullifierRecords)
+ * - Deposits (from event indexer)
+ * - Transfers (from event indexer)
  * - Redemptions (RedemptionRequest accounts)
  */
 
 import type { RpcClient } from "./commitment-tree";
-import { STEALTH_ANNOUNCEMENT_SIZE } from "./stealth";
 
 // =============================================================================
 // Constants
@@ -43,7 +42,7 @@ export const OPERATION_TYPE_LABELS: Record<number, string> = {
 // Types
 // =============================================================================
 
-/** Parsed deposit from a StealthAnnouncement account */
+/** Parsed deposit from indexer event data */
 export interface ExplorerDeposit {
   pubkey: string;
   amountSats: bigint;
@@ -127,19 +126,6 @@ function decodeBase64(b64: string): Uint8Array {
 // Parsers
 // =============================================================================
 
-/** Parse a StealthAnnouncement for explorer display (82B layout) */
-function parseAnnouncement(pubkey: string, data: Uint8Array) {
-  const amountSats = readU64LE(data, 34);
-  return {
-    pubkey,
-    announcementType: data[1],
-    amountSats,
-    commitment: toHex(data.slice(42, 74)),
-    leafIndex: readU64LE(data, 74),
-    isDeposit: data[1] === 0,
-  };
-}
-
 /** Parse a NullifierRecord account (1 byte — slim layout)
  * Only confirms existence (discriminator = 0x03). Metadata from indexer events. */
 export function parseNullifierRecord(
@@ -209,37 +195,27 @@ export interface IndexerLeaf {
   leaf_index: number;
   commitment: string; // hex
   created_at: number; // unix timestamp
+  announcement_type?: number; // 0=deposit, 1=transfer
+  amount_sats?: number; // plaintext amount (deposits only)
 }
 
-/** Fetch all deposit StealthAnnouncements (plaintext amounts) */
+/** Fetch all deposit announcements from indexer data */
 export async function fetchExplorerDeposits(
-  rpc: RpcClient,
-  programId: string,
+  _rpc: RpcClient,
+  _programId: string,
   indexerLeaves?: IndexerLeaf[]
 ): Promise<ExplorerDeposit[]> {
-  const accounts = await fetchAccountsBySize(rpc, programId, STEALTH_ANNOUNCEMENT_SIZE);
+  if (!indexerLeaves || indexerLeaves.length === 0) return [];
 
-  // Build leaf_index → indexer data map for enrichment
-  const leafMap = new Map<number, IndexerLeaf>();
-  if (indexerLeaves) {
-    for (const leaf of indexerLeaves) {
-      leafMap.set(leaf.leaf_index, leaf);
-    }
-  }
-
-  return accounts
-    .map(({ pubkey, data }) => parseAnnouncement(pubkey, data))
-    .filter((a) => a.isDeposit)
-    .map(({ pubkey, amountSats, leafIndex, commitment }) => {
-      const indexerData = leafMap.get(Number(leafIndex));
-      return {
-        pubkey,
-        amountSats,
-        leafIndex,
-        commitment, // from on-chain account (self-sovereign)
-        createdAt: indexerData?.created_at,
-      };
-    })
+  return indexerLeaves
+    .filter((leaf) => leaf.announcement_type === 0) // deposits only
+    .map((leaf) => ({
+      pubkey: "", // no PDA — data comes from events
+      amountSats: BigInt(leaf.amount_sats ?? 0),
+      leafIndex: BigInt(leaf.leaf_index),
+      commitment: leaf.commitment,
+      createdAt: leaf.created_at,
+    }))
     .sort((a, b) => {
       const aHasTime = (a.createdAt ?? 0) > 0;
       const bHasTime = (b.createdAt ?? 0) > 0;
@@ -250,34 +226,24 @@ export async function fetchExplorerDeposits(
     });
 }
 
-/** Fetch all transfer events (encrypted announcements + nullifiers) */
+/** Fetch all transfer events from indexer data */
 export async function fetchExplorerTransfers(
-  rpc: RpcClient,
-  programId: string,
+  _rpc: RpcClient,
+  _programId: string,
   indexerLeaves?: IndexerLeaf[]
 ): Promise<ExplorerTransferEvent[]> {
-  const announcements = await fetchAccountsBySize(rpc, programId, STEALTH_ANNOUNCEMENT_SIZE);
-
-  // Build leaf_index → indexer data map for enrichment
-  const leafMap = new Map<number, IndexerLeaf>();
-  if (indexerLeaves) {
-    for (const leaf of indexerLeaves) {
-      leafMap.set(leaf.leaf_index, leaf);
-    }
-  }
+  if (!indexerLeaves || indexerLeaves.length === 0) return [];
 
   const events: ExplorerTransferEvent[] = [];
 
-  for (const { pubkey, data } of announcements) {
-    const ann = parseAnnouncement(pubkey, data);
-    if (ann.isDeposit) continue;
-    const indexerData = leafMap.get(Number(ann.leafIndex));
+  for (const leaf of indexerLeaves) {
+    if (leaf.announcement_type === 0) continue; // skip deposits
     events.push({
       type: "commitment",
-      pubkey,
-      timestamp: indexerData?.created_at ?? 0,
-      commitment: ann.commitment,
-      leafIndex: ann.leafIndex,
+      pubkey: "",
+      timestamp: leaf.created_at ?? 0,
+      commitment: leaf.commitment,
+      leafIndex: BigInt(leaf.leaf_index),
     });
   }
 

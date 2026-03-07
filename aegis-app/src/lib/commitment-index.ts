@@ -11,10 +11,8 @@ import {
   CommitmentTreeIndex,
   DEVNET_CONFIG,
   parseCommitmentTreeData,
-  parseStealthAnnouncement,
-  STEALTH_ANNOUNCEMENT_SIZE,
-  COMMITMENT_TREE_DISCRIMINATOR,
-  ROOT_HISTORY_SIZE,
+  parseProgramEvents,
+  type StealthAnnouncementEvent,
   initPoseidon,
 } from "@aegis/sdk";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
@@ -202,10 +200,10 @@ export async function checkSyncStatus(): Promise<{
 }
 
 /**
- * Sync local index from on-chain stealth announcements
+ * Sync local index from on-chain transaction log events.
  *
- * Fetches all stealth announcement accounts and rebuilds the local index.
- * This ensures the local index matches on-chain state.
+ * Scans program transaction logs for stealth announcement events (disc=0x03)
+ * and leaf_inserted events (disc=0x01) to rebuild the local commitment index.
  */
 export async function syncFromOnChain(): Promise<{
   synced: number;
@@ -217,9 +215,9 @@ export async function syncFromOnChain(): Promise<{
 
   const connection = getHeliusConnection("devnet");
 
-  console.log("[CommitmentIndex] Fetching stealth announcements from chain...");
+  console.log("[CommitmentIndex] Fetching commitments from transaction events...");
 
-  // Fetch tree state to get nextIndex (filters out stale pre-reset announcements)
+  // Fetch tree state to get nextIndex
   let treeNextIndex = Number.MAX_SAFE_INTEGER;
   try {
     const treePda = new PublicKey(COMMITMENT_TREE_ADDRESS);
@@ -233,43 +231,75 @@ export async function syncFromOnChain(): Promise<{
     console.warn("[CommitmentIndex] Failed to fetch tree state:", e);
   }
 
-  // Fetch all stealth announcement accounts
-  const accounts = await connection.getProgramAccounts(AEGIS_PROGRAM_ID, {
-    filters: [{ dataSize: STEALTH_ANNOUNCEMENT_SIZE }],
-  });
-
-  console.log(`[CommitmentIndex] Found ${accounts.length} stealth announcements`);
-
-  // Parse announcements — commitment is stored on-chain (self-sovereign recovery)
+  // Try backend indexer first (has full history in SQLite)
   const commitments: Array<{ commitment: bigint; leafIndex: number; amount: bigint }> = [];
+  let fromBackend = false;
 
-  for (const account of accounts) {
-    try {
-      const parsed = parseStealthAnnouncement(new Uint8Array(account.account.data));
-      if (parsed) {
-        if (parsed.leafIndex >= treeNextIndex) {
-          continue;
-        }
-        // Read commitment directly from on-chain account data
-        let commitmentBigint = 0n;
-        for (let i = 0; i < parsed.commitment.length; i++) {
-          commitmentBigint = (commitmentBigint << 8n) | BigInt(parsed.commitment[i]);
-        }
+  try {
+    const backendUrl = process.env.BACKEND_URL || "http://localhost:8080";
+    const resp = await fetch(`${backendUrl}/api/announcements`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      for (const a of data.announcements) {
+        if (a.leaf_index >= treeNextIndex) continue;
+        // commitment is hex string from backend
+        const commitmentBigint = BigInt("0x" + a.commitment);
         commitments.push({
           commitment: commitmentBigint,
-          leafIndex: parsed.leafIndex,
+          leafIndex: a.leaf_index,
           amount: 0n,
         });
       }
-    } catch (e) {
-      console.warn("[CommitmentIndex] Failed to parse announcement:", e);
+      fromBackend = true;
+      console.log(`[CommitmentIndex] Fetched ${commitments.length} commitments from backend`);
+    }
+  } catch {
+    console.warn("[CommitmentIndex] Backend unavailable, falling back to RPC event scanning");
+  }
+
+  // Fallback: scan transaction logs directly
+  if (!fromBackend) {
+    const signatures = await connection.getSignaturesForAddress(AEGIS_PROGRAM_ID, { limit: 1000 }, "confirmed");
+    console.log(`[CommitmentIndex] Scanning ${signatures.length} transactions for events...`);
+
+    const BATCH_SIZE = 20;
+    for (let i = 0; i < signatures.length; i += BATCH_SIZE) {
+      const batch = signatures.slice(i, i + BATCH_SIZE);
+      const txResults = await Promise.all(
+        batch.map((sig) =>
+          connection.getTransaction(sig.signature, {
+            commitment: "confirmed",
+            maxSupportedTransactionVersion: 0,
+          })
+        )
+      );
+
+      for (const tx of txResults) {
+        if (!tx?.meta?.logMessages) continue;
+        const events = parseProgramEvents(tx.meta.logMessages);
+        for (const event of events) {
+          if (event.type !== "stealth_announcement") continue;
+          const sa = event as StealthAnnouncementEvent;
+          if (sa.leafIndex >= treeNextIndex) continue;
+
+          let commitmentBigint = 0n;
+          for (let j = 0; j < sa.commitment.length; j++) {
+            commitmentBigint = (commitmentBigint << 8n) | BigInt(sa.commitment[j]);
+          }
+          commitments.push({
+            commitment: commitmentBigint,
+            leafIndex: sa.leafIndex,
+            amount: 0n,
+          });
+        }
+      }
     }
   }
 
-  // Sort by leaf index to ensure correct order
+  // Sort by leaf index and deduplicate
   commitments.sort((a, b) => a.leafIndex - b.leafIndex);
-
-  // Deduplicate by leafIndex (keep last occurrence)
   const deduped: typeof commitments = [];
   for (const c of commitments) {
     if (deduped.length > 0 && deduped[deduped.length - 1].leafIndex === c.leafIndex) {
@@ -278,20 +308,18 @@ export async function syncFromOnChain(): Promise<{
       deduped.push(c);
     }
   }
-  const commitmentsFinal = deduped;
 
-  console.log(`[CommitmentIndex] Parsed ${commitmentsFinal.length} valid commitments (filtered ${commitments.length - commitmentsFinal.length} stale/duplicate)`);
+  console.log(`[CommitmentIndex] ${deduped.length} valid commitments after dedup`);
 
   // Reset and rebuild index
   serverIndex = new CommitmentTreeIndex();
   let synced = 0;
   let skipped = 0;
 
-  for (const { commitment, leafIndex, amount } of commitmentsFinal) {
+  for (const { commitment, leafIndex, amount } of deduped) {
     try {
       const addedIndex = serverIndex.addCommitment(commitment, amount);
       const addedIndexNum = Number(addedIndex);
-      console.log(`[CommitmentIndex] Added commitment: leafIndex=${leafIndex}, addedIndex=${addedIndexNum}, match=${addedIndexNum === leafIndex}`);
       if (addedIndexNum === leafIndex) {
         synced++;
       } else {

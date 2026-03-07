@@ -88,20 +88,19 @@ On-chain logic:
 5. Verify sweep TX input spends from deposit TX (linkage proof)
 6. Compute commitment: **`Poseidon(npk, 0x7a627463, amount_sats)`**
 7. Insert commitment into Merkle tree → get `leaf_index`
-8. Create `StealthAnnouncement` PDA: `["stealth", sweep_txid]`
+8. Emit stealth announcement event (sol_log_data, disc=0x03)
 9. Mint zkBTC to pool vault
 
-### 1.5 StealthAnnouncement (90 bytes)
+### 1.5 Stealth Announcement Event (sol_log_data, disc=0x03)
 
-| Offset | Size | Field | Description |
-|--------|------|-------|-------------|
-| 0 | 1 | discriminator | `0x08` |
+| Segment | Size | Field | Description |
+|---------|------|-------|-------------|
+| 0 | 1 | discriminator | `0x03` |
 | 1 | 1 | type | `0` = deposit (plaintext amount) |
 | 2 | 32 | ephemeral_pub | Ed25519 |
-| 34 | 8 | amount_bytes | u64 LE plaintext |
-| 42 | 32 | commitment | Poseidon hash |
-| 74 | 8 | leaf_index | tree position |
-| 82 | 8 | created_at | timestamp |
+| 3 | 8 | amount_bytes | u64 LE plaintext |
+| 4 | 32 | commitment | Poseidon hash |
+| 5 | 4 | leaf_index | tree position (u32 LE) |
 
 ### 1.6 Deposit Status Flow
 
@@ -117,7 +116,7 @@ DETECTED → CONFIRMING → CONFIRMED → SWEEPING → SWEEP_CONFIRMING → VERI
 scanUnifiedNotes(keys, announcements) → ScannedNote[]
 ```
 
-For each `StealthAnnouncement` on-chain:
+For each stealth announcement event (from indexer or tx logs):
 
 1. ECDH: `sharedSecret = X25519(viewingPrivKey, ephemeralPub)`
 2. Derive `stealthScalar` from shared secret
@@ -214,14 +213,14 @@ Instruction data:
 [..]       stealth_data (M × 40: ephemeral_pub(32) + encrypted_amount(8))
 ```
 
-Accounts: `pool_state, commitment_tree, vk_registry, user, system_program, nullifier_records[N], stealth_announcements[M]`
+Accounts: `pool_state, commitment_tree, vk_registry, user, system_program, nullifier_records[N]`
 
 On-chain logic:
 1. Verify Groth16 proof via BN254 pairing syscalls
 2. Validate VK hash from registry for (N, M) variant
 3. Create `NullifierRecord` PDA per input → prevents double-spend
 4. Insert each output commitment into Merkle tree
-5. Create `StealthAnnouncement` PDA per output (type=1, encrypted amount)
+5. Emit stealth announcement event per output (type=1, encrypted amount)
 
 ---
 
@@ -341,13 +340,13 @@ Instruction data (variable length — btc_script trimmed to actual size):
 [..]       request_nonce (8 bytes)
 ```
 
-Accounts: `pool_state, commitment_tree, vk_registry, user, system_program, nullifier_records[N], stealth_announcements[M-1], redemption_request`
+Accounts: `pool_state, commitment_tree, vk_registry, user, system_program, nullifier_records[N], redemption_request`
 
 On-chain logic:
 1. Verify Groth16 proof (same circuit as transact/unshield)
 2. Verify bound params hash (flag=2 for redeem mode)
 3. Create nullifier PDAs for all inputs
-4. Insert M-1 output commitments into tree with stealth announcements
+4. Insert M-1 output commitments into tree, emit stealth announcement events
 5. Create `RedemptionRequest` PDA (118 bytes, status=Pending)
 6. Decrement `total_shielded`, increment `pending_redemptions`
 
@@ -405,7 +404,7 @@ On-chain logic:
 | `TREE_DEPTH` | 16 | Merkle tree (65,536 leaves) |
 | `ROOT_HISTORY_SIZE` | 100 | Anti-front-running buffer |
 | `DEPOSIT_OP_RETURN_SIZE` | 64 bytes | ephemeralPub + npk |
-| `STEALTH_ANNOUNCEMENT_SIZE` | 90 bytes | On-chain record |
+| Stealth announcement | sol_log_data event (disc=0x03) | Emitted per output |
 | `PROOF_SIZE` | 256 bytes | Groth16 (2G1 + 1G2) |
 | `MAX_FEE_SATS` | 50,000 | Redemption fee tolerance |
 | `REDEMPTION_TIMEOUT_SLOTS` | ~7 days | Cancel window |

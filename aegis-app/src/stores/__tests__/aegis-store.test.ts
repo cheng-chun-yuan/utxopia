@@ -7,7 +7,6 @@ const mockDeriveKeysFromWallet = vi.fn();
 const mockCreateStealthMetaAddress = vi.fn();
 const mockEncodeStealthMetaAddress = vi.fn();
 const mockScanAnnouncements = vi.fn();
-const mockParseStealthAnnouncement = vi.fn();
 const mockScanUnifiedNotes = vi.fn();
 
 vi.mock("@aegis/sdk", () => ({
@@ -16,9 +15,7 @@ vi.mock("@aegis/sdk", () => ({
   createStealthMetaAddress: (keys: unknown) => mockCreateStealthMetaAddress(keys),
   encodeStealthMetaAddress: (meta: unknown) => mockEncodeStealthMetaAddress(meta),
   scanAnnouncements: (keys: unknown, announcements: unknown) => mockScanAnnouncements(keys, announcements),
-  parseStealthAnnouncement: (data: unknown) => mockParseStealthAnnouncement(data),
   scanUnifiedNotes: (keys: unknown, announcements: unknown) => mockScanUnifiedNotes(keys, announcements),
-  STEALTH_ANNOUNCEMENT_SIZE: 90,
 }));
 
 vi.mock("@/lib/constants", () => ({

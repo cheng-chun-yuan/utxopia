@@ -39,7 +39,6 @@ import {
   AUTHORITY_SIZE,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
-  deriveDepositStealthPDA,
   deriveLightClientPDA,
   derivePoolVaultATA,
   deriveVerifiedTransactionPDA,
@@ -381,7 +380,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
     const [poolStatePDA] = derivePoolStatePDA();
     const [commitmentTreePDA] = deriveCommitmentTreePDA();
     const [lightClientPDA] = deriveLightClientPDA();
-    const [stealthAnnouncementPDA] = deriveDepositStealthPDA(txidInternal);
     const poolVaultATA = derivePoolVaultATA();
 
     // Block header PDA: derive from block hash
@@ -433,11 +431,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
       verifiedTxPDA,
       lightClientPDA,
       commitmentTreePDA,
-      stealthAnnouncementPDA,
-      chadBuffer: bufferPubkey,
+      sweepTxBuffer: bufferPubkey,
       authority: relayer.publicKey,
       zkbtcMint: ZKBTC_MINT_ADDRESS,
       poolVaultATA,
+      depositTxBuffer: bufferPubkey, // TODO: separate deposit TX buffer when available
       instructionData: verifyDepositData,
     });
 
