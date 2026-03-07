@@ -1,23 +1,37 @@
-//! Admin Update Pool — Allows pool authority to update min/max deposit bounds and service fee.
+//! Timelocked Pool Parameter Updates
 //!
-//! Instruction data: min_deposit(u64 LE) + max_deposit(u64 LE) + service_fee_sats(u64 LE) = 24 bytes
+//! Three instructions for governance-delayed pool parameter changes:
 //!
-//! Accounts:
+//! - `propose_pool_update` (disc 21): Authority proposes new values, starts 48h timelock
+//! - `execute_pool_update` (disc 22): Anyone executes after timelock expires
+//! - `cancel_pool_update` (disc 23): Authority cancels pending proposal
+//!
+//! Propose instruction data: min_deposit(u64 LE) + max_deposit(u64 LE) + service_fee_sats(u64 LE) = 24 bytes
+//! Execute/Cancel instruction data: (none)
+//!
+//! Accounts (all three):
 //!   0. [writable] Pool state
-//!   1. [signer] Authority (must match pool.authority)
+//!   1. [signer]   Authority (propose/cancel only; execute is permissionless but still needs payer)
 
 use pinocchio::{
     account_info::AccountInfo,
     program_error::ProgramError,
     pubkey::Pubkey,
+    sysvars::{clock::Clock, Sysvar},
     ProgramResult,
 };
 
+use crate::constants::TIMELOCK_DELAY_SECS;
 use crate::error::AegisError;
 use crate::state::PoolState;
-use crate::utils::{validate_program_owner, validate_account_writable};
+use crate::utils::{
+    emit_pool_update_cancelled, emit_pool_update_executed, emit_pool_update_proposed,
+    validate_account_writable, validate_program_owner,
+};
 
-pub fn process_admin_update_pool(
+/// Propose new pool parameters. Starts a 48h timelock.
+/// Overwrites any existing pending proposal.
+pub fn process_propose_pool_update(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     data: &[u8],
@@ -51,6 +65,12 @@ pub fn process_admin_update_pool(
         return Err(ProgramError::InvalidInstructionData);
     }
 
+    let clock = Clock::get()?;
+    let execute_after = clock
+        .unix_timestamp
+        .checked_add(TIMELOCK_DELAY_SECS)
+        .ok_or(ProgramError::ArithmeticOverflow)?;
+
     let mut pool_data = pool_state_info.try_borrow_mut_data()?;
     let pool = PoolState::from_bytes_mut(&mut pool_data)?;
 
@@ -58,9 +78,97 @@ pub fn process_admin_update_pool(
         return Err(AegisError::Unauthorized.into());
     }
 
-    pool.set_min_deposit(min_deposit);
-    pool.set_max_deposit(max_deposit);
-    pool.set_service_fee_sats(service_fee);
+    pool.set_pending_min_deposit(min_deposit);
+    pool.set_pending_max_deposit(max_deposit);
+    pool.set_pending_service_fee(service_fee);
+    pool.set_pending_execute_after(execute_after);
+
+    emit_pool_update_proposed(min_deposit, max_deposit, service_fee, execute_after);
+
+    Ok(())
+}
+
+/// Execute a pending pool update after the timelock has elapsed.
+/// Permissionless — anyone can call this once the timelock expires.
+pub fn process_execute_pool_update(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    _data: &[u8],
+) -> ProgramResult {
+    if accounts.is_empty() {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    }
+
+    let pool_state_info = &accounts[0];
+
+    validate_program_owner(pool_state_info, program_id)?;
+    validate_account_writable(pool_state_info)?;
+
+    let clock = Clock::get()?;
+
+    let mut pool_data = pool_state_info.try_borrow_mut_data()?;
+    let pool = PoolState::from_bytes_mut(&mut pool_data)?;
+
+    if !pool.has_pending_proposal() {
+        return Err(AegisError::NoPendingProposal.into());
+    }
+
+    if clock.unix_timestamp < pool.pending_execute_after() {
+        return Err(AegisError::TimelockNotElapsed.into());
+    }
+
+    // Apply pending values
+    let min = pool.pending_min_deposit();
+    let max = pool.pending_max_deposit();
+    let fee = pool.pending_service_fee();
+
+    pool.set_min_deposit(min);
+    pool.set_max_deposit(max);
+    pool.set_service_fee_sats(fee);
+    pool.set_last_update(clock.unix_timestamp);
+
+    // Clear pending proposal
+    pool.clear_pending_proposal();
+
+    emit_pool_update_executed(min, max, fee);
+
+    Ok(())
+}
+
+/// Cancel a pending pool update. Authority only.
+pub fn process_cancel_pool_update(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    _data: &[u8],
+) -> ProgramResult {
+    if accounts.len() < 2 {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    }
+
+    let pool_state_info = &accounts[0];
+    let authority = &accounts[1];
+
+    validate_program_owner(pool_state_info, program_id)?;
+    validate_account_writable(pool_state_info)?;
+
+    if !authority.is_signer() {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    let mut pool_data = pool_state_info.try_borrow_mut_data()?;
+    let pool = PoolState::from_bytes_mut(&mut pool_data)?;
+
+    if authority.key().as_ref() != pool.authority {
+        return Err(AegisError::Unauthorized.into());
+    }
+
+    if !pool.has_pending_proposal() {
+        return Err(AegisError::NoPendingProposal.into());
+    }
+
+    pool.clear_pending_proposal();
+
+    emit_pool_update_cancelled();
 
     Ok(())
 }

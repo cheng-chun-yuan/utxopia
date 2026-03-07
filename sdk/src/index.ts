@@ -570,6 +570,13 @@ export {
   // Public redeem: burn SPL → BTC withdrawal
   buildPublicRedeemInstructionData,
   buildPublicRedeemInstruction,
+  // Timelocked pool update instructions
+  buildProposePoolUpdateInstructionData,
+  buildProposePoolUpdateInstruction,
+  buildExecutePoolUpdateInstructionData,
+  buildExecutePoolUpdateInstruction,
+  buildCancelPoolUpdateInstructionData,
+  buildCancelPoolUpdateInstruction,
   // Redemption PDA helper
   deriveRedemptionRequestPDA as deriveRedemptionRequestPDAFromInstruction,
   type Instruction,
@@ -578,6 +585,9 @@ export {
   type UnshieldInstructionOptions,
   type RedeemInstructionOptions,
   type PublicRedeemInstructionOptions,
+  type ProposePoolUpdateOptions,
+  type ExecutePoolUpdateOptions,
+  type CancelPoolUpdateOptions,
 } from "./instructions";
 
 // ==========================================================================
@@ -621,12 +631,21 @@ export {
   parseLeafInsertedEvent,
   parseNullifierSpentEvent,
   parseStealthAnnouncementEvent,
+  parsePoolUpdateProposedEvent,
+  parsePoolUpdateExecutedEvent,
+  parsePoolUpdateCancelledEvent,
   EVENT_LEAF_INSERTED,
   EVENT_NULLIFIER_SPENT,
   EVENT_STEALTH_ANNOUNCEMENT,
+  EVENT_POOL_UPDATE_PROPOSED,
+  EVENT_POOL_UPDATE_EXECUTED,
+  EVENT_POOL_UPDATE_CANCELLED,
   type LeafInsertedEvent,
   type NullifierSpentEvent,
   type StealthAnnouncementEvent,
+  type PoolUpdateProposedEvent,
+  type PoolUpdateExecutedEvent,
+  type PoolUpdateCancelledEvent,
   type ProgramEvent,
 } from "./events";
 

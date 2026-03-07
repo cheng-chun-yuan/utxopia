@@ -81,7 +81,7 @@ BTC Deposit → Taproot Address (npk-tweaked) → Backend Sweep → SPV Verifica
 
 | Directory | Purpose | Language |
 |-----------|---------|----------|
-| `contracts/programs/aegis` | Main Solana program (11 instructions) | Rust (Pinocchio) |
+| `contracts/programs/aegis` | Main Solana program (14 instructions) | Rust (Pinocchio) |
 | `contracts/programs/btc-light-client` | Bitcoin header tracking (standalone program) | Rust (Pinocchio) |
 | `circuits` | JoinSplit Groth16 ZK circuits | circom |
 | `sdk` | TypeScript SDK (@aegis/sdk) | TypeScript |
@@ -165,6 +165,9 @@ Spending Key (Baby Jubjub) ─► Signs JoinSplit transactions (EdDSA-Poseidon)
 | 7 | `set_paused` | Admin pause/unpause |
 | 11-12 | VK registry | Init/update verification key hashes |
 | 14 | `transact` | JoinSplit N-to-M private transfer (Groth16) |
+| 21 | `propose_pool_update` | Authority proposes new pool params (48h timelock) |
+| 22 | `execute_pool_update` | Permissionless execute after timelock expires |
+| 23 | `cancel_pool_update` | Authority cancels pending proposal |
 
 ## SDK Usage (@aegis/sdk)
 

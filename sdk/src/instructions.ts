@@ -47,6 +47,9 @@ const INSTRUCTION = {
   UNSHIELD: 15,
   REDEEM: 16,
   PUBLIC_REDEEM: 17,
+  PROPOSE_POOL_UPDATE: 21,
+  EXECUTE_POOL_UPDATE: 22,
+  CANCEL_POOL_UPDATE: 23,
 } as const;
 
 /** Export instruction discriminators for consumers */
@@ -936,6 +939,143 @@ export function buildPublicRedeemInstruction(options: PublicRedeemInstructionOpt
     programAddress: config.aegisProgramId,
     accounts,
     data,
+  };
+}
+
+// =============================================================================
+// Timelocked Pool Update Instruction Builders
+// =============================================================================
+
+/** Propose pool update instruction options */
+export interface ProposePoolUpdateOptions {
+  /** New minimum deposit in satoshis */
+  minDeposit: bigint;
+  /** New maximum deposit in satoshis */
+  maxDeposit: bigint;
+  /** New service fee in satoshis */
+  serviceFee: bigint;
+  /** Account addresses */
+  accounts: {
+    poolState: Address;
+    authority: Address;
+  };
+}
+
+/**
+ * Build propose_pool_update instruction data
+ *
+ * Layout: discriminator(1) + min_deposit(8) + max_deposit(8) + service_fee(8) = 25 bytes
+ */
+export function buildProposePoolUpdateInstructionData(
+  minDeposit: bigint,
+  maxDeposit: bigint,
+  serviceFee: bigint,
+): Uint8Array {
+  const data = new Uint8Array(25);
+  const view = new DataView(data.buffer);
+
+  data[0] = INSTRUCTION.PROPOSE_POOL_UPDATE;
+  view.setBigUint64(1, minDeposit, true);
+  view.setBigUint64(9, maxDeposit, true);
+  view.setBigUint64(17, serviceFee, true);
+
+  return data;
+}
+
+/**
+ * Build a complete propose_pool_update instruction
+ *
+ * Accounts:
+ * 0. pool_state (writable)
+ * 1. authority (signer)
+ */
+export function buildProposePoolUpdateInstruction(options: ProposePoolUpdateOptions): Instruction {
+  const config = getConfig();
+
+  const data = buildProposePoolUpdateInstructionData(
+    options.minDeposit,
+    options.maxDeposit,
+    options.serviceFee,
+  );
+
+  return {
+    programAddress: config.aegisProgramId,
+    accounts: [
+      { address: options.accounts.poolState, role: AccountRole.WRITABLE },
+      { address: options.accounts.authority, role: AccountRole.WRITABLE_SIGNER },
+    ],
+    data,
+  };
+}
+
+/** Execute pool update instruction options */
+export interface ExecutePoolUpdateOptions {
+  accounts: {
+    poolState: Address;
+  };
+}
+
+/**
+ * Build execute_pool_update instruction data
+ *
+ * Layout: discriminator(1) = 1 byte
+ */
+export function buildExecutePoolUpdateInstructionData(): Uint8Array {
+  return new Uint8Array([INSTRUCTION.EXECUTE_POOL_UPDATE]);
+}
+
+/**
+ * Build a complete execute_pool_update instruction (permissionless)
+ *
+ * Accounts:
+ * 0. pool_state (writable)
+ */
+export function buildExecutePoolUpdateInstruction(options: ExecutePoolUpdateOptions): Instruction {
+  const config = getConfig();
+
+  return {
+    programAddress: config.aegisProgramId,
+    accounts: [
+      { address: options.accounts.poolState, role: AccountRole.WRITABLE },
+    ],
+    data: buildExecutePoolUpdateInstructionData(),
+  };
+}
+
+/** Cancel pool update instruction options */
+export interface CancelPoolUpdateOptions {
+  accounts: {
+    poolState: Address;
+    authority: Address;
+  };
+}
+
+/**
+ * Build cancel_pool_update instruction data
+ *
+ * Layout: discriminator(1) = 1 byte
+ */
+export function buildCancelPoolUpdateInstructionData(): Uint8Array {
+  return new Uint8Array([INSTRUCTION.CANCEL_POOL_UPDATE]);
+}
+
+/**
+ * Build a complete cancel_pool_update instruction
+ *
+ * Accounts:
+ * 0. pool_state (writable)
+ * 1. authority (signer)
+ */
+export function buildCancelPoolUpdateInstruction(options: CancelPoolUpdateOptions): Instruction {
+  const config = getConfig();
+
+  return {
+    programAddress: config.aegisProgramId,
+    accounts: [
+      { address: options.accounts.poolState, role: AccountRole.WRITABLE },
+      { address: options.accounts.authority, role: AccountRole.WRITABLE_SIGNER },
+    ],
+    data: buildCancelPoolUpdateInstructionData(),
   };
 }
 

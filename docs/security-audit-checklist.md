@@ -37,7 +37,7 @@
 
 ## MEDIUM (Should Fix)
 
-- [x] **M1** Admin update_pool missing min/max bounds validation
+- [x] **M1** Pool update bounds validation (min <= max, max <= 21M BTC) — enforced in propose_pool_update with 48h timelock
 - [x] **M2** Missing input validation on /api/redeem
 - [x] **M3** SHA256 truncated to 8 bytes for amount key (document)
 - [x] **M4** No authentication tag on XOR amount encryption (document)

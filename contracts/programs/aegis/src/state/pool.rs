@@ -65,8 +65,21 @@ pub struct PoolState {
     /// fee_pool = sum(service_fee - miner_fee) across all completed withdrawals.
     fee_pool: [u8; 8],
 
+    /// Pending timelock: proposed min_deposit (satoshis)
+    pending_min_deposit: [u8; 8],
+
+    /// Pending timelock: proposed max_deposit (satoshis)
+    pending_max_deposit: [u8; 8],
+
+    /// Pending timelock: proposed service_fee_sats (satoshis)
+    pending_service_fee: [u8; 8],
+
+    /// Pending timelock: unix timestamp after which the proposal can be executed.
+    /// 0 means no active proposal.
+    pending_execute_after: [u8; 8],
+
     /// Reserved for future use
-    _reserved: [u8; 56],
+    _reserved: [u8; 24],
 }
 
 impl PoolState {
@@ -154,6 +167,26 @@ impl PoolState {
         u64::from_le_bytes(self.fee_pool)
     }
 
+    pub fn pending_min_deposit(&self) -> u64 {
+        u64::from_le_bytes(self.pending_min_deposit)
+    }
+
+    pub fn pending_max_deposit(&self) -> u64 {
+        u64::from_le_bytes(self.pending_max_deposit)
+    }
+
+    pub fn pending_service_fee(&self) -> u64 {
+        u64::from_le_bytes(self.pending_service_fee)
+    }
+
+    pub fn pending_execute_after(&self) -> i64 {
+        i64::from_le_bytes(self.pending_execute_after)
+    }
+
+    pub fn has_pending_proposal(&self) -> bool {
+        self.pending_execute_after() != 0
+    }
+
     // Setters
     pub fn set_paused(&mut self, paused: bool) {
         if paused {
@@ -201,6 +234,30 @@ impl PoolState {
 
     pub fn set_fee_pool(&mut self, value: u64) {
         self.fee_pool = value.to_le_bytes();
+    }
+
+    pub fn set_pending_min_deposit(&mut self, value: u64) {
+        self.pending_min_deposit = value.to_le_bytes();
+    }
+
+    pub fn set_pending_max_deposit(&mut self, value: u64) {
+        self.pending_max_deposit = value.to_le_bytes();
+    }
+
+    pub fn set_pending_service_fee(&mut self, value: u64) {
+        self.pending_service_fee = value.to_le_bytes();
+    }
+
+    pub fn set_pending_execute_after(&mut self, value: i64) {
+        self.pending_execute_after = value.to_le_bytes();
+    }
+
+    /// Clear all pending timelock fields
+    pub fn clear_pending_proposal(&mut self) {
+        self.pending_min_deposit = [0u8; 8];
+        self.pending_max_deposit = [0u8; 8];
+        self.pending_service_fee = [0u8; 8];
+        self.pending_execute_after = [0u8; 8];
     }
 
     // Increment helpers with overflow check

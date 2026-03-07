@@ -50,6 +50,9 @@ pub const CHAIN_ID: u64 = 101; // Solana mainnet
 /// If a redemption stays in Processing longer than this, the user can cancel.
 pub const REDEMPTION_TIMEOUT_SLOTS: u64 = 9000;
 
+/// Timelock delay for pool parameter updates (48 hours in seconds)
+pub const TIMELOCK_DELAY_SECS: i64 = 48 * 60 * 60;
+
 /// Token-2022 program ID (TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb)
 pub const TOKEN_2022_PROGRAM_ID: [u8; 32] = [
     0x06, 0xdd, 0xf6, 0xe1, 0xee, 0x75, 0x8f, 0xde,

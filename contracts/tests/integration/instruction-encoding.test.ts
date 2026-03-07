@@ -11,6 +11,9 @@ import {
   buildRequestRedemptionInstruction,
   buildSetPausedInstruction,
   buildClaimGroth16Instruction,
+  buildProposePoolUpdateInstruction,
+  buildExecutePoolUpdateInstruction,
+  buildCancelPoolUpdateInstruction,
 } from "../helpers/instructions";
 import {
   derivePoolStatePda,
@@ -191,6 +194,57 @@ describe("Aegis Instruction Encoding", function () {
       expect(ix.data[0]).to.equal(11); // Instruction.ClaimGroth16
       expect(ix.data.length).to.equal(201);
       expect(ix.data.readBigUInt64LE(193)).to.equal(amount);
+    });
+  });
+
+  describe("Timelocked Pool Update Tests", () => {
+    it("should correctly encode ProposePoolUpdate instruction", () => {
+      const minDeposit = 10_000n;
+      const maxDeposit = 100_000_000_000n;
+      const serviceFee = 500n;
+
+      const ix = buildProposePoolUpdateInstruction(
+        PROGRAM_ID,
+        poolStatePda,
+        authority.publicKey,
+        minDeposit,
+        maxDeposit,
+        serviceFee,
+      );
+
+      expect(ix.data[0]).to.equal(21); // Instruction.ProposePoolUpdate
+      expect(ix.data.length).to.equal(25);
+      expect(ix.data.readBigUInt64LE(1)).to.equal(minDeposit);
+      expect(ix.data.readBigUInt64LE(9)).to.equal(maxDeposit);
+      expect(ix.data.readBigUInt64LE(17)).to.equal(serviceFee);
+      expect(ix.keys.length).to.equal(2);
+      expect(ix.keys[1].isSigner).to.equal(true);
+    });
+
+    it("should correctly encode ExecutePoolUpdate instruction", () => {
+      const ix = buildExecutePoolUpdateInstruction(
+        PROGRAM_ID,
+        poolStatePda,
+      );
+
+      expect(ix.data[0]).to.equal(22); // Instruction.ExecutePoolUpdate
+      expect(ix.data.length).to.equal(1);
+      expect(ix.keys.length).to.equal(1);
+      // Permissionless — no signer required
+      expect(ix.keys[0].isSigner).to.equal(false);
+    });
+
+    it("should correctly encode CancelPoolUpdate instruction", () => {
+      const ix = buildCancelPoolUpdateInstruction(
+        PROGRAM_ID,
+        poolStatePda,
+        authority.publicKey,
+      );
+
+      expect(ix.data[0]).to.equal(23); // Instruction.CancelPoolUpdate
+      expect(ix.data.length).to.equal(1);
+      expect(ix.keys.length).to.equal(2);
+      expect(ix.keys[1].isSigner).to.equal(true);
     });
   });
 

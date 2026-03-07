@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
 import { fetchAccountInfo, isHeliusConfigured } from "@/lib/helius-server";
-import { DEVNET_CONFIG, bytesToBigint } from "@aegis/sdk";
+import { DEVNET_CONFIG } from "@aegis/sdk";
 import bs58 from "bs58";
+
+/** Read a little-endian u64 from a Uint8Array slice as bigint */
+function readU64LE(data: Uint8Array, offset: number): bigint {
+  let result = 0n;
+  for (let i = 7; i >= 0; i--) {
+    result = (result << 8n) | BigInt(data[offset + i]);
+  }
+  return result;
+}
 
 export const runtime = "nodejs";
 
@@ -14,18 +23,25 @@ const POOL_STATE_DISCRIMINATOR = 0x01;
 interface PoolStateData {
   discriminator: number;
   bump: number;
+  isPaused: boolean;
   authority: string;
   zkbtcMint: string;
   poolVault: string;
-  minDeposit: string;
+  frostVault: string;
+  depositCount: string;
   totalMinted: string;
   totalBurned: string;
-  totalShielded: string;
-  depositCount: string;
-  directClaims: string;
-  stealthClaims: string;
-  isPaused: boolean;
+  pendingRedemptions: string;
   lastUpdate: number;
+  minDeposit: string;
+  maxDeposit: string;
+  totalShielded: string;
+  serviceFeeSats: string;
+  feePool: string;
+  pendingMinDeposit: string;
+  pendingMaxDeposit: string;
+  pendingServiceFee: string;
+  pendingExecuteAfter: number;
 }
 
 /**
@@ -57,23 +73,35 @@ export async function GET() {
       );
     }
 
-    // Parse state (simplified - matches PoolState struct layout)
-    // Using SDK's bytesToBigint for u64 parsing
+    // Parse state — matches PoolState repr(C) layout from pool.rs
+    // Offsets: disc(1) bump(1) flags(1) pad(1) authority(32) mint(32) poolVault(32) frostVault(32)
+    //          depositCount(8)@132 totalMinted(8)@140 totalBurned(8)@148 pendingRedemptions(8)@156
+    //          lastUpdate(8)@164 minDeposit(8)@172 maxDeposit(8)@180 totalShielded(8)@188
+    //          serviceFeeSats(8)@196 feePool(8)@204
+    //          pendingMinDeposit(8)@212 pendingMaxDeposit(8)@220
+    //          pendingServiceFee(8)@228 pendingExecuteAfter(8)@236 reserved(24)@244
     const state: PoolStateData = {
       discriminator: data[0],
       bump: data[1],
-      authority: bs58.encode(data.slice(8, 40)),
-      zkbtcMint: bs58.encode(data.slice(40, 72)),
-      poolVault: bs58.encode(data.slice(72, 104)),
-      minDeposit: bytesToBigint(data.slice(104, 112)).toString(),
-      totalMinted: bytesToBigint(data.slice(112, 120)).toString(),
-      totalBurned: bytesToBigint(data.slice(120, 128)).toString(),
-      totalShielded: bytesToBigint(data.slice(128, 136)).toString(),
-      depositCount: bytesToBigint(data.slice(136, 144)).toString(),
-      directClaims: bytesToBigint(data.slice(144, 152)).toString(),
-      stealthClaims: bytesToBigint(data.slice(152, 160)).toString(),
-      isPaused: data[160] !== 0,
-      lastUpdate: Number(bytesToBigint(data.slice(168, 176))),
+      isPaused: (data[2] & 0x01) !== 0,
+      authority: bs58.encode(data.slice(4, 36)),
+      zkbtcMint: bs58.encode(data.slice(36, 68)),
+      poolVault: bs58.encode(data.slice(68, 100)),
+      frostVault: bs58.encode(data.slice(100, 132)),
+      depositCount: readU64LE(data, 132).toString(),
+      totalMinted: readU64LE(data, 140).toString(),
+      totalBurned: readU64LE(data, 148).toString(),
+      pendingRedemptions: readU64LE(data, 156).toString(),
+      lastUpdate: Number(readU64LE(data, 164)),
+      minDeposit: readU64LE(data, 172).toString(),
+      maxDeposit: readU64LE(data, 180).toString(),
+      totalShielded: readU64LE(data, 188).toString(),
+      serviceFeeSats: readU64LE(data, 196).toString(),
+      feePool: readU64LE(data, 204).toString(),
+      pendingMinDeposit: readU64LE(data, 212).toString(),
+      pendingMaxDeposit: readU64LE(data, 220).toString(),
+      pendingServiceFee: readU64LE(data, 228).toString(),
+      pendingExecuteAfter: Number(readU64LE(data, 236)),
     };
 
     return NextResponse.json({

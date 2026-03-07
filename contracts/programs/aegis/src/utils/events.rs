@@ -20,6 +20,15 @@ pub const ANNOUNCEMENT_TYPE_DEPOSIT: u8 = 0;
 /// Announcement type: transfer (XOR-encrypted amount from JoinSplit transact)
 pub const ANNOUNCEMENT_TYPE_TRANSFER: u8 = 1;
 
+/// Event discriminator: pool update proposed (timelock)
+const EVENT_POOL_UPDATE_PROPOSED: u8 = 0x04;
+
+/// Event discriminator: pool update executed (timelock)
+const EVENT_POOL_UPDATE_EXECUTED: u8 = 0x05;
+
+/// Event discriminator: pool update cancelled (timelock)
+const EVENT_POOL_UPDATE_CANCELLED: u8 = 0x06;
+
 /// Emit when a commitment is inserted into the Merkle tree.
 ///
 /// Layout: disc(1) + commitment(32) + created_at(8) = 41 bytes
@@ -58,4 +67,40 @@ pub fn emit_stealth_announcement(
     let atype = [announcement_type];
     let li = leaf_index.to_le_bytes();
     sol_log_data(&[&disc, &atype, ephemeral_pub, encrypted_amount, commitment, &li]);
+}
+
+/// Emit when a pool update is proposed (timelock starts).
+///
+/// Layout: disc(1) + min_deposit(8) + max_deposit(8) + service_fee(8) + execute_after(8) = 33 bytes
+pub fn emit_pool_update_proposed(
+    min_deposit: u64,
+    max_deposit: u64,
+    service_fee: u64,
+    execute_after: i64,
+) {
+    let disc = [EVENT_POOL_UPDATE_PROPOSED];
+    let min = min_deposit.to_le_bytes();
+    let max = max_deposit.to_le_bytes();
+    let fee = service_fee.to_le_bytes();
+    let ts = execute_after.to_le_bytes();
+    sol_log_data(&[&disc, &min, &max, &fee, &ts]);
+}
+
+/// Emit when a pool update is executed (timelock elapsed).
+///
+/// Layout: disc(1) + min_deposit(8) + max_deposit(8) + service_fee(8) = 25 bytes
+pub fn emit_pool_update_executed(min_deposit: u64, max_deposit: u64, service_fee: u64) {
+    let disc = [EVENT_POOL_UPDATE_EXECUTED];
+    let min = min_deposit.to_le_bytes();
+    let max = max_deposit.to_le_bytes();
+    let fee = service_fee.to_le_bytes();
+    sol_log_data(&[&disc, &min, &max, &fee]);
+}
+
+/// Emit when a pool update proposal is cancelled.
+///
+/// Layout: disc(1) = 1 byte
+pub fn emit_pool_update_cancelled() {
+    let disc = [EVENT_POOL_UPDATE_CANCELLED];
+    sol_log_data(&[&disc]);
 }

@@ -4,7 +4,7 @@
  * Architecture:
  * - Most operations (deposit, claim, split) are handled client-side via SDK + Solana
  * - Only redemption (BTC withdrawal) requires backend (server-side BTC signing)
- * - Block header submission uses Next.js API routes (proxied to relayer)
+ * - Block headers are submitted by the backend header-relayer service (batch only)
  * - Deposit status checked via mempool.space directly (no backend needed)
  *
  * Backend provides:
@@ -17,8 +17,6 @@ import type {
   RedeemResponse,
   WithdrawalStatusResponse,
   DepositStatusResponse,
-  SubmitHeaderRequest,
-  SubmitHeaderResponse,
   HeaderStatusResponse,
 } from "./types";
 import { ApiError } from "./errors";
@@ -107,49 +105,7 @@ class zkBTCApiClient {
     return this.request<WithdrawalStatusResponse>(API_ENDPOINTS.WITHDRAWAL_STATUS(requestId));
   }
 
-  // ============ Block Header Management (Next.js API Routes) ============
-
-  /**
-   * Submit a Bitcoin block header to be published on-chain by the relayer
-   * Uses internal Next.js API route (proxied to header-relayer service)
-   */
-  async submitHeader(
-    blockHeight: number,
-    blockHash: string,
-    rawHeader: string,
-    prevBlockHash: string,
-    merkleRoot: string,
-    timestamp: number,
-    bits: number,
-    nonce: number
-  ): Promise<SubmitHeaderResponse> {
-    const body: SubmitHeaderRequest = {
-      block_height: blockHeight,
-      block_hash: blockHash,
-      raw_header: rawHeader,
-      prev_block_hash: prevBlockHash,
-      merkle_root: merkleRoot,
-      timestamp,
-      bits,
-      nonce,
-    };
-
-    // Use internal API route (same origin)
-    const response = await fetch("/api/header/submit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({
-        error: `HTTP ${response.status}: ${response.statusText}`,
-      }));
-      throw ApiError.fromResponse(error, response.status);
-    }
-
-    return response.json();
-  }
+  // ============ Block Header Status (Next.js API Route) ============
 
   /**
    * Check if a block header exists on-chain

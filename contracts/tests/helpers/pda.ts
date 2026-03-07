@@ -23,6 +23,10 @@ export interface PoolStateLayout {
   lastUpdate: bigint;
   minDeposit: bigint;
   maxDeposit: bigint;
+  pendingMinDeposit: bigint;
+  pendingMaxDeposit: bigint;
+  pendingServiceFee: bigint;
+  pendingExecuteAfter: bigint;
   _reserved: Uint8Array;
 }
 
@@ -59,7 +63,12 @@ export function parsePoolState(data: Buffer): PoolStateLayout {
     lastUpdate: data.readBigInt64LE(180),
     minDeposit: data.readBigUInt64LE(188),
     maxDeposit: data.readBigUInt64LE(196),
-    _reserved: data.subarray(200, 264),
+    // offsets 204-227: totalShielded, serviceFeeSats, feePool (skipped)
+    pendingMinDeposit: data.readBigUInt64LE(212),
+    pendingMaxDeposit: data.readBigUInt64LE(220),
+    pendingServiceFee: data.readBigUInt64LE(228),
+    pendingExecuteAfter: data.readBigInt64LE(236),
+    _reserved: data.subarray(244, 268),
   };
 }
 

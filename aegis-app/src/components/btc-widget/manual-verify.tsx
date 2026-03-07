@@ -167,7 +167,7 @@ export function ManualVerify() {
     setTimeout(() => setCopied(null), 2000);
   }, []);
 
-  // Submit block header to Solana via relayer
+  // Check if block header exists on-chain (submitted by backend header-relayer)
   const handleSubmitBlockHeader = useCallback(async () => {
     if (!verificationData) {
       setError("No verification data");
@@ -179,36 +179,20 @@ export function ManualVerify() {
 
     try {
       const header = verificationData.blockHeader;
-      console.log("[Header] Submitting block header via relayer...");
+      console.log("[Header] Checking block header on-chain...");
       console.log("[Header] Height:", header.height);
-      console.log("[Header] Hash:", header.hash);
 
-      // Call relayer API to publish header on-chain
-      const result = await zkBTCApi.submitHeader(
-        header.height,
-        header.hash,
-        header.rawHeader,
-        header.previousBlockHash,
-        header.merkleRoot,
-        header.timestamp,
-        header.bits,
-        header.nonce
-      );
+      const result = await zkBTCApi.getHeaderStatus(header.height);
 
-      if (result.success) {
-        setHeaderTxSig(result.solana_tx_signature || null);
+      if (result.exists) {
         setHeaderSubmitted(true);
-        console.log("[Header] Block header submitted:", result.solana_tx_signature);
-
-        if (result.already_exists) {
-          console.log("[Header] Header already existed on-chain");
-        }
+        console.log("[Header] Block header found on-chain");
       } else {
-        throw new Error(result.error || result.message || "Failed to submit header");
+        throw new Error("Block header not yet relayed on-chain. The header-relayer service submits headers automatically — please wait and retry.");
       }
     } catch (err) {
-      console.error("[Header] Submission failed:", err);
-      setError(err instanceof Error ? err.message : "Failed to submit block header");
+      console.error("[Header] Check failed:", err);
+      setError(err instanceof Error ? err.message : "Failed to check block header");
     } finally {
       setHeaderSubmitting(false);
     }

@@ -213,35 +213,39 @@ async function main() {
   // =========================================================================
   // Step 0: Update pool min_deposit to 5000 (if needed)
   // =========================================================================
-  console.log("\n=== Step 0: Update pool min_deposit ===");
+  console.log("\n=== Step 0: Propose pool min_deposit update (timelocked) ===");
   {
     const NEW_MIN_DEPOSIT = 5000n;
     const MAX_DEPOSIT = 100_000_000_000n;
+    const SERVICE_FEE = 0n;
 
-    const updateData = Buffer.alloc(17);
-    updateData[0] = 17; // ADMIN_UPDATE_POOL discriminator
-    updateData.writeBigUInt64LE(NEW_MIN_DEPOSIT, 1);
-    updateData.writeBigUInt64LE(MAX_DEPOSIT, 9);
+    // propose_pool_update: disc(1) + min_deposit(8) + max_deposit(8) + service_fee(8) = 25 bytes
+    const proposeData = Buffer.alloc(25);
+    proposeData[0] = 21; // PROPOSE_POOL_UPDATE discriminator
+    proposeData.writeBigUInt64LE(NEW_MIN_DEPOSIT, 1);
+    proposeData.writeBigUInt64LE(MAX_DEPOSIT, 9);
+    proposeData.writeBigUInt64LE(SERVICE_FEE, 17);
 
-    const updateIx = new TransactionInstruction({
+    const proposeIx = new TransactionInstruction({
       programId: AEGIS_PROGRAM_ID,
       keys: [
         { pubkey: poolStatePDA, isSigner: false, isWritable: true },
         { pubkey: relayer.publicKey, isSigner: true, isWritable: false },
       ],
-      data: updateData,
+      data: proposeData,
     });
 
     const { blockhash: bh0 } = await connection.getLatestBlockhash();
-    const updateTx = new Transaction();
-    updateTx.add(updateIx);
-    updateTx.feePayer = relayer.publicKey;
-    updateTx.recentBlockhash = bh0;
+    const proposeTx = new Transaction();
+    proposeTx.add(proposeIx);
+    proposeTx.feePayer = relayer.publicKey;
+    proposeTx.recentBlockhash = bh0;
 
-    const updateSig = await sendAndConfirmTransaction(connection, updateTx, [relayer], {
+    const proposeSig = await sendAndConfirmTransaction(connection, proposeTx, [relayer], {
       commitment: "confirmed",
     });
-    console.log("Pool min_deposit updated to 5000. Sig:", updateSig);
+    console.log("Pool update proposed (48h timelock). Sig:", proposeSig);
+    console.log("NOTE: execute_pool_update (disc 22) must be called after timelock expires.");
   }
 
   // =========================================================================

@@ -50,7 +50,7 @@ async function main() {
   const balance = await connection.getBalance(payer.publicKey);
   console.log(`Payer balance: ${balance / 1e9} SOL`);
 
-  // Create minimal test data (discriminator 22 + dummy data)
+  // Create minimal test data (discriminator 13 = ADD_DEMO_STEALTH + dummy data)
   // ephemeral_pub (33) + commitment (32) + encrypted_amount (8) = 73 + 1 discriminator = 74
   const instructionData = Buffer.alloc(74);
   instructionData[0] = 13; // ADD_DEMO_STEALTH discriminator

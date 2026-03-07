@@ -24,6 +24,9 @@ export const Instruction = {
   SubmitHeader: 9,
   VerifyDeposit: 10,
   ClaimGroth16: 11,
+  ProposePoolUpdate: 21,
+  ExecutePoolUpdate: 22,
+  CancelPoolUpdate: 23,
 } as const;
 
 /**

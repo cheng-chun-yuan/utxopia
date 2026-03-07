@@ -145,6 +145,12 @@ pub enum AegisError {
 
     #[error("Block difficulty does not match expected value")]
     DifficultyMismatch = 6071,
+
+    #[error("Timelock period has not elapsed")]
+    TimelockNotElapsed = 6072,
+
+    #[error("No pending pool update proposal")]
+    NoPendingProposal = 6073,
 }
 
 impl From<AegisError> for ProgramError {

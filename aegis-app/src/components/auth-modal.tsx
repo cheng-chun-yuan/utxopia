@@ -85,6 +85,19 @@ export function AuthModal({
           {error && (
             <div className="mx-6 mt-3 px-3 py-2 rounded-[8px] bg-red-500/10 border border-red-500/20">
               <p className="text-caption text-red-400 text-center">{error}</p>
+              {error.includes("No saved key found") && passkeySupported && (
+                <button
+                  onClick={onPasskeyRegister}
+                  disabled={isLoading}
+                  className={cn(
+                    "w-full mt-2 px-3 py-2 rounded-[8px]",
+                    "bg-privacy/20 hover:bg-privacy/30 text-privacy",
+                    "disabled:opacity-40 transition-colors text-caption font-semibold cursor-pointer",
+                  )}
+                >
+                  Create New Passkey on This Device
+                </button>
+              )}
             </div>
           )}
 

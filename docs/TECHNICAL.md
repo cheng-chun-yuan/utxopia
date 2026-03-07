@@ -322,6 +322,9 @@ Frontend falls back to RPC log scanning when indexer is unavailable.
 | 12 | `UPDATE_VK_REGISTRY` | Update VK hash (circuit upgrades) |
 | 13 | `ADD_DEMO_STEALTH` | Demo deposit (devnet only, disabled on mainnet) |
 | 14 | `TRANSACT` | JoinSplit N-to-M private transfer (Groth16) |
+| 21 | `PROPOSE_POOL_UPDATE` | Authority proposes new pool params (48h timelock) |
+| 22 | `EXECUTE_POOL_UPDATE` | Permissionless execute after timelock expires |
+| 23 | `CANCEL_POOL_UPDATE` | Authority cancels pending proposal |
 
 ---
 
@@ -440,6 +443,13 @@ Custom error codes start at 6000 to avoid conflicts with Solana system errors.
 | 6064 | `DuplicateAccounts` | Same account passed twice |
 | 6065 | `AccountClosed` | Account has been closed |
 | 6066 | `InvalidVkRegistry` | VK registry doesn't match circuit variant |
+| 6067 | `InvalidBoundParams` | Invalid bound parameters hash |
+| 6068 | `RedemptionTimeout` | Redemption processing timeout exceeded |
+| 6069 | `JoinSplitTooLarge` | JoinSplit dimensions exceed tx size limit |
+| 6070 | `RedemptionOutputMismatch` | BTC output doesn't match expected address/amount |
+| 6071 | `DifficultyMismatch` | Block difficulty doesn't match expected value |
+| 6072 | `TimelockNotElapsed` | 48h timelock period has not elapsed |
+| 6073 | `NoPendingProposal` | No pending pool update proposal to execute/cancel |
 
 > Source: `contracts/programs/aegis/src/error.rs`
 

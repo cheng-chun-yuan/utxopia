@@ -3,9 +3,10 @@
  *
  * Minimal endpoints for backend communication:
  * - Redemption (BTC withdrawal) - requires server-side BTC signing
- * - Header submission - uses Next.js API routes (proxied to relayer)
+ * - Header status - checks on-chain header existence
  *
  * Note: Deposit/claim operations use SDK directly (no backend API)
+ * Note: Header submission uses the backend header-relayer service (batch only)
  */
 
 export const API_ENDPOINTS = {
@@ -13,8 +14,7 @@ export const API_ENDPOINTS = {
   REDEEM: "/api/redeem",
   WITHDRAWAL_STATUS: (id: string) => `/api/withdrawal/status/${encodeURIComponent(id)}`,
 
-  // Block header submission (Next.js API routes -> header-relayer)
-  SUBMIT_HEADER: "/api/header/submit",
+  // Block header status (Next.js API route -> Solana RPC)
   HEADER_STATUS: (height: number) => `/api/header/status/${height}`,
 } as const;
 

@@ -10,6 +10,9 @@
 export const EVENT_LEAF_INSERTED = 0x01;
 export const EVENT_NULLIFIER_SPENT = 0x02;
 export const EVENT_STEALTH_ANNOUNCEMENT = 0x03;
+export const EVENT_POOL_UPDATE_PROPOSED = 0x04;
+export const EVENT_POOL_UPDATE_EXECUTED = 0x05;
+export const EVENT_POOL_UPDATE_CANCELLED = 0x06;
 
 /** Parsed leaf inserted event */
 export interface LeafInsertedEvent {
@@ -37,7 +40,35 @@ export interface StealthAnnouncementEvent {
   leafIndex: number;
 }
 
-export type ProgramEvent = LeafInsertedEvent | NullifierSpentEvent | StealthAnnouncementEvent;
+/** Parsed pool update proposed event */
+export interface PoolUpdateProposedEvent {
+  type: "pool_update_proposed";
+  minDeposit: bigint;
+  maxDeposit: bigint;
+  serviceFee: bigint;
+  executeAfter: number; // unix timestamp
+}
+
+/** Parsed pool update executed event */
+export interface PoolUpdateExecutedEvent {
+  type: "pool_update_executed";
+  minDeposit: bigint;
+  maxDeposit: bigint;
+  serviceFee: bigint;
+}
+
+/** Parsed pool update cancelled event */
+export interface PoolUpdateCancelledEvent {
+  type: "pool_update_cancelled";
+}
+
+export type ProgramEvent =
+  | LeafInsertedEvent
+  | NullifierSpentEvent
+  | StealthAnnouncementEvent
+  | PoolUpdateProposedEvent
+  | PoolUpdateExecutedEvent
+  | PoolUpdateCancelledEvent;
 
 /**
  * Parse a leaf inserted event from decoded sol_log_data segments.
@@ -124,6 +155,63 @@ export function parseStealthAnnouncementEvent(segments: Uint8Array[]): StealthAn
   };
 }
 
+/**
+ * Parse a pool update proposed event from decoded sol_log_data segments.
+ * Expected: disc(1) + min_deposit(8) + max_deposit(8) + service_fee(8) + execute_after(8)
+ */
+export function parsePoolUpdateProposedEvent(segments: Uint8Array[]): PoolUpdateProposedEvent | null {
+  if (segments.length < 5) return null;
+  if (segments[0].length !== 1 || segments[0][0] !== EVENT_POOL_UPDATE_PROPOSED) return null;
+
+  if (segments[1].length !== 8 || segments[2].length !== 8 || segments[3].length !== 8 || segments[4].length !== 8) return null;
+
+  const minView = new DataView(segments[1].buffer, segments[1].byteOffset, 8);
+  const maxView = new DataView(segments[2].buffer, segments[2].byteOffset, 8);
+  const feeView = new DataView(segments[3].buffer, segments[3].byteOffset, 8);
+  const tsView = new DataView(segments[4].buffer, segments[4].byteOffset, 8);
+
+  return {
+    type: "pool_update_proposed",
+    minDeposit: minView.getBigUint64(0, true),
+    maxDeposit: maxView.getBigUint64(0, true),
+    serviceFee: feeView.getBigUint64(0, true),
+    executeAfter: Number(tsView.getBigInt64(0, true)),
+  };
+}
+
+/**
+ * Parse a pool update executed event from decoded sol_log_data segments.
+ * Expected: disc(1) + min_deposit(8) + max_deposit(8) + service_fee(8)
+ */
+export function parsePoolUpdateExecutedEvent(segments: Uint8Array[]): PoolUpdateExecutedEvent | null {
+  if (segments.length < 4) return null;
+  if (segments[0].length !== 1 || segments[0][0] !== EVENT_POOL_UPDATE_EXECUTED) return null;
+
+  if (segments[1].length !== 8 || segments[2].length !== 8 || segments[3].length !== 8) return null;
+
+  const minView = new DataView(segments[1].buffer, segments[1].byteOffset, 8);
+  const maxView = new DataView(segments[2].buffer, segments[2].byteOffset, 8);
+  const feeView = new DataView(segments[3].buffer, segments[3].byteOffset, 8);
+
+  return {
+    type: "pool_update_executed",
+    minDeposit: minView.getBigUint64(0, true),
+    maxDeposit: maxView.getBigUint64(0, true),
+    serviceFee: feeView.getBigUint64(0, true),
+  };
+}
+
+/**
+ * Parse a pool update cancelled event from decoded sol_log_data segments.
+ * Expected: disc(1)
+ */
+export function parsePoolUpdateCancelledEvent(segments: Uint8Array[]): PoolUpdateCancelledEvent | null {
+  if (segments.length < 1) return null;
+  if (segments[0].length !== 1 || segments[0][0] !== EVENT_POOL_UPDATE_CANCELLED) return null;
+
+  return { type: "pool_update_cancelled" };
+}
+
 function decodeBase64(b64: string): Uint8Array {
   if (typeof atob === "function") {
     return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -162,6 +250,15 @@ export function parseProgramEvents(logs: string[], programId?: string): ProgramE
       if (event) events.push(event);
     } else if (disc === EVENT_STEALTH_ANNOUNCEMENT) {
       const event = parseStealthAnnouncementEvent(segments);
+      if (event) events.push(event);
+    } else if (disc === EVENT_POOL_UPDATE_PROPOSED) {
+      const event = parsePoolUpdateProposedEvent(segments);
+      if (event) events.push(event);
+    } else if (disc === EVENT_POOL_UPDATE_EXECUTED) {
+      const event = parsePoolUpdateExecutedEvent(segments);
+      if (event) events.push(event);
+    } else if (disc === EVENT_POOL_UPDATE_CANCELLED) {
+      const event = parsePoolUpdateCancelledEvent(segments);
       if (event) events.push(event);
     }
   }

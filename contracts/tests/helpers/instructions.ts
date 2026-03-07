@@ -258,6 +258,79 @@ export function buildSetPausedInstruction(
 }
 
 /**
+ * Build ProposePoolUpdate instruction.
+ *
+ * Data layout: discriminator(1) + min_deposit(8) + max_deposit(8) + service_fee(8) = 25 bytes.
+ */
+export function buildProposePoolUpdateInstruction(
+  programId: PublicKey,
+  poolState: PublicKey,
+  authority: PublicKey,
+  minDeposit: bigint,
+  maxDeposit: bigint,
+  serviceFee: bigint,
+): TransactionInstruction {
+  const data = Buffer.alloc(25);
+  data[0] = Instruction.ProposePoolUpdate;
+  data.writeBigUInt64LE(minDeposit, 1);
+  data.writeBigUInt64LE(maxDeposit, 9);
+  data.writeBigUInt64LE(serviceFee, 17);
+
+  return new TransactionInstruction({
+    keys: [
+      { pubkey: poolState, isSigner: false, isWritable: true },
+      { pubkey: authority, isSigner: true, isWritable: false },
+    ],
+    programId,
+    data,
+  });
+}
+
+/**
+ * Build ExecutePoolUpdate instruction.
+ *
+ * Data layout: discriminator(1) = 1 byte. Permissionless.
+ */
+export function buildExecutePoolUpdateInstruction(
+  programId: PublicKey,
+  poolState: PublicKey,
+): TransactionInstruction {
+  const data = Buffer.alloc(1);
+  data[0] = Instruction.ExecutePoolUpdate;
+
+  return new TransactionInstruction({
+    keys: [
+      { pubkey: poolState, isSigner: false, isWritable: true },
+    ],
+    programId,
+    data,
+  });
+}
+
+/**
+ * Build CancelPoolUpdate instruction.
+ *
+ * Data layout: discriminator(1) = 1 byte.
+ */
+export function buildCancelPoolUpdateInstruction(
+  programId: PublicKey,
+  poolState: PublicKey,
+  authority: PublicKey,
+): TransactionInstruction {
+  const data = Buffer.alloc(1);
+  data[0] = Instruction.CancelPoolUpdate;
+
+  return new TransactionInstruction({
+    keys: [
+      { pubkey: poolState, isSigner: false, isWritable: true },
+      { pubkey: authority, isSigner: true, isWritable: false },
+    ],
+    programId,
+    data,
+  });
+}
+
+/**
  * Build ClaimGroth16 instruction.
  *
  * Data layout (200 bytes payload + discriminator = 201 total):

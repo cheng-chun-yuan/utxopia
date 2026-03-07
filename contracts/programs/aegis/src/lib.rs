@@ -92,9 +92,10 @@ pub mod instruction {
     #[cfg(feature = "devnet")]
     pub const ADMIN_CLOSE_PDA: u8 = 20;
 
-    // Admin: update pool bounds (devnet only)
-    #[cfg(feature = "devnet")]
-    pub const ADMIN_UPDATE_POOL: u8 = 21;
+    // Timelocked pool parameter updates (enabled in all builds)
+    pub const PROPOSE_POOL_UPDATE: u8 = 21;
+    pub const EXECUTE_POOL_UPDATE: u8 = 22;
+    pub const CANCEL_POOL_UPDATE: u8 = 23;
 }
 
 entrypoint!(process_instruction);
@@ -164,10 +165,15 @@ pub fn process_instruction(
         instruction::ADMIN_CLOSE_PDA => {
             instructions::process_admin_close_pda(program_id, accounts, data)
         }
-        // Admin: update pool bounds
-        #[cfg(feature = "devnet")]
-        instruction::ADMIN_UPDATE_POOL => {
-            instructions::process_admin_update_pool(program_id, accounts, data)
+        // Timelocked pool parameter updates
+        instruction::PROPOSE_POOL_UPDATE => {
+            instructions::process_propose_pool_update(program_id, accounts, data)
+        }
+        instruction::EXECUTE_POOL_UPDATE => {
+            instructions::process_execute_pool_update(program_id, accounts, data)
+        }
+        instruction::CANCEL_POOL_UPDATE => {
+            instructions::process_cancel_pool_update(program_id, accounts, data)
         }
         _ => Err(ProgramError::InvalidInstructionData),
     }
@@ -239,6 +245,11 @@ mod tests {
             instruction::PUBLIC_REDEEM,
             #[cfg(feature = "devnet")]
             instruction::ADD_DEMO_STEALTH,
+            #[cfg(feature = "devnet")]
+            instruction::ADMIN_CLOSE_PDA,
+            instruction::PROPOSE_POOL_UPDATE,
+            instruction::EXECUTE_POOL_UPDATE,
+            instruction::CANCEL_POOL_UPDATE,
         ];
 
         for (i, &d1) in discriminators.iter().enumerate() {

@@ -196,28 +196,6 @@ export interface VerifyDepositResponse {
   message?: string;
 }
 
-// Block header submission (relayer publishes on-chain)
-export interface SubmitHeaderRequest {
-  block_height: number;
-  block_hash: string;
-  raw_header: string; // 80-byte header in hex (160 chars)
-  prev_block_hash: string;
-  merkle_root: string;
-  timestamp: number;
-  bits: number;
-  nonce: number;
-}
-
-export interface SubmitHeaderResponse {
-  success: boolean;
-  block_height: number;
-  block_hash: string;
-  solana_tx_signature?: string;
-  already_exists?: boolean;
-  message?: string;
-  error?: string;
-}
-
 export interface HeaderStatusResponse {
   exists: boolean;
   block_height: number;

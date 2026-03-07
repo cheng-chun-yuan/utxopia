@@ -39,7 +39,7 @@ pub mod add_demo_stealth;
 
 // Admin utilities
 pub mod admin_close_pda;
-pub mod admin_update_pool;
+pub mod admin_update_pool; // propose/execute/cancel pool updates (timelocked)
 
 // VK registry (deployment)
 pub mod init_vk_registry;
