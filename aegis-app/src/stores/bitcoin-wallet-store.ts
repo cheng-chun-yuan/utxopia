@@ -75,10 +75,7 @@ async function fetchBalance(addr: string): Promise<number | null> {
       const confirmed =
         (data.chain_stats?.funded_txo_sum || 0) -
         (data.chain_stats?.spent_txo_sum || 0);
-      const unconfirmed =
-        (data.mempool_stats?.funded_txo_sum || 0) -
-        (data.mempool_stats?.spent_txo_sum || 0);
-      return confirmed + unconfirmed;
+      return confirmed;
     }
   } catch {
     // Network errors are expected when mempool API is unreachable

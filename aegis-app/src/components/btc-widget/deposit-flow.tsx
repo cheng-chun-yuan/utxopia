@@ -517,12 +517,20 @@ export function DepositFlow() {
                       />
                       <p className="text-caption text-gray pl-2 mb-3">
                         {walletDepositAmount ? `${(parseInt(walletDepositAmount) / 100_000_000).toFixed(8)} BTC` : ""}
-                        {btcWallet.balance !== null && ` · Balance: ${(btcWallet.balance / 100_000_000).toFixed(8)} BTC`}
+                        {btcWallet.balance !== null && ` · Confirmed: ${(btcWallet.balance / 100_000_000).toFixed(8)} BTC`}
                       </p>
+
+                      {btcWallet.balance !== null && walletDepositAmount && parseInt(walletDepositAmount) > btcWallet.balance && (
+                        <div className="p-2.5 mb-3 bg-error/10 border border-error/20 rounded-[10px]">
+                          <span className="text-caption text-error">
+                            Insufficient confirmed funds: have {btcWallet.balance.toLocaleString()} sats, need {parseInt(walletDepositAmount).toLocaleString()}+ sats (excluding fees). Wait for pending transactions to confirm.
+                          </span>
+                        </div>
+                      )}
 
                       <button
                         onClick={buildTxPreview}
-                        disabled={buildingPreview || !walletDepositAmount || parseInt(walletDepositAmount) < 546}
+                        disabled={buildingPreview || !walletDepositAmount || parseInt(walletDepositAmount) < 546 || (btcWallet.balance !== null && parseInt(walletDepositAmount) > btcWallet.balance)}
                         className={cn(
                           "w-full py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2",
                           "bg-btc hover:bg-btc/90 text-background",
