@@ -20,8 +20,18 @@ const AEGIS_PROGRAM_ID = DEVNET_CONFIG.aegisProgramId;
 // Re-export types for the page component
 export type { ExplorerDeposit, ExplorerTransferEvent, ExplorerRedemption };
 
+// Enriched deposit with BTC tracker data
+export interface EnrichedDeposit extends ExplorerDeposit {
+  btcTxid?: string;
+  sweepTxid?: string;
+  taprootAddress?: string;
+  depositStatus?: string;
+  confirmations?: number;
+  sweepConfirmations?: number;
+}
+
 // Convenience aliases matching the old names used by the page
-export type DepositRecord = ExplorerDeposit;
+export type DepositRecord = EnrichedDeposit;
 export type TransferEvent = ExplorerTransferEvent;
 export type RedemptionRecord = ExplorerRedemption;
 
@@ -89,15 +99,66 @@ async function fetchIndexerLeaves(): Promise<IndexerLeaf[]> {
   }
 }
 
+/** Deposit tracker status response */
+interface DepositTrackerItem {
+  id: string;
+  status: string;
+  taproot_address: string;
+  amount_sats: number;
+  confirmations: number;
+  btc_txid?: string;
+  sweep_txid?: string;
+  sweep_confirmations: number;
+  solana_tx?: string;
+  leaf_index?: number;
+  npk?: string;
+  ephemeral_pub?: string;
+}
+
+/** Fetch deposit tracker data from backend */
+async function fetchDepositTrackerData(): Promise<DepositTrackerItem[]> {
+  try {
+    const resp = await fetch("/api/deposits");
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    return data.deposits ?? [];
+  } catch {
+    return [];
+  }
+}
+
 export function useDeposits() {
-  const { data, error, isLoading, mutate } = useSWR<ExplorerDeposit[]>(
+  const { data, error, isLoading, mutate } = useSWR<EnrichedDeposit[]>(
     "explorer-deposits",
     async () => {
-      const [rpcAdapter, leaves] = await Promise.all([
+      const [rpcAdapter, leaves, trackerDeposits] = await Promise.all([
         Promise.resolve(createRpcAdapter()),
         fetchIndexerLeaves(),
+        fetchDepositTrackerData(),
       ]);
-      return fetchExplorerDeposits(rpcAdapter, AEGIS_PROGRAM_ID, leaves);
+      const deposits = await fetchExplorerDeposits(rpcAdapter, AEGIS_PROGRAM_ID, leaves);
+
+      // Build lookup maps from tracker data
+      const byLeafIndex = new Map<number, DepositTrackerItem>();
+      const byCommitment = new Map<string, DepositTrackerItem>();
+      for (const td of trackerDeposits) {
+        if (td.leaf_index != null) byLeafIndex.set(td.leaf_index, td);
+      }
+
+      // Enrich deposits with tracker data
+      return deposits.map((d): EnrichedDeposit => {
+        const tracker = byLeafIndex.get(Number(d.leafIndex));
+        if (!tracker) return d;
+        return {
+          ...d,
+          btcTxid: tracker.btc_txid ?? undefined,
+          sweepTxid: tracker.sweep_txid ?? undefined,
+          taprootAddress: tracker.taproot_address,
+          depositStatus: tracker.status,
+          confirmations: tracker.confirmations,
+          sweepConfirmations: tracker.sweep_confirmations,
+        };
+      });
     },
     SWR_OPTIONS
   );

@@ -13,6 +13,8 @@ use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use solana_sdk::pubkey::Pubkey;
+
 use super::storage::EventStore;
 use super::tree_cache::TreeCache;
 
@@ -21,6 +23,7 @@ use super::tree_cache::TreeCache;
 pub struct IndexerAppState {
     pub store: Arc<EventStore>,
     pub tree_cache: Arc<TreeCache>,
+    pub program_id: Pubkey,
 }
 
 /// Query params for leaves endpoint
@@ -84,6 +87,37 @@ pub struct NullifierResponse {
     pub data: Option<super::storage::NullifierRow>,
 }
 
+/// Request body for POST /api/nullifiers/batch
+#[derive(Debug, Deserialize)]
+pub struct BatchNullifierRequest {
+    pub hashes: Vec<String>,
+}
+
+/// Response for POST /api/nullifiers/batch
+#[derive(Debug, Serialize)]
+pub struct BatchNullifierResponse {
+    /// Map of nullifier hash → spent (true/false)
+    pub results: std::collections::HashMap<String, bool>,
+}
+
+/// Query params for GET /api/nullifiers
+#[derive(Debug, Deserialize)]
+pub struct NullifiersQuery {
+    /// Return nullifiers with slot > since (for incremental sync)
+    pub since: Option<i64>,
+}
+
+/// Response for GET /api/nullifiers — returns PDA addresses for client-side matching (privacy)
+#[derive(Debug, Serialize)]
+pub struct AllNullifiersResponse {
+    /// Base58 PDA addresses derived from nullifier hashes
+    pub pdas: Vec<String>,
+    /// Total nullifier count (for integrity check against on-chain getProgramAccounts count)
+    pub total: usize,
+    /// Latest slot in the result set (client caches this for next ?since= call)
+    pub latest_slot: i64,
+}
+
 /// Query params for announcements endpoint
 #[derive(Debug, Deserialize)]
 pub struct AnnouncementsQuery {
@@ -120,8 +154,8 @@ pub struct SyncResponse {
 }
 
 /// Create the event indexer router with tree cache
-pub fn event_indexer_router(store: Arc<EventStore>, tree_cache: Arc<TreeCache>) -> Router {
-    let state = IndexerAppState { store, tree_cache };
+pub fn event_indexer_router(store: Arc<EventStore>, tree_cache: Arc<TreeCache>, program_id: Pubkey) -> Router {
+    let state = IndexerAppState { store, tree_cache, program_id };
 
     Router::new()
         .route("/api/tree/leaves", get(get_leaves))
@@ -129,6 +163,8 @@ pub fn event_indexer_router(store: Arc<EventStore>, tree_cache: Arc<TreeCache>) 
         .route("/api/tree/status", get(get_status))
         .route("/api/tree/proof", get(get_proof))
         .route("/api/tree/sync", post(post_sync))
+        .route("/api/nullifiers", get(get_all_nullifiers))
+        .route("/api/nullifiers/batch", post(batch_nullifiers))
         .route("/api/nullifiers/{hash}", get(get_nullifier))
         .route("/ws/tree", get(ws_tree_handler))
         .route("/api/announcements", get(get_announcements))
@@ -246,6 +282,46 @@ async fn post_sync(State(state): State<IndexerAppState>) -> Json<SyncResponse> {
     }
 }
 
+/// GET /api/nullifiers — returns spent nullifier PDA addresses for client-side matching.
+/// Supports ?since=<slot> for incremental sync. Client caches latest_slot for next call.
+async fn get_all_nullifiers(
+    State(state): State<IndexerAppState>,
+    Query(params): Query<NullifiersQuery>,
+) -> Json<AllNullifiersResponse> {
+    match state.store.get_nullifier_hashes_since(params.since) {
+        Ok((hashes, total, latest_slot)) => {
+            // Derive PDA address from each nullifier hash
+            let pdas: Vec<String> = hashes
+                .iter()
+                .filter_map(|hash_hex| {
+                    let bytes = hex::decode(hash_hex).ok()?;
+                    if bytes.len() != 32 {
+                        return None;
+                    }
+                    let (pda, _) = Pubkey::find_program_address(
+                        &[b"nullifier", &bytes],
+                        &state.program_id,
+                    );
+                    Some(pda.to_string())
+                })
+                .collect();
+            Json(AllNullifiersResponse {
+                pdas,
+                total,
+                latest_slot,
+            })
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to list nullifiers");
+            Json(AllNullifiersResponse {
+                pdas: vec![],
+                total: 0,
+                latest_slot: 0,
+            })
+        }
+    }
+}
+
 async fn get_nullifier(
     State(state): State<IndexerAppState>,
     Path(hash): Path<String>,
@@ -267,6 +343,21 @@ async fn get_nullifier(
             })
         }
     }
+}
+
+async fn batch_nullifiers(
+    State(state): State<IndexerAppState>,
+    Json(body): Json<BatchNullifierRequest>,
+) -> Json<BatchNullifierResponse> {
+    let mut results = std::collections::HashMap::new();
+    for hash in &body.hashes {
+        let spent = match state.store.get_nullifier(hash) {
+            Ok(Some(_)) => true,
+            _ => false,
+        };
+        results.insert(hash.clone(), spent);
+    }
+    Json(BatchNullifierResponse { results })
 }
 
 async fn get_announcements(

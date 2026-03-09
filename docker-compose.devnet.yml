@@ -64,7 +64,9 @@ services:
       RUST_LOG: info,zkbtc=debug
       ALLOWED_ORIGIN: "${ALLOWED_ORIGIN:-https://aegis.amidoggy.xyz}"
       AEGIS_NETWORK: devnet
-      AEGIS_SOLANA_RPC: https://api.devnet.solana.com
+      # Single place to switch Bitcoin network: "testnet" (testnet3) or "testnet4"
+      AEGIS_BITCOIN_NETWORK: testnet4
+      AEGIS_SOLANA_RPC: https://devnet.helius-rpc.com/?api-key=200fd940-548a-473b-849b-8dd13d5eba6e
       AEGIS_BITCOIN_RPC: https://mempool.space/testnet4/api
       AEGIS_SIGNING_MODE: frost
       AEGIS_FROST_THRESHOLD: "2"
@@ -72,15 +74,15 @@ services:
       AEGIS_FROST_API_KEY: "${FROST_API_KEY}"
       AEGIS_FROST_SIGNER_URLS: http://frost-signer-1:9001,http://frost-signer-2:9002,http://frost-signer-3:9003
       AEGIS_FROST_KEY_SHARE: placeholder
-      AEGIS_FROST_GROUP_PUBKEY: d857a067bec0ae2027a6026ef73d2905f108b1a66de6d12d23a3feb42013b1dd
+      AEGIS_FROST_GROUP_PUBKEY: b425ad56ed0584c7297f4b010bcf2c32d406f176af825117556db103745b4bd9
       AEGIS_DEMO_MODE: "1"
-      POOL_RECEIVE_ADDRESS: tb1pmpt6qea7czhzqfaxqfh0w0ffqhcs3vdxdhndztfr50ltggqnk8wsdrd5m5
+      POOL_RECEIVE_ADDRESS: tb1pksj664hdqkzvw2tlfvqshnevxt2qdutk47p9z964dkcsxazmf0vsjas4n4
       ESPLORA_URL: https://mempool.space/testnet4/api
-      SOLANA_RPC_URL: https://api.devnet.solana.com
+      SOLANA_RPC_URL: https://devnet.helius-rpc.com/?api-key=200fd940-548a-473b-849b-8dd13d5eba6e
       DEPOSIT_DB_PATH: /app/data/deposits.db
       INDEXER_DB_PATH: /app/data/events.db
       INDEXER_POLL_INTERVAL_SECS: "10"
-      AEGIS_PROGRAM_ID: 8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim
+      AEGIS_PROGRAM_ID: 4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1
       TRACKER_API_PORT: "3001"
       MEMPOOL_WS_ENABLED: "true"
       MEMPOOL_WS_URL: wss://mempool.space/testnet4/api/v1/ws
@@ -118,7 +120,7 @@ services:
     container_name: aegis-header-relayer
     environment:
       DEPLOY_ENV: devnet
-      DEVNET_SOLANA_RPC_URL: https://api.devnet.solana.com
+      DEVNET_SOLANA_RPC_URL: https://devnet.helius-rpc.com/?api-key=200fd940-548a-473b-849b-8dd13d5eba6e
       DEVNET_PROGRAM_ID: Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq
       DEVNET_RELAYER_KEYPAIR: "${DEVNET_RELAYER_KEYPAIR}"
       DEVNET_BITCOIN_NETWORK: testnet4

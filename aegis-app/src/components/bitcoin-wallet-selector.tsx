@@ -4,6 +4,7 @@ import { useBitcoinWallet } from "@/stores/bitcoin-wallet-store";
 import type { BtcWalletType } from "@/stores/bitcoin-wallet-store";
 import { Spinner } from "@/components/ui/spinner";
 import { truncateMiddle } from "@/lib/utils/formatting";
+import { useIsMobileWithoutWallet } from "@/hooks/use-mobile-wallet-detect";
 
 interface BitcoinWalletSelectorProps {
   onConnect?: () => void;
@@ -18,6 +19,7 @@ export function BitcoinWalletSelector({
 }: BitcoinWalletSelectorProps) {
   const { connected, connecting, address, connect, disconnect, error } =
     useBitcoinWallet();
+  const isMobileNoWallet = useIsMobileWithoutWallet();
 
   const handleConnect = async (type: BtcWalletType) => {
     try {
@@ -44,6 +46,20 @@ export function BitcoinWalletSelector({
         >
           Disconnect
         </button>
+      </div>
+    );
+  }
+
+  if (isMobileNoWallet) {
+    return (
+      <div className={className}>
+        <MobileWalletGuidance />
+        {error && (
+          <div className="warning-box mt-2">
+            <span>⚠</span>
+            {error}
+          </div>
+        )}
       </div>
     );
   }
@@ -93,6 +109,33 @@ export function BitcoinWalletSelector({
           {error}
         </div>
       )}
+    </div>
+  );
+}
+
+export function MobileWalletGuidance() {
+  const currentUrl = typeof window !== "undefined" ? window.location.href : "";
+  const xverseUrl = `https://connect.xverse.app/browser?url=${encodeURIComponent(currentUrl)}`;
+
+  return (
+    <div className="p-4 bg-btc/5 border border-btc/20 rounded-[12px] space-y-3">
+      <div className="flex items-center gap-2">
+        <BitcoinIcon className="w-5 h-5" />
+        <span className="text-body2-semibold text-foreground">Mobile Wallet Required</span>
+      </div>
+      <p className="text-caption text-gray">
+        To sign BTC deposit transactions, open this page in your wallet&apos;s built-in browser.
+      </p>
+      <a
+        href={xverseUrl}
+        className="w-full py-2.5 rounded-[10px] font-medium transition-colors flex items-center justify-center gap-2 bg-btc hover:bg-btc/90 text-background text-body2"
+      >
+        <BitcoinIcon className="w-4 h-4" />
+        Open in Xverse
+      </a>
+      <p className="text-[11px] text-gray text-center">
+        Or open your Xverse / Leather app, tap the browser icon, and navigate to this page.
+      </p>
     </div>
   );
 }

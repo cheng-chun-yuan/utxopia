@@ -23,6 +23,8 @@ export interface AnnouncementClientConfig {
   solanaRpcUrl: string;
   /** Aegis program ID base58 (for direct RPC fallback) */
   programId: string;
+  /** Commitment tree PDA base58 — query this instead of program ID for fewer results */
+  commitmentTreeAddress?: string;
   /** REST request timeout in ms (default 5000) */
   restTimeoutMs?: number;
   /** Max WS reconnect delay in ms (default 30000) */
@@ -115,6 +117,8 @@ export class AnnouncementClient {
   private backendHealthy = true;
   private closed = false;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastRpcFetchAt = 0;
+  private rpcCooldownMs = 30_000; // minimum 30s between RPC fallback calls
 
   private restTimeout: number;
   private wsMaxReconnect: number;
@@ -234,7 +238,16 @@ export class AnnouncementClient {
   private async fetchFromRpc(
     since?: number,
   ): Promise<OnChainStealthAnnouncement[]> {
-    // Fetch recent signatures for the program
+    // Cooldown to avoid 429 spam when backend is down
+    const now = Date.now();
+    if (now - this.lastRpcFetchAt < this.rpcCooldownMs) {
+      return this.cachedAnnouncements;
+    }
+    this.lastRpcFetchAt = now;
+
+    // Query commitment tree PDA (only txs that insert leaves = stealth announcements)
+    // Falls back to program ID if commitmentTreeAddress not configured
+    const queryAddress = this.config.commitmentTreeAddress || this.config.programId;
     const sigsResp = await fetch(this.config.solanaRpcUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -242,7 +255,7 @@ export class AnnouncementClient {
         jsonrpc: "2.0",
         id: 1,
         method: "getSignaturesForAddress",
-        params: [this.config.programId, { limit: 200 }],
+        params: [queryAddress, { limit: 200 }],
       }),
       signal: AbortSignal.timeout(this.restTimeout * 2),
     });

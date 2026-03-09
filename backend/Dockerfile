@@ -21,6 +21,9 @@ RUN mkdir -p src/bin && \
 # Build dependencies only (will be cached if Cargo.toml doesn't change)
 RUN cargo build --release 2>/dev/null || true
 
+# Cache buster
+ARG CACHEBUST=1
+
 # Now copy actual source code
 COPY src ./src
 
@@ -48,14 +51,10 @@ COPY --from=builder /app/target/release/zkbtc-api /app/zkbtc-api
 RUN mkdir -p /app/data && \
     useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 
-# Entrypoint: fix data dir ownership (handles host-created files), then run as appuser
-RUN printf '#!/bin/sh\nchown -R appuser:appuser /app/data 2>/dev/null || true\nexec gosu appuser "$@"\n' > /app/entrypoint.sh && \
-    chmod +x /app/entrypoint.sh && \
-    apt-get update && apt-get install -y gosu && rm -rf /var/lib/apt/lists/*
-
 ENV RUST_LOG=info
 
 EXPOSE 3001
 
-ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["/app/zkbtc-api", "api", "--port", "3001"]
+USER appuser
+
+CMD ["/app/zkbtc-api", "tracker", "--interval", "60", "--confirmations", "1"]

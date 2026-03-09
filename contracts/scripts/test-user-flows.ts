@@ -85,7 +85,7 @@ const RPC_URL = process.env.RPC_URL || (NETWORK === "devnet"
   ? "https://api.devnet.solana.com"
   : "http://127.0.0.1:8899");
 
-const DEVNET_PROGRAM_ID = "8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim";
+const DEVNET_PROGRAM_ID = "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1";
 
 function loadConfig(): any {
   const configFile = NETWORK === "devnet" ? ".devnet-config.json" : ".localnet-config.json";

@@ -337,6 +337,19 @@ export interface NonInteractiveDepositResult {
 }
 
 /**
+ * Extended result when a user refund pubkey is provided.
+ * Includes Taproot script-path data for the refund spending path.
+ */
+export interface NonInteractiveDepositWithRefundResult extends NonInteractiveDepositResult {
+  /** 32-byte Merkle root (TapLeaf hash of the refund script) */
+  merkleRoot: Uint8Array;
+  /** 33-byte control block for script-path spend (leaf_version|parity + internal_key) */
+  controlBlock: Uint8Array;
+  /** 73-byte refund script */
+  refundScript: Uint8Array;
+}
+
+/**
  * Create a non-interactive stealth deposit (npk-based).
  *
  * This is the client-side-only deposit flow: no backend API call needed.
@@ -346,15 +359,32 @@ export interface NonInteractiveDepositResult {
  * The user can send ANY amount of BTC — the commitment is computed on-chain
  * from the npk + actual BTC amount received.
  *
+ * When `userRefundPubkey` is provided, the Taproot address includes a
+ * script-path with a time-locked refund spending condition (144 blocks).
+ *
  * @param recipientMeta - Recipient's stealth meta-address
  * @param groupPubKey - FROST group public key (32-byte x-only), used as Taproot internal key
  * @param network - Bitcoin network for address encoding
+ * @param userRefundPubkey - Optional 32-byte x-only pubkey for refund script path
  */
 export async function createNonInteractiveDeposit(
   recipientMeta: StealthMetaAddress,
   groupPubKey: Uint8Array,
+  network?: "mainnet" | "testnet" | "regtest",
+  userRefundPubkey?: undefined,
+): Promise<NonInteractiveDepositResult>;
+export async function createNonInteractiveDeposit(
+  recipientMeta: StealthMetaAddress,
+  groupPubKey: Uint8Array,
+  network: "mainnet" | "testnet" | "regtest",
+  userRefundPubkey: Uint8Array,
+): Promise<NonInteractiveDepositWithRefundResult>;
+export async function createNonInteractiveDeposit(
+  recipientMeta: StealthMetaAddress,
+  groupPubKey: Uint8Array,
   network: "mainnet" | "testnet" | "regtest" = "testnet",
-): Promise<NonInteractiveDepositResult> {
+  userRefundPubkey?: Uint8Array,
+): Promise<NonInteractiveDepositResult | NonInteractiveDepositWithRefundResult> {
   // Only viewingPubKey + mpk needed (spendingPubKey not used by sender)
   const viewingPubKey = new Uint8Array(recipientMeta.viewingPubKey);
 
@@ -370,12 +400,39 @@ export async function createNonInteractiveDeposit(
   const npkBigint = computeNPKSync(recipientMPK, stealthScalar);
   const npk = bigintToBytes(npkBigint);
 
-  // 4. Derive Taproot address from npk + group key
+  const ephemeralPub = new Uint8Array(ephemeral.pubKey);
+
+  if (userRefundPubkey) {
+    // Refund path: Taproot with script tree containing refund script
+    const { deriveTaprootAddressWithRefund, buildDepositOpReturn } = await import("./taproot");
+    const {
+      address: btcAddress,
+      outputKey,
+      merkleRoot,
+      controlBlock,
+      refundScript,
+    } = deriveTaprootAddressWithRefund(npk, userRefundPubkey, groupPubKey, network);
+
+    // Still build OP_RETURN so the backend can detect the deposit
+    const opReturnPayload = buildDepositOpReturn(ephemeralPub, npk);
+
+    return {
+      btcAddress,
+      depositOutputKey: outputKey,
+      opReturnPayload,
+      npk,
+      ephemeralPub,
+      merkleRoot,
+      controlBlock,
+      refundScript,
+    };
+  }
+
+  // Standard path: key-path-only Taproot address
   const { deriveTaprootAddress, buildDepositOpReturn } = await import("./taproot");
   const { address: btcAddress, outputKey } = deriveTaprootAddress(npk, network, groupPubKey);
 
-  // 5. Build 64-byte OP_RETURN payload (ephemeralPub || npk)
-  const ephemeralPub = new Uint8Array(ephemeral.pubKey);
+  // Build 64-byte OP_RETURN payload (ephemeralPub || npk)
   const opReturnPayload = buildDepositOpReturn(ephemeralPub, npk);
 
   return {

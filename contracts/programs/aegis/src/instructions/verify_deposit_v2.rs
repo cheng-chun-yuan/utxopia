@@ -1,29 +1,29 @@
-//! Verify Stealth Deposit instruction (Pinocchio)
+//! Verify Deposit V2 instruction (Pinocchio)
 //!
-//! Trustless npk-based deposit flow:
-//! 1. User generates npk client-side, sends BTC with OP_RETURN(ephemeralPub || npk)
-//! 2. Backend detects deposit, sweeps UTXO to pool wallet
-//! 3. Backend calls btc-light-client's verify_transaction to create VerifiedTransaction PDA
-//! 4. Backend uploads BOTH sweep TX and deposit TX to ChadBuffer accounts
-//! 5. Backend calls this instruction — npk + ephemeral_pub extracted ON-CHAIN from deposit TX
+//! OP_RETURN-free deposit flow:
+//! 1. User generates npk client-side, relayer creates DepositIntent PDA
+//! 2. User sends BTC (no OP_RETURN needed)
+//! 3. Backend detects deposit, sweeps UTXO to pool wallet
+//! 4. Backend calls btc-light-client's verify_transaction to create VerifiedTransaction PDA
+//! 5. Backend uploads sweep TX to ChadBuffer
+//! 6. Backend calls this instruction — npk + ephemeral_pub read from DepositIntent PDA
 //!
 //! This instruction:
 //! - Checks VerifiedTransaction PDA exists (btc-light-client already verified SPV for sweep TX)
 //! - Verifies sufficient confirmations via light client tip height
-//! - Reads deposit TX from its ChadBuffer, extracts npk + ephemeral_pub from OP_RETURN
-//! - Verifies sweep TX has an input spending from the deposit TX (proves linkage)
+//! - Reads npk + ephemeral_pub from DepositIntent PDA (instead of deposit TX OP_RETURN)
 //! - Extracts deposit amount trustlessly from the SPV-verified sweep raw transaction
 //! - Computes commitment ON-CHAIN: Poseidon(npk, ZKBTC_TOKEN_ID, amount)
 //! - Inserts commitment into Merkle tree
 //! - Emits stealth announcement as sol_log_data event (type=0, plaintext amount)
 //! - Mints zkBTC to pool vault
+//! - Closes DepositIntent PDA (returns rent to authority)
 //!
-//! Instruction Data (80 bytes, fixed):
+//! Instruction Data (76 bytes, fixed):
 //! - [0-31]   sweep_txid        (32 bytes) - Sweep tx ID (internal byte order)
 //! - [32-39]  block_height      (8 bytes)  - Block containing sweep tx (cross-check)
 //! - [40-43]  sweep_tx_size     (4 bytes)  - Raw sweep tx size in ChadBuffer
-//! - [44-47]  deposit_tx_size   (4 bytes)  - Raw deposit tx size in ChadBuffer
-//! - [48-79]  deposit_txid      (32 bytes) - Deposit tx ID (internal byte order)
+//! - [44-75]  deposit_txid      (32 bytes) - Deposit tx ID (internal byte order)
 
 use pinocchio::{
     account_info::AccountInfo,
@@ -35,44 +35,34 @@ use pinocchio::{
 
 use crate::error::AegisError;
 use crate::state::{
-    CommitmentTree, DepositReceipt, PoolState,
+    CommitmentTree, DepositIntent, DepositReceipt, PoolState,
     VerifiedTransactionView, light_client_tip_height,
     deposit_receipt::DEPOSIT_RECEIPT_DISCRIMINATOR,
 };
 use crate::utils::events::ANNOUNCEMENT_TYPE_DEPOSIT;
 use crate::utils::crypto::compute_deposit_commitment;
-use crate::utils::bitcoin::{compute_tx_hash, DepositOpReturn, ParsedTransaction};
+use crate::utils::bitcoin::{compute_tx_hash, ParsedTransaction};
 use crate::utils::chadbuffer::read_transaction_from_buffer;
 use crate::utils::{
     create_pda_account, mint_zkbtc, validate_program_owner, validate_system_program,
     validate_token_2022_owner, validate_token_program_key, validate_account_writable,
 };
 
-/// Required confirmations for deposits
-#[cfg(feature = "devnet")]
-pub const DEMO_REQUIRED_CONFIRMATIONS: u64 = 1;
+use super::verify_stealth_deposit::DEMO_REQUIRED_CONFIRMATIONS;
 
-#[cfg(not(feature = "devnet"))]
-pub const DEMO_REQUIRED_CONFIRMATIONS: u64 = 6;
-
-/// Instruction data for verify_stealth_deposit (trustless npk extraction)
-///
-/// The commitment is computed ON-CHAIN: Poseidon(npk, ZKBTC_TOKEN_ID, amount)
-/// npk + ephemeral_pub are extracted ON-CHAIN from the deposit TX's OP_RETURN.
-/// Amount is extracted from the SPV-verified sweep TX.
-pub struct VerifyStealthDepositData {
+/// Instruction data for verify_deposit_v2 (OP_RETURN-free)
+pub struct VerifyDepositV2Data {
     pub sweep_txid: [u8; 32],
     pub block_height: u64,
     pub sweep_tx_size: u32,
-    pub deposit_tx_size: u32,
     pub deposit_txid: [u8; 32],
 }
 
-impl VerifyStealthDepositData {
-    pub const HEADER_SIZE: usize = 32 + 8 + 4 + 4 + 32; // 80 bytes
+impl VerifyDepositV2Data {
+    pub const SIZE: usize = 32 + 8 + 4 + 32; // 76 bytes
 
     pub fn from_bytes(data: &[u8]) -> Result<Self, ProgramError> {
-        if data.len() < Self::HEADER_SIZE {
+        if data.len() < Self::SIZE {
             return Err(ProgramError::InvalidInstructionData);
         }
 
@@ -81,26 +71,23 @@ impl VerifyStealthDepositData {
 
         let block_height = u64::from_le_bytes(data[32..40].try_into().unwrap());
         let sweep_tx_size = u32::from_le_bytes(data[40..44].try_into().unwrap());
-        let deposit_tx_size = u32::from_le_bytes(data[44..48].try_into().unwrap());
 
         let mut deposit_txid = [0u8; 32];
-        deposit_txid.copy_from_slice(&data[48..80]);
+        deposit_txid.copy_from_slice(&data[44..76]);
 
         Ok(Self {
             sweep_txid,
             block_height,
             sweep_tx_size,
-            deposit_tx_size,
             deposit_txid,
         })
     }
 }
 
-/// Verify an npk-based stealth deposit using VerifiedTransaction PDA
+/// Verify an OP_RETURN-free deposit using DepositIntent PDA + VerifiedTransaction PDA
 ///
-/// Trustlessly extracts npk + ephemeral_pub from the deposit TX's OP_RETURN.
-/// Verifies the sweep TX spends from the deposit TX (input linkage).
-/// Computes commitment on-chain, inserts into Merkle tree, emits stealth announcement event.
+/// Reads npk + ephemeral_pub from DepositIntent PDA instead of deposit TX OP_RETURN.
+/// After verification, closes DepositIntent PDA and returns rent to authority.
 ///
 /// # Accounts
 /// 0.  `[writable]` Pool state
@@ -113,12 +100,9 @@ impl VerifyStealthDepositData {
 /// 7.  `[writable]` zkBTC mint
 /// 8.  `[writable]` Pool vault token account
 /// 9.  `[]` Token-2022 program
-/// 10. `[]` Deposit TX buffer (ChadBuffer)
+/// 10. `[writable]` DepositIntent PDA
 /// 11. `[writable]` Deposit receipt PDA (prevents duplicate verification)
-///
-/// # Instruction data
-/// - VerifyStealthDepositData (80 bytes, fixed)
-pub fn process_verify_stealth_deposit(
+pub fn process_verify_deposit_v2(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     data: &[u8],
@@ -137,21 +121,21 @@ pub fn process_verify_stealth_deposit(
     let zkbtc_mint = &accounts[7];
     let pool_vault = &accounts[8];
     let token_program = &accounts[9];
-    let deposit_tx_buffer_info = &accounts[10];
+    let deposit_intent_info = &accounts[10];
     let deposit_receipt_info = &accounts[11];
 
-    // Parse instruction data (no trailing merkle proof)
-    let ix_data = VerifyStealthDepositData::from_bytes(data)?;
+    // Parse instruction data
+    let ix_data = VerifyDepositV2Data::from_bytes(data)?;
 
     // Validate account owners
     validate_program_owner(pool_state_info, program_id)?;
-    // VerifiedTransaction and Light client are owned by btc-light-client program
     let btc_lc_id: &Pubkey = unsafe {
         &*(&crate::constants::BTC_LIGHT_CLIENT_PROGRAM_ID as *const [u8; 32] as *const Pubkey)
     };
     validate_program_owner(verified_tx_info, btc_lc_id)?;
     validate_program_owner(light_client_info, btc_lc_id)?;
     validate_program_owner(commitment_tree_info, program_id)?;
+    validate_program_owner(deposit_intent_info, program_id)?;
     validate_token_2022_owner(zkbtc_mint)?;
     validate_token_2022_owner(pool_vault)?;
     validate_token_program_key(token_program)?;
@@ -162,6 +146,7 @@ pub fn process_verify_stealth_deposit(
     validate_account_writable(commitment_tree_info)?;
     validate_account_writable(zkbtc_mint)?;
     validate_account_writable(pool_vault)?;
+    validate_account_writable(deposit_intent_info)?;
     validate_account_writable(deposit_receipt_info)?;
 
     // Authority must be signer
@@ -186,7 +171,6 @@ pub fn process_verify_stealth_deposit(
     };
 
     // --- Deposit receipt dedup check ---
-    // Derive deposit receipt PDA from deposit_txid and verify it doesn't already exist
     {
         let receipt_seeds: &[&[u8]] = &[DepositReceipt::SEED, &ix_data.deposit_txid];
         let (expected_receipt_pda, receipt_bump) = find_program_address(receipt_seeds, program_id);
@@ -194,7 +178,7 @@ pub fn process_verify_stealth_deposit(
             return Err(ProgramError::InvalidSeeds);
         }
 
-        // Check if deposit was already verified (account exists and initialized)
+        // Check if deposit was already verified
         {
             let receipt_data = deposit_receipt_info.try_borrow_data()?;
             if !receipt_data.is_empty() && receipt_data[0] == DEPOSIT_RECEIPT_DISCRIMINATOR {
@@ -202,7 +186,7 @@ pub fn process_verify_stealth_deposit(
             }
         }
 
-        // Create deposit receipt PDA to prevent future duplicates
+        // Create deposit receipt PDA
         let rent = Rent::get()?;
         let bump_bytes = [receipt_bump];
         let signer_seeds: &[&[u8]] = &[
@@ -225,23 +209,20 @@ pub fn process_verify_stealth_deposit(
     }
 
     // --- VerifiedTransaction PDA check ---
-    // Parse the VerifiedTransaction PDA and verify sweep txid matches
     {
         let vt_data = verified_tx_info.try_borrow_data()?;
         let vt = VerifiedTransactionView::from_bytes(&vt_data)?;
 
-        // Verify txid matches (both in internal byte order)
         if *vt.txid() != ix_data.sweep_txid {
             return Err(AegisError::InvalidSpvProof.into());
         }
 
-        // Cross-check block height
         if vt.block_height() as u64 != ix_data.block_height {
             return Err(AegisError::InvalidBlockHeader.into());
         }
     }
 
-    // Verify sufficient confirmations via light client tip height
+    // Verify sufficient confirmations
     {
         let lc_data = light_client_info.try_borrow_data()?;
         let tip = light_client_tip_height(&lc_data)?;
@@ -273,36 +254,22 @@ pub fn process_verify_stealth_deposit(
     let sweep_parsed = ParsedTransaction::parse(sweep_raw_tx)
         .map_err(|_| AegisError::InvalidSpvProof)?;
 
-    // --- Read and verify deposit TX from ChadBuffer ---
-    crate::utils::chadbuffer::validate_chadbuffer_owner(deposit_tx_buffer_info)?;
-    let deposit_buffer_data = deposit_tx_buffer_info
-        .try_borrow_data()
-        .map_err(|_| AegisError::InvalidBlockHeader)?;
+    // --- Read npk + ephemeral_pub from DepositIntent PDA ---
+    let (ephemeral_pub, npk) = {
+        let intent_data = deposit_intent_info.try_borrow_data()?;
+        let intent = DepositIntent::from_bytes(&intent_data)?;
 
-    let deposit_raw_tx = read_transaction_from_buffer(&deposit_buffer_data, ix_data.deposit_tx_size as usize)?;
+        // Verify DepositIntent PDA address
+        let intent_seeds: &[&[u8]] = &[DepositIntent::SEED, &intent.npk];
+        let (expected_intent_pda, _) = find_program_address(intent_seeds, program_id);
+        if deposit_intent_info.key() != &expected_intent_pda {
+            return Err(ProgramError::InvalidSeeds);
+        }
 
-    // Verify deposit transaction hash matches deposit_txid
-    let computed_deposit_hash = compute_tx_hash(deposit_raw_tx);
-    if computed_deposit_hash != ix_data.deposit_txid {
-        return Err(AegisError::InvalidSpvProof.into());
-    }
+        (intent.ephemeral_pub, intent.npk)
+    };
 
-    // Parse deposit TX
-    let deposit_parsed = ParsedTransaction::parse(deposit_raw_tx)
-        .map_err(|_| AegisError::InvalidSpvProof)?;
-
-    // --- Verify sweep TX spends from deposit TX (input linkage) ---
-    // This proves the chain: deposit TX -> sweep TX (SPV-verified)
-    if !sweep_parsed.find_input_with_prev_txid(&ix_data.deposit_txid) {
-        return Err(AegisError::InvalidSpvProof.into());
-    }
-
-    // --- Extract npk + ephemeral_pub from deposit TX OP_RETURN ---
-    let DepositOpReturn { ephemeral_pub, npk } = deposit_parsed
-        .find_deposit_op_return()
-        .ok_or(AegisError::InvalidStealthOpReturn)?;
-
-    // Extract deposit amount from sweep TX's deposit output
+    // Extract deposit amount from sweep TX's deposit output (largest P2TR output)
     let deposit_output = sweep_parsed.find_deposit_output()
         .ok_or(AegisError::InvalidSpvProof)?;
     let amount_sats = deposit_output.value;
@@ -316,7 +283,6 @@ pub fn process_verify_stealth_deposit(
     }
 
     // Compute commitment ON-CHAIN: Poseidon(npk, ZKBTC_TOKEN_ID, amount)
-    // npk is trustlessly extracted from the deposit TX's OP_RETURN
     let commitment = compute_deposit_commitment(&npk, amount_sats)?;
 
     // Insert commitment into Merkle tree
@@ -333,7 +299,7 @@ pub fn process_verify_stealth_deposit(
 
     let clock = Clock::get()?;
 
-    // Emit stealth announcement as log event (replaces PDA creation)
+    // Emit stealth announcement as log event
     let amount_bytes = amount_sats.to_le_bytes();
     crate::utils::events::emit_stealth_announcement(
         ANNOUNCEMENT_TYPE_DEPOSIT,
@@ -343,7 +309,7 @@ pub fn process_verify_stealth_deposit(
         leaf_index as u32,
     );
 
-    // Emit leaf inserted event (commitment + timestamp for indexer)
+    // Emit leaf inserted event
     crate::utils::events::emit_leaf_inserted(&commitment, clock.unix_timestamp);
 
     // Mint zkBTC to pool vault
@@ -370,7 +336,25 @@ pub fn process_verify_stealth_deposit(
         pool.set_last_update(clock.unix_timestamp);
     }
 
-    crate::debug_msg!("npk-based deposit verified and minted");
+    // Close DepositIntent PDA — return rent to authority
+    {
+        let dest_starting_lamports = authority.lamports();
+        let intent_lamports = deposit_intent_info.lamports();
+
+        // Transfer lamports
+        unsafe {
+            *authority.borrow_mut_lamports_unchecked() = dest_starting_lamports
+                .checked_add(intent_lamports)
+                .ok_or(ProgramError::ArithmeticOverflow)?;
+            *deposit_intent_info.borrow_mut_lamports_unchecked() = 0;
+        }
+
+        // Zero out data
+        let mut intent_data = deposit_intent_info.try_borrow_mut_data()?;
+        intent_data.fill(0);
+    }
+
+    crate::debug_msg!("v2 deposit verified and minted (OP_RETURN-free)");
 
     Ok(())
 }

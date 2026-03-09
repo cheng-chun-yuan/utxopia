@@ -11,7 +11,6 @@ import {
   scanUnifiedNotes,
   hexToBytes,
   computeNullifierHashForNote,
-  deriveNullifierRecordPDA,
   decodeViewOnlyKeys,
   scanAnnouncementsViewOnly,
   computeJoinSplitNullifierSync,
@@ -22,6 +21,7 @@ import {
   type StealthMetaAddress,
   type ViewOnlyKeys,
 } from "@aegis/sdk";
+import { fetchSpentNullifierPDAs, nullifierHashToPDA } from "@/lib/nullifier-utils";
 
 // ============================================================================
 // localStorage Key Persistence (AES-256-GCM encrypted)
@@ -151,13 +151,14 @@ let announcementClient: AnnouncementClient | null = null;
 
 function getAnnouncementClient(): AnnouncementClient {
   if (!announcementClient) {
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
+    const backendUrl = process.env.NEXT_PUBLIC_ZKBTC_API_URL || "http://localhost:3001";
     const wsUrl = backendUrl.replace("http://", "ws://").replace("https://", "wss://");
     announcementClient = new AnnouncementClient({
       backendUrl,
       backendWsUrl: wsUrl,
-      solanaRpcUrl: process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.devnet.solana.com",
+      solanaRpcUrl: process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com",
       programId: DEVNET_CONFIG.aegisProgramId,
+      commitmentTreeAddress: DEVNET_CONFIG.commitmentTreePda,
     });
   }
   return announcementClient;
@@ -465,57 +466,32 @@ export const useAegisStore = create<AegisState>((set, get) => ({
             ? await scanAnnouncementsViewOnly(viewOnlyKeys, announcements)
             : await scanUnifiedNotes(keys!, announcements);
 
-        // Check which notes are spent — batch all nullifier PDAs into a single getMultipleAccounts RPC call
-        const rpcUrl = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.devnet.solana.com";
+        // Check which notes are spent via backend batch nullifier API
+        const backendUrl = process.env.NEXT_PUBLIC_ZKBTC_API_URL || "http://localhost:3001";
 
-        // Pre-compute all nullifier PDAs
         const nullifyingKey = isViewOnly && viewOnlyKeys
           ? viewOnlyKeys.nullifyingKey
           : keys!.nullifyingKey;
 
-        const nullifierData = await Promise.all(
-          scanned.map(async (note) => {
-            const hashBytes = isViewOnly
-              ? bigintToBytes(computeJoinSplitNullifierSync(nullifyingKey, BigInt(note.leafIndex)))
-              : computeNullifierHashForNote(keys!, note as any);
-            const [nullifierPda] = await deriveNullifierRecordPDA(
-              hashBytes,
-              DEVNET_CONFIG.aegisProgramId
-            );
-            return { note, nullifierPda: nullifierPda.toString() };
-          })
-        );
+        // Compute nullifier hashes (hex) for each note
+        const nullifierData = scanned.map((note) => {
+          const hashBytes = isViewOnly
+            ? bigintToBytes(computeJoinSplitNullifierSync(nullifyingKey, BigInt(note.leafIndex)))
+            : computeNullifierHashForNote(keys!, note as any);
+          const hashHex = Buffer.from(hashBytes).toString("hex");
+          return { note, hashHex };
+        });
 
-        // Single batched RPC call for all nullifier checks
+        // Fetch spent nullifier PDAs (incremental sync) and match client-side for privacy
         let notesWithSpentStatus: (typeof scanned[number] & { isSpent: boolean })[];
         if (nullifierData.length === 0) {
           notesWithSpentStatus = [];
         } else {
-          try {
-            const response = await fetch(rpcUrl, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                jsonrpc: "2.0",
-                id: 1,
-                method: "getMultipleAccounts",
-                params: [
-                  nullifierData.map(d => d.nullifierPda),
-                  { encoding: "base64" },
-                ],
-              }),
-            });
-            const result = await response.json();
-            const accountValues: (null | object)[] = result?.result?.value || [];
-
-            notesWithSpentStatus = nullifierData.map((d, i) => ({
-              ...d.note,
-              isSpent: accountValues[i] !== null,
-            }));
-          } catch (err) {
-            console.error("[Aegis] Batch nullifier check failed, falling back:", err);
-            notesWithSpentStatus = scanned.map(note => ({ ...note, isSpent: false }));
-          }
+          const spentPdas = await fetchSpentNullifierPDAs(backendUrl);
+          notesWithSpentStatus = nullifierData.map((d) => ({
+            ...d.note,
+            isSpent: spentPdas.has(nullifierHashToPDA(d.hashHex)),
+          }));
         }
 
         const notes: InboxNote[] = notesWithSpentStatus.map((note, index) => {
@@ -588,7 +564,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
       return;
     }
     try {
-      const rpcUrl = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.devnet.solana.com";
+      const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com";
       // Fetch token accounts for the zkBTC mint under Token-2022
       const response = await fetch(rpcUrl, {
         method: "POST",

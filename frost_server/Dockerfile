@@ -48,8 +48,13 @@ RUN mkdir -p /app/config /app/logs
 
 # Non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
-USER appuser
 
 ENV RUST_LOG=info,frost_server=debug
 
-ENTRYPOINT ["/app/frost-server"]
+# Copy entrypoint script
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+USER appuser
+
+ENTRYPOINT ["/app/entrypoint.sh"]

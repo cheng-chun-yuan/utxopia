@@ -46,6 +46,7 @@ import {
   buildVerifyStealthDepositInstructionData,
   buildVerifyTransactionInstruction,
   buildVerifyStealthDepositInstruction,
+  deriveDepositReceiptPDA,
 } from "@/lib/solana/instructions";
 
 import {
@@ -68,9 +69,8 @@ import {
 
 interface VerifyRequest {
   sweepTxid: string;      // hex display order
+  depositTxid: string;    // hex display order (original deposit tx)
   blockHeight: number;
-  ephemeralPub: string;   // hex 32 bytes
-  npk: string;            // hex 32 bytes
 }
 
 interface VerifySuccessResponse {
@@ -336,30 +336,35 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
 
   try {
     const body: VerifyRequest = await request.json();
-    const { sweepTxid, blockHeight, ephemeralPub, npk } = body;
+    const { sweepTxid, depositTxid, blockHeight } = body;
 
-    if (!sweepTxid || !blockHeight || !ephemeralPub || !npk) {
+    if (!sweepTxid || !depositTxid || !blockHeight) {
       return NextResponse.json(
-        { success: false, error: "Missing required fields" },
+        { success: false, error: "Missing required fields (sweepTxid, depositTxid, blockHeight)" },
         { status: 400 }
       );
     }
 
-    console.log(`[Verify] Processing deposit verification for txid: ${sweepTxid}`);
+    console.log(`[Verify] Processing deposit verification for sweep: ${sweepTxid}, deposit: ${depositTxid}`);
 
     const connection = new Connection(
       process.env.NEXT_PUBLIC_SOLANA_RPC || "https://api.devnet.solana.com",
       "confirmed"
     );
     const relayer = getRelayerKeypair();
-    const network = (process.env.NEXT_PUBLIC_BTC_NETWORK || "testnet4") as "mainnet" | "testnet" | "testnet4" | "signet" | "regtest";
+    const network = (process.env.NEXT_PUBLIC_BTC_NETWORK || "testnet") as "mainnet" | "testnet" | "testnet4" | "signet" | "regtest";
 
     // 1. Fetch raw tx hex from mempool.space and strip SegWit witness data
-    console.log("[Verify] Fetching raw transaction...");
-    const rawTxHex = await fetchRawTxHex(sweepTxid, network);
-    const fullTxBytes = hexToBytes(rawTxHex);
-    const rawTxBytes = stripWitness(fullTxBytes);
-    console.log(`[Verify] Raw tx: ${fullTxBytes.length} bytes (full), ${rawTxBytes.length} bytes (non-witness)`);
+    console.log("[Verify] Fetching raw transactions...");
+    const [sweepRawHex, depositRawHex] = await Promise.all([
+      fetchRawTxHex(sweepTxid, network),
+      fetchRawTxHex(depositTxid, network),
+    ]);
+    const sweepFullBytes = hexToBytes(sweepRawHex);
+    const depositFullBytes = hexToBytes(depositRawHex);
+    const sweepRawBytes = stripWitness(sweepFullBytes);
+    const depositRawBytes = stripWitness(depositFullBytes);
+    console.log(`[Verify] Sweep: ${sweepFullBytes.length}→${sweepRawBytes.length} bytes, Deposit: ${depositFullBytes.length}→${depositRawBytes.length} bytes`);
 
     // 2. Fetch Merkle proof from mempool.space
     console.log("[Verify] Fetching Merkle proof...");
@@ -369,18 +374,23 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
     console.log("[Verify] Fetching block header...");
     const blockHeader = await getBlockHeaderByHeight(blockHeight, network);
 
-    // Convert txid and block hash to internal byte order (reversed)
-    const txidInternal = reverseBytes(spvHexToBytes(sweepTxid));
+    // Convert txids and block hash to internal byte order (reversed)
+    const sweepTxidInternal = reverseBytes(spvHexToBytes(sweepTxid));
+    const depositTxidInternal = reverseBytes(spvHexToBytes(depositTxid));
     const blockHashInternal = reverseBytes(spvHexToBytes(blockHeader.hash));
 
-    // 4. Upload raw tx to ChadBuffer
-    const { bufferPubkey } = await uploadDataToBuffer(connection, relayer, rawTxBytes);
+    // 4. Upload raw txs to ChadBuffer accounts
+    const [sweepBuffer, depositBuffer] = await Promise.all([
+      uploadDataToBuffer(connection, relayer, sweepRawBytes),
+      uploadDataToBuffer(connection, relayer, depositRawBytes),
+    ]);
 
     // 5. Derive all PDAs
     const [poolStatePDA] = derivePoolStatePDA();
     const [commitmentTreePDA] = deriveCommitmentTreePDA();
     const [lightClientPDA] = deriveLightClientPDA();
     const poolVaultATA = derivePoolVaultATA();
+    const [depositReceiptPDA] = deriveDepositReceiptPDA(depositTxidInternal);
 
     // Block header PDA: derive from block hash
     const blockHeaderPDA = PublicKey.findProgramAddressSync(
@@ -388,7 +398,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
       BTC_LIGHT_CLIENT_PROGRAM_ID
     )[0];
 
-    const [verifiedTxPDA] = deriveVerifiedTransactionPDA(blockHashInternal, txidInternal);
+    const [verifiedTxPDA] = deriveVerifiedTransactionPDA(blockHashInternal, sweepTxidInternal);
 
     // 6. Build merkle proof data for verify_transaction
     const merkleSiblings = merkleProof.merkleProof.map((hash) =>
@@ -397,9 +407,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
     const pathBits = buildPathBits(merkleProof.txIndex, merkleSiblings.length);
 
     const verifyTxData = buildVerifyTransactionInstructionData({
-      txid: txidInternal,
+      txid: sweepTxidInternal,
       blockHash: blockHashInternal,
-      txSize: rawTxBytes.length,
+      txSize: sweepRawBytes.length,
       txIndex: merkleProof.txIndex,
       merkleSiblings,
       pathBits,
@@ -410,20 +420,17 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
       verifiedTxPDA,
       lightClientPDA,
       blockHeaderPDA,
-      chadBuffer: bufferPubkey,
+      chadBuffer: sweepBuffer.bufferPubkey,
       instructionData: verifyTxData,
     });
 
     // 7. Build verify_stealth_deposit instruction
-    const ephemeralPubBytes = hexToBytes(ephemeralPub);
-    const npkBytes = hexToBytes(npk);
-
     const verifyDepositData = buildVerifyStealthDepositInstructionData({
-      txid: txidInternal,
+      sweepTxid: sweepTxidInternal,
       blockHeight,
-      txSize: rawTxBytes.length,
-      ephemeralPub: ephemeralPubBytes,
-      npk: npkBytes,
+      sweepTxSize: sweepRawBytes.length,
+      depositTxSize: depositRawBytes.length,
+      depositTxid: depositTxidInternal,
     });
 
     const verifyDepositIx = buildVerifyStealthDepositInstruction({
@@ -431,11 +438,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
       verifiedTxPDA,
       lightClientPDA,
       commitmentTreePDA,
-      sweepTxBuffer: bufferPubkey,
+      sweepTxBuffer: sweepBuffer.bufferPubkey,
       authority: relayer.publicKey,
       zkbtcMint: ZKBTC_MINT_ADDRESS,
       poolVaultATA,
-      depositTxBuffer: bufferPubkey, // TODO: separate deposit TX buffer when available
+      depositTxBuffer: depositBuffer.bufferPubkey,
+      depositReceiptPDA,
       instructionData: verifyDepositData,
     });
 
@@ -458,9 +466,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
 
     console.log(`[Verify] Transaction confirmed: ${signature}`);
 
-    // 9. Close buffer
+    // 9. Close buffers
     try {
-      await closeBuffer(connection, relayer, bufferPubkey);
+      await Promise.all([
+        closeBuffer(connection, relayer, sweepBuffer.bufferPubkey),
+        closeBuffer(connection, relayer, depositBuffer.bufferPubkey),
+      ]);
     } catch (closeErr) {
       console.warn("[Verify] Failed to close buffer (non-critical):", closeErr);
     }

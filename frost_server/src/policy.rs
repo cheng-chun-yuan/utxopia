@@ -94,6 +94,9 @@ pub enum PolicyError {
 
     #[error("POLICY_SOLANA_RPC_ERROR: {0}")]
     SolanaRpcError(String),
+
+    #[error("POLICY_SOLANA_VERIFICATION_FAILED: {0}")]
+    SolanaVerificationFailed(String),
 }
 
 /// Signing policy configuration
@@ -413,6 +416,11 @@ impl SigningPolicy {
                             }
                         }
                     })
+            }
+            SolanaVerification::Sweep { npk } => {
+                verifier.verify_deposit_intent(npk).await.map_err(|e| {
+                    PolicyError::SolanaVerificationFailed(format!("DepositIntent verification failed: {}", e))
+                })
             }
         }
     }

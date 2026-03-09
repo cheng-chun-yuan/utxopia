@@ -14,7 +14,7 @@ use clap::Parser;
 use frost_server::solana_verifier::{find_program_address, SolanaVerifier};
 
 /// Default devnet Aegis program ID
-const DEVNET_PROGRAM_ID: &str = "8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim";
+const DEVNET_PROGRAM_ID: &str = "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1";
 const DEVNET_RPC_URL: &str = "https://api.devnet.solana.com";
 
 #[derive(Parser)]

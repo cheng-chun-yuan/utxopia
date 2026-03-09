@@ -397,11 +397,11 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
     if (matchingNote) {
       setSelectedNoteIds(new Set([matchingNote.id]));
       notePreselectedRef.current = true;
-      if (connected && hasKeys) {
+      if (hasKeys) {
         setStep("compose");
       }
     }
-  }, [preselectedNote, availableNotes, inboxLoading, connected, hasKeys]);
+  }, [preselectedNote, availableNotes, inboxLoading, hasKeys]);
 
   // Auto-select notes when total output changes
   useEffect(() => {
@@ -413,19 +413,19 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 
   // Step transitions
   useEffect(() => {
-    if (connected && hasKeys && step === "connect") {
+    if (hasKeys && step === "connect") {
       setStep("compose");
-    } else if (!connected && step !== "connect") {
+    } else if (!hasKeys && step !== "connect") {
       setStep("connect");
     }
-  }, [connected, hasKeys, step]);
+  }, [hasKeys, step]);
 
   // Auto-import note from ?note= URL param
   useEffect(() => {
-    if (!initialSecretPhrase || importAutoTriggered.current || !connected || !hasKeys) return;
+    if (!initialSecretPhrase || importAutoTriggered.current || !hasKeys) return;
     importAutoTriggered.current = true;
     handleImportScan(initialSecretPhrase);
-  }, [initialSecretPhrase, connected, hasKeys]);
+  }, [initialSecretPhrase, hasKeys]);
 
   // Import scan handler
   const handleImportScan = useCallback(async (phrase?: string) => {
@@ -612,7 +612,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 
   const handlePay = async () => {
     // Imported notes only need wallet for stealth address (self-change), not for keys
-    if (!hasImportedNotes && !isPublicRedeem && (!publicKey || !keys || !signTransaction || !canSubmit)) return;
+    if (!hasImportedNotes && !isPublicRedeem && (!keys || !canSubmit)) return;
     if (hasImportedNotes && !canSubmit) return;
     if (isPublicRedeem && (!publicKey || !signTransaction || !canSubmit)) return;
 
@@ -1271,7 +1271,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       );
     }
 
-    if (connected && hasKeys && availableNotes.length === 0) {
+    if (hasKeys && availableNotes.length === 0) {
       return (
         <div className="flex flex-col items-center justify-center py-8">
           <div className="rounded-full bg-gray/10 p-4 mb-4">
@@ -1288,18 +1288,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       );
     }
 
-    return (
-      <div className="flex flex-col items-center justify-center py-8">
-        <div className="rounded-full bg-purple/10 p-4 mb-4">
-          <Wallet className="h-10 w-10 text-purple" />
-        </div>
-        <p className="text-heading6 text-foreground mb-2">Connect Your Wallet</p>
-        <p className="text-body2 text-gray text-center mb-6">
-          Connect your Solana wallet to send payments
-        </p>
-        <WalletButton className="btn-primary w-full justify-center" />
-      </div>
-    );
+    return null;
   }
 
   // ===== COMPOSE STEP =====

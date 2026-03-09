@@ -395,6 +395,7 @@ async fn run_tracker_service(args: &[String]) {
     } else {
         service
     };
+    let mut service = service;
 
     // API server port
     let api_port: u16 = env::var("TRACKER_API_PORT")
@@ -442,7 +443,7 @@ async fn run_tracker_service(args: &[String]) {
     let solana_rpc = env::var("SOLANA_RPC_URL")
         .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
     let aegis_program_id = env::var("AEGIS_PROGRAM_ID")
-        .unwrap_or_else(|_| "8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim".to_string());
+        .unwrap_or_else(|_| "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1".to_string());
 
     let event_store = Arc::new(
         EventStore::new(&indexer_db_path).expect("Failed to create event store")
@@ -452,7 +453,10 @@ async fn run_tracker_service(args: &[String]) {
     );
 
     // Build the indexer router (proof, status, sync, ws, leaves, nullifiers)
-    let indexer_router = event_indexer_router(event_store.clone(), tree_cache.clone());
+    let program_pubkey: solana_sdk::pubkey::Pubkey = aegis_program_id
+        .parse()
+        .expect("Invalid AEGIS_PROGRAM_ID");
+    let indexer_router = event_indexer_router(event_store.clone(), tree_cache.clone(), program_pubkey);
 
     // Start the event indexer service in background
     let solana_rpc_clone = solana_rpc.clone();

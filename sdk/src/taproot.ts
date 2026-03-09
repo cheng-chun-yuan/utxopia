@@ -401,6 +401,181 @@ export function buildMockBtcTransaction(
   return rawTx;
 }
 
+// ========== Refund Script Taproot Helpers ==========
+
+/**
+ * Encode an integer as Bitcoin Script compact size (CompactSize/varint).
+ * - 0-252: single byte
+ * - 253-65535: 0xfd + 2 bytes LE
+ */
+function compactSizeEncode(n: number): Uint8Array {
+  if (n < 0) throw new Error("compactSize cannot be negative");
+  if (n <= 252) {
+    return new Uint8Array([n]);
+  }
+  if (n <= 0xffff) {
+    const buf = new Uint8Array(3);
+    buf[0] = 0xfd;
+    buf[1] = n & 0xff;
+    buf[2] = (n >> 8) & 0xff;
+    return buf;
+  }
+  throw new Error("compactSize > 65535 not supported");
+}
+
+/**
+ * Build a refund script for time-locked user recovery.
+ *
+ * Script:
+ *   <npk_32> OP_DROP <144> OP_CHECKSEQUENCEVERIFY OP_DROP <user_x_only_pubkey_32> OP_CHECKSIG
+ *
+ * @param npk - 32-byte note public key (commitment binding)
+ * @param userPubkey - 32-byte x-only public key for the refund path
+ * @returns Script bytes (73 bytes)
+ */
+export function buildRefundScript(npk: Uint8Array, userPubkey: Uint8Array): Uint8Array {
+  if (npk.length !== 32) throw new Error("npk must be 32 bytes");
+  if (userPubkey.length !== 32) throw new Error("userPubkey must be 32 bytes (x-only)");
+
+  // Total: 1+32+1+1+2+1+1+1+32+1 = 73 bytes
+  const script = new Uint8Array(73);
+  let offset = 0;
+
+  // OP_PUSHBYTES_32 + npk
+  script[offset++] = 0x20;
+  script.set(npk, offset);
+  offset += 32;
+
+  // OP_DROP
+  script[offset++] = 0x75;
+
+  // Push 144 as minimal signed LE: 144 = 0x90, high bit set → needs 0x00 padding → [0x90, 0x00]
+  // OP_PUSHBYTES_2
+  script[offset++] = 0x02;
+  script[offset++] = 0x90;
+  script[offset++] = 0x00;
+
+  // OP_CHECKSEQUENCEVERIFY
+  script[offset++] = 0xb2;
+
+  // OP_DROP
+  script[offset++] = 0x75;
+
+  // OP_PUSHBYTES_32 + user x-only pubkey
+  script[offset++] = 0x20;
+  script.set(userPubkey, offset);
+  offset += 32;
+
+  // OP_CHECKSIG
+  script[offset++] = 0xac;
+
+  return script;
+}
+
+/**
+ * Compute a TapLeaf hash per BIP-341.
+ *
+ * TapLeaf = H_TapLeaf(leafVersion || compactSize(script.length) || script)
+ *
+ * @param script - The leaf script bytes
+ * @param leafVersion - Leaf version byte (default 0xc0)
+ * @returns 32-byte tagged hash
+ */
+export function computeTapLeafHash(script: Uint8Array, leafVersion: number = 0xc0): Uint8Array {
+  const scriptLenBytes = compactSizeEncode(script.length);
+  const data = new Uint8Array(1 + scriptLenBytes.length + script.length);
+  data[0] = leafVersion;
+  data.set(scriptLenBytes, 1);
+  data.set(script, 1 + scriptLenBytes.length);
+  return taggedHash("TapLeaf", data);
+}
+
+/**
+ * Derive a Taproot address with a refund script path.
+ *
+ * The address commits to both the FROST group key (internal key) and a
+ * time-locked refund script that allows the user to reclaim funds after
+ * 144 blocks (~1 day) if the bridge fails to sweep.
+ *
+ * Taproot construction:
+ * - Internal key = FROST group key (x-only)
+ * - Single TapLeaf = refund script
+ * - Merkle root = TapLeaf hash (single leaf, no branching)
+ * - Tweak = H_TapTweak(internal_key || merkle_root)
+ * - Output key = internal_key + tweak * G
+ *
+ * @param npk - 32-byte note public key (embedded in refund script for binding)
+ * @param userRefundPubkey - 32-byte x-only pubkey for the refund spending path
+ * @param internalKey - 32-byte x-only FROST group public key
+ * @param network - Bitcoin network for address encoding
+ */
+export function deriveTaprootAddressWithRefund(
+  npk: Uint8Array,
+  userRefundPubkey: Uint8Array,
+  internalKey: Uint8Array,
+  network: "mainnet" | "testnet" | "regtest" = "testnet"
+): {
+  address: string;
+  outputKey: Uint8Array;
+  merkleRoot: Uint8Array;
+  controlBlock: Uint8Array;
+  refundScript: Uint8Array;
+  tweak: Uint8Array;
+} {
+  if (internalKey.length !== 32) throw new Error("Internal key must be 32 bytes (x-only)");
+  if (npk.length !== 32) throw new Error("npk must be 32 bytes");
+  if (userRefundPubkey.length !== 32) throw new Error("userRefundPubkey must be 32 bytes (x-only)");
+
+  // 1. Build the refund script
+  const refundScript = buildRefundScript(npk, userRefundPubkey);
+
+  // 2. Compute the TapLeaf hash (single leaf = merkle root)
+  const merkleRoot = computeTapLeafHash(refundScript);
+
+  // 3. Compute tweak = H_TapTweak(internal_key || merkle_root)
+  const tweakInput = new Uint8Array(64);
+  tweakInput.set(internalKey, 0);
+  tweakInput.set(merkleRoot, 32);
+  const tweak = taggedHash("TapTweak", tweakInput);
+
+  // 4. Compute output key = lift_x(internal_key) + tweak * G
+  const tweakScalar = bytesToBigInt(tweak);
+  const SECP256K1_ORDER = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+  if (tweakScalar >= SECP256K1_ORDER) {
+    throw new Error("Tweak scalar exceeds curve order");
+  }
+
+  const keyHex = "02" + bytesToHex(internalKey);
+  const internalPoint = secp256k1.Point.fromHex(keyHex);
+  const tweakPoint = secp256k1.Point.BASE.multiply(tweakScalar);
+  const outputPoint = internalPoint.add(tweakPoint);
+
+  const outputKeyHex = outputPoint.toHex(true); // 33-byte compressed hex
+  const outputKey = hexToBytes(outputKeyHex.slice(2)); // drop "02"/"03" prefix
+
+  // 5. Determine parity bit for the control block
+  const parityBit = outputKeyHex.startsWith("03") ? 1 : 0;
+
+  // 6. Build the control block: <leaf_version | parity_bit> <internal_key>
+  const controlBlock = new Uint8Array(33);
+  controlBlock[0] = 0xc0 | parityBit;
+  controlBlock.set(internalKey, 1);
+
+  // 7. Encode as bech32m address
+  const hrp = network === "mainnet" ? "bc" : network === "regtest" ? "bcrt" : "tb";
+  const words = bech32.bech32m.toWords(outputKey);
+  const address = bech32.bech32m.encode(hrp, [1, ...words]);
+
+  return {
+    address,
+    outputKey,
+    merkleRoot,
+    controlBlock,
+    refundScript,
+    tweak,
+  };
+}
+
 /**
  * Get the internal key used by Aegis
  * In production, this would be the FROST threshold public key

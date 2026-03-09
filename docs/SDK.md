@@ -162,7 +162,7 @@ interface ScannedNote {
 
 ```typescript
 // Program IDs (devnet)
-AEGIS_PROGRAM_ID = '8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim';
+AEGIS_PROGRAM_ID = '4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1';
 CHADBUFFER_PROGRAM_ID = '6VrJmWbhN9WbEkg87JizunVMpL6CHKGVmzWCf3o3LRgy';
 
 // Merkle tree

@@ -208,6 +208,9 @@ export {
 
 export {
   deriveTaprootAddress,
+  deriveTaprootAddressWithRefund,
+  buildRefundScript,
+  computeTapLeafHash,
   verifyTaprootAddress,
   createP2TRScriptPubkey,
   parseP2TRScriptPubkey,
@@ -367,6 +370,7 @@ export {
   type ViewOnlyScannedNote,
   createNonInteractiveDeposit,
   type NonInteractiveDepositResult,
+  type NonInteractiveDepositWithRefundResult,
 } from "./stealth";
 
 // ==========================================================================

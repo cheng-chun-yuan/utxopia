@@ -28,7 +28,7 @@ use super::watcher::{AddressWatcher, MerkleProofData, WatcherError};
 /// Token-2022 program ID
 const TOKEN_2022_PROGRAM_ID: Pubkey = pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
-/// ChadBuffer program ID (deployed to devnet)
+/// ChadBuffer program ID (must match the on-chain Aegis contract's CHADBUFFER_PROGRAM_ID)
 const CHADBUFFER_PROGRAM_ID: Pubkey = pubkey!("C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF");
 
 /// ChadBuffer authority header size (32 bytes for payer pubkey)
@@ -46,7 +46,7 @@ const CHADBUFFER_MAX_DATA_PER_WRITE: usize = SOLANA_TX_SIZE_LIMIT - CHADBUFFER_W
 /// Get Aegis program ID from env or use devnet default
 fn aegis_program_id() -> String {
     std::env::var("AEGIS_PROGRAM_ID")
-        .unwrap_or_else(|_| "8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim".to_string())
+        .unwrap_or_else(|_| "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1".to_string())
 }
 
 /// Get BTC light client program ID from env or use devnet default
@@ -252,19 +252,262 @@ impl SpvVerifier {
         }
     }
 
-    /// Check if a deposit has already been verified
-    pub async fn is_already_verified(&self, sweep_txid: &str) -> Result<bool, VerifierError> {
-        let txid_internal = txid_to_internal(sweep_txid)?;
+    /// Check if a deposit has already been verified by looking up the
+    /// deposit receipt PDA (created by verify_stealth_deposit on-chain).
+    pub async fn is_already_verified(
+        &self,
+        deposit_txid: &str,
+    ) -> Result<bool, VerifierError> {
+        let txid_internal = txid_to_internal(deposit_txid)?;
 
-        let (deposit_record, _) = Pubkey::find_program_address(
-            &[b"stealth", &txid_internal],
+        let (deposit_receipt_pda, _) = Pubkey::find_program_address(
+            &[b"deposit_receipt", &txid_internal],
             &self.program_id,
         );
 
-        match self.rpc.get_account(&deposit_record) {
-            Ok(_) => Ok(true),
+        match self.rpc.get_account(&deposit_receipt_pda) {
+            Ok(account) => Ok(!account.data.is_empty() && account.data[0] == 0x06),
             Err(_) => Ok(false),
         }
+    }
+
+    /// Register a DepositIntent PDA on Solana (disc 24).
+    ///
+    /// Creates a PDA with seeds ["deposit_intent", npk] storing ephemeral_pub + npk.
+    /// This is called before sweep for OP_RETURN-free deposits.
+    pub async fn register_deposit_intent(
+        &self,
+        ephemeral_pub_hex: &str,
+        npk_hex: &str,
+    ) -> Result<String, VerifierError> {
+        let payer = self.payer.as_ref().ok_or(VerifierError::NoPayerSet)?;
+
+        let ephemeral_pub = hex::decode(ephemeral_pub_hex)
+            .map_err(|e| VerifierError::VerificationFailed(format!("invalid ephemeral_pub hex: {}", e)))?;
+        let npk = hex::decode(npk_hex)
+            .map_err(|e| VerifierError::VerificationFailed(format!("invalid npk hex: {}", e)))?;
+
+        if ephemeral_pub.len() != 32 || npk.len() != 32 {
+            return Err(VerifierError::VerificationFailed("ephemeral_pub and npk must be 32 bytes".to_string()));
+        }
+
+        // Derive DepositIntent PDA
+        let (deposit_intent_pda, _) = Pubkey::find_program_address(
+            &[b"deposit_intent", &npk],
+            &self.program_id,
+        );
+
+        // Check if PDA already exists
+        if let Ok(account) = self.rpc.get_account(&deposit_intent_pda) {
+            if !account.data.is_empty() && account.data[0] == 0x07 {
+                println!("[verifier] DepositIntent PDA already exists: {}", deposit_intent_pda);
+                return Ok(String::new()); // Idempotent
+            }
+        }
+
+        // Build instruction: disc(24) + ephemeral_pub(32) + npk(32)
+        let mut ix_data = Vec::with_capacity(65);
+        ix_data.push(24u8); // discriminator
+        ix_data.extend_from_slice(&ephemeral_pub);
+        ix_data.extend_from_slice(&npk);
+
+        let accounts = vec![
+            AccountMeta::new(payer.pubkey(), true),           // payer
+            AccountMeta::new(deposit_intent_pda, false),       // deposit_intent PDA
+            AccountMeta::new_readonly(solana_sdk::system_program::ID, false), // system_program
+        ];
+
+        let ix = Instruction {
+            program_id: self.program_id,
+            accounts,
+            data: ix_data,
+        };
+
+        let blockhash = self.rpc.get_latest_blockhash()
+            .map_err(|e| VerifierError::RpcError(format!("Failed to get blockhash: {}", e)))?;
+
+        let tx = Transaction::new_signed_with_payer(
+            &[ix],
+            Some(&payer.pubkey()),
+            &[payer],
+            blockhash,
+        );
+
+        let sig = self.rpc.send_and_confirm_transaction(&tx)
+            .map_err(|e| VerifierError::RpcError(format!("register_deposit_intent failed: {}", e)))?;
+
+        println!("[verifier] DepositIntent PDA created: {} (tx: {})", deposit_intent_pda, sig);
+        Ok(sig.to_string())
+    }
+
+    /// Verify a deposit using v2 instruction (disc 25) which reads from DepositIntent PDA.
+    ///
+    /// This eliminates the need for a deposit TX ChadBuffer.
+    pub async fn verify_deposit_v2(
+        &self,
+        sweep_txid: &str,
+        deposit_txid: &str,
+        npk_hex: &str,
+    ) -> Result<VerificationResult, VerifierError> {
+        let payer = self.payer.as_ref().ok_or(VerifierError::NoPayerSet)?;
+
+        // Get sweep tx confirmation status
+        let tx_status = self.watcher.get_tx_confirmations(sweep_txid).await?;
+        if !tx_status.confirmed {
+            return Err(VerifierError::TxNotConfirmed);
+        }
+        let block_height = tx_status.block_height.ok_or(VerifierError::TxNotConfirmed)?;
+
+        // Get merkle proof + block header + raw sweep tx
+        let merkle_proof = self.watcher.get_merkle_proof(sweep_txid).await?;
+        let block_header = self.watcher.get_block_header(block_height).await?;
+        let sweep_raw_full = self.watcher.get_raw_tx(sweep_txid).await?;
+        let sweep_raw_tx = strip_witness_data(&sweep_raw_full)?;
+
+        println!("[verifier-v2] Sweep raw tx: {} bytes (from {})", sweep_raw_tx.len(), sweep_raw_full.len());
+
+        // Convert txids to internal byte order
+        let sweep_txid_internal = txid_to_internal(sweep_txid)?;
+        let deposit_txid_internal = txid_to_internal(deposit_txid)?;
+
+        // Compute block hash
+        let header_bytes = hex::decode(block_header.header_hex.trim())
+            .map_err(|e| VerifierError::VerificationFailed(format!("invalid header hex: {}", e)))?;
+        let block_hash = double_sha256(&header_bytes);
+
+        // Upload only sweep TX to ChadBuffer (no deposit TX needed!)
+        let (sweep_buffer_pubkey, sweep_buffer_keypair) =
+            self.upload_to_chadbuffer(payer, &sweep_raw_tx)?;
+
+        // Build and send v2 verification transaction
+        let result = self.send_verify_deposit_v2_tx(
+            payer,
+            &sweep_txid_internal,
+            &deposit_txid_internal,
+            &merkle_proof,
+            block_height,
+            &block_hash,
+            &sweep_buffer_pubkey,
+            sweep_raw_tx.len() as u32,
+            npk_hex,
+        ).await;
+
+        // Clean up ChadBuffer
+        let _ = self.close_chadbuffer(payer, &sweep_buffer_pubkey);
+        drop(sweep_buffer_keypair);
+
+        let solana_tx = result?;
+        let leaf_index = self.get_leaf_index_from_tx(&solana_tx).await?;
+
+        Ok(VerificationResult {
+            solana_tx,
+            leaf_index,
+            block_height,
+        })
+    }
+
+    /// Send verify_deposit_v2 transaction (btc-light-client verify + aegis disc 25)
+    #[allow(clippy::too_many_arguments)]
+    async fn send_verify_deposit_v2_tx(
+        &self,
+        payer: &Keypair,
+        sweep_txid: &[u8; 32],
+        deposit_txid: &[u8; 32],
+        merkle_proof: &MerkleProofData,
+        block_height: u64,
+        block_hash: &[u8; 32],
+        sweep_buffer: &Pubkey,
+        sweep_tx_size: u32,
+        npk_hex: &str,
+    ) -> Result<String, VerifierError> {
+        // Derive PDAs (same as v1)
+        let (pool_state, _) = Pubkey::find_program_address(&[b"pool_state"], &self.program_id);
+        let (light_client, _) = Pubkey::find_program_address(
+            &[b"btc_light_client"], &self.light_client_program_id,
+        );
+        let (block_header_pda, _) = Pubkey::find_program_address(
+            &[b"block", block_hash], &self.light_client_program_id,
+        );
+        let (verified_tx_pda, _) = Pubkey::find_program_address(
+            &[b"verified_tx", block_hash, sweep_txid], &self.light_client_program_id,
+        );
+        let (commitment_tree, _) = Pubkey::find_program_address(
+            &[b"commitment_tree"], &self.program_id,
+        );
+
+        // Read pool state for mint/vault
+        let pool_account = self.rpc.get_account(&pool_state)
+            .map_err(|e| VerifierError::RpcError(format!("Failed to get pool state: {}", e)))?;
+        if pool_account.data.len() < 100 {
+            return Err(VerifierError::VerificationFailed("pool state too small".to_string()));
+        }
+        let zkbtc_mint = Pubkey::try_from(&pool_account.data[36..68])
+            .map_err(|_| VerifierError::VerificationFailed("invalid zkbtc_mint".to_string()))?;
+        let pool_vault = Pubkey::try_from(&pool_account.data[68..100])
+            .map_err(|_| VerifierError::VerificationFailed("invalid pool_vault".to_string()))?;
+
+        // Derive DepositIntent PDA from npk
+        let npk_bytes = hex::decode(npk_hex)
+            .map_err(|e| VerifierError::VerificationFailed(format!("invalid npk: {}", e)))?;
+        let (deposit_intent_pda, _) = Pubkey::find_program_address(
+            &[b"deposit_intent", &npk_bytes], &self.program_id,
+        );
+
+        // Derive deposit receipt PDA
+        let (deposit_receipt_pda, _) = Pubkey::find_program_address(
+            &[b"deposit_receipt", deposit_txid], &self.program_id,
+        );
+
+        // --- Instruction 1: btc-light-client verify_transaction ---
+        let verify_tx_ix = self.build_verify_transaction_ix(
+            payer, sweep_txid, merkle_proof, block_hash, sweep_tx_size,
+            &light_client, &block_header_pda, &verified_tx_pda, sweep_buffer,
+        )?;
+
+        // --- Instruction 2: aegis verify_deposit_v2 (disc 25) ---
+        // Layout: disc(1) + sweep_txid(32) + block_height(8) + sweep_tx_size(4) + deposit_txid(32) = 77
+        let mut v2_data = Vec::with_capacity(77);
+        v2_data.push(25u8); // discriminator
+        v2_data.extend_from_slice(sweep_txid);
+        v2_data.extend_from_slice(&block_height.to_le_bytes());
+        v2_data.extend_from_slice(&sweep_tx_size.to_le_bytes());
+        v2_data.extend_from_slice(deposit_txid);
+
+        let v2_accounts = vec![
+            AccountMeta::new(pool_state, false),                         // 0: pool_state
+            AccountMeta::new_readonly(verified_tx_pda, false),           // 1: verified_tx
+            AccountMeta::new_readonly(light_client, false),              // 2: light_client
+            AccountMeta::new(commitment_tree, false),                    // 3: commitment_tree
+            AccountMeta::new_readonly(*sweep_buffer, false),             // 4: sweep_tx_buffer
+            AccountMeta::new(payer.pubkey(), true),                      // 5: authority/payer
+            AccountMeta::new_readonly(solana_sdk::system_program::ID, false), // 6: system_program
+            AccountMeta::new(zkbtc_mint, false),                         // 7: zkbtc_mint
+            AccountMeta::new(pool_vault, false),                         // 8: pool_vault
+            AccountMeta::new_readonly(TOKEN_2022_PROGRAM_ID, false),     // 9: token_program
+            AccountMeta::new(deposit_intent_pda, false),                 // 10: deposit_intent PDA
+            AccountMeta::new(deposit_receipt_pda, false),                // 11: deposit_receipt
+        ];
+
+        let v2_ix = Instruction {
+            program_id: self.program_id,
+            accounts: v2_accounts,
+            data: v2_data,
+        };
+
+        let recent_blockhash = self.rpc.get_latest_blockhash()
+            .map_err(|e| VerifierError::RpcError(format!("Failed to get blockhash: {}", e)))?;
+
+        let tx = Transaction::new_signed_with_payer(
+            &[verify_tx_ix, v2_ix],
+            Some(&payer.pubkey()),
+            &[payer],
+            recent_blockhash,
+        );
+
+        let sig = self.rpc.send_and_confirm_transaction(&tx)
+            .map_err(|e| VerifierError::RpcError(format!("v2 verification tx failed: {}", e)))?;
+
+        Ok(sig.to_string())
     }
 
     // =========================================================================
@@ -570,7 +813,13 @@ impl SpvVerifier {
         deposit_data.extend_from_slice(&deposit_tx_size.to_le_bytes());
         deposit_data.extend_from_slice(deposit_txid);
 
-        // 11 accounts for verify_stealth_deposit (stealth PDA removed, events instead)
+        // Derive deposit receipt PDA (prevents duplicate verification)
+        let (deposit_receipt_pda, _) = Pubkey::find_program_address(
+            &[b"deposit_receipt", deposit_txid],
+            &self.program_id,
+        );
+
+        // 12 accounts for verify_stealth_deposit
         let deposit_accounts = vec![
             AccountMeta::new(pool_state, false),                        // 0: pool_state
             AccountMeta::new_readonly(verified_tx_pda, false),          // 1: verified_tx
@@ -583,6 +832,7 @@ impl SpvVerifier {
             AccountMeta::new(pool_vault, false),                        // 8: pool_vault
             AccountMeta::new_readonly(TOKEN_2022_PROGRAM_ID, false),    // 9: token_program
             AccountMeta::new_readonly(*deposit_buffer, false),          // 10: deposit_tx_buffer
+            AccountMeta::new(deposit_receipt_pda, false),               // 11: deposit_receipt
         ];
 
         let deposit_ix = Instruction {

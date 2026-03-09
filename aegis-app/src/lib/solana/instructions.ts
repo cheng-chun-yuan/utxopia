@@ -348,27 +348,28 @@ export function buildVerifyTransactionInstructionData(params: {
 /**
  * Build aegis verify_stealth_deposit instruction data (disc=1)
  *
- * Amount is extracted on-chain from the SPV-verified raw transaction.
+ * npk + ephemeral_pub are extracted ON-CHAIN from the deposit TX OP_RETURN.
+ * Amount is extracted from the SPV-verified sweep TX.
  *
- * Layout: disc(1) + txid(32) + block_height(u64 LE)
- *         + tx_size(u32 LE) + ephemeral_pub(32) + npk(32) = 109 bytes
+ * Layout: disc(1) + sweep_txid(32) + block_height(u64 LE)
+ *         + sweep_tx_size(u32 LE) + deposit_tx_size(u32 LE) + deposit_txid(32) = 81 bytes
  */
 export function buildVerifyStealthDepositInstructionData(params: {
-  txid: Uint8Array;       // 32 bytes, internal byte order
+  sweepTxid: Uint8Array;      // 32 bytes, internal byte order
   blockHeight: number;
-  txSize: number;
-  ephemeralPub: Uint8Array; // 32 bytes
-  npk: Uint8Array;          // 32 bytes
+  sweepTxSize: number;
+  depositTxSize: number;
+  depositTxid: Uint8Array;    // 32 bytes, internal byte order
 }): Buffer {
-  const buf = Buffer.alloc(109);
+  const buf = Buffer.alloc(81);
   let offset = 0;
 
   buf[offset++] = 1; // discriminator
-  Buffer.from(params.txid).copy(buf, offset); offset += 32;
+  Buffer.from(params.sweepTxid).copy(buf, offset); offset += 32;
   buf.writeBigUInt64LE(BigInt(params.blockHeight), offset); offset += 8;
-  buf.writeUInt32LE(params.txSize, offset); offset += 4;
-  Buffer.from(params.ephemeralPub).copy(buf, offset); offset += 32;
-  Buffer.from(params.npk).copy(buf, offset); offset += 32;
+  buf.writeUInt32LE(params.sweepTxSize, offset); offset += 4;
+  buf.writeUInt32LE(params.depositTxSize, offset); offset += 4;
+  Buffer.from(params.depositTxid).copy(buf, offset); offset += 32;
 
   return buf;
 }
@@ -399,9 +400,10 @@ export function buildVerifyTransactionInstruction(params: {
 }
 
 /**
- * Build verify_stealth_deposit TransactionInstruction (11 accounts)
+ * Build verify_stealth_deposit TransactionInstruction (12 accounts)
  *
  * Stealth announcement is emitted as sol_log_data event (no PDA account needed).
+ * Account 11 is the deposit_receipt PDA (prevents duplicate verification).
  */
 export function buildVerifyStealthDepositInstruction(params: {
   poolStatePDA: PublicKey;
@@ -413,6 +415,7 @@ export function buildVerifyStealthDepositInstruction(params: {
   zkbtcMint: PublicKey;
   poolVaultATA: PublicKey;
   depositTxBuffer: PublicKey;
+  depositReceiptPDA: PublicKey;
   instructionData: Buffer;
 }): TransactionInstruction {
   return new TransactionInstruction({
@@ -429,9 +432,24 @@ export function buildVerifyStealthDepositInstruction(params: {
       { pubkey: params.poolVaultATA, isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
       { pubkey: params.depositTxBuffer, isSigner: false, isWritable: false },
+      { pubkey: params.depositReceiptPDA, isSigner: false, isWritable: true },
     ],
     data: params.instructionData,
   });
+}
+
+/**
+ * Derive Deposit Receipt PDA
+ * Seeds: ["deposit_receipt", deposit_txid(32)]
+ */
+export function deriveDepositReceiptPDA(
+  depositTxid: Uint8Array,
+  programId: PublicKey = AEGIS_PROGRAM_ID
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from("deposit_receipt"), Buffer.from(depositTxid)],
+    programId
+  );
 }
 
 // =============================================================================

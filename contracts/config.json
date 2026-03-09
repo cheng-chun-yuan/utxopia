@@ -1,7 +1,7 @@
 {
   "programs": {
     "devnet": {
-      "Aegis": "8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim",
+      "Aegis": "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1",
       "btc_light_client": "Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"
     },
     "localnet": {

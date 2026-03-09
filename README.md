@@ -177,7 +177,7 @@ bash scripts/setup.sh
 
 | Program | Address |
 |---------|---------|
-| Aegis | `8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim` |
+| Aegis | `4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1` |
 | BTC Light Client | `Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq` |
 | ChadBuffer | `C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF` |
 

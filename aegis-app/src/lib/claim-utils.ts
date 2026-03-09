@@ -1,17 +1,14 @@
 "use client";
 
-import { PublicKey } from "@solana/web3.js";
 import {
   initPoseidon,
   deriveMasterKey,
   deriveKeysFromSeedCircuit,
-  getCommitmentIndex,
   computeJoinSplitNullifierSync,
   scanUnifiedNotes,
-  PDA_SEEDS,
-  DEVNET_CONFIG,
   type AegisKeys,
 } from "@aegis/sdk";
+import { fetchSpentNullifierPDAs, nullifierHashToPDA } from "@/lib/nullifier-utils";
 
 export interface ScannedSecretNote {
   amount: number;
@@ -30,7 +27,6 @@ export interface ScannedSecretNote {
  */
 export async function scanSecretPhrase(
   phrase: string,
-  connection?: { getAccountInfo: (pk: PublicKey) => Promise<{ data: Buffer } | null> },
 ): Promise<ScannedSecretNote[]> {
   if (phrase.trim().length < 8) {
     throw new Error("Secret phrase must be at least 8 characters");
@@ -72,8 +68,9 @@ export async function scanSecretPhrase(
     );
   }
 
-  // Build all notes with nullifier status
-  const rpcUrl = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.devnet.solana.com";
+  // Fetch spent nullifier PDAs, match client-side (privacy: backend never learns which notes we own)
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
+  const spentPdas = await fetchSpentNullifierPDAs(backendUrl);
 
   const results: ScannedSecretNote[] = [];
   for (const note of scannedNotes) {
@@ -82,19 +79,12 @@ export async function scanSecretPhrase(
     const nullifierValue = computeJoinSplitNullifierSync(keys.nullifyingKey, leafIndexBigint);
     const nullifierHex = nullifierValue.toString(16).padStart(64, "0");
 
-    let isSpent = false;
-    try {
-      isSpent = await checkNullifierExists(nullifierHex, rpcUrl, connection);
-    } catch {
-      // Assume unspent on error
-    }
-
     results.push({
       amount: Number(note.amount),
       leafIndex: leafIndexBigint,
       commitment: commitmentHex,
       nullifierHash: nullifierHex,
-      isSpent,
+      isSpent: spentPdas.has(nullifierHashToPDA(nullifierHex)),
       keys,
     });
   }
@@ -120,87 +110,16 @@ export async function scanSecretPhrase(
 export async function refreshNullifierStatus(
   notes: ScannedSecretNote[],
 ): Promise<ScannedSecretNote[]> {
-  const rpcUrl = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "https://api.devnet.solana.com";
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
+  const spentPdas = await fetchSpentNullifierPDAs(backendUrl);
 
-  // Batch: compute all nullifier PDAs
-  const pdas = notes.map((n) => {
-    const nullifierBytes = hexToBytes(n.nullifierHash);
-    const [pda] = PublicKey.findProgramAddressSync(
-      [Buffer.from(PDA_SEEDS.NULLIFIER), nullifierBytes],
-      new PublicKey(DEVNET_CONFIG.aegisProgramId)
-    );
-    return pda.toBase58();
-  });
-
-  // Single batched RPC call
-  try {
-    const resp = await fetch(rpcUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0", id: 1,
-        method: "getMultipleAccounts",
-        params: [pdas, { encoding: "base64" }],
-      }),
-    });
-    const result = await resp.json();
-    const accountValues: (null | object)[] = result?.result?.value || [];
-
-    return notes.map((n, i) => ({
-      ...n,
-      isSpent: accountValues[i] !== null,
-    }));
-  } catch {
-    return notes; // keep existing status on error
-  }
+  return notes.map((n) => ({
+    ...n,
+    isSpent: spentPdas.has(nullifierHashToPDA(n.nullifierHash)),
+  }));
 }
 
-/** Check if a nullifier exists on-chain (returns true = spent) */
-async function checkNullifierExists(
-  nullifierHex: string,
-  rpcUrl: string,
-  connection?: { getAccountInfo: (pk: PublicKey) => Promise<{ data: Buffer } | null> },
-): Promise<boolean> {
-  // Try API first
-  try {
-    const nullifierResp = await fetch(`/api/tracker/nullifier/${nullifierHex}`);
-    if (nullifierResp.ok) {
-      const nullifierData = await nullifierResp.json();
-      if (nullifierData.found) return true;
-    }
-  } catch {
-    // Fall through to on-chain check
-  }
 
-  // On-chain PDA check
-  const nullifierBytes = hexToBytes(nullifierHex);
-  const [nullifierPda] = PublicKey.findProgramAddressSync(
-    [Buffer.from(PDA_SEEDS.NULLIFIER), nullifierBytes],
-    new PublicKey(DEVNET_CONFIG.aegisProgramId)
-  );
-
-  if (connection) {
-    const account = await connection.getAccountInfo(nullifierPda);
-    return account !== null;
-  }
-
-  // Fallback: RPC call
-  try {
-    const resp = await fetch(rpcUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0", id: 1,
-        method: "getAccountInfo",
-        params: [nullifierPda.toBase58(), { encoding: "base64" }],
-      }),
-    });
-    const result = await resp.json();
-    return result?.result?.value !== null;
-  } catch {
-    return false;
-  }
-}
 
 function hexToBytes(hex: string): Uint8Array {
   const h = hex.startsWith("0x") ? hex.slice(2) : hex;

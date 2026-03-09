@@ -197,6 +197,57 @@ impl SolanaVerifier {
         Ok(())
     }
 
+    /// Verify that a DepositIntent PDA exists on-chain.
+    ///
+    /// Derives PDA from seeds ["deposit_intent", npk], fetches via RPC,
+    /// and validates discriminator (0x07).
+    pub async fn verify_deposit_intent(
+        &self,
+        npk_hex: &str,
+    ) -> Result<(), SolanaVerifyError> {
+        let npk_bytes = hex::decode(npk_hex)
+            .map_err(|e| SolanaVerifyError::RpcError(format!("invalid npk hex: {}", e)))?;
+
+        if npk_bytes.len() != 32 {
+            return Err(SolanaVerifyError::RpcError(format!(
+                "npk must be 32 bytes, got {}", npk_bytes.len()
+            )));
+        }
+
+        let seeds: &[&[u8]] = &[b"deposit_intent", &npk_bytes];
+        let pda = find_program_address(seeds, &self.program_id)
+            .ok_or_else(|| SolanaVerifyError::RpcError("failed to derive DepositIntent PDA".to_string()))?;
+
+        let pda_base58 = bs58::encode(&pda.0).into_string();
+
+        tracing::debug!(
+            pda = %pda_base58,
+            npk = %npk_hex,
+            "verifying DepositIntent PDA"
+        );
+
+        let data = self.get_account_data(&pda_base58).await?.ok_or_else(|| {
+            SolanaVerifyError::AccountNotFound(format!(
+                "DepositIntent PDA {} not found", pda_base58
+            ))
+        })?;
+
+        // Validate discriminator (0x07)
+        if data.is_empty() || data[0] != 0x07 {
+            return Err(SolanaVerifyError::InvalidAccountData(format!(
+                "wrong discriminator: expected 0x07, got 0x{:02x}",
+                data.first().copied().unwrap_or(0)
+            )));
+        }
+
+        tracing::info!(
+            pda = %pda_base58,
+            "DepositIntent verified on-chain"
+        );
+
+        Ok(())
+    }
+
     /// Fetch account data via Solana JSON-RPC `getAccountInfo`.
     ///
     /// Returns `None` if account doesn't exist, `Some(data)` if it does.
@@ -329,8 +380,8 @@ mod tests {
     #[test]
     fn test_pda_derivation_known_vector() {
         // Test with a known program ID and seeds
-        // Using the Aegis program ID: 8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim
-        let program_id_bytes = bs58::decode("8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim")
+        // Using the Aegis program ID: 4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1
+        let program_id_bytes = bs58::decode("4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1")
             .into_vec()
             .unwrap();
         let mut program_id = [0u8; 32];
@@ -353,7 +404,7 @@ mod tests {
     #[test]
     fn test_pda_with_redemption_seeds() {
         // Simulate a real redemption PDA derivation
-        let program_id_bytes = bs58::decode("8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim")
+        let program_id_bytes = bs58::decode("4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1")
             .into_vec()
             .unwrap();
         let mut program_id = [0u8; 32];

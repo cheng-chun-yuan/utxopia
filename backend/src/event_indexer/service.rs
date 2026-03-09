@@ -65,7 +65,7 @@ impl EventIndexerService {
 
         // Initial backfill
         if let Err(e) = self.backfill().await {
-            tracing::error!(error = %e, "Backfill failed");
+            eprintln!("[event-indexer] Backfill FAILED: {}", e);
         }
 
         // Ongoing polling
@@ -80,9 +80,10 @@ impl EventIndexerService {
 
     /// Backfill: scan all historical transactions for the program
     async fn backfill(&mut self) -> Result<(), String> {
-        tracing::info!("Starting backfill from last known signature");
+        println!("[event-indexer] Starting backfill for program {}", self.config.program_id);
 
         let last_sig = self.store.get_last_signature()?;
+        println!("[event-indexer] Last known signature: {:?}", last_sig);
         let mut before: Option<String> = None;
         let mut total_processed = 0u64;
 
@@ -90,6 +91,10 @@ impl EventIndexerService {
             let signatures = self
                 .get_signatures_for_address(&self.config.program_id, before.as_deref(), last_sig.as_deref())
                 .await?;
+
+            if !signatures.is_empty() || before.is_none() {
+                println!("[event-indexer] Fetched {} signatures", signatures.len());
+            }
 
             if signatures.is_empty() {
                 break;
@@ -100,10 +105,25 @@ impl EventIndexerService {
                 let sig = &sig_info.signature;
                 let slot = sig_info.slot;
 
-                if let Err(e) = self.process_transaction(sig, slot).await {
-                    tracing::warn!(signature = %sig, error = %e, "Failed to process tx");
+                let mut retries = 0u32;
+                loop {
+                    match self.process_transaction(sig, slot).await {
+                        Ok(_) => break,
+                        Err(e) if e.contains("429") && retries < 5 => {
+                            retries += 1;
+                            let backoff = Duration::from_secs(2u64.pow(retries));
+                            eprintln!("[event-indexer] Rate limited on {}..., retry {} in {:?}", &sig[..20], retries, backoff);
+                            tokio::time::sleep(backoff).await;
+                        }
+                        Err(e) => {
+                            eprintln!("[event-indexer] Failed to process tx {}...: {}", &sig[..20], e);
+                            break;
+                        }
+                    }
                 }
                 total_processed += 1;
+                // Delay between RPC calls to avoid rate limiting on devnet
+                tokio::time::sleep(Duration::from_millis(500)).await;
             }
 
             // Track pagination
@@ -115,7 +135,7 @@ impl EventIndexerService {
             }
         }
 
-        tracing::info!(total = total_processed, "Backfill complete");
+        println!("[event-indexer] Backfill complete: {} transactions processed", total_processed);
         Ok(())
     }
 
@@ -162,6 +182,9 @@ impl EventIndexerService {
     async fn process_transaction(&mut self, signature: &str, slot: i64) -> Result<(), String> {
         let logs = self.get_transaction_logs(signature).await?;
         let events = parse_program_events(&logs);
+        if !events.is_empty() {
+            println!("[event-indexer] Tx {}... → {} events", &signature[..20], events.len());
+        }
 
         for event in events {
             match event {
@@ -287,6 +310,14 @@ impl EventIndexerService {
             .json()
             .await
             .map_err(|e| format!("json error: {}", e))?;
+
+        // Check for RPC errors
+        if let Some(err) = json.get("error") {
+            return Err(format!("RPC error for {}: {}", &signature[..20], err));
+        }
+        if json["result"].is_null() {
+            return Err(format!("Null result for tx {}", &signature[..20]));
+        }
 
         let logs = json["result"]["meta"]["logMessages"]
             .as_array()

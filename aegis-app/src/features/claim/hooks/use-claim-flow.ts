@@ -25,13 +25,13 @@ import {
   createUnshieldBoundParams,
   createStealthDepositWithKeys,
   poseidonHashSync,
-  PDA_SEEDS,
   bytesToBigint,
   bytesToHex,
   DEVNET_CONFIG,
   type StealthMetaAddress,
   type JoinSplitProofInputs,
 } from "@aegis/sdk";
+import { fetchSpentNullifierPDAs, nullifierHashToPDA } from "@/lib/nullifier-utils";
 import {
   ZKBTC_MINT_ADDRESS,
   TOKEN_2022_PROGRAM_ID,
@@ -215,35 +215,12 @@ export function useClaimFlow(initialNote?: string) {
       const nullifierValue = computeJoinSplitNullifierSync(note.nullifier, foundLeafIndex);
       const nullifierHex = nullifierValue.toString(16).padStart(64, "0");
 
-      // Check if nullifier already spent via backend indexer (cached in SQLite)
-      try {
-        const nullifierResp = await fetch(
-          `/api/tracker/nullifier/${nullifierHex}`
-        );
-        if (nullifierResp.ok) {
-          const nullifierData = await nullifierResp.json();
-          if (nullifierData.found) {
-            throw new Error("This note has already been claimed.");
-          }
-        }
-      } catch (checkErr) {
-        // If it's our "already claimed" error, rethrow
-        if (checkErr instanceof Error && checkErr.message.includes("already been claimed")) {
-          throw checkErr;
-        }
-        // Otherwise fall back to on-chain check
-        const nullifierBytesCheck = new Uint8Array(32);
-        for (let i = 0; i < 32; i++) {
-          nullifierBytesCheck[i] = parseInt(nullifierHex.slice(i * 2, i * 2 + 2), 16);
-        }
-        const [nullifierPda] = PublicKey.findProgramAddressSync(
-          [Buffer.from(PDA_SEEDS.NULLIFIER), nullifierBytesCheck],
-          new PublicKey(DEVNET_CONFIG.aegisProgramId)
-        );
-        const nullifierAccount = await connection.getAccountInfo(nullifierPda);
-        if (nullifierAccount !== null) {
-          throw new Error("This note has already been claimed.");
-        }
+      // Check if nullifier already spent — fetch all PDAs, match client-side (privacy)
+      // Uses backend primary with on-chain getProgramAccounts fallback
+      const backendUrl = process.env.NEXT_PUBLIC_ZKBTC_API_URL || "http://localhost:3001";
+      const spentPdas = await fetchSpentNullifierPDAs(backendUrl);
+      if (spentPdas.has(nullifierHashToPDA(nullifierHex))) {
+        throw new Error("This note has already been claimed.");
       }
 
       const commitment = computeJoinSplitCommitmentSync(pubKeyX, ZKBTC_TOKEN_ID, BigInt(foundAmount));

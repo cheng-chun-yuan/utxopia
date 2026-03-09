@@ -12,7 +12,7 @@ pub struct EventStore {
     pool: Pool<SqliteConnectionManager>,
 }
 
-/// A leaf event row returned by queries
+/// A leaf event row returned by queries (enriched with announcement data)
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct LeafRow {
     pub leaf_index: i64,
@@ -20,6 +20,15 @@ pub struct LeafRow {
     pub created_at: i64,
     pub tx_signature: String,
     pub slot: i64,
+    /// 0=deposit, 1=transfer (from stealth_announcements table)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub announcement_type: Option<i64>,
+    /// Plaintext amount in sats (only for deposits, decoded from encrypted_amount)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub amount_sats: Option<i64>,
+    /// Ephemeral public key hex (from stealth_announcements)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ephemeral_pub: Option<String>,
 }
 
 /// A nullifier event row returned by queries
@@ -173,45 +182,59 @@ impl EventStore {
         }
     }
 
-    /// Get all leaves, optionally filtered by leaf_index > since
+    /// Get all leaves, optionally filtered by leaf_index > since.
+    /// Enriches with announcement data (type, amount, ephemeral_pub) via LEFT JOIN.
     pub fn get_leaves(&self, since: Option<i64>) -> Result<Vec<LeafRow>, String> {
         let conn = self.conn()?;
-        let mut stmt = if let Some(since_idx) = since {
-            let mut s = conn
-                .prepare("SELECT leaf_index, commitment, created_at, tx_signature, slot FROM leaf_events WHERE leaf_index > ?1 ORDER BY leaf_index")
-                .map_err(|e| format!("query error: {}", e))?;
-            let rows = s
-                .query_map(params![since_idx], |row| {
-                    let commitment_blob: Vec<u8> = row.get(1)?;
-                    Ok(LeafRow {
-                        leaf_index: row.get(0)?,
-                        commitment: hex::encode(&commitment_blob),
-                        created_at: row.get(2)?,
-                        tx_signature: row.get(3)?,
-                        slot: row.get(4)?,
-                    })
+        let base_query = "SELECT l.leaf_index, l.commitment, l.created_at, l.tx_signature, l.slot, \
+                          a.announcement_type, a.encrypted_amount, a.ephemeral_pub \
+                          FROM leaf_events l \
+                          LEFT JOIN stealth_announcements a ON l.leaf_index = a.leaf_index";
+
+        let map_row = |row: &rusqlite::Row| -> rusqlite::Result<LeafRow> {
+            let commitment_blob: Vec<u8> = row.get(1)?;
+            let ann_type: Option<i64> = row.get(5)?;
+            let encrypted_amount: Option<Vec<u8>> = row.get(6)?;
+            let ephemeral_pub: Option<Vec<u8>> = row.get(7)?;
+
+            // For deposits (type=0), encrypted_amount is plaintext LE u64
+            let amount_sats = if ann_type == Some(0) {
+                encrypted_amount.as_ref().and_then(|b| {
+                    if b.len() >= 8 {
+                        Some(i64::from_le_bytes(b[..8].try_into().ok()?))
+                    } else {
+                        None
+                    }
                 })
-                .map_err(|e| format!("query error: {}", e))?;
-            return rows.collect::<Result<Vec<_>, _>>().map_err(|e| format!("row error: {}", e));
-        } else {
-            conn.prepare("SELECT leaf_index, commitment, created_at, tx_signature, slot FROM leaf_events ORDER BY leaf_index")
-                .map_err(|e| format!("query error: {}", e))?
+            } else {
+                None
+            };
+
+            Ok(LeafRow {
+                leaf_index: row.get(0)?,
+                commitment: hex::encode(&commitment_blob),
+                created_at: row.get(2)?,
+                tx_signature: row.get(3)?,
+                slot: row.get(4)?,
+                announcement_type: ann_type,
+                amount_sats,
+                ephemeral_pub: ephemeral_pub.map(|b| hex::encode(&b)),
+            })
         };
 
-        let rows = stmt
-            .query_map([], |row| {
-                let commitment_blob: Vec<u8> = row.get(1)?;
-                Ok(LeafRow {
-                    leaf_index: row.get(0)?,
-                    commitment: hex::encode(&commitment_blob),
-                    created_at: row.get(2)?,
-                    tx_signature: row.get(3)?,
-                    slot: row.get(4)?,
-                })
-            })
-            .map_err(|e| format!("query error: {}", e))?;
-
-        rows.collect::<Result<Vec<_>, _>>().map_err(|e| format!("row error: {}", e))
+        if let Some(since_idx) = since {
+            let query = format!("{} WHERE l.leaf_index > ?1 ORDER BY l.leaf_index", base_query);
+            let mut stmt = conn.prepare(&query).map_err(|e| format!("query error: {}", e))?;
+            let rows = stmt.query_map(params![since_idx], map_row)
+                .map_err(|e| format!("query error: {}", e))?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| format!("row error: {}", e))
+        } else {
+            let query = format!("{} ORDER BY l.leaf_index", base_query);
+            let mut stmt = conn.prepare(&query).map_err(|e| format!("query error: {}", e))?;
+            let rows = stmt.query_map([], map_row)
+                .map_err(|e| format!("query error: {}", e))?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|e| format!("row error: {}", e))
+        }
     }
 
     /// Get the next expected leaf index (max + 1, or 0 if empty)
@@ -345,6 +368,49 @@ impl EventStore {
         let conn = self.conn()?;
         conn.query_row("SELECT MAX(leaf_index) FROM stealth_announcements", [], |row| row.get(0))
             .map_err(|e| format!("query error: {}", e))
+    }
+
+    /// Get nullifier hashes with incremental sync support.
+    /// Returns (hashes since slot, total count, latest slot in result).
+    pub fn get_nullifier_hashes_since(&self, since_slot: Option<i64>) -> Result<(Vec<String>, usize, i64), String> {
+        let conn = self.conn()?;
+
+        // Total count (always full)
+        let total: usize = conn
+            .query_row("SELECT COUNT(*) FROM nullifier_events", [], |row| row.get::<_, i64>(0))
+            .map_err(|e| format!("count error: {}", e))? as usize;
+
+        // Fetch hashes (optionally filtered by slot)
+        let (query, use_param) = if since_slot.is_some() {
+            ("SELECT nullifier_hash, slot FROM nullifier_events WHERE slot > ?1 ORDER BY slot", true)
+        } else {
+            ("SELECT nullifier_hash, slot FROM nullifier_events ORDER BY slot", false)
+        };
+
+        let mut stmt = conn.prepare(query).map_err(|e| format!("query error: {}", e))?;
+
+        let mut hashes = Vec::new();
+        let mut latest_slot: i64 = 0;
+
+        let map_row = |row: &rusqlite::Row| -> rusqlite::Result<(String, i64)> {
+            let blob: Vec<u8> = row.get(0)?;
+            let slot: i64 = row.get(1)?;
+            Ok((hex::encode(&blob), slot))
+        };
+
+        let rows = if use_param {
+            stmt.query_map(params![since_slot.unwrap()], map_row)
+        } else {
+            stmt.query_map([], map_row)
+        }.map_err(|e| format!("query error: {}", e))?;
+
+        for row in rows {
+            let (hash, slot) = row.map_err(|e| format!("row error: {}", e))?;
+            if slot > latest_slot { latest_slot = slot; }
+            hashes.push(hash);
+        }
+
+        Ok((hashes, total, latest_slot))
     }
 
     fn map_announcement_row(row: &rusqlite::Row) -> rusqlite::Result<AnnouncementRow> {

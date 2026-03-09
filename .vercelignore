@@ -1,0 +1,16 @@
+test-ledger/
+backend/
+frost_server/
+contracts/
+circuits/
+devnet-test/
+docs/
+scripts/
+aegis-app/public/circuits/
+aegis-app/build-tools/
+aegis-app/platforms/
+aegis-app/platform-tools/
+aegis-app/licenses/
+**/target/
+**/node_modules/
+**/.next/

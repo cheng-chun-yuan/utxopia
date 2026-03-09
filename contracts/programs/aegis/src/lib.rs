@@ -92,10 +92,15 @@ pub mod instruction {
     #[cfg(feature = "devnet")]
     pub const ADMIN_CLOSE_PDA: u8 = 20;
 
+
     // Timelocked pool parameter updates (enabled in all builds)
     pub const PROPOSE_POOL_UPDATE: u8 = 21;
     pub const EXECUTE_POOL_UPDATE: u8 = 22;
     pub const CANCEL_POOL_UPDATE: u8 = 23;
+
+    // OP_RETURN-free deposit flow
+    pub const REGISTER_DEPOSIT_INTENT: u8 = 24;
+    pub const VERIFY_DEPOSIT_V2: u8 = 25;
 }
 
 entrypoint!(process_instruction);
@@ -175,6 +180,13 @@ pub fn process_instruction(
         instruction::CANCEL_POOL_UPDATE => {
             instructions::process_cancel_pool_update(program_id, accounts, data)
         }
+        // OP_RETURN-free deposit flow
+        instruction::REGISTER_DEPOSIT_INTENT => {
+            instructions::process_register_deposit_intent(program_id, accounts, data)
+        }
+        instruction::VERIFY_DEPOSIT_V2 => {
+            instructions::process_verify_deposit_v2(program_id, accounts, data)
+        }
         _ => Err(ProgramError::InvalidInstructionData),
     }
 }
@@ -250,6 +262,8 @@ mod tests {
             instruction::PROPOSE_POOL_UPDATE,
             instruction::EXECUTE_POOL_UPDATE,
             instruction::CANCEL_POOL_UPDATE,
+            instruction::REGISTER_DEPOSIT_INTENT,
+            instruction::VERIFY_DEPOSIT_V2,
         ];
 
         for (i, &d1) in discriminators.iter().enumerate() {

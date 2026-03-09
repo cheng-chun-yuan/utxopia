@@ -72,6 +72,8 @@ pub struct DepositTrackerService {
     publisher: Option<DepositUpdatePublisher>,
     /// Last block height scanned for deposits (atomic for interior mutability)
     last_scanned_height: AtomicU64,
+    /// Header relayer (shared with WS listener for on-demand sync)
+    header_relayer: Option<Arc<HeaderRelayer>>,
 }
 
 impl DepositTrackerService {
@@ -89,6 +91,7 @@ impl DepositTrackerService {
             verifier: None,
             publisher: None,
             last_scanned_height: AtomicU64::new(0),
+            header_relayer: None,
         }
     }
 
@@ -106,6 +109,7 @@ impl DepositTrackerService {
             verifier: None,
             publisher: None,
             last_scanned_height: AtomicU64::new(0),
+            header_relayer: None,
         }
     }
 
@@ -143,7 +147,7 @@ impl DepositTrackerService {
     /// Set up verifier with Solana keypair
     pub fn with_verifier(mut self, keypair: Keypair) -> Self {
         let program_id = std::env::var("AEGIS_PROGRAM_ID")
-            .unwrap_or_else(|_| "8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim".to_string());
+            .unwrap_or_else(|_| "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1".to_string());
         let mut verifier = if self.config.esplora_url.contains("localhost") || self.config.esplora_url.contains("127.0.0.1") {
             // Custom esplora URL (e.g., regtest) — use it for the verifier too
             match SpvVerifier::new(&self.config.solana_rpc, &self.config.esplora_url, &program_id) {
@@ -668,7 +672,7 @@ impl DepositTrackerService {
     }
 
     /// Run the tracker service (blocking)
-    pub async fn run(&self) -> Result<(), TrackerError> {
+    pub async fn run(&mut self) -> Result<(), TrackerError> {
         println!("=== Deposit Tracker Service ===");
         println!("Poll interval: {} seconds", self.config.poll_interval_secs);
         println!("Required confirmations: {}", self.config.required_confirmations);
@@ -688,6 +692,9 @@ impl DepositTrackerService {
 
         // Backfill sweep fees for older deposits missing fee data
         self.backfill_sweep_fees().await;
+
+        // Initialize header relayer (shared between WS listener and verify path)
+        self.init_header_relayer();
 
         // Optionally start the mempool.space WebSocket listener
         let mut ws_event_rx = self.maybe_start_ws_listener();
@@ -719,6 +726,24 @@ impl DepositTrackerService {
         }
     }
 
+    /// Initialize the header relayer (shared between WS listener and verify path)
+    fn init_header_relayer(&mut self) {
+        if self.header_relayer.is_some() {
+            return;
+        }
+        if self.config.header_relay_enabled && !self.config.relayer_keypair.is_empty() {
+            match self.create_header_relayer() {
+                Ok(r) => {
+                    println!("[ws] Header relayer configured");
+                    self.header_relayer = Some(Arc::new(r));
+                }
+                Err(e) => {
+                    eprintln!("[ws] Header relayer failed: {}, continuing without", e);
+                }
+            }
+        }
+    }
+
     /// Start WebSocket listener if enabled, returns event receiver
     fn maybe_start_ws_listener(&self) -> Option<mpsc::UnboundedReceiver<WsEvent>> {
         if !self.config.ws_enabled {
@@ -727,22 +752,7 @@ impl DepositTrackerService {
 
         let (event_tx, event_rx) = mpsc::unbounded_channel::<WsEvent>();
 
-        let header_relayer = if self.config.header_relay_enabled && !self.config.relayer_keypair.is_empty() {
-            match self.create_header_relayer() {
-                Ok(r) => {
-                    println!("[ws] Header relayer configured");
-                    Some(Arc::new(r))
-                }
-                Err(e) => {
-                    eprintln!("[ws] Header relayer failed: {}, continuing without", e);
-                    None
-                }
-            }
-        } else {
-            None
-        };
-
-        let listener = MempoolWsListener::new(&self.config, event_tx, header_relayer);
+        let listener = MempoolWsListener::new(&self.config, event_tx, self.header_relayer.clone());
         tokio::spawn(async move { listener.run().await });
 
         Some(event_rx)
@@ -916,6 +926,26 @@ impl DepositTrackerService {
         self.db.update(&record)?;
         println!("[{}] Sweeping UTXO to pool wallet...", record.id);
 
+        // For npk-based deposits, register DepositIntent PDA before sweep
+        if let (Some(ref ephemeral_pub), Some(ref npk)) = (&record.ephemeral_pub, &record.npk) {
+            if let Some(verifier) = &self.verifier {
+                println!("[{}] Registering DepositIntent PDA (npk-based deposit)...", record.id);
+                match verifier.register_deposit_intent(ephemeral_pub, npk).await {
+                    Ok(sig) => {
+                        if sig.is_empty() {
+                            println!("[{}] DepositIntent PDA already exists (idempotent)", record.id);
+                        } else {
+                            println!("[{}] DepositIntent PDA registered: {}", record.id, sig);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[{}] Failed to register DepositIntent PDA: {}", record.id, e);
+                        // Continue with sweep anyway — v2 verify will fail if PDA missing
+                    }
+                }
+            }
+        }
+
         let result = sweeper
             .sweep_utxo(address, commitment, self.config.required_confirmations)
             .await?;
@@ -984,19 +1014,44 @@ impl DepositTrackerService {
 
         let record_id = record.id.clone();
 
-        // Check if block header is available
+        // Check if block header is available — trigger on-demand relay if missing
         if let Some(block_height) = record.sweep_block_height {
             if !verifier.block_header_available(block_height).await? {
-                println!(
-                    "[{}] Waiting for header-relayer to sync block {}",
-                    record_id, block_height
-                );
-                return Ok(());
+                // Try to sync headers on-demand (covers WS disconnect gaps)
+                if let Some(relayer) = &self.header_relayer {
+                    println!(
+                        "[{}] Block {} header missing, triggering on-demand header sync...",
+                        record_id, block_height
+                    );
+                    match relayer.sync_headers().await {
+                        Ok(n) if n > 0 => {
+                            println!("[{}] On-demand relay: synced {} headers", record_id, n);
+                        }
+                        Ok(_) => {}
+                        Err(e) => {
+                            eprintln!("[{}] On-demand header relay failed: {}", record_id, e);
+                        }
+                    }
+                    // Re-check after sync attempt
+                    if !verifier.block_header_available(block_height).await? {
+                        println!(
+                            "[{}] Still waiting for block {} after sync attempt",
+                            record_id, block_height
+                        );
+                        return Ok(());
+                    }
+                } else {
+                    println!(
+                        "[{}] Waiting for header-relayer to sync block {}",
+                        record_id, block_height
+                    );
+                    return Ok(());
+                }
             }
         }
 
-        if verifier.is_already_verified(sweep_txid).await? {
-            println!("[{}] Already verified on Solana", record_id);
+        if verifier.is_already_verified(deposit_txid).await? {
+            println!("[{}] Already verified on Solana (deposit receipt exists)", record_id);
             record.mark_ready("already_verified".to_string(), 0);
             self.db.update(&record)?;
             return Ok(());
@@ -1004,11 +1059,19 @@ impl DepositTrackerService {
 
         record.mark_verifying();
         self.db.update(&record)?;
-        println!("[{}] Submitting SPV verification...", record_id);
 
-        let result = verifier
-            .verify_deposit(sweep_txid, deposit_txid)
-            .await?;
+        // Route to v2 verification if deposit has npk (npk-based, no deposit ChadBuffer needed)
+        let result = if let Some(ref npk) = record.npk {
+            println!("[{}] Submitting SPV verification (v2, npk-based)...", record_id);
+            verifier
+                .verify_deposit_v2(sweep_txid, deposit_txid, npk)
+                .await?
+        } else {
+            println!("[{}] Submitting SPV verification...", record_id);
+            verifier
+                .verify_deposit(sweep_txid, deposit_txid)
+                .await?
+        };
 
         let mut record = self.db.get_by_address(address)?
             .ok_or_else(|| TrackerError::NotFound(address.to_string()))?;

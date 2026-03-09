@@ -10,6 +10,7 @@ use argon2::Argon2;
 use frost_secp256k1_tr as frost;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::path::Path;
 use thiserror::Error;
 
@@ -35,6 +36,9 @@ pub enum KeystoreError {
 /// Encrypted key file format
 #[derive(Debug, Serialize, Deserialize)]
 struct EncryptedKeyFile {
+    /// Version: 1 = SHA-256 KDF, 2 = Argon2id KDF (absent treated as 2)
+    #[serde(default = "default_version")]
+    version: u8,
     /// Signer identifier
     signer_id: u16,
     /// Salt for key derivation (hex-encoded)
@@ -55,6 +59,8 @@ pub struct KeyShareData {
     /// Serialized FROST public key package
     pub public_key_package: Vec<u8>,
 }
+
+fn default_version() -> u8 { 2 }
 
 /// Encrypted keystore manager
 pub struct Keystore {
@@ -78,7 +84,16 @@ impl Keystore {
         self.key_path.exists()
     }
 
-    /// Derive encryption key using Argon2id
+    /// Derive encryption key using SHA-256 (v1 format)
+    fn derive_key_v1(password: &str, salt: &[u8]) -> [u8; 32] {
+        let mut hasher = Sha256::new();
+        hasher.update(password.as_bytes());
+        hasher.update(salt);
+        hasher.update(b"frost-keystore-v1");
+        hasher.finalize().into()
+    }
+
+    /// Derive encryption key using Argon2id (v2 format)
     fn derive_key(password: &str, salt: &[u8]) -> [u8; 32] {
         use argon2::Params;
         let mut key = [0u8; 32];
@@ -136,6 +151,7 @@ impl Keystore {
 
         // Create encrypted file
         let encrypted = EncryptedKeyFile {
+            version: 2,
             signer_id: self.signer_id,
             salt: hex::encode(salt),
             nonce: hex::encode(nonce_bytes),
@@ -191,16 +207,40 @@ impl Keystore {
         let ciphertext = hex::decode(&encrypted.ciphertext)
             .map_err(|e| KeystoreError::Decryption(e.to_string()))?;
 
-        // Derive key
-        let key = Self::derive_key(password, &salt);
-
-        let cipher = Aes256Gcm::new_from_slice(&key)
-            .map_err(|e| KeystoreError::Decryption(e.to_string()))?;
+        // Try both KDFs: prefer version-based selection, fallback to the other
         let nonce = Nonce::from_slice(&nonce_bytes);
+        let (primary_key, fallback_key) = if encrypted.version <= 1 {
+            (Self::derive_key_v1(password, &salt), Some(Self::derive_key(password, &salt)))
+        } else {
+            (Self::derive_key(password, &salt), Some(Self::derive_key_v1(password, &salt)))
+        };
 
-        let plaintext = cipher
-            .decrypt(nonce, ciphertext.as_ref())
-            .map_err(|_| KeystoreError::InvalidPassword)?;
+        let plaintext = {
+            let cipher = Aes256Gcm::new_from_slice(&primary_key)
+                .map_err(|e| KeystoreError::Decryption(e.to_string()))?;
+            match cipher.decrypt(nonce, ciphertext.as_ref()) {
+                Ok(pt) => {
+                    tracing::info!("Decrypted with {} KDF", if encrypted.version <= 1 { "v1 SHA-256" } else { "v2 Argon2id" });
+                    pt
+                }
+                Err(_) => {
+                    // Try fallback KDF
+                    if let Some(fb_key) = fallback_key {
+                        let fb_cipher = Aes256Gcm::new_from_slice(&fb_key)
+                            .map_err(|e| KeystoreError::Decryption(e.to_string()))?;
+                        match fb_cipher.decrypt(nonce, ciphertext.as_ref()) {
+                            Ok(pt) => {
+                                tracing::info!("Decrypted with fallback {} KDF", if encrypted.version <= 1 { "v2 Argon2id" } else { "v1 SHA-256" });
+                                pt
+                            }
+                            Err(_) => return Err(KeystoreError::InvalidPassword),
+                        }
+                    } else {
+                        return Err(KeystoreError::InvalidPassword);
+                    }
+                }
+            }
+        };
 
         // Deserialize key share data
         let data: KeyShareData = serde_json::from_slice(&plaintext)?;

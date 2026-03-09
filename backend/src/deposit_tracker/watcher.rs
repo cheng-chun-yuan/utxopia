@@ -78,7 +78,7 @@ impl AddressWatcher {
 
     /// Create watcher from Network enum (uses default API URL for that network)
     pub fn from_network(network: Network) -> Self {
-        Self::new(network.default_bitcoin_api())
+        Self::new(&network.default_bitcoin_api())
     }
 
     /// Create with custom URL

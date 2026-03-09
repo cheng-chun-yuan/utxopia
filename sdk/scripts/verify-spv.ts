@@ -38,7 +38,7 @@ const NPK = "1a721b70e048c86e94e573785a5ffc26e30cb409d56b814b494878cf81b27227";
 const AMOUNT_SATS = 9778; // Actual sweep output amount (not the old 10000)
 
 // Program IDs
-const AEGIS_PROGRAM_ID = new PublicKey("8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim");
+const AEGIS_PROGRAM_ID = new PublicKey("4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1");
 const BTC_LIGHT_CLIENT_PROGRAM_ID = new PublicKey("Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq");
 const CHADBUFFER_PROGRAM_ID = new PublicKey("C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF");
 const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");

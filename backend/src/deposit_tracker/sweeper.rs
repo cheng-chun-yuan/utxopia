@@ -558,7 +558,7 @@ pub fn extract_deposit_op_return_from_transaction(tx: &Transaction) -> Option<su
 
 /// Compute the taproot tweak hash: H_taptweak(P || commitment)
 /// Uses BIP-340 tagged hash
-fn compute_tweak(internal_key: &XOnlyPublicKey, commitment: &[u8; 32]) -> [u8; 32] {
+pub(crate) fn compute_tweak(internal_key: &XOnlyPublicKey, commitment: &[u8; 32]) -> [u8; 32] {
     let tag_hash = sha256(b"TapTweak");
 
     let mut hasher = Sha256::new();
@@ -567,6 +567,65 @@ fn compute_tweak(internal_key: &XOnlyPublicKey, commitment: &[u8; 32]) -> [u8; 3
     hasher.update(&internal_key.serialize());
     hasher.update(commitment);
     hasher.finalize().into()
+}
+
+/// Compute a Taproot tweak using a TapLeaf script tree merkle root (BIP-341).
+///
+/// For deposits with a refund script, the merkle_root is the TapLeaf hash of the refund script.
+/// tweak = H_TapTweak(internal_key || merkle_root)
+pub fn compute_tweak_with_merkle_root(internal_key: &XOnlyPublicKey, merkle_root: &[u8; 32]) -> [u8; 32] {
+    compute_tweak(internal_key, merkle_root)
+}
+
+/// Build the refund script for a deposit: <npk> OP_DROP <144> OP_CSV OP_DROP <user_pubkey> OP_CHECKSIG
+pub fn build_refund_script(npk: &[u8; 32], user_pubkey: &[u8; 32]) -> Vec<u8> {
+    let mut script = Vec::with_capacity(73);
+    script.push(0x20); // OP_PUSHBYTES_32
+    script.extend_from_slice(npk);
+    script.push(0x75); // OP_DROP
+    script.push(0x02); // OP_PUSHBYTES_2
+    script.push(0x90); // 144 LE byte 0
+    script.push(0x00); // 144 LE byte 1 (sign extension)
+    script.push(0xb2); // OP_CHECKSEQUENCEVERIFY
+    script.push(0x75); // OP_DROP
+    script.push(0x20); // OP_PUSHBYTES_32
+    script.extend_from_slice(user_pubkey);
+    script.push(0xac); // OP_CHECKSIG
+    script
+}
+
+/// Compute the BIP-341 TapLeaf hash: H_TapLeaf(leafVersion || compactSize(script.length) || script)
+pub fn compute_tapleaf_hash(script: &[u8]) -> [u8; 32] {
+    let tag_hash = sha256(b"TapLeaf");
+    let mut hasher = Sha256::new();
+    hasher.update(&tag_hash);
+    hasher.update(&tag_hash);
+    // leafVersion = 0xc0
+    hasher.update(&[0xc0u8]);
+    // compactSize encoding of script length
+    if script.len() < 253 {
+        hasher.update(&[script.len() as u8]);
+    } else {
+        hasher.update(&[0xfdu8]);
+        hasher.update(&(script.len() as u16).to_le_bytes());
+    }
+    hasher.update(script);
+    hasher.finalize().into()
+}
+
+/// Compute the Taproot tweak for a deposit with a refund script path.
+///
+/// 1. Builds refund script from npk + user_refund_pubkey
+/// 2. Computes TapLeaf hash -> merkle root (single leaf)
+/// 3. Returns H_TapTweak(internal_key || merkle_root)
+pub fn compute_refund_tweak(
+    internal_key: &XOnlyPublicKey,
+    npk: &[u8; 32],
+    user_refund_pubkey: &[u8; 32],
+) -> [u8; 32] {
+    let script = build_refund_script(npk, user_refund_pubkey);
+    let merkle_root = compute_tapleaf_hash(&script);
+    compute_tweak(internal_key, &merkle_root)
 }
 
 #[cfg(test)]

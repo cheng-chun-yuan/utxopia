@@ -556,6 +556,7 @@ fn policy_error(err: crate::policy::PolicyError) -> (StatusCode, Json<ErrorRespo
         PolicyError::SolanaRedemptionMismatch(_) => ("POLICY_SOLANA_REDEMPTION_MISMATCH", StatusCode::FORBIDDEN),
         PolicyError::SolanaRedemptionWrongStatus(_) => ("POLICY_SOLANA_REDEMPTION_WRONG_STATUS", StatusCode::FORBIDDEN),
         PolicyError::SolanaRpcError(_) => ("POLICY_SOLANA_RPC_ERROR", StatusCode::BAD_GATEWAY),
+        PolicyError::SolanaVerificationFailed(_) => ("POLICY_SOLANA_VERIFICATION_FAILED", StatusCode::FORBIDDEN),
     };
     (status, Json(ErrorResponse::new(code, err.to_string())))
 }

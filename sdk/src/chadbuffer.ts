@@ -4,7 +4,7 @@
  * Helper functions to upload Bitcoin transaction data to ChadBuffer
  * for SPV verification on Solana.
  *
- * Networks: Bitcoin Testnet3, Solana Devnet
+ * Networks: Bitcoin Testnet4, Solana Devnet
  *
  * Reference: https://github.com/deanmlittle/chadbuffer
  */
@@ -336,12 +336,12 @@ function splitIntoChunks(data: Uint8Array, chunkSize: number): Uint8Array[] {
  */
 export async function fetchRawTransaction(
   txid: string,
-  network: "mainnet" | "testnet" = "testnet"
+  network: "mainnet" | "testnet" | "testnet4" = "testnet4"
 ): Promise<Uint8Array> {
   const baseUrl =
-    network === "testnet"
-      ? "https://mempool.space/testnet4/api"
-      : "https://mempool.space/api";
+    network === "mainnet"
+      ? "https://mempool.space/api"
+      : `https://mempool.space/${network}/api`;
 
   const response = await fetch(`${baseUrl}/tx/${txid}/raw`);
   if (!response.ok) {
@@ -357,16 +357,16 @@ export async function fetchRawTransaction(
  */
 export async function fetchMerkleProof(
   txid: string,
-  network: "mainnet" | "testnet" = "testnet"
+  network: "mainnet" | "testnet" | "testnet4" = "testnet4"
 ): Promise<{
   blockHeight: number;
   merkleProof: Uint8Array[];
   txIndex: number;
 }> {
   const baseUrl =
-    network === "testnet"
-      ? "https://mempool.space/testnet4/api"
-      : "https://mempool.space/api";
+    network === "mainnet"
+      ? "https://mempool.space/api"
+      : `https://mempool.space/${network}/api`;
 
   const response = await fetch(`${baseUrl}/tx/${txid}/merkle-proof`);
   if (!response.ok) {
@@ -475,7 +475,7 @@ export async function prepareVerifyDeposit(
   rpcSubscriptions: RpcSubscriptions<SolanaRpcSubscriptionsApi>,
   payer: KeyPairSigner,
   txid: string,
-  network: "mainnet" | "testnet" = "testnet"
+  network: "mainnet" | "testnet" | "testnet4" = "testnet4"
 ): Promise<{
   bufferAddress: Address;
   transactionSize: number;

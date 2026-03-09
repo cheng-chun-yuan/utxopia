@@ -24,7 +24,7 @@ import path from "path";
 // Config
 // =============================================================================
 
-const AEGIS_PROGRAM_ID = new PublicKey("8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim");
+const AEGIS_PROGRAM_ID = new PublicKey("4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1");
 const TOKEN_2022 = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
 const RPC_URL = "https://api.devnet.solana.com";

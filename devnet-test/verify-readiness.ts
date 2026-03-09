@@ -32,7 +32,7 @@ const FROST_SIGNER_URLS = [
   process.env.FROST_SIGNER_2_URL || "http://localhost:8082",
   process.env.FROST_SIGNER_3_URL || "http://localhost:8083",
 ];
-const AEGIS_PROGRAM_ID = process.env.AEGIS_PROGRAM_ID || "8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim";
+const AEGIS_PROGRAM_ID = process.env.AEGIS_PROGRAM_ID || "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1";
 const BTC_LIGHT_CLIENT_PROGRAM_ID = process.env.BTC_LIGHT_CLIENT_PROGRAM_ID || "Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq";
 const SIGNING_MODE = process.env.AEGIS_SIGNING_MODE || "frost";
 const CIRCUITS_DIR = path.resolve(__dirname, "../circuits/build");

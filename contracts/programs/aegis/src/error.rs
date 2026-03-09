@@ -151,6 +151,9 @@ pub enum AegisError {
 
     #[error("No pending pool update proposal")]
     NoPendingProposal = 6073,
+
+    #[error("Deposit already verified (duplicate)")]
+    DuplicateDeposit = 6074,
 }
 
 impl From<AegisError> for ProgramError {

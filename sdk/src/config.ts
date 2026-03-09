@@ -173,26 +173,25 @@ export const LOCALNET_CHADBUFFER_PROGRAM_ID: Address = address(
 /**
  * Devnet Configuration (v3.3.0)
  *
- * Fresh deployment 2026-03-03:
- * - Slim accounts: NullifierRecord 1B; stealth announcements emitted as events
- * - Event emission via sol_log_data
- * - Program ID: 8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim
+ * Fresh deployment 2026-03-09:
+ * - Deposit receipt PDA prevents duplicate verification
+ * - Program ID: 4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1
  */
 export const DEVNET_CONFIG: NetworkConfig = {
   network: "devnet",
 
-  // Program IDs (fresh deployment 2026-03-03)
-  aegisProgramId: address("8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim"),
+  // Program IDs (fresh deployment 2026-03-09)
+  aegisProgramId: address("4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1"),
   btcLightClientProgramId: address("Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"),
   chadbufferProgramId: CHADBUFFER_PROGRAM_ID,
   token2022ProgramId: TOKEN_2022_PROGRAM_ID,
   ataProgramId: ATA_PROGRAM_ID,
 
-  // Deployed Accounts (fresh deployment 2026-03-08)
-  poolStatePda: address("9XASi9bFNFLgDgdVG13UNg4Q9vzWC8XydnEBbdsd4dVt"),
-  commitmentTreePda: address("CbaDvGVVQqskcu4cz6Fsu3i2q8eWG8GjeqpZiKgPiCaW"),
-  zkbtcMint: address("Ga8NYnpoZyNHJG85H8jiRxtcNYE337A25LWtzZ1FFFR1"),
-  poolVault: address("4ywyvYDUL1CEyaN3GxsnN4jwxk6BWvt9qvsU34TMcawe"),
+  // Deployed Accounts (fresh deployment 2026-03-09)
+  poolStatePda: address("4654vJpq3E3A6nwtUwNWeJuTkHDcqT761uoBX7AHjm5x"),
+  commitmentTreePda: address("2bjcEufNf6Xa7YwH1ci99k1NjRg6jjirCQXsPjC5Qgk6"),
+  zkbtcMint: address("GvFAyHsbWDbwvHxecaFnnGrhM1MR72E3cSX78qQbAyC7"),
+  poolVault: address("DHM2r1jXqvv9CqTYqy97x4ppAEFyWaKdRMby18gkLwhm"),
 
   // RPC Endpoints
   solanaRpcUrl: "https://api.devnet.solana.com",
@@ -206,7 +205,7 @@ export const DEVNET_CONFIG: NetworkConfig = {
   circuitCdnUrl: "https://circuits.amidoggy.xyz",
 
   // Groth16 Verifier: verification is inline in the Aegis program (no separate verifier program)
-  groth16VerifierProgramId: address("8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim"),
+  groth16VerifierProgramId: address("4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1"),
 
   // VK Hashes (SHA256 of serialized VK bytes, generated from circom trusted setup)
   vkHashes: {
@@ -230,7 +229,7 @@ export const DEVNET_CONFIG: NetworkConfig = {
   },
 
   // Pool group key (FROST 2-of-3 DKG output, x-only secp256k1)
-  groupPubKey: "d857a067bec0ae2027a6026ef73d2905f108b1a66de6d12d23a3feb42013b1dd",
+  groupPubKey: "b425ad56ed0584c7297f4b010bcf2c32d406f176af825117556db103745b4bd9",
 
   // SNS Subdomain Resolution (devnet)
   snsNameServiceProgramId: "namesLPneVptA9Z5rqUDD9tMTWEJwofgaYwp8cawRkX",  // SPL Name Service (devnet)
@@ -365,10 +364,32 @@ export const LOCALNET_CONFIG: NetworkConfig = {
 /** Current active configuration (defaults to devnet) */
 let currentConfig: NetworkConfig = DEVNET_CONFIG;
 
+/** Esplora URL for a given Bitcoin network */
+function esploraUrlForNetwork(net: string): string {
+  switch (net) {
+    case "mainnet": return "https://mempool.space/api";
+    case "testnet": return "https://mempool.space/testnet/api";
+    case "testnet4": return "https://mempool.space/testnet4/api";
+    case "signet": return "https://mempool.space/signet/api";
+    default: return `https://mempool.space/${net}/api`;
+  }
+}
+
 /**
- * Get the current network configuration
+ * Get the current network configuration.
+ * Respects NEXT_PUBLIC_BTC_NETWORK env var to override Bitcoin network
+ * (e.g., "testnet" for testnet3, "testnet4" for testnet4).
  */
 export function getConfig(): NetworkConfig {
+  const btcNetOverride =
+    typeof process !== "undefined" && process.env?.NEXT_PUBLIC_BTC_NETWORK;
+  if (btcNetOverride && btcNetOverride !== currentConfig.bitcoinNetwork) {
+    return {
+      ...currentConfig,
+      bitcoinNetwork: btcNetOverride as NetworkConfig["bitcoinNetwork"],
+      esploraUrl: esploraUrlForNetwork(btcNetOverride),
+    };
+  }
   return currentConfig;
 }
 

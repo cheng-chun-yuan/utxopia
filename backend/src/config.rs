@@ -97,13 +97,24 @@ impl Network {
         }
     }
 
-    /// Get default Bitcoin/Esplora API for this network (mempool.space)
-    pub fn default_bitcoin_api(&self) -> &'static str {
+    /// Get default Bitcoin/Esplora API for this network (mempool.space).
+    /// Respects AEGIS_BITCOIN_NETWORK env var to override (e.g., "testnet" or "testnet4").
+    pub fn default_bitcoin_api(&self) -> String {
+        // Allow explicit override via AEGIS_BITCOIN_NETWORK
+        if let Ok(btc_net) = env::var("AEGIS_BITCOIN_NETWORK") {
+            return match btc_net.as_str() {
+                "mainnet" => "https://mempool.space/api".to_string(),
+                "testnet" | "testnet3" => "https://mempool.space/testnet/api".to_string(),
+                "testnet4" => "https://mempool.space/testnet4/api".to_string(),
+                "signet" => "https://mempool.space/signet/api".to_string(),
+                _ => format!("https://mempool.space/{}/api", btc_net),
+            };
+        }
         match self {
-            Network::Mainnet => "https://mempool.space/api",
-            Network::Testnet => "https://mempool.space/testnet/api",
-            Network::Devnet => "https://mempool.space/testnet4/api",
-            Network::Regtest => "http://localhost:3002/regtest/api",
+            Network::Mainnet => "https://mempool.space/api".to_string(),
+            Network::Testnet => "https://mempool.space/testnet/api".to_string(),
+            Network::Devnet => "https://mempool.space/testnet/api".to_string(),
+            Network::Regtest => "http://localhost:3002/regtest/api".to_string(),
         }
     }
 
@@ -221,25 +232,25 @@ impl AEGISConfig {
         // Program IDs (required for non-devnet)
         let program_id = get_required_or_devnet_default(
             "AEGIS_PROGRAM_ID",
-            "8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim",
+            "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1",
             network,
         )?;
 
         let pool_state = get_required_or_devnet_default(
             "AEGIS_POOL_STATE",
-            "9XASi9bFNFLgDgdVG13UNg4Q9vzWC8XydnEBbdsd4dVt",
+            "4654vJpq3E3A6nwtUwNWeJuTkHDcqT761uoBX7AHjm5x",
             network,
         )?;
 
         let commitment_tree = get_required_or_devnet_default(
             "AEGIS_COMMITMENT_TREE",
-            "CbaDvGVVQqskcu4cz6Fsu3i2q8eWG8GjeqpZiKgPiCaW",
+            "2bjcEufNf6Xa7YwH1ci99k1NjRg6jjirCQXsPjC5Qgk6",
             network,
         )?;
 
         let zkbtc_mint = get_required_or_devnet_default(
             "AEGIS_ZKBTC_MINT",
-            "Ga8NYnpoZyNHJG85H8jiRxtcNYE337A25LWtzZ1FFFR1",
+            "GvFAyHsbWDbwvHxecaFnnGrhM1MR72E3cSX78qQbAyC7",
             network,
         )?;
 

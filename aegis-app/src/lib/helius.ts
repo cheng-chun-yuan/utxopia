@@ -16,9 +16,9 @@ import {
   DEFAULT_PRIORITY_FEE,
 } from "@aegis/sdk";
 
-// Use NEXT_PUBLIC_HELIUS_RPC_URL (full URL, no API key exposed to client)
-// or fall back to plain devnet. Do NOT use NEXT_PUBLIC_HELIUS_API_KEY.
-const HELIUS_RPC_URL = process.env.NEXT_PUBLIC_HELIUS_RPC_URL || "";
+// Use NEXT_PUBLIC_SOLANA_RPC_URL (Helius or other RPC provider)
+// or fall back to plain devnet.
+const HELIUS_RPC_URL = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "";
 
 /** Helius RPC endpoint for devnet */
 export const HELIUS_RPC_DEVNET = HELIUS_RPC_URL || getHeliusRpcUrl("devnet");

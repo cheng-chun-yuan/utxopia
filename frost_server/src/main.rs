@@ -453,7 +453,7 @@ async fn run_dkg_coordinator(
 
     tracing::info!("DKG ceremony completed successfully!");
     tracing::info!("Group public key (x-only): {}", group_pubkey);
-    tracing::info!("Taproot address: tb1p{}", bech32_encode(&group_pubkey)?);
+    tracing::info!("Taproot address: {}", bech32_encode(&group_pubkey)?);
 
     Ok(())
 }
@@ -498,7 +498,7 @@ fn generate_test_keys(
     let x_only = hex::encode(&vk_bytes[1..33]);
 
     tracing::info!("Group public key (x-only): {}", x_only);
-    tracing::info!("Taproot address: tb1p{}", bech32_encode(&x_only)?);
+    tracing::info!("Taproot address: {}", bech32_encode(&x_only)?);
 
     // Save group public key to file
     let pubkey_path = format!("{}/group_pubkey.txt", output_dir);

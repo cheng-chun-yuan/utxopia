@@ -7,7 +7,9 @@ import {
   RefreshCw, ExternalLink, Info,
   Zap, Loader2, CheckCircle2, ArrowRight,
   Hash, FileText, ArrowLeftRight, ChevronDown, Shield,
+  QrCode, Copy,
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { cn } from "@/lib/utils";
 import { notifySuccess, notifyError } from "@/lib/notifications";
 import {
@@ -29,6 +31,8 @@ import { useBitcoinWalletStore } from "@/stores/bitcoin-wallet-store";
 import { useNotesStore } from "@/stores/notes-store";
 import { registerDeposit } from "@/lib/api/deposits";
 import { getBtcSignerNetwork } from "@/lib/btc-network";
+import { MobileWalletGuidance } from "@/components/bitcoin-wallet-selector";
+import { useIsMobileWithoutWallet } from "@/hooks/use-mobile-wallet-detect";
 
 export function DepositFlow() {
   const isDevnet = getConfig().network === "devnet";
@@ -70,6 +74,22 @@ export function DepositFlow() {
   const [editingUtxos, setEditingUtxos] = useState(false);
   const [showOpReturn, setShowOpReturn] = useState(false);
   const btcWallet = useBitcoinWalletStore();
+  const isMobileNoWallet = useIsMobileWithoutWallet();
+
+  // QR code deposit state
+  const [qrMode, setQrMode] = useState(false);
+  const [qrRefundAddress, setQrRefundAddress] = useState("");
+  const [qrDepositInfo, setQrDepositInfo] = useState<{
+    btcAddress: string;
+    npkHex: string;
+    ephemeralPubHex: string;
+    merkleRoot: Uint8Array;
+    controlBlock: Uint8Array;
+    refundScript: Uint8Array;
+    amount: number;
+  } | null>(null);
+  const [qrGenerating, setQrGenerating] = useState(false);
+  const [qrRegistered, setQrRegistered] = useState(false);
 
   const resetFlow = () => {
     setError(null);
@@ -80,6 +100,91 @@ export function DepositFlow() {
     setWalletDepositAmount("10000");
     setWalletDepositResult(null);
     setDepositPreview(null);
+    setQrMode(false);
+    setQrDepositInfo(null);
+    setQrRefundAddress("");
+    setQrRegistered(false);
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => notifySuccess("Copied!"));
+  };
+
+  // QR code deposit: generate address for any-wallet deposit
+  const generateQrDeposit = async () => {
+    if (!resolvedMeta) return;
+
+    const amountSats = parseInt(walletDepositAmount);
+    if (!amountSats || amountSats < 546) {
+      notifyError("Amount must be at least 546 sats");
+      return;
+    }
+
+    // Parse refund address to get x-only pubkey
+    const refundPubkey = qrRefundAddress.trim();
+    if (!/^[0-9a-fA-F]{64}$/.test(refundPubkey)) {
+      notifyError("Enter your BTC x-only public key (64 hex chars)");
+      return;
+    }
+
+    setQrGenerating(true);
+    setError(null);
+
+    try {
+      const config = getConfig();
+      const groupPubKey = hexToBytes(config.groupPubKey);
+      const userRefundPubkeyBytes = hexToBytes(refundPubkey);
+
+      const deposit = await createNonInteractiveDeposit(
+        resolvedMeta,
+        groupPubKey,
+        getBtcSignerNetwork(),
+        userRefundPubkeyBytes,
+      );
+
+      // deposit has extended fields when userRefundPubkey is provided
+      const extDeposit = deposit as any;
+
+      const npkHex = bytesToHex(deposit.npk);
+      const ephemeralPubHex = bytesToHex(deposit.ephemeralPub);
+
+      setQrDepositInfo({
+        btcAddress: deposit.btcAddress,
+        npkHex,
+        ephemeralPubHex,
+        merkleRoot: extDeposit.merkleRoot,
+        controlBlock: extDeposit.controlBlock,
+        refundScript: extDeposit.refundScript,
+        amount: amountSats,
+      });
+
+      // Register with backend
+      registerDeposit(
+        deposit.btcAddress,
+        npkHex,
+        amountSats,
+        ephemeralPubHex,
+      ).then(() => {
+        setQrRegistered(true);
+      }).catch((err) => {
+        console.warn("Failed to register QR deposit:", err);
+      });
+
+      // Save refund data locally
+      useNotesStore.getState().saveNote({
+        commitment: ephemeralPubHex + npkHex,
+        noteExport: "qr_deposit_pending",
+        amountSats,
+        taprootAddress: deposit.btcAddress,
+        expiresAt: Math.floor(Date.now() / 1000) + 86400 * 30,
+      });
+
+    } catch (err) {
+      console.error("QR deposit error:", err);
+      setError(err instanceof Error ? err.message : "Failed to generate QR deposit");
+    } finally {
+      setQrGenerating(false);
+    }
   };
 
   // Demo mode: Submit mock stealth deposit via backend relayer (keeps user anonymous)
@@ -497,7 +602,169 @@ export function DepositFlow() {
           {/* ========== NORMAL MODE: Wallet Deposit ========== */}
           {!demoMode && resolvedMeta && !walletDepositResult && (
             <>
-              {btcWallet.connected ? (
+              {/* Deposit method selector */}
+              <div className="flex gap-2 mb-4">
+                <button
+                  onClick={() => setQrMode(false)}
+                  className={cn(
+                    "flex-1 py-2 rounded-[10px] text-body2 transition-colors border",
+                    !qrMode
+                      ? "bg-btc/10 border-btc/30 text-btc"
+                      : "bg-muted border-gray/15 text-gray hover:text-gray-light"
+                  )}
+                >
+                  <Wallet className="w-3.5 h-3.5 inline mr-1.5" />
+                  Wallet (PSBT)
+                </button>
+                <button
+                  onClick={() => setQrMode(true)}
+                  className={cn(
+                    "flex-1 py-2 rounded-[10px] text-body2 transition-colors border",
+                    qrMode
+                      ? "bg-btc/10 border-btc/30 text-btc"
+                      : "bg-muted border-gray/15 text-gray hover:text-gray-light"
+                  )}
+                >
+                  <QrCode className="w-3.5 h-3.5 inline mr-1.5" />
+                  QR Code
+                </button>
+              </div>
+
+              {/* ========== QR CODE MODE ========== */}
+              {qrMode && (
+                <>
+                  {!qrDepositInfo ? (
+                    <div className="mb-4">
+                      <label className="text-body2 text-gray-light pl-2 mb-2 block">Amount (satoshis)</label>
+                      <input
+                        type="number"
+                        value={walletDepositAmount}
+                        onChange={(e) => setWalletDepositAmount(e.target.value)}
+                        placeholder="10000"
+                        min="546"
+                        className={cn(
+                          "w-full p-3 bg-muted border border-gray/15 rounded-[12px] mb-1",
+                          "text-body2 font-mono text-foreground placeholder:text-gray",
+                          "outline-none focus:border-btc/40 transition-colors"
+                        )}
+                      />
+                      <p className="text-caption text-gray pl-2 mb-3">
+                        {walletDepositAmount ? `${(parseInt(walletDepositAmount) / 100_000_000).toFixed(8)} BTC` : ""}
+                      </p>
+
+                      <label className="text-body2 text-gray-light pl-2 mb-2 block">
+                        BTC Refund Public Key (x-only, 64 hex chars)
+                      </label>
+                      <input
+                        type="text"
+                        value={qrRefundAddress}
+                        onChange={(e) => setQrRefundAddress(e.target.value)}
+                        placeholder="e.g. a1b2c3d4...64 hex characters"
+                        className={cn(
+                          "w-full p-3 bg-muted border border-gray/15 rounded-[12px] mb-3",
+                          "text-body2 font-mono text-foreground placeholder:text-gray",
+                          "outline-none focus:border-btc/40 transition-colors"
+                        )}
+                      />
+
+                      <button
+                        onClick={generateQrDeposit}
+                        disabled={qrGenerating || !walletDepositAmount || parseInt(walletDepositAmount) < 546}
+                        className={cn(
+                          "w-full py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2",
+                          "bg-btc hover:bg-btc/90 text-background",
+                          "disabled:bg-gray/20 disabled:text-gray disabled:cursor-not-allowed"
+                        )}
+                      >
+                        {qrGenerating ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <QrCode className="w-4 h-4" />
+                            Generate QR Code
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mb-4 flex flex-col gap-3">
+                      {/* QR Code */}
+                      <div className="flex flex-col items-center p-4 bg-white rounded-[12px]">
+                        <QRCodeSVG
+                          value={`bitcoin:${qrDepositInfo.btcAddress}?amount=${(qrDepositInfo.amount / 1e8).toFixed(8)}`}
+                          size={200}
+                          level="M"
+                        />
+                      </div>
+
+                      {/* Instruction */}
+                      <div className="p-3 bg-btc/5 border border-btc/20 rounded-[12px] text-center">
+                        <p className="text-body2-semibold text-btc mb-1">
+                          Send exactly {(qrDepositInfo.amount / 1e8).toFixed(8)} BTC
+                        </p>
+                        <p className="text-caption text-gray">to this address</p>
+                      </div>
+
+                      {/* Address (copyable) */}
+                      <div className="p-3 bg-muted border border-gray/15 rounded-[12px]">
+                        <p className="text-caption text-gray mb-1">Deposit Address:</p>
+                        <div className="flex items-center gap-2">
+                          <code className="flex-1 text-[10px] font-mono text-btc break-all">
+                            {qrDepositInfo.btcAddress}
+                          </code>
+                          <button
+                            onClick={() => copyToClipboard(qrDepositInfo.btcAddress)}
+                            className="p-1.5 rounded-[6px] hover:bg-gray/15 transition-colors shrink-0"
+                          >
+                            <Copy className="w-3.5 h-3.5 text-gray hover:text-gray-light" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Info note */}
+                      <div className="p-3 bg-sol/10 border border-sol/20 rounded-[12px]">
+                        <div className="flex items-start gap-2">
+                          <Info className="w-4 h-4 text-sol shrink-0 mt-0.5" />
+                          <p className="text-caption text-gray">
+                            24h refund available if not swept. The backend will automatically detect
+                            and verify your deposit on Solana.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Registration status */}
+                      <div className="flex items-center gap-2 px-2">
+                        {qrRegistered ? (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-success" />
+                            <span className="text-caption text-success">Registered with backend</span>
+                          </>
+                        ) : (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 text-gray animate-spin" />
+                            <span className="text-caption text-gray">Registering with backend...</span>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Reset button */}
+                      <button
+                        onClick={() => { setQrDepositInfo(null); setQrRegistered(false); }}
+                        className="btn-secondary w-full"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        Generate New Address
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* ========== WALLET (PSBT) MODE ========== */}
+              {!qrMode && btcWallet.connected ? (
                 <div className="mb-4">
                   {/* Amount input (hidden once preview is built) */}
                   {!depositPreview && (
@@ -517,7 +784,7 @@ export function DepositFlow() {
                       />
                       <p className="text-caption text-gray pl-2 mb-3">
                         {walletDepositAmount ? `${(parseInt(walletDepositAmount) / 100_000_000).toFixed(8)} BTC` : ""}
-                        {btcWallet.balance !== null && ` · Confirmed: ${(btcWallet.balance / 100_000_000).toFixed(8)} BTC`}
+                        {btcWallet.connected && (btcWallet.balance !== null ? ` · Confirmed: ${(btcWallet.balance / 100_000_000).toFixed(8)} BTC` : " · Loading...")}
                       </p>
 
                       {btcWallet.balance !== null && walletDepositAmount && parseInt(walletDepositAmount) > btcWallet.balance && (
@@ -804,43 +1071,49 @@ export function DepositFlow() {
                     );
                   })()}
                 </div>
-              ) : (
+              ) : !qrMode ? (
                 <div className="mb-4 flex flex-col gap-2">
                   <p className="text-body2 text-gray-light pl-2 mb-1">Connect Bitcoin Wallet</p>
-                  <button
-                    onClick={() => btcWallet.connect("sats-connect")}
-                    disabled={btcWallet.connecting}
-                    className={cn(
-                      "w-full py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2",
-                      "bg-btc hover:bg-btc/90 text-background",
-                      "disabled:bg-gray/20 disabled:text-gray disabled:cursor-not-allowed"
-                    )}
-                  >
-                    {btcWallet.connecting ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Wallet className="w-4 h-4" />
-                    )}
-                    Xverse / Leather
-                  </button>
-                  <button
-                    onClick={() => btcWallet.connect("unisat")}
-                    disabled={btcWallet.connecting}
-                    className={cn(
-                      "w-full py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2",
-                      "bg-[#eb4b13] hover:bg-[#d44311] text-white",
-                      "disabled:bg-gray/20 disabled:text-gray disabled:cursor-not-allowed"
-                    )}
-                  >
-                    {btcWallet.connecting ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Wallet className="w-4 h-4" />
-                    )}
-                    UniSat
-                  </button>
+                  {isMobileNoWallet ? (
+                    <MobileWalletGuidance />
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => btcWallet.connect("sats-connect")}
+                        disabled={btcWallet.connecting}
+                        className={cn(
+                          "w-full py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2",
+                          "bg-btc hover:bg-btc/90 text-background",
+                          "disabled:bg-gray/20 disabled:text-gray disabled:cursor-not-allowed"
+                        )}
+                      >
+                        {btcWallet.connecting ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Wallet className="w-4 h-4" />
+                        )}
+                        Xverse / Leather
+                      </button>
+                      <button
+                        onClick={() => btcWallet.connect("unisat")}
+                        disabled={btcWallet.connecting}
+                        className={cn(
+                          "w-full py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2",
+                          "bg-[#eb4b13] hover:bg-[#d44311] text-white",
+                          "disabled:bg-gray/20 disabled:text-gray disabled:cursor-not-allowed"
+                        )}
+                      >
+                        {btcWallet.connecting ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Wallet className="w-4 h-4" />
+                        )}
+                        UniSat
+                      </button>
+                    </>
+                  )}
                 </div>
-              )}
+              ) : null}
             </>
           )}
 

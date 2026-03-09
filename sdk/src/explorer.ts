@@ -51,6 +51,10 @@ export interface ExplorerDeposit {
   commitment?: string;
   /** Unix timestamp (from indexer events, not on-chain) */
   createdAt?: number;
+  /** Ephemeral public key hex (from stealth announcement) */
+  ephemeralPub?: string;
+  /** Solana transaction signature */
+  txSignature?: string;
 }
 
 /** Transfer event — either a new commitment or a spent nullifier */
@@ -197,6 +201,8 @@ export interface IndexerLeaf {
   created_at: number; // unix timestamp
   announcement_type?: number; // 0=deposit, 1=transfer
   amount_sats?: number; // plaintext amount (deposits only)
+  ephemeral_pub?: string; // hex (from stealth announcement)
+  tx_signature?: string; // Solana tx signature
 }
 
 /** Fetch all deposit announcements from indexer data */
@@ -215,6 +221,8 @@ export async function fetchExplorerDeposits(
       leafIndex: BigInt(leaf.leaf_index),
       commitment: leaf.commitment,
       createdAt: leaf.created_at,
+      ephemeralPub: leaf.ephemeral_pub,
+      txSignature: leaf.tx_signature,
     }))
     .sort((a, b) => {
       const aHasTime = (a.createdAt ?? 0) > 0;

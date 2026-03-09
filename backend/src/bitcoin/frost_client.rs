@@ -87,6 +87,11 @@ pub enum SolanaVerification {
         /// Expected BTC destination address
         expected_btc_address: String,
     },
+    /// Verify a DepositIntent PDA exists for sweep signing
+    Sweep {
+        /// Note public key (hex, 32 bytes) — used to derive PDA
+        npk: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
