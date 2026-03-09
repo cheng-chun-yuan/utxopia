@@ -14,4 +14,12 @@ config.resolver.nodeModulesPaths = [
   path.resolve(monorepoRoot, "node_modules"),
 ];
 
+// Polyfill Node.js built-ins for SDK transitive deps (circomlibjs)
+config.resolver.extraNodeModules = {
+  ...config.resolver.extraNodeModules,
+  assert: require.resolve("assert"),
+  buffer: require.resolve("buffer"),
+  process: require.resolve("process/browser"),
+};
+
 module.exports = withNativeWind(config, { input: "./global.css" });
