@@ -14,22 +14,17 @@ config.resolver.nodeModulesPaths = [
   path.resolve(monorepoRoot, "node_modules"),
 ];
 
-// Polyfill Node.js built-ins for SDK transitive deps (circomlibjs/ffjavascript)
+// Polyfill Node.js built-ins that transitive deps may reference
 config.resolver.extraNodeModules = {
   ...config.resolver.extraNodeModules,
-  assert: require.resolve("assert"),
   buffer: require.resolve("buffer"),
-  crypto: require.resolve("crypto-browserify"),
-  events: require.resolve("events"),
-  os: require.resolve("os-browserify/browser"),
   process: require.resolve("process/browser"),
-  stream: require.resolve("stream-browserify"),
-  string_decoder: require.resolve("string_decoder"),
-  vm: require.resolve("vm-browserify"),
 };
 
 // Force-shim modules that exist in node_modules but break in React Native
 const shimmedModules = {
+  "circomlibjs": path.resolve(projectRoot, "shims/empty.js"),
+  "snarkjs": path.resolve(projectRoot, "shims/empty.js"),
   "web-worker": path.resolve(projectRoot, "shims/empty.js"),
 };
 
