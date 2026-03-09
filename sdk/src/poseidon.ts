@@ -10,12 +10,14 @@
  * - Nullifier Hash = Poseidon(nullifier)
  */
 
-import { poseidon1 } from "poseidon-lite/poseidon1";
-import { poseidon2 } from "poseidon-lite/poseidon2";
-import { poseidon3 } from "poseidon-lite/poseidon3";
-import { poseidon4 } from "poseidon-lite/poseidon4";
-import { poseidon5 } from "poseidon-lite/poseidon5";
-import { poseidon6 } from "poseidon-lite/poseidon6";
+import {
+  poseidon1,
+  poseidon2,
+  poseidon3,
+  poseidon4,
+  poseidon5,
+  poseidon6,
+} from "poseidon-lite";
 
 // Lookup table for poseidon hash by input count (1-6 covers all SDK usage)
 const poseidonFns = [
