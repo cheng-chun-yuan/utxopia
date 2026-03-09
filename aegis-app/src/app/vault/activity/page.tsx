@@ -261,7 +261,7 @@ function ActivityContent() {
 
 export default function ActivityPage() {
   return (
-    <main className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+    <main className="min-h-screen bg-background flex flex-col items-center py-8 px-4 sm:py-12">
       {/* Header */}
       <div className="w-full max-w-[480px] mb-4 flex items-center justify-between">
         <Link

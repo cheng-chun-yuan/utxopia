@@ -174,7 +174,7 @@ export default function VaultPage() {
       <div className="hacker-grid fixed inset-0 pointer-events-none opacity-30" />
 
       {/* Content */}
-      <div className="relative z-10 flex flex-col items-center justify-center min-h-screen p-4">
+      <div className="relative z-10 flex flex-col items-center min-h-screen py-8 px-4 sm:py-12">
         {/* Header */}
         <div className="w-full max-w-[680px] mb-6 flex items-center justify-between">
           <Link
@@ -202,12 +202,12 @@ export default function VaultPage() {
             "backdrop-blur-xl bg-card/80 border border-gray/20",
             "w-[680px] max-w-[calc(100vw-32px)] rounded-[24px]",
             "shadow-[0_0_60px_rgba(20,241,149,0.04),0_0_120px_rgba(153,69,255,0.03)]",
-            "p-8"
+            "p-4 sm:p-8"
           )}
         >
           {/* Title Section */}
-          <div className="text-center mb-8">
-            <h1 className="text-[28px] font-bold text-foreground mb-2 tracking-tight">
+          <div className="text-center mb-6 sm:mb-8">
+            <h1 className="text-[22px] sm:text-[28px] font-bold text-foreground mb-2 tracking-tight">
               <span className="bg-gradient-to-r from-privacy/90 to-privacy bg-clip-text text-transparent">
                 Aegis
               </span>{" "}
@@ -455,12 +455,12 @@ export default function VaultPage() {
               "bg-gradient-to-r from-privacy/5 via-muted/80 to-purple/5",
               "border border-privacy/20"
             )}>
-              <div className="flex items-center justify-between relative z-10">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 relative z-10">
                 <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-[10px] bg-privacy/10 border border-privacy/20">
-                    <Wallet className="w-5 h-5 text-privacy" />
+                  <div className="p-2 sm:p-2.5 rounded-[10px] bg-privacy/10 border border-privacy/20 shrink-0">
+                    <Wallet className="w-4 h-4 sm:w-5 sm:h-5 text-privacy" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
                       <p className="text-caption text-gray">Ready to Spend</p>
                       <button
@@ -472,7 +472,7 @@ export default function VaultPage() {
                         <RefreshCw className={cn("w-3 h-3", isLoadingInbox && "animate-spin")} />
                       </button>
                     </div>
-                    <div className="flex items-baseline gap-2">
+                    <div className="flex items-baseline gap-2 flex-wrap">
                       {isLoadingInbox ? (
                         <div className="flex items-center gap-2">
                           <Loader2 className="w-4 h-4 animate-spin text-privacy" />
@@ -480,10 +480,10 @@ export default function VaultPage() {
                         </div>
                       ) : (
                         <>
-                          <span className="text-[22px] font-bold text-privacy font-mono tracking-tight">
+                          <span className="text-[18px] sm:text-[22px] font-bold text-privacy font-mono tracking-tight">
                             {(Number(totalAmountSats) / 100_000_000).toFixed(8)}
                           </span>
-                          <span className="text-body2 text-gray">zkBTC</span>
+                          <span className="text-caption sm:text-body2 text-gray">zkBTC</span>
                           {depositCount > 0 && (
                             <span className="text-caption text-gray/60 ml-1">
                               ({depositCount} note{depositCount !== 1 ? "s" : ""})
@@ -498,10 +498,11 @@ export default function VaultPage() {
                   <Link
                     href="/vault/activity?tab=notes"
                     className={cn(
-                      "flex items-center gap-1.5 px-4 py-2 rounded-[10px]",
+                      "flex items-center justify-center gap-1.5 px-4 py-2 rounded-[10px]",
                       "bg-privacy/10 hover:bg-privacy/20 border border-privacy/20",
                       "text-privacy text-body2 transition-all duration-200 cursor-pointer",
-                      "hover:shadow-[0_0_15px_rgba(20,241,149,0.1)]"
+                      "hover:shadow-[0_0_15px_rgba(20,241,149,0.1)]",
+                      "shrink-0"
                     )}
                   >
                     View Funds
@@ -520,7 +521,7 @@ export default function VaultPage() {
           </div>
 
           {/* Feature Cards Grid - 2x2 */}
-          <div className="grid grid-cols-2 gap-4 mb-8">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-6 sm:mb-8">
             {features
               .filter((f) => !isViewOnly || f.title === "My Funds" || f.title === "Explorer")
               .map((feature) => (

@@ -134,14 +134,15 @@ function TabBar({
           key={tab.id}
           onClick={() => onTabChange(tab.id)}
           className={cn(
-            "flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-[10px] text-sm transition-colors",
+            "flex-1 flex items-center justify-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2.5 rounded-[10px] text-xs sm:text-sm transition-colors",
             activeTab === tab.id
               ? colorMap[tab.id]
               : "text-gray hover:text-gray-light hover:bg-gray/10"
           )}
         >
           {tab.icon}
-          <span>{tab.label}</span>
+          <span className="hidden sm:inline">{tab.label}</span>
+          <span className="sm:hidden">{tab.label.slice(0, 3)}</span>
           {counts[tab.id] > 0 && (
             <span className="min-w-[22px] h-[22px] px-1.5 flex items-center justify-center text-xs rounded-full bg-gray/20 text-gray-light font-medium">
               {counts[tab.id]}
@@ -194,6 +195,29 @@ function Td({ children, className }: { children: React.ReactNode; className?: st
 }
 
 // =============================================================================
+// Deposit Status Badge
+// =============================================================================
+
+const DEPOSIT_STATUS_STYLES: Record<string, { bg: string; text: string }> = {
+  pending: { bg: "bg-yellow-500/10 border-yellow-500/20", text: "text-yellow-400" },
+  confirming: { bg: "bg-blue-500/10 border-blue-500/20", text: "text-blue-400" },
+  sweeping: { bg: "bg-purple-500/10 border-purple-500/20", text: "text-purple-400" },
+  ready: { bg: "bg-green-500/10 border-green-500/20", text: "text-green-400" },
+  claimed: { bg: "bg-green-500/10 border-green-500/20", text: "text-green-400" },
+  failed: { bg: "bg-red-500/10 border-red-500/20", text: "text-red-400" },
+};
+
+function DepositStatusBadge({ status }: { status: string }) {
+  const lc = status.toLowerCase();
+  const style = DEPOSIT_STATUS_STYLES[lc] ?? DEPOSIT_STATUS_STYLES.pending;
+  return (
+    <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-caption border", style.bg, style.text)}>
+      {status}
+    </span>
+  );
+}
+
+// =============================================================================
 // Deposits Tab
 // =============================================================================
 
@@ -217,13 +241,16 @@ function DepositsTab() {
           <Th>Type</Th>
           <Th>Commitment</Th>
           <Th>Amount</Th>
+          <Th>Status</Th>
+          <Th>BTC Txid</Th>
+          <Th>Sweep Txid</Th>
           <Th>Leaf</Th>
           <Th>Timestamp</Th>
           <Th className="w-[40px]" />
         </TableHeader>
         <tbody className="divide-y divide-gray/10">
-          {deposits.map((d) => (
-            <tr key={d.pubkey} className="hover:bg-gray/5 transition-colors">
+          {deposits.map((d, i) => (
+            <tr key={d.commitment || i} className="hover:bg-gray/5 transition-colors">
               <Td>
                 <div className="flex items-center gap-2">
                   <div className="p-1 rounded-[6px] bg-green-500/10">
@@ -249,21 +276,62 @@ function DepositsTab() {
                 <span className="text-caption text-gray ml-1">BTC</span>
               </Td>
               <Td>
+                {d.depositStatus ? (
+                  <DepositStatusBadge status={d.depositStatus} />
+                ) : (
+                  <span className="text-caption text-gray">—</span>
+                )}
+              </Td>
+              <Td>
+                {d.btcTxid ? (
+                  <a
+                    href={`https://mempool.space/testnet4/tx/${d.btcTxid}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-btc hover:text-btc/80 transition-colors"
+                  >
+                    <code className="text-caption font-mono">{truncate(d.btcTxid, 6, 4)}</code>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                ) : (
+                  <span className="text-caption text-gray">—</span>
+                )}
+              </Td>
+              <Td>
+                {d.sweepTxid ? (
+                  <a
+                    href={`https://mempool.space/testnet4/tx/${d.sweepTxid}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-btc hover:text-btc/80 transition-colors"
+                  >
+                    <code className="text-caption font-mono">{truncate(d.sweepTxid, 6, 4)}</code>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                ) : (
+                  <span className="text-caption text-gray">—</span>
+                )}
+              </Td>
+              <Td>
                 <span className="text-caption text-foreground font-mono">#{d.leafIndex.toString()}</span>
               </Td>
               <Td>
                 <span className="text-caption text-gray">{d.createdAt ? timeAgo(d.createdAt) : "—"}</span>
               </Td>
               <Td>
-                <a
-                  href={solanaExplorerUrl(d.pubkey)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sol hover:text-sol/80 transition-colors"
-                  aria-label="View on OrbMarkets"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
+                {d.txSignature ? (
+                  <a
+                    href={`https://explorer.solana.com/tx/${d.txSignature}?cluster=devnet`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sol hover:text-sol/80 transition-colors"
+                    aria-label="View transaction"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                ) : (
+                  <span className="text-caption text-gray">—</span>
+                )}
               </Td>
             </tr>
           ))}

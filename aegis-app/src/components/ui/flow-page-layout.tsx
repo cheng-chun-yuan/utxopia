@@ -135,7 +135,7 @@ export function FlowPageLayout({
   const titleConfig = colorConfig[titleColor];
 
   return (
-    <main className="min-h-screen bg-background hacker-bg noise-overlay flex flex-col items-center justify-center p-4">
+    <main className="min-h-screen bg-background hacker-bg noise-overlay flex flex-col items-center py-8 px-4 sm:py-12">
       {/* Header */}
       <div
         className="w-full mb-4 flex items-center justify-between relative z-10"

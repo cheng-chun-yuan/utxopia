@@ -198,7 +198,7 @@ export default function DocsPage() {
           </Link>
 
           {/* Main card */}
-          <div className="bg-card/80 backdrop-blur-sm border border-gray/30 rounded-[16px] glow-border cyber-corners p-8 md:p-10 space-y-10">
+          <div className="bg-card/80 backdrop-blur-sm border border-gray/30 rounded-[16px] glow-border cyber-corners p-5 sm:p-8 md:p-10 space-y-8 sm:space-y-10">
             {/* 1. Welcome Hero */}
             <section className="space-y-4 text-center">
               <div className="flex justify-center">

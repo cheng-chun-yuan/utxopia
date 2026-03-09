@@ -77,7 +77,7 @@ const StatsDisplay = memo(function StatsDisplay({
   const volumeBtc = (Number(stats?.volume ?? 0n) / 100_000_000).toFixed(4);
 
   return (
-    <div className="grid grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
       <div className="space-y-2 text-center">
         <div className="flex items-center justify-center gap-2">
           <Shield className="w-5 h-5 text-privacy privacy-glow" />
@@ -153,7 +153,7 @@ export default function Home() {
               </div>
 
               {/* Main headline */}
-              <h1 className="text-4xl lg:text-6xl font-bold text-foreground leading-tight">
+              <h1 className="text-3xl sm:text-4xl lg:text-6xl font-bold text-foreground leading-tight">
                 <span className="bg-gradient-to-r from-btc to-btc-light bg-clip-text text-transparent">
                   Bitcoin
                 </span>{" "}

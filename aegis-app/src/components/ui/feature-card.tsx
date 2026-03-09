@@ -73,7 +73,7 @@ export function FeatureCard({ icon, title, description, subtext, href, color, di
     return (
       <div
         className={cn(
-          "flex flex-col items-center p-6 rounded-[16px] relative",
+          "flex flex-col items-center p-4 sm:p-6 rounded-[16px] relative",
           "bg-card/50 border border-gray/20",
           "cursor-not-allowed select-none"
         )}
@@ -85,16 +85,16 @@ export function FeatureCard({ icon, title, description, subtext, href, color, di
         )}
         <div
           className={cn(
-            "w-14 h-14 rounded-[12px] flex items-center justify-center mb-4",
+            "w-10 h-10 sm:w-14 sm:h-14 rounded-[10px] sm:rounded-[12px] flex items-center justify-center mb-3 sm:mb-4",
             "bg-gray/5 border border-gray/15",
           )}
         >
-          <div className="w-7 h-7 text-gray/40">
+          <div className="w-5 h-5 sm:w-7 sm:h-7 text-gray/40">
             {icon}
           </div>
         </div>
-        <h3 className="text-body1 text-gray/50 mb-1">{title}</h3>
-        <p className="text-body2 text-gray/30 mb-1">{description}</p>
+        <h3 className="text-body2 sm:text-body1 text-gray/50 mb-1">{title}</h3>
+        <p className="text-caption sm:text-body2 text-gray/30 mb-1 text-center">{description}</p>
         <span className="text-caption text-gray/25">{subtext}</span>
       </div>
     );
@@ -104,7 +104,7 @@ export function FeatureCard({ icon, title, description, subtext, href, color, di
     <Link
       href={href}
       className={cn(
-        "flex flex-col items-center p-6 rounded-[16px]",
+        "flex flex-col items-center p-4 sm:p-6 rounded-[16px]",
         "bg-card border border-gray/20",
         "transition-all duration-300 cursor-pointer",
         config.hoverBorder,
@@ -116,23 +116,23 @@ export function FeatureCard({ icon, title, description, subtext, href, color, di
       {/* Icon */}
       <div
         className={cn(
-          "w-14 h-14 rounded-[12px] flex items-center justify-center mb-4",
+          "w-10 h-10 sm:w-14 sm:h-14 rounded-[10px] sm:rounded-[12px] flex items-center justify-center mb-3 sm:mb-4",
           config.iconBg,
           "border",
           config.iconBorder,
           "transition-all duration-300 group-hover:scale-110"
         )}
       >
-        <div className={cn("w-7 h-7", config.iconText)}>
+        <div className={cn("w-5 h-5 sm:w-7 sm:h-7", config.iconText)}>
           {icon}
         </div>
       </div>
 
       {/* Title */}
-      <h3 className="text-body1 text-foreground mb-1">{title}</h3>
+      <h3 className="text-body2 sm:text-body1 text-foreground mb-1">{title}</h3>
 
       {/* Description */}
-      <p className={cn("text-body2 mb-1 transition-colors duration-300", config.iconText, "opacity-70 group-hover:opacity-100")}>{description}</p>
+      <p className={cn("text-caption sm:text-body2 mb-1 transition-colors duration-300 text-center", config.iconText, "opacity-70 group-hover:opacity-100")}>{description}</p>
 
       {/* Subtext */}
       <span className="text-caption text-gray">{subtext}</span>
