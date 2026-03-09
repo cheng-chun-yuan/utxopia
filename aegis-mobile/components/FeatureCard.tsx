@@ -1,6 +1,5 @@
 import React from "react";
 import { Pressable, View, Text, StyleSheet } from "react-native";
-import { Card } from "@/components/ui";
 import { Colors } from "@/lib/colors";
 
 type FeatureVariant = "btc" | "privacy" | "sol";
@@ -8,22 +7,21 @@ type FeatureVariant = "btc" | "privacy" | "sol";
 interface FeatureCardProps {
   icon: React.ReactNode;
   title: string;
-  description: string;
+  description?: string;
   variant: FeatureVariant;
   onPress?: () => void;
 }
-
-/** Map feature variants to Card component variants */
-const cardVariantMap: Record<FeatureVariant, "btc" | "privacy" | "purple"> = {
-  btc: "btc",
-  privacy: "privacy",
-  sol: "purple",
-};
 
 const accentColors: Record<FeatureVariant, string> = {
   btc: Colors.btc,
   privacy: Colors.privacy,
   sol: Colors.sol,
+};
+
+const bgColors: Record<FeatureVariant, string> = {
+  btc: "rgba(247, 147, 26, 0.10)",
+  privacy: "rgba(20, 241, 149, 0.10)",
+  sol: "rgba(153, 69, 255, 0.10)",
 };
 
 export function FeatureCard({
@@ -33,58 +31,58 @@ export function FeatureCard({
   variant,
   onPress,
 }: FeatureCardProps) {
-  const cardVariant = cardVariantMap[variant];
   const accent = accentColors[variant];
+  const bg = bgColors[variant];
 
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
+      style={({ pressed }) => [
+        styles.card,
+        { opacity: pressed ? 0.85 : 1 },
+      ]}
     >
-      <Card variant={cardVariant} className="mb-3">
-        <View style={styles.row}>
-          <View
-            style={[
-              styles.iconContainer,
-              { backgroundColor: `${accent}15` },
-            ]}
-          >
-            {icon}
-          </View>
-          <View style={styles.textContainer}>
-            <Text style={[styles.title, { color: accent }]}>{title}</Text>
-            <Text style={styles.description}>{description}</Text>
-          </View>
-        </View>
-      </Card>
+      <View style={[styles.iconCircle, { backgroundColor: bg }]}>
+        {icon}
+      </View>
+      <View style={styles.textCol}>
+        <Text style={[styles.title, { color: accent }]}>{title}</Text>
+        {description ? (
+          <Text style={styles.description} numberOfLines={1}>
+            {description}
+          </Text>
+        ) : null}
+      </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
+  card: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
+    backgroundColor: Colors.card,
+    borderRadius: 14,
+    padding: 14,
   },
-  iconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+  iconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
   },
-  textContainer: {
+  textCol: {
     flex: 1,
     gap: 2,
   },
   title: {
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 15,
+    fontWeight: "600",
   },
   description: {
     fontSize: 13,
     color: Colors.gray,
-    lineHeight: 18,
   },
 });

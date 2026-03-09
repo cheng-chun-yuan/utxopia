@@ -2,21 +2,20 @@ import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { Colors } from "@/lib/colors";
 import { formatSats } from "@/lib/utils";
-import { Spinner } from "@/components/ui";
 import { usePoolStats } from "@/hooks/use-pool-stats";
 
-function StatItem({ label, value }: { label: string; value: string }) {
+function StatPill({ label, value }: { label: string; value: string }) {
   return (
-    <View style={styles.statItem}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+    <View style={styles.pill}>
+      <Text style={styles.pillValue}>{value}</Text>
+      <Text style={styles.pillLabel}>{label}</Text>
     </View>
   );
 }
 
-function SkeletonItem() {
+function SkeletonPill() {
   return (
-    <View style={styles.statItem}>
+    <View style={styles.pill}>
       <View style={styles.skeletonValue} />
       <View style={styles.skeletonLabel} />
     </View>
@@ -28,66 +27,70 @@ export function PoolStats() {
 
   if (isLoading || !stats) {
     return (
-      <View style={styles.container}>
-        <SkeletonItem />
-        <SkeletonItem />
-        <SkeletonItem />
+      <View style={styles.row}>
+        <SkeletonPill />
+        <SkeletonPill />
+        <SkeletonPill />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <StatItem
-        label="Total Shielded"
-        value={`${formatSats(stats.totalShielded)} BTC`}
+    <View style={styles.row}>
+      <StatPill
+        value={`${formatSats(stats.totalShielded)}`}
+        label="Shielded"
       />
-      <StatItem label="Deposits" value={stats.depositCount.toLocaleString()} />
-      <StatItem
-        label="Total Minted"
-        value={`${formatSats(stats.totalMinted)} BTC`}
+      <StatPill
+        value={stats.depositCount.toLocaleString()}
+        label="Deposits"
+      />
+      <StatPill
+        value={`${formatSats(stats.totalMinted)}`}
+        label="Volume"
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  row: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 16,
     gap: 8,
   },
-  statItem: {
+  pill: {
     flex: 1,
+    backgroundColor: Colors.card,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
     alignItems: "center",
     gap: 4,
   },
-  statValue: {
+  pillValue: {
     color: Colors.foreground,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
+    fontVariant: ["tabular-nums"],
   },
-  statLabel: {
+  pillLabel: {
     color: Colors.gray,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "500",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   skeletonValue: {
-    width: 64,
-    height: 18,
-    borderRadius: 6,
+    width: 48,
+    height: 16,
+    borderRadius: 4,
     backgroundColor: Colors.secondary,
   },
   skeletonLabel: {
-    width: 48,
-    height: 12,
-    borderRadius: 4,
+    width: 36,
+    height: 10,
+    borderRadius: 3,
     backgroundColor: Colors.secondary,
-    marginTop: 4,
+    marginTop: 2,
   },
 });

@@ -4,9 +4,10 @@ import {
   Text,
   FlatList,
   StyleSheet,
+  Pressable,
   Linking,
 } from "react-native";
-import { ScreenContainer, Card, Button, Spinner } from "@/components/ui";
+import { ScreenContainer, Button, Spinner } from "@/components/ui";
 import { Colors } from "@/lib/colors";
 import { formatSats, truncateAddress } from "@/lib/utils";
 import { useClaim, type ClaimableDeposit } from "@/hooks/use-claim";
@@ -30,7 +31,7 @@ function ProofProgress({ progress }: { progress: number }) {
   );
 }
 
-function DepositCard({
+function DepositRow({
   deposit,
   onClaim,
   isClaiming,
@@ -40,28 +41,25 @@ function DepositCard({
   isClaiming: boolean;
 }) {
   return (
-    <Card variant="privacy" className="mb-3">
-      <View style={styles.cardRow}>
-        <View style={styles.cardInfo}>
-          <Text style={styles.amountText}>
-            {formatSats(deposit.amount)} BTC
-          </Text>
-          <Text style={styles.hashText}>
-            {truncateAddress(deposit.commitment, 8)}
-          </Text>
-          <Text style={styles.leafText}>Leaf #{deposit.leafIndex}</Text>
-        </View>
-        <Button
-          size="sm"
-          variant="primary"
-          onPress={onClaim}
-          disabled={isClaiming}
-          loading={isClaiming}
-        >
-          Claim
-        </Button>
+    <View style={styles.depositRow}>
+      <View style={styles.depositInfo}>
+        <Text style={styles.depositAmount}>
+          {formatSats(deposit.amount)} BTC
+        </Text>
+        <Text style={styles.depositMeta}>
+          Leaf #{deposit.leafIndex}
+        </Text>
       </View>
-    </Card>
+      <Button
+        size="sm"
+        variant="primary"
+        onPress={onClaim}
+        disabled={isClaiming}
+        loading={isClaiming}
+      >
+        Claim
+      </Button>
+    </View>
   );
 }
 
@@ -75,26 +73,25 @@ export default function ClaimScreen() {
     return (
       <ScreenContainer>
         <View style={styles.centered}>
-          <CheckCircle size={64} color={Colors.success} />
-          <Text style={styles.successTitle}>Deposit Claimed!</Text>
-          <Text style={styles.successSubtitle}>
+          <CheckCircle size={56} color={Colors.success} />
+          <Text style={styles.resultTitle}>Deposit Claimed</Text>
+          <Text style={styles.resultSub}>
             Your zkBTC is now in your shielded balance.
           </Text>
           {txSignature && txSignature !== "placeholder_claim_sig" && (
-            <Button
-              variant="ghost"
-              size="sm"
+            <Pressable
               onPress={() =>
                 Linking.openURL(
                   `https://solscan.io/tx/${txSignature}?cluster=devnet`
                 )
               }
-              className="mt-4"
+              style={styles.txPill}
             >
-              View on Solscan
-            </Button>
+              <Text style={styles.txPillText}>View on Solscan</Text>
+            </Pressable>
           )}
-          <Button variant="secondary" onPress={reset} className="mt-6">
+          <View style={{ height: 24 }} />
+          <Button variant="secondary" onPress={reset}>
             Done
           </Button>
         </View>
@@ -106,10 +103,13 @@ export default function ClaimScreen() {
     return (
       <ScreenContainer>
         <View style={styles.centered}>
-          <AlertCircle size={64} color={Colors.error} />
-          <Text style={styles.errorTitle}>Claim Failed</Text>
-          <Text style={styles.errorSubtitle}>{error}</Text>
-          <Button variant="secondary" onPress={reset} className="mt-6">
+          <AlertCircle size={56} color={Colors.error} />
+          <Text style={[styles.resultTitle, { color: Colors.error }]}>
+            Claim Failed
+          </Text>
+          <Text style={styles.resultSub}>{error}</Text>
+          <View style={{ height: 24 }} />
+          <Button variant="secondary" onPress={reset}>
             Try Again
           </Button>
         </View>
@@ -120,26 +120,22 @@ export default function ClaimScreen() {
   return (
     <ScreenContainer>
       <Text style={styles.heading}>Claim Deposits</Text>
-      <Text style={styles.subtitle}>
-        Verified BTC deposits ready to claim as shielded zkBTC.
-      </Text>
 
       {step === "proving" && <ProofProgress progress={proofProgress} />}
 
       {step === "submitting" && (
         <View style={styles.submittingRow}>
           <Spinner size="sm" />
-          <Text style={styles.submittingText}>Submitting transaction...</Text>
+          <Text style={styles.submittingText}>Submitting...</Text>
         </View>
       )}
 
       {claimable.length === 0 && step === "idle" ? (
         <View style={styles.emptyState}>
-          <Inbox size={48} color={Colors.gray} />
-          <Text style={styles.emptyText}>No deposits to claim</Text>
-          <Text style={styles.emptySubtext}>
-            Deposits will appear here after BTC confirmation and SPV
-            verification.
+          <Inbox size={40} color={Colors.gray} />
+          <Text style={styles.emptyTitle}>No deposits to claim</Text>
+          <Text style={styles.emptySub}>
+            Deposits appear here after BTC confirmation.
           </Text>
         </View>
       ) : (
@@ -147,7 +143,7 @@ export default function ClaimScreen() {
           data={claimable}
           keyExtractor={(item) => item.commitment}
           renderItem={({ item }) => (
-            <DepositCard
+            <DepositRow
               deposit={item}
               onClaim={() => claim(item)}
               isClaiming={isClaiming}
@@ -166,38 +162,31 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "700",
     color: Colors.foreground,
-    marginBottom: 4,
+    marginBottom: 16,
     marginTop: 8,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: Colors.gray,
-    marginBottom: 20,
+    letterSpacing: -0.3,
   },
   list: {
     paddingBottom: 32,
   },
-  cardRow: {
+  depositRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
   },
-  cardInfo: {
+  depositInfo: {
     flex: 1,
     marginRight: 12,
   },
-  amountText: {
-    fontSize: 18,
-    fontWeight: "700",
+  depositAmount: {
+    fontSize: 16,
+    fontWeight: "600",
     color: Colors.foreground,
   },
-  hashText: {
-    fontSize: 13,
-    fontFamily: "monospace",
-    color: Colors.gray,
-    marginTop: 2,
-  },
-  leafText: {
+  depositMeta: {
     fontSize: 12,
     color: Colors.gray,
     marginTop: 2,
@@ -206,14 +195,14 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   progressBarBg: {
-    height: 6,
-    borderRadius: 3,
+    height: 4,
+    borderRadius: 2,
     backgroundColor: Colors.secondary,
     overflow: "hidden",
   },
   progressBarFill: {
-    height: 6,
-    borderRadius: 3,
+    height: 4,
+    borderRadius: 2,
     backgroundColor: Colors.privacy,
   },
   progressText: {
@@ -239,46 +228,44 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 32,
   },
-  successTitle: {
+  resultTitle: {
     fontSize: 22,
     fontWeight: "700",
     color: Colors.success,
     marginTop: 16,
   },
-  successSubtitle: {
+  resultSub: {
     fontSize: 14,
     color: Colors.gray,
-    marginTop: 8,
+    marginTop: 6,
     textAlign: "center",
   },
-  errorTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: Colors.error,
-    marginTop: 16,
+  txPill: {
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: Colors.secondary,
+    borderRadius: 8,
   },
-  errorSubtitle: {
-    fontSize: 14,
-    color: Colors.gray,
-    marginTop: 8,
-    textAlign: "center",
+  txPillText: {
+    color: Colors.privacy,
+    fontSize: 13,
+    fontWeight: "500",
   },
   emptyState: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 32,
+    gap: 8,
   },
-  emptyText: {
-    fontSize: 18,
+  emptyTitle: {
+    fontSize: 16,
     fontWeight: "600",
     color: Colors.grayLight,
-    marginTop: 16,
   },
-  emptySubtext: {
-    fontSize: 14,
+  emptySub: {
+    fontSize: 13,
     color: Colors.gray,
-    marginTop: 8,
     textAlign: "center",
   },
 });

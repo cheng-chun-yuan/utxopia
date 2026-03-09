@@ -1,7 +1,5 @@
 import React from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
-import { ChevronRight } from "lucide-react-native";
-import { Card } from "@/components/ui";
 import { Colors } from "@/lib/colors";
 import { formatSats } from "@/lib/utils";
 
@@ -30,100 +28,83 @@ export function InboxItem({
   onPress,
 }: InboxItemProps) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => pressed && styles.pressed}>
-      <Card className="mb-3">
-        <View style={styles.row}>
-          <View style={styles.left}>
-            <Text style={styles.amount}>{formatSats(amount)} BTC</Text>
-            <Text style={styles.sats}>
-              {amount.toLocaleString()} sats
-            </Text>
-            <Text style={styles.timestamp}>{formatTimestamp(timestamp)}</Text>
-          </View>
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+    >
+      <View style={styles.left}>
+        <Text style={styles.amount}>{formatSats(amount)} BTC</Text>
+        <Text style={styles.timestamp}>{formatTimestamp(timestamp)}</Text>
+      </View>
 
-          <View style={styles.right}>
-            <View
-              style={[
-                styles.badge,
-                spent ? styles.badgeSpent : styles.badgeAvailable,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.badgeText,
-                  spent ? styles.badgeTextSpent : styles.badgeTextAvailable,
-                ]}
-              >
-                {spent ? "Spent" : "Available"}
-              </Text>
-            </View>
-
-            {onPress && (
-              <ChevronRight size={18} color={Colors.gray} style={styles.chevron} />
-            )}
-          </View>
-        </View>
-      </Card>
+      <View style={styles.right}>
+        <View
+          style={[styles.dot, spent ? styles.dotSpent : styles.dotAvailable]}
+        />
+        <Text
+          style={[
+            styles.status,
+            spent ? styles.statusSpent : styles.statusAvailable,
+          ]}
+        >
+          {spent ? "Spent" : "Available"}
+        </Text>
+      </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  pressed: {
-    opacity: 0.7,
-  },
   row: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  pressed: {
+    opacity: 0.7,
   },
   left: {
     flex: 1,
+    gap: 2,
   },
   right: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   amount: {
     color: Colors.foreground,
-    fontSize: 17,
-    fontWeight: "700",
-    fontVariant: ["tabular-nums"],
-  },
-  sats: {
-    color: Colors.gray,
-    fontSize: 13,
-    marginTop: 2,
+    fontSize: 16,
+    fontWeight: "600",
     fontVariant: ["tabular-nums"],
   },
   timestamp: {
     color: Colors.gray,
     fontSize: 12,
-    marginTop: 4,
   },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
-  badgeAvailable: {
-    backgroundColor: "rgba(20, 241, 149, 0.12)",
+  dotAvailable: {
+    backgroundColor: Colors.privacy,
   },
-  badgeSpent: {
-    backgroundColor: "rgba(139, 138, 158, 0.12)",
+  dotSpent: {
+    backgroundColor: Colors.gray,
   },
-  badgeText: {
+  status: {
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "500",
   },
-  badgeTextAvailable: {
+  statusAvailable: {
     color: Colors.privacy,
   },
-  badgeTextSpent: {
+  statusSpent: {
     color: Colors.gray,
-  },
-  chevron: {
-    marginLeft: 4,
   },
 });

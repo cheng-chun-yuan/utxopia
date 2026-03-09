@@ -31,48 +31,37 @@ export default function AuthScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        {/* Shield icon */}
-        <View style={styles.iconContainer}>
-          <Shield
-            size={64}
-            color={Colors.privacy}
-            strokeWidth={1.5}
-          />
+        <View style={styles.iconCircle}>
+          <Shield size={56} color={Colors.privacy} strokeWidth={1.5} />
         </View>
 
-        {/* Title */}
         <Text style={styles.title}>Aegis</Text>
         <Text style={styles.subtitle}>Private Bitcoin Bridge</Text>
+      </View>
 
-        {/* Spacer */}
-        <View style={styles.spacer} />
+      <View style={styles.buttonGroup}>
+        <Button
+          variant="primary"
+          size="lg"
+          loading={loading && !hasCredential}
+          disabled={loading}
+          onPress={handleRegister}
+          className="w-full"
+        >
+          Create Account
+        </Button>
 
-        {/* Buttons */}
-        <View style={styles.buttonGroup}>
-          <Button
-            variant="primary"
-            size="lg"
-            loading={loading && !hasCredential}
-            disabled={loading}
-            onPress={handleRegister}
-            className="w-full"
-          >
-            Create Account
-          </Button>
+        <Button
+          variant="secondary"
+          size="lg"
+          loading={loading && hasCredential}
+          disabled={loading}
+          onPress={handleAuthenticate}
+          className="w-full"
+        >
+          Sign In
+        </Button>
 
-          <Button
-            variant="secondary"
-            size="lg"
-            loading={loading && hasCredential}
-            disabled={loading}
-            onPress={handleAuthenticate}
-            className="w-full"
-          >
-            Sign In
-          </Button>
-        </View>
-
-        {/* Error display */}
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </View>
     </View>
@@ -83,36 +72,34 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
-    justifyContent: "center",
-    alignItems: "center",
     paddingHorizontal: 32,
+    justifyContent: "space-between",
+    paddingTop: "40%",
+    paddingBottom: 64,
   },
   content: {
-    width: "100%",
     alignItems: "center",
   },
-  iconContainer: {
-    marginBottom: 24,
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: "rgba(20, 241, 149, 0.1)",
+  iconCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "rgba(20, 241, 149, 0.08)",
     justifyContent: "center",
     alignItems: "center",
+    marginBottom: 32,
   },
   title: {
-    fontSize: 36,
+    fontSize: 40,
     fontWeight: "800",
-    color: Colors.privacy,
-    letterSpacing: -0.5,
+    color: Colors.foreground,
+    letterSpacing: -1,
   },
   subtitle: {
     fontSize: 16,
     color: Colors.gray,
-    marginTop: 4,
-  },
-  spacer: {
-    height: 48,
+    marginTop: 8,
+    fontWeight: "400",
   },
   buttonGroup: {
     width: "100%",
@@ -122,7 +109,6 @@ const styles = StyleSheet.create({
     color: Colors.error,
     fontSize: 14,
     textAlign: "center",
-    marginTop: 16,
-    paddingHorizontal: 8,
+    marginTop: 8,
   },
 });

@@ -42,18 +42,17 @@ function formatRelativeTime(timestamp: number): string {
 
 function ExplorerItemRow({ item }: { item: ExplorerItem }) {
   const handlePress = useCallback(() => {
-    // Open on Solscan (hash could be tx sig or account)
     Linking.openURL(
       `https://solscan.io/tx/${item.hash}?cluster=devnet`
     );
   }, [item.hash]);
 
   return (
-    <Pressable onPress={handlePress} style={styles.itemRow}>
-      <View style={styles.itemLeft}>
-        <Text style={styles.itemHash}>{truncateAddress(item.hash, 10)}</Text>
-        {item.type && <Text style={styles.itemType}>{item.type}</Text>}
-      </View>
+    <Pressable
+      onPress={handlePress}
+      style={({ pressed }) => [styles.itemRow, pressed && { opacity: 0.6 }]}
+    >
+      <Text style={styles.itemHash}>{truncateAddress(item.hash, 10)}</Text>
       <Text style={styles.itemTime}>{formatRelativeTime(item.timestamp)}</Text>
     </Pressable>
   );
@@ -64,12 +63,7 @@ function TabContent({ tabKey }: { tabKey: TabKey }) {
   const nullifiers = useNullifiers();
   const proofs = useProofs();
 
-  const hookMap = {
-    commitments,
-    nullifiers,
-    proofs,
-  };
-
+  const hookMap = { commitments, nullifiers, proofs };
   const { data, isLoading, mutate } = hookMap[tabKey];
 
   const [refreshing, setRefreshing] = useState(false);
@@ -123,7 +117,7 @@ export default function ExplorerScreen() {
     <ScreenContainer edges={["left", "right", "bottom"]}>
       <Text style={styles.heading}>Explorer</Text>
 
-      {/* Tab selector */}
+      {/* Tab bar — text only, underline active */}
       <View style={styles.tabBar}>
         {TABS.map((tab) => {
           const isActive = activeTab === tab.key;
@@ -143,7 +137,6 @@ export default function ExplorerScreen() {
         })}
       </View>
 
-      {/* Tab content */}
       <View style={styles.tabContent}>
         <TabContent tabKey={activeTab} />
       </View>
@@ -153,18 +146,17 @@ export default function ExplorerScreen() {
 
 const styles = StyleSheet.create({
   heading: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: "700",
     color: Colors.foreground,
     marginTop: 8,
-    marginBottom: 16,
+    marginBottom: 20,
+    letterSpacing: -0.5,
   },
   tabBar: {
     flexDirection: "row",
-    gap: 4,
-    marginBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    gap: 0,
+    marginBottom: 4,
   },
   tab: {
     flex: 1,
@@ -178,14 +170,16 @@ const styles = StyleSheet.create({
   },
   tabText: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "500",
     color: Colors.gray,
   },
   tabTextActive: {
-    color: Colors.privacy,
+    color: Colors.foreground,
+    fontWeight: "600",
   },
   tabContent: {
     flex: 1,
+    marginTop: 8,
   },
   listContent: {
     paddingBottom: 32,
@@ -194,23 +188,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: Colors.border,
-  },
-  itemLeft: {
-    flex: 1,
-    marginRight: 12,
   },
   itemHash: {
     fontSize: 14,
     fontFamily: "monospace",
     color: Colors.foreground,
-  },
-  itemType: {
-    fontSize: 12,
-    color: Colors.gray,
-    marginTop: 2,
   },
   itemTime: {
     fontSize: 13,
@@ -227,7 +212,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   emptyText: {
-    fontSize: 16,
+    fontSize: 15,
     color: Colors.gray,
   },
 });

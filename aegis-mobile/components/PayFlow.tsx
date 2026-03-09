@@ -8,13 +8,9 @@ import {
 } from "lucide-react-native";
 import { useSend, type SendStep } from "@/hooks/use-send";
 import { useAegisStore } from "@/stores/aegis-store";
-import { Button, Input, Card, AmountDisplay } from "@/components/ui";
+import { Button, Input, AmountDisplay } from "@/components/ui";
 import { Colors } from "@/lib/colors";
 import { formatSats, truncateAddress } from "@/lib/utils";
-
-// ---------------------------------------------------------------------------
-// Circular Progress (simple SVG-free approach for proof step)
-// ---------------------------------------------------------------------------
 
 function ProofProgress({ progress }: { progress: number }) {
   const pct = Math.round(progress * 100);
@@ -28,9 +24,14 @@ function ProofProgress({ progress }: { progress: number }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// PayFlow Component
-// ---------------------------------------------------------------------------
+function BackRow({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={styles.backRow}>
+      <ArrowLeft size={18} color={Colors.grayLight} />
+      <Text style={styles.backLabel}>Back</Text>
+    </Pressable>
+  );
+}
 
 export function PayFlow() {
   const {
@@ -51,32 +52,20 @@ export function PayFlow() {
     .filter((n) => !n.spent)
     .reduce((sum, n) => sum + n.amount, 0);
 
-  // Local input state
   const [recipientInput, setRecipientInput] = useState("");
   const [amountInput, setAmountInput] = useState("");
 
-  // -------------------------------------------------------------------------
-  // Navigation helpers
-  // -------------------------------------------------------------------------
-
-  const canGoBack = (s: SendStep) =>
-    s === "amount" || s === "confirm";
-
   const goBack = () => {
-    // Reset and start over (simple approach)
     reset();
     setRecipientInput("");
     setAmountInput("");
   };
 
-  // -------------------------------------------------------------------------
-  // Recipient Step
-  // -------------------------------------------------------------------------
-
+  // -- Recipient --
   const renderRecipient = () => (
-    <View style={styles.stepContainer}>
+    <View style={styles.container}>
       <Text style={styles.heading}>Send zkBTC</Text>
-      <Text style={styles.subheading}>
+      <Text style={styles.subtext}>
         Enter a .btcpro.sol name or stealth address
       </Text>
 
@@ -97,19 +86,14 @@ export function PayFlow() {
         variant="primary"
         size="lg"
         disabled={recipientInput.trim().length === 0}
-        onPress={() => {
-          setRecipient(recipientInput.trim());
-        }}
+        onPress={() => setRecipient(recipientInput.trim())}
       >
         Next
       </Button>
     </View>
   );
 
-  // -------------------------------------------------------------------------
-  // Amount Step
-  // -------------------------------------------------------------------------
-
+  // -- Amount --
   const renderAmount = () => {
     const parsed = parseInt(amountInput, 10);
     const isValid = !isNaN(parsed) && parsed > 0;
@@ -117,14 +101,14 @@ export function PayFlow() {
     const exceedsBalance = isValid && parsed > availableBalance;
 
     return (
-      <View style={styles.stepContainer}>
-        <BackButton onPress={goBack} />
+      <View style={styles.container}>
+        <BackRow onPress={goBack} />
 
         <View style={styles.spacerMd} />
 
         <Text style={styles.heading}>Amount</Text>
-        <Text style={styles.subheading}>
-          Sending to {truncateAddress(recipient, 8)}
+        <Text style={styles.subtext}>
+          To {truncateAddress(recipient, 8)}
         </Text>
 
         <View style={styles.spacerLg} />
@@ -138,14 +122,11 @@ export function PayFlow() {
         />
 
         {btcEquiv && (
-          <Text style={styles.btcEquivalent}>= {btcEquiv} BTC</Text>
+          <Text style={styles.btcEquiv}>= {btcEquiv} BTC</Text>
         )}
 
-        <View style={styles.spacerSm} />
-
         <Text style={styles.balanceLabel}>
-          Available: {formatSats(availableBalance)} BTC (
-          {availableBalance.toLocaleString()} sats)
+          Available: {formatSats(availableBalance)} BTC
         </Text>
 
         {exceedsBalance && (
@@ -166,31 +147,30 @@ export function PayFlow() {
     );
   };
 
-  // -------------------------------------------------------------------------
-  // Confirm Step
-  // -------------------------------------------------------------------------
-
+  // -- Confirm --
   const renderConfirm = () => (
-    <View style={styles.stepContainer}>
-      <BackButton onPress={goBack} />
+    <View style={styles.container}>
+      <BackRow onPress={goBack} />
 
       <View style={styles.spacerMd} />
 
-      <Text style={styles.heading}>Confirm Send</Text>
+      <Text style={styles.heading}>Confirm</Text>
 
       <View style={styles.spacerLg} />
 
-      <Card variant="privacy">
-        <Text style={styles.confirmLabel}>Recipient</Text>
-        <Text style={styles.confirmValue}>
-          {truncateAddress(recipient, 10)}
-        </Text>
-
-        <View style={styles.spacerMd} />
-
-        <Text style={styles.confirmLabel}>Amount</Text>
-        <AmountDisplay sats={amountSats} showSats />
-      </Card>
+      <View style={styles.summaryCard}>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Recipient</Text>
+          <Text style={styles.summaryValue}>
+            {truncateAddress(recipient, 10)}
+          </Text>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Amount</Text>
+          <AmountDisplay sats={amountSats} showSats />
+        </View>
+      </View>
 
       <View style={styles.spacerLg} />
 
@@ -207,57 +187,42 @@ export function PayFlow() {
     </View>
   );
 
-  // -------------------------------------------------------------------------
-  // Proving Step
-  // -------------------------------------------------------------------------
-
+  // -- Proving --
   const renderProving = () => (
-    <View style={[styles.stepContainer, styles.centeredStep]}>
+    <View style={[styles.container, styles.centered]}>
       <ProofProgress progress={proofProgress} />
     </View>
   );
 
-  // -------------------------------------------------------------------------
-  // Submitting Step
-  // -------------------------------------------------------------------------
-
+  // -- Submitting --
   const renderSubmitting = () => (
-    <View style={[styles.stepContainer, styles.centeredStep]}>
-      <Loader size={48} color={Colors.privacy} />
-      <View style={styles.spacerMd} />
-      <Text style={styles.submittingLabel}>Submitting to Solana...</Text>
+    <View style={[styles.container, styles.centered]}>
+      <Loader size={44} color={Colors.privacy} />
+      <Text style={styles.centeredLabel}>Submitting to Solana...</Text>
     </View>
   );
 
-  // -------------------------------------------------------------------------
-  // Success Step
-  // -------------------------------------------------------------------------
-
+  // -- Success --
   const renderSuccess = () => {
     const solscanUrl = txSignature
       ? `https://solscan.io/tx/${txSignature}?cluster=devnet`
       : null;
 
     return (
-      <View style={[styles.stepContainer, styles.centeredStep]}>
-        <CheckCircle2 size={64} color={Colors.success} />
-
-        <View style={styles.spacerMd} />
+      <View style={[styles.container, styles.centered]}>
+        <CheckCircle2 size={56} color={Colors.success} />
 
         <Text style={styles.successTitle}>Sent!</Text>
-        <Text style={styles.successSub}>
-          {formatSats(amountSats)} BTC sent to{" "}
-          {truncateAddress(recipient, 6)}
+        <Text style={styles.subtext}>
+          {formatSats(amountSats)} BTC to {truncateAddress(recipient, 6)}
         </Text>
 
         {txSignature && (
           <Pressable
-            onPress={() => {
-              if (solscanUrl) Linking.openURL(solscanUrl);
-            }}
-            style={styles.txLink}
+            onPress={() => { if (solscanUrl) Linking.openURL(solscanUrl); }}
+            style={styles.txPill}
           >
-            <Text style={styles.txLinkText}>
+            <Text style={styles.txPillText}>
               {truncateAddress(txSignature, 8)}
             </Text>
           </Pressable>
@@ -276,16 +241,14 @@ export function PayFlow() {
     );
   };
 
-  // -------------------------------------------------------------------------
-  // Error Step
-  // -------------------------------------------------------------------------
-
+  // -- Error --
   const renderError = () => (
-    <View style={[styles.stepContainer, styles.centeredStep]}>
-      <Text style={styles.errorIcon}>!</Text>
-      <View style={styles.spacerMd} />
+    <View style={[styles.container, styles.centered]}>
+      <View style={styles.errorCircle}>
+        <Text style={styles.errorIcon}>!</Text>
+      </View>
       <Text style={styles.errorTitle}>Transaction Failed</Text>
-      <Text style={styles.errorDetail}>{error}</Text>
+      <Text style={styles.subtext}>{error}</Text>
 
       <View style={styles.spacerLg} />
 
@@ -298,10 +261,6 @@ export function PayFlow() {
       </Button>
     </View>
   );
-
-  // -------------------------------------------------------------------------
-  // Main render
-  // -------------------------------------------------------------------------
 
   switch (step) {
     case "recipient":
@@ -321,29 +280,12 @@ export function PayFlow() {
   }
 }
 
-// ---------------------------------------------------------------------------
-// BackButton helper
-// ---------------------------------------------------------------------------
-
-function BackButton({ onPress }: { onPress: () => void }) {
-  return (
-    <Button variant="ghost" size="sm" onPress={onPress} className="self-start">
-      <ArrowLeft size={18} color={Colors.grayLight} />
-      <Text style={styles.backLabel}>Back</Text>
-    </Button>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
-
 const styles = StyleSheet.create({
-  stepContainer: {
+  container: {
     flex: 1,
     paddingTop: 16,
   },
-  centeredStep: {
+  centered: {
     alignItems: "center",
     justifyContent: "center",
   },
@@ -351,13 +293,15 @@ const styles = StyleSheet.create({
     color: Colors.foreground,
     fontSize: 24,
     fontWeight: "700",
+    letterSpacing: -0.3,
   },
-  subheading: {
-    color: Colors.grayLight,
-    fontSize: 15,
+  subtext: {
+    color: Colors.gray,
+    fontSize: 14,
     marginTop: 4,
+    textAlign: "center",
   },
-  btcEquivalent: {
+  btcEquiv: {
     color: Colors.btc,
     fontSize: 14,
     fontWeight: "600",
@@ -366,7 +310,13 @@ const styles = StyleSheet.create({
   balanceLabel: {
     color: Colors.gray,
     fontSize: 13,
-    marginTop: 4,
+    marginTop: 6,
+  },
+  backRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
   },
   backLabel: {
     color: Colors.grayLight,
@@ -374,18 +324,30 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
 
-  // Confirm
-  confirmLabel: {
+  // Summary
+  summaryCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 14,
+    padding: 16,
+  },
+  summaryRow: {
+    paddingVertical: 8,
+  },
+  summaryLabel: {
     color: Colors.gray,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "500",
     marginBottom: 4,
   },
-  confirmValue: {
+  summaryValue: {
     color: Colors.foreground,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
     fontFamily: "monospace",
+  },
+  divider: {
+    height: 1,
+    backgroundColor: Colors.border,
   },
   sendButtonText: {
     color: Colors.background,
@@ -398,57 +360,49 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   progressCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 4,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
     borderColor: Colors.privacy,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(20, 241, 149, 0.08)",
+    backgroundColor: "rgba(20, 241, 149, 0.06)",
   },
   progressText: {
     color: Colors.privacy,
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: "700",
     fontVariant: ["tabular-nums"],
   },
   progressLabel: {
-    color: Colors.grayLight,
-    fontSize: 16,
-    fontWeight: "500",
+    color: Colors.gray,
+    fontSize: 15,
     marginTop: 16,
   },
-
-  // Submitting
-  submittingLabel: {
-    color: Colors.grayLight,
-    fontSize: 16,
-    fontWeight: "500",
+  centeredLabel: {
+    color: Colors.gray,
+    fontSize: 15,
+    marginTop: 16,
   },
 
   // Success
   successTitle: {
     color: Colors.success,
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: "700",
+    marginTop: 12,
   },
-  successSub: {
-    color: Colors.grayLight,
-    fontSize: 15,
-    marginTop: 4,
-    textAlign: "center",
-  },
-  txLink: {
+  txPill: {
     marginTop: 12,
     paddingHorizontal: 12,
     paddingVertical: 6,
     backgroundColor: Colors.secondary,
     borderRadius: 8,
   },
-  txLinkText: {
+  txPillText: {
     color: Colors.privacy,
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: "monospace",
   },
 
@@ -458,29 +412,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 4,
   },
-  errorIcon: {
-    color: Colors.error,
-    fontSize: 48,
-    fontWeight: "700",
-    width: 80,
-    height: 80,
-    lineHeight: 80,
-    textAlign: "center",
-    borderRadius: 40,
+  errorCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     borderWidth: 3,
     borderColor: Colors.error,
-    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  errorIcon: {
+    color: Colors.error,
+    fontSize: 32,
+    fontWeight: "700",
   },
   errorTitle: {
     color: Colors.error,
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "700",
-  },
-  errorDetail: {
-    color: Colors.grayLight,
-    fontSize: 14,
-    marginTop: 4,
-    textAlign: "center",
+    marginTop: 12,
   },
 
   // Spacers
