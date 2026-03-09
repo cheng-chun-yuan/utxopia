@@ -1,15 +1,25 @@
-import { View, Text } from "react-native";
-import { ScreenContainer } from "@/components/ui";
+import { View, StyleSheet } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { InboxList } from "@/components/InboxList";
 import { Colors } from "@/lib/colors";
 
 export default function ReceivedScreen() {
   return (
-    <ScreenContainer>
-      <View className="flex-1 items-center justify-center">
-        <Text className="text-lg" style={{ color: Colors.grayLight }}>
-          Received — Coming Soon
-        </Text>
+    <SafeAreaView style={styles.container} edges={["top", "bottom", "left", "right"]}>
+      <View style={styles.content}>
+        <InboxList unspentOnly />
       </View>
-    </ScreenContainer>
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+});
