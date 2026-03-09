@@ -5,15 +5,18 @@
  * All transfers (claim, split, send) use unified JoinSplit(N,M) proofs.
  */
 
+export type {
+  JoinSplitProofInputs,
+  ProofData,
+  MerkleProofInput,
+} from "@aegis/sdk";
+
 export {
   generateJoinSplitProof,
   proofToBytes,
   initProver,
   isProverAvailable,
-  type JoinSplitProofInputs,
-  type ProofData,
-  type MerkleProofInput,
-} from "@aegis/sdk";
+} from "@aegis/sdk/prover/web";
 
 export interface MerkleProof {
   siblings: bigint[];

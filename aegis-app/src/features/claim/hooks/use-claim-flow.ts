@@ -11,9 +11,6 @@ import {
   deriveNote,
   deriveMasterKey,
   initPoseidon,
-  initProver,
-  generateJoinSplitProof,
-  proofToBytes,
   eddsaGetPubKey,
   eddsaPoseidonSign,
   fetchCommitmentTree,
@@ -31,6 +28,11 @@ import {
   type StealthMetaAddress,
   type JoinSplitProofInputs,
 } from "@aegis/sdk";
+import {
+  initProver,
+  generateJoinSplitProof,
+  proofToBytes,
+} from "@aegis/sdk/prover/web";
 import { fetchSpentNullifierPDAs, nullifierHashToPDA } from "@/lib/nullifier-utils";
 import {
   ZKBTC_MINT_ADDRESS,

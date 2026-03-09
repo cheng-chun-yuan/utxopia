@@ -8,13 +8,12 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import type { JoinSplitProofInputs, ProofData } from "@aegis/sdk";
 import {
   initProver,
   generateJoinSplitProof,
   proofToBytes,
-  type JoinSplitProofInputs,
-  type ProofData,
-} from "@aegis/sdk";
+} from "@aegis/sdk/prover/web";
 
 interface ProverState {
   isInitialized: boolean;

@@ -240,22 +240,15 @@ export {
 // WASM Prover (Browser + Node.js) — JoinSplit only
 // ==========================================================================
 
-export {
-  initProver,
-  isProverAvailable,
-  setCircuitPath,
-  getCircuitPath,
-  proofToBytes,
-  cleanup as cleanupProver,
-  getGroth16VerifierProgramId,
-  buildVerifyInstructionData,
-  type ProofData,
-  type MerkleProofInput,
-  type CircuitType,
-  // JoinSplit prover
-  generateJoinSplitProof,
-  circuitExists,
-  type JoinSplitProofInputs,
+// Prover types only (no runtime dependency on snarkjs)
+// For prover runtime functions (initProver, generateJoinSplitProof, etc.), import from:
+// - @aegis/sdk/prover/web    (browser/Node.js — uses snarkjs)
+// - @aegis/sdk/prover/mobile (React Native — uses mopro-ffi)
+export type {
+  ProofData,
+  MerkleProofInput,
+  CircuitType,
+  JoinSplitProofInputs,
 } from "./prover/web";
 
 // ==========================================================================
