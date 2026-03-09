@@ -187,7 +187,7 @@ async function getEddsa(): Promise<Eddsa> {
 export async function eddsaGetPubKey(seed: Uint8Array): Promise<BabyJubPoint> {
   const eddsa = await getEddsa();
   const F = eddsa.babyJub.F;
-  const pubKey = eddsa.prv2pub(Buffer.from(seed));
+  const pubKey = eddsa.prv2pub(new Uint8Array(seed));
   return {
     x: F.toObject(pubKey[0]) as bigint,
     y: F.toObject(pubKey[1]) as bigint,
@@ -211,17 +211,17 @@ export async function eddsaGetPrivScalar(seed: Uint8Array): Promise<bigint> {
   // Intercept the pruneBuffer call to capture the raw scalar.
   // circomlibjs prv2pub does: sBuff = pruneBuffer(blake512(seed)); s = fromRprLE(sBuff); A = Base8 * (s >> 3)
   // We temporarily replace pruneBuffer to capture sBuff.
-  let capturedBuff: Buffer | null = null;
+  let capturedBuff: Uint8Array | null = null;
   const origPrune = eddsa.pruneBuffer.bind(eddsa);
-  (eddsa as any).pruneBuffer = (buff: Buffer) => {
+  (eddsa as any).pruneBuffer = (buff: any) => {
     const result = origPrune(buff);
-    capturedBuff = Buffer.from(result);
+    capturedBuff = new Uint8Array(result);
     return result;
   };
 
   try {
     // Call prv2pub which triggers pruneBuffer internally
-    eddsa.prv2pub(Buffer.from(seed));
+    eddsa.prv2pub(new Uint8Array(seed));
   } finally {
     // Restore original
     (eddsa as any).pruneBuffer = origPrune;
@@ -253,7 +253,7 @@ export async function eddsaPoseidonSign(
   const eddsa = await getEddsa();
   const F = eddsa.babyJub.F;
   const msgF = F.e(msgHash);
-  const signature = eddsa.signPoseidon(Buffer.from(seed), msgF);
+  const signature = eddsa.signPoseidon(new Uint8Array(seed), msgF);
   const R8x = F.toObject(signature.R8[0]) as bigint;
   const R8y = F.toObject(signature.R8[1]) as bigint;
   const S = signature.S;
