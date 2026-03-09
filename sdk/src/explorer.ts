@@ -119,11 +119,12 @@ function bs58Encode(bytes: Uint8Array): string {
 }
 
 function decodeBase64(b64: string): Uint8Array {
-  // Works in both browser (atob) and Node.js (Buffer)
-  if (typeof atob === "function") {
-    return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
   }
-  return new Uint8Array(Buffer.from(b64, "base64"));
+  return bytes;
 }
 
 // =============================================================================

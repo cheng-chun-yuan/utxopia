@@ -11,6 +11,7 @@
  */
 
 import { bigintToBytes, bytesToBigint } from "./crypto";
+import { toHex } from "./utils/encoding";
 
 // Tree configuration - matches on-chain constants (depth 16 = 65,536 leaves)
 export const TREE_DEPTH = 16;
@@ -92,10 +93,10 @@ export function proofToCircomFormat(proof: MerkleProof): {
 } {
   return {
     merkle_path: proof.pathElements.map(
-      (el) => "0x" + Buffer.from(el).toString("hex")
+      (el) => "0x" + toHex(el)
     ),
     path_indices: proof.pathIndices.map((i) => i.toString()),
-    merkle_root: "0x" + Buffer.from(proof.root).toString("hex"),
+    merkle_root: "0x" + toHex(proof.root),
   };
 }
 

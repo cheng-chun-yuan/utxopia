@@ -9,6 +9,7 @@
  * Reference: https://github.com/deanmlittle/chadbuffer
  */
 
+import { fromBase64 } from "./utils/encoding";
 import {
   address,
   getProgramDerivedAddress,
@@ -87,9 +88,9 @@ enum ChadBufferInstruction {
  * Create instruction data for ChadBuffer Init (discriminator 0)
  * Format: discriminator(1) + data
  */
-function createInitInstructionData(data: Uint8Array): Buffer {
-  const buffer = Buffer.alloc(1 + data.length);
-  buffer.writeUInt8(ChadBufferInstruction.Create, 0);
+function createInitInstructionData(data: Uint8Array): Uint8Array {
+  const buffer = new Uint8Array(1 + data.length);
+  buffer[0] = ChadBufferInstruction.Create;
   buffer.set(data, 1);
   return buffer;
 }
@@ -98,13 +99,13 @@ function createInitInstructionData(data: Uint8Array): Buffer {
  * Create instruction data for ChadBuffer Write (discriminator 2)
  * Format: discriminator(1) + u24_offset(3) + data
  */
-function createWriteInstructionData(offset: number, data: Uint8Array): Buffer {
-  const buffer = Buffer.alloc(1 + 3 + data.length);
-  buffer.writeUInt8(ChadBufferInstruction.Write, 0);
+function createWriteInstructionData(offset: number, data: Uint8Array): Uint8Array {
+  const buffer = new Uint8Array(1 + 3 + data.length);
+  buffer[0] = ChadBufferInstruction.Write;
   // u24 offset (little-endian)
-  buffer.writeUInt8(offset & 0xff, 1);
-  buffer.writeUInt8((offset >> 8) & 0xff, 2);
-  buffer.writeUInt8((offset >> 16) & 0xff, 3);
+  buffer[1] = offset & 0xff;
+  buffer[2] = (offset >> 8) & 0xff;
+  buffer[3] = (offset >> 16) & 0xff;
   buffer.set(data, 4);
   return buffer;
 }
@@ -113,8 +114,8 @@ function createWriteInstructionData(offset: number, data: Uint8Array): Buffer {
  * Create instruction data for ChadBuffer Close (discriminator 3)
  * Format: discriminator(1) only
  */
-function createCloseInstructionData(): Buffer {
-  return Buffer.from([ChadBufferInstruction.Close]);
+function createCloseInstructionData(): Uint8Array {
+  return new Uint8Array([ChadBufferInstruction.Close]);
 }
 
 /**
@@ -280,7 +281,7 @@ export async function readBufferData(
   }
 
   // Decode base64 data
-  const rawData = Buffer.from(accountInfo.value.data[0], "base64");
+  const rawData = fromBase64(accountInfo.value.data[0]);
   const authorityBytes = rawData.slice(0, AUTHORITY_SIZE);
   const data = new Uint8Array(rawData.slice(AUTHORITY_SIZE));
 
@@ -293,9 +294,9 @@ export async function readBufferData(
 /**
  * Simple base58 encoding for addresses
  */
-function bs58Encode(bytes: Uint8Array | Buffer): string {
+function bs58Encode(bytes: Uint8Array): string {
   const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-  const byteArray = bytes instanceof Buffer ? new Uint8Array(bytes) : bytes;
+  const byteArray = bytes;
 
   let num = BigInt(0);
   for (let i = 0; i < byteArray.length; i++) {

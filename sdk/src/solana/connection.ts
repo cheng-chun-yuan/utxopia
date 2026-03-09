@@ -6,6 +6,7 @@
  */
 
 import type { ConnectionAdapter } from "../stealth";
+import { base64ToBinaryString } from "../utils/encoding";
 
 // =============================================================================
 // Types
@@ -80,9 +81,7 @@ export function createFetchConnectionAdapter(endpoint: string): ConnectionAdapte
       }
 
       // Decode base64 (works in browser and Node.js)
-      const binaryString = typeof atob !== "undefined"
-        ? atob(base64Data)
-        : Buffer.from(base64Data, "base64").toString("binary");
+      const binaryString = base64ToBinaryString(base64Data);
 
       const bytes = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) {
@@ -144,9 +143,7 @@ export function createConnectionAdapterFromKit(rpc: KitRpc): ConnectionAdapter {
       }
 
       // Decode base64
-      const binaryString = typeof atob !== "undefined"
-        ? atob(base64Data)
-        : Buffer.from(base64Data, "base64").toString("binary");
+      const binaryString = base64ToBinaryString(base64Data);
 
       const bytes = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) {
