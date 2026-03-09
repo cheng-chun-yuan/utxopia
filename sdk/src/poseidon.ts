@@ -1,9 +1,8 @@
 /**
  * Poseidon Hash - BN254 compatible with circom circuits and Solana's sol_poseidon
  *
- * Uses circomlibjs which matches:
- * - circomlib's poseidon.circom
- * - Solana's sol_poseidon syscall (light-poseidon)
+ * Uses poseidon-lite: pure JavaScript, zero dependencies, works in
+ * Browser, Node.js, and React Native (no WASM required).
  *
  * UNIFIED MODEL:
  * - Commitment = Poseidon(pub_key_x, amount)
@@ -11,28 +10,30 @@
  * - Nullifier Hash = Poseidon(nullifier)
  */
 
-import { buildPoseidon, type Poseidon } from "circomlibjs";
+import { poseidon1 } from "poseidon-lite/poseidon1";
+import { poseidon2 } from "poseidon-lite/poseidon2";
+import { poseidon3 } from "poseidon-lite/poseidon3";
+import { poseidon4 } from "poseidon-lite/poseidon4";
+import { poseidon5 } from "poseidon-lite/poseidon5";
+import { poseidon6 } from "poseidon-lite/poseidon6";
 
-// Singleton poseidon instance
-let poseidonInstance: Poseidon | null = null;
+// Lookup table for poseidon hash by input count (1-6 covers all SDK usage)
+const poseidonFns = [
+  undefined,   // 0 — unused
+  poseidon1,   // 1 input
+  poseidon2,   // 2 inputs
+  poseidon3,   // 3 inputs
+  poseidon4,   // 4 inputs
+  poseidon5,   // 5 inputs
+  poseidon6,   // 6 inputs
+] as const;
 
 /**
- * Initialize poseidon (must be called before using hash functions)
+ * Initialize poseidon (no-op — poseidon-lite needs no initialization)
+ * Kept for backward API compatibility.
  */
 export async function initPoseidon(): Promise<void> {
-  if (!poseidonInstance) {
-    poseidonInstance = await buildPoseidon();
-  }
-}
-
-/**
- * Get the poseidon instance (lazy initialization)
- */
-async function getPoseidon(): Promise<Poseidon> {
-  if (!poseidonInstance) {
-    await initPoseidon();
-  }
-  return poseidonInstance!;
+  // poseidon-lite is synchronous and ready immediately
 }
 
 /**
@@ -40,21 +41,18 @@ async function getPoseidon(): Promise<Poseidon> {
  * Returns bigint result
  */
 export async function poseidonHash(inputs: bigint[]): Promise<bigint> {
-  const poseidon = await getPoseidon();
-  const hash = poseidon(inputs);
-  return poseidon.F.toObject(hash) as bigint;
+  return poseidonHashSync(inputs);
 }
 
 /**
- * Synchronous hash (requires prior initialization via initPoseidon)
- * Throws if not initialized
+ * Synchronous Poseidon hash (no initialization required with poseidon-lite)
  */
 export function poseidonHashSync(inputs: bigint[]): bigint {
-  if (!poseidonInstance) {
-    throw new Error("Poseidon not initialized. Call initPoseidon() first.");
+  const n = inputs.length;
+  if (n < 1 || n > 6) {
+    throw new Error(`Poseidon: unsupported input count ${n} (expected 1-6)`);
   }
-  const hash = poseidonInstance(inputs);
-  return poseidonInstance.F.toObject(hash) as bigint;
+  return poseidonFns[n]!(inputs as any);
 }
 
 // BN254 scalar field prime

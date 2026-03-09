@@ -96,8 +96,7 @@
     "@solana-program/system": "^0.10.0",
     "@solana/kit": "^5.5.0",
     "bech32": "^2.0.0",
-    "circomlibjs": "^0.1.7",
-    "snarkjs": "^0.7.5"
+    "poseidon-lite": "^0.3.0"
   },
   "devDependencies": {
     "@solana/web3.js": "^1.98.4",
@@ -106,10 +105,18 @@
     "typescript": "^5.3.0"
   },
   "peerDependencies": {
-    "react": ">=17.0.0"
+    "react": ">=17.0.0",
+    "circomlibjs": "^0.1.7",
+    "snarkjs": "^0.7.5"
   },
   "peerDependenciesMeta": {
     "react": {
+      "optional": true
+    },
+    "circomlibjs": {
+      "optional": true
+    },
+    "snarkjs": {
       "optional": true
     }
   },

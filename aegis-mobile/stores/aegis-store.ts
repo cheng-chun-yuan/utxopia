@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import {
   initPoseidon,
-  deriveKeysFromSeedCircuit,
+  deriveKeysFromSeed,
   createStealthMetaAddress,
   encodeStealthMetaAddress,
   type AegisKeys,
@@ -119,7 +119,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
     try {
       await ensurePoseidon();
 
-      const keys = await deriveKeysFromSeedCircuit(seed);
+      const keys = deriveKeysFromSeed(seed);
       const meta = createStealthMetaAddress(keys);
       const encoded = encodeStealthMetaAddress(meta);
 

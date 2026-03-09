@@ -53,7 +53,9 @@ import {
 } from "./crypto-ed25519";
 import { computeMPKSync, poseidonHashSync } from "./poseidon";
 import { BABYJUB_ORDER } from "./crypto-babyjub";
-import { buildEddsa, type Eddsa } from "circomlibjs";
+// circomlibjs is lazily imported to avoid pulling ffjavascript WASM into React Native bundles.
+// Only eddsaGetPubKey, eddsaGetPrivScalar, and eddsaPoseidonSign need it (web/Node.js only).
+type Eddsa = any;
 
 // ========== Types ==========
 
@@ -172,6 +174,7 @@ let eddsaInstance: Eddsa | null = null;
 
 async function getEddsa(): Promise<Eddsa> {
   if (!eddsaInstance) {
+    const { buildEddsa } = await import("circomlibjs");
     eddsaInstance = await buildEddsa();
   }
   return eddsaInstance;

@@ -36,6 +36,7 @@
     "lucide-react-native": "^0.577.0",
     "nativewind": "^4.2.2",
     "os-browserify": "^0.3.0",
+    "poseidon-lite": "^0.3.0",
     "process": "^0.11.10",
     "react": "19.2.0",
     "react-dom": "19.2.0",
