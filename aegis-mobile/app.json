@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "aegis",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "xyz.aegis.mobile"
@@ -29,7 +28,8 @@
       "expo-router"
     ],
     "experiments": {
-      "typedRoutes": true
+      "typedRoutes": true,
+      "reactCompiler": true
     }
   }
 }
