@@ -8,8 +8,14 @@
 //!
 //! Configuration lives in `crate::config` (single source of truth).
 
+pub mod cors;
+pub mod env;
 pub mod error;
+pub mod http;
+pub mod keypair;
 pub mod logging;
+pub mod reconnect;
+pub mod ws;
 
 // Re-export config types from crate::config for convenience
 pub use crate::config::{ConfigError, Network, SigningMode, AEGISConfig};

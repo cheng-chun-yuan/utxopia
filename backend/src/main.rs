@@ -149,18 +149,7 @@ fn create_frost_service(config: RedemptionConfig) -> Result<RedemptionService, S
 
     // Set payer keypair for on-chain transactions (mark_processing, complete_redemption)
     if let Ok(keypair_val) = env::var("RELAYER_KEYPAIR").or_else(|_| env::var("VERIFIER_KEYPAIR")) {
-        let keypair_result = if keypair_val.starts_with('[') {
-            serde_json::from_str::<Vec<u8>>(&keypair_val)
-                .map_err(|e| format!("parse keypair JSON: {}", e))
-                .and_then(|bytes| {
-                    solana_sdk::signer::keypair::Keypair::try_from(bytes.as_slice())
-                        .map_err(|e| format!("invalid keypair: {}", e))
-                })
-        } else {
-            zkbtc::load_keypair_from_file(&keypair_val)
-                .map_err(|e| format!("{}", e))
-        };
-        match keypair_result {
+        match zkbtc::common::keypair::load_keypair(&keypair_val) {
             Ok(keypair) => {
                 println!("Redemption service: payer keypair set");
                 sol_client.set_payer(keypair);
@@ -175,10 +164,7 @@ fn create_frost_service(config: RedemptionConfig) -> Result<RedemptionService, S
 }
 
 async fn run_api_server(args: &[String]) {
-    let mut port: u16 = env::var("API_PORT")
-        .ok()
-        .and_then(|p| p.parse().ok())
-        .unwrap_or(3001);
+    let mut port: u16 = zkbtc::common::env::env_or("API_PORT", 3001);
 
     let mut i = 0;
     while i < args.len() {
@@ -267,6 +253,8 @@ async fn run_tracker_service(args: &[String]) {
     }
 
     // Load config from environment
+    use zkbtc::common::env::{env_or, env_bool, env_string};
+
     if let Ok(addr) = env::var("POOL_RECEIVE_ADDRESS") {
         config.pool_receive_address = addr;
     }
@@ -276,40 +264,28 @@ async fn run_tracker_service(args: &[String]) {
     if let Ok(db_path) = env::var("DEPOSIT_DB_PATH") {
         config.db_path = db_path;
     }
-    if let Ok(interval) = env::var("DEPOSIT_POLL_INTERVAL_SECS") {
-        config.poll_interval_secs = interval.parse().unwrap_or(30);
-    }
-    if let Ok(confirmations) = env::var("DEPOSIT_REQUIRED_CONFIRMATIONS") {
-        config.required_confirmations = confirmations.parse().unwrap_or(3);
-    }
-    if let Ok(max_retries) = env::var("DEPOSIT_MAX_RETRIES") {
-        config.max_retries = max_retries.parse().unwrap_or(5);
-    }
+    config.poll_interval_secs = env_or("DEPOSIT_POLL_INTERVAL_SECS", config.poll_interval_secs);
+    config.required_confirmations = env_or("DEPOSIT_REQUIRED_CONFIRMATIONS", config.required_confirmations);
+    config.max_retries = env_or("DEPOSIT_MAX_RETRIES", config.max_retries);
     if let Ok(esplora) = env::var("ESPLORA_URL") {
         config.esplora_url = esplora;
     }
 
     // WebSocket config
-    if let Ok(ws_enabled) = env::var("MEMPOOL_WS_ENABLED") {
-        config.ws_enabled = ws_enabled == "1" || ws_enabled.to_lowercase() == "true";
-    }
+    config.ws_enabled = env_bool("MEMPOOL_WS_ENABLED", config.ws_enabled);
     if let Ok(ws_url) = env::var("MEMPOOL_WS_URL") {
         config.ws_url = ws_url;
     }
 
     // Header relay config (integrated into deposit tracker)
-    if let Ok(hr_enabled) = env::var("HEADER_RELAY_ENABLED") {
-        config.header_relay_enabled = hr_enabled == "1" || hr_enabled.to_lowercase() == "true";
-    }
+    config.header_relay_enabled = env_bool("HEADER_RELAY_ENABLED", config.header_relay_enabled);
     if let Ok(program_id) = env::var("BTC_LIGHT_CLIENT_PROGRAM_ID") {
         config.btc_light_client_program_id = program_id;
     }
     if let Ok(keypair) = env::var("RELAYER_KEYPAIR") {
         config.relayer_keypair = keypair;
     }
-    if let Ok(batch_size) = env::var("HEADER_BATCH_SIZE") {
-        config.header_batch_size = batch_size.parse().unwrap_or(5);
-    }
+    config.header_batch_size = env_or("HEADER_BATCH_SIZE", config.header_batch_size);
 
     // Create data directory if using default path
     if config.db_path.starts_with("data/") {
@@ -371,18 +347,7 @@ async fn run_tracker_service(args: &[String]) {
 
     // Configure verifier if keypair available (supports inline JSON or file path)
     let service = if let Ok(keypair_val) = env::var("VERIFIER_KEYPAIR") {
-        let keypair_result = if keypair_val.starts_with('[') {
-            serde_json::from_str::<Vec<u8>>(&keypair_val)
-                .map_err(|e| format!("parse keypair JSON: {}", e))
-                .and_then(|bytes| {
-                    solana_sdk::signer::keypair::Keypair::try_from(bytes.as_slice())
-                        .map_err(|e| format!("invalid keypair: {}", e))
-                })
-        } else {
-            zkbtc::load_keypair_from_file(&keypair_val)
-                .map_err(|e| format!("{}", e))
-        };
-        match keypair_result {
+        match zkbtc::common::keypair::load_keypair(&keypair_val) {
             Ok(keypair) => {
                 println!("Verifier configured with Solana keypair");
                 service.with_verifier(keypair)
@@ -398,10 +363,7 @@ async fn run_tracker_service(args: &[String]) {
     let mut service = service;
 
     // API server port
-    let api_port: u16 = env::var("TRACKER_API_PORT")
-        .ok()
-        .and_then(|p| p.parse().ok())
-        .unwrap_or(3001);
+    let api_port: u16 = env_or("TRACKER_API_PORT", 3001);
 
     println!("=== zkBTC Deposit Tracker ===");
     println!();
@@ -434,16 +396,10 @@ async fn run_tracker_service(args: &[String]) {
     // Event Indexer + Merkle Tree Cache
     // =========================================================================
 
-    let indexer_db_path = env::var("INDEXER_DB_PATH")
-        .unwrap_or_else(|_| "data/events.db".to_string());
-    let indexer_poll_secs: u64 = env::var("INDEXER_POLL_INTERVAL_SECS")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(10);
-    let solana_rpc = env::var("SOLANA_RPC_URL")
-        .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
-    let aegis_program_id = env::var("AEGIS_PROGRAM_ID")
-        .unwrap_or_else(|_| "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1".to_string());
+    let indexer_db_path = env_string("INDEXER_DB_PATH", "data/events.db");
+    let indexer_poll_secs: u64 = env_or("INDEXER_POLL_INTERVAL_SECS", 10);
+    let solana_rpc = env_string("SOLANA_RPC_URL", "https://api.devnet.solana.com");
+    let aegis_program_id = env_string("AEGIS_PROGRAM_ID", "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1");
 
     let event_store = Arc::new(
         EventStore::new(&indexer_db_path).expect("Failed to create event store")

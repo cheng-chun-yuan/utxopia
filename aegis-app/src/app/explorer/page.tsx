@@ -246,16 +246,13 @@ function DepositsTab() {
                   </div>
                 </Td>
                 <Td>
-                  <div className="flex items-center gap-1.5">
-                    <Shield className="w-4 h-4 text-purple-400" />
-                    <span className="text-body2 text-foreground font-medium">zkBTC</span>
-                  </div>
+                  <span className="inline-flex items-center gap-1.5 text-caption text-purple-400/90 bg-purple-500/[0.06] border border-purple-500/15 px-2 py-0.5 rounded-full font-medium">
+                    <Shield className="w-3 h-3" />
+                    zkBTC
+                  </span>
                 </Td>
                 <Td>
-                  <div className="flex items-center gap-1.5">
-                    <BitcoinIcon className="w-3.5 h-3.5 text-btc" />
-                    <span className="text-body2 text-foreground font-mono">{d.amountBtc}</span>
-                  </div>
+                  <span className="text-body2 text-foreground font-mono">{d.amountSats.toLocaleString()} <span className="text-gray text-caption">sats</span></span>
                 </Td>
                 <Td>
                   <span className="text-caption text-foreground font-mono">#{d.leafIndex}</span>
@@ -278,10 +275,6 @@ function DepositsTab() {
 // =============================================================================
 // Transfers Tab — grouped by transaction
 // =============================================================================
-
-function outputLabel(index: number): { label: string; color: string } {
-  return { label: `Output ${index + 1}`, color: "text-purple-400" };
-}
 
 function TransfersTab() {
   const { transfers, isLoading, error, refresh } = useTransfers();
@@ -313,6 +306,7 @@ function TransfersTab() {
               <Th className="w-[40px]" />
               <Th>Type</Th>
               <Th>Tx ID</Th>
+              <Th>Inputs</Th>
               <Th>Outputs</Th>
               <Th>Time</Th>
               <Th className="w-[40px]" />
@@ -348,8 +342,15 @@ function TransfersTab() {
                       </div>
                     </Td>
                     <Td>
-                      <span className="text-caption text-gray bg-gray/10 px-2 py-0.5 rounded-full">
-                        {tx.outputs.length} output{tx.outputs.length !== 1 ? "s" : ""}
+                      <span className="inline-flex items-center gap-1 text-caption text-green-400/80 bg-green-500/[0.06] border border-green-500/15 px-2 py-0.5 rounded-full">
+                        <span className="font-mono">{tx.inputCount}</span>
+                        <span className="hidden sm:inline">input{tx.inputCount !== 1 ? "s" : ""}</span>
+                      </span>
+                    </Td>
+                    <Td>
+                      <span className="inline-flex items-center gap-1 text-caption text-purple-400/80 bg-purple-500/[0.06] border border-purple-500/15 px-2 py-0.5 rounded-full">
+                        <span className="font-mono">{tx.outputs.length}</span>
+                        <span className="hidden sm:inline">output{tx.outputs.length !== 1 ? "s" : ""}</span>
                       </span>
                     </Td>
                     <Td>
@@ -359,27 +360,77 @@ function TransfersTab() {
                       <SolanaLink signature={tx.txSignature} />
                     </Td>
                   </tr>
-                  {isOpen && tx.outputs.map((out, i) => {
-                    const { label, color } = outputLabel(i);
-                    return (
-                      <tr key={out.leafIndex} className="bg-muted/30">
-                        <Td />
-                        <Td>
-                          <span className={cn("text-caption font-medium", color)}>{label}</span>
-                        </Td>
-                        <Td colSpan={2}>
-                          <div className="flex items-center gap-1.5">
-                            <code className="text-caption font-mono text-foreground">{truncate(out.commitment, 8, 6)}</code>
-                            <CopyButton text={out.commitment} label="Commitment" variant="default" iconSize="sm" />
+                  {isOpen && (
+                    <tr>
+                      <td colSpan={7} className="p-0">
+                        <div className="mx-4 my-3 rounded-[10px] bg-gradient-to-b from-gray/[0.06] to-transparent border border-gray/10 overflow-hidden">
+                          <div className="grid grid-cols-2 divide-x divide-gray/10">
+                            {/* Inputs (Nullifiers) */}
+                            <div className="p-4 space-y-2.5">
+                              <div className="flex items-center gap-2 mb-3">
+                                <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                                <span className="text-caption text-green-400/90 font-semibold uppercase tracking-wider">
+                                  Inputs
+                                </span>
+                                <span className="text-caption text-green-400/60 font-medium">{tx.inputCount}</span>
+                              </div>
+                              {tx.nullifierPdas.length > 0 ? tx.nullifierPdas.map((pda, i) => (
+                                <div key={pda} className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-green-500/[0.04] border border-green-500/10 hover:border-green-500/20 transition-colors">
+                                  <span className="text-[10px] text-green-400/60 font-mono font-semibold w-4 shrink-0">{i + 1}</span>
+                                  <code className="text-caption font-mono text-foreground/90 truncate">{truncate(pda, 8, 6)}</code>
+                                  <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                                    <CopyButton text={pda} label="Nullifier" variant="default" iconSize="sm" />
+                                    <a
+                                      href={`https://explorer.solana.com/address/${pda}?cluster=devnet`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-sol hover:text-sol/80 transition-colors p-0.5"
+                                    >
+                                      <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  </div>
+                                </div>
+                              )) : (
+                                <div className="flex items-center justify-center py-4 text-caption text-gray/40">
+                                  No nullifiers (deposit claim)
+                                </div>
+                              )}
+                            </div>
+                            {/* Outputs (Commitments) */}
+                            <div className="p-4 space-y-2.5">
+                              <div className="flex items-center gap-2 mb-3">
+                                <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                                <span className="text-caption text-purple-400/90 font-semibold uppercase tracking-wider">
+                                  Outputs
+                                </span>
+                                <span className="text-caption text-purple-400/60 font-medium">{tx.outputs.length}</span>
+                              </div>
+                              {tx.outputs.map((out, i) => (
+                                <div key={out.leafIndex} className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-purple-500/[0.04] border border-purple-500/10 hover:border-purple-500/20 transition-colors">
+                                  <span className="text-[10px] text-purple-400/60 font-mono font-semibold w-4 shrink-0">{i + 1}</span>
+                                  <code className="text-caption font-mono text-foreground/90 truncate">{truncate(out.commitment, 8, 6)}</code>
+                                  <span className="text-[10px] text-gray/50 font-mono bg-gray/[0.08] px-1.5 py-0.5 rounded shrink-0">
+                                    #{out.leafIndex}
+                                  </span>
+                                  <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                                    <CopyButton text={out.commitment} label="Commitment" variant="default" iconSize="sm" />
+                                    <a
+                                      href={`https://explorer.solana.com/address/${out.commitment}?cluster=devnet`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-sol hover:text-sol/80 transition-colors p-0.5"
+                                    >
+                                      <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                        </Td>
-                        <Td>
-                          <span className="text-caption text-foreground font-mono">Leaf #{out.leafIndex}</span>
-                        </Td>
-                        <Td />
-                      </tr>
-                    );
-                  })}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                 </Fragment>
               );
             })}

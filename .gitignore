@@ -3,6 +3,8 @@
 *.log
 node_modules/
 
+.wrangler/
+
 # IDE
 .vscode/
 .idea/

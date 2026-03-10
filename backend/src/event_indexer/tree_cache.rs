@@ -21,6 +21,15 @@ pub struct TreeUpdate {
     pub new_root: String,
 }
 
+/// Update broadcast when a nullifier is spent
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct NullifierUpdate {
+    #[serde(rename = "type")]
+    pub update_type: String,
+    pub nullifier_hash: String,
+    pub slot: i64,
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct AnnouncementUpdate {
     #[serde(rename = "type")]
@@ -38,6 +47,8 @@ pub struct TreeCache {
     store: Arc<EventStore>,
     /// Broadcast channel for tree update notifications
     update_tx: broadcast::Sender<TreeUpdate>,
+    /// Broadcast channel for nullifier spent notifications
+    nullifier_tx: broadcast::Sender<NullifierUpdate>,
     /// Broadcast channel for stealth announcement notifications
     announcement_tx: broadcast::Sender<AnnouncementUpdate>,
 }
@@ -61,6 +72,7 @@ impl TreeCache {
 
         let tree = MerkleTree::build_from_leaves(&commitments)?;
         let (update_tx, _) = broadcast::channel(256);
+        let (nullifier_tx, _) = broadcast::channel(256);
         let (announcement_tx, _) = broadcast::channel(256);
 
         tracing::info!(
@@ -73,6 +85,7 @@ impl TreeCache {
             tree: RwLock::new(tree),
             store,
             update_tx,
+            nullifier_tx,
             announcement_tx,
         })
     }
@@ -160,6 +173,21 @@ impl TreeCache {
     /// Subscribe to tree updates (for WebSocket broadcast)
     pub fn subscribe(&self) -> broadcast::Receiver<TreeUpdate> {
         self.update_tx.subscribe()
+    }
+
+    /// Broadcast a nullifier spent event to subscribers
+    pub fn broadcast_nullifier(&self, nullifier_hash: &str, slot: i64) {
+        let update = NullifierUpdate {
+            update_type: "nullifier_spent".to_string(),
+            nullifier_hash: nullifier_hash.to_string(),
+            slot,
+        };
+        let _ = self.nullifier_tx.send(update);
+    }
+
+    /// Subscribe to nullifier updates (for WebSocket broadcast)
+    pub fn subscribe_nullifiers(&self) -> broadcast::Receiver<NullifierUpdate> {
+        self.nullifier_tx.subscribe()
     }
 
     /// Broadcast a stealth announcement event to subscribers

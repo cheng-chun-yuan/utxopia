@@ -15,7 +15,7 @@ import {
   scanAnnouncementsViewOnly,
   computeJoinSplitNullifierSync,
   bigintToBytes,
-  AnnouncementClient,
+  EventClient,
   DEVNET_CONFIG,
   type AegisKeys,
   type StealthMetaAddress,
@@ -146,15 +146,15 @@ let inboxFetchPromise: Promise<void> | null = null;
 // Cache last announcement count to skip re-scan when nothing changed
 let lastAnnouncementCount = -1;
 
-// Singleton AnnouncementClient
-let announcementClient: AnnouncementClient | null = null;
+// Singleton EventClient (extends AnnouncementClient with tree + nullifier events)
+let eventClient: EventClient | null = null;
 
-function getAnnouncementClient(): AnnouncementClient {
-  if (!announcementClient) {
+export function getEventClient(): EventClient {
+  if (!eventClient) {
     const backendUrl = "";
     const wsBackendUrl = process.env.NEXT_PUBLIC_ZKBTC_API_URL || "http://localhost:3001";
     const wsUrl = wsBackendUrl.replace("http://", "ws://").replace("https://", "wss://");
-    announcementClient = new AnnouncementClient({
+    eventClient = new EventClient({
       backendUrl,
       backendWsUrl: wsUrl,
       solanaRpcUrl: process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com",
@@ -162,7 +162,7 @@ function getAnnouncementClient(): AnnouncementClient {
       commitmentTreeAddress: DEVNET_CONFIG.commitmentTreePda,
     });
   }
-  return announcementClient;
+  return eventClient;
 }
 
 // ============================================================================
@@ -446,8 +446,8 @@ export const useAegisStore = create<AegisState>((set, get) => ({
 
     const doFetch = async () => {
       try {
-        // Fetch via AnnouncementClient (backend WS/REST → RPC fallback)
-        const client = getAnnouncementClient();
+        // Fetch via EventClient (backend WS/REST → RPC fallback)
+        const client = getEventClient();
         const announcements = await client.fetchAll();
 
         // Skip only the expensive scan step if announcement count is unchanged,
@@ -547,9 +547,9 @@ export const useAegisStore = create<AegisState>((set, get) => ({
   },
 
   startRealtimeInbox: () => {
-    const client = getAnnouncementClient();
+    const client = getEventClient();
     client.start().catch((err) => {
-      console.warn("[Aegis] AnnouncementClient start failed:", err);
+      console.warn("[Aegis] EventClient start failed:", err);
     });
     const unsub = client.onAnnouncement(() => {
       // New announcements arrived via WS — trigger inbox refresh
@@ -561,7 +561,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
     return () => {
       unsub();
       client.close();
-      announcementClient = null;
+      eventClient = null;
     };
   },
 

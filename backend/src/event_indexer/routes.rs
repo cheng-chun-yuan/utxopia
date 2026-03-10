@@ -3,7 +3,7 @@
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Path, Query, State,
+        Query, State,
     },
     response::IntoResponse,
     routing::{get, post},
@@ -12,6 +12,8 @@ use axum::{
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+
+use crate::common::ws::run_broadcast_ws;
 
 use solana_sdk::pubkey::Pubkey;
 
@@ -26,31 +28,11 @@ pub struct IndexerAppState {
     pub program_id: Pubkey,
 }
 
-/// Query params for leaves endpoint
-#[derive(Debug, Deserialize)]
-pub struct LeavesQuery {
-    /// Return leaves with leaf_index > since
-    pub since: Option<i64>,
-}
-
 /// Query params for proof endpoint
 #[derive(Debug, Deserialize)]
 pub struct ProofQuery {
     /// Commitment hex string
     pub commitment: Option<String>,
-}
-
-/// Response for GET /api/tree/leaves
-#[derive(Debug, Serialize)]
-pub struct LeavesResponse {
-    pub leaves: Vec<super::storage::LeafRow>,
-    pub count: usize,
-}
-
-/// Response for GET /api/tree/root
-#[derive(Debug, Serialize)]
-pub struct RootResponse {
-    pub next_index: i64,
 }
 
 /// Response for GET /api/tree/status
@@ -77,27 +59,6 @@ pub struct ProofResponse {
     pub indices: Option<Vec<u8>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
-}
-
-/// Response for GET /api/nullifiers/:hash
-#[derive(Debug, Serialize)]
-pub struct NullifierResponse {
-    pub found: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<super::storage::NullifierRow>,
-}
-
-/// Request body for POST /api/nullifiers/batch
-#[derive(Debug, Deserialize)]
-pub struct BatchNullifierRequest {
-    pub hashes: Vec<String>,
-}
-
-/// Response for POST /api/nullifiers/batch
-#[derive(Debug, Serialize)]
-pub struct BatchNullifierResponse {
-    /// Map of nullifier hash → spent (true/false)
-    pub results: std::collections::HashMap<String, bool>,
 }
 
 /// Query params for GET /api/nullifiers
@@ -144,6 +105,28 @@ pub struct AnnouncementsStatusResponse {
     pub mismatch: bool,
 }
 
+/// A single transfer with nullifier PDAs derived
+#[derive(Debug, Serialize)]
+pub struct TransferItem {
+    pub tx_signature: String,
+    pub commitments: Vec<String>,
+    pub leaf_indices: Vec<i64>,
+    pub nullifier_hashes: Vec<String>,
+    /// On-chain nullifier PDA addresses (base58)
+    pub nullifier_pdas: Vec<String>,
+    pub output_count: i64,
+    pub input_count: i64,
+    pub timestamp: i64,
+}
+
+/// Response for GET /api/transfers
+#[derive(Debug, Serialize)]
+pub struct TransfersResponse {
+    pub success: bool,
+    pub transfers: Vec<TransferItem>,
+    pub count: usize,
+}
+
 /// Response for POST /api/tree/sync
 #[derive(Debug, Serialize)]
 pub struct SyncResponse {
@@ -161,18 +144,25 @@ pub fn event_indexer_router(store: Arc<EventStore>, tree_cache: Arc<TreeCache>, 
     let state = IndexerAppState { store, tree_cache, program_id };
 
     Router::new()
-        .route("/api/tree/leaves", get(get_leaves))
-        .route("/api/tree/root", get(get_root))
+        // Tree
         .route("/api/tree/status", get(get_status))
         .route("/api/tree/proof", get(get_proof))
         .route("/api/tree/sync", post(post_sync))
         .route("/api/tree/reset", post(post_reset))
+        // Nullifiers
         .route("/api/nullifiers", get(get_all_nullifiers))
-        .route("/api/nullifiers/batch", post(batch_nullifiers))
-        .route("/api/nullifiers/{hash}", get(get_nullifier))
-        .route("/ws/tree", get(ws_tree_handler))
+        .route("/api/nullifiers/status", get(get_nullifiers_status))
+        // Announcements
         .route("/api/announcements", get(get_announcements))
         .route("/api/announcements/status", get(get_announcements_status))
+        // Transfers (grouped announcements + nullifier inputs)
+        .route("/api/transfers", get(get_transfers))
+        // Global
+        .route("/api/sync", post(post_sync_all))
+        .route("/api/reset", post(post_reset_all))
+        // WebSocket
+        .route("/ws/events", get(ws_events_handler))
+        .route("/ws/tree", get(ws_tree_handler))
         .route("/ws/announcements", get(ws_announcements_handler))
         .with_state(state)
 }
@@ -180,35 +170,6 @@ pub fn event_indexer_router(store: Arc<EventStore>, tree_cache: Arc<TreeCache>, 
 // =============================================================================
 // REST Handlers
 // =============================================================================
-
-async fn get_leaves(
-    State(state): State<IndexerAppState>,
-    Query(params): Query<LeavesQuery>,
-) -> Json<LeavesResponse> {
-    match state.store.get_leaves(params.since) {
-        Ok(leaves) => {
-            let count = leaves.len();
-            Json(LeavesResponse { leaves, count })
-        }
-        Err(e) => {
-            tracing::error!(error = %e, "Failed to get leaves");
-            Json(LeavesResponse {
-                leaves: vec![],
-                count: 0,
-            })
-        }
-    }
-}
-
-async fn get_root(State(state): State<IndexerAppState>) -> Json<RootResponse> {
-    match state.store.get_next_leaf_index() {
-        Ok(next_index) => Json(RootResponse { next_index }),
-        Err(e) => {
-            tracing::error!(error = %e, "Failed to get root");
-            Json(RootResponse { next_index: 0 })
-        }
-    }
-}
 
 async fn get_status(State(state): State<IndexerAppState>) -> Json<StatusResponse> {
     let status = state.tree_cache.get_status().await;
@@ -358,42 +319,50 @@ async fn get_all_nullifiers(
     }
 }
 
-async fn get_nullifier(
+async fn get_transfers(
     State(state): State<IndexerAppState>,
-    Path(hash): Path<String>,
-) -> Json<NullifierResponse> {
-    match state.store.get_nullifier(&hash) {
-        Ok(Some(data)) => Json(NullifierResponse {
-            found: true,
-            data: Some(data),
-        }),
-        Ok(None) => Json(NullifierResponse {
-            found: false,
-            data: None,
-        }),
+) -> Json<TransfersResponse> {
+    match state.store.get_transfers() {
+        Ok(rows) => {
+            let count = rows.len();
+            let transfers: Vec<TransferItem> = rows.into_iter().map(|t| {
+                let nullifier_pdas: Vec<String> = t.nullifier_hashes.iter()
+                    .filter_map(|hash_hex| {
+                        let bytes = hex::decode(hash_hex).ok()?;
+                        if bytes.len() != 32 { return None; }
+                        let (pda, _) = Pubkey::find_program_address(
+                            &[b"nullifier", &bytes],
+                            &state.program_id,
+                        );
+                        Some(pda.to_string())
+                    })
+                    .collect();
+                TransferItem {
+                    tx_signature: t.tx_signature,
+                    commitments: t.commitments,
+                    leaf_indices: t.leaf_indices,
+                    nullifier_hashes: t.nullifier_hashes,
+                    nullifier_pdas,
+                    output_count: t.output_count,
+                    input_count: t.input_count,
+                    timestamp: t.timestamp,
+                }
+            }).collect();
+            Json(TransfersResponse {
+                success: true,
+                transfers,
+                count,
+            })
+        }
         Err(e) => {
-            tracing::error!(error = %e, "Failed to get nullifier");
-            Json(NullifierResponse {
-                found: false,
-                data: None,
+            tracing::error!(error = %e, "Failed to get transfers");
+            Json(TransfersResponse {
+                success: true,
+                transfers: vec![],
+                count: 0,
             })
         }
     }
-}
-
-async fn batch_nullifiers(
-    State(state): State<IndexerAppState>,
-    Json(body): Json<BatchNullifierRequest>,
-) -> Json<BatchNullifierResponse> {
-    let mut results = std::collections::HashMap::new();
-    for hash in &body.hashes {
-        let spent = match state.store.get_nullifier(hash) {
-            Ok(Some(_)) => true,
-            _ => false,
-        };
-        results.insert(hash.clone(), spent);
-    }
-    Json(BatchNullifierResponse { results })
 }
 
 async fn get_announcements(
@@ -447,6 +416,74 @@ async fn get_announcements_status(
     })
 }
 
+/// GET /api/nullifiers/status
+async fn get_nullifiers_status(
+    State(state): State<IndexerAppState>,
+) -> Json<serde_json::Value> {
+    let (_, total, latest_slot) = state
+        .store
+        .get_nullifier_hashes_since(None)
+        .unwrap_or_default();
+    Json(serde_json::json!({
+        "count": total,
+        "latest_slot": latest_slot,
+    }))
+}
+
+/// POST /api/sync — force sync all resources
+async fn post_sync_all(State(state): State<IndexerAppState>) -> Json<SyncResponse> {
+    match state.tree_cache.force_rebuild().await {
+        Ok(()) => {
+            let status = state.tree_cache.get_status().await;
+            Json(SyncResponse {
+                success: true,
+                root: Some(status.root),
+                size: Some(status.size),
+                error: None,
+            })
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "Sync all failed");
+            Json(SyncResponse {
+                success: false,
+                root: None,
+                size: None,
+                error: Some(e),
+            })
+        }
+    }
+}
+
+/// POST /api/reset — clear all data and rebuild
+async fn post_reset_all(State(state): State<IndexerAppState>) -> Json<SyncResponse> {
+    tracing::warn!("Resetting all indexed data");
+    if let Err(e) = state.store.clear_all() {
+        return Json(SyncResponse {
+            success: false,
+            root: None,
+            size: None,
+            error: Some(format!("clear failed: {}", e)),
+        });
+    }
+    match state.tree_cache.force_rebuild().await {
+        Ok(()) => {
+            let status = state.tree_cache.get_status().await;
+            Json(SyncResponse {
+                success: true,
+                root: Some(status.root),
+                size: Some(status.size),
+                error: None,
+            })
+        }
+        Err(e) => Json(SyncResponse {
+            success: false,
+            root: None,
+            size: None,
+            error: Some(e),
+        }),
+    }
+}
+
 // =============================================================================
 // WebSocket Handlers
 // =============================================================================
@@ -458,40 +495,9 @@ async fn ws_tree_handler(
     ws.on_upgrade(move |socket| handle_tree_socket(socket, state.tree_cache))
 }
 
-async fn handle_tree_socket(socket: WebSocket, tree_cache: Arc<TreeCache>) {
-    let (mut sender, mut receiver) = socket.split();
-
-    // Subscribe to tree updates
-    let mut rx = tree_cache.subscribe();
-
-    // Forward tree updates to the client
-    let send_task = tokio::spawn(async move {
-        while let Ok(update) = rx.recv().await {
-            let json = match serde_json::to_string(&update) {
-                Ok(j) => j,
-                Err(_) => continue,
-            };
-            if sender.send(Message::Text(json.into())).await.is_err() {
-                break;
-            }
-        }
-    });
-
-    // Handle incoming messages (ping/pong, close)
-    let recv_task = tokio::spawn(async move {
-        while let Some(msg) = receiver.next().await {
-            match msg {
-                Ok(Message::Close(_)) => break,
-                Err(_) => break,
-                _ => {}
-            }
-        }
-    });
-
-    tokio::select! {
-        _ = send_task => {},
-        _ = recv_task => {},
-    }
+async fn handle_tree_socket(socket: axum::extract::ws::WebSocket, tree_cache: Arc<TreeCache>) {
+    let rx = tree_cache.subscribe();
+    run_broadcast_ws(socket, rx, None, "").await;
 }
 
 async fn ws_announcements_handler(
@@ -501,18 +507,38 @@ async fn ws_announcements_handler(
     ws.on_upgrade(move |socket| handle_announcements_socket(socket, state.tree_cache))
 }
 
-async fn handle_announcements_socket(socket: WebSocket, tree_cache: Arc<TreeCache>) {
+async fn handle_announcements_socket(socket: axum::extract::ws::WebSocket, tree_cache: Arc<TreeCache>) {
+    let rx = tree_cache.subscribe_announcements();
+    run_broadcast_ws(socket, rx, None, "").await;
+}
+
+/// Unified event stream — multiplexes tree, nullifier, and announcement updates
+async fn ws_events_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<IndexerAppState>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_events_socket(socket, state.tree_cache))
+}
+
+async fn handle_events_socket(socket: WebSocket, tree_cache: Arc<TreeCache>) {
     let (mut sender, mut receiver) = socket.split();
-    let mut rx = tree_cache.subscribe_announcements();
+
+    let mut tree_rx = tree_cache.subscribe();
+    let mut null_rx = tree_cache.subscribe_nullifiers();
+    let mut ann_rx = tree_cache.subscribe_announcements();
 
     let send_task = tokio::spawn(async move {
-        while let Ok(update) = rx.recv().await {
-            let json = match serde_json::to_string(&update) {
-                Ok(j) => j,
-                Err(_) => continue,
+        loop {
+            let json = tokio::select! {
+                Ok(update) = tree_rx.recv() => serde_json::to_string(&update).ok(),
+                Ok(update) = null_rx.recv() => serde_json::to_string(&update).ok(),
+                Ok(update) = ann_rx.recv() => serde_json::to_string(&update).ok(),
+                else => break,
             };
-            if sender.send(Message::Text(json.into())).await.is_err() {
-                break;
+            if let Some(json) = json {
+                if sender.send(Message::Text(json.into())).await.is_err() {
+                    break;
+                }
             }
         }
     });

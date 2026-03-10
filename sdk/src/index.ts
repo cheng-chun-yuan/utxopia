@@ -657,6 +657,21 @@ export {
 } from "./announcement-client";
 
 // ==========================================================================
+// Event Client (unified WS + REST for all event types)
+// ==========================================================================
+
+export {
+  EventClient,
+  type LeafInsertedEvent as EventLeafInserted,
+  type NullifierSpentEvent as EventNullifierSpent,
+  type AnnouncementEvent as EventAnnouncement,
+  type ServerEvent as EventServerEvent,
+  type EventListener,
+  type TreeStatusResponse,
+  type NullifierPdasResponse,
+} from "./event-client";
+
+// ==========================================================================
 // Demo Instructions (devnet/localnet only)
 // ==========================================================================
 

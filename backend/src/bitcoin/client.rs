@@ -20,10 +20,7 @@ impl EsploraClient {
     /// Create a new client with custom URL
     pub fn new(base_url: &str) -> Self {
         Self {
-            client: Client::builder()
-                .timeout(std::time::Duration::from_secs(15))
-                .build()
-                .unwrap_or_else(|_| Client::new()),
+            client: crate::common::http::default_http_client(),
             base_url: base_url.trim_end_matches('/').to_string(),
         }
     }

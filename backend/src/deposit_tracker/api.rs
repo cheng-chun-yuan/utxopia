@@ -18,8 +18,6 @@ use axum::{
 };
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tower_http::cors::{AllowOrigin, Any, CorsLayer};
-
 use crate::api::middleware::{api_key_auth_middleware, create_rate_limiter, rate_limit_middleware};
 use super::service::DepositTrackerService;
 use super::types::DepositStatusResponse;
@@ -58,28 +56,7 @@ pub fn create_deposit_router(tracker: DepositTrackerService) -> Router {
         bitcoin_network: "testnet".to_string(),
     });
 
-    // CORS configuration
-    let cors = match std::env::var("ALLOWED_ORIGIN") {
-        Ok(origin) if !origin.is_empty() => {
-            let origins: Vec<_> = origin
-                .split(',')
-                .filter_map(|o| o.trim().parse().ok())
-                .collect();
-            CorsLayer::new()
-                .allow_origin(AllowOrigin::list(origins))
-                .allow_methods(Any)
-                .allow_headers(Any)
-        }
-        _ => {
-            tracing::warn!("ALLOWED_ORIGIN not set — defaulting to localhost:3000 (set ALLOWED_ORIGIN for production)");
-            CorsLayer::new()
-                .allow_origin(AllowOrigin::list(
-                    vec!["http://localhost:3000".parse().unwrap()]
-                ))
-                .allow_methods(Any)
-                .allow_headers(Any)
-        }
-    };
+    let cors = crate::common::cors::cors_from_env();
 
     let authed = Router::new()
         .route("/api/deposits", post(handle_register_deposit))

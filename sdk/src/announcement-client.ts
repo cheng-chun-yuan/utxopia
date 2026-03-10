@@ -108,24 +108,24 @@ function wsUpdateToAnnouncement(update: WsAnnouncementUpdate): OnChainStealthAnn
 // ---------------------------------------------------------------------------
 
 export class AnnouncementClient {
-  private ws: WebSocket | null = null;
-  private wsReconnectDelay = 1000;
-  private wsConnected = false;
-  private listeners = new Set<AnnouncementListener>();
-  private cachedAnnouncements: OnChainStealthAnnouncement[] = [];
-  private latestLeafIndex = -1;
-  private backendHealthy = true;
-  private closed = false;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  protected ws: WebSocket | null = null;
+  protected wsReconnectDelay = 1000;
+  protected wsConnected = false;
+  protected listeners = new Set<AnnouncementListener>();
+  protected cachedAnnouncements: OnChainStealthAnnouncement[] = [];
+  protected latestLeafIndex = -1;
+  protected backendHealthy = true;
+  protected closed = false;
+  protected reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private lastRpcFetchAt = 0;
   private rpcCooldownMs = 30_000; // minimum 30s between RPC fallback calls
 
-  private restTimeout: number;
-  private wsMaxReconnect: number;
+  protected restTimeout: number;
+  protected wsMaxReconnect: number;
   private maxLag: number;
-  private wsUrl: string;
+  protected wsUrl: string;
 
-  constructor(private config: AnnouncementClientConfig) {
+  constructor(protected config: AnnouncementClientConfig) {
     this.restTimeout = config.restTimeoutMs ?? 5000;
     this.wsMaxReconnect = config.wsMaxReconnectMs ?? 30000;
     this.maxLag = config.maxLagLeaves ?? 2;
@@ -212,7 +212,7 @@ export class AnnouncementClient {
   // Internal: Backend REST
   // -----------------------------------------------------------------------
 
-  private async fetchFromBackend(
+  protected async fetchFromBackend(
     since?: number,
   ): Promise<OnChainStealthAnnouncement[]> {
     const url = since != null
@@ -362,7 +362,7 @@ export class AnnouncementClient {
   // Internal: WebSocket
   // -----------------------------------------------------------------------
 
-  private connectWs(): void {
+  protected connectWs(): void {
     if (this.closed) return;
 
     try {
@@ -420,7 +420,7 @@ export class AnnouncementClient {
     }
   }
 
-  private scheduleReconnect(): void {
+  protected scheduleReconnect(): void {
     if (this.closed) return;
 
     this.reconnectTimer = setTimeout(async () => {

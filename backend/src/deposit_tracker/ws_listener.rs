@@ -10,7 +10,7 @@ use futures_util::{SinkExt, StreamExt};
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::mpsc;
-use tokio::time::{sleep, Duration};
+use tokio::time::Duration;
 use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 use super::header_relayer::HeaderRelayer;
@@ -57,25 +57,17 @@ impl MempoolWsListener {
 
     /// Run forever with automatic reconnection (spawn as background task).
     pub async fn run(&self) {
-        let mut backoff_secs = 5u64;
-
-        loop {
-            println!("[ws] Connecting to {}...", self.ws_url);
-
-            match self.connect_and_listen().await {
-                Ok(()) => {
-                    println!("[ws] Connection closed, reconnecting...");
-                    backoff_secs = 5;
-                }
-                Err(e) => {
-                    eprintln!("[ws] Error: {}, reconnecting in {}s...", e, backoff_secs);
-                }
-            }
-
-            let _ = self.event_tx.send(WsEvent::Disconnected);
-            sleep(Duration::from_secs(backoff_secs)).await;
-            backoff_secs = (backoff_secs * 2).min(120);
-        }
+        crate::common::reconnect::reconnect_loop(
+            "mempool-ws",
+            Duration::from_secs(5),
+            Duration::from_secs(120),
+            || async {
+                let result = self.connect_and_listen().await;
+                let _ = self.event_tx.send(WsEvent::Disconnected);
+                result
+            },
+        )
+        .await;
     }
 
     async fn connect_and_listen(&self) -> Result<(), String> {

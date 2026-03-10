@@ -5,14 +5,15 @@
 
 use axum::{
     extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
+        ws::{WebSocketUpgrade},
         Path, State,
     },
     response::IntoResponse,
 };
-use futures_util::{SinkExt, StreamExt};
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
+
+use crate::common::ws::run_broadcast_ws;
 
 use super::types::DepositStatusUpdate;
 
@@ -72,61 +73,21 @@ pub async fn ws_deposit_handler(
 }
 
 /// Handle individual WebSocket connection
-async fn handle_socket(socket: WebSocket, deposit_id: String, state: SharedWebSocketState) {
-    let (mut sender, mut receiver) = socket.split();
-
-    // Subscribe to updates
+async fn handle_socket(socket: axum::extract::ws::WebSocket, deposit_id: String, state: SharedWebSocketState) {
     let ws_state = state.read().await;
-    let mut rx = ws_state.subscribe();
+    let rx = ws_state.subscribe();
     drop(ws_state);
 
-    // Spawn task to forward updates to this client
-    let deposit_id_clone = deposit_id.clone();
-    let send_task = tokio::spawn(async move {
-        while let Ok(update) = rx.recv().await {
-            // Only send updates for the subscribed deposit
-            if update.deposit_id == deposit_id_clone {
-                let json = match serde_json::to_string(&update) {
-                    Ok(j) => j,
-                    Err(_) => continue,
-                };
-
-                if sender.send(Message::Text(json.into())).await.is_err() {
-                    break;
-                }
-            }
-        }
-    });
-
-    // Handle incoming messages (ping/pong, close)
-    let recv_task = tokio::spawn(async move {
-        while let Some(msg) = receiver.next().await {
-            match msg {
-                Ok(Message::Ping(data)) => {
-                    // Pong is handled automatically by axum
-                    let _ = data;
-                }
-                Ok(Message::Close(_)) => {
-                    break;
-                }
-                Ok(Message::Text(text)) => {
-                    // Handle any client messages if needed
-                    // For now, we just log them
-                    println!("WS received from {}: {}", deposit_id, text);
-                }
-                Err(_) => {
-                    break;
-                }
-                _ => {}
-            }
-        }
-    });
-
-    // Wait for either task to complete
-    tokio::select! {
-        _ = send_task => {},
-        _ = recv_task => {},
-    }
+    let filter_id = deposit_id.clone();
+    run_broadcast_ws(
+        socket,
+        rx,
+        Some(Box::new(move |update: &DepositStatusUpdate| {
+            update.deposit_id == filter_id
+        })),
+        &deposit_id,
+    )
+    .await;
 }
 
 /// WebSocket upgrade handler for all deposit updates
@@ -141,43 +102,12 @@ pub async fn ws_all_deposits_handler(
 }
 
 /// Handle WebSocket connection for all deposits
-async fn handle_socket_all(socket: WebSocket, state: SharedWebSocketState) {
-    let (mut sender, mut receiver) = socket.split();
-
-    // Subscribe to updates
+async fn handle_socket_all(socket: axum::extract::ws::WebSocket, state: SharedWebSocketState) {
     let ws_state = state.read().await;
-    let mut rx = ws_state.subscribe();
+    let rx = ws_state.subscribe();
     drop(ws_state);
 
-    // Spawn task to forward ALL updates to this client
-    let send_task = tokio::spawn(async move {
-        while let Ok(update) = rx.recv().await {
-            let json = match serde_json::to_string(&update) {
-                Ok(j) => j,
-                Err(_) => continue,
-            };
-
-            if sender.send(Message::Text(json.into())).await.is_err() {
-                break;
-            }
-        }
-    });
-
-    // Handle incoming messages
-    let recv_task = tokio::spawn(async move {
-        while let Some(msg) = receiver.next().await {
-            match msg {
-                Ok(Message::Close(_)) => break,
-                Err(_) => break,
-                _ => {}
-            }
-        }
-    });
-
-    tokio::select! {
-        _ = send_task => {},
-        _ = recv_task => {},
-    }
+    run_broadcast_ws(socket, rx, None, "").await;
 }
 
 /// Publisher for broadcasting deposit updates

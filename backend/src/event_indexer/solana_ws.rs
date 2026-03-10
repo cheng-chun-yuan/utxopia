@@ -47,33 +47,13 @@ impl SolanaWsSubscriber {
 
     /// Run the subscriber loop with automatic reconnection
     pub async fn run(&self) {
-        let mut reconnect_delay = Duration::from_secs(1);
-        let max_delay = Duration::from_secs(60);
-
-        loop {
-            tracing::info!(
-                url = %self.config.ws_url,
-                program_id = %self.config.program_id,
-                "Connecting to Solana logsSubscribe..."
-            );
-
-            match self.connect_and_listen().await {
-                Ok(()) => {
-                    tracing::info!("Solana WS connection closed normally");
-                    reconnect_delay = Duration::from_secs(1);
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        error = %e,
-                        retry_secs = reconnect_delay.as_secs(),
-                        "Solana WS connection failed, reconnecting..."
-                    );
-                }
-            }
-
-            tokio::time::sleep(reconnect_delay).await;
-            reconnect_delay = (reconnect_delay * 2).min(max_delay);
-        }
+        crate::common::reconnect::reconnect_loop(
+            "solana-ws",
+            Duration::from_secs(1),
+            Duration::from_secs(60),
+            || async { self.connect_and_listen().await },
+        )
+        .await;
     }
 
     /// Connect to Solana WS and process log notifications
@@ -208,7 +188,11 @@ impl SolanaWsSubscriber {
                     }
                 }
                 ProgramEvent::NullifierSpent(e) => {
-                    let _ = self.store.insert_nullifier(&e, signature, slot);
+                    if let Ok(inserted) = self.store.insert_nullifier(&e, signature, slot) {
+                        if inserted {
+                            self.tree_cache.broadcast_nullifier(&hex::encode(e.nullifier_hash), slot);
+                        }
+                    }
                 }
                 ProgramEvent::StealthAnnouncement(e) => {
                     if let Ok(inserted) =

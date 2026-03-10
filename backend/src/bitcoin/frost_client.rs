@@ -197,10 +197,7 @@ impl FrostClient {
     /// * `api_key` - Optional API key for FROST server auth
     pub fn new(signer_urls: Vec<String>, threshold: usize, api_key: Option<String>) -> Self {
         Self {
-            http: Client::builder()
-                .timeout(Duration::from_secs(30))
-                .build()
-                .unwrap_or_else(|_| Client::new()),
+            http: crate::common::http::http_client_with_timeout(Duration::from_secs(30)),
             signer_urls,
             threshold,
             api_key,

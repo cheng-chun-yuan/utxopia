@@ -42,6 +42,18 @@ pub struct NullifierRow {
     pub slot: i64,
 }
 
+/// A transfer grouped by tx_signature, with inputs (nullifiers) and outputs (commitments)
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct TransferRow {
+    pub tx_signature: String,
+    pub commitments: Vec<String>,
+    pub leaf_indices: Vec<i64>,
+    pub nullifier_hashes: Vec<String>,
+    pub output_count: i64,
+    pub input_count: i64,
+    pub timestamp: i64, // spent_at from nullifier_events
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct AnnouncementRow {
     pub leaf_index: i64,
@@ -431,6 +443,78 @@ impl EventStore {
         )
         .map_err(|e| format!("clear error: {}", e))?;
         Ok(())
+    }
+
+    /// Get transfers: announcements (type=1) grouped by tx_signature,
+    /// enriched with nullifier hashes and timestamp from nullifier_events.
+    pub fn get_transfers(&self) -> Result<Vec<TransferRow>, String> {
+        let conn = self.conn()?;
+
+        // Step 1: Get grouped outputs
+        let mut stmt = conn.prepare(
+            "SELECT
+                a.tx_signature,
+                GROUP_CONCAT(HEX(a.commitment), ',') AS commitments,
+                GROUP_CONCAT(a.leaf_index, ',') AS leaf_indices,
+                COUNT(a.leaf_index) AS output_count
+             FROM stealth_announcements a
+             WHERE a.announcement_type = 1
+             GROUP BY a.tx_signature
+             ORDER BY MAX(a.leaf_index) DESC"
+        ).map_err(|e| format!("query error: {}", e))?;
+
+        struct PartialTransfer {
+            tx_signature: String,
+            commitments: Vec<String>,
+            leaf_indices: Vec<i64>,
+            output_count: i64,
+        }
+
+        let partials: Vec<PartialTransfer> = stmt.query_map([], |row| {
+            let commitments_str: String = row.get(1)?;
+            let leaf_indices_str: String = row.get(2)?;
+            Ok(PartialTransfer {
+                tx_signature: row.get(0)?,
+                commitments: commitments_str.split(',').map(|s| s.to_lowercase()).collect(),
+                leaf_indices: leaf_indices_str.split(',').filter_map(|s| s.parse().ok()).collect(),
+                output_count: row.get(3)?,
+            })
+        }).map_err(|e| format!("query error: {}", e))?
+          .collect::<Result<Vec<_>, _>>().map_err(|e| format!("row error: {}", e))?;
+
+        // Step 2: For each tx, fetch nullifiers
+        let mut null_stmt = conn.prepare(
+            "SELECT HEX(nullifier_hash), spent_at FROM nullifier_events WHERE tx_signature = ?1"
+        ).map_err(|e| format!("query error: {}", e))?;
+
+        let mut results = Vec::with_capacity(partials.len());
+        for p in partials {
+            let nullifiers: Vec<(String, i64)> = null_stmt.query_map(
+                params![p.tx_signature],
+                |row| {
+                    let hash: String = row.get(0)?;
+                    let spent_at: i64 = row.get(1)?;
+                    Ok((hash.to_lowercase(), spent_at))
+                },
+            ).map_err(|e| format!("query error: {}", e))?
+             .collect::<Result<Vec<_>, _>>().map_err(|e| format!("row error: {}", e))?;
+
+            let input_count = nullifiers.len() as i64;
+            let timestamp = nullifiers.iter().map(|(_, t)| *t).max().unwrap_or(0);
+            let nullifier_hashes: Vec<String> = nullifiers.into_iter().map(|(h, _)| h).collect();
+
+            results.push(TransferRow {
+                tx_signature: p.tx_signature,
+                commitments: p.commitments,
+                leaf_indices: p.leaf_indices,
+                nullifier_hashes,
+                output_count: p.output_count,
+                input_count,
+                timestamp,
+            });
+        }
+
+        Ok(results)
     }
 
     fn map_announcement_row(row: &rusqlite::Row) -> rusqlite::Result<AnnouncementRow> {

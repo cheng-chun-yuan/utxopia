@@ -7,7 +7,6 @@ use axum::{
 };
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 
 use super::service::{SharedStealthService, StealthDepositService};
 use super::types::{
@@ -29,25 +28,7 @@ pub fn create_stealth_router(service: StealthDepositService) -> Router {
         stealth: Arc::new(RwLock::new(service)),
     });
 
-    let cors = match std::env::var("ALLOWED_ORIGIN") {
-        Ok(origin) if !origin.is_empty() => {
-            let origins: Vec<_> = origin
-                .split(',')
-                .filter_map(|o| o.trim().parse().ok())
-                .collect();
-            CorsLayer::new()
-                .allow_origin(AllowOrigin::list(origins))
-                .allow_methods(Any)
-                .allow_headers(Any)
-        }
-        _ => {
-            tracing::warn!("ALLOWED_ORIGIN not set — CORS allows any origin (not safe for production)");
-            CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods(Any)
-                .allow_headers(Any)
-        }
-    };
+    let cors = crate::common::cors::cors_from_env();
 
     Router::new()
         .route("/api/stealth/prepare", post(handle_prepare))

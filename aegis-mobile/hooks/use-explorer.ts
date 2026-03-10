@@ -1,24 +1,70 @@
 import useSWR from "swr";
+import { API_BASE, fetcher } from "@/lib/api";
+import { getEventClient } from "./use-event-stream";
 
-const API_BASE =
-  process.env.EXPO_PUBLIC_API_URL || "https://api-aegis.amidoggy.xyz";
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
-
-export interface ExplorerItem {
-  hash: string;
-  timestamp: number;
-  type?: string;
+export interface LeafRow {
+  leaf_index: number;
+  commitment: string;
+  created_at: number;
+  tx_signature: string;
+  slot: number;
 }
 
-export function useCommitments() {
-  return useSWR<ExplorerItem[]>(`${API_BASE}/tree/leaves`, fetcher);
+export interface AnnouncementRow {
+  leaf_index: number;
+  announcement_type: number;
+  ephemeral_pub: string;
+  encrypted_amount: string;
+  commitment: string;
+  tx_signature: string;
+  slot: number;
+}
+
+export interface NullifierPdas {
+  pdas: string[];
+  total: number;
+  latest_slot: number;
+}
+
+export interface AnnouncementsResponse {
+  success: boolean;
+  announcements: AnnouncementRow[];
+  count: number;
+  latest_leaf_index: number | null;
+}
+
+export function useAnnouncements() {
+  return useSWR<AnnouncementsResponse>(
+    `${API_BASE}/api/announcements`,
+    fetcher,
+  );
 }
 
 export function useNullifiers() {
-  return useSWR<ExplorerItem[]>(`${API_BASE}/events/nullifiers`, fetcher);
+  return useSWR<NullifierPdas>(
+    `${API_BASE}/api/nullifiers`,
+    async () => {
+      const client = getEventClient();
+      const pdas = await client.fetchSpentNullifiers();
+      return { pdas: Array.from(pdas), total: pdas.size, latest_slot: 0 };
+    },
+  );
 }
 
-export function useProofs() {
-  return useSWR<ExplorerItem[]>(`${API_BASE}/events/proofs`, fetcher);
+export interface TreeStatus {
+  root: string;
+  next_index: number;
+  size: number;
+}
+
+export function useTreeStatus() {
+  return useSWR<TreeStatus>(
+    `${API_BASE}/api/tree/status`,
+    async () => {
+      const client = getEventClient();
+      const status = await client.fetchTreeStatus();
+      if (!status) throw new Error("Backend unavailable");
+      return status;
+    },
+  );
 }

@@ -205,7 +205,12 @@ impl EventIndexerService {
                     tracing::debug!(leaf_index, inserted, "Indexed leaf");
                 }
                 ProgramEvent::NullifierSpent(e) => {
-                    self.store.insert_nullifier(&e, signature, slot)?;
+                    let inserted = self.store.insert_nullifier(&e, signature, slot)?;
+                    if inserted {
+                        if let Some(ref cache) = self.tree_cache {
+                            cache.broadcast_nullifier(&hex::encode(e.nullifier_hash), slot);
+                        }
+                    }
                     tracing::debug!(
                         nullifier = hex::encode(&e.nullifier_hash[..8]),
                         "Indexed nullifier"
