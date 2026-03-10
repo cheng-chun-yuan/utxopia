@@ -358,6 +358,12 @@ impl EventStore {
         }
     }
 
+    pub fn get_leaf_count(&self) -> Result<i64, String> {
+        let conn = self.conn()?;
+        conn.query_row("SELECT COUNT(*) FROM leaf_events", [], |row| row.get(0))
+            .map_err(|e| format!("query error: {}", e))
+    }
+
     pub fn get_announcement_count(&self) -> Result<i64, String> {
         let conn = self.conn()?;
         conn.query_row("SELECT COUNT(*) FROM stealth_announcements", [], |row| row.get(0))

@@ -151,8 +151,9 @@ let announcementClient: AnnouncementClient | null = null;
 
 function getAnnouncementClient(): AnnouncementClient {
   if (!announcementClient) {
-    const backendUrl = process.env.NEXT_PUBLIC_ZKBTC_API_URL || "http://localhost:3001";
-    const wsUrl = backendUrl.replace("http://", "ws://").replace("https://", "wss://");
+    const backendUrl = "";
+    const wsBackendUrl = process.env.NEXT_PUBLIC_ZKBTC_API_URL || "http://localhost:3001";
+    const wsUrl = wsBackendUrl.replace("http://", "ws://").replace("https://", "wss://");
     announcementClient = new AnnouncementClient({
       backendUrl,
       backendWsUrl: wsUrl,
@@ -466,8 +467,8 @@ export const useAegisStore = create<AegisState>((set, get) => ({
             ? await scanAnnouncementsViewOnly(viewOnlyKeys, announcements)
             : await scanUnifiedNotes(keys!, announcements);
 
-        // Check which notes are spent via backend batch nullifier API
-        const backendUrl = process.env.NEXT_PUBLIC_ZKBTC_API_URL || "http://localhost:3001";
+        // Check which notes are spent via backend batch nullifier API (use proxy)
+        const backendUrl = "";
 
         const nullifyingKey = isViewOnly && viewOnlyKeys
           ? viewOnlyKeys.nullifyingKey

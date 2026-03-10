@@ -714,7 +714,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         setProofStatus("Verifying imported funds...");
 
         // Fetch all announcements once
-        const announcementsResp = await fetch("/api/stealth/announcements");
+        const announcementsResp = await fetch("/api/announcements");
         const announcementsData = await announcementsResp.json();
         const allAnns = announcementsData.announcements || [];
 
@@ -742,11 +742,11 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
           }
 
           const parsedAnns = [{
-            announcementType: matchingAnn.announcementType,
-            ephemeralPub: hexToBytes(matchingAnn.ephemeralPub),
-            encryptedAmount: hexToBytes(matchingAnn.encryptedAmount),
+            announcementType: matchingAnn.announcement_type,
+            ephemeralPub: hexToBytes(matchingAnn.ephemeral_pub),
+            encryptedAmount: hexToBytes(matchingAnn.encrypted_amount),
             commitment: hexToBytes(matchingAnn.commitment),
-            leafIndex: matchingAnn.leafIndex,
+            leafIndex: matchingAnn.leaf_index,
           }];
 
           const scanned = await scanNotes(impNote.keys, parsedAnns);

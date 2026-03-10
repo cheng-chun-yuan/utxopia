@@ -39,7 +39,7 @@ export async function scanSecretPhrase(
   const keys = await deriveKeysFromSeedCircuit(masterKey);
 
   // Fetch all stealth announcements and scan with phrase-derived viewing key
-  const announcementsResp = await fetch("/api/stealth/announcements");
+  const announcementsResp = await fetch("/api/announcements");
   if (!announcementsResp.ok) {
     throw new Error("Failed to fetch stealth announcements");
   }
@@ -47,17 +47,17 @@ export async function scanSecretPhrase(
 
   // Parse announcements into the format scanUnifiedNotes expects
   const announcements = (announcementsData.announcements || []).map((ann: {
-    announcementType: number;
-    ephemeralPub: string;
-    encryptedAmount: string;
+    announcement_type: number;
+    ephemeral_pub: string;
+    encrypted_amount: string;
     commitment: string;
-    leafIndex: number;
+    leaf_index: number;
   }) => ({
-    announcementType: ann.announcementType,
-    ephemeralPub: hexToBytes(ann.ephemeralPub),
-    encryptedAmount: hexToBytes(ann.encryptedAmount),
+    announcementType: ann.announcement_type,
+    ephemeralPub: hexToBytes(ann.ephemeral_pub),
+    encryptedAmount: hexToBytes(ann.encrypted_amount),
     commitment: hexToBytes(ann.commitment),
-    leafIndex: ann.leafIndex,
+    leafIndex: ann.leaf_index,
   }));
 
   const scannedNotes = await scanUnifiedNotes(keys, announcements);

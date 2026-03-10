@@ -137,8 +137,11 @@ pub struct AnnouncementsResponse {
 #[derive(Debug, Serialize)]
 pub struct AnnouncementsStatusResponse {
     pub count: i64,
+    pub leaf_count: i64,
     pub latest_leaf_index: Option<i64>,
     pub tree_next_index: u64,
+    /// true when leaf_count != announcement count (indicates missing announcements)
+    pub mismatch: bool,
 }
 
 /// Response for POST /api/tree/sync
@@ -391,12 +394,23 @@ async fn get_announcements_status(
     State(state): State<IndexerAppState>,
 ) -> Json<AnnouncementsStatusResponse> {
     let count = state.store.get_announcement_count().unwrap_or(0);
+    let leaf_count = state.store.get_leaf_count().unwrap_or(0);
     let latest = state.store.get_latest_announcement_leaf_index().ok().flatten();
     let tree_status = state.tree_cache.get_status().await;
+    let mismatch = leaf_count != count;
+    if mismatch {
+        tracing::warn!(
+            leaf_count,
+            announcement_count = count,
+            "Leaf/announcement count mismatch — some announcements may be missing"
+        );
+    }
     Json(AnnouncementsStatusResponse {
         count,
+        leaf_count,
         latest_leaf_index: latest,
         tree_next_index: tree_status.next_index,
+        mismatch,
     })
 }
 
