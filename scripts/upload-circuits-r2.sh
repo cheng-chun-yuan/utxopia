@@ -9,7 +9,7 @@
 
 set -euo pipefail
 
-BUCKET="aegis-circuits"
+BUCKET="zvault-circuits"
 CIRCUIT_DIR="aegis-app/public/circuits/groth16"
 
 TIER1=(joinsplit_1x1 joinsplit_1x2 joinsplit_2x1 joinsplit_2x2)
@@ -26,9 +26,10 @@ upload_circuit() {
   fi
   local size=$(du -h "$zkey" | cut -f1)
   echo "Uploading $name ($size)..."
-  npx wrangler r2 object put "$BUCKET/groth16/${name}/${name}.zkey" \
+  npx wrangler r2 object put "$BUCKET/circuits/groth16/${name}/${name}.zkey" \
     --file "$zkey" \
-    --content-type "application/octet-stream"
+    --content-type "application/octet-stream" \
+    --remote
 }
 
 case "$MODE" in
