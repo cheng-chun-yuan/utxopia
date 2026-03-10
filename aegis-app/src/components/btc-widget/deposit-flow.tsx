@@ -1083,7 +1083,7 @@ export function DepositFlow() {
                         disabled={btcWallet.connecting}
                         className={cn(
                           "w-full py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2",
-                          "bg-btc hover:bg-btc/90 text-background",
+                          "bg-gray/15 hover:bg-gray/25 text-foreground border border-gray/20",
                           "disabled:bg-gray/20 disabled:text-gray disabled:cursor-not-allowed"
                         )}
                       >
@@ -1099,7 +1099,7 @@ export function DepositFlow() {
                         disabled={btcWallet.connecting}
                         className={cn(
                           "w-full py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2",
-                          "bg-[#eb4b13] hover:bg-[#d44311] text-white",
+                          "bg-gray/15 hover:bg-gray/25 text-foreground border border-gray/20",
                           "disabled:bg-gray/20 disabled:text-gray disabled:cursor-not-allowed"
                         )}
                       >
