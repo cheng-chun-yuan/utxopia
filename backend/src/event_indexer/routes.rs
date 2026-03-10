@@ -166,6 +166,7 @@ pub fn event_indexer_router(store: Arc<EventStore>, tree_cache: Arc<TreeCache>, 
         .route("/api/tree/status", get(get_status))
         .route("/api/tree/proof", get(get_proof))
         .route("/api/tree/sync", post(post_sync))
+        .route("/api/tree/reset", post(post_reset))
         .route("/api/nullifiers", get(get_all_nullifiers))
         .route("/api/nullifiers/batch", post(batch_nullifiers))
         .route("/api/nullifiers/{hash}", get(get_nullifier))
@@ -282,6 +283,38 @@ async fn post_sync(State(state): State<IndexerAppState>) -> Json<SyncResponse> {
                 error: Some(e),
             })
         }
+    }
+}
+
+/// POST /api/tree/reset — clear all indexed data and rebuild from scratch.
+/// The indexer will re-backfill on its next poll cycle.
+async fn post_reset(State(state): State<IndexerAppState>) -> Json<SyncResponse> {
+    tracing::warn!("Resetting event indexer — clearing all data");
+    if let Err(e) = state.store.clear_all() {
+        return Json(SyncResponse {
+            success: false,
+            root: None,
+            size: None,
+            error: Some(format!("clear failed: {}", e)),
+        });
+    }
+    // Rebuild tree cache (now empty)
+    match state.tree_cache.force_rebuild().await {
+        Ok(()) => {
+            let status = state.tree_cache.get_status().await;
+            Json(SyncResponse {
+                success: true,
+                root: Some(status.root),
+                size: Some(status.size),
+                error: None,
+            })
+        }
+        Err(e) => Json(SyncResponse {
+            success: false,
+            root: None,
+            size: None,
+            error: Some(e),
+        }),
     }
 }
 

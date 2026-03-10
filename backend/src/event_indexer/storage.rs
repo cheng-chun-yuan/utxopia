@@ -419,6 +419,20 @@ impl EventStore {
         Ok((hashes, total, latest_slot))
     }
 
+    /// Clear all indexed data (leaves, nullifiers, announcements, state).
+    /// Used to force a full re-index from on-chain data.
+    pub fn clear_all(&self) -> Result<(), String> {
+        let conn = self.conn()?;
+        conn.execute_batch(
+            "DELETE FROM leaf_events;
+             DELETE FROM nullifier_events;
+             DELETE FROM stealth_announcements;
+             DELETE FROM indexer_state;"
+        )
+        .map_err(|e| format!("clear error: {}", e))?;
+        Ok(())
+    }
+
     fn map_announcement_row(row: &rusqlite::Row) -> rusqlite::Result<AnnouncementRow> {
         let ephemeral_blob: Vec<u8> = row.get(2)?;
         let amount_blob: Vec<u8> = row.get(3)?;
