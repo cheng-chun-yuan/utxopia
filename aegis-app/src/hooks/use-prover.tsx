@@ -13,7 +13,14 @@ import {
   initProver,
   generateJoinSplitProof,
   proofToBytes,
+  setCircuitPath,
 } from "@aegis/sdk/prover/web";
+
+// Point circuit artifacts at R2 CDN when configured
+const cdnUrl = process.env.NEXT_PUBLIC_CIRCUIT_CDN_URL;
+if (cdnUrl) {
+  setCircuitPath(`${cdnUrl}/circuits/groth16`);
+}
 
 interface ProverState {
   isInitialized: boolean;
