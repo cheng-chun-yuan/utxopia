@@ -279,12 +279,8 @@ function DepositsTab() {
 // Transfers Tab — grouped by transaction
 // =============================================================================
 
-function outputLabel(index: number, total: number): { label: string; color: string } {
-  if (total === 1) return { label: "Send", color: "text-purple-400" };
-  if (total === 2) return index === 0 ? { label: "Send", color: "text-purple-400" } : { label: "Change", color: "text-gray" };
-  if (index === 0) return { label: "Send", color: "text-purple-400" };
-  if (index === total - 1) return { label: "Change", color: "text-gray" };
-  return { label: "Fee", color: "text-orange-400" };
+function outputLabel(index: number): { label: string; color: string } {
+  return { label: `Output ${index + 1}`, color: "text-purple-400" };
 }
 
 function TransfersTab() {
@@ -364,7 +360,7 @@ function TransfersTab() {
                     </Td>
                   </tr>
                   {isOpen && tx.outputs.map((out, i) => {
-                    const { label, color } = outputLabel(i, tx.outputs.length);
+                    const { label, color } = outputLabel(i);
                     return (
                       <tr key={out.leafIndex} className="bg-muted/30">
                         <Td />
