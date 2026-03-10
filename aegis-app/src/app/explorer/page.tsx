@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, Suspense, useCallback, Fragment } from "react";
 import Link from "next/link";
 import {
   ArrowDownToLine,
   ArrowUpDown,
   ArrowUpFromLine,
+  ChevronDown,
   ExternalLink,
   Loader2,
   Search,
@@ -140,9 +141,9 @@ function Th({ children, className }: { children?: React.ReactNode; className?: s
   );
 }
 
-function Td({ children, className }: { children: React.ReactNode; className?: string }) {
+function Td({ children, className, colSpan }: { children?: React.ReactNode; className?: string; colSpan?: number }) {
   return (
-    <td className={cn("px-4 py-3.5 whitespace-nowrap", className)}>
+    <td className={cn("px-4 py-3.5 whitespace-nowrap", className)} colSpan={colSpan}>
       {children}
     </td>
   );
@@ -288,6 +289,16 @@ function outputLabel(index: number, total: number): { label: string; color: stri
 
 function TransfersTab() {
   const { transfers, isLoading, error, refresh } = useTransfers();
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggle = useCallback((sig: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(sig)) next.delete(sig);
+      else next.add(sig);
+      return next;
+    });
+  }, []);
 
   if (error) return <ErrorState message={error} onRetry={refresh} />;
   if (isLoading) return <LoadingState />;
@@ -299,52 +310,85 @@ function TransfersTab() {
         <span className="text-caption text-gray">{transfers.length} transaction(s)</span>
         <RefreshButton onClick={refresh} />
       </div>
-      <div className="space-y-3">
-        {transfers.map((tx) => (
-          <div key={tx.txSignature} className="rounded-[12px] border border-gray/15 overflow-hidden">
-            {/* Tx header */}
-            <div className="flex items-center justify-between px-4 py-3 bg-muted/50 border-b border-gray/10">
-              <div className="flex items-center gap-2.5">
-                <div className="flex items-center gap-1">
-                  <Shield className="w-4 h-4 text-purple-400" />
-                  <span className="text-body2 text-purple-400 font-medium">
-                    JoinSplit
-                  </span>
-                </div>
-                <span className="text-caption text-gray bg-gray/10 px-2 py-0.5 rounded-full">
-                  1 input → {tx.outputs.length} outputs
-                </span>
-                <span className="text-caption text-gray">{timeAgo(tx.timestamp)}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5">
-                  <code className="text-caption font-mono text-gray">{truncate(tx.txSignature, 6, 4)}</code>
-                  <CopyButton text={tx.txSignature} label="Tx" variant="default" iconSize="sm" />
-                </div>
-                <SolanaLink signature={tx.txSignature} />
-              </div>
-            </div>
-
-            {/* Outputs */}
-            <div className="divide-y divide-gray/10">
-              {tx.outputs.map((out, i) => {
-                const { label, color } = outputLabel(i, tx.outputs.length);
-                return (
-                  <div key={out.leafIndex} className="flex items-center justify-between px-4 py-2.5 hover:bg-gray/5 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <span className={cn("text-caption font-medium min-w-[50px]", color)}>{label}</span>
+      <div className="overflow-x-auto rounded-[12px] border border-gray/15">
+        <table className="w-full min-w-[600px]">
+          <thead>
+            <tr className="border-b border-gray/15">
+              <Th className="w-[40px]" />
+              <Th>Type</Th>
+              <Th>Tx ID</Th>
+              <Th>Outputs</Th>
+              <Th>Time</Th>
+              <Th className="w-[40px]" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray/10">
+            {transfers.map((tx) => {
+              const isOpen = expanded.has(tx.txSignature);
+              return (
+                <Fragment key={tx.txSignature}>
+                  <tr
+                    className="hover:bg-gray/5 transition-colors cursor-pointer"
+                    onClick={() => toggle(tx.txSignature)}
+                  >
+                    <Td>
+                      <ChevronDown
+                        className={cn(
+                          "w-4 h-4 text-gray transition-transform",
+                          isOpen && "rotate-180"
+                        )}
+                      />
+                    </Td>
+                    <Td>
                       <div className="flex items-center gap-1.5">
-                        <code className="text-caption font-mono text-foreground">{truncate(out.commitment, 8, 6)}</code>
-                        <CopyButton text={out.commitment} label="Commitment" variant="default" iconSize="sm" />
+                        <Shield className="w-4 h-4 text-purple-400" />
+                        <span className="text-body2 text-foreground font-medium">JoinSplit</span>
                       </div>
-                    </div>
-                    <span className="text-caption text-foreground font-mono">Leaf #{out.leafIndex}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+                    </Td>
+                    <Td>
+                      <div className="flex items-center gap-1.5">
+                        <code className="text-caption font-mono text-foreground">{truncate(tx.txSignature, 6, 4)}</code>
+                        <CopyButton text={tx.txSignature} label="Tx" variant="default" iconSize="sm" />
+                      </div>
+                    </Td>
+                    <Td>
+                      <span className="text-caption text-gray bg-gray/10 px-2 py-0.5 rounded-full">
+                        {tx.outputs.length} output{tx.outputs.length !== 1 ? "s" : ""}
+                      </span>
+                    </Td>
+                    <Td>
+                      <span className="text-caption text-gray">{timeAgo(tx.timestamp)}</span>
+                    </Td>
+                    <Td>
+                      <SolanaLink signature={tx.txSignature} />
+                    </Td>
+                  </tr>
+                  {isOpen && tx.outputs.map((out, i) => {
+                    const { label, color } = outputLabel(i, tx.outputs.length);
+                    return (
+                      <tr key={out.leafIndex} className="bg-muted/30">
+                        <Td />
+                        <Td>
+                          <span className={cn("text-caption font-medium", color)}>{label}</span>
+                        </Td>
+                        <Td colSpan={2}>
+                          <div className="flex items-center gap-1.5">
+                            <code className="text-caption font-mono text-foreground">{truncate(out.commitment, 8, 6)}</code>
+                            <CopyButton text={out.commitment} label="Commitment" variant="default" iconSize="sm" />
+                          </div>
+                        </Td>
+                        <Td>
+                          <span className="text-caption text-foreground font-mono">Leaf #{out.leafIndex}</span>
+                        </Td>
+                        <Td />
+                      </tr>
+                    );
+                  })}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );
