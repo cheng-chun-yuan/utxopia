@@ -54,15 +54,37 @@ export function StealthRecipientInput({
     const trimmed = recipient.trim();
 
     try {
-      const isStealthAddress = trimmed.startsWith("aegis:") || /^[0-9a-fA-F]{100,}$/.test(trimmed);
+      // Reject URLs
+      if (/^https?:\/\//i.test(trimmed)) {
+        onError("Please enter a .btcpro.sol name or stealth address, not a URL");
+        return;
+      }
+
+      // Reject Bitcoin addresses (bc1/tb1/1/3/n/m prefixed)
+      if (/^(bc1|tb1|[13nm])[a-zA-HJ-NP-Z0-9]{25,}$/i.test(trimmed)) {
+        onError("Please enter a .btcpro.sol name or stealth address, not a BTC address");
+        return;
+      }
+
+      // Detect stealth address: aegis: prefix or long hex (50+ chars)
+      const isStealthAddress = trimmed.startsWith("aegis:") || /^[0-9a-fA-F]{50,}$/.test(trimmed);
 
       if (isStealthAddress) {
         const meta = decodeStealthMetaAddress(trimmed);
         if (!meta) {
-          onError("Invalid stealth address format (expected 130 hex characters)");
+          const short = trimmed.length > 20
+            ? `${trimmed.slice(0, 10)}...${trimmed.slice(-6)}`
+            : trimmed;
+          onError(`Invalid stealth address: ${short}`);
           return;
         }
         onResolved(meta, null);
+        return;
+      }
+
+      // Reject Solana pubkeys (base58, 32-44 chars)
+      if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed)) {
+        onError("Enter a .btcpro.sol name or stealth address, not a Solana address");
         return;
       }
 
@@ -72,10 +94,18 @@ export function StealthRecipientInput({
         .replace(new RegExp(`\\.${parentDomain}$`, "i"), "")
         .toLowerCase();
 
+      if (subdomain.length > 32) {
+        onError("Name too long — expected a short .btcpro.sol subdomain");
+        return;
+      }
+
       const connectionAdapter = getConnectionAdapter();
       const result = await resolveSnsName(connectionAdapter as any, subdomain);
       if (!result) {
-        onError(`"${subdomain}.${parentDomain}.sol" not found`);
+        const displayName = subdomain.length > 20
+          ? `${subdomain.slice(0, 10)}...${subdomain.slice(-6)}`
+          : subdomain;
+        onError(`"${displayName}.${parentDomain}.sol" not found`);
         return;
       }
 
@@ -148,11 +178,10 @@ export function StealthRecipientInput({
                 onResolved(selfMeta, null);
                 onError(null);
               }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2 py-1 rounded-md bg-purple/10 hover:bg-purple/20 border border-purple/20 transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-md bg-purple/10 hover:bg-purple/20 border border-purple/20 transition-colors"
               title="Send to yourself"
             >
               <UserRound className="w-3.5 h-3.5 text-purple" />
-              <span className="text-caption text-purple">Self</span>
             </button>
           )}
         </div>
@@ -160,9 +189,9 @@ export function StealthRecipientInput({
 
       {/* Error */}
       {error && !resolvedMeta && (
-        <div className="flex items-center gap-2 text-red-400 pl-2">
-          <AlertCircle className="w-3.5 h-3.5" />
-          <span className="text-caption">{error}</span>
+        <div className="flex items-start gap-2 text-red-400 pl-2">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+          <span className="text-caption break-all">{error}</span>
         </div>
       )}
 

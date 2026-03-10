@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { getConnectionAdapter } from "@/lib/adapters/connection-adapter";
 import {
   Check, AlertCircle, Wallet,
   RefreshCw, ExternalLink, Info,
@@ -13,8 +12,6 @@ import { QRCodeSVG } from "qrcode.react";
 import { cn } from "@/lib/utils";
 import { notifySuccess, notifyError } from "@/lib/notifications";
 import {
-  resolveSnsName,
-  decodeStealthMetaAddress,
   bytesToHex,
   hexToBytes,
   createStealthDepositWithKeys,
@@ -33,8 +30,11 @@ import { registerDeposit } from "@/lib/api/deposits";
 import { getBtcSignerNetwork } from "@/lib/btc-network";
 import { MobileWalletGuidance } from "@/components/bitcoin-wallet-selector";
 import { useIsMobileWithoutWallet } from "@/hooks/use-mobile-wallet-detect";
+import { useAegis } from "@/hooks/use-aegis";
+import { StealthRecipientInput } from "@/components/ui/stealth-recipient-input";
 
 export function DepositFlow() {
+  const { stealthAddress } = useAegis();
   const isDevnet = getConfig().network === "devnet";
   // Demo mode state (only available on devnet)
   const [demoMode, setDemoMode] = useState(false);
@@ -47,9 +47,7 @@ export function DepositFlow() {
 
   // Stealth mode state
   const [error, setError] = useState<string | null>(null);
-  const [recipient, setRecipient] = useState("");
   const [resolvedMeta, setResolvedMeta] = useState<StealthMetaAddress | null>(null);
-  const [resolvingRecipient, setResolvingRecipient] = useState(false);
 
   // Wallet deposit state (PSBT flow)
   const [walletDepositAmount, setWalletDepositAmount] = useState("10000");
@@ -93,7 +91,6 @@ export function DepositFlow() {
 
   const resetFlow = () => {
     setError(null);
-    setRecipient("");
     setResolvedMeta(null);
     setDemoAmount("10000");
     setDemoResult(null);
@@ -240,58 +237,6 @@ export function DepositFlow() {
     }
   };
 
-  // Resolve recipient — auto-detect .btcpro.sol name vs raw stealth address
-  const resolveRecipient = async () => {
-    if (!recipient.trim()) {
-      setError("Please enter a recipient");
-      return;
-    }
-
-    setResolvingRecipient(true);
-    setError(null);
-    setResolvedMeta(null);
-
-    const trimmed = recipient.trim();
-
-    try {
-      const isStealthAddress = trimmed.startsWith("aegis:") || /^[0-9a-fA-F]{100,}$/.test(trimmed);
-
-      if (isStealthAddress) {
-        // Try as raw stealth address first
-        const meta = decodeStealthMetaAddress(trimmed);
-        if (meta) {
-          setResolvedMeta(meta);
-          return;
-        }
-        setError("Invalid stealth address format. Expected 130 hex characters (65 bytes).");
-        return;
-      }
-
-      // Otherwise treat as .btcpro.sol name
-      const config = getConfig();
-      const parentDomain = config.snsParentDomain || "btcpro";
-      const name = trimmed
-        .replace(new RegExp(`\\.${parentDomain}\\.sol$`, "i"), "")
-        .replace(new RegExp(`\\.${parentDomain}$`, "i"), "")
-        .toLowerCase();
-      const connectionAdapter = getConnectionAdapter();
-      const result = await resolveSnsName(connectionAdapter as any, name);
-      if (!result) {
-        setError(`Name "${name}.${parentDomain}.sol" not found`);
-        return;
-      }
-      const meta: StealthMetaAddress = {
-        spendingPubKey: new Uint8Array(32),
-        viewingPubKey: result.viewingPubKey,
-        mpk: result.mpk,
-      };
-      setResolvedMeta(meta);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to resolve recipient");
-    } finally {
-      setResolvingRecipient(false);
-    }
-  };
 
   // Step 1: Generate deposit info + fetch UTXOs in parallel
   const buildTxPreview = async () => {
@@ -454,46 +399,16 @@ export function DepositFlow() {
 
       {/* ========== STEALTH MODE (Send by Stealth) ========== */}
       <>
-          {/* Recipient Input — auto-detects .btcpro.sol name vs raw stealth address */}
-          <div className="mb-4">
-            <label className="text-body2 text-gray-light pl-2 mb-2 block">
-              Recipient
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={recipient}
-                onChange={(e) => { setRecipient(e.target.value); setResolvedMeta(null); }}
-                placeholder="alice.btcpro.sol or stealth address"
-                className={cn(
-                  "flex-1 p-3 bg-muted border border-gray/15 rounded-[12px]",
-                  "text-body2 font-mono text-foreground placeholder:text-gray",
-                  "outline-none focus:border-sol/40 transition-colors"
-                )}
-              />
-              <button
-                onClick={resolveRecipient}
-                disabled={!recipient.trim() || resolvingRecipient}
-                className={cn(
-                  "px-4 py-2 rounded-[10px] text-body2 transition-colors",
-                  "bg-sol hover:bg-sol-dark text-white",
-                  "disabled:bg-gray/20 disabled:text-gray disabled:cursor-not-allowed"
-                )}
-              >
-                {resolvingRecipient ? "..." : "Resolve"}
-              </button>
-            </div>
-          </div>
-
-          {/* Error alert */}
-          {error && (
-            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-[12px]">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-                <span className="text-body2 text-red-400">{error}</span>
-              </div>
-            </div>
-          )}
+          {/* Recipient Input — shared component with auto-resolve on blur/Enter */}
+          <StealthRecipientInput
+            onResolved={(meta, name) => { setResolvedMeta(meta); }}
+            resolvedMeta={resolvedMeta}
+            resolvedName={null}
+            error={error}
+            onError={setError}
+            selfMeta={stealthAddress ?? null}
+            className="mb-4"
+          />
 
           {/* Resolved recipient info */}
           {resolvedMeta && (

@@ -58,7 +58,7 @@ function isValidSolanaAddress(address: string): boolean {
 }
 
 // Constants
-const MIN_PAY_SATS = 1000;
+const MIN_PAY_SATS = 500;
 const ZKBTC_TOKEN_ID = BigInt(0x7a627463);
 const MAX_OUTPUTS = 12; // N+M<=14, need at least 1 input + 1 change
 const SERVICE_FEE_SATS = 2000; // Flat service fee for BTC withdrawals (goes to pool)
@@ -856,11 +856,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       // come from the SAME ECDH shared secret. Otherwise scanner can't find notes.
       setProofStatus("Building transaction...");
 
-      const selfMeta = stealthAddress ? {
-        spendingPubKey: new Uint8Array(32),
-        viewingPubKey: stealthAddress.viewingPubKey,
-        mpk: stealthAddress.mpk,
-      } : null;
+      const selfMeta = stealthAddress ?? null;
 
       const sendAmounts: bigint[] = [];
       const recipientNpks: bigint[] = [];
@@ -1556,11 +1552,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                 defaultAddress={keys?.solanaPublicKey.some(b => b !== 0) ? (publicKey?.toBase58() || "") : ""}
                 disablePublic={outputs.some(o => o.id !== output.id && (o.mode === "public" || o.mode === "btc"))}
                 disableBtc={outputs.some(o => o.id !== output.id && (o.mode === "public" || o.mode === "btc"))}
-                selfMeta={stealthAddress ? {
-                  spendingPubKey: new Uint8Array(32),
-                  viewingPubKey: stealthAddress.viewingPubKey,
-                  mpk: stealthAddress.mpk,
-                } : null}
+                selfMeta={stealthAddress ?? null}
               />
             ))}
           </div>
@@ -1677,6 +1669,20 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
               }
             </span>
           </div>
+          {!isPublicRedeem && nInputs > 0 && nOutputs > 0 && (
+            <div className="flex justify-between items-center text-body2 mt-1">
+              <span className="text-gray">Circuit</span>
+              <span className={cn(
+                "font-mono text-xs",
+                AVAILABLE_CIRCUITS.has(`${nInputs}x${nOutputs}`)
+                  ? "text-gray-light"
+                  : "text-red-400"
+              )}>
+                JoinSplit({nInputs}x{nOutputs})
+                {!AVAILABLE_CIRCUITS.has(`${nInputs}x${nOutputs}`) && " — N/A"}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Processing time info */}
@@ -1700,19 +1706,6 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         {validationErrors.length > 0 && !error && (
           <div className="mb-4 p-2.5 rounded-[10px] bg-gray/5 border border-gray/10">
             <p className="text-caption text-gray">{validationErrors[0]}</p>
-          </div>
-        )}
-
-        {/* Circuit info */}
-        {!isPublicRedeem && nInputs > 0 && nOutputs > 0 && (
-          <div className={cn(
-            "mb-2 text-center text-caption",
-            AVAILABLE_CIRCUITS.has(`${nInputs}x${nOutputs}`)
-              ? "text-gray"
-              : "text-red-400"
-          )}>
-            Circuit: JoinSplit({nInputs}x{nOutputs})
-            {!AVAILABLE_CIRCUITS.has(`${nInputs}x${nOutputs}`) && " — not supported"}
           </div>
         )}
 
