@@ -48,5 +48,16 @@ next-env.d.ts
 /data/
 
 # Circuit proving artifacts (large WASM/zkey files)
+# Allow tier-1+2 circuits (N+M <= 5) for Vercel; rest served via CDN
 /public/circuits/groth16/joinsplit_*/
+!/public/circuits/groth16/joinsplit_1x1/
+!/public/circuits/groth16/joinsplit_1x2/
+!/public/circuits/groth16/joinsplit_1x3/
+!/public/circuits/groth16/joinsplit_1x4/
+!/public/circuits/groth16/joinsplit_2x1/
+!/public/circuits/groth16/joinsplit_2x2/
+!/public/circuits/groth16/joinsplit_2x3/
+!/public/circuits/groth16/joinsplit_3x1/
+!/public/circuits/groth16/joinsplit_3x2/
+!/public/circuits/groth16/joinsplit_4x1/
 .env*.local
