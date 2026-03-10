@@ -17,17 +17,38 @@ import {
   poseidon4,
   poseidon5,
   poseidon6,
+  poseidon7,
+  poseidon8,
+  poseidon9,
+  poseidon10,
+  poseidon11,
+  poseidon12,
+  poseidon13,
+  poseidon14,
+  poseidon15,
+  poseidon16,
 } from "poseidon-lite";
 
-// Lookup table for poseidon hash by input count (1-6 covers all SDK usage)
+// Lookup table for poseidon hash by input count (1-16 covers all circuit arities)
+// Max arity = 2 + N + M where N+M <= 14, so up to 16 inputs for msgHash
 const poseidonFns = [
-  undefined,   // 0 — unused
-  poseidon1,   // 1 input
-  poseidon2,   // 2 inputs
-  poseidon3,   // 3 inputs
-  poseidon4,   // 4 inputs
-  poseidon5,   // 5 inputs
-  poseidon6,   // 6 inputs
+  undefined,    // 0 — unused
+  poseidon1,    // 1 input
+  poseidon2,    // 2 inputs
+  poseidon3,    // 3 inputs
+  poseidon4,    // 4 inputs
+  poseidon5,    // 5 inputs
+  poseidon6,    // 6 inputs
+  poseidon7,    // 7 inputs
+  poseidon8,    // 8 inputs
+  poseidon9,    // 9 inputs
+  poseidon10,   // 10 inputs
+  poseidon11,   // 11 inputs
+  poseidon12,   // 12 inputs
+  poseidon13,   // 13 inputs
+  poseidon14,   // 14 inputs
+  poseidon15,   // 15 inputs
+  poseidon16,   // 16 inputs
 ] as const;
 
 /**
@@ -51,8 +72,8 @@ export async function poseidonHash(inputs: bigint[]): Promise<bigint> {
  */
 export function poseidonHashSync(inputs: bigint[]): bigint {
   const n = inputs.length;
-  if (n < 1 || n > 6) {
-    throw new Error(`Poseidon: unsupported input count ${n} (expected 1-6)`);
+  if (n < 1 || n > 16) {
+    throw new Error(`Poseidon: unsupported input count ${n} (expected 1-16)`);
   }
   return poseidonFns[n]!(inputs as any);
 }
