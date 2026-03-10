@@ -35,6 +35,7 @@
         "@solana/wallet-adapter-react-ui": "^0.9.39",
         "@solana/web3.js": "^1.98.0",
         "bs58": "^5.0.0",
+        "circomlibjs": "^0.1.7",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",
         "lucide-react": "^0.562.0",
@@ -43,6 +44,7 @@
         "react": "19.2.3",
         "react-dom": "19.2.3",
         "sats-connect": "^4.2.1",
+        "snarkjs": "^0.7.6",
         "sonner": "^2.0.7",
         "swr": "^2.3.8",
         "tailwind-merge": "^3.4.0",
@@ -75,8 +77,7 @@
         "@solana-program/system": "^0.10.0",
         "@solana/kit": "^5.5.0",
         "bech32": "^2.0.0",
-        "circomlibjs": "^0.1.7",
-        "snarkjs": "^0.7.5",
+        "poseidon-lite": "^0.3.0",
       },
       "devDependencies": {
         "@solana/web3.js": "^1.98.4",
@@ -85,10 +86,14 @@
         "typescript": "^5.3.0",
       },
       "peerDependencies": {
+        "circomlibjs": "^0.1.7",
         "react": ">=17.0.0",
+        "snarkjs": "^0.7.5",
       },
       "optionalPeers": [
+        "circomlibjs",
         "react",
+        "snarkjs",
       ],
     },
   },
@@ -1748,6 +1753,8 @@
     "pirates": ["pirates@4.0.7", "", {}, "sha512-TfySrs/5nm8fQJDcBDuUng3VOUKsd7S+zqvbOTiGXHfxX4wK31ard+hoNuvkicM/2YFzlpDgABOevKSsB4G/FA=="],
 
     "pngjs": ["pngjs@5.0.0", "", {}, "sha512-40QW5YalBNfQo5yRYmiw7Yz6TKKVr3h6970B2YE+3fQpsWcrbj1PzJgxeJ19DRQjhMbKPIuMY8rFaXc8moolVw=="],
+
+    "poseidon-lite": ["poseidon-lite@0.3.0", "", {}, "sha512-ilJj4MIve4uBEG7SrtPqUUNkvpJ/pLVbndxa0WvebcQqeIhe+h72JR4g0EvwchUzm9sOQDlOjiDNmRAgxNZl4A=="],
 
     "possible-typed-array-names": ["possible-typed-array-names@1.1.0", "", {}, "sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg=="],
 

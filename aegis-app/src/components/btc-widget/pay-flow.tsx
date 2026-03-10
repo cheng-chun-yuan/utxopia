@@ -303,7 +303,6 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
     relayerFeeSats: number;
     serviceFeeSats: number;
   } | null>(null);
-  const [relayerEnabled, setRelayerEnabled] = useState(true);
 
   useEffect(() => {
     fetch("/api/relayer/meta")
@@ -327,7 +326,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   ]);
 
   const isPurePrivateSend = !outputs.some(o => o.mode === "btc" || o.mode === "public");
-  const effectiveRelayerFee = relayerEnabled ? (relayerMeta?.relayerFeeSats ?? RELAYER_FEE_SATS) : 0;
+  const effectiveRelayerFee = relayerMeta?.relayerFeeSats ?? RELAYER_FEE_SATS;
   const effectiveServiceFee = relayerMeta?.serviceFeeSats ?? SERVICE_FEE_SATS;
 
   // Available unspent notes
@@ -675,7 +674,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       // ===== ZK PROOF PATH =====
       // Validate circuit availability before anything else
       const effectiveNInputs = hasImportedNotes ? activeImportedNotes.length : selectedNotes.length;
-      const circuitKey = `${effectiveNInputs}x${outputs.length + (changeSats > 0 ? 1 : 0)}`;
+      const circuitKey = `${effectiveNInputs}x${outputs.length + (changeSats > 0 ? 1 : 0) + (effectiveRelayerFee > 0 ? 1 : 0)}`;
       if (!AVAILABLE_CIRCUITS.has(circuitKey)) {
         throw new Error(
           `Circuit JoinSplit(${circuitKey}) is not available. ` +
@@ -916,14 +915,17 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         }
       }
 
-      // Add relayer fee output (for all modes when relayer is enabled)
+      // Add relayer fee output (always — fee goes to relayer if stealthMeta available, else to self)
       let relayerFeeOutputIndex: number | undefined;
-      if (effectiveRelayerFee > 0 && relayerMeta?.stealthMeta) {
+      if (effectiveRelayerFee > 0) {
         setProofStatus("Adding relayer fee output...");
-        // Parse relayer stealth meta-address (96 bytes: spendingPub + viewingPub + mpk)
-        const relayerMetaAddr = decodeStealthMetaAddress(relayerMeta.stealthMeta);
         const feeAmount = BigInt(effectiveRelayerFee);
-        const feeResult = await createStealthDepositWithKeys(relayerMetaAddr, feeAmount);
+        // Use relayer stealth meta if available, otherwise send fee to self
+        const feeMeta = relayerMeta?.stealthMeta
+          ? decodeStealthMetaAddress(relayerMeta.stealthMeta)
+          : selfMeta;
+        if (!feeMeta) throw new Error("Cannot create fee output without stealth address");
+        const feeResult = await createStealthDepositWithKeys(feeMeta, feeAmount);
         if (hasSpecialLastOutput) {
           // Insert BEFORE the unshield/redeem output (which is currently last)
           const insertIdx = sendAmounts.length - 1;
@@ -1622,17 +1624,10 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
           {/* Relayer fee — paid as a shielded note to relayer */}
           {!isPublicRedeem && (
             <div className="flex justify-between items-center text-caption mb-1">
-              <span className="text-gray/60 flex items-center gap-1">
+              <span className="text-gray/60">
                 Relayer fee (shielded note → relayer)
-                <button
-                  type="button"
-                  onClick={() => setRelayerEnabled(prev => !prev)}
-                  className="text-purple/70 hover:text-purple underline text-[10px] ml-1"
-                >
-                  {relayerEnabled ? "disable" : "enable"}
-                </button>
               </span>
-              <span className={cn("text-gray/60", !relayerEnabled && "line-through")}>
+              <span className="text-gray/60">
                 {(relayerMeta?.relayerFeeSats ?? RELAYER_FEE_SATS).toLocaleString()} sats
               </span>
             </div>

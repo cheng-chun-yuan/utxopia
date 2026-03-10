@@ -35,9 +35,6 @@ const nextConfig: NextConfig = {
         http: false,
         https: false,
         zlib: false,
-        // Optional peer deps of @aegis/sdk (lazy-loaded, not needed in browser bundle)
-        circomlibjs: false,
-        snarkjs: false,
       };
     }
     return config;
