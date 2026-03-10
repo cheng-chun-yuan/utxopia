@@ -92,13 +92,21 @@ function reduceToFieldOnChain(bytes: Uint8Array): bigint {
   return BigInt("0x" + Buffer.from(reduced).toString("hex"));
 }
 
-// Available circuit variants (tier-1 + tier-2 — must match files in public/circuits/groth16/)
-// All 91 JoinSplit(N,M) circuits where N>=1, M>=1, N+M<=14
+// Available circuit variants — locally served (N+M <= 5), rest via CDN
+// Constrain to what's actually compiled and has on-chain VK registered
 const AVAILABLE_CIRCUITS = new Set(
   Array.from({ length: 13 }, (_, n) =>
     Array.from({ length: 14 - n - 1 }, (_, m) => `${n + 1}x${m + 1}`)
   ).flat()
 );
+
+// Circuits served locally by Vercel (N+M <= 5, always available)
+const LOCAL_CIRCUITS = new Set([
+  "1x1", "1x2", "1x3", "1x4",
+  "2x1", "2x2", "2x3",
+  "3x1", "3x2",
+  "4x1",
+]);
 
 type PayStep = "connect" | "compose" | "proving" | "success";
 
@@ -557,11 +565,11 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         errors.push(`Too many inputs/outputs (${totalIO}/14 max)`);
       }
 
-      // Check circuit availability (only tier-1 circuits compiled)
+      // Check circuit availability
       if (nInputs > 0 && nOutputs > 0) {
         const circuitKey = `${nInputs}x${nOutputs}`;
         if (!AVAILABLE_CIRCUITS.has(circuitKey)) {
-          errors.push(`Circuit JoinSplit(${circuitKey}) not available`);
+          errors.push(`Circuit JoinSplit(${circuitKey}) not supported (max N+M=14)`);
         }
       }
     }
@@ -683,8 +691,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       const circuitKey = `${effectiveNInputs}x${outputs.length + (changeSats > 0 ? 1 : 0) + (effectiveRelayerFee > 0 ? 1 : 0)}`;
       if (!AVAILABLE_CIRCUITS.has(circuitKey)) {
         throw new Error(
-          `Circuit JoinSplit(${circuitKey}) is not available. ` +
-          `Only tier-1 circuits (1x1, 1x2, 2x1, 2x2) are compiled. ` +
+          `Circuit JoinSplit(${circuitKey}) is not supported (N+M must be ≤ 14). ` +
           `Adjust your inputs/outputs to fit.`
         );
       }
@@ -1549,6 +1556,11 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                 defaultAddress={keys?.solanaPublicKey.some(b => b !== 0) ? (publicKey?.toBase58() || "") : ""}
                 disablePublic={outputs.some(o => o.id !== output.id && (o.mode === "public" || o.mode === "btc"))}
                 disableBtc={outputs.some(o => o.id !== output.id && (o.mode === "public" || o.mode === "btc"))}
+                selfMeta={stealthAddress ? {
+                  spendingPubKey: new Uint8Array(32),
+                  viewingPubKey: stealthAddress.viewingPubKey,
+                  mpk: stealthAddress.mpk,
+                } : null}
               />
             ))}
           </div>
@@ -1688,6 +1700,19 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         {validationErrors.length > 0 && !error && (
           <div className="mb-4 p-2.5 rounded-[10px] bg-gray/5 border border-gray/10">
             <p className="text-caption text-gray">{validationErrors[0]}</p>
+          </div>
+        )}
+
+        {/* Circuit info */}
+        {!isPublicRedeem && nInputs > 0 && nOutputs > 0 && (
+          <div className={cn(
+            "mb-2 text-center text-caption",
+            AVAILABLE_CIRCUITS.has(`${nInputs}x${nOutputs}`)
+              ? "text-gray"
+              : "text-red-400"
+          )}>
+            Circuit: JoinSplit({nInputs}x{nOutputs})
+            {!AVAILABLE_CIRCUITS.has(`${nInputs}x${nOutputs}`) && " — not supported"}
           </div>
         )}
 
@@ -1927,6 +1952,7 @@ interface OutputRowCardProps {
   defaultAddress: string;
   disablePublic?: boolean;
   disableBtc?: boolean;
+  selfMeta?: StealthMetaAddress | null;
 }
 
 function OutputRowCard({
@@ -1938,6 +1964,7 @@ function OutputRowCard({
   defaultAddress,
   disablePublic = false,
   disableBtc = false,
+  selfMeta,
 }: OutputRowCardProps) {
 
   return (
@@ -2047,6 +2074,7 @@ function OutputRowCard({
             error={output.stealthError}
             onError={(err) => onUpdate({ stealthError: err })}
             icon={<Shield className="w-4 h-4 text-purple" />}
+            selfMeta={selfMeta}
           />
         </div>
       ) : (

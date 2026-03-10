@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Check, AlertCircle, Globe } from "lucide-react";
+import { Check, AlertCircle, Globe, UserRound } from "lucide-react";
 import { getConnectionAdapter } from "@/lib/adapters/connection-adapter";
 import { cn } from "@/lib/utils";
 import {
   decodeStealthMetaAddress,
+  encodeStealthMetaAddress,
   resolveSnsName,
   getConfig,
   type StealthMetaAddress,
@@ -19,6 +20,8 @@ interface StealthRecipientInputProps {
   onError: (error: string | null) => void;
   className?: string;
   icon?: React.ReactNode;
+  /** If provided, shows a "Self" button to auto-fill with own stealth address */
+  selfMeta?: StealthMetaAddress | null;
 }
 
 export function StealthRecipientInput({
@@ -29,6 +32,7 @@ export function StealthRecipientInput({
   onError,
   className,
   icon,
+  selfMeta,
 }: StealthRecipientInputProps) {
   const [recipient, setRecipient] = useState("");
   const [resolving, setResolving] = useState(false);
@@ -113,10 +117,11 @@ export function StealthRecipientInput({
             onChange={(e) => handleInputChange(e.target.value)}
             placeholder={`alice.${parentDomain}.sol or aegis:...`}
             className={cn(
-              "w-full pr-4 py-3 bg-muted border rounded-[10px]",
+              "w-full py-3 bg-muted border rounded-[10px]",
               "text-body2 font-mono text-foreground placeholder:text-gray/40",
               "outline-none transition-colors",
               icon ? "pl-10" : "pl-4",
+              selfMeta ? "pr-16" : "pr-4",
               error
                 ? "border-red-500/50"
                 : resolvedMeta
@@ -134,6 +139,22 @@ export function StealthRecipientInput({
               }
             }}
           />
+          {selfMeta && !resolvedMeta && (
+            <button
+              type="button"
+              onClick={() => {
+                const encoded = encodeStealthMetaAddress(selfMeta);
+                setRecipient(encoded);
+                onResolved(selfMeta, null);
+                onError(null);
+              }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 px-2 py-1 rounded-md bg-purple/10 hover:bg-purple/20 border border-purple/20 transition-colors"
+              title="Send to yourself"
+            >
+              <UserRound className="w-3.5 h-3.5 text-purple" />
+              <span className="text-caption text-purple">Self</span>
+            </button>
+          )}
         </div>
       </div>
 

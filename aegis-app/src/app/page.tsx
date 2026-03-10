@@ -140,19 +140,11 @@ export default function Home() {
           <div className="text-center space-y-8 w-full">
             {/* Hero */}
             <div className="space-y-6">
-              {/* Bitcoin + Privacy badge */}
-              <div className="flex items-center justify-center gap-4">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-btc/10 border border-btc/20">
-                  <BitcoinIcon className="w-4 h-4" />
-                  <span className="text-caption text-btc">Bitcoin Native</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-privacy/10 border border-privacy/20">
-                  <Shield className="w-4 h-4 text-privacy" />
-                  <span className="text-caption text-privacy">ZK Privacy</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-cyan/10 border border-cyan/20">
-                  <Zap className="w-4 h-4 text-cyan" />
-                  <span className="text-caption text-cyan">Powered by Zeus</span>
+              {/* Powered by Zeus badge */}
+              <div className="flex items-center justify-center">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple/10 border border-purple/20">
+                  <img src="/zeus_network.svg" alt="Zeus" className="w-4 h-4" />
+                  <span className="text-caption"><span className="text-gray-light">Powered by</span> <span className="text-purple">Zeus Network</span></span>
                 </div>
               </div>
 
