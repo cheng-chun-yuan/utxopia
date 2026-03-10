@@ -191,16 +191,18 @@ impl EventIndexerService {
                 ProgramEvent::LeafInserted(e) => {
                     let leaf_index = self.next_leaf_index;
                     let inserted = self.store.insert_leaf(leaf_index, &e, signature, slot)?;
-                    self.next_leaf_index += 1;
 
-                    // Update in-memory tree cache
+                    // Only advance counter if actually inserted (not a duplicate)
                     if inserted {
+                        self.next_leaf_index += 1;
+
+                        // Update in-memory tree cache
                         if let Some(ref cache) = self.tree_cache {
                             cache.on_leaf_inserted(leaf_index as u64, e.commitment).await;
                         }
                     }
 
-                    tracing::debug!(leaf_index, "Indexed leaf");
+                    tracing::debug!(leaf_index, inserted, "Indexed leaf");
                 }
                 ProgramEvent::NullifierSpent(e) => {
                     self.store.insert_nullifier(&e, signature, slot)?;
