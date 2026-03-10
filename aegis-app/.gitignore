@@ -46,3 +46,6 @@ next-env.d.ts
 
 # runtime data (commitment index)
 /data/
+
+# Circuit proving artifacts (large WASM/zkey files)
+/public/circuits/groth16/joinsplit_*/
