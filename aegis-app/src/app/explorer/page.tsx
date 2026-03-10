@@ -542,7 +542,7 @@ export default function ExplorerPage() {
                 <Shield className="h-3 w-3 text-privacy absolute -bottom-1 -right-1" />
               </div>
             </div>
-            <span className="text-heading6 text-foreground">Aegis</span>
+            <span className="text-heading6 text-foreground">Private Bitcoin</span>
           </Link>
           <div className="flex items-center gap-4">
             <Link href="/vault" className="text-body2 text-gray hover:text-gray-light transition-colors">Vault</Link>
@@ -557,7 +557,7 @@ export default function ExplorerPage() {
           </div>
           <div>
             <h1 className="text-heading5 text-foreground">Explorer</h1>
-            <p className="text-caption text-gray">Browse all on-chain Aegis activity on Solana devnet</p>
+            <p className="text-caption text-gray">Browse all on-chain Private Bitcoin activity on Solana devnet</p>
           </div>
         </div>
 
@@ -579,7 +579,7 @@ export default function ExplorerPage() {
 
         <footer className="mt-8 pt-6 border-t border-gray/15">
           <div className="flex justify-between items-center">
-            <Link href="/" className="text-caption text-gray hover:text-gray-light transition-colors">Aegis</Link>
+            <Link href="/" className="text-caption text-gray hover:text-gray-light transition-colors">Private Bitcoin</Link>
             <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption text-gray hover:text-gray-light transition-colors flex items-center gap-1.5">
               Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network
             </a>

@@ -1,8 +1,8 @@
 import * as SecureStore from "expo-secure-store";
 
-const CREDENTIAL_KEY = "aegis:passkey_cred_id";
-const SEED_KEY = "aegis:passkey_seed";
-const KEYS_KEY = "aegis:derived_keys";
+const CREDENTIAL_KEY = "aegis.passkey_cred_id";
+const SEED_KEY = "aegis.passkey_seed";
+const KEYS_KEY = "aegis.derived_keys";
 
 export async function getStoredCredentialId(): Promise<string | null> {
   return SecureStore.getItemAsync(CREDENTIAL_KEY);

@@ -20,8 +20,8 @@ const rethinkSans = Rethink_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Aegis - Private Bitcoin on Solana",
-  description: "Private Bitcoin on Solana using zero-knowledge proofs",
+  title: "Private Bitcoin | Use Bitcoin Natively & Privately on Solana",
+  description: "Use Bitcoin natively and privately on Solana with zero-knowledge proofs. Powered by Zeus Network.",
 };
 
 export default function RootLayout({

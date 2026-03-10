@@ -49,3 +49,4 @@ next-env.d.ts
 
 # Circuit proving artifacts (large WASM/zkey files)
 /public/circuits/groth16/joinsplit_*/
+.env*.local

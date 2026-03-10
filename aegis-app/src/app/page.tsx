@@ -115,7 +115,7 @@ export default function Home() {
                 <Shield className="h-3 w-3 text-privacy absolute -bottom-1 -right-1" />
               </div>
             </div>
-            <span className="text-heading6 text-foreground">Aegis</span>
+            <span className="text-heading6 text-foreground">Private Bitcoin</span>
           </div>
           <div className="flex items-center gap-4">
             <Link
@@ -157,14 +157,19 @@ export default function Home() {
                 <span className="bg-gradient-to-r from-btc to-btc-light bg-clip-text text-transparent">
                   Bitcoin
                 </span>{" "}
-                Meets<br />
+                Meets{" "}
                 <span className="bg-gradient-to-r from-privacy to-sol bg-clip-text text-transparent">
-                  Zero-Knowledge Privacy
+                  Privacy
+                </span>
+                <br />
+                <span className="text-foreground">on{" "}</span>
+                <span className="bg-gradient-to-r from-sol to-privacy bg-clip-text text-transparent">
+                  Solana
                 </span>
               </h1>
 
               <p className="text-body1 text-gray-light max-w-xl mx-auto">
-                Private Bitcoin on Solana. Zero-knowledge proofs ensure
+                Use Bitcoin natively &amp; privately on Solana. Zero-knowledge proofs ensure
                 your transactions remain confidential while maintaining full Bitcoin backing.
               </p>
 
@@ -225,7 +230,7 @@ export default function Home() {
               />
               <FeatureCard
                 icon={ShieldCheck}
-                title="OFAC Compliant"
+                title="OFAC Compliant (Coming Soon)"
                 description="Built-in compliance screening ensures regulatory compliance while preserving privacy"
                 variant="cyber"
               />
@@ -290,11 +295,11 @@ export default function Home() {
               <Shield className="w-4 h-4 text-privacy" />
               <span className="text-caption text-privacy">Privacy</span>
               <span className="text-caption text-gray">=</span>
-              <span className="text-caption text-foreground">Aegis</span>
+              <span className="text-caption text-foreground">Private Bitcoin</span>
             </div>
-            <p className="text-caption text-gray">
-              Private Bitcoin on Solana
-            </p>
+            <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption text-gray hover:text-gray-light transition-colors flex items-center gap-1.5">
+              Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network
+            </a>
           </div>
         </footer>
       </div>

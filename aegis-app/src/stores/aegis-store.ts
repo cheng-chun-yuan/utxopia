@@ -233,7 +233,7 @@ interface AegisState {
   hydratePasskeyKeys: () => Promise<boolean>;
   loadViewOnlyKeys: (encoded: string) => void;
   clearKeys: (walletPubkey?: string) => void;
-  refreshInbox: (connection?: Connection) => Promise<void>;
+  refreshInbox: (connection?: Connection, force?: boolean) => Promise<void>;
   startRealtimeInbox: () => () => void;
   refreshPublicBalance: (walletPubkey?: PublicKey) => Promise<void>;
   submitWithdrawal: (withdrawal: Omit<ActiveWithdrawal, "id" | "createdAt" | "updatedAt">) => string;
@@ -425,11 +425,16 @@ export const useAegisStore = create<AegisState>((set, get) => ({
     });
   },
 
-  refreshInbox: async (_connection) => {
+  refreshInbox: async (_connection, force) => {
     const { keys, viewOnlyKeys, isViewOnly } = get();
     if (!keys && !viewOnlyKeys) {
       set({ inboxNotes: [], inboxTotalSats: 0n, inboxDepositCount: 0 });
       return;
+    }
+
+    // Force flag resets the announcement count cache so we re-scan everything
+    if (force) {
+      lastAnnouncementCount = -1;
     }
 
     // Deduplicate: if already fetching, wait for that to complete

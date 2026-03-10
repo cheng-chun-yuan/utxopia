@@ -209,12 +209,11 @@ export default function VaultPage() {
           <div className="text-center mb-6 sm:mb-8">
             <h1 className="text-[22px] sm:text-[28px] font-bold text-foreground mb-2 tracking-tight">
               <span className="bg-gradient-to-r from-privacy/90 to-privacy bg-clip-text text-transparent">
-                Aegis
-              </span>{" "}
-              <span className="text-foreground">Vault</span>
+                Private Bitcoin
+              </span>
             </h1>
             <p className="text-body2 text-gray">
-              Private Bitcoin on Solana with zero-knowledge privacy
+              Use Bitcoin natively &amp; privately on Solana
             </p>
           </div>
 
@@ -570,7 +569,7 @@ export default function VaultPage() {
                 href="/docs"
                 className="hover:text-gray-light transition-colors text-caption cursor-pointer"
               >
-                Aegis
+                Private Bitcoin
               </a>
               <a
                 href="/docs"

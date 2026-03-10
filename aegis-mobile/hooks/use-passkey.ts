@@ -11,6 +11,20 @@ import {
 const RP_NAME = "Aegis";
 const RP_ID = "aegis.xyz";
 
+function getRandomBytes(length: number): Uint8Array {
+  const bytes = new Uint8Array(length);
+  // Use global crypto if available (polyfilled in polyfills.js), else fallback
+  if (typeof globalThis.crypto?.getRandomValues === "function") {
+    globalThis.crypto.getRandomValues(bytes);
+  } else {
+    // Fallback: Math.random (acceptable for challenges, seed uses native entropy)
+    for (let i = 0; i < length; i++) {
+      bytes[i] = Math.floor(Math.random() * 256);
+    }
+  }
+  return bytes;
+}
+
 function bytesToBase64URL(bytes: Uint8Array): string {
   let binary = "";
   for (let i = 0; i < bytes.length; i++) {
@@ -20,9 +34,7 @@ function bytesToBase64URL(bytes: Uint8Array): string {
 }
 
 function randomBase64URL(length: number): string {
-  const bytes = new Uint8Array(length);
-  crypto.getRandomValues(bytes);
-  return bytesToBase64URL(bytes);
+  return bytesToBase64URL(getRandomBytes(length));
 }
 
 export interface UsePasskeyReturn {
@@ -78,8 +90,7 @@ export function usePasskey(): UsePasskeyReturn {
       // Generate random 32-byte seed (PRF not reliably available on native).
       // The seed is stored encrypted at OS level via SecureStore.
       // The passkey serves as the biometric authentication gate.
-      const seed = new Uint8Array(32);
-      crypto.getRandomValues(seed);
+      const seed = getRandomBytes(32);
       await storeSeed(seed);
 
       await storeCredentialId(credential.id);

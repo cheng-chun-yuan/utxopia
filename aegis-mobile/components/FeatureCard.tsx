@@ -14,14 +14,8 @@ interface FeatureCardProps {
 
 const accentColors: Record<FeatureVariant, string> = {
   btc: Colors.btc,
-  privacy: Colors.privacy,
+  privacy: Colors.accent,
   sol: Colors.sol,
-};
-
-const bgColors: Record<FeatureVariant, string> = {
-  btc: "rgba(247, 147, 26, 0.10)",
-  privacy: "rgba(20, 241, 149, 0.10)",
-  sol: "rgba(153, 69, 255, 0.10)",
 };
 
 export function FeatureCard({
@@ -32,7 +26,6 @@ export function FeatureCard({
   onPress,
 }: FeatureCardProps) {
   const accent = accentColors[variant];
-  const bg = bgColors[variant];
 
   return (
     <Pressable
@@ -42,9 +35,7 @@ export function FeatureCard({
         { opacity: pressed ? 0.85 : 1 },
       ]}
     >
-      <View style={[styles.iconCircle, { backgroundColor: bg }]}>
-        {icon}
-      </View>
+      <View style={styles.iconWrap}>{icon}</View>
       <View style={styles.textCol}>
         <Text style={[styles.title, { color: accent }]}>{title}</Text>
         {description ? (
@@ -65,11 +56,14 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.card,
     borderRadius: 14,
     padding: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
-  iconCircle: {
+  iconWrap: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: 12,
+    backgroundColor: Colors.secondary,
     alignItems: "center",
     justifyContent: "center",
   },

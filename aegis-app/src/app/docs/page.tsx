@@ -166,7 +166,7 @@ export default function DocsPage() {
                   <Shield className="h-3 w-3 text-privacy absolute -bottom-1 -right-1" />
                 </div>
               </div>
-              <span className="text-heading6 text-foreground">Aegis</span>
+              <span className="text-heading6 text-foreground">Private Bitcoin</span>
             </Link>
           </div>
           <div className="flex items-center gap-4">
@@ -208,13 +208,13 @@ export default function DocsPage() {
                 </div>
               </div>
               <h1 className="text-3xl md:text-4xl font-bold text-foreground">
-                Privacy on Aegis
+                Privacy on zkBTC
               </h1>
               <p className="text-body1 text-gray-light">
                 One protocol for private Bitcoin on Solana
               </p>
               <p className="text-body2 text-gray max-w-lg mx-auto">
-                Aegis lets you deposit BTC and transact privately on Solana using
+                Private Bitcoin lets you deposit BTC and transact privately on Solana using
                 zero-knowledge proofs. No public tokens, no traceable amounts, no
                 linked addresses.
               </p>
@@ -249,9 +249,9 @@ export default function DocsPage() {
 
             <div className="border-t border-gray/15" />
 
-            {/* 3. How Aegis Works */}
+            {/* 3. How Private Bitcoin Works */}
             <section className="space-y-6">
-              <h2 className="text-heading5 text-foreground">How Aegis Works</h2>
+              <h2 className="text-heading5 text-foreground">How Private Bitcoin Works</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {steps.map((step) => {
                   const Icon = step.icon;
@@ -381,7 +381,7 @@ export default function DocsPage() {
                   href="/"
                   className="text-caption text-gray hover:text-gray-light transition-colors"
                 >
-                  Aegis
+                  Private Bitcoin
                 </Link>
               </div>
               <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption text-gray hover:text-gray-light transition-colors flex items-center gap-1.5">

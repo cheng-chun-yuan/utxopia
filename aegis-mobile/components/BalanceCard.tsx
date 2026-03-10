@@ -12,9 +12,9 @@ export default function BalanceCard({ balanceSats }: BalanceCardProps) {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>Shielded Balance</Text>
+      <Text style={styles.label}>SHIELDED BALANCE</Text>
       <Text style={styles.amount}>
-        <Text style={styles.symbol}>&#8383; </Text>
+        <Text style={styles.symbol}>{"\u20BF"} </Text>
         {btcString}
       </Text>
       {balanceSats > 0 && (
@@ -31,14 +31,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   label: {
-    fontSize: 14,
-    fontWeight: "500",
+    fontSize: 11,
+    fontWeight: "600",
     color: Colors.gray,
-    marginBottom: 8,
+    marginBottom: 10,
+    letterSpacing: 2,
   },
   amount: {
-    fontSize: 42,
-    fontWeight: "700",
+    fontSize: 44,
+    fontWeight: "800",
     color: Colors.foreground,
     fontVariant: ["tabular-nums"],
     letterSpacing: -1,

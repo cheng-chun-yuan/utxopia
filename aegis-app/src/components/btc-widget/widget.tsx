@@ -52,7 +52,7 @@ const Footer = memo(function Footer() {
     <div className="flex justify-between items-center gap-2 mt-4 text-gray px-2 text-xs">
       <div className="flex items-center gap-4">
         <a href="/docs" className="hover:text-gray-light">
-          Aegis
+          Private Bitcoin
         </a>
       </div>
       <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="hover:text-gray-light flex items-center gap-1.5">Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network</a>
@@ -124,7 +124,7 @@ export function zkBTCWidget({ trigger, defaultTab = "deposit" }: {
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
-        {trigger || <button className="btn-primary">Open Aegis</button>}
+        {trigger || <button className="btn-primary">Open Private Bitcoin</button>}
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
@@ -134,7 +134,7 @@ export function zkBTCWidget({ trigger, defaultTab = "deposit" }: {
           "max-h-[calc(100vh-32px)] overflow-y-auto"
         )}>
           <div className="flex justify-end mb-2">
-            <Dialog.Title hidden>Aegis</Dialog.Title>
+            <Dialog.Title hidden>Private Bitcoin</Dialog.Title>
             <Dialog.Close asChild>
               <button className="rounded-lg p-2 text-gray hover:text-white hover:bg-muted" aria-label="Close">
                 <X className="h-5 w-5" />

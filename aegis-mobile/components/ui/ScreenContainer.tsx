@@ -12,11 +12,8 @@ import { cn } from "@/lib/utils";
 
 interface ScreenContainerProps {
   children: React.ReactNode;
-  /** Wrap children in a ScrollView */
   scrollable?: boolean;
-  /** Additional className for the inner content view */
   className?: string;
-  /** Disable SafeAreaView edges (e.g., when inside a tab navigator that already handles safe area) */
   edges?: ("top" | "bottom" | "left" | "right")[];
 }
 

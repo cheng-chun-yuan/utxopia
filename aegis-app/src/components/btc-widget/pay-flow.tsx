@@ -667,7 +667,13 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         setRequestId(sig);
         setNoteOutputPhrases([]);
         setStep("success");
-        refreshPublicBalance?.(publicKey!);
+        // Auto-refresh after public redeem
+        for (const delay of [2000, 5000, 10000]) {
+          setTimeout(() => {
+            refreshInbox(undefined, true);
+            refreshPublicBalance?.(publicKey!);
+          }, delay);
+        }
         return;
       }
 
@@ -1200,11 +1206,14 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       setNoteOutputPhrases(notePhrases);
       setStep("success");
 
-      // Auto-refresh balances after successful transaction
-      setTimeout(() => {
-        refreshInbox();
-        if (publicKey) refreshPublicBalance?.(publicKey);
-      }, 2000);
+      // Auto-refresh balances after successful transaction (force=true to bypass dedup cache)
+      // Retry with increasing delay to give backend time to index
+      for (const delay of [2000, 5000, 10000]) {
+        setTimeout(() => {
+          refreshInbox(undefined, true);
+          if (publicKey) refreshPublicBalance?.(publicKey);
+        }, delay);
+      }
     } catch (err) {
       console.error("[Pay] Error:", err);
       setError(err instanceof Error ? err.message : "Failed to process payment");

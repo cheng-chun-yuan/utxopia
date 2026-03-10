@@ -31,15 +31,15 @@ interface OnboardingStep {
 
 const steps: OnboardingStep[] = [
   {
-    title: "Welcome to Aegis",
+    title: "Welcome to Private Bitcoin",
     description:
-      "Aegis is a privacy layer for Bitcoin on Solana. Deposit BTC to receive private zkBTC tokens that can be transferred without revealing your identity.",
+      "Private Bitcoin is a privacy layer for Bitcoin on Solana, powered by Zeus Network. Deposit BTC to receive private zkBTC tokens that can be transferred without revealing your identity.",
     icon: <Shield className="w-8 h-8" />,
   },
   {
     title: "Privacy First",
     description:
-      "Using zero-knowledge proofs and stealth addresses, Aegis ensures your deposits and transfers cannot be linked. Your financial activity remains private.",
+      "Using zero-knowledge proofs and stealth addresses, Private Bitcoin ensures your deposits and transfers cannot be linked. Your financial activity remains private.",
     icon: <Eye className="w-8 h-8" />,
   },
   {

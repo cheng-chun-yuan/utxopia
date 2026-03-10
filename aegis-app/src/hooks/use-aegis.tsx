@@ -31,8 +31,8 @@ export function useAegis() {
   }, [wallet.connected, wallet.signMessage, wallet.publicKey, store.deriveKeys]);
 
   // Wrap refreshInbox to automatically use connection
-  const refreshInbox = useCallback(async () => {
-    await store.refreshInbox(connection);
+  const refreshInbox = useCallback(async (conn?: unknown, force?: boolean) => {
+    await store.refreshInbox(connection, force);
   }, [connection, store.refreshInbox]);
 
   // Refresh public zkBTC balance when wallet is connected
