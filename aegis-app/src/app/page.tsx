@@ -126,10 +126,11 @@ export default function Home() {
               <Search className="w-3 h-3" />
             </Link>
             <Link
-              href="/docs"
+              href="/vault"
               className="text-body2 text-gray hover:text-gray-light transition-colors flex items-center gap-1"
             >
-              Docs
+              Vault
+              <Lock className="w-3 h-3" />
             </Link>
           </div>
         </header>
