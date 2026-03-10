@@ -461,6 +461,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
               amount: n.amount,
               leafIndex: n.leafIndex,
               ephemeralPub: (n as any).ephemeralPub,
+              stealthPub: (n as any).stealthPub,
               npk: (n as any).npk,
             }))
           : isViewOnly && viewOnlyKeys
