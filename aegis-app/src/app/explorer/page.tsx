@@ -342,7 +342,7 @@ function TransfersTab() {
                     <Td>
                       <div className="flex items-center gap-1.5">
                         <Shield className="w-4 h-4 text-purple-400" />
-                        <span className="text-body2 text-foreground font-medium">JoinSplit</span>
+                        <span className="text-body2 text-foreground font-medium">Private Send</span>
                       </div>
                     </Td>
                     <Td>
@@ -421,7 +421,7 @@ function WithdrawalsTab() {
         <table className="w-full min-w-[600px]">
           <thead>
             <tr className="border-b border-gray/15">
-              <Th>Source</Th>
+              <Th>Type</Th>
               <Th>Status</Th>
               <Th>Destination</Th>
               <Th>Amount</Th>
@@ -433,13 +433,21 @@ function WithdrawalsTab() {
             {redemptions.map((r) => {
               const statusStyle = STATUS_STYLES[r.status] ?? STATUS_STYLES.Pending;
               const btcAddr = r.btcScript ? scriptToAddress(r.btcScript) : null;
+              const isBtcWithdraw = !!r.btcScript;
               return (
                 <tr key={r.pubkey} className="hover:bg-gray/5 transition-colors">
                   <Td>
-                    <div className="flex items-center gap-1.5">
-                      <Shield className="w-4 h-4 text-purple-400" />
-                      <span className="text-body2 text-foreground font-medium">zkBTC</span>
-                    </div>
+                    {isBtcWithdraw ? (
+                      <div className="flex items-center gap-1.5">
+                        <BitcoinIcon className="w-4 h-4 text-btc" />
+                        <span className="text-body2 text-foreground font-medium">Bitcoin Withdraw</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <Shield className="w-4 h-4 text-sol" />
+                        <span className="text-body2 text-foreground font-medium">Solana Withdraw</span>
+                      </div>
+                    )}
                   </Td>
                   <Td>
                     <span className={cn("inline-flex items-center px-2.5 py-0.5 rounded-full text-caption border font-medium", statusStyle.bg, statusStyle.text)}>
@@ -448,7 +456,11 @@ function WithdrawalsTab() {
                   </Td>
                   <Td>
                     <div className="flex items-center gap-1.5">
-                      <BitcoinIcon className="w-4 h-4 text-btc" />
+                      {isBtcWithdraw ? (
+                        <BitcoinIcon className="w-4 h-4 text-btc" />
+                      ) : (
+                        <Shield className="w-4 h-4 text-sol" />
+                      )}
                       {btcAddr ? (
                         <>
                           <code className="text-caption font-mono text-foreground">{truncate(btcAddr, 8, 6)}</code>
