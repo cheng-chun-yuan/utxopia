@@ -273,7 +273,15 @@ async fn run_server(
     };
 
     // Build audit log
-    let audit = AuditLog::new(audit_log_path.map(std::path::PathBuf::from));
+    let audit_path = audit_log_path.map(std::path::PathBuf::from);
+    let audit = AuditLog::new(audit_path);
+
+    // Build duplicate tracker from audit log history
+    let signed_history = audit.scan_signed_redemptions();
+    let duplicate_tracker = Arc::new(frost_server::DuplicateTracker::new(signed_history));
+
+    // Wire duplicate tracker into policy
+    let policy = policy.map(|p| p.with_duplicate_tracker(Arc::clone(&duplicate_tracker)));
 
     let keystore = Keystore::new(&key_path, signer_id);
     let keystore_for_load = Keystore::new(&key_path, signer_id);
@@ -282,6 +290,7 @@ async fn run_server(
         app_state = app_state.with_policy(p);
     }
     app_state = app_state.with_audit(audit);
+    app_state = app_state.with_duplicate_tracker(duplicate_tracker);
     let state = Arc::new(app_state);
 
     // Try to load existing key

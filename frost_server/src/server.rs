@@ -5,7 +5,7 @@
 use crate::audit::AuditLog;
 use crate::dkg::{DkgError, DkgParticipant};
 use crate::keystore::Keystore;
-use crate::policy::SigningPolicy;
+use crate::policy::{DuplicateTracker, SigningPolicy};
 use crate::signing::{FrostSigner, SigningError};
 use crate::types::{
     AggregateRequest, AggregateResponse, DkgFinalizeRequest, DkgFinalizeResponse,
@@ -21,6 +21,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use crate::types::SolanaVerification;
 use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
@@ -43,6 +44,10 @@ pub struct AppState {
     pub policy: Option<SigningPolicy>,
     /// Audit log
     pub audit: Arc<AuditLog>,
+    /// Duplicate tracker for preventing double-signing
+    pub duplicate_tracker: Option<Arc<DuplicateTracker>>,
+    /// Session-level verification data (session_id -> (requester, nonce)), for recording after round2
+    pub session_verifications: RwLock<HashMap<uuid::Uuid, (String, u64)>>,
 }
 
 impl AppState {
@@ -55,6 +60,8 @@ impl AppState {
             key_password,
             policy: None,
             audit: Arc::new(AuditLog::new(None)),
+            duplicate_tracker: None,
+            session_verifications: RwLock::new(HashMap::new()),
         }
     }
 
@@ -67,6 +74,12 @@ impl AppState {
     /// Set audit log
     pub fn with_audit(mut self, audit: AuditLog) -> Self {
         self.audit = Arc::new(audit);
+        self
+    }
+
+    /// Set duplicate tracker
+    pub fn with_duplicate_tracker(mut self, tracker: Arc<DuplicateTracker>) -> Self {
+        self.duplicate_tracker = Some(tracker);
         self
     }
 
@@ -286,6 +299,14 @@ async fn round1_handler(
                     fee_sats = info.fee_sats,
                     "policy check passed"
                 );
+
+                // Store verification data for duplicate tracking after round2
+                if let Some(ref verification) = request.solana_verification {
+                    if let SolanaVerification::Withdrawal { ref requester, nonce, .. } = verification {
+                        state.session_verifications.write().await
+                            .insert(request.session_id, (requester.clone(), *nonce));
+                    }
+                }
             }
             Err(e) => {
                 let reason = e.to_string();
@@ -341,7 +362,34 @@ async fn round2_handler(
         )
     })?;
 
-    signer.round2(&request).map(Json).map_err(signing_error)
+    let session_id = request.session_id;
+    let result = signer.round2(&request).map(Json).map_err(signing_error);
+
+    // On successful round2, record the signing for duplicate prevention
+    if result.is_ok() {
+        if let Some(ref tracker) = state.duplicate_tracker {
+            let verifications = state.session_verifications.read().await;
+            if let Some((requester, nonce)) = verifications.get(&session_id) {
+                tracker.record(requester, *nonce);
+                state.audit.log_signing_complete(
+                    &session_id.to_string(),
+                    state.signer_id,
+                    requester,
+                    *nonce,
+                );
+                tracing::info!(
+                    session = %session_id,
+                    requester = %requester,
+                    nonce = nonce,
+                    "recorded signing completion for duplicate prevention"
+                );
+            }
+        }
+        // Clean up session verification data
+        state.session_verifications.write().await.remove(&session_id);
+    }
+
+    result
 }
 
 /// Broadcast channel: verify commitments digest
@@ -557,6 +605,10 @@ fn policy_error(err: crate::policy::PolicyError) -> (StatusCode, Json<ErrorRespo
         PolicyError::SolanaRedemptionWrongStatus(_) => ("POLICY_SOLANA_REDEMPTION_WRONG_STATUS", StatusCode::FORBIDDEN),
         PolicyError::SolanaRpcError(_) => ("POLICY_SOLANA_RPC_ERROR", StatusCode::BAD_GATEWAY),
         PolicyError::SolanaVerificationFailed(_) => ("POLICY_SOLANA_VERIFICATION_FAILED", StatusCode::FORBIDDEN),
+        PolicyError::DuplicateSigning { .. } => ("POLICY_DUPLICATE_SIGNING", StatusCode::CONFLICT),
+        PolicyError::CrossValidationFailed(_) => ("POLICY_CROSS_VALIDATION_FAILED", StatusCode::FORBIDDEN),
+        PolicyError::AlreadyPaid { .. } => ("POLICY_ALREADY_PAID", StatusCode::FORBIDDEN),
+        PolicyError::InvalidAddress { .. } => ("POLICY_INVALID_ADDRESS", StatusCode::FORBIDDEN),
     };
     (status, Json(ErrorResponse::new(code, err.to_string())))
 }

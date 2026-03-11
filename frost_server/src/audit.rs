@@ -3,9 +3,10 @@
 //! Append-only JSON-lines log file recording every policy decision
 //! and signing event for forensic review.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::fs::OpenOptions;
-use std::io::Write;
+use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -16,13 +17,13 @@ pub struct AuditLog {
 }
 
 /// A single audit log entry
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AuditEntry {
     /// ISO-8601 timestamp
     pub ts: String,
     /// Session ID
     pub session_id: String,
-    /// Action type (e.g., "policy_check", "round1", "round2")
+    /// Action type (e.g., "policy_check", "round1", "round2", "signing_complete")
     pub action: String,
     /// Sighash (hex, truncated to 16 chars for readability)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -44,6 +45,12 @@ pub struct AuditEntry {
     /// Signer ID
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signer_id: Option<u16>,
+    /// Requester pubkey (base58) for duplicate tracking
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub requester: Option<String>,
+    /// Redemption nonce for duplicate tracking
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub redemption_nonce: Option<u64>,
 }
 
 impl AuditLog {
@@ -106,6 +113,8 @@ impl AuditLog {
             amount_sats,
             fee_sats,
             signer_id: None,
+            requester: None,
+            redemption_nonce: None,
         });
     }
 
@@ -129,7 +138,71 @@ impl AuditLog {
             amount_sats: None,
             fee_sats: None,
             signer_id: Some(signer_id),
+            requester: None,
+            redemption_nonce: None,
         });
+    }
+
+    /// Log a signing completion event (for duplicate tracking)
+    pub fn log_signing_complete(
+        &self,
+        session_id: &str,
+        signer_id: u16,
+        requester: &str,
+        nonce: u64,
+    ) {
+        self.log(&AuditEntry {
+            ts: chrono_now(),
+            session_id: session_id.to_string(),
+            action: "signing_complete".to_string(),
+            sighash: None,
+            result: "ok".to_string(),
+            reason: None,
+            destinations: None,
+            amount_sats: None,
+            fee_sats: None,
+            signer_id: Some(signer_id),
+            requester: Some(requester.to_string()),
+            redemption_nonce: Some(nonce),
+        });
+    }
+
+    /// Scan the audit log on startup to rebuild the set of already-signed (requester, nonce) pairs.
+    /// Returns a HashSet of `"requester:nonce"` strings.
+    pub fn scan_signed_redemptions(&self) -> HashSet<String> {
+        let mut signed = HashSet::new();
+
+        if self.path.as_os_str().is_empty() {
+            return signed;
+        }
+
+        let file = match std::fs::File::open(&self.path) {
+            Ok(f) => f,
+            Err(_) => return signed,
+        };
+
+        let reader = BufReader::new(file);
+        for line in reader.lines() {
+            let line = match line {
+                Ok(l) => l,
+                Err(_) => continue,
+            };
+            if let Ok(entry) = serde_json::from_str::<AuditEntry>(&line) {
+                if entry.action == "signing_complete" && entry.result == "ok" {
+                    if let (Some(req), Some(nonce)) = (entry.requester, entry.redemption_nonce) {
+                        signed.insert(format!("{}:{}", req, nonce));
+                    }
+                }
+            }
+        }
+
+        tracing::info!(
+            count = signed.len(),
+            path = %self.path.display(),
+            "loaded previously signed redemptions from audit log"
+        );
+
+        signed
     }
 
     /// Get the log file path (for diagnostics)

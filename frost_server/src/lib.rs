@@ -36,7 +36,7 @@ pub mod types;
 pub use audit::AuditLog;
 pub use dkg::{DkgError, DkgParticipant};
 pub use keystore::{Keystore, KeystoreError};
-pub use policy::{PolicyError, SigningPolicy};
+pub use policy::{DuplicateTracker, PolicyError, SigningPolicy};
 pub use server::{create_router, AppState};
 pub use signing::{aggregate_signatures, FrostSigner, SigningError};
 pub use types::*;

@@ -16,6 +16,8 @@ use bitcoin::{
     sighash::{Prevouts, SighashCache, TapSighashType},
     Address, Amount, Network, Transaction, TxOut,
 };
+use std::collections::HashSet;
+use std::sync::Mutex;
 use thiserror::Error;
 
 use crate::solana_verifier::SolanaVerifier;
@@ -97,6 +99,54 @@ pub enum PolicyError {
 
     #[error("POLICY_SOLANA_VERIFICATION_FAILED: {0}")]
     SolanaVerificationFailed(String),
+
+    #[error("POLICY_DUPLICATE_SIGNING: already signed redemption for {requester} nonce {nonce}")]
+    DuplicateSigning {
+        requester: String,
+        nonce: u64,
+    },
+
+    #[error("POLICY_CROSS_VALIDATION_FAILED: {0}")]
+    CrossValidationFailed(String),
+
+    #[error("POLICY_ALREADY_PAID: BTC destination {address} already has {tx_count} transaction(s)")]
+    AlreadyPaid {
+        address: String,
+        tx_count: usize,
+    },
+
+    #[error("POLICY_INVALID_ADDRESS: output {index} has invalid or unparseable script: {details}")]
+    InvalidAddress {
+        index: usize,
+        details: String,
+    },
+}
+
+/// Tracks already-signed (requester, nonce) pairs to prevent duplicate signing.
+/// Populated from audit log on startup, updated after each successful signing.
+pub struct DuplicateTracker {
+    signed: Mutex<HashSet<String>>,
+}
+
+impl DuplicateTracker {
+    /// Create a new tracker, optionally pre-populated from audit log scan
+    pub fn new(initial: HashSet<String>) -> Self {
+        Self {
+            signed: Mutex::new(initial),
+        }
+    }
+
+    /// Check if this (requester, nonce) has already been signed
+    pub fn is_signed(&self, requester: &str, nonce: u64) -> bool {
+        let key = format!("{}:{}", requester, nonce);
+        self.signed.lock().unwrap().contains(&key)
+    }
+
+    /// Record a successful signing
+    pub fn record(&self, requester: &str, nonce: u64) {
+        let key = format!("{}:{}", requester, nonce);
+        self.signed.lock().unwrap().insert(key);
+    }
 }
 
 /// Signing policy configuration
@@ -117,6 +167,8 @@ pub struct SigningPolicy {
     http: reqwest::Client,
     /// Optional Solana on-chain verifier (None = skip Solana verification)
     solana_verifier: Option<SolanaVerifier>,
+    /// Duplicate signing tracker
+    duplicate_tracker: Option<std::sync::Arc<DuplicateTracker>>,
 }
 
 impl SigningPolicy {
@@ -141,6 +193,7 @@ impl SigningPolicy {
                 .build()
                 .unwrap_or_else(|_| reqwest::Client::new()),
             solana_verifier: None,
+            duplicate_tracker: None,
         }
     }
 
@@ -148,6 +201,17 @@ impl SigningPolicy {
     pub fn with_solana_verifier(mut self, verifier: SolanaVerifier) -> Self {
         self.solana_verifier = Some(verifier);
         self
+    }
+
+    /// Set the duplicate signing tracker
+    pub fn with_duplicate_tracker(mut self, tracker: std::sync::Arc<DuplicateTracker>) -> Self {
+        self.duplicate_tracker = Some(tracker);
+        self
+    }
+
+    /// Get reference to duplicate tracker (for recording after successful signing)
+    pub fn duplicate_tracker(&self) -> Option<&std::sync::Arc<DuplicateTracker>> {
+        self.duplicate_tracker.as_ref()
     }
 
     /// Verify a Round1Request against the signing policy.
@@ -174,8 +238,24 @@ impl SigningPolicy {
             self.verify_utxos(ctx).await?;
         }
 
-        // 3. Check destinations
-        let destinations = self.check_destinations(&tx)?;
+        // 3. Validate all output addresses are parseable + check static destination whitelist
+        //    For withdrawals, skip the static whitelist (cross-validation in step 8 is the real check).
+        let is_withdrawal = matches!(
+            request.solana_verification,
+            Some(SolanaVerification::Withdrawal { .. })
+        );
+        self.validate_output_addresses(&tx)?;
+        let destinations = if is_withdrawal {
+            // Withdrawal destinations are validated by cross-validation (step 8), not static whitelist
+            tx.output
+                .iter()
+                .filter(|o| !o.script_pubkey.is_op_return())
+                .filter_map(|o| Address::from_script(&o.script_pubkey, self.network).ok())
+                .map(|a| a.to_string())
+                .collect()
+        } else {
+            self.check_destinations(&tx)?
+        };
 
         // 4. Check amounts
         let total_input: u64 = prevout_txouts.iter().map(|o| o.value.to_sat()).sum();
@@ -202,6 +282,51 @@ impl SigningPolicy {
             (&self.solana_verifier, &request.solana_verification)
         {
             self.verify_solana(verifier, verification).await?;
+        }
+
+        // 7. Duplicate signing prevention (withdrawal only)
+        if let Some(ref verification) = request.solana_verification {
+            if let SolanaVerification::Withdrawal { ref requester, nonce, .. } = verification {
+                if let Some(ref tracker) = self.duplicate_tracker {
+                    if tracker.is_signed(requester, *nonce) {
+                        return Err(PolicyError::DuplicateSigning {
+                            requester: requester.clone(),
+                            nonce: *nonce,
+                        });
+                    }
+                }
+            }
+        }
+
+        // 8. Cross-validate tx outputs match on-chain PDA btc_script (withdrawal only)
+        if let Some(ref verification) = request.solana_verification {
+            if let SolanaVerification::Withdrawal {
+                ref expected_btc_address,
+                expected_amount_sats,
+                ..
+            } = verification
+            {
+                self.cross_validate_tx_outputs(
+                    &tx,
+                    expected_btc_address,
+                    *expected_amount_sats,
+                )?;
+            }
+        }
+
+        // 9. Mempool/previous tx check — reject if destination already received payment
+        if let Some(ref verification) = request.solana_verification {
+            if let SolanaVerification::Withdrawal { ref expected_btc_address, .. } = verification {
+                // expected_btc_address is hex scriptPubKey; convert to bech32 for Esplora
+                if let Some(ref base_url) = self.esplora_url {
+                    self.check_destination_not_already_paid(
+                        base_url,
+                        expected_btc_address,
+                        &tx,
+                    )
+                    .await?;
+                }
+            }
         }
 
         Ok(PolicyInfo {
@@ -337,6 +462,28 @@ impl SigningPolicy {
         Ok(())
     }
 
+    /// Validate that all non-OP_RETURN outputs have valid, parseable Bitcoin addresses.
+    /// Rejects outputs with non-standard or unparseable scripts.
+    fn validate_output_addresses(&self, tx: &Transaction) -> Result<(), PolicyError> {
+        for (i, output) in tx.output.iter().enumerate() {
+            if output.script_pubkey.is_op_return() {
+                continue;
+            }
+            // Must be parseable as a valid Bitcoin address on the configured network
+            Address::from_script(&output.script_pubkey, self.network).map_err(|_| {
+                PolicyError::InvalidAddress {
+                    index: i,
+                    details: format!(
+                        "script {} is not a valid address on {:?}",
+                        hex::encode(output.script_pubkey.as_bytes()),
+                        self.network
+                    ),
+                }
+            })?;
+        }
+        Ok(())
+    }
+
     /// Check that all non-OP_RETURN outputs go to allowed destinations.
     /// Returns the list of destination addresses found.
     fn check_destinations(&self, tx: &Transaction) -> Result<Vec<String>, PolicyError> {
@@ -369,6 +516,92 @@ impl SigningPolicy {
         }
 
         Ok(destinations)
+    }
+
+    /// Cross-validate that the transaction outputs match the on-chain PDA's btc_script and amount.
+    fn cross_validate_tx_outputs(
+        &self,
+        tx: &Transaction,
+        expected_script_hex: &str,
+        expected_amount_sats: u64,
+    ) -> Result<(), PolicyError> {
+        let expected_script_bytes = hex::decode(expected_script_hex).map_err(|e| {
+            PolicyError::CrossValidationFailed(format!("invalid expected_btc_address hex: {}", e))
+        })?;
+
+        // Find the output that matches the expected scriptPubKey
+        let matching_output = tx.output.iter().find(|out| {
+            out.script_pubkey.as_bytes() == expected_script_bytes.as_slice()
+        });
+
+        let output = matching_output.ok_or_else(|| {
+            PolicyError::CrossValidationFailed(format!(
+                "no output matches on-chain btc_script {}",
+                expected_script_hex
+            ))
+        })?;
+
+        // Verify the output amount matches
+        if output.value.to_sat() != expected_amount_sats {
+            return Err(PolicyError::CrossValidationFailed(format!(
+                "output amount {} != on-chain expected {}",
+                output.value.to_sat(),
+                expected_amount_sats
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Check that the BTC destination address hasn't already received a payment.
+    /// Queries Esplora for transactions involving the destination address.
+    async fn check_destination_not_already_paid(
+        &self,
+        base_url: &str,
+        script_hex: &str,
+        _tx: &Transaction,
+    ) -> Result<(), PolicyError> {
+        // Convert hex scriptPubKey to a bitcoin address string for Esplora lookup
+        let script_bytes = hex::decode(script_hex).map_err(|e| {
+            PolicyError::CrossValidationFailed(format!("invalid script hex: {}", e))
+        })?;
+        let script = bitcoin::ScriptBuf::from_bytes(script_bytes);
+
+        let address = Address::from_script(&script, self.network)
+            .map(|a| a.to_string())
+            .map_err(|e| {
+                PolicyError::CrossValidationFailed(format!(
+                    "cannot derive address from script: {}",
+                    e
+                ))
+            })?;
+
+        let url = format!("{}/address/{}/txs", base_url.trim_end_matches('/'), address);
+        let response = self
+            .http
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| PolicyError::EsploraError(format!("mempool check: {}", e)))?;
+
+        if !response.status().is_success() {
+            // If address not found, that's fine — no previous payments
+            return Ok(());
+        }
+
+        let txs: Vec<serde_json::Value> = response
+            .json()
+            .await
+            .map_err(|e| PolicyError::EsploraError(format!("parse tx list: {}", e)))?;
+
+        if !txs.is_empty() {
+            return Err(PolicyError::AlreadyPaid {
+                address,
+                tx_count: txs.len(),
+            });
+        }
+
+        Ok(())
     }
 
     /// Verify Solana on-chain state for the given verification type.
