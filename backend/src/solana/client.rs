@@ -715,11 +715,13 @@ impl SolClient {
             &BTC_LIGHT_CLIENT_PROGRAM_ID,
         );
 
-        // Derive pool_vault PDA
-        let (pool_vault, _) = Pubkey::find_program_address(
-            &[b"vault", self.zkbtc_mint.as_ref()],
-            &self.program_id,
-        );
+        // Read pool_vault from on-chain PoolState (offset 68, 32 bytes)
+        let pool_account = self
+            .rpc
+            .get_account(&self.pool_state)
+            .map_err(|e| SolError::RpcError(format!("read pool_state: {}", e)))?;
+        let pool_vault = Pubkey::try_from(&pool_account.data[68..100])
+            .map_err(|_| SolError::RpcError("pool_vault parse from pool_state".into()))?;
 
         let accounts = vec![
             AccountMeta::new(self.pool_state, false),                   // 0: pool_state (writable)

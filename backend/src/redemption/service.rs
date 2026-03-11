@@ -333,15 +333,63 @@ impl RedemptionService {
                     continue;
                 }
             } else {
-                // Processing on-chain but not tracked locally — try to build BTC tx
-                match self.build_sign_broadcast(pda).await {
-                    Ok(_) => result.withdrawals_processed += 1,
+                // Processing on-chain but not tracked locally (e.g., after redeploy).
+                // Check if BTC was already sent to this address to avoid duplicate broadcasts.
+                let btc_address = match script_to_address(
+                    &pda.btc_script,
+                    bitcoin::Network::Testnet,
+                ) {
+                    Ok(addr) => addr,
                     Err(e) => {
                         eprintln!(
-                            "[tick] Error building tx for untracked Processing PDA {}: {}",
-                            &pda.pda_address[..8],
-                            e
+                            "[tick] Cannot parse BTC address for PDA {}: {}",
+                            &pda.pda_address[..8], e
                         );
+                        continue;
+                    }
+                };
+
+                // Check for existing payments to this address
+                match self.esplora.get_address_txids(&btc_address).await {
+                    Ok(txs) if !txs.is_empty() => {
+                        // Found existing tx(s) — recover tracking with the first confirmed txid
+                        let txid = txs[0].clone();
+                        println!(
+                            "[tick] PDA {} already has BTC tx {}, recovering tracking",
+                            &pda.pda_address[..8], &txid[..8]
+                        );
+                        let now = now_secs();
+                        let entry = RedemptionTracking {
+                            pda_address: pda.pda_address.clone(),
+                            btc_txid: Some(txid),
+                            local_status: LocalRedemptionStatus::AwaitingConfirmation,
+                            retry_count: 0,
+                            created_at: now,
+                            last_updated: now,
+                            error: None,
+                            verified_tx_pda: None,
+                            buffer_pubkey: None,
+                            tx_size: None,
+                            requester: Some(pda.requester.clone()),
+                            amount_sats: Some(pda.amount_sats),
+                            btc_script: Some(hex::encode(&pda.btc_script)),
+                            request_id: Some(pda.request_id),
+                        };
+                        self.tracking.upsert(entry).await;
+                        result.withdrawals_processed += 1;
+                    }
+                    _ => {
+                        // No existing payments — safe to broadcast
+                        match self.build_sign_broadcast(pda).await {
+                            Ok(_) => result.withdrawals_processed += 1,
+                            Err(e) => {
+                                eprintln!(
+                                    "[tick] Error building tx for untracked Processing PDA {}: {}",
+                                    &pda.pda_address[..8],
+                                    e
+                                );
+                            }
+                        }
                     }
                 }
                 continue;
@@ -430,6 +478,10 @@ impl RedemptionService {
                 verified_tx_pda: None,
                 buffer_pubkey: None,
                 tx_size: None,
+                requester: Some(pda.requester.clone()),
+                amount_sats: Some(pda.amount_sats),
+                btc_script: Some(hex::encode(&pda.btc_script)),
+                request_id: Some(pda.request_id),
             };
             self.tracking.upsert(entry).await;
             return Err(ServiceError::NoUtxos);
@@ -499,6 +551,10 @@ impl RedemptionService {
             verified_tx_pda: None,
             buffer_pubkey: None,
             tx_size: None,
+            requester: Some(pda.requester.clone()),
+            amount_sats: Some(pda.amount_sats),
+            btc_script: Some(hex::encode(&pda.btc_script)),
+            request_id: Some(pda.request_id),
         };
         self.tracking.upsert(entry).await;
 
@@ -568,9 +624,36 @@ impl RedemptionService {
             return Ok(true);
         }
 
-        // If already SpvVerified, skip to complete_redemption call
+        // If already SpvVerified, verify the PDA still exists before skipping ahead
         if tracking.local_status == LocalRedemptionStatus::SpvVerified {
-            return self.call_complete_and_cleanup(pda, tracking).await;
+            let vt_still_valid = if let Some(ref vt_str) = tracking.verified_tx_pda {
+                if let Ok(vt_pk) = vt_str.parse::<solana_sdk::pubkey::Pubkey>() {
+                    self.sol_client.account_exists(&vt_pk).unwrap_or(false)
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            if vt_still_valid {
+                return self.call_complete_and_cleanup(pda, tracking).await;
+            } else {
+                // Stale SpvVerified state — reset to re-run verification
+                println!(
+                    "[redemption] PDA {} SpvVerified state is stale, resetting to re-verify",
+                    &pda.pda_address[..8]
+                );
+                let now = now_secs();
+                let mut entry = tracking.clone();
+                entry.local_status = LocalRedemptionStatus::AwaitingConfirmation;
+                entry.verified_tx_pda = None;
+                entry.buffer_pubkey = None;
+                entry.tx_size = None;
+                entry.last_updated = now;
+                self.tracking.upsert(entry).await;
+                // Fall through to re-run the full flow below
+            }
         }
 
         // Check BTC confirmations

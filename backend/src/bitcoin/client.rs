@@ -129,6 +129,23 @@ impl EsploraClient {
             .collect())
     }
 
+    /// Get txids for transactions involving an address (most recent first).
+    pub async fn get_address_txids(&self, address: &str) -> Result<Vec<String>, EsploraError> {
+        let url = format!("{}/address/{}/txs", self.base_url, address);
+        let resp = self.client.get(&url).send().await?;
+
+        if !resp.status().is_success() {
+            return Err(EsploraError::AddressNotFound(address.to_string()));
+        }
+
+        #[derive(serde::Deserialize)]
+        struct TxEntry {
+            txid: String,
+        }
+        let txs: Vec<TxEntry> = resp.json().await?;
+        Ok(txs.into_iter().map(|t| t.txid).collect())
+    }
+
     /// Get raw transaction hex
     pub async fn get_tx_hex(&self, txid: &str) -> Result<String, EsploraError> {
         let url = format!("{}/tx/{}/hex", self.base_url, txid);

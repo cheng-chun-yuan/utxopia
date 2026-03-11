@@ -322,6 +322,19 @@ pub struct RedemptionTracking {
     /// Stripped raw tx size (needed for complete_redemption instruction)
     #[serde(default)]
     pub tx_size: Option<u32>,
+    // ── Snapshot of on-chain PDA data (preserved after PDA closure) ──
+    /// Requester's Solana pubkey (base58)
+    #[serde(default)]
+    pub requester: Option<String>,
+    /// Withdrawal amount in satoshis
+    #[serde(default)]
+    pub amount_sats: Option<u64>,
+    /// BTC destination scriptPubKey (hex)
+    #[serde(default)]
+    pub btc_script: Option<String>,
+    /// On-chain request nonce
+    #[serde(default)]
+    pub request_id: Option<u64>,
 }
 
 /// Backend-side redemption status
