@@ -735,7 +735,17 @@ impl DepositTrackerService {
             match self.create_header_relayer() {
                 Ok(r) => {
                     println!("[ws] Header relayer configured");
-                    self.header_relayer = Some(Arc::new(r));
+                    let relayer = Arc::new(r);
+                    // Initial sync — catch up any gap accumulated while offline
+                    let r2 = Arc::clone(&relayer);
+                    tokio::spawn(async move {
+                        match r2.sync_headers().await {
+                            Ok(n) if n > 0 => println!("[header-relay] Initial sync: relayed {} headers", n),
+                            Ok(_) => println!("[header-relay] Initial sync: already at tip"),
+                            Err(e) => eprintln!("[header-relay] Initial sync error: {}", e),
+                        }
+                    });
+                    self.header_relayer = Some(relayer);
                 }
                 Err(e) => {
                     eprintln!("[ws] Header relayer failed: {}, continuing without", e);

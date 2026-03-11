@@ -12,6 +12,7 @@ use tokio::sync::{Notify, RwLock};
 use solana_sdk::signature::Signer as SolanaSigner;
 
 use crate::bitcoin::client::EsploraClient;
+use crate::deposit_tracker::header_relayer::HeaderRelayer;
 use crate::redemption::builder::TxBuilder;
 use crate::redemption::queue::WithdrawalQueue;
 use crate::redemption::signer::{SingleKeySigner, TxSigner};
@@ -74,6 +75,9 @@ pub struct RedemptionService {
 
     /// Running flag
     running: Arc<RwLock<bool>>,
+
+    /// Header relayer for on-demand block header sync (optional, shared with deposit tracker)
+    header_relayer: Option<Arc<HeaderRelayer>>,
 }
 
 impl RedemptionService {
@@ -91,6 +95,9 @@ impl RedemptionService {
         let mut builder = TxBuilder::new_testnet();
         builder.set_service_fee(config.service_fee_sats);
 
+        // Auto-init header relayer if env vars are set
+        let header_relayer = Self::try_create_header_relayer();
+
         Self {
             scanner,
             tracking,
@@ -103,7 +110,51 @@ impl RedemptionService {
             pool_utxos: Arc::new(RwLock::new(Vec::new())),
             stats: Arc::new(RwLock::new(RedemptionStats::default())),
             running: Arc::new(RwLock::new(false)),
+            header_relayer,
             config,
+        }
+    }
+
+    /// Set the header relayer (shared with deposit tracker for on-demand sync)
+    pub fn set_header_relayer(&mut self, relayer: Arc<HeaderRelayer>) {
+        self.header_relayer = Some(relayer);
+    }
+
+    /// Try to create a header relayer from environment variables.
+    fn try_create_header_relayer() -> Option<Arc<HeaderRelayer>> {
+        use crate::common::env::env_bool;
+
+        if !env_bool("HEADER_RELAY_ENABLED", false) {
+            return None;
+        }
+
+        let relayer_keypair_val = std::env::var("RELAYER_KEYPAIR").ok()?;
+        if relayer_keypair_val.is_empty() {
+            return None;
+        }
+
+        let keypair = crate::common::keypair::load_keypair(&relayer_keypair_val).ok()?;
+
+        let solana_rpc = std::env::var("SOLANA_RPC_URL")
+            .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
+        let esplora_url = std::env::var("ESPLORA_URL")
+            .unwrap_or_else(|_| "https://mempool.space/testnet4/api".to_string());
+        let btc_lc_pid = std::env::var("BTC_LIGHT_CLIENT_PROGRAM_ID")
+            .unwrap_or_else(|_| "Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq".to_string());
+        let batch_size: u8 = std::env::var("HEADER_BATCH_SIZE")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(5);
+
+        match HeaderRelayer::new(&solana_rpc, &esplora_url, &btc_lc_pid, keypair, batch_size) {
+            Ok(r) => {
+                println!("[redemption] Header relayer configured for on-demand sync");
+                Some(Arc::new(r))
+            }
+            Err(e) => {
+                eprintln!("[redemption] Failed to create header relayer: {}", e);
+                None
+            }
         }
     }
 
@@ -586,15 +637,43 @@ impl RedemptionService {
             crate::solana::spv::derive_block_header_pda(&block_hash, &btc_lc_pid);
         let light_client_pda = crate::solana::spv::derive_light_client_pda(&btc_lc_pid);
 
-        // 4. Check if block header is relayed
+        // 4. Check if block header is relayed — trigger on-demand sync if not
         match self.sol_client.account_exists(&block_header_pda) {
             Ok(true) => {}
             Ok(false) => {
-                println!(
-                    "[redemption] Block header not yet relayed for {}, will retry next tick",
-                    &btc_txid[..8]
-                );
-                return Ok(false);
+                // Trigger on-demand header sync
+                if let Some(relayer) = &self.header_relayer {
+                    println!(
+                        "[redemption] Block header not relayed for {}, triggering on-demand sync",
+                        &btc_txid[..8]
+                    );
+                    match relayer.sync_headers().await {
+                        Ok(n) if n > 0 => {
+                            println!("[redemption] On-demand relay: synced {} headers", n);
+                        }
+                        Ok(_) => {}
+                        Err(e) => {
+                            eprintln!("[redemption] On-demand relay error: {}", e);
+                        }
+                    }
+                    // Re-check after sync
+                    match self.sol_client.account_exists(&block_header_pda) {
+                        Ok(true) => {} // proceed
+                        _ => {
+                            println!(
+                                "[redemption] Block header still not available for {}, will retry",
+                                &btc_txid[..8]
+                            );
+                            return Ok(false);
+                        }
+                    }
+                } else {
+                    println!(
+                        "[redemption] Block header not yet relayed for {}, no relayer available",
+                        &btc_txid[..8]
+                    );
+                    return Ok(false);
+                }
             }
             Err(e) => {
                 eprintln!("[redemption] Error checking block header PDA: {}", e);

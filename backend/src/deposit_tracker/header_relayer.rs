@@ -299,13 +299,22 @@ impl HeaderRelayer {
             .map_err(|e| RelayerError::Rpc(e.to_string()))
     }
 
-    /// Triggered by WS new block event. Syncs if >= 2 blocks behind.
-    pub async fn on_new_block(&self, new_height: u64) -> Result<u32, RelayerError> {
+    /// Triggered by WS new block event. Syncs headers up to BTC tip.
+    pub async fn on_new_block(&self, _new_height: u64) -> Result<u32, RelayerError> {
         let state = self
             .get_light_client_state()?
             .ok_or(RelayerError::NotInitialized)?;
 
-        if new_height.saturating_sub(state.tip_height) < 2 {
+        // Check against actual BTC tip (not just the incoming block) because
+        // blocks arrive one at a time via WS but we may already be many behind.
+        let btc_tip = self.get_btc_tip_height().await?;
+        let gap = btc_tip.saturating_sub(state.tip_height);
+
+        if gap < 2 {
+            println!(
+                "[header-relay] LC tip={}, BTC tip={}, gap={} (need >= 2)",
+                state.tip_height, btc_tip, gap
+            );
             return Ok(0);
         }
 
