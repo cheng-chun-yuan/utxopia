@@ -51,9 +51,6 @@ interface PoolStateData {
  */
 export async function GET() {
   try {
-    console.log("[PoolState API] Fetching from:", POOL_STATE_ADDRESS);
-    console.log("[PoolState API] Using Helius:", isHeliusConfigured());
-
     const accountInfo = await fetchAccountInfo(POOL_STATE_ADDRESS, "devnet");
 
     if (!accountInfo) {

@@ -173,7 +173,7 @@ impl SolanaWsSubscriber {
                         .get_next_leaf_index()
                         .unwrap_or(0);
                     if let Ok(inserted) =
-                        self.store.insert_leaf(leaf_index, &e, signature, slot)
+                        self.store.insert_leaf(leaf_index, &e, signature, slot, 0)
                     {
                         if inserted {
                             let tree_cache = self.tree_cache.clone();
@@ -188,7 +188,7 @@ impl SolanaWsSubscriber {
                     }
                 }
                 ProgramEvent::NullifierSpent(e) => {
-                    if let Ok(inserted) = self.store.insert_nullifier(&e, signature, slot) {
+                    if let Ok(inserted) = self.store.insert_nullifier(&e, signature, slot, 0) {
                         if inserted {
                             self.tree_cache.broadcast_nullifier(&hex::encode(e.nullifier_hash), slot);
                         }
@@ -196,7 +196,7 @@ impl SolanaWsSubscriber {
                 }
                 ProgramEvent::StealthAnnouncement(e) => {
                     if let Ok(inserted) =
-                        self.store.insert_announcement(&e, signature, slot)
+                        self.store.insert_announcement(&e, signature, slot, 0)
                     {
                         if inserted {
                             self.tree_cache.broadcast_announcement(&e);

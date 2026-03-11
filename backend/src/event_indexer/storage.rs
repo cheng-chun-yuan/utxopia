@@ -63,6 +63,8 @@ pub struct AnnouncementRow {
     pub commitment: String,       // hex
     pub tx_signature: String,
     pub slot: i64,
+    /// Block time from getTransaction RPC (Unix timestamp)
+    pub block_time: i64,
 }
 
 impl EventStore {
@@ -109,7 +111,8 @@ impl EventStore {
                 commitment BLOB NOT NULL,
                 created_at INTEGER NOT NULL,
                 tx_signature TEXT NOT NULL,
-                slot INTEGER NOT NULL
+                slot INTEGER NOT NULL,
+                block_time INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS nullifier_events (
@@ -118,7 +121,8 @@ impl EventStore {
                 spent_at INTEGER NOT NULL,
                 spent_by TEXT NOT NULL,
                 tx_signature TEXT NOT NULL,
-                slot INTEGER NOT NULL
+                slot INTEGER NOT NULL,
+                block_time INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS stealth_announcements (
@@ -128,16 +132,27 @@ impl EventStore {
                 encrypted_amount BLOB NOT NULL,
                 commitment BLOB NOT NULL,
                 tx_signature TEXT NOT NULL,
-                slot INTEGER NOT NULL
+                slot INTEGER NOT NULL,
+                block_time INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS indexer_state (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+
+
             ",
         )
         .map_err(|e| format!("migration error: {}", e))?;
+
+        // Add block_time column to existing tables (idempotent migration)
+        for table in &["leaf_events", "nullifier_events", "stealth_announcements"] {
+            let _ = conn.execute_batch(
+                &format!("ALTER TABLE {} ADD COLUMN block_time INTEGER NOT NULL DEFAULT 0", table),
+            ); // Ignore error if column already exists
+        }
+
         Ok(())
     }
 
@@ -148,17 +163,19 @@ impl EventStore {
         event: &LeafInsertedEvent,
         tx_signature: &str,
         slot: i64,
+        block_time: i64,
     ) -> Result<bool, String> {
         let conn = self.conn()?;
         let result = conn.execute(
-            "INSERT OR IGNORE INTO leaf_events (leaf_index, commitment, created_at, tx_signature, slot)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT OR IGNORE INTO leaf_events (leaf_index, commitment, created_at, tx_signature, slot, block_time)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 leaf_index,
                 event.commitment.as_slice(),
                 event.created_at,
                 tx_signature,
                 slot,
+                block_time,
             ],
         );
         match result {
@@ -173,12 +190,13 @@ impl EventStore {
         event: &NullifierSpentEvent,
         tx_signature: &str,
         slot: i64,
+        block_time: i64,
     ) -> Result<bool, String> {
         let conn = self.conn()?;
         let spent_by_hex = hex::encode(&event.spent_by);
         let result = conn.execute(
-            "INSERT OR IGNORE INTO nullifier_events (nullifier_hash, operation_type, spent_at, spent_by, tx_signature, slot)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT OR IGNORE INTO nullifier_events (nullifier_hash, operation_type, spent_at, spent_by, tx_signature, slot, block_time)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 event.nullifier_hash.as_slice(),
                 event.operation_type as i64,
@@ -186,6 +204,7 @@ impl EventStore {
                 spent_by_hex,
                 tx_signature,
                 slot,
+                block_time,
             ],
         );
         match result {
@@ -199,7 +218,8 @@ impl EventStore {
     pub fn get_leaves(&self, since: Option<i64>) -> Result<Vec<LeafRow>, String> {
         let conn = self.conn()?;
         let base_query = "SELECT l.leaf_index, l.commitment, l.created_at, l.tx_signature, l.slot, \
-                          a.announcement_type, a.encrypted_amount, a.ephemeral_pub \
+                          a.announcement_type, a.encrypted_amount, a.ephemeral_pub, \
+                          COALESCE(l.block_time, 0) as block_time \
                           FROM leaf_events l \
                           LEFT JOIN stealth_announcements a ON l.leaf_index = a.leaf_index";
 
@@ -208,6 +228,7 @@ impl EventStore {
             let ann_type: Option<i64> = row.get(5)?;
             let encrypted_amount: Option<Vec<u8>> = row.get(6)?;
             let ephemeral_pub: Option<Vec<u8>> = row.get(7)?;
+            let block_time: i64 = row.get(8)?;
 
             // For deposits (type=0), encrypted_amount is plaintext LE u64
             let amount_sats = if ann_type == Some(0) {
@@ -225,7 +246,8 @@ impl EventStore {
             Ok(LeafRow {
                 leaf_index: row.get(0)?,
                 commitment: hex::encode(&commitment_blob),
-                created_at: row.get(2)?,
+                // Use block_time (from RPC getTransaction) if available, fallback to created_at (from on-chain Clock)
+                created_at: if block_time > 0 { block_time } else { row.get(2)? },
                 tx_signature: row.get(3)?,
                 slot: row.get(4)?,
                 announcement_type: ann_type,
@@ -321,12 +343,13 @@ impl EventStore {
         event: &StealthAnnouncementEvent,
         tx_signature: &str,
         slot: i64,
+        block_time: i64,
     ) -> Result<bool, String> {
         let conn = self.conn()?;
         let result = conn.execute(
             "INSERT OR IGNORE INTO stealth_announcements
-             (leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+             (leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot, block_time)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 event.leaf_index as i64,
                 event.announcement_type as i64,
@@ -335,6 +358,7 @@ impl EventStore {
                 event.commitment.as_slice(),
                 tx_signature,
                 slot,
+                block_time,
             ],
         );
         match result {
@@ -348,7 +372,7 @@ impl EventStore {
         if let Some(since) = since_leaf_index {
             let mut stmt = conn
                 .prepare(
-                    "SELECT leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot
+                    "SELECT leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot, COALESCE(block_time, 0)
                      FROM stealth_announcements WHERE leaf_index > ?1 ORDER BY leaf_index",
                 )
                 .map_err(|e| format!("query error: {}", e))?;
@@ -359,7 +383,7 @@ impl EventStore {
         } else {
             let mut stmt = conn
                 .prepare(
-                    "SELECT leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot
+                    "SELECT leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot, COALESCE(block_time, 0)
                      FROM stealth_announcements ORDER BY leaf_index",
                 )
                 .map_err(|e| format!("query error: {}", e))?;
@@ -482,26 +506,30 @@ impl EventStore {
         }).map_err(|e| format!("query error: {}", e))?
           .collect::<Result<Vec<_>, _>>().map_err(|e| format!("row error: {}", e))?;
 
-        // Step 2: For each tx, fetch nullifiers
+        // Step 2: For each tx, fetch nullifiers + block_time
         let mut null_stmt = conn.prepare(
-            "SELECT HEX(nullifier_hash), spent_at FROM nullifier_events WHERE tx_signature = ?1"
+            "SELECT HEX(nullifier_hash), spent_at, COALESCE(block_time, 0) FROM nullifier_events WHERE tx_signature = ?1"
         ).map_err(|e| format!("query error: {}", e))?;
 
         let mut results = Vec::with_capacity(partials.len());
         for p in partials {
-            let nullifiers: Vec<(String, i64)> = null_stmt.query_map(
+            let nullifiers: Vec<(String, i64, i64)> = null_stmt.query_map(
                 params![p.tx_signature],
                 |row| {
                     let hash: String = row.get(0)?;
                     let spent_at: i64 = row.get(1)?;
-                    Ok((hash.to_lowercase(), spent_at))
+                    let block_time: i64 = row.get(2)?;
+                    Ok((hash.to_lowercase(), spent_at, block_time))
                 },
             ).map_err(|e| format!("query error: {}", e))?
              .collect::<Result<Vec<_>, _>>().map_err(|e| format!("row error: {}", e))?;
 
             let input_count = nullifiers.len() as i64;
-            let timestamp = nullifiers.iter().map(|(_, t)| *t).max().unwrap_or(0);
-            let nullifier_hashes: Vec<String> = nullifiers.into_iter().map(|(h, _)| h).collect();
+            // Prefer block_time (from RPC), fall back to spent_at (from on-chain Clock)
+            let block_time = nullifiers.iter().map(|(_, _, bt)| *bt).max().unwrap_or(0);
+            let spent_at = nullifiers.iter().map(|(_, t, _)| *t).max().unwrap_or(0);
+            let timestamp = if block_time > 0 { block_time } else { spent_at };
+            let nullifier_hashes: Vec<String> = nullifiers.into_iter().map(|(h, _, _)| h).collect();
 
             results.push(TransferRow {
                 tx_signature: p.tx_signature,
@@ -529,6 +557,7 @@ impl EventStore {
             commitment: hex::encode(&commitment_blob),
             tx_signature: row.get(5)?,
             slot: row.get(6)?,
+            block_time: row.get::<_, i64>(7).unwrap_or(0),
         })
     }
 }
@@ -546,8 +575,8 @@ mod tests {
             created_at: 1700000000,
         };
 
-        assert!(store.insert_leaf(0, &event, "sig1", 100).unwrap());
-        assert!(!store.insert_leaf(0, &event, "sig1", 100).unwrap()); // duplicate
+        assert!(store.insert_leaf(0, &event, "sig1", 100, 1700000000).unwrap());
+        assert!(!store.insert_leaf(0, &event, "sig1", 100, 1700000000).unwrap()); // duplicate
 
         let leaves = store.get_leaves(None).unwrap();
         assert_eq!(leaves.len(), 1);
@@ -567,8 +596,8 @@ mod tests {
             commitment: [0xBB; 32],
             leaf_index: 5,
         };
-        assert!(store.insert_announcement(&event, "sig1", 100).unwrap());
-        assert!(!store.insert_announcement(&event, "sig1", 100).unwrap()); // dup
+        assert!(store.insert_announcement(&event, "sig1", 100, 1700000000).unwrap());
+        assert!(!store.insert_announcement(&event, "sig1", 100, 1700000000).unwrap()); // dup
 
         let rows = store.get_announcements(None).unwrap();
         assert_eq!(rows.len(), 1);
@@ -593,7 +622,7 @@ mod tests {
             spent_by: [0xEF; 32],
         };
 
-        assert!(store.insert_nullifier(&event, "sig2", 101).unwrap());
+        assert!(store.insert_nullifier(&event, "sig2", 101, 1700000001).unwrap());
 
         let hash_hex = hex::encode([0xCD; 32]);
         let result = store.get_nullifier(&hash_hex).unwrap();

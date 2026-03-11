@@ -14,8 +14,8 @@ import {
   deriveCommitmentTreePDA,
   derivePoolVaultATA,
 } from "@/lib/solana/instructions";
-import { getHeliusConnection, isHeliusConfigured } from "@/lib/helius-server";
-import { addCommitmentToIndex, syncFromOnChain } from "@/lib/commitment-index";
+import { getHeliusConnection } from "@/lib/helius-server";
+import { syncFromOnChain } from "@/lib/commitment-index";
 
 export const runtime = "nodejs";
 
@@ -73,8 +73,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log("[Demo API] Processing stealth deposit...");
-
     // Get admin keypair (required for demo instructions)
     const admin = getAdminKeypair();
     if (!admin) {
@@ -86,8 +84,6 @@ export async function POST(request: NextRequest) {
 
     // Connect to Solana via Helius
     const connection = getHeliusConnection("devnet");
-    console.log("[Demo API] Using Helius:", isHeliusConfigured());
-    console.log("[Demo API] Admin:", admin.publicKey.toBase58());
 
     // =========================================================================
     // Pre-flight account validation (diagnose "invalid account data" errors)
@@ -96,12 +92,6 @@ export async function POST(request: NextRequest) {
     const [commitmentTree] = deriveCommitmentTreePDA();
     const poolVault = derivePoolVaultATA();
 
-    console.log("[Demo API] Checking required accounts...");
-    console.log("[Demo API] Pool State PDA:", poolState.toBase58());
-    console.log("[Demo API] Commitment Tree PDA:", commitmentTree.toBase58());
-    console.log("[Demo API] zkBTC Mint:", ZKBTC_MINT_ADDRESS.toBase58());
-    console.log("[Demo API] Pool Vault ATA:", poolVault.toBase58());
-
     // Fetch account info for all required accounts
     const [poolInfo, treeInfo, mintInfo, vaultInfo] = await Promise.all([
       connection.getAccountInfo(poolState),
@@ -109,15 +99,6 @@ export async function POST(request: NextRequest) {
       connection.getAccountInfo(ZKBTC_MINT_ADDRESS),
       connection.getAccountInfo(poolVault),
     ]);
-
-    console.log("[Demo API] Pool exists:", !!poolInfo);
-    console.log("[Demo API] Pool owner:", poolInfo?.owner.toBase58() || "N/A");
-    console.log("[Demo API] Tree exists:", !!treeInfo);
-    console.log("[Demo API] Tree owner:", treeInfo?.owner.toBase58() || "N/A");
-    console.log("[Demo API] Mint exists:", !!mintInfo);
-    console.log("[Demo API] Mint owner:", mintInfo?.owner.toBase58() || "N/A");
-    console.log("[Demo API] Vault exists:", !!vaultInfo);
-    console.log("[Demo API] Vault owner:", vaultInfo?.owner.toBase58() || "N/A");
 
     // Validate pool state exists and is owned by Aegis program
     if (!poolInfo) {
@@ -178,9 +159,6 @@ export async function POST(request: NextRequest) {
     // Check pool authority matches admin keypair
     // Pool state layout: discriminator(4 bytes) + authority(32 bytes)
     const poolAuthority = new PublicKey(poolInfo.data.slice(4, 36));
-    console.log("[Demo API] Pool Authority:", poolAuthority.toBase58());
-    console.log("[Demo API] Admin Pubkey:", admin.publicKey.toBase58());
-    console.log("[Demo API] Authority Match:", poolAuthority.equals(admin.publicKey));
 
     if (!poolAuthority.equals(admin.publicKey)) {
       return NextResponse.json(
@@ -191,8 +169,6 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
-
-    console.log("[Demo API] All pre-flight checks passed!");
 
     // Build demo deposit transaction (npk-based, commitment computed on-chain)
     const ephemeralPubBytes = hexToBytes(ephemeralPub);
@@ -211,32 +187,11 @@ export async function POST(request: NextRequest) {
         commitment: "confirmed",
       });
 
-      console.log("[Demo API] Transaction confirmed:", signature);
-
       // Sync local index from on-chain AFTER transaction confirms
-      // This ensures local index includes the new commitment with correct leaf index
-      let leafIndex: string | undefined;
       try {
-        console.log("[Demo API] Syncing local index from on-chain...");
-        const syncResult = await syncFromOnChain();
-        console.log("[Demo API] Synced", syncResult.synced, "commitments, root:", syncResult.root.slice(0, 16) + "...");
-
-        // The new commitment should now be in the synced index
-        // Find its leaf index from the sync
-        leafIndex = (syncResult.synced - 1).toString();
-      } catch (syncError) {
-        console.warn("[Demo API] Sync failed:", syncError);
-        // Fallback: try to add manually
-        try {
-          // We don't have the commitment here (computed on-chain), so skip manual fallback
-          const commitmentBigInt = 0n; // placeholder - sync should handle this
-          const amountBigInt = BigInt(amount);
-          const indexResult = await addCommitmentToIndex(commitmentBigInt, amountBigInt);
-          leafIndex = indexResult.leafIndex.toString();
-          console.log("[Demo API] Added to local index manually, leafIndex:", leafIndex);
-        } catch (indexError) {
-          console.warn("[Demo API] Failed to add to local index:", indexError);
-        }
+        await syncFromOnChain();
+      } catch {
+        // Sync failure is non-fatal — backend indexer will catch up
       }
 
       return NextResponse.json({
@@ -261,10 +216,7 @@ export async function POST(request: NextRequest) {
       );
     }
   } catch (error) {
-    // Log full error server-side for debugging
     console.error("[Demo API] Error:", error);
-    console.error("[Demo API] Error stack:", error instanceof Error ? error.stack : "no stack");
-
     // Return error message for debugging (in dev mode)
     const errorMessage = error instanceof Error ? error.message : "Internal server error";
     return NextResponse.json(

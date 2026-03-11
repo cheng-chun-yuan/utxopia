@@ -2,16 +2,20 @@
 
 import { useState, Suspense, useCallback, Fragment } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   ArrowDownToLine,
   ArrowUpDown,
   ArrowUpFromLine,
+  CheckCircle2,
   ChevronDown,
+  Clock,
   ExternalLink,
   Loader2,
   Search,
   Shield,
   RefreshCw,
+  XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "@/components/ui/copy-button";
@@ -21,6 +25,7 @@ import {
   useTransfers,
   useRedemptions,
 } from "@/hooks/use-explorer";
+import { getMempoolExplorerUrl } from "@/lib/btc-network";
 
 // =============================================================================
 // Helpers
@@ -201,11 +206,167 @@ function RefreshButton({ onClick }: { onClick: () => void }) {
 }
 
 // =============================================================================
+// Deposit Status Badge (reused from balance-view pattern)
+// =============================================================================
+
+const DEPOSIT_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; spinning?: boolean }> = {
+  pending: { label: "Awaiting BTC", color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-500/20" },
+  detected: { label: "Detected", color: "text-purple-400", bg: "bg-purple-500/10 border-purple-500/20", spinning: true },
+  confirming: { label: "Confirming", color: "text-purple-400", bg: "bg-purple-500/10 border-purple-500/20", spinning: true },
+  confirmed: { label: "Confirmed", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20" },
+  sweeping: { label: "Sweeping", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20", spinning: true },
+  sweep_confirming: { label: "Sweep Confirming", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20", spinning: true },
+  verifying: { label: "Verifying", color: "text-sol", bg: "bg-sol/10 border-sol/20", spinning: true },
+  ready: { label: "Minted", color: "text-green-400", bg: "bg-green-500/10 border-green-500/20" },
+  claimed: { label: "Minted", color: "text-green-400", bg: "bg-green-500/10 border-green-500/20" },
+  failed: { label: "Failed", color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" },
+};
+
+function DepositStatusBadge({ status }: { status: string | null }) {
+  if (!status) {
+    // Demo deposit — show "Minted" since it's already on-chain
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-medium bg-green-500/10 border-green-500/20 text-green-400">
+        <CheckCircle2 className="w-3 h-3" />
+        Minted
+      </span>
+    );
+  }
+  const cfg = DEPOSIT_STATUS_CONFIG[status] ?? DEPOSIT_STATUS_CONFIG.pending;
+  const Icon = cfg.spinning ? Loader2 : (status === "failed" ? XCircle : status === "claimed" || status === "ready" ? CheckCircle2 : Clock);
+  return (
+    <span className={cn("inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-medium", cfg.color, cfg.bg)}>
+      <Icon className={cn("w-3 h-3", cfg.spinning && "animate-spin")} />
+      {cfg.label}
+    </span>
+  );
+}
+
+// =============================================================================
+// Deposit Details (expandable row for real deposits)
+// =============================================================================
+
+import type { DepositRecord } from "@/hooks/use-explorer";
+
+const DEPOSIT_STATUS_ORDER: Record<string, number> = {
+  pending: 0, detected: 1, confirming: 1, confirmed: 2,
+  sweeping: 3, sweep_confirming: 3, verifying: 4, ready: 5, claimed: 5,
+};
+
+function DepositDetails({ deposit }: { deposit: DepositRecord }) {
+  const stepOrder = DEPOSIT_STATUS_ORDER[deposit.status ?? ""] ?? 0;
+
+  const steps = [
+    {
+      title: "Deposit BTC to Reserve",
+      done: stepOrder >= 1,
+      active: stepOrder === 1,
+      detail: deposit.btcTxid ? (
+        <div className="flex items-center gap-1.5">
+          <a
+            href={`${getMempoolExplorerUrl()}/tx/${deposit.btcTxid}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] text-btc/70 hover:text-btc flex items-center gap-1 transition-colors"
+          >
+            Deposit tx <ExternalLink className="w-2.5 h-2.5" />
+          </a>
+          <code className="text-[10px] font-mono text-gray">{truncate(deposit.btcTxid, 6, 4)}</code>
+          <CopyButton text={deposit.btcTxid} label="TX" variant="default" iconSize="sm" />
+        </div>
+      ) : null,
+    },
+    {
+      title: "Sweep to Pool",
+      done: stepOrder >= 3,
+      active: stepOrder === 3,
+      detail: deposit.sweepTxid ? (
+        <div className="flex items-center gap-1.5">
+          <a
+            href={`${getMempoolExplorerUrl()}/tx/${deposit.sweepTxid}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] text-btc/70 hover:text-btc flex items-center gap-1 transition-colors"
+          >
+            Sweep tx <ExternalLink className="w-2.5 h-2.5" />
+          </a>
+          <code className="text-[10px] font-mono text-gray">{truncate(deposit.sweepTxid, 6, 4)}</code>
+          <CopyButton text={deposit.sweepTxid} label="TX" variant="default" iconSize="sm" />
+        </div>
+      ) : null,
+    },
+    {
+      title: "SPV Verification",
+      done: stepOrder >= 4,
+      active: stepOrder === 4,
+      detail: deposit.solanaTx ? (
+        <div className="flex items-center gap-1.5">
+          <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-400">
+            <CheckCircle2 className="w-2.5 h-2.5" /> SPV Confirmed
+          </span>
+        </div>
+      ) : null,
+    },
+    {
+      title: "Mint zkBTC",
+      done: stepOrder >= 5,
+      active: false,
+      detail: null,
+    },
+  ];
+
+  return (
+    <div className="mx-4 my-3 px-4 py-3 rounded-[10px] bg-linear-to-b from-gray/6 to-transparent border border-gray/10 space-y-1">
+      {steps.map((step, i) => (
+        <div key={step.title} className="flex gap-2.5">
+          <div className="flex flex-col items-center">
+            <div className={cn(
+              "w-5 h-5 rounded-full flex items-center justify-center shrink-0",
+              step.done ? "bg-green-500/20" : step.active ? "bg-btc/20" : "bg-gray/10"
+            )}>
+              {step.done ? (
+                <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
+              ) : step.active ? (
+                <Loader2 className="w-3 h-3 text-btc animate-spin" />
+              ) : (
+                <Clock className="w-2.5 h-2.5 text-gray/40" />
+              )}
+            </div>
+            {i < steps.length - 1 && (
+              <div className={cn("w-px flex-1 min-h-[12px]", step.done ? "bg-green-500/30" : "bg-gray/10")} />
+            )}
+          </div>
+          <div className={cn("pb-2 flex-1", i === steps.length - 1 && "pb-0")}>
+            <p className={cn(
+              "text-[11px] font-medium",
+              step.done ? "text-foreground" : step.active ? "text-foreground" : "text-gray/40"
+            )}>{step.title}</p>
+            {step.detail && (step.done || step.active) && (
+              <div className="mt-1">{step.detail}</div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// =============================================================================
 // Deposits Tab
 // =============================================================================
 
 function DepositsTab() {
   const { deposits, isLoading, error, refresh } = useDeposits();
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggle = useCallback((sig: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(sig)) next.delete(sig);
+      else next.add(sig);
+      return next;
+    });
+  }, []);
 
   if (error) return <ErrorState message={error} onRetry={refresh} />;
   if (isLoading) return <LoadingState />;
@@ -218,11 +379,12 @@ function DepositsTab() {
         <RefreshButton onClick={refresh} />
       </div>
       <div className="overflow-x-auto rounded-[12px] border border-gray/15">
-        <table className="w-full min-w-[600px]">
+        <table className="w-full min-w-[700px]">
           <thead>
             <tr className="border-b border-gray/15">
-              <Th>Source</Th>
+              <Th>Status</Th>
               <Th>Tx ID</Th>
+              <Th>Source</Th>
               <Th>Destination</Th>
               <Th>Amount</Th>
               <Th>Leaf</Th>
@@ -231,40 +393,72 @@ function DepositsTab() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray/10">
-            {deposits.map((d) => (
-              <tr key={d.commitment} className="hover:bg-gray/5 transition-colors">
-                <Td>
-                  <div className="flex items-center gap-1.5">
-                    <BitcoinIcon className="w-4 h-4 text-btc" />
-                    <span className="text-body2 text-foreground font-medium">BTC</span>
-                  </div>
-                </Td>
-                <Td>
-                  <div className="flex items-center gap-1.5">
-                    <code className="text-caption font-mono text-foreground">{truncate(d.txSignature, 6, 4)}</code>
-                    <CopyButton text={d.txSignature} label="Tx" variant="default" iconSize="sm" />
-                  </div>
-                </Td>
-                <Td>
-                  <span className="inline-flex items-center gap-1.5 text-caption text-purple-400/90 bg-purple-500/[0.06] border border-purple-500/15 px-2 py-0.5 rounded-full font-medium">
-                    <Shield className="w-3 h-3" />
-                    zkBTC
-                  </span>
-                </Td>
-                <Td>
-                  <span className="text-body2 text-foreground font-mono">{d.amountSats.toLocaleString()} <span className="text-gray text-caption">sats</span></span>
-                </Td>
-                <Td>
-                  <span className="text-caption text-foreground font-mono">#{d.leafIndex}</span>
-                </Td>
-                <Td>
-                  <span className="text-caption text-gray">{timeAgo(d.timestamp)}</span>
-                </Td>
-                <Td>
-                  {d.txSignature && <SolanaLink signature={d.txSignature} />}
-                </Td>
-              </tr>
-            ))}
+            {deposits.map((d) => {
+              const isOpen = expanded.has(d.commitment);
+              const canExpand = !d.isDemo;
+
+              return (
+                <Fragment key={d.commitment}>
+                  <tr
+                    className={cn("hover:bg-gray/5 transition-colors", canExpand && "cursor-pointer")}
+                    onClick={() => canExpand && toggle(d.commitment)}
+                  >
+                    <Td>
+                      <div className="flex items-center gap-1.5">
+                        <DepositStatusBadge status={d.status} />
+                        {d.isDemo && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 font-medium">
+                            Demo
+                          </span>
+                        )}
+                      </div>
+                    </Td>
+                    <Td>
+                      <div className="flex items-center gap-1.5">
+                        <code className="text-caption font-mono text-foreground">{truncate(d.txSignature, 6, 4)}</code>
+                        <CopyButton text={d.txSignature} label="Tx" variant="default" iconSize="sm" />
+                      </div>
+                    </Td>
+                    <Td>
+                      <span className="inline-flex items-center gap-1.5 text-caption text-btc/90 bg-btc/6 border border-btc/15 px-2 py-0.5 rounded-full font-medium">
+                        <BitcoinIcon className="w-3.5 h-3.5" />
+                        BTC
+                      </span>
+                    </Td>
+                    <Td>
+                      <span className="inline-flex items-center gap-1.5 text-caption text-purple-400/90 bg-purple-500/6 border border-purple-500/15 px-2 py-0.5 rounded-full font-medium">
+                        <Image src="/zkbtc.png" alt="zkBTC" width={14} height={14} className="rounded-full" />
+                        zkBTC
+                      </span>
+                    </Td>
+                    <Td>
+                      <span className="text-body2 text-foreground font-mono">{d.amountSats.toLocaleString()} <span className="text-gray text-caption">sats</span></span>
+                    </Td>
+                    <Td>
+                      <span className="text-caption text-foreground font-mono">#{d.leafIndex}</span>
+                    </Td>
+                    <Td>
+                      <span className="text-caption text-gray">{timeAgo(d.timestamp)}</span>
+                    </Td>
+                    <Td>
+                      <div className="flex items-center gap-1.5">
+                        {d.txSignature && <SolanaLink signature={d.txSignature} />}
+                        {canExpand && (
+                          <ChevronDown className={cn("w-3.5 h-3.5 text-gray transition-transform", isOpen && "rotate-180")} />
+                        )}
+                      </div>
+                    </Td>
+                  </tr>
+                  {isOpen && !d.isDemo && (
+                    <tr>
+                      <td colSpan={8} className="p-0">
+                        <DepositDetails deposit={d} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -342,13 +536,13 @@ function TransfersTab() {
                       </div>
                     </Td>
                     <Td>
-                      <span className="inline-flex items-center gap-1 text-caption text-green-400/80 bg-green-500/[0.06] border border-green-500/15 px-2 py-0.5 rounded-full">
+                      <span className="inline-flex items-center gap-1 text-caption text-green-400/80 bg-green-500/6 border border-green-500/15 px-2 py-0.5 rounded-full">
                         <span className="font-mono">{tx.inputCount}</span>
                         <span className="hidden sm:inline">input{tx.inputCount !== 1 ? "s" : ""}</span>
                       </span>
                     </Td>
                     <Td>
-                      <span className="inline-flex items-center gap-1 text-caption text-purple-400/80 bg-purple-500/[0.06] border border-purple-500/15 px-2 py-0.5 rounded-full">
+                      <span className="inline-flex items-center gap-1 text-caption text-purple-400/80 bg-purple-500/6 border border-purple-500/15 px-2 py-0.5 rounded-full">
                         <span className="font-mono">{tx.outputs.length}</span>
                         <span className="hidden sm:inline">output{tx.outputs.length !== 1 ? "s" : ""}</span>
                       </span>
@@ -363,7 +557,7 @@ function TransfersTab() {
                   {isOpen && (
                     <tr>
                       <td colSpan={7} className="p-0">
-                        <div className="mx-4 my-3 rounded-[10px] bg-gradient-to-b from-gray/[0.06] to-transparent border border-gray/10 overflow-hidden">
+                        <div className="mx-4 my-3 rounded-[10px] bg-linear-to-b from-gray/6 to-transparent border border-gray/10 overflow-hidden">
                           <div className="grid grid-cols-2 divide-x divide-gray/10">
                             {/* Inputs (Nullifiers) */}
                             <div className="p-4 space-y-2.5">
@@ -375,7 +569,7 @@ function TransfersTab() {
                                 <span className="text-caption text-green-400/60 font-medium">{tx.inputCount}</span>
                               </div>
                               {tx.nullifierPdas.length > 0 ? tx.nullifierPdas.map((pda, i) => (
-                                <div key={pda} className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-green-500/[0.04] border border-green-500/10 hover:border-green-500/20 transition-colors">
+                                <div key={pda} className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-green-500/4 border border-green-500/10 hover:border-green-500/20 transition-colors">
                                   <span className="text-[10px] text-green-400/60 font-mono font-semibold w-4 shrink-0">{i + 1}</span>
                                   <code className="text-caption font-mono text-foreground/90 truncate">{truncate(pda, 8, 6)}</code>
                                   <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
@@ -406,19 +600,20 @@ function TransfersTab() {
                                 <span className="text-caption text-purple-400/60 font-medium">{tx.outputs.length}</span>
                               </div>
                               {tx.outputs.map((out, i) => (
-                                <div key={out.leafIndex} className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-purple-500/[0.04] border border-purple-500/10 hover:border-purple-500/20 transition-colors">
+                                <div key={out.leafIndex} className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-purple-500/4 border border-purple-500/10 hover:border-purple-500/20 transition-colors">
                                   <span className="text-[10px] text-purple-400/60 font-mono font-semibold w-4 shrink-0">{i + 1}</span>
                                   <code className="text-caption font-mono text-foreground/90 truncate">{truncate(out.commitment, 8, 6)}</code>
-                                  <span className="text-[10px] text-gray/50 font-mono bg-gray/[0.08] px-1.5 py-0.5 rounded shrink-0">
+                                  <span className="text-[10px] text-gray/50 font-mono bg-gray/8 px-1.5 py-0.5 rounded shrink-0">
                                     #{out.leafIndex}
                                   </span>
                                   <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
                                     <CopyButton text={out.commitment} label="Commitment" variant="default" iconSize="sm" />
                                     <a
-                                      href={`https://explorer.solana.com/address/${out.commitment}?cluster=devnet`}
+                                      href={`https://explorer.solana.com/tx/${tx.txSignature}?cluster=devnet`}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="text-sol hover:text-sol/80 transition-colors p-0.5"
+                                      title="View transaction"
                                     >
                                       <ExternalLink className="w-3 h-3" />
                                     </a>
@@ -587,7 +782,7 @@ export default function ExplorerPage() {
         {/* Header */}
         <header className="flex items-center justify-between mb-8">
           <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-            <div className="p-2 rounded-[12px] bg-gradient-to-br from-btc/20 to-privacy/20 border border-btc/20">
+            <div className="p-2 rounded-[12px] bg-linear-to-br from-btc/20 to-privacy/20 border border-btc/20">
               <div className="relative">
                 <BitcoinIcon className="h-6 w-6 btc-glow" />
                 <Shield className="h-3 w-3 text-privacy absolute -bottom-1 -right-1" />

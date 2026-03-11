@@ -157,6 +157,8 @@ pub fn event_indexer_router(store: Arc<EventStore>, tree_cache: Arc<TreeCache>, 
         .route("/api/announcements/status", get(get_announcements_status))
         // Transfers (grouped announcements + nullifier inputs)
         .route("/api/transfers", get(get_transfers))
+        // Redemption tracking (reads from persistent JSON file)
+        .route("/api/redemption/tracking", get(get_redemption_tracking))
         // Global
         .route("/api/sync", post(post_sync_all))
         .route("/api/reset", post(post_reset_all))
@@ -556,5 +558,58 @@ async fn handle_events_socket(socket: WebSocket, tree_cache: Arc<TreeCache>) {
     tokio::select! {
         _ = send_task => {},
         _ = recv_task => {},
+    }
+}
+
+// =============================================================================
+// Redemption Tracking (reads from persistent JSON file)
+// =============================================================================
+
+/// GET /api/redemption/tracking — expose local redemption tracking state
+///
+/// Reads `redemption_tracking.json` from disk (written atomically by the
+/// redemption watcher). Returns BTC txids, status, timestamps, and errors
+/// keyed by PDA address for the frontend to join with on-chain PDA data.
+async fn get_redemption_tracking() -> Json<serde_json::Value> {
+    let path = std::path::Path::new("redemption_tracking.json");
+    if !path.exists() {
+        return Json(serde_json::json!({
+            "success": true,
+            "tracking": [],
+            "count": 0,
+        }));
+    }
+
+    match std::fs::read_to_string(path) {
+        Ok(data) => {
+            match serde_json::from_str::<Vec<serde_json::Value>>(&data) {
+                Ok(entries) => {
+                    let count = entries.len();
+                    Json(serde_json::json!({
+                        "success": true,
+                        "tracking": entries,
+                        "count": count,
+                    }))
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "Failed to parse redemption tracking JSON");
+                    Json(serde_json::json!({
+                        "success": false,
+                        "tracking": [],
+                        "count": 0,
+                        "error": format!("Parse error: {}", e),
+                    }))
+                }
+            }
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to read redemption tracking file");
+            Json(serde_json::json!({
+                "success": false,
+                "tracking": [],
+                "count": 0,
+                "error": format!("Read error: {}", e),
+            }))
+        }
     }
 }

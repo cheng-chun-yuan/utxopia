@@ -32,6 +32,12 @@ pub struct EventIndexerService {
     tree_cache: Option<Arc<TreeCache>>,
 }
 
+/// Data extracted from a getTransaction RPC response
+struct TransactionData {
+    logs: Vec<String>,
+    block_time: i64,
+}
+
 impl EventIndexerService {
     pub fn new(config: EventIndexerConfig, store: Arc<EventStore>) -> Result<Self, String> {
         let next_leaf_index = store.get_next_leaf_index()?;
@@ -80,10 +86,9 @@ impl EventIndexerService {
 
     /// Backfill: scan all historical transactions for the program
     async fn backfill(&mut self) -> Result<(), String> {
-        println!("[event-indexer] Starting backfill for program {}", self.config.program_id);
+        tracing::info!(program_id = %self.config.program_id, "Starting backfill");
 
         let last_sig = self.store.get_last_signature()?;
-        println!("[event-indexer] Last known signature: {:?}", last_sig);
         let mut before: Option<String> = None;
         let mut total_processed = 0u64;
 
@@ -91,10 +96,6 @@ impl EventIndexerService {
             let signatures = self
                 .get_signatures_for_address(&self.config.program_id, before.as_deref(), last_sig.as_deref())
                 .await?;
-
-            if !signatures.is_empty() || before.is_none() {
-                println!("[event-indexer] Fetched {} signatures", signatures.len());
-            }
 
             if signatures.is_empty() {
                 break;
@@ -135,7 +136,7 @@ impl EventIndexerService {
             }
         }
 
-        println!("[event-indexer] Backfill complete: {} transactions processed", total_processed);
+        tracing::info!(total_processed, "Backfill complete");
         Ok(())
     }
 
@@ -178,19 +179,21 @@ impl EventIndexerService {
         Ok(())
     }
 
-    /// Process a single transaction: fetch logs, parse events, store
+    /// Process a single transaction: fetch logs + blockTime, parse events, store
     async fn process_transaction(&mut self, signature: &str, slot: i64) -> Result<(), String> {
-        let logs = self.get_transaction_logs(signature).await?;
-        let events = parse_program_events(&logs);
+        let tx_data = self.get_transaction_data(signature).await?;
+        let events = parse_program_events(&tx_data.logs);
         if !events.is_empty() {
-            println!("[event-indexer] Tx {}... → {} events", &signature[..20], events.len());
+            tracing::debug!(signature = &signature[..20], count = events.len(), block_time = tx_data.block_time, "Parsed events");
         }
+
+        let block_time = tx_data.block_time;
 
         for event in events {
             match event {
                 ProgramEvent::LeafInserted(e) => {
                     let leaf_index = self.next_leaf_index;
-                    let inserted = self.store.insert_leaf(leaf_index, &e, signature, slot)?;
+                    let inserted = self.store.insert_leaf(leaf_index, &e, signature, slot, block_time)?;
 
                     // Only advance counter if actually inserted (not a duplicate)
                     if inserted {
@@ -205,7 +208,7 @@ impl EventIndexerService {
                     tracing::debug!(leaf_index, inserted, "Indexed leaf");
                 }
                 ProgramEvent::NullifierSpent(e) => {
-                    let inserted = self.store.insert_nullifier(&e, signature, slot)?;
+                    let inserted = self.store.insert_nullifier(&e, signature, slot, block_time)?;
                     if inserted {
                         if let Some(ref cache) = self.tree_cache {
                             cache.broadcast_nullifier(&hex::encode(e.nullifier_hash), slot);
@@ -217,7 +220,7 @@ impl EventIndexerService {
                     );
                 }
                 ProgramEvent::StealthAnnouncement(e) => {
-                    let inserted = self.store.insert_announcement(&e, signature, slot)?;
+                    let inserted = self.store.insert_announcement(&e, signature, slot, block_time)?;
                     if inserted {
                         if let Some(ref cache) = self.tree_cache {
                             cache.broadcast_announcement(&e);
@@ -294,7 +297,7 @@ impl EventIndexerService {
         Ok(signatures)
     }
 
-    async fn get_transaction_logs(&self, signature: &str) -> Result<Vec<String>, String> {
+    async fn get_transaction_data(&self, signature: &str) -> Result<TransactionData, String> {
         let body = serde_json::json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -335,7 +338,10 @@ impl EventIndexerService {
             })
             .unwrap_or_default();
 
-        Ok(logs)
+        // Extract blockTime (Unix timestamp from the validator)
+        let block_time = json["result"]["blockTime"].as_i64().unwrap_or(0);
+
+        Ok(TransactionData { logs, block_time })
     }
 }
 

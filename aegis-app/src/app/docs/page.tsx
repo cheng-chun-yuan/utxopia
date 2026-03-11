@@ -160,7 +160,7 @@ export default function DocsPage() {
         <header className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-3">
             <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-              <div className="p-2 rounded-[12px] bg-gradient-to-br from-btc/20 to-privacy/20 border border-btc/20">
+              <div className="p-2 rounded-[12px] bg-linear-to-br from-btc/20 to-privacy/20 border border-btc/20">
                 <div className="relative">
                   <BitcoinIcon className="h-6 w-6 btc-glow" />
                   <Shield className="h-3 w-3 text-privacy absolute -bottom-1 -right-1" />

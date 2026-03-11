@@ -15,9 +15,6 @@ const COMMITMENT_TREE_ADDRESS = DEVNET_CONFIG.commitmentTreePda;
  */
 export async function GET() {
   try {
-    console.log("[CommitmentTree API] Fetching from:", COMMITMENT_TREE_ADDRESS);
-    console.log("[CommitmentTree API] Using Helius:", isHeliusConfigured());
-
     const accountInfo = await fetchAccountInfo(COMMITMENT_TREE_ADDRESS, "devnet");
 
     if (!accountInfo) {

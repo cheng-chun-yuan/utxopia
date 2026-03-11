@@ -201,7 +201,7 @@ const DepositCard = memo(({ deposit }: { deposit: TrackerDepositStatus }) => {
       {/* Amount header card — click to expand timeline */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full p-4 rounded-xl bg-gradient-to-br from-muted to-muted/50 border border-gray/15 cursor-pointer hover:border-gray/25 transition-colors text-left"
+        className="w-full p-4 rounded-xl bg-linear-to-br from-muted to-muted/50 border border-gray/15 cursor-pointer hover:border-gray/25 transition-colors text-left"
       >
         <div className="flex items-center justify-between mb-3">
           <StatusBadge status={status} />
