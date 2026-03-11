@@ -38,8 +38,6 @@ pub enum RelayerError {
     Parse(String),
     #[error("Light client not initialized")]
     NotInitialized,
-    #[error("Need >= 2 blocks to relay")]
-    NotEnoughBlocks,
     #[error("Already at tip")]
     AlreadyAtTip,
 }
@@ -74,7 +72,7 @@ impl HeaderRelayer {
             program_id: Pubkey::from_str(program_id)
                 .map_err(|e| RelayerError::Parse(format!("invalid program id: {}", e)))?,
             payer,
-            batch_size: batch_size.clamp(2, 10),
+            batch_size: batch_size.clamp(1, 10),
         })
     }
 
@@ -176,9 +174,6 @@ impl HeaderRelayer {
         if state.tip_height >= btc_tip {
             return Err(RelayerError::AlreadyAtTip);
         }
-        if btc_tip - state.tip_height < 2 {
-            return Err(RelayerError::NotEnoughBlocks);
-        }
 
         println!(
             "[header-relay] Syncing {} blocks ({} -> {})",
@@ -193,11 +188,7 @@ impl HeaderRelayer {
         let mut total = 0u32;
 
         while height <= btc_tip {
-            if btc_tip - height + 1 < 2 {
-                break;
-            }
-
-            let batch_size = (self.batch_size as u64).min(btc_tip - height + 1).max(2);
+            let batch_size = (self.batch_size as u64).min(btc_tip - height + 1);
 
             let mut raw_headers = Vec::with_capacity(batch_size as usize);
             for i in 0..batch_size {
@@ -207,7 +198,7 @@ impl HeaderRelayer {
                 raw_headers.push(self.get_raw_header(height + i).await?);
             }
 
-            if raw_headers.len() < 2 {
+            if raw_headers.is_empty() {
                 break;
             }
 
@@ -301,23 +292,10 @@ impl HeaderRelayer {
 
     /// Triggered by WS new block event. Syncs headers up to BTC tip.
     pub async fn on_new_block(&self, _new_height: u64) -> Result<u32, RelayerError> {
-        let state = self
-            .get_light_client_state()?
-            .ok_or(RelayerError::NotInitialized)?;
-
-        // Check against actual BTC tip (not just the incoming block) because
-        // blocks arrive one at a time via WS but we may already be many behind.
-        let btc_tip = self.get_btc_tip_height().await?;
-        let gap = btc_tip.saturating_sub(state.tip_height);
-
-        if gap < 2 {
-            println!(
-                "[header-relay] LC tip={}, BTC tip={}, gap={} (need >= 2)",
-                state.tip_height, btc_tip, gap
-            );
-            return Ok(0);
+        match self.sync_headers().await {
+            Ok(n) => Ok(n),
+            Err(RelayerError::AlreadyAtTip) => Ok(0),
+            Err(e) => Err(e),
         }
-
-        self.sync_headers().await
     }
 }

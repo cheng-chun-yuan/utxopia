@@ -134,7 +134,7 @@ pub fn process_complete_redemption(
     };
 
     // Validate redemption state (must be Pending or Processing) and get details
-    let (amount_sats, expected_script_len, expected_script) = {
+    let (amount_sats, expected_script_len, expected_script, requester_key, request_id) = {
         let redemption_data = redemption_info.try_borrow_data()?;
         let redemption = RedemptionRequest::from_bytes(&redemption_data)?;
 
@@ -148,7 +148,10 @@ pub fn process_complete_redemption(
         let script_len = script.len();
         script_buf[..script_len].copy_from_slice(script);
 
-        (redemption.amount_sats(), script_len, script_buf)
+        let mut req_key = [0u8; 32];
+        req_key.copy_from_slice(&redemption.requester);
+
+        (redemption.amount_sats(), script_len, script_buf, req_key, redemption.request_id())
     };
 
     // --- VerifiedTransaction PDA check ---
@@ -258,6 +261,15 @@ pub fn process_complete_redemption(
         pool.set_pending_redemptions(pending_redemptions.saturating_sub(1));
         pool.set_last_update(clock.unix_timestamp);
     }
+
+    // --- Emit completion event (before PDA is closed) ---
+    crate::utils::events::emit_redemption_completed(
+        &requester_key,
+        amount_sats,
+        request_id,
+        &ix_data.btc_txid,
+        &expected_script[..expected_script_len],
+    );
 
     // --- Close RedemptionRequest PDA ---
     close_account_securely(redemption_info, rent_recipient)?;

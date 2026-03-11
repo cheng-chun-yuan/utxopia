@@ -10,7 +10,7 @@ use pinocchio_system::instructions::CreateAccount;
 
 use crate::constants::{
     BLOCK_HEADER_DISCRIMINATOR, BLOCK_HEADER_SEED, BLOCKS_PER_EPOCH, HEIGHT_INDEX_DISCRIMINATOR,
-    HEIGHT_INDEX_SEED, MAX_BATCH_SIZE, MIN_BATCH_SIZE, REQUIRED_CONFIRMATIONS,
+    HEIGHT_INDEX_SEED, MAX_BATCH_SIZE, REQUIRED_CONFIRMATIONS,
 };
 use crate::state::{BitcoinLightClient, BlockHeader, HeightIndex};
 use crate::utils::{
@@ -22,7 +22,7 @@ use crate::utils::{
 /// Permissionless — anyone can submit. Supports forking from any existing block.
 ///
 /// Instruction data (after discriminator):
-///   [0]             num_headers: u8 (min=2, max=10)
+///   [0]             num_headers: u8 (1..=10)
 ///   [1..1+N*80]     raw_headers: N × 80 bytes
 ///
 /// Accounts:
@@ -42,7 +42,7 @@ pub fn process_extend_blockchain(
     }
 
     let num_headers = data[0];
-    if num_headers < MIN_BATCH_SIZE || num_headers > MAX_BATCH_SIZE {
+    if num_headers == 0 || num_headers > MAX_BATCH_SIZE {
         return Err(ProgramError::InvalidInstructionData);
     }
 

@@ -18,9 +18,6 @@ pub(crate) const VERIFIED_TX_SEED: &[u8] = b"verified_tx";
 /// Maximum number of headers in a single extend_blockchain batch
 pub(crate) const MAX_BATCH_SIZE: u8 = 10;
 
-/// Minimum number of headers in a single extend_blockchain batch
-pub(crate) const MIN_BATCH_SIZE: u8 = 2;
-
 /// Target timespan for difficulty adjustment (2 weeks in seconds)
 pub(crate) const TARGET_TIMESPAN: u32 = 1_209_600;
 
