@@ -554,7 +554,7 @@ function TransfersTab() {
                     onClick={() => toggle(tx.txSignature)}
                   >
                     <Td>
-                      {tx.instructionDisc === 16 ? (
+                      {tx.instructionDisc === 16 || tx.instructionDisc === 5 || (tx.operationType === 0 && tx.instructionDisc !== 15) ? (
                         <div className="flex items-center gap-1.5">
                           <div className="p-1 rounded-[6px] bg-btc/10 border border-btc/20">
                             <BitcoinIcon className="w-3 h-3 text-btc" />
@@ -599,7 +599,7 @@ function TransfersTab() {
                       </span>
                     </Td>
                     <Td>
-                      {tx.instructionDisc === 15 || tx.instructionDisc === 16 ? (
+                      {tx.instructionDisc === 15 || tx.instructionDisc === 16 || tx.instructionDisc === 5 || (tx.operationType === 0 && tx.instructionDisc !== 15) ? (
                         <span className="inline-flex items-center gap-1 text-caption text-purple-400/80 bg-purple-500/6 border border-purple-500/15 px-2 py-0.5 rounded-full">
                           <span className="font-mono">{1 + tx.outputs.length}</span>
                           <span className="hidden sm:inline">output{tx.outputs.length > 0 ? "s" : ""}</span>
@@ -622,7 +622,7 @@ function TransfersTab() {
                     <tr>
                       <td colSpan={6} className="p-0">
                         <div className="mx-4 my-3 rounded-[10px] bg-linear-to-b from-gray/6 to-transparent border border-gray/10 overflow-hidden">
-                          {tx.instructionDisc === 16 ? (
+                          {tx.instructionDisc === 16 || tx.instructionDisc === 5 || (tx.operationType === 0 && tx.instructionDisc !== 15) ? (
                             /* Redeem: Inputs on left, Output (BTC amount + BTC address) on right */
                             <div className="grid grid-cols-2 divide-x divide-gray/10">
                               {/* Inputs (Nullifiers) */}
@@ -882,13 +882,14 @@ function TransfersTab() {
 const WITHDRAWAL_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; spinning?: boolean }> = {
   Pending: { label: "Pending", color: "text-orange-400", bg: "bg-orange-500/10 border-orange-500/20" },
   Processing: { label: "Processing", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20", spinning: true },
+  Completed: { label: "Completed", color: "text-green-400", bg: "bg-green-500/10 border-green-500/20" },
   Failed: { label: "Failed", color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" },
 };
 
 function WithdrawalStatusBadge({ status }: { status: string }) {
   const cfg = WITHDRAWAL_STATUS_CONFIG[status] ?? WITHDRAWAL_STATUS_CONFIG.Pending;
-  const Icon = cfg.spinning ? Loader2 : (status === "Failed" ? XCircle : status === "Pending" ? Clock : CheckCircle2);
-  const subtitle = status === "Failed" ? "Error" : status === "Pending" ? "Awaiting" : "In progress";
+  const Icon = cfg.spinning ? Loader2 : (status === "Failed" ? XCircle : status === "Completed" ? CheckCircle2 : status === "Pending" ? Clock : CheckCircle2);
+  const subtitle = status === "Failed" ? "Error" : status === "Completed" ? "Done" : status === "Pending" ? "Awaiting" : "In progress";
 
   return (
     <div className="flex items-center gap-1.5">

@@ -56,7 +56,7 @@ export interface RedemptionRecord {
   pubkey: string;
   requestId: string;
   amountSats: string;
-  status: "Pending" | "Processing" | "Failed";
+  status: "Pending" | "Processing" | "Failed" | "Completed";
   requester: string;
   btcScript: string;
   // Enriched from backend tracking
