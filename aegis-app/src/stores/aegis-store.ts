@@ -468,6 +468,9 @@ export const useAegisStore = create<AegisState>((set, get) => ({
               ephemeralPub: (n as any).ephemeralPub,
               stealthPub: (n as any).stealthPub,
               npk: (n as any).npk,
+              blockTime: n.createdAt > 1_000_000_000_000
+                ? Math.floor(n.createdAt / 1000) // ms → seconds
+                : (n.createdAt > 0 ? n.createdAt : 0),
             }))
           : isViewOnly && viewOnlyKeys
             ? await scanAnnouncementsViewOnly(viewOnlyKeys, announcements)
@@ -511,7 +514,9 @@ export const useAegisStore = create<AegisState>((set, get) => ({
           return {
             ...note,
             id: `${commitmentHex.slice(0, 16)}-${index}`,
-            createdAt: Date.now(),
+            createdAt: (note as any).blockTime
+              ? (note as any).blockTime * 1000  // Convert seconds → ms
+              : Date.now(),
             commitmentHex,
           };
         });

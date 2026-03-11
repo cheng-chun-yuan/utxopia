@@ -142,6 +142,9 @@ export interface ScannedNote {
 
   /** Original announcement commitment */
   commitment: Uint8Array;
+
+  /** Unix timestamp (seconds) from on-chain block_time, 0 if unavailable */
+  blockTime?: number;
 }
 
 /**
@@ -174,6 +177,8 @@ export interface OnChainStealthAnnouncement {
   /** Commitment = Poseidon(npk, token, amount) stored on-chain */
   commitment: Uint8Array;
   leafIndex: number;
+  /** Unix timestamp (seconds) from on-chain block_time, 0 if unavailable */
+  blockTime?: number;
 }
 
 // ========== Helper Functions ==========
@@ -534,6 +539,8 @@ export interface ViewOnlyScannedNote {
   leafIndex: number;
   commitment: Uint8Array;
   ephemeralPub: Uint8Array;
+  /** Unix timestamp (seconds) from on-chain block_time, 0 if unavailable */
+  blockTime?: number;
 }
 
 /**
@@ -548,6 +555,7 @@ export async function scanAnnouncementsViewOnly(
     encryptedAmount: Uint8Array;
     commitment: Uint8Array;
     leafIndex: number;
+    blockTime?: number;
   }[]
 ): Promise<ViewOnlyScannedNote[]> {
   const found: ViewOnlyScannedNote[] = [];
@@ -597,6 +605,7 @@ export async function scanAnnouncementsViewOnly(
           ? bigintToBytes(expectedCommitment)
           : new Uint8Array(ann.commitment),
         ephemeralPub: ann.ephemeralPub,
+        blockTime: ann.blockTime ?? 0,
       });
     } catch (error) {
       if (error instanceof TypeError || error instanceof RangeError) {
@@ -777,6 +786,7 @@ export async function scanUnifiedNotes(
         stealthPub,
         leafIndex: ann.leafIndex,
         commitment: commitmentBytes,
+        blockTime: ann.blockTime ?? 0,
       });
     } catch (error) {
       if (error instanceof TypeError || error instanceof RangeError) {

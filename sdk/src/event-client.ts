@@ -39,6 +39,7 @@ export interface AnnouncementEvent {
   encrypted_amount: string;
   commitment: string;
   leaf_index: number;
+  block_time?: number;
 }
 
 export type ServerEvent =
@@ -214,6 +215,7 @@ export class EventClient extends AnnouncementClient {
       encryptedAmount: hexToBytes(event.encrypted_amount),
       commitment: hexToBytes(event.commitment),
       leafIndex: event.leaf_index,
+      blockTime: event.block_time ?? 0,
     };
 
     // Update cache (same logic as parent AnnouncementClient.connectWs)

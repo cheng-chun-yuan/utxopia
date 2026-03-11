@@ -46,6 +46,7 @@ interface BackendAnnouncementRow {
   commitment: string;
   tx_signature: string;
   slot: number;
+  block_time?: number;
 }
 
 interface BackendAnnouncementsResponse {
@@ -90,6 +91,7 @@ function rowToAnnouncement(row: BackendAnnouncementRow): OnChainStealthAnnouncem
     encryptedAmount: hexToBytes(row.encrypted_amount),
     commitment: hexToBytes(row.commitment),
     leafIndex: row.leaf_index,
+    blockTime: row.block_time ?? 0,
   };
 }
 
