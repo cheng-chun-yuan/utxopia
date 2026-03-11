@@ -170,7 +170,20 @@ export async function GET() {
     }
 
     // Join PDA data with tracking data (active redemptions)
-    const serialized = redemptions.map((r) => {
+    const serialized: Array<{
+      pubkey: string;
+      requestId: string;
+      amountSats: string;
+      status: string;
+      requester: string;
+      btcScript: string;
+      btcTxid: string | null;
+      localStatus: string | null;
+      createdAt: number;
+      updatedAt: number;
+      retryCount: number;
+      trackerError: string | null;
+    }> = redemptions.map((r) => {
       const tracking = trackingMap.get(r.pubkey);
       const trackingTime = tracking?.created_at ?? 0;
       const slotTime = r.processingSlot > 0 ? (slotTimeMap.get(r.processingSlot) ?? 0) : 0;
