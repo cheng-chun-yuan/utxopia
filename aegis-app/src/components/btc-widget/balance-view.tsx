@@ -20,7 +20,8 @@ import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { useBackendDeposits } from "@/hooks/use-backend-deposits";
-import { useAegisStore } from "@/stores";
+import { useDeposits } from "@/hooks/use-explorer";
+import { useAegisStore, type InboxNote } from "@/stores";
 import { isDepositForViewer, hexToBytes, bytesToBigint } from "@aegis/sdk";
 
 // =============================================================================
@@ -190,6 +191,34 @@ const TxLink = memo(({ href, label, color = "text-btc/70 hover:text-btc" }: { hr
 });
 TxLink.displayName = "TxLink";
 
+// Simple card for demo deposits — no expandable timeline
+const DemoDepositCard = memo(({ deposit }: { deposit: TrackerDepositStatus }) => {
+  return (
+    <div className="p-4 rounded-xl bg-linear-to-br from-muted to-muted/50 border border-gray/15">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-1.5">
+          <StatusBadge status={deposit.status || "claimed"} />
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 font-medium">Demo</span>
+        </div>
+        {deposit.leaf_index != null && (
+          <span className="text-[10px] text-gray font-mono">Leaf #{deposit.leaf_index}</span>
+        )}
+      </div>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-gray">Amount</span>
+          <span className="flex items-center gap-1.5">
+            <Image src="/zkbtc.png" alt="zkBTC" width={16} height={16} className="rounded-full" />
+            <span className="text-base font-semibold text-white">{formatBtc(deposit.minted_sats ?? deposit.amount_sats)}</span>
+            <span className="text-xs text-purple">zkBTC</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+});
+DemoDepositCard.displayName = "DemoDepositCard";
+
 const DepositCard = memo(({ deposit }: { deposit: TrackerDepositStatus }) => {
   const { copied, copy } = useCopyToClipboard();
   const status = deposit.status;
@@ -217,24 +246,24 @@ const DepositCard = memo(({ deposit }: { deposit: TrackerDepositStatus }) => {
             <span className="text-xs text-gray">Deposit</span>
             <span className="flex items-center gap-1.5">
               <BitcoinIcon className="w-4 h-4" />
-              <span className="text-base font-semibold text-white">{formatBtc(deposit.amount_sats)}</span>
+              <span className="text-base font-semibold text-white">{formatBtc(deposit.btc_deposit_amount_sats ?? deposit.amount_sats)}</span>
               <span className="text-xs text-btc">BTC</span>
             </span>
           </div>
-          {(deposit.minted_sats != null || deposit.sweep_fee_sats != null) && (
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-gray">Receive</span>
-              <span className="flex items-center gap-1.5">
-                <Image src="/zkbtc.png" alt="zkBTC" width={16} height={16} className="rounded-full" />
-                <span className="text-base font-semibold text-white">{formatBtc(deposit.minted_sats ?? (deposit.amount_sats - deposit.sweep_fee_sats!))}</span>
-                <span className="text-xs text-purple">zkBTC</span>
-              </span>
-            </div>
-          )}
-          {deposit.sweep_fee_sats != null && (
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-gray">Receive</span>
+            <span className="flex items-center gap-1.5">
+              <Image src="/zkbtc.png" alt="zkBTC" width={16} height={16} className="rounded-full" />
+              <span className="text-base font-semibold text-white">{formatBtc(deposit.minted_sats ?? deposit.amount_sats)}</span>
+              <span className="text-xs text-purple">zkBTC</span>
+            </span>
+          </div>
+          {(deposit.btc_deposit_amount_sats || deposit.sweep_fee_sats != null) && (
             <div className="flex items-center justify-between pt-1 border-t border-gray/10">
               <span className="text-[10px] text-gray">Network Fee</span>
-              <span className="text-[10px] text-gray">-{formatSats(deposit.sweep_fee_sats)} sats</span>
+              <span className="text-[10px] text-gray">
+                -{formatSats(deposit.sweep_fee_sats ?? ((deposit.btc_deposit_amount_sats ?? deposit.amount_sats) - (deposit.minted_sats ?? deposit.amount_sats)))} sats
+              </span>
             </div>
           )}
         </div>
@@ -369,7 +398,9 @@ RetryButton.displayName = "RetryButton";
 
 export function BalanceView() {
   const { deposits: backendDeposits, isLoading: backendLoading } = useBackendDeposits();
+  const { deposits: explorerDeposits, isLoading: explorerLoading } = useDeposits();
   const keys = useAegisStore((s) => s.keys);
+  const inboxNotes = useAegisStore((s) => s.inboxNotes);
 
   const [mounted, setMounted] = useState(false);
 
@@ -399,42 +430,76 @@ export function BalanceView() {
     }
   }, [lookupAddress]);
 
-  // Filter deposits to only show ones belonging to the current user
+  // Filter deposits belonging to current user:
+  // 1. Try tracker deposits (original method, uses npk matching)
+  // 2. Fallback: join explorer deposits with inbox notes by commitment
+  //    (inbox scanning already identified the user's notes via viewing key)
   const myDeposits = useMemo(() => {
     if (!keys) return [];
-    return backendDeposits.filter((d) => {
+
+    // Method 1: tracker deposits with npk matching
+    const fromTracker = backendDeposits.filter((d) => {
       if (!d.ephemeral_pub || !d.npk) return false;
       try {
         const ephPub = hexToBytes(d.ephemeral_pub);
         const npk = bytesToBigint(hexToBytes(d.npk));
         return isDepositForViewer(
-          keys.viewingPrivKey,
-          keys.spendingPubKey,
-          keys.nullifyingKey,
-          ephPub,
-          npk,
+          keys.viewingPrivKey, keys.spendingPubKey, keys.nullifyingKey, ephPub, npk,
         );
-      } catch {
-        return false;
-      }
+      } catch { return false; }
     });
-  }, [backendDeposits, keys]);
 
-  // Split into ongoing vs minted
-  const { ongoing, minted } = useMemo(() => {
+    if (fromTracker.length > 0) return fromTracker;
+
+    // Method 2: join explorer deposits with inbox notes by commitment
+    // The inbox notes are already filtered to the user's keys (via scanUnifiedNotes)
+    const myCommitments = new Set(inboxNotes.map((n) => n.commitmentHex));
+    const fromExplorer: (TrackerDepositStatus & { is_demo?: boolean })[] = explorerDeposits
+      .filter((d) => myCommitments.has(d.commitment))
+      .map((d) => ({
+        id: d.commitment,
+        status: (d.status ?? "claimed") as DepositStatus,
+        taproot_address: d.taprootAddress ?? "",
+        amount_sats: d.amountSats,
+        confirmations: d.confirmations,
+        can_claim: false,
+        btc_txid: d.btcTxid ?? undefined,
+        sweep_txid: d.sweepTxid ?? undefined,
+        sweep_confirmations: d.sweepConfirmations,
+        solana_tx: d.solanaTx ?? undefined,
+        leaf_index: d.leafIndex,
+        ephemeral_pub: d.ephemeralPub,
+        sweep_fee_sats: d.sweepFeeSats ?? undefined,
+        minted_sats: d.mintedSats ?? undefined,
+        error: d.trackerError ?? undefined,
+        created_at: d.timestamp,
+        updated_at: d.timestamp,
+        is_demo: d.isDemo,
+        btc_deposit_amount_sats: d.btcDepositAmountSats ?? undefined,
+      }));
+
+    return fromExplorer;
+  }, [backendDeposits, explorerDeposits, inboxNotes, keys]);
+
+  // Split into ongoing vs minted vs demo
+  const { ongoing, minted, demo } = useMemo(() => {
     const sorted = [...myDeposits].sort((a, b) => b.updated_at - a.updated_at);
     const ongoing: TrackerDepositStatus[] = [];
     const minted: TrackerDepositStatus[] = [];
+    const demo: TrackerDepositStatus[] = [];
     for (const d of sorted) {
-      if (d.status === "ready" || d.status === "claimed") {
+      if ((d as TrackerDepositStatus & { is_demo?: boolean }).is_demo) {
+        demo.push(d);
+      } else if (d.status === "ready" || d.status === "claimed") {
         minted.push(d);
       } else {
         ongoing.push(d);
       }
     }
-    return { ongoing, minted };
+    return { ongoing, minted, demo };
   }, [myDeposits]);
 
+  const isLoading = backendLoading || explorerLoading;
   const hasAnyDeposits = myDeposits.length > 0;
 
   if (!mounted) {
@@ -489,8 +554,21 @@ export function BalanceView() {
         </div>
       )}
 
+      {/* Demo deposits */}
+      {demo.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-3.5 h-3.5 text-yellow-500" />
+            <span className="text-xs font-medium text-yellow-500">Demo ({demo.length})</span>
+          </div>
+          {demo.map((dep) => (
+            <DemoDepositCard key={dep.id} deposit={dep} />
+          ))}
+        </div>
+      )}
+
       {/* Loading state for backend */}
-      {!hasAnyDeposits && backendLoading && (
+      {!hasAnyDeposits && isLoading && (
         <div className="flex flex-col items-center py-8">
           <Loader2 className="w-6 h-6 text-btc animate-spin mb-2" />
           <p className="text-sm text-gray">Checking for deposits...</p>
@@ -498,7 +576,7 @@ export function BalanceView() {
       )}
 
       {/* Empty state */}
-      {keys && !hasAnyDeposits && !backendLoading && (
+      {keys && !hasAnyDeposits && !isLoading && (
         <div className="text-center py-8">
           <div className="rounded-full bg-btc/10 p-4 w-fit mx-auto mb-4">
             <BitcoinIcon className="h-8 w-8" />
@@ -591,4 +669,34 @@ export function BalanceView() {
       </div>
     </div>
   );
+}
+
+// =============================================================================
+// Hook for deposit count (used by activity page tab bar)
+// =============================================================================
+
+export function useMyDepositCount(): number {
+  const { deposits: backendDeposits } = useBackendDeposits();
+  const { deposits: explorerDeposits } = useDeposits();
+  const keys = useAegisStore((s) => s.keys);
+  const inboxNotes = useAegisStore((s) => s.inboxNotes);
+
+  return useMemo(() => {
+    if (!keys) return 0;
+
+    // Method 1: tracker deposits
+    const fromTracker = backendDeposits.filter((d) => {
+      if (!d.ephemeral_pub || !d.npk) return false;
+      try {
+        const ephPub = hexToBytes(d.ephemeral_pub);
+        const npk = bytesToBigint(hexToBytes(d.npk));
+        return isDepositForViewer(keys.viewingPrivKey, keys.spendingPubKey, keys.nullifyingKey, ephPub, npk);
+      } catch { return false; }
+    });
+    if (fromTracker.length > 0) return fromTracker.length;
+
+    // Method 2: explorer + inbox notes
+    const myCommitments = new Set(inboxNotes.map((n) => n.commitmentHex));
+    return explorerDeposits.filter((d) => myCommitments.has(d.commitment)).length;
+  }, [backendDeposits, explorerDeposits, inboxNotes, keys]);
 }

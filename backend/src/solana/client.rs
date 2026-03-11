@@ -208,6 +208,16 @@ impl SolClient {
         self.payer.as_ref().map(|k| k.pubkey())
     }
 
+    /// Get a reference to the underlying RPC client
+    pub fn rpc(&self) -> &RpcClient {
+        &self.rpc
+    }
+
+    /// Get a reference to the payer keypair (if set)
+    pub fn payer_keypair(&self) -> Option<&Keypair> {
+        self.payer.as_ref()
+    }
+
     /// Check connection
     pub fn is_connected(&self) -> bool {
         self.rpc.get_health().is_ok()

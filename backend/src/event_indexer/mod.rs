@@ -14,6 +14,6 @@ pub mod solana_ws;
 pub use parser::{ProgramEvent, LeafInsertedEvent, NullifierSpentEvent, StealthAnnouncementEvent};
 pub use storage::EventStore;
 pub use service::{EventIndexerConfig, EventIndexerService};
-pub use routes::event_indexer_router;
+pub use routes::{event_indexer_router, event_indexer_router_with_deposits};
 pub use tree_cache::TreeCache;
 pub use solana_ws::{SolanaWsConfig, SolanaWsSubscriber};

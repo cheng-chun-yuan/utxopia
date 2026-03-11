@@ -415,6 +415,13 @@ impl SqliteDepositStore {
         Ok(total as u64)
     }
 
+    /// Delete all deposits (used by reset endpoints to clear stale tracker data)
+    pub fn clear_all(&self) -> Result<(), SqliteError> {
+        let conn = self.conn()?;
+        conn.execute("DELETE FROM deposits", [])?;
+        Ok(())
+    }
+
     /// Delete a deposit by ID
     pub fn delete(&self, id: &str) -> Result<bool, SqliteError> {
         let conn = self.conn()?;

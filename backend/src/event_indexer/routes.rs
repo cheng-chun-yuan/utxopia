@@ -17,6 +17,8 @@ use crate::common::ws::run_broadcast_ws;
 
 use solana_sdk::pubkey::Pubkey;
 
+use crate::deposit_tracker::sqlite_db::SqliteDepositStore;
+
 use super::storage::EventStore;
 use super::tree_cache::TreeCache;
 
@@ -26,6 +28,8 @@ pub struct IndexerAppState {
     pub store: Arc<EventStore>,
     pub tree_cache: Arc<TreeCache>,
     pub program_id: Pubkey,
+    /// Optional deposit tracker store — reset endpoints clear this too
+    pub deposit_store: Option<Arc<SqliteDepositStore>>,
 }
 
 /// Query params for proof endpoint
@@ -117,6 +121,17 @@ pub struct TransferItem {
     pub output_count: i64,
     pub input_count: i64,
     pub timestamp: i64,
+    /// NullifierOperationType: 0=FullWithdrawal (unshield/redeem), 2=PrivateTransfer
+    pub operation_type: i64,
+    /// Aegis instruction discriminator: 14=transact, 15=unshield
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub instruction_disc: Option<i64>,
+    /// Token transfer amount in sats (unshield txs only)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unshield_amount: Option<i64>,
+    /// Token transfer recipient wallet (unshield txs only)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unshield_recipient: Option<String>,
 }
 
 /// Response for GET /api/transfers
@@ -141,7 +156,11 @@ pub struct SyncResponse {
 
 /// Create the event indexer router with tree cache
 pub fn event_indexer_router(store: Arc<EventStore>, tree_cache: Arc<TreeCache>, program_id: Pubkey) -> Router {
-    let state = IndexerAppState { store, tree_cache, program_id };
+    event_indexer_router_with_deposits(store, tree_cache, program_id, None)
+}
+
+pub fn event_indexer_router_with_deposits(store: Arc<EventStore>, tree_cache: Arc<TreeCache>, program_id: Pubkey, deposit_store: Option<Arc<SqliteDepositStore>>) -> Router {
+    let state = IndexerAppState { store, tree_cache, program_id, deposit_store };
 
     Router::new()
         // Tree
@@ -250,6 +269,7 @@ async fn post_sync(State(state): State<IndexerAppState>) -> Json<SyncResponse> {
 }
 
 /// POST /api/tree/reset — clear all indexed data and rebuild from scratch.
+/// Also clears stale deposit tracker data to prevent mismatched joins.
 /// The indexer will re-backfill on its next poll cycle.
 async fn post_reset(State(state): State<IndexerAppState>) -> Json<SyncResponse> {
     tracing::warn!("Resetting event indexer — clearing all data");
@@ -260,6 +280,14 @@ async fn post_reset(State(state): State<IndexerAppState>) -> Json<SyncResponse> 
             size: None,
             error: Some(format!("clear failed: {}", e)),
         });
+    }
+    // Also clear deposit tracker data to prevent stale leaf_index matches
+    if let Some(ref deposit_store) = state.deposit_store {
+        if let Err(e) = deposit_store.clear_all() {
+            tracing::warn!(error = %e, "Failed to clear deposit tracker (non-fatal)");
+        } else {
+            tracing::info!("Deposit tracker data cleared");
+        }
     }
     // Rebuild tree cache (now empty)
     match state.tree_cache.force_rebuild().await {
@@ -348,6 +376,10 @@ async fn get_transfers(
                     output_count: t.output_count,
                     input_count: t.input_count,
                     timestamp: t.timestamp,
+                    operation_type: t.operation_type,
+                    instruction_disc: t.instruction_disc,
+                    unshield_amount: t.unshield_amount,
+                    unshield_recipient: t.unshield_recipient,
                 }
             }).collect();
             Json(TransfersResponse {
@@ -466,6 +498,14 @@ async fn post_reset_all(State(state): State<IndexerAppState>) -> Json<SyncRespon
             size: None,
             error: Some(format!("clear failed: {}", e)),
         });
+    }
+    // Also clear deposit tracker data to prevent stale leaf_index matches
+    if let Some(ref deposit_store) = state.deposit_store {
+        if let Err(e) = deposit_store.clear_all() {
+            tracing::warn!(error = %e, "Failed to clear deposit tracker (non-fatal)");
+        } else {
+            tracing::info!("Deposit tracker data cleared");
+        }
     }
     match state.tree_cache.force_rebuild().await {
         Ok(()) => {

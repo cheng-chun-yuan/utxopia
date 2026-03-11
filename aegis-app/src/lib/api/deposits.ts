@@ -67,6 +67,8 @@ export interface DepositStatusResponse {
   error?: string;
   created_at: number;
   updated_at: number;
+  /** Original BTC deposit amount in sats (before sweep fee, from mempool) */
+  btc_deposit_amount_sats?: number;
 }
 
 export interface DepositStatusUpdate {

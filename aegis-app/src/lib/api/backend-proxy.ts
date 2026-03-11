@@ -7,6 +7,8 @@
 
 const BACKEND_URL =
   process.env.TRACKER_API_URL || "http://localhost:3001";
+const BACKEND_API_KEY =
+  process.env.BACKEND_API_KEY || "";
 
 export async function proxyToBackend(
   request: Request,
@@ -18,6 +20,9 @@ export async function proxyToBackend(
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
+  if (BACKEND_API_KEY) {
+    headers["X-API-Key"] = BACKEND_API_KEY;
+  }
 
   const body =
     request.method !== "GET" && request.method !== "HEAD"

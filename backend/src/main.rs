@@ -17,7 +17,8 @@
 use zkbtc::api_server as api;
 use zkbtc::config::AEGISConfig;
 use zkbtc::deposit_tracker::{self, TrackerConfig};
-use zkbtc::event_indexer::{EventIndexerConfig, EventIndexerService, EventStore, TreeCache, event_indexer_router, SolanaWsConfig, SolanaWsSubscriber};
+use zkbtc::deposit_tracker::sqlite_db::SqliteDepositStore;
+use zkbtc::event_indexer::{EventIndexerConfig, EventIndexerService, EventStore, TreeCache, event_indexer_router_with_deposits, SolanaWsConfig, SolanaWsSubscriber};
 use zkbtc::redemption::{MpcSigner, RedemptionConfig, RedemptionService, SingleKeySigner};
 use zkbtc::stealth::StealthDepositService;
 use zkbtc::units;
@@ -412,7 +413,11 @@ async fn run_tracker_service(args: &[String]) {
     let program_pubkey: solana_sdk::pubkey::Pubkey = aegis_program_id
         .parse()
         .expect("Invalid AEGIS_PROGRAM_ID");
-    let indexer_router = event_indexer_router(event_store.clone(), tree_cache.clone(), program_pubkey);
+    // Create a deposit store handle so reset endpoints can clear stale tracker data
+    let deposit_store = Arc::new(
+        SqliteDepositStore::new(&config.db_path).expect("Failed to open deposit store for indexer")
+    );
+    let indexer_router = event_indexer_router_with_deposits(event_store.clone(), tree_cache.clone(), program_pubkey, Some(deposit_store));
 
     // Start the event indexer service in background
     let solana_rpc_clone = solana_rpc.clone();

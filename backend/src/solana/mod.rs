@@ -6,6 +6,7 @@
 //! - SPV proof verification on-chain
 
 pub mod client;
+pub mod spv;
 
 // Re-exports for convenience
 pub use client::{

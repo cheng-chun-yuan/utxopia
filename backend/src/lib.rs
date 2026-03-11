@@ -83,7 +83,7 @@ pub use deposit_tracker::{
 };
 
 pub use event_indexer::{
-    EventStore, EventIndexerService, event_indexer_router, TreeCache,
+    EventStore, EventIndexerService, event_indexer_router, event_indexer_router_with_deposits, TreeCache,
 };
 
 pub use stealth::{

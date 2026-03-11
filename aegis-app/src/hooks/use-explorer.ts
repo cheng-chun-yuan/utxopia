@@ -28,6 +28,7 @@ export interface DepositRecord {
   taprootAddress: string | null;
   trackerError: string | null;
   isDemo: boolean;
+  btcDepositAmountSats: number | null;
 }
 
 export interface TransferOutput {
@@ -41,6 +42,14 @@ export interface GroupedTransfer {
   inputCount: number;
   nullifierPdas: string[];
   outputs: TransferOutput[];
+  /** NullifierOperationType: 0=FullWithdrawal (unshield), 2=PrivateTransfer */
+  operationType: number;
+  /** Aegis instruction discriminator: 14=transact, 15=unshield */
+  instructionDisc?: number;
+  /** Token transfer amount in sats (unshield txs only) */
+  unshieldAmount?: number;
+  /** Token transfer recipient wallet (unshield txs only) */
+  unshieldRecipient?: string;
 }
 
 export interface RedemptionRecord {
@@ -69,6 +78,10 @@ interface BackendTransferRow {
   output_count: number;
   input_count: number;
   timestamp: number;
+  operation_type: number;
+  instruction_disc?: number;
+  unshield_amount?: number;
+  unshield_recipient?: string;
 }
 
 // Backend announcement row from /api/announcements
@@ -148,7 +161,7 @@ export function useDeposits() {
     "explorer-deposits",
     async () => {
       const resp = await fetch("/api/explorer/deposits");
-      if (!resp.ok) throw new Error(`Failed to fetch: ${resp.status}`);
+      if (!resp.ok) return [];
       const json = await resp.json();
       return (json.deposits ?? []).map(
         (d: any): DepositRecord => ({
@@ -184,10 +197,14 @@ export function useTransfers() {
         timestamp: t.timestamp,
         inputCount: t.input_count,
         nullifierPdas: t.nullifier_pdas ?? [],
-        outputs: t.commitments.map((c: string, i: number) => ({
+        outputs: (t.commitments ?? []).map((c: string, i: number) => ({
           commitment: c,
-          leafIndex: t.leaf_indices[i] ?? 0,
+          leafIndex: (t.leaf_indices ?? [])[i] ?? 0,
         })),
+        operationType: t.operation_type ?? 2,
+        instructionDisc: t.instruction_disc,
+        unshieldAmount: t.unshield_amount,
+        unshieldRecipient: t.unshield_recipient,
       }));
     },
     SWR_OPTIONS,

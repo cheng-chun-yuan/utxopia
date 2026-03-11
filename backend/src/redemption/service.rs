@@ -9,6 +9,7 @@
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::{Notify, RwLock};
+use solana_sdk::signature::Signer as SolanaSigner;
 
 use crate::bitcoin::client::EsploraClient;
 use crate::redemption::builder::TxBuilder;
@@ -19,6 +20,14 @@ use crate::redemption::types::*;
 use crate::redemption::watcher::RedemptionScanner;
 use crate::redemption::ws_redemption::RedemptionWsListener;
 use crate::solana::client::SolClient;
+
+/// Get current Unix timestamp in seconds.
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
 
 /// Convert raw BTC scriptPubKey bytes to a bech32 address string.
 fn script_to_address(script: &[u8], network: bitcoin::Network) -> Result<String, String> {
@@ -367,6 +376,9 @@ impl RedemptionService {
                 created_at: now,
                 last_updated: now,
                 error: Some("no UTXOs available".to_string()),
+                verified_tx_pda: None,
+                buffer_pubkey: None,
+                tx_size: None,
             };
             self.tracking.upsert(entry).await;
             return Err(ServiceError::NoUtxos);
@@ -433,6 +445,9 @@ impl RedemptionService {
             created_at: now,
             last_updated: now,
             error: None,
+            verified_tx_pda: None,
+            buffer_pubkey: None,
+            tx_size: None,
         };
         self.tracking.upsert(entry).await;
 
@@ -452,6 +467,14 @@ impl RedemptionService {
     }
 
     /// Phase 3: Try to complete a Processing PDA.
+    ///
+    /// Full SPV pipeline:
+    ///   1. Wait for BTC confirmations
+    ///   2. Upload raw tx to ChadBuffer + call verify_transaction (creates VerifiedTransaction PDA)
+    ///   3. Call complete_redemption (burns zkBTC, closes RedemptionRequest PDA)
+    ///   4. Close ChadBuffer
+    ///
+    /// In simulated mode (AEGIS_BROADCAST_MODE != "real"), skips SPV and just marks locally complete.
     ///
     /// Returns Ok(true) if completed, Ok(false) if not ready yet.
     async fn try_complete_redemption(
@@ -473,7 +496,33 @@ impl RedemptionService {
             None => return Ok(false), // no txid yet
         };
 
-        // Check BTC confirmations (need >= 6)
+        let broadcast_mode =
+            std::env::var("AEGIS_BROADCAST_MODE").unwrap_or_else(|_| "simulated".to_string());
+
+        // Simulated mode: no real BTC tx to verify, just mark locally complete
+        if broadcast_mode != "real" {
+            println!(
+                "[redemption] PDA {} simulated mode, marking complete",
+                &pda.pda_address[..8],
+            );
+            let now = now_secs();
+            let mut entry = tracking;
+            entry.local_status = LocalRedemptionStatus::Completed;
+            entry.last_updated = now;
+            self.tracking.upsert(entry).await;
+
+            let mut stats = self.stats.write().await;
+            stats.processing = stats.processing.saturating_sub(1);
+            stats.complete += 1;
+            return Ok(true);
+        }
+
+        // If already SpvVerified, skip to complete_redemption call
+        if tracking.local_status == LocalRedemptionStatus::SpvVerified {
+            return self.call_complete_and_cleanup(pda, tracking).await;
+        }
+
+        // Check BTC confirmations
         let confirmations = match self.esplora.get_confirmations(&btc_txid).await {
             Ok(c) => c,
             Err(e) => {
@@ -485,80 +534,231 @@ impl RedemptionService {
             }
         };
 
-        if confirmations < 6 {
+        if confirmations < self.config.required_confirmations {
             return Ok(false);
         }
 
-        // Check if VerifiedTransaction PDA exists
-        // We need block_hash from esplora to derive the PDA
-        let tx_status = match self.esplora.get_tx_status(&btc_txid).await {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!(
-                    "[redemption] Error getting tx status for {}: {}",
-                    btc_txid, e
+        println!(
+            "[redemption] PDA {} BTC confirmed ({} confs >= {}), starting SPV verification",
+            &pda.pda_address[..8],
+            confirmations,
+            self.config.required_confirmations
+        );
+
+        // Get payer keypair
+        let payer = self.sol_client.payer_keypair().ok_or_else(|| {
+            ServiceError::BuildError("no payer keypair set on SolClient".to_string())
+        })?;
+        let rpc = self.sol_client.rpc();
+        let btc_lc_pid = crate::solana::client::BTC_LIGHT_CLIENT_PROGRAM_ID;
+
+        // 1. Fetch raw BTC withdrawal tx, strip witness
+        let tx_hex = self
+            .esplora
+            .get_tx_hex(&btc_txid)
+            .await
+            .map_err(|e| ServiceError::BuildError(format!("get_tx_hex: {}", e)))?;
+        let raw_tx = hex::decode(tx_hex.trim())
+            .map_err(|e| ServiceError::BuildError(format!("hex decode raw tx: {}", e)))?;
+        let stripped = crate::solana::spv::strip_witness_data(&raw_tx)
+            .map_err(|e| ServiceError::BuildError(format!("strip_witness: {}", e)))?;
+
+        // 2. Get block hash from tx status
+        let tx_status = self
+            .esplora
+            .get_tx_status(&btc_txid)
+            .await
+            .map_err(|e| ServiceError::BuildError(format!("get_tx_status: {}", e)))?;
+        let block_hash_hex = tx_status
+            .block_hash
+            .as_ref()
+            .ok_or_else(|| ServiceError::BuildError("tx has no block_hash".to_string()))?;
+
+        let block_hash = crate::solana::spv::txid_to_internal(block_hash_hex)
+            .map_err(|e| ServiceError::BuildError(format!("block_hash parse: {}", e)))?;
+        let txid_internal = crate::solana::spv::txid_to_internal(&btc_txid)
+            .map_err(|e| ServiceError::BuildError(format!("txid parse: {}", e)))?;
+
+        // 3. Derive PDAs
+        let verified_tx_pda =
+            crate::solana::spv::derive_verified_tx_pda(&block_hash, &txid_internal, &btc_lc_pid);
+        let block_header_pda =
+            crate::solana::spv::derive_block_header_pda(&block_hash, &btc_lc_pid);
+        let light_client_pda = crate::solana::spv::derive_light_client_pda(&btc_lc_pid);
+
+        // 4. Check if block header is relayed
+        match self.sol_client.account_exists(&block_header_pda) {
+            Ok(true) => {}
+            Ok(false) => {
+                println!(
+                    "[redemption] Block header not yet relayed for {}, will retry next tick",
+                    &btc_txid[..8]
                 );
+                return Ok(false);
+            }
+            Err(e) => {
+                eprintln!("[redemption] Error checking block header PDA: {}", e);
+                return Ok(false);
+            }
+        }
+
+        // 5. Check if already verified (idempotent)
+        let already_verified = match self.sol_client.account_exists(&verified_tx_pda) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("[redemption] Error checking verified_tx PDA: {}", e);
                 return Ok(false);
             }
         };
 
-        let block_hash_hex = match &tx_status.block_hash {
-            Some(h) => h.clone(),
-            None => return Ok(false),
-        };
+        let buffer_pubkey;
+        let tx_size = stripped.len() as u32;
 
-        // Decode block_hash and txid to bytes for PDA derivation
-        let block_hash_bytes: [u8; 32] = hex::decode(&block_hash_hex)
-            .ok()
-            .and_then(|b| <[u8; 32]>::try_from(b).ok())
-            .unwrap_or_default();
+        if !already_verified {
+            // Upload to ChadBuffer + call verify_transaction
+            let (buf_pk, _buf_kp) = crate::solana::spv::upload_to_chadbuffer(rpc, payer, &stripped)
+                .map_err(|e| ServiceError::BuildError(format!("upload_to_chadbuffer: {}", e)))?;
+            buffer_pubkey = buf_pk;
 
-        let txid_bytes: [u8; 32] = hex::decode(&btc_txid)
-            .ok()
-            .and_then(|b| <[u8; 32]>::try_from(b).ok())
-            .unwrap_or_default();
+            // Get merkle proof
+            let merkle_proof = self
+                .esplora
+                .get_merkle_proof(&btc_txid)
+                .await
+                .map_err(|e| ServiceError::BuildError(format!("get_merkle_proof: {}", e)))?;
 
-        let verified_tx_pda = SolClient::derive_verified_tx_pda(&block_hash_bytes, &txid_bytes);
+            let verify_ix = crate::solana::spv::build_verify_transaction_ix(
+                &payer.pubkey(),
+                &txid_internal,
+                &merkle_proof,
+                &block_hash,
+                tx_size,
+                &btc_lc_pid,
+                &light_client_pda,
+                &block_header_pda,
+                &verified_tx_pda,
+                &buffer_pubkey,
+            )
+            .map_err(|e| ServiceError::BuildError(format!("build_verify_tx_ix: {}", e)))?;
 
-        match self.sol_client.account_exists(&verified_tx_pda) {
-            Ok(true) => {
-                // VerifiedTransaction PDA exists — ready to complete
-                println!(
-                    "[redemption] PDA {} confirmed ({} confs), marking complete",
-                    &pda.pda_address[..8],
-                    confirmations
-                );
+            // Send verify_transaction
+            let blockhash = rpc
+                .get_latest_blockhash()
+                .map_err(|e| ServiceError::BuildError(format!("get blockhash: {}", e)))?;
+            let tx = solana_sdk::transaction::Transaction::new_signed_with_payer(
+                &[verify_ix],
+                Some(&payer.pubkey()),
+                &[payer],
+                blockhash,
+            );
+            rpc.send_and_confirm_transaction(&tx)
+                .map_err(|e| ServiceError::BuildError(format!("verify_transaction failed: {}", e)))?;
 
-                // TODO: Actually call send_complete_redemption once ChadBuffer is available.
-                // For now, just update local tracking.
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs();
-                let mut entry = tracking;
-                entry.local_status = LocalRedemptionStatus::Completed;
-                entry.last_updated = now;
-                self.tracking.upsert(entry).await;
-
-                // Update stats
-                let mut stats = self.stats.write().await;
-                stats.processing = stats.processing.saturating_sub(1);
-                stats.complete += 1;
-
-                Ok(true)
-            }
-            Ok(false) => {
-                // Not yet verified on Solana
-                Ok(false)
-            }
-            Err(e) => {
-                eprintln!(
-                    "[redemption] Error checking verified_tx PDA: {}",
-                    e
-                );
-                Ok(false)
-            }
+            println!(
+                "[redemption] verify_transaction succeeded for PDA {}",
+                &pda.pda_address[..8]
+            );
+        } else {
+            // Already verified — retrieve buffer_pubkey from tracking if available
+            buffer_pubkey = if let Some(ref bp) = tracking.buffer_pubkey {
+                bp.parse::<solana_sdk::pubkey::Pubkey>()
+                    .map_err(|e| ServiceError::BuildError(format!("parse buffer_pubkey: {}", e)))?
+            } else {
+                // Need a new buffer for complete_redemption (it reads from it)
+                let (buf_pk, _) = crate::solana::spv::upload_to_chadbuffer(rpc, payer, &stripped)
+                    .map_err(|e| ServiceError::BuildError(format!("upload_to_chadbuffer: {}", e)))?;
+                buf_pk
+            };
         }
+
+        // Save progress — SpvVerified state for retry resilience
+        let now = now_secs();
+        let mut entry = tracking.clone();
+        entry.local_status = LocalRedemptionStatus::SpvVerified;
+        entry.verified_tx_pda = Some(verified_tx_pda.to_string());
+        entry.buffer_pubkey = Some(buffer_pubkey.to_string());
+        entry.tx_size = Some(tx_size);
+        entry.last_updated = now;
+        self.tracking.upsert(entry.clone()).await;
+
+        // 6. Call complete_redemption
+        self.call_complete_and_cleanup(pda, entry).await
+    }
+
+    /// Call complete_redemption on-chain, close the ChadBuffer, and update tracking to Completed.
+    async fn call_complete_and_cleanup(
+        &self,
+        pda: &ParsedRedemption,
+        tracking: RedemptionTracking,
+    ) -> Result<bool, ServiceError> {
+        let pda_pubkey = pda
+            .pda_address
+            .parse::<solana_sdk::pubkey::Pubkey>()
+            .map_err(|e| ServiceError::BuildError(format!("invalid PDA pubkey: {}", e)))?;
+
+        let btc_txid = tracking.btc_txid.as_ref().ok_or_else(|| {
+            ServiceError::BuildError("no btc_txid in tracking".to_string())
+        })?;
+        let txid_internal = crate::solana::spv::txid_to_internal(btc_txid)
+            .map_err(|e| ServiceError::BuildError(format!("txid parse: {}", e)))?;
+
+        let verified_tx_str = tracking.verified_tx_pda.as_ref().ok_or_else(|| {
+            ServiceError::BuildError("no verified_tx_pda in tracking".to_string())
+        })?;
+        let verified_tx_pda = verified_tx_str
+            .parse::<solana_sdk::pubkey::Pubkey>()
+            .map_err(|e| ServiceError::BuildError(format!("parse verified_tx_pda: {}", e)))?;
+
+        let buffer_str = tracking.buffer_pubkey.as_ref().ok_or_else(|| {
+            ServiceError::BuildError("no buffer_pubkey in tracking".to_string())
+        })?;
+        let buffer_pubkey = buffer_str
+            .parse::<solana_sdk::pubkey::Pubkey>()
+            .map_err(|e| ServiceError::BuildError(format!("parse buffer_pubkey: {}", e)))?;
+
+        let tx_size = tracking.tx_size.ok_or_else(|| {
+            ServiceError::BuildError("no tx_size in tracking".to_string())
+        })?;
+
+        // Call complete_redemption on-chain
+        self.sol_client
+            .send_complete_redemption(
+                &pda_pubkey,
+                &txid_internal,
+                &verified_tx_pda,
+                &buffer_pubkey,
+                tx_size,
+            )
+            .await
+            .map_err(|e| ServiceError::BuildError(format!("complete_redemption: {}", e)))?;
+
+        println!(
+            "[redemption] complete_redemption succeeded for PDA {}",
+            &pda.pda_address[..8]
+        );
+
+        // Close ChadBuffer to reclaim rent
+        let payer = self.sol_client.payer_keypair().ok_or_else(|| {
+            ServiceError::BuildError("no payer keypair".to_string())
+        })?;
+        if let Err(e) = crate::solana::spv::close_chadbuffer(self.sol_client.rpc(), payer, &buffer_pubkey) {
+            eprintln!("[redemption] Warning: failed to close ChadBuffer: {}", e);
+        }
+
+        // Update tracking to Completed
+        let now = now_secs();
+        let mut entry = tracking;
+        entry.local_status = LocalRedemptionStatus::Completed;
+        entry.buffer_pubkey = None;
+        entry.last_updated = now;
+        self.tracking.upsert(entry).await;
+
+        // Update stats
+        let mut stats = self.stats.write().await;
+        stats.processing = stats.processing.saturating_sub(1);
+        stats.complete += 1;
+
+        Ok(true)
     }
 
     /// Run the service loop

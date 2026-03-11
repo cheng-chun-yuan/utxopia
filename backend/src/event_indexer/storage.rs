@@ -52,6 +52,14 @@ pub struct TransferRow {
     pub output_count: i64,
     pub input_count: i64,
     pub timestamp: i64, // spent_at from nullifier_events
+    /// NullifierOperationType: 0=FullWithdrawal (unshield/redeem), 1=PartialWithdrawal, 2=PrivateTransfer
+    pub operation_type: i64,
+    /// Aegis instruction discriminator: 14=transact, 15=unshield, 5=request_redemption, 16=redeem
+    pub instruction_disc: Option<i64>,
+    /// Token transfer amount in sats (unshield txs only)
+    pub unshield_amount: Option<i64>,
+    /// Token transfer recipient wallet (unshield txs only)
+    pub unshield_recipient: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -65,6 +73,17 @@ pub struct AnnouncementRow {
     pub slot: i64,
     /// Block time from getTransaction RPC (Unix timestamp)
     pub block_time: i64,
+    /// Whether this deposit was SPV-verified (real BTC deposit vs demo)
+    pub is_verified: bool,
+    /// BTC deposit txid (display hex, only for verified deposits)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub btc_deposit_txid: Option<String>,
+    /// BTC sweep txid (display hex, only for verified deposits)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub btc_sweep_txid: Option<String>,
+    /// Original BTC deposit amount in sats (from mempool, before sweep fee)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub btc_deposit_amount_sats: Option<i64>,
 }
 
 impl EventStore {
@@ -153,6 +172,37 @@ impl EventStore {
             ); // Ignore error if column already exists
         }
 
+        // Add is_verified column to stealth_announcements (real BTC deposit vs demo)
+        let _ = conn.execute_batch(
+            "ALTER TABLE stealth_announcements ADD COLUMN is_verified INTEGER NOT NULL DEFAULT 0",
+        );
+
+        // Add BTC txid columns to stealth_announcements (for verified deposits)
+        let _ = conn.execute_batch(
+            "ALTER TABLE stealth_announcements ADD COLUMN btc_deposit_txid TEXT",
+        );
+        let _ = conn.execute_batch(
+            "ALTER TABLE stealth_announcements ADD COLUMN btc_sweep_txid TEXT",
+        );
+
+        // Add BTC deposit amount column (original amount before sweep fee)
+        let _ = conn.execute_batch(
+            "ALTER TABLE stealth_announcements ADD COLUMN btc_deposit_amount_sats INTEGER",
+        );
+
+        // Add instruction_disc column to nullifier_events (Aegis instruction discriminator)
+        let _ = conn.execute_batch(
+            "ALTER TABLE nullifier_events ADD COLUMN instruction_disc INTEGER",
+        );
+
+        // Add unshield token transfer columns to nullifier_events
+        let _ = conn.execute_batch(
+            "ALTER TABLE nullifier_events ADD COLUMN unshield_amount INTEGER",
+        );
+        let _ = conn.execute_batch(
+            "ALTER TABLE nullifier_events ADD COLUMN unshield_recipient TEXT",
+        );
+
         Ok(())
     }
 
@@ -191,12 +241,15 @@ impl EventStore {
         tx_signature: &str,
         slot: i64,
         block_time: i64,
+        instruction_disc: Option<u8>,
+        unshield_amount: Option<i64>,
+        unshield_recipient: Option<&str>,
     ) -> Result<bool, String> {
         let conn = self.conn()?;
         let spent_by_hex = hex::encode(&event.spent_by);
         let result = conn.execute(
-            "INSERT OR IGNORE INTO nullifier_events (nullifier_hash, operation_type, spent_at, spent_by, tx_signature, slot, block_time)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT OR IGNORE INTO nullifier_events (nullifier_hash, operation_type, spent_at, spent_by, tx_signature, slot, block_time, instruction_disc, unshield_amount, unshield_recipient)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 event.nullifier_hash.as_slice(),
                 event.operation_type as i64,
@@ -205,6 +258,9 @@ impl EventStore {
                 tx_signature,
                 slot,
                 block_time,
+                instruction_disc.map(|d| d as i64),
+                unshield_amount,
+                unshield_recipient,
             ],
         );
         match result {
@@ -344,12 +400,26 @@ impl EventStore {
         tx_signature: &str,
         slot: i64,
         block_time: i64,
+        is_verified: bool,
+        btc_deposit_txid: Option<&str>,
+        btc_sweep_txid: Option<&str>,
+        btc_deposit_amount_sats: Option<i64>,
     ) -> Result<bool, String> {
         let conn = self.conn()?;
+        // Use ON CONFLICT to upgrade is_verified from false→true (never downgrade).
+        // This handles the case where WS inserts first (is_verified=false) and
+        // the poll service later processes the same tx with is_verified=true.
+        // Also update BTC txids and deposit amount if provided (non-null wins over null).
         let result = conn.execute(
-            "INSERT OR IGNORE INTO stealth_announcements
-             (leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot, block_time)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO stealth_announcements
+             (leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot, block_time, is_verified, btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+             ON CONFLICT(leaf_index) DO UPDATE SET
+                is_verified = MAX(stealth_announcements.is_verified, excluded.is_verified),
+                block_time = CASE WHEN excluded.block_time > 0 THEN excluded.block_time ELSE stealth_announcements.block_time END,
+                btc_deposit_txid = COALESCE(excluded.btc_deposit_txid, stealth_announcements.btc_deposit_txid),
+                btc_sweep_txid = COALESCE(excluded.btc_sweep_txid, stealth_announcements.btc_sweep_txid),
+                btc_deposit_amount_sats = COALESCE(excluded.btc_deposit_amount_sats, stealth_announcements.btc_deposit_amount_sats)",
             params![
                 event.leaf_index as i64,
                 event.announcement_type as i64,
@@ -359,6 +429,10 @@ impl EventStore {
                 tx_signature,
                 slot,
                 block_time,
+                is_verified as i64,
+                btc_deposit_txid,
+                btc_sweep_txid,
+                btc_deposit_amount_sats,
             ],
         );
         match result {
@@ -372,7 +446,7 @@ impl EventStore {
         if let Some(since) = since_leaf_index {
             let mut stmt = conn
                 .prepare(
-                    "SELECT leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot, COALESCE(block_time, 0)
+                    "SELECT leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot, COALESCE(block_time, 0), COALESCE(is_verified, 0), btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats
                      FROM stealth_announcements WHERE leaf_index > ?1 ORDER BY leaf_index",
                 )
                 .map_err(|e| format!("query error: {}", e))?;
@@ -383,7 +457,7 @@ impl EventStore {
         } else {
             let mut stmt = conn
                 .prepare(
-                    "SELECT leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot, COALESCE(block_time, 0)
+                    "SELECT leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot, COALESCE(block_time, 0), COALESCE(is_verified, 0), btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats
                      FROM stealth_announcements ORDER BY leaf_index",
                 )
                 .map_err(|e| format!("query error: {}", e))?;
@@ -506,30 +580,37 @@ impl EventStore {
         }).map_err(|e| format!("query error: {}", e))?
           .collect::<Result<Vec<_>, _>>().map_err(|e| format!("row error: {}", e))?;
 
-        // Step 2: For each tx, fetch nullifiers + block_time
+        // Step 2: For each tx, fetch nullifiers + block_time + operation_type + instruction_disc + unshield fields
         let mut null_stmt = conn.prepare(
-            "SELECT HEX(nullifier_hash), spent_at, COALESCE(block_time, 0) FROM nullifier_events WHERE tx_signature = ?1"
+            "SELECT HEX(nullifier_hash), spent_at, COALESCE(block_time, 0), operation_type, instruction_disc, unshield_amount, unshield_recipient FROM nullifier_events WHERE tx_signature = ?1"
         ).map_err(|e| format!("query error: {}", e))?;
 
         let mut results = Vec::with_capacity(partials.len());
         for p in partials {
-            let nullifiers: Vec<(String, i64, i64)> = null_stmt.query_map(
+            let nullifiers: Vec<(String, i64, i64, i64, Option<i64>, Option<i64>, Option<String>)> = null_stmt.query_map(
                 params![p.tx_signature],
                 |row| {
                     let hash: String = row.get(0)?;
                     let spent_at: i64 = row.get(1)?;
                     let block_time: i64 = row.get(2)?;
-                    Ok((hash.to_lowercase(), spent_at, block_time))
+                    let op_type: i64 = row.get(3)?;
+                    let disc: Option<i64> = row.get(4)?;
+                    let ua: Option<i64> = row.get(5)?;
+                    let ur: Option<String> = row.get(6)?;
+                    Ok((hash.to_lowercase(), spent_at, block_time, op_type, disc, ua, ur))
                 },
             ).map_err(|e| format!("query error: {}", e))?
              .collect::<Result<Vec<_>, _>>().map_err(|e| format!("row error: {}", e))?;
 
             let input_count = nullifiers.len() as i64;
-            // Prefer block_time (from RPC), fall back to spent_at (from on-chain Clock)
-            let block_time = nullifiers.iter().map(|(_, _, bt)| *bt).max().unwrap_or(0);
-            let spent_at = nullifiers.iter().map(|(_, t, _)| *t).max().unwrap_or(0);
+            let block_time = nullifiers.iter().map(|(_, _, bt, _, _, _, _)| *bt).max().unwrap_or(0);
+            let spent_at = nullifiers.iter().map(|(_, t, _, _, _, _, _)| *t).max().unwrap_or(0);
             let timestamp = if block_time > 0 { block_time } else { spent_at };
-            let nullifier_hashes: Vec<String> = nullifiers.into_iter().map(|(h, _, _)| h).collect();
+            let operation_type = nullifiers.first().map(|(_, _, _, ot, _, _, _)| *ot).unwrap_or(2);
+            let instruction_disc = nullifiers.first().and_then(|(_, _, _, _, d, _, _)| *d);
+            let unshield_amount = nullifiers.first().and_then(|(_, _, _, _, _, ua, _)| *ua);
+            let unshield_recipient = nullifiers.first().and_then(|(_, _, _, _, _, _, ur)| ur.clone());
+            let nullifier_hashes: Vec<String> = nullifiers.into_iter().map(|(h, _, _, _, _, _, _)| h).collect();
 
             results.push(TransferRow {
                 tx_signature: p.tx_signature,
@@ -539,8 +620,63 @@ impl EventStore {
                 output_count: p.output_count,
                 input_count,
                 timestamp,
+                operation_type,
+                instruction_disc,
+                unshield_amount,
+                unshield_recipient,
             });
         }
+
+        // Step 3: Find unshield transactions — nullifier events whose
+        // tx_signature does NOT appear in transfer announcements (no type=1 outputs),
+        // and instruction_disc = 15 (UNSHIELD). Excludes request_redemption (disc=5)
+        // and redeem (disc=16) which belong in the Withdrawals tab.
+        let mut unshield_stmt = conn.prepare(
+            "SELECT n.tx_signature,
+                    GROUP_CONCAT(HEX(n.nullifier_hash), ',') AS hashes,
+                    COUNT(*) AS input_count,
+                    MIN(n.operation_type) AS op_type,
+                    MAX(n.spent_at) AS spent_at,
+                    MAX(COALESCE(n.block_time, 0)) AS block_time,
+                    MAX(n.unshield_amount) AS unshield_amount,
+                    MAX(n.unshield_recipient) AS unshield_recipient
+             FROM nullifier_events n
+             WHERE n.tx_signature NOT IN (
+                 SELECT DISTINCT tx_signature FROM stealth_announcements WHERE announcement_type = 1
+             )
+             AND COALESCE(n.instruction_disc, -1) NOT IN (5, 16, 17)
+             GROUP BY n.tx_signature
+             ORDER BY MAX(COALESCE(n.block_time, n.spent_at)) DESC"
+        ).map_err(|e| format!("query error: {}", e))?;
+
+        let unshields: Vec<TransferRow> = unshield_stmt.query_map([], |row| {
+            let tx_sig: String = row.get(0)?;
+            let hashes_str: String = row.get(1)?;
+            let input_count: i64 = row.get(2)?;
+            let op_type: i64 = row.get(3)?;
+            let spent_at: i64 = row.get(4)?;
+            let block_time: i64 = row.get(5)?;
+            let unshield_amount: Option<i64> = row.get(6)?;
+            let unshield_recipient: Option<String> = row.get(7)?;
+            Ok(TransferRow {
+                tx_signature: tx_sig,
+                commitments: vec![],
+                leaf_indices: vec![],
+                nullifier_hashes: hashes_str.split(',').map(|s| s.to_lowercase()).collect(),
+                output_count: 0,
+                input_count,
+                timestamp: if block_time > 0 { block_time } else { spent_at },
+                operation_type: op_type,
+                instruction_disc: Some(15), // unshield
+                unshield_amount,
+                unshield_recipient,
+            })
+        }).map_err(|e| format!("query error: {}", e))?
+          .collect::<Result<Vec<_>, _>>().map_err(|e| format!("row error: {}", e))?;
+
+        results.extend(unshields);
+        // Re-sort by timestamp descending
+        results.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
 
         Ok(results)
     }
@@ -558,6 +694,10 @@ impl EventStore {
             tx_signature: row.get(5)?,
             slot: row.get(6)?,
             block_time: row.get::<_, i64>(7).unwrap_or(0),
+            is_verified: row.get::<_, i64>(8).unwrap_or(0) != 0,
+            btc_deposit_txid: row.get::<_, Option<String>>(9).unwrap_or(None),
+            btc_sweep_txid: row.get::<_, Option<String>>(10).unwrap_or(None),
+            btc_deposit_amount_sats: row.get::<_, Option<i64>>(11).unwrap_or(None),
         })
     }
 }
@@ -596,8 +736,10 @@ mod tests {
             commitment: [0xBB; 32],
             leaf_index: 5,
         };
-        assert!(store.insert_announcement(&event, "sig1", 100, 1700000000).unwrap());
-        assert!(!store.insert_announcement(&event, "sig1", 100, 1700000000).unwrap()); // dup
+        assert!(store.insert_announcement(&event, "sig1", 100, 1700000000, false, None, None, None).unwrap());
+        // Second insert with same leaf_index uses ON CONFLICT DO UPDATE (returns rows_affected > 0)
+        // but no new row is created
+        let _ = store.insert_announcement(&event, "sig1", 100, 1700000000, false, None, None, None).unwrap();
 
         let rows = store.get_announcements(None).unwrap();
         assert_eq!(rows.len(), 1);
@@ -622,7 +764,7 @@ mod tests {
             spent_by: [0xEF; 32],
         };
 
-        assert!(store.insert_nullifier(&event, "sig2", 101, 1700000001).unwrap());
+        assert!(store.insert_nullifier(&event, "sig2", 101, 1700000001, Some(14), None, None).unwrap());
 
         let hash_hex = hex::encode([0xCD; 32]);
         let result = store.get_nullifier(&hash_hex).unwrap();

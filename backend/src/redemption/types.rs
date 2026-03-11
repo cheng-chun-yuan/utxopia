@@ -313,6 +313,15 @@ pub struct RedemptionTracking {
     pub last_updated: u64,
     /// Error message if failed
     pub error: Option<String>,
+    /// Verified transaction PDA address (set after verify_transaction succeeds)
+    #[serde(default)]
+    pub verified_tx_pda: Option<String>,
+    /// ChadBuffer address (set during SPV upload, cleared after close)
+    #[serde(default)]
+    pub buffer_pubkey: Option<String>,
+    /// Stripped raw tx size (needed for complete_redemption instruction)
+    #[serde(default)]
+    pub tx_size: Option<u32>,
 }
 
 /// Backend-side redemption status
@@ -324,6 +333,8 @@ pub enum LocalRedemptionStatus {
     Signing,
     /// BTC transaction broadcast, waiting for confirmations
     AwaitingConfirmation,
+    /// SPV verification complete (verify_transaction succeeded), awaiting complete_redemption call
+    SpvVerified,
     /// Fully confirmed and complete_redemption called
     Completed,
     /// Terminal failure

@@ -89,9 +89,39 @@ export async function GET() {
       }
     }
 
+    // Fetch blockTime for PDAs with a processingSlot but no tracking timestamp
+    const slotsNeedingTime = redemptions
+      .filter((r) => r.processingSlot > 0 && !trackingMap.has(r.pubkey))
+      .map((r) => r.processingSlot);
+
+    const slotTimeMap = new Map<number, number>();
+    if (slotsNeedingTime.length > 0) {
+      const uniqueSlots = [...new Set(slotsNeedingTime)];
+      await Promise.all(
+        uniqueSlots.map(async (slot) => {
+          try {
+            const resp = await fetch(RPC_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                jsonrpc: "2.0", id: 1,
+                method: "getBlockTime",
+                params: [slot],
+              }),
+              signal: AbortSignal.timeout(5000),
+            });
+            const json = await resp.json();
+            if (json.result) slotTimeMap.set(slot, json.result);
+          } catch { /* ignore */ }
+        }),
+      );
+    }
+
     // Join PDA data with tracking data
     const serialized = redemptions.map((r) => {
       const tracking = trackingMap.get(r.pubkey);
+      const trackingTime = tracking?.created_at ?? 0;
+      const slotTime = r.processingSlot > 0 ? (slotTimeMap.get(r.processingSlot) ?? 0) : 0;
       return {
         pubkey: r.pubkey,
         requestId: r.requestId.toString(),
@@ -102,7 +132,7 @@ export async function GET() {
         // Enriched from backend tracking
         btcTxid: tracking?.btc_txid ?? null,
         localStatus: tracking?.local_status ?? null,
-        createdAt: tracking?.created_at ?? 0,
+        createdAt: trackingTime || slotTime,
         updatedAt: tracking?.last_updated ?? 0,
         retryCount: tracking?.retry_count ?? 0,
         trackerError: tracking?.error ?? null,

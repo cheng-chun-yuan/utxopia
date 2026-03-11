@@ -9,6 +9,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { fetchAnnouncementsFromRpc } from "@/lib/api/rpc-fallback";
 
 const BACKEND_URL = process.env.TRACKER_API_URL || "http://localhost:3001";
 const RPC_URL =
@@ -44,6 +45,8 @@ interface TransferItem {
   output_count: number;
   input_count: number;
   timestamp: number;
+  operation_type: number;
+  instruction_disc?: number;
 }
 
 interface TxResult {
@@ -114,10 +117,48 @@ async function getTransactionData(signature: string): Promise<TxResult> {
   }
 }
 
+async function buildTransfersFromRpc(): Promise<Response> {
+  try {
+    const txMetas = await fetchAnnouncementsFromRpc(1); // type=1 = transfers
+
+    const transfers: TransferItem[] = txMetas.map((tx) => {
+      const sorted = tx.announcements.sort((a, b) => a.leafIndex - b.leafIndex);
+      return {
+        tx_signature: tx.signature,
+        commitments: sorted.map((a) => a.commitment),
+        leaf_indices: sorted.map((a) => a.leafIndex),
+        nullifier_hashes: [],
+        nullifier_pdas: tx.nullifierPdas,
+        output_count: sorted.length,
+        input_count: tx.nullifierPdas.length,
+        timestamp: tx.blockTime,
+        operation_type: 2,
+        instruction_disc: 14,
+      };
+    });
+
+    transfers.sort((a, b) => {
+      const maxA = Math.max(...a.leaf_indices);
+      const maxB = Math.max(...b.leaf_indices);
+      return maxB - maxA;
+    });
+
+    return NextResponse.json({
+      success: true,
+      transfers,
+      count: transfers.length,
+      fallback: true,
+    });
+  } catch (rpcErr) {
+    console.error("[Transfers API] RPC fallback also failed:", rpcErr);
+    return NextResponse.json({ success: true, transfers: [], count: 0 });
+  }
+}
+
 export async function GET() {
   try {
     // Try the dedicated backend /api/transfers endpoint first
-    const resp = await fetch(`${BACKEND_URL}/api/transfers`);
+    const resp = await fetch(`${BACKEND_URL}/api/transfers`, { cache: "no-store" });
     if (resp.ok) {
       const data = await resp.json();
       if (data.success && data.transfers?.length > 0) {
@@ -128,9 +169,16 @@ export async function GET() {
     // Fallback: build from announcements + RPC
     console.log("[Transfers API] Fallback: building from announcements + RPC");
 
-    const annResp = await fetch(`${BACKEND_URL}/api/announcements`);
+    let annResp: Response;
+    try {
+      annResp = await fetch(`${BACKEND_URL}/api/announcements`, { cache: "no-store" });
+    } catch {
+      annResp = new Response(null, { status: 503 });
+    }
     if (!annResp.ok) {
-      return NextResponse.json({ success: true, transfers: [], count: 0 });
+      // Third tier: pure RPC fallback
+      console.log("[Transfers API] Announcements also unavailable, trying RPC fallback");
+      return buildTransfersFromRpc();
     }
 
     const annData = await annResp.json();
@@ -176,11 +224,13 @@ export async function GET() {
         tx_signature: txSig,
         commitments: sorted.map((a) => a.commitment),
         leaf_indices: sorted.map((a) => a.leaf_index),
-        nullifier_hashes: [], // Not available without log parsing, but PDAs are sufficient
+        nullifier_hashes: [],
         nullifier_pdas: nullifierPdas,
         output_count: sorted.length,
         input_count: nullifierPdas.length,
         timestamp: blockTime,
+        operation_type: 2, // fallback assumes transact (private send)
+        instruction_disc: 14,
       });
     }
 

@@ -92,6 +92,46 @@ function reduceToFieldOnChain(bytes: Uint8Array): bigint {
   return BigInt("0x" + Buffer.from(reduced).toString("hex"));
 }
 
+/**
+ * Estimate Solana transaction size for a JoinSplit(N,M).
+ * Solana max tx size = 1232 bytes.
+ *
+ * Layout:
+ *  - 1 byte: signature count (compact-u16)
+ *  - 64 bytes: 1 signature (relayer/user)
+ *  - 3 bytes: message header (num_signers, num_readonly_signed, num_readonly_unsigned)
+ *  - 1 byte: account count (compact-u16, up to 127 fits in 1 byte)
+ *  - 32 * numAccounts: account public keys
+ *  - 32 bytes: recent blockhash
+ *  - 1 byte: instruction count (compact-u16)
+ *  - Per instruction: 1 (program_id idx) + 1 (compact-u16 acct count) + numAccounts (indices) + 2 (compact-u16 data len) + data
+ *
+ * Accounts: pool_state, commitment_tree, vk_registry, user, system_program, N nullifier PDAs = 5 + N
+ * But some accounts are deduped (program ID counted once). Total unique ≈ 6 + N (5 + N accounts + aegis program).
+ * Instruction data: 1 + 2 + 256 + 32 + 32 + (N*32) + (M*32) + (M*40) = 323 + 32N + 72M
+ */
+const SOLANA_MAX_TX_SIZE = 1232;
+
+function estimateTransactionSize(nInputs: number, nOutputs: number): number {
+  const numAccounts = 6 + nInputs; // 5 instruction accounts + N nullifier PDAs + 1 program
+  const instructionDataSize = 323 + (nInputs * 32) + (nOutputs * 72);
+
+  return (
+    1 +                       // signature count (compact-u16)
+    64 +                      // 1 signature
+    3 +                       // message header
+    1 +                       // account count (compact-u16)
+    (numAccounts * 32) +      // account public keys
+    32 +                      // recent blockhash
+    1 +                       // instruction count (compact-u16)
+    1 +                       // program ID index
+    1 +                       // account indices count (compact-u16)
+    (5 + nInputs) +           // account indices (one byte each)
+    2 +                       // instruction data length (compact-u16)
+    instructionDataSize       // instruction data
+  );
+}
+
 // Available circuit variants — locally served (N+M <= 5), rest via CDN
 // Constrain to what's actually compiled and has on-chain VK registered
 const AVAILABLE_CIRCUITS = new Set(
@@ -570,6 +610,14 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         const circuitKey = `${nInputs}x${nOutputs}`;
         if (!AVAILABLE_CIRCUITS.has(circuitKey)) {
           errors.push(`Circuit JoinSplit(${circuitKey}) not supported (max N+M=14)`);
+        }
+      }
+
+      // Check Solana transaction size limit
+      if (nInputs > 0 && nOutputs > 0) {
+        const estimatedSize = estimateTransactionSize(nInputs, nOutputs);
+        if (estimatedSize > SOLANA_MAX_TX_SIZE) {
+          errors.push(`Transaction too large (${estimatedSize}/${SOLANA_MAX_TX_SIZE} bytes). Reduce inputs or outputs.`);
         }
       }
     }
@@ -1669,20 +1717,36 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
               }
             </span>
           </div>
-          {!isPublicRedeem && nInputs > 0 && nOutputs > 0 && (
-            <div className="flex justify-between items-center text-body2 mt-1">
-              <span className="text-gray">Circuit</span>
-              <span className={cn(
-                "font-mono text-xs",
-                AVAILABLE_CIRCUITS.has(`${nInputs}x${nOutputs}`)
-                  ? "text-gray-light"
-                  : "text-red-400"
-              )}>
-                JoinSplit({nInputs}x{nOutputs})
-                {!AVAILABLE_CIRCUITS.has(`${nInputs}x${nOutputs}`) && " — N/A"}
-              </span>
-            </div>
-          )}
+          {!isPublicRedeem && nInputs > 0 && nOutputs > 0 && (() => {
+            const txSize = estimateTransactionSize(nInputs, nOutputs);
+            const sizeOk = txSize <= SOLANA_MAX_TX_SIZE;
+            return (
+              <>
+                <div className="flex justify-between items-center text-body2 mt-1">
+                  <span className="text-gray">Circuit</span>
+                  <span className={cn(
+                    "font-mono text-xs",
+                    AVAILABLE_CIRCUITS.has(`${nInputs}x${nOutputs}`)
+                      ? "text-gray-light"
+                      : "text-red-400"
+                  )}>
+                    JoinSplit({nInputs}x{nOutputs})
+                    {!AVAILABLE_CIRCUITS.has(`${nInputs}x${nOutputs}`) && " — N/A"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-body2 mt-1">
+                  <span className="text-gray">Tx Size</span>
+                  <span className={cn(
+                    "font-mono text-xs",
+                    sizeOk ? "text-gray-light" : "text-orange-400"
+                  )}>
+                    {txSize}/{SOLANA_MAX_TX_SIZE} bytes
+                    {!sizeOk && " — too large"}
+                  </span>
+                </div>
+              </>
+            );
+          })()}
         </div>
 
         {/* Processing time info */}
@@ -1704,8 +1768,16 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 
         {/* Validation errors */}
         {validationErrors.length > 0 && !error && (
-          <div className="mb-4 p-2.5 rounded-[10px] bg-gray/5 border border-gray/10">
-            <p className="text-caption text-gray">{validationErrors[0]}</p>
+          <div className={cn(
+            "mb-4 p-2.5 rounded-[10px]",
+            validationErrors[0].includes("too large")
+              ? "bg-orange-500/10 border border-orange-500/20"
+              : "bg-gray/5 border border-gray/10"
+          )}>
+            <p className={cn(
+              "text-caption",
+              validationErrors[0].includes("too large") ? "text-orange-400" : "text-gray"
+            )}>{validationErrors[0]}</p>
           </div>
         )}
 

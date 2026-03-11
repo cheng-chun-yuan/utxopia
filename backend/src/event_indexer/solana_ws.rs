@@ -164,48 +164,51 @@ impl SolanaWsSubscriber {
             "Processing real-time events"
         );
 
+        // Separate events by type
+        let mut leaf_events = Vec::new();
+        let mut announcements = Vec::new();
+        let mut nullifiers = Vec::new();
+
         for event in events {
             match event {
-                ProgramEvent::LeafInserted(e) => {
-                    // Use next_leaf_index from store for consistency
-                    let leaf_index = self
-                        .store
-                        .get_next_leaf_index()
-                        .unwrap_or(0);
-                    if let Ok(inserted) =
-                        self.store.insert_leaf(leaf_index, &e, signature, slot, 0)
-                    {
-                        if inserted {
-                            let tree_cache = self.tree_cache.clone();
-                            let commitment = e.commitment;
-                            // Fire-and-forget async update (we're in sync context)
-                            tokio::spawn(async move {
-                                tree_cache
-                                    .on_leaf_inserted(leaf_index as u64, commitment)
-                                    .await;
-                            });
-                        }
+                ProgramEvent::LeafInserted(e) => leaf_events.push(e),
+                ProgramEvent::StealthAnnouncement(e) => announcements.push(e),
+                ProgramEvent::NullifierSpent(e) => nullifiers.push(e),
+            }
+        }
+
+        // Match LeafInserted with StealthAnnouncement by commitment.
+        // The announcement carries the authoritative on-chain leaf_index.
+        for ann in &announcements {
+            let leaf_index = ann.leaf_index as i64;
+
+            // Find matching leaf event by commitment
+            if let Some(leaf) = leaf_events.iter().find(|l| l.commitment == ann.commitment) {
+                if let Ok(inserted) = self.store.insert_leaf(leaf_index, leaf, signature, slot, 0) {
+                    if inserted {
+                        let tree_cache = self.tree_cache.clone();
+                        let commitment = leaf.commitment;
+                        tokio::spawn(async move {
+                            tree_cache.on_leaf_inserted(leaf_index as u64, commitment).await;
+                        });
                     }
                 }
-                ProgramEvent::NullifierSpent(e) => {
-                    if let Ok(inserted) = self.store.insert_nullifier(&e, signature, slot, 0) {
-                        if inserted {
-                            self.tree_cache.broadcast_nullifier(&hex::encode(e.nullifier_hash), slot);
-                        }
-                    }
+            }
+
+            // Insert announcement (is_verified=false from WS; poll service upgrades it later)
+            if let Ok(inserted) = self.store.insert_announcement(ann, signature, slot, 0, false, None, None, None) {
+                if inserted {
+                    self.tree_cache.broadcast_announcement(ann);
+                    tracing::debug!(leaf_index = ann.leaf_index, "Real-time stealth announcement indexed");
                 }
-                ProgramEvent::StealthAnnouncement(e) => {
-                    if let Ok(inserted) =
-                        self.store.insert_announcement(&e, signature, slot, 0)
-                    {
-                        if inserted {
-                            self.tree_cache.broadcast_announcement(&e);
-                            tracing::debug!(
-                                leaf_index = e.leaf_index,
-                                "Real-time stealth announcement indexed"
-                            );
-                        }
-                    }
+            }
+        }
+
+        // Handle nullifiers
+        for null in &nullifiers {
+            if let Ok(inserted) = self.store.insert_nullifier(null, signature, slot, 0, None, None, None) {
+                if inserted {
+                    self.tree_cache.broadcast_nullifier(&hex::encode(null.nullifier_hash), slot);
                 }
             }
         }

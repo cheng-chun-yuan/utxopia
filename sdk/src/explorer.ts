@@ -77,6 +77,8 @@ export interface ExplorerRedemption {
   status: "Pending" | "Processing" | "Failed";
   requester: string;
   btcScript: string;
+  /** Slot when processing started (from PDA data[4..8]) — 0 if still Pending */
+  processingSlot: number;
 }
 
 // =============================================================================
@@ -153,6 +155,9 @@ export function parseRedemptionRequest(
   const status: ExplorerRedemption["status"] =
     statusByte === 1 ? "Processing" : statusByte === 2 ? "Failed" : "Pending";
   const scriptLen = data[2];
+  // data[3] = padding, data[4..8] = processing_slot (u32 LE)
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const processingSlot = view.getUint32(4, true);
 
   return {
     pubkey,
@@ -161,6 +166,7 @@ export function parseRedemptionRequest(
     status,
     requester: bs58Encode(data.slice(16, 48)),
     btcScript: toHex(data.slice(56, 56 + Math.min(scriptLen, 34))),
+    processingSlot,
   };
 }
 

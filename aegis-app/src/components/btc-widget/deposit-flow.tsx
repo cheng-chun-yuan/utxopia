@@ -28,6 +28,41 @@ import { useBitcoinWalletStore } from "@/stores/bitcoin-wallet-store";
 import { useNotesStore } from "@/stores/notes-store";
 import { registerDeposit } from "@/lib/api/deposits";
 import { getBtcSignerNetwork } from "@/lib/btc-network";
+
+/** Decode a tb1p/bcrt1p Taproot address to a 64-char hex x-only pubkey */
+function decodeBech32mPubkey(addr: string): string | null {
+  const CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+  const lower = addr.toLowerCase();
+  const sepIdx = lower.lastIndexOf("1");
+  if (sepIdx < 1 || sepIdx + 7 > lower.length) return null;
+
+  const dataPart = lower.slice(sepIdx + 1);
+  const values: number[] = [];
+  for (const c of dataPart) {
+    const v = CHARSET.indexOf(c);
+    if (v === -1) return null;
+    values.push(v);
+  }
+  if (values.length < 7) return null;
+
+  const data = values.slice(0, values.length - 6);
+  if (data[0] !== 1) return null; // witness version must be 1 for Taproot
+
+  // Convert 5-bit groups to 8-bit
+  let acc = 0, bits = 0;
+  const result: number[] = [];
+  for (const v of data.slice(1)) {
+    acc = (acc << 5) | v;
+    bits += 5;
+    while (bits >= 8) {
+      bits -= 8;
+      result.push((acc >> bits) & 0xff);
+    }
+  }
+
+  if (result.length !== 32) return null;
+  return result.map(b => b.toString(16).padStart(2, "0")).join("");
+}
 import { MobileWalletGuidance } from "@/components/bitcoin-wallet-selector";
 import { useIsMobileWithoutWallet } from "@/hooks/use-mobile-wallet-detect";
 import { useAegis } from "@/hooks/use-aegis";
@@ -84,7 +119,6 @@ export function DepositFlow() {
     merkleRoot: Uint8Array;
     controlBlock: Uint8Array;
     refundScript: Uint8Array;
-    amount: number;
   } | null>(null);
   const [qrGenerating, setQrGenerating] = useState(false);
   const [qrRegistered, setQrRegistered] = useState(false);
@@ -111,16 +145,18 @@ export function DepositFlow() {
   const generateQrDeposit = async () => {
     if (!resolvedMeta) return;
 
-    const amountSats = parseInt(walletDepositAmount);
-    if (!amountSats || amountSats < 546) {
-      notifyError("Amount must be at least 546 sats");
-      return;
+    // Parse refund input: accept tb1p... address or raw 64-char hex pubkey
+    let refundPubkey = qrRefundAddress.trim();
+    if (refundPubkey.toLowerCase().startsWith("tb1p") || refundPubkey.toLowerCase().startsWith("bcrt1p")) {
+      const decoded = decodeBech32mPubkey(refundPubkey);
+      if (!decoded) {
+        notifyError("Invalid Taproot address");
+        return;
+      }
+      refundPubkey = decoded;
     }
-
-    // Parse refund address to get x-only pubkey
-    const refundPubkey = qrRefundAddress.trim();
     if (!/^[0-9a-fA-F]{64}$/.test(refundPubkey)) {
-      notifyError("Enter your BTC x-only public key (64 hex chars)");
+      notifyError("Enter a BTC Taproot address (tb1p...) or x-only public key (64 hex chars)");
       return;
     }
 
@@ -152,14 +188,13 @@ export function DepositFlow() {
         merkleRoot: extDeposit.merkleRoot,
         controlBlock: extDeposit.controlBlock,
         refundScript: extDeposit.refundScript,
-        amount: amountSats,
       });
 
       // Register with backend
       registerDeposit(
         deposit.btcAddress,
         npkHex,
-        amountSats,
+        0,
         ephemeralPubHex,
       ).then(() => {
         setQrRegistered(true);
@@ -171,7 +206,7 @@ export function DepositFlow() {
       useNotesStore.getState().saveNote({
         commitment: ephemeralPubHex + npkHex,
         noteExport: "qr_deposit_pending",
-        amountSats,
+        amountSats: 0,
         taprootAddress: deposit.btcAddress,
         expiresAt: Math.floor(Date.now() / 1000) + 86400 * 30,
       });
@@ -550,31 +585,14 @@ export function DepositFlow() {
                 <>
                   {!qrDepositInfo ? (
                     <div className="mb-4">
-                      <label className="text-body2 text-gray-light pl-2 mb-2 block">Amount (satoshis)</label>
-                      <input
-                        type="number"
-                        value={walletDepositAmount}
-                        onChange={(e) => setWalletDepositAmount(e.target.value)}
-                        placeholder="10000"
-                        min="546"
-                        className={cn(
-                          "w-full p-3 bg-muted border border-gray/15 rounded-[12px] mb-1",
-                          "text-body2 font-mono text-foreground placeholder:text-gray",
-                          "outline-none focus:border-btc/40 transition-colors"
-                        )}
-                      />
-                      <p className="text-caption text-gray pl-2 mb-3">
-                        {walletDepositAmount ? `${(parseInt(walletDepositAmount) / 100_000_000).toFixed(8)} BTC` : ""}
-                      </p>
-
                       <label className="text-body2 text-gray-light pl-2 mb-2 block">
-                        BTC Refund Public Key (x-only, 64 hex chars)
+                        BTC Refund Address
                       </label>
                       <input
                         type="text"
                         value={qrRefundAddress}
                         onChange={(e) => setQrRefundAddress(e.target.value)}
-                        placeholder="e.g. a1b2c3d4...64 hex characters"
+                        placeholder="tb1p... or 64 hex chars"
                         className={cn(
                           "w-full p-3 bg-muted border border-gray/15 rounded-[12px] mb-3",
                           "text-body2 font-mono text-foreground placeholder:text-gray",
@@ -584,7 +602,7 @@ export function DepositFlow() {
 
                       <button
                         onClick={generateQrDeposit}
-                        disabled={qrGenerating || !walletDepositAmount || parseInt(walletDepositAmount) < 546}
+                        disabled={qrGenerating || !qrRefundAddress.trim()}
                         className={cn(
                           "w-full py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2",
                           "bg-btc hover:bg-btc/90 text-background",
@@ -607,20 +625,14 @@ export function DepositFlow() {
                   ) : (
                     <div className="mb-4 flex flex-col gap-3">
                       {/* QR Code */}
-                      <div className="flex flex-col items-center p-4 bg-white rounded-[12px]">
+                      <div className="flex flex-col items-center p-4 rounded-[12px]">
                         <QRCodeSVG
-                          value={`bitcoin:${qrDepositInfo.btcAddress}?amount=${(qrDepositInfo.amount / 1e8).toFixed(8)}`}
+                          value={`bitcoin:${qrDepositInfo.btcAddress}`}
                           size={200}
                           level="M"
+                          bgColor="transparent"
+                          fgColor="#f7931a"
                         />
-                      </div>
-
-                      {/* Instruction */}
-                      <div className="p-3 bg-btc/5 border border-btc/20 rounded-[12px] text-center">
-                        <p className="text-body2-semibold text-btc mb-1">
-                          Send exactly {(qrDepositInfo.amount / 1e8).toFixed(8)} BTC
-                        </p>
-                        <p className="text-caption text-gray">to this address</p>
                       </div>
 
                       {/* Address (copyable) */}

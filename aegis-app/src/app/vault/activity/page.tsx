@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { BalanceView } from "@/components/btc-widget/balance-view";
+import { BalanceView, useMyDepositCount } from "@/components/btc-widget/balance-view";
 import { useAegisKeys, useStealthInbox } from "@/hooks/use-aegis";
 import { usePasskey } from "@/hooks/use-passkey";
 import { useAegisStore } from "@/stores/aegis-store";
@@ -33,11 +33,11 @@ const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
 function TabBar({
   activeTab,
   onTabChange,
-  claimableCount,
+  counts,
 }: {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
-  claimableCount: number;
+  counts: Record<TabType, number>;
 }) {
   return (
     <div className="flex gap-1 p-1 bg-muted border border-gray/15 rounded-[12px]">
@@ -54,9 +54,9 @@ function TabBar({
         >
           {tab.icon}
           <span>{tab.label}</span>
-          {tab.id === "notes" && claimableCount > 0 && (
+          {counts[tab.id] > 0 && (
             <span className="min-w-[22px] h-[22px] px-2 flex items-center justify-center text-sm rounded-full bg-privacy text-background font-bold">
-              {claimableCount}
+              {counts[tab.id]}
             </span>
           )}
         </button>
@@ -200,6 +200,7 @@ function ActivityContent() {
 
   // Badge shows spendable notes only (exclude spent)
   const notesCount = notes.filter((n) => !n.isSpent).length;
+  const depositCount = useMyDepositCount();
 
   // Update URL when tab changes
   const handleTabChange = (tab: TabType) => {
@@ -223,7 +224,7 @@ function ActivityContent() {
         <TabBar
           activeTab={activeTab}
           onTabChange={handleTabChange}
-          claimableCount={notesCount}
+          counts={{ deposits: depositCount, notes: notesCount }}
         />
       </div>
 

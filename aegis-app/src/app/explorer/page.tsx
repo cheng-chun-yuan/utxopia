@@ -8,13 +8,14 @@ import {
   ArrowUpDown,
   ArrowUpFromLine,
   CheckCircle2,
-  ChevronDown,
   Clock,
   ExternalLink,
   Loader2,
   Search,
   Shield,
   RefreshCw,
+  Unlock,
+  Wallet,
   XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -223,22 +224,26 @@ const DEPOSIT_STATUS_CONFIG: Record<string, { label: string; color: string; bg: 
 };
 
 function DepositStatusBadge({ status }: { status: string | null }) {
-  if (!status) {
-    // Demo deposit — show "Minted" since it's already on-chain
-    return (
-      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-medium bg-green-500/10 border-green-500/20 text-green-400">
-        <CheckCircle2 className="w-3 h-3" />
-        Minted
-      </span>
-    );
-  }
-  const cfg = DEPOSIT_STATUS_CONFIG[status] ?? DEPOSIT_STATUS_CONFIG.pending;
-  const Icon = cfg.spinning ? Loader2 : (status === "failed" ? XCircle : status === "claimed" || status === "ready" ? CheckCircle2 : Clock);
+  const resolvedStatus = status ?? "claimed";
+  const cfg = DEPOSIT_STATUS_CONFIG[resolvedStatus] ?? DEPOSIT_STATUS_CONFIG.pending;
+  const Icon = cfg.spinning ? Loader2 : (resolvedStatus === "failed" ? XCircle : resolvedStatus === "claimed" || resolvedStatus === "ready" ? CheckCircle2 : Clock);
+
+  const subtitle = resolvedStatus === "claimed" || resolvedStatus === "ready"
+    ? "Complete"
+    : resolvedStatus === "failed"
+    ? "Error"
+    : "In progress";
+
   return (
-    <span className={cn("inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-medium", cfg.color, cfg.bg)}>
-      <Icon className={cn("w-3 h-3", cfg.spinning && "animate-spin")} />
-      {cfg.label}
-    </span>
+    <div className="flex items-center gap-1.5">
+      <div className={cn("p-1 rounded-[6px] border", cfg.bg)}>
+        <Icon className={cn("w-3 h-3", cfg.color, cfg.spinning && "animate-spin")} />
+      </div>
+      <div className="flex flex-col">
+        <span className={cn("text-[12px] font-semibold leading-tight", cfg.color)}>{cfg.label}</span>
+        <span className="text-[10px] text-gray leading-tight">{subtitle}</span>
+      </div>
+    </div>
   );
 }
 
@@ -261,18 +266,36 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
       title: "Deposit BTC to Reserve",
       done: stepOrder >= 1,
       active: stepOrder === 1,
-      detail: deposit.btcTxid ? (
-        <div className="flex items-center gap-1.5">
-          <a
-            href={`${getMempoolExplorerUrl()}/tx/${deposit.btcTxid}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[11px] text-btc/70 hover:text-btc flex items-center gap-1 transition-colors"
-          >
-            Deposit tx <ExternalLink className="w-2.5 h-2.5" />
-          </a>
-          <code className="text-[10px] font-mono text-gray">{truncate(deposit.btcTxid, 6, 4)}</code>
-          <CopyButton text={deposit.btcTxid} label="TX" variant="default" iconSize="sm" />
+      detail: (deposit.btcTxid || deposit.taprootAddress) ? (
+        <div className="space-y-1">
+          {deposit.btcTxid && (
+            <div className="flex items-center gap-1.5">
+              <a
+                href={`${getMempoolExplorerUrl()}/tx/${deposit.btcTxid}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-btc/70 hover:text-btc flex items-center gap-1 transition-colors"
+              >
+                Deposit tx <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+              <code className="text-[10px] font-mono text-gray">{truncate(deposit.btcTxid, 6, 4)}</code>
+              <CopyButton text={deposit.btcTxid} label="TX" variant="default" iconSize="sm" />
+            </div>
+          )}
+          {deposit.taprootAddress && (
+            <div className="flex items-center gap-1.5">
+              <a
+                href={`${getMempoolExplorerUrl()}/address/${deposit.taprootAddress}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-btc/70 hover:text-btc flex items-center gap-1 transition-colors"
+              >
+                Address <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+              <code className="text-[10px] font-mono text-gray">{truncate(deposit.taprootAddress, 8, 6)}</code>
+              <CopyButton text={deposit.taprootAddress} label="Address" variant="default" iconSize="sm" />
+            </div>
+          )}
         </div>
       ) : null,
     },
@@ -300,10 +323,27 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
       done: stepOrder >= 4,
       active: stepOrder === 4,
       detail: deposit.solanaTx ? (
-        <div className="flex items-center gap-1.5">
-          <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-400">
-            <CheckCircle2 className="w-2.5 h-2.5" /> SPV Confirmed
-          </span>
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-400">
+              <CheckCircle2 className="w-2.5 h-2.5" /> SPV Confirmed
+            </span>
+            <a
+              href={`https://explorer.solana.com/tx/${deposit.solanaTx}?cluster=devnet`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] text-sol/70 hover:text-sol flex items-center gap-1 transition-colors"
+            >
+              Solana tx <ExternalLink className="w-2.5 h-2.5" />
+            </a>
+          </div>
+          {deposit.commitment && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-gray">Commitment</span>
+              <code className="text-[10px] font-mono text-purple-400/70">{truncate(deposit.commitment, 8, 6)}</code>
+              <CopyButton text={deposit.commitment} label="Commitment" variant="default" iconSize="sm" />
+            </div>
+          )}
         </div>
       ) : null,
     },
@@ -311,7 +351,9 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
       title: "Mint zkBTC",
       done: stepOrder >= 5,
       active: false,
-      detail: null,
+      detail: deposit.mintedSats ? (
+        <span className="text-[10px] text-green-400 font-mono">{deposit.mintedSats.toLocaleString()} sats minted</span>
+      ) : null,
     },
   ];
 
@@ -378,10 +420,10 @@ function DepositsTab() {
         <span className="text-caption text-gray">{deposits.length} deposit(s)</span>
         <RefreshButton onClick={refresh} />
       </div>
-      <div className="overflow-x-auto rounded-[12px] border border-gray/15">
+      <div className="overflow-x-auto rounded-[12px] border border-gray/15 backdrop-blur-sm bg-muted/30">
         <table className="w-full min-w-[700px]">
           <thead>
-            <tr className="border-b border-gray/15">
+            <tr className="border-b border-gray/15 bg-muted/50">
               <Th>Status</Th>
               <Th>Tx ID</Th>
               <Th>Source</Th>
@@ -443,9 +485,6 @@ function DepositsTab() {
                     <Td>
                       <div className="flex items-center gap-1.5">
                         {d.txSignature && <SolanaLink signature={d.txSignature} />}
-                        {canExpand && (
-                          <ChevronDown className={cn("w-3.5 h-3.5 text-gray transition-transform", isOpen && "rotate-180")} />
-                        )}
                       </div>
                     </Td>
                   </tr>
@@ -493,11 +532,10 @@ function TransfersTab() {
         <span className="text-caption text-gray">{transfers.length} transaction(s)</span>
         <RefreshButton onClick={refresh} />
       </div>
-      <div className="overflow-x-auto rounded-[12px] border border-gray/15">
+      <div className="overflow-x-auto rounded-[12px] border border-gray/15 backdrop-blur-sm bg-muted/30">
         <table className="w-full min-w-[600px]">
           <thead>
-            <tr className="border-b border-gray/15">
-              <Th className="w-[40px]" />
+            <tr className="border-b border-gray/15 bg-muted/50">
               <Th>Type</Th>
               <Th>Tx ID</Th>
               <Th>Inputs</Th>
@@ -516,18 +554,37 @@ function TransfersTab() {
                     onClick={() => toggle(tx.txSignature)}
                   >
                     <Td>
-                      <ChevronDown
-                        className={cn(
-                          "w-4 h-4 text-gray transition-transform",
-                          isOpen && "rotate-180"
-                        )}
-                      />
-                    </Td>
-                    <Td>
-                      <div className="flex items-center gap-1.5">
-                        <Shield className="w-4 h-4 text-purple-400" />
-                        <span className="text-body2 text-foreground font-medium">Private Send</span>
-                      </div>
+                      {tx.instructionDisc === 16 ? (
+                        <div className="flex items-center gap-1.5">
+                          <div className="p-1 rounded-[6px] bg-btc/10 border border-btc/20">
+                            <BitcoinIcon className="w-3 h-3 text-btc" />
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-caption text-btc font-semibold leading-tight">Redeem</span>
+                            <span className="text-[10px] text-gray leading-tight">zkBTC → BTC</span>
+                          </div>
+                        </div>
+                      ) : tx.instructionDisc === 15 ? (
+                        <div className="flex items-center gap-1.5">
+                          <div className="p-1 rounded-[6px] bg-purple-500/10 border border-purple-500/20">
+                            <Unlock className="w-3 h-3 text-purple-400" />
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-caption text-purple-400 font-semibold leading-tight">Unshield</span>
+                            <span className="text-[10px] text-gray leading-tight">zkBTC → SPL</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <div className="p-1 rounded-[6px] bg-privacy/10 border border-privacy/20">
+                            <Shield className="w-3 h-3 text-privacy" />
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-caption text-privacy font-semibold leading-tight">Private Send</span>
+                            <span className="text-[10px] text-gray leading-tight">Shielded transfer</span>
+                          </div>
+                        </div>
+                      )}
                     </Td>
                     <Td>
                       <div className="flex items-center gap-1.5">
@@ -542,10 +599,17 @@ function TransfersTab() {
                       </span>
                     </Td>
                     <Td>
-                      <span className="inline-flex items-center gap-1 text-caption text-purple-400/80 bg-purple-500/6 border border-purple-500/15 px-2 py-0.5 rounded-full">
-                        <span className="font-mono">{tx.outputs.length}</span>
-                        <span className="hidden sm:inline">output{tx.outputs.length !== 1 ? "s" : ""}</span>
-                      </span>
+                      {tx.instructionDisc === 15 || tx.instructionDisc === 16 ? (
+                        <span className="inline-flex items-center gap-1 text-caption text-purple-400/80 bg-purple-500/6 border border-purple-500/15 px-2 py-0.5 rounded-full">
+                          <span className="font-mono">{1 + tx.outputs.length}</span>
+                          <span className="hidden sm:inline">output{tx.outputs.length > 0 ? "s" : ""}</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-caption text-purple-400/80 bg-purple-500/6 border border-purple-500/15 px-2 py-0.5 rounded-full">
+                          <span className="font-mono">{tx.outputs.length}</span>
+                          <span className="hidden sm:inline">output{tx.outputs.length !== 1 ? "s" : ""}</span>
+                        </span>
+                      )}
                     </Td>
                     <Td>
                       <span className="text-caption text-gray">{timeAgo(tx.timestamp)}</span>
@@ -556,72 +620,247 @@ function TransfersTab() {
                   </tr>
                   {isOpen && (
                     <tr>
-                      <td colSpan={7} className="p-0">
+                      <td colSpan={6} className="p-0">
                         <div className="mx-4 my-3 rounded-[10px] bg-linear-to-b from-gray/6 to-transparent border border-gray/10 overflow-hidden">
-                          <div className="grid grid-cols-2 divide-x divide-gray/10">
-                            {/* Inputs (Nullifiers) */}
-                            <div className="p-4 space-y-2.5">
-                              <div className="flex items-center gap-2 mb-3">
-                                <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                                <span className="text-caption text-green-400/90 font-semibold uppercase tracking-wider">
-                                  Inputs
-                                </span>
-                                <span className="text-caption text-green-400/60 font-medium">{tx.inputCount}</span>
-                              </div>
-                              {tx.nullifierPdas.length > 0 ? tx.nullifierPdas.map((pda, i) => (
-                                <div key={pda} className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-green-500/4 border border-green-500/10 hover:border-green-500/20 transition-colors">
-                                  <span className="text-[10px] text-green-400/60 font-mono font-semibold w-4 shrink-0">{i + 1}</span>
-                                  <code className="text-caption font-mono text-foreground/90 truncate">{truncate(pda, 8, 6)}</code>
-                                  <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
-                                    <CopyButton text={pda} label="Nullifier" variant="default" iconSize="sm" />
-                                    <a
-                                      href={`https://explorer.solana.com/address/${pda}?cluster=devnet`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-sol hover:text-sol/80 transition-colors p-0.5"
-                                    >
-                                      <ExternalLink className="w-3 h-3" />
-                                    </a>
-                                  </div>
-                                </div>
-                              )) : (
-                                <div className="flex items-center justify-center py-4 text-caption text-gray/40">
-                                  No nullifiers (deposit claim)
-                                </div>
-                              )}
-                            </div>
-                            {/* Outputs (Commitments) */}
-                            <div className="p-4 space-y-2.5">
-                              <div className="flex items-center gap-2 mb-3">
-                                <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
-                                <span className="text-caption text-purple-400/90 font-semibold uppercase tracking-wider">
-                                  Outputs
-                                </span>
-                                <span className="text-caption text-purple-400/60 font-medium">{tx.outputs.length}</span>
-                              </div>
-                              {tx.outputs.map((out, i) => (
-                                <div key={out.leafIndex} className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-purple-500/4 border border-purple-500/10 hover:border-purple-500/20 transition-colors">
-                                  <span className="text-[10px] text-purple-400/60 font-mono font-semibold w-4 shrink-0">{i + 1}</span>
-                                  <code className="text-caption font-mono text-foreground/90 truncate">{truncate(out.commitment, 8, 6)}</code>
-                                  <span className="text-[10px] text-gray/50 font-mono bg-gray/8 px-1.5 py-0.5 rounded shrink-0">
-                                    #{out.leafIndex}
+                          {tx.instructionDisc === 16 ? (
+                            /* Redeem: Inputs on left, Output (BTC amount + BTC address) on right */
+                            <div className="grid grid-cols-2 divide-x divide-gray/10">
+                              {/* Inputs (Nullifiers) */}
+                              <div className="p-4 space-y-2.5">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                                  <span className="text-caption text-green-400/90 font-semibold uppercase tracking-wider">
+                                    Inputs
                                   </span>
-                                  <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
-                                    <CopyButton text={out.commitment} label="Commitment" variant="default" iconSize="sm" />
-                                    <a
-                                      href={`https://explorer.solana.com/tx/${tx.txSignature}?cluster=devnet`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-sol hover:text-sol/80 transition-colors p-0.5"
-                                      title="View transaction"
-                                    >
-                                      <ExternalLink className="w-3 h-3" />
-                                    </a>
-                                  </div>
+                                  <span className="text-caption text-green-400/60 font-medium">{tx.inputCount}</span>
                                 </div>
-                              ))}
+                                {tx.nullifierPdas.map((pda, i) => (
+                                  <div key={pda} className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-green-500/4 border border-green-500/10 hover:border-green-500/20 transition-colors">
+                                    <span className="text-[10px] text-green-400/60 font-mono font-semibold w-4 shrink-0">{i + 1}</span>
+                                    <code className="text-caption font-mono text-foreground/90 truncate">{truncate(pda, 8, 6)}</code>
+                                    <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                                      <CopyButton text={pda} label="Nullifier" variant="default" iconSize="sm" />
+                                      <a
+                                        href={`https://explorer.solana.com/address/${pda}?cluster=devnet`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-sol hover:text-sol/80 transition-colors p-0.5"
+                                      >
+                                        <ExternalLink className="w-3 h-3" />
+                                      </a>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              {/* Outputs — BTC redemption */}
+                              <div className="p-4 space-y-2.5">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-btc" />
+                                  <span className="text-caption text-btc/90 font-semibold uppercase tracking-wider">
+                                    Outputs
+                                  </span>
+                                  <span className="text-caption text-btc/60 font-medium">{1 + tx.outputs.length}</span>
+                                </div>
+                                <div className="px-3 py-2.5 rounded-[8px] bg-btc/4 border border-btc/10 space-y-2">
+                                  {/* Amount */}
+                                  <div className="flex items-center gap-2">
+                                    <BitcoinIcon className="w-3.5 h-3.5 text-btc shrink-0" />
+                                    {tx.unshieldAmount ? (
+                                      <span className="text-body2 text-foreground font-mono font-semibold">
+                                        {tx.unshieldAmount.toLocaleString()} <span className="text-gray text-caption">sats</span>
+                                        <span className="text-[10px] text-gray/60 ml-1.5">({(tx.unshieldAmount / 1e8).toFixed(8)} BTC)</span>
+                                      </span>
+                                    ) : (
+                                      <span className="text-caption text-gray/40">Amount pending re-index</span>
+                                    )}
+                                  </div>
+                                  {/* BTC Destination */}
+                                  {tx.unshieldRecipient ? (
+                                    <div className="group flex items-center gap-2">
+                                      <BitcoinIcon className="w-3.5 h-3.5 text-btc/50 shrink-0" />
+                                      <code className="text-caption font-mono text-foreground/80 truncate">{truncate(tx.unshieldRecipient, 10, 6)}</code>
+                                      <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                                        <CopyButton text={tx.unshieldRecipient} label="BTC Address" variant="default" iconSize="sm" />
+                                        <a
+                                          href={`${getMempoolExplorerUrl()}/address/${tx.unshieldRecipient}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-btc hover:text-btc/80 transition-colors p-0.5"
+                                        >
+                                          <ExternalLink className="w-3 h-3" />
+                                        </a>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <BitcoinIcon className="w-3.5 h-3.5 text-gray/30 shrink-0" />
+                                      <span className="text-caption text-gray/40">BTC address pending re-index</span>
+                                    </div>
+                                  )}
+                                </div>
+                                {/* Shielded outputs (change) */}
+                                {tx.outputs.map((out, i) => (
+                                  <div key={out.leafIndex} className="group flex items-center gap-2 px-3 py-1.5 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-gray/15 transition-colors">
+                                    <span className="text-[10px] text-gray/40 font-mono w-4 shrink-0">{i + 2}</span>
+                                    <code className="text-[11px] font-mono text-foreground/60 truncate">{truncate(out.commitment, 8, 6)}</code>
+                                    <span className="text-[10px] text-gray/40 font-mono bg-gray/6 px-1 py-0.5 rounded shrink-0">#{out.leafIndex}</span>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
-                          </div>
+                          ) : tx.instructionDisc === 15 ? (
+                            /* Unshield: Inputs on left, Output (amount + recipient) on right */
+                            <div className="grid grid-cols-2 divide-x divide-gray/10">
+                              {/* Inputs (Nullifiers) */}
+                              <div className="p-4 space-y-2.5">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                                  <span className="text-caption text-green-400/90 font-semibold uppercase tracking-wider">
+                                    Inputs
+                                  </span>
+                                  <span className="text-caption text-green-400/60 font-medium">{tx.inputCount}</span>
+                                </div>
+                                {tx.nullifierPdas.map((pda, i) => (
+                                  <div key={pda} className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-green-500/4 border border-green-500/10 hover:border-green-500/20 transition-colors">
+                                    <span className="text-[10px] text-green-400/60 font-mono font-semibold w-4 shrink-0">{i + 1}</span>
+                                    <code className="text-caption font-mono text-foreground/90 truncate">{truncate(pda, 8, 6)}</code>
+                                    <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                                      <CopyButton text={pda} label="Nullifier" variant="default" iconSize="sm" />
+                                      <a
+                                        href={`https://explorer.solana.com/address/${pda}?cluster=devnet`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-sol hover:text-sol/80 transition-colors p-0.5"
+                                      >
+                                        <ExternalLink className="w-3 h-3" />
+                                      </a>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              {/* Outputs — single output showing amount + recipient */}
+                              <div className="p-4 space-y-2.5">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                                  <span className="text-caption text-purple-400/90 font-semibold uppercase tracking-wider">
+                                    Outputs
+                                  </span>
+                                  <span className="text-caption text-purple-400/60 font-medium">{1 + tx.outputs.length}</span>
+                                </div>
+                                <div className="px-3 py-2.5 rounded-[8px] bg-purple-500/4 border border-purple-500/10 space-y-2">
+                                  {/* Amount */}
+                                  <div className="flex items-center gap-2">
+                                    <Image src="/zkbtc.png" alt="zkBTC" width={14} height={14} className="rounded-full shrink-0" />
+                                    {tx.unshieldAmount ? (
+                                      <span className="text-body2 text-foreground font-mono font-semibold">
+                                        {tx.unshieldAmount.toLocaleString()} <span className="text-gray text-caption">sats</span>
+                                        <span className="text-[10px] text-gray/60 ml-1.5">({(tx.unshieldAmount / 1e8).toFixed(8)} BTC)</span>
+                                      </span>
+                                    ) : (
+                                      <span className="text-caption text-gray/40">Amount pending re-index</span>
+                                    )}
+                                  </div>
+                                  {/* Recipient */}
+                                  {tx.unshieldRecipient ? (
+                                    <div className="group flex items-center gap-2">
+                                      <Wallet className="w-3.5 h-3.5 text-sol/50 shrink-0" />
+                                      <code className="text-caption font-mono text-foreground/80 truncate">{truncate(tx.unshieldRecipient, 8, 6)}</code>
+                                      <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                                        <CopyButton text={tx.unshieldRecipient} label="Address" variant="default" iconSize="sm" />
+                                        <a
+                                          href={`https://explorer.solana.com/address/${tx.unshieldRecipient}?cluster=devnet`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-sol hover:text-sol/80 transition-colors p-0.5"
+                                        >
+                                          <ExternalLink className="w-3 h-3" />
+                                        </a>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <Wallet className="w-3.5 h-3.5 text-gray/30 shrink-0" />
+                                      <span className="text-caption text-gray/40">Recipient pending re-index</span>
+                                    </div>
+                                  )}
+                                </div>
+                                {/* Shielded outputs */}
+                                {tx.outputs.map((out, i) => (
+                                  <div key={out.leafIndex} className="group flex items-center gap-2 px-3 py-1.5 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-gray/15 transition-colors">
+                                    <span className="text-[10px] text-gray/40 font-mono w-4 shrink-0">{i + 2}</span>
+                                    <code className="text-[11px] font-mono text-foreground/60 truncate">{truncate(out.commitment, 8, 6)}</code>
+                                    <span className="text-[10px] text-gray/40 font-mono bg-gray/6 px-1 py-0.5 rounded shrink-0">#{out.leafIndex}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            /* Standard transfer: inputs/outputs */
+                            <div className="grid grid-cols-2 divide-x divide-gray/10">
+                              {/* Inputs (Nullifiers) */}
+                              <div className="p-4 space-y-2.5">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                                  <span className="text-caption text-green-400/90 font-semibold uppercase tracking-wider">
+                                    Inputs
+                                  </span>
+                                  <span className="text-caption text-green-400/60 font-medium">{tx.inputCount}</span>
+                                </div>
+                                {tx.nullifierPdas.length > 0 ? tx.nullifierPdas.map((pda, i) => (
+                                  <div key={pda} className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-green-500/4 border border-green-500/10 hover:border-green-500/20 transition-colors">
+                                    <span className="text-[10px] text-green-400/60 font-mono font-semibold w-4 shrink-0">{i + 1}</span>
+                                    <code className="text-caption font-mono text-foreground/90 truncate">{truncate(pda, 8, 6)}</code>
+                                    <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                                      <CopyButton text={pda} label="Nullifier" variant="default" iconSize="sm" />
+                                      <a
+                                        href={`https://explorer.solana.com/address/${pda}?cluster=devnet`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-sol hover:text-sol/80 transition-colors p-0.5"
+                                      >
+                                        <ExternalLink className="w-3 h-3" />
+                                      </a>
+                                    </div>
+                                  </div>
+                                )) : (
+                                  <div className="flex items-center justify-center py-4 text-caption text-gray/40">
+                                    No nullifiers (deposit claim)
+                                  </div>
+                                )}
+                              </div>
+                              {/* Outputs (Commitments) */}
+                              <div className="p-4 space-y-2.5">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                                  <span className="text-caption text-purple-400/90 font-semibold uppercase tracking-wider">
+                                    Outputs
+                                  </span>
+                                  <span className="text-caption text-purple-400/60 font-medium">{tx.outputs.length}</span>
+                                </div>
+                                {tx.outputs.map((out, i) => (
+                                  <div key={out.leafIndex} className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-purple-500/4 border border-purple-500/10 hover:border-purple-500/20 transition-colors">
+                                    <span className="text-[10px] text-purple-400/60 font-mono font-semibold w-4 shrink-0">{i + 1}</span>
+                                    <code className="text-caption font-mono text-foreground/90 truncate">{truncate(out.commitment, 8, 6)}</code>
+                                    <span className="text-[10px] text-gray/50 font-mono bg-gray/8 px-1.5 py-0.5 rounded shrink-0">
+                                      #{out.leafIndex}
+                                    </span>
+                                    <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                                      <CopyButton text={out.commitment} label="Commitment" variant="default" iconSize="sm" />
+                                      <a
+                                        href={`https://explorer.solana.com/tx/${tx.txSignature}?cluster=devnet`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-sol hover:text-sol/80 transition-colors p-0.5"
+                                        title="View transaction"
+                                      >
+                                        <ExternalLink className="w-3 h-3" />
+                                      </a>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -640,14 +879,185 @@ function TransfersTab() {
 // Withdrawals Tab
 // =============================================================================
 
-const STATUS_STYLES: Record<string, { bg: string; text: string }> = {
-  Pending: { bg: "bg-orange-500/10 border-orange-500/20", text: "text-orange-400" },
-  Processing: { bg: "bg-blue-500/10 border-blue-500/20", text: "text-blue-400" },
-  Failed: { bg: "bg-red-500/10 border-red-500/20", text: "text-red-400" },
+const WITHDRAWAL_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; spinning?: boolean }> = {
+  Pending: { label: "Pending", color: "text-orange-400", bg: "bg-orange-500/10 border-orange-500/20" },
+  Processing: { label: "Processing", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20", spinning: true },
+  Failed: { label: "Failed", color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" },
 };
+
+function WithdrawalStatusBadge({ status }: { status: string }) {
+  const cfg = WITHDRAWAL_STATUS_CONFIG[status] ?? WITHDRAWAL_STATUS_CONFIG.Pending;
+  const Icon = cfg.spinning ? Loader2 : (status === "Failed" ? XCircle : status === "Pending" ? Clock : CheckCircle2);
+  const subtitle = status === "Failed" ? "Error" : status === "Pending" ? "Awaiting" : "In progress";
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className={cn("p-1 rounded-[6px] border", cfg.bg)}>
+        <Icon className={cn("w-3 h-3", cfg.color, cfg.spinning && "animate-spin")} />
+      </div>
+      <div className="flex flex-col">
+        <span className={cn("text-[12px] font-semibold leading-tight", cfg.color)}>{cfg.label}</span>
+        <span className="text-[10px] text-gray leading-tight">{subtitle}</span>
+      </div>
+    </div>
+  );
+}
+
+// Withdrawal lifecycle step order based on localStatus/status
+const WITHDRAWAL_STATUS_ORDER: Record<string, number> = {
+  Pending: 0,
+  pending: 0,
+  processing: 1,
+  Processing: 1,
+  sending: 2,
+  sent: 3,
+  confirming: 3,
+  completed: 4,
+  Failed: -1,
+  failed: -1,
+};
+
+import type { RedemptionRecord } from "@/hooks/use-explorer";
+
+function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
+  const status = redemption.localStatus ?? redemption.status ?? "Pending";
+  const stepOrder = WITHDRAWAL_STATUS_ORDER[status] ?? 0;
+  const isFailed = stepOrder === -1;
+  const btcAddr = redemption.btcScript ? scriptToAddress(redemption.btcScript) : null;
+
+  const steps = [
+    {
+      title: "Request Redemption",
+      done: !isFailed && stepOrder >= 0,
+      active: stepOrder === 0 && !isFailed,
+      detail: (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5">
+            <a
+              href={`https://explorer.solana.com/address/${redemption.pubkey}?cluster=devnet`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] text-sol/70 hover:text-sol flex items-center gap-1 transition-colors"
+            >
+              Request PDA <ExternalLink className="w-2.5 h-2.5" />
+            </a>
+            <code className="text-[10px] font-mono text-gray">{truncate(redemption.pubkey, 6, 4)}</code>
+            <CopyButton text={redemption.pubkey} label="PDA" variant="default" iconSize="sm" />
+          </div>
+          {btcAddr && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-gray">Destination</span>
+              <code className="text-[10px] font-mono text-btc/70">{truncate(btcAddr, 8, 6)}</code>
+              <CopyButton text={btcAddr} label="BTC Address" variant="default" iconSize="sm" />
+            </div>
+          )}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] text-gray">Amount</span>
+            <span className="text-[10px] font-mono text-foreground">{Number(redemption.amountSats).toLocaleString()} sats</span>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: "Mark Processing",
+      done: !isFailed && stepOrder >= 1,
+      active: stepOrder === 1 && !isFailed,
+      detail: !isFailed && stepOrder >= 1 ? (
+        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400">
+          <CheckCircle2 className="w-2.5 h-2.5" /> Backend picked up
+        </span>
+      ) : null,
+    },
+    {
+      title: "BTC Send (FROST Sign)",
+      done: !isFailed && stepOrder >= 3,
+      active: stepOrder === 2 && !isFailed,
+      detail: redemption.btcTxid ? (
+        <div className="flex items-center gap-1.5">
+          <a
+            href={`${getMempoolExplorerUrl()}/tx/${redemption.btcTxid}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[11px] text-btc/70 hover:text-btc flex items-center gap-1 transition-colors"
+          >
+            BTC tx <ExternalLink className="w-2.5 h-2.5" />
+          </a>
+          <code className="text-[10px] font-mono text-gray">{truncate(redemption.btcTxid, 6, 4)}</code>
+          <CopyButton text={redemption.btcTxid} label="BTC TX" variant="default" iconSize="sm" />
+        </div>
+      ) : null,
+    },
+    {
+      title: "Complete & Burn",
+      done: !isFailed && stepOrder >= 4,
+      active: false,
+      detail: !isFailed && stepOrder >= 4 ? (
+        <span className="text-[10px] text-green-400 font-mono">Redemption completed on-chain</span>
+      ) : null,
+    },
+  ];
+
+  return (
+    <div className="mx-4 my-3 px-4 py-3 rounded-[10px] bg-linear-to-b from-gray/6 to-transparent border border-gray/10 space-y-1">
+      {isFailed && (
+        <div className="mb-2 px-3 py-1.5 rounded-[8px] bg-red-500/10 border border-red-500/20">
+          <div className="flex items-center gap-1.5">
+            <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+            <span className="text-[11px] text-red-400 font-medium">
+              {redemption.trackerError ?? "Withdrawal failed"}
+            </span>
+          </div>
+          {redemption.retryCount > 0 && (
+            <span className="text-[10px] text-red-400/60 ml-5">Retry count: {redemption.retryCount}</span>
+          )}
+        </div>
+      )}
+      {steps.map((step, i) => (
+        <div key={step.title} className="flex gap-2.5">
+          <div className="flex flex-col items-center">
+            <div className={cn(
+              "w-5 h-5 rounded-full flex items-center justify-center shrink-0",
+              step.done ? "bg-green-500/20" : step.active ? "bg-btc/20" : "bg-gray/10"
+            )}>
+              {step.done ? (
+                <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
+              ) : step.active ? (
+                <Loader2 className="w-3 h-3 text-btc animate-spin" />
+              ) : (
+                <Clock className="w-2.5 h-2.5 text-gray/40" />
+              )}
+            </div>
+            {i < steps.length - 1 && (
+              <div className={cn("w-px flex-1 min-h-[12px]", step.done ? "bg-green-500/30" : "bg-gray/10")} />
+            )}
+          </div>
+          <div className={cn("pb-2 flex-1", i === steps.length - 1 && "pb-0")}>
+            <p className={cn(
+              "text-[11px] font-medium",
+              step.done ? "text-foreground" : step.active ? "text-foreground" : "text-gray/40"
+            )}>{step.title}</p>
+            {step.detail && (step.done || step.active) && (
+              <div className="mt-1">{step.detail}</div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function WithdrawalsTab() {
   const { redemptions, isLoading, error, refresh } = useRedemptions();
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggle = useCallback((key: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
   if (error) return <ErrorState message={error} onRetry={refresh} />;
   if (isLoading) return <LoadingState />;
@@ -659,85 +1069,86 @@ function WithdrawalsTab() {
         <span className="text-caption text-gray">{redemptions.length} withdrawal(s)</span>
         <RefreshButton onClick={refresh} />
       </div>
-      <div className="overflow-x-auto rounded-[12px] border border-gray/15">
+      <div className="overflow-x-auto rounded-[12px] border border-gray/15 backdrop-blur-sm bg-muted/30">
         <table className="w-full min-w-[600px]">
           <thead>
-            <tr className="border-b border-gray/15">
-              <Th>Type</Th>
+            <tr className="border-b border-gray/15 bg-muted/50">
               <Th>Status</Th>
               <Th>Destination</Th>
               <Th>Amount</Th>
               <Th>Requester</Th>
+              <Th>Time</Th>
               <Th className="w-[40px]" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray/10">
             {redemptions.map((r) => {
-              const statusStyle = STATUS_STYLES[r.status] ?? STATUS_STYLES.Pending;
               const btcAddr = r.btcScript ? scriptToAddress(r.btcScript) : null;
               const isBtcWithdraw = !!r.btcScript;
+              const isOpen = expanded.has(r.pubkey);
               return (
-                <tr key={r.pubkey} className="hover:bg-gray/5 transition-colors">
-                  <Td>
-                    {isBtcWithdraw ? (
+                <Fragment key={r.pubkey}>
+                  <tr
+                    className="hover:bg-gray/5 transition-colors cursor-pointer"
+                    onClick={() => toggle(r.pubkey)}
+                  >
+                    <Td>
+                      <WithdrawalStatusBadge status={r.status} />
+                    </Td>
+                    <Td>
                       <div className="flex items-center gap-1.5">
-                        <BitcoinIcon className="w-4 h-4 text-btc" />
-                        <span className="text-body2 text-foreground font-medium">Bitcoin Withdraw</span>
+                        {isBtcWithdraw ? (
+                          <BitcoinIcon className="w-4 h-4 text-btc" />
+                        ) : (
+                          <Shield className="w-4 h-4 text-sol" />
+                        )}
+                        {btcAddr ? (
+                          <>
+                            <code className="text-caption font-mono text-foreground">{truncate(btcAddr, 8, 6)}</code>
+                            <CopyButton text={btcAddr} label="BTC Address" variant="default" iconSize="sm" />
+                          </>
+                        ) : (
+                          <span className="text-caption text-gray">—</span>
+                        )}
                       </div>
-                    ) : (
+                    </Td>
+                    <Td>
                       <div className="flex items-center gap-1.5">
-                        <Shield className="w-4 h-4 text-sol" />
-                        <span className="text-body2 text-foreground font-medium">Solana Withdraw</span>
+                        <BitcoinIcon className="w-3.5 h-3.5 text-btc" />
+                        <span className="text-body2 text-foreground font-mono">
+                          {(Number(r.amountSats) / 1e8).toFixed(8)}
+                        </span>
                       </div>
-                    )}
-                  </Td>
-                  <Td>
-                    <span className={cn("inline-flex items-center px-2.5 py-0.5 rounded-full text-caption border font-medium", statusStyle.bg, statusStyle.text)}>
-                      {r.status}
-                    </span>
-                  </Td>
-                  <Td>
-                    <div className="flex items-center gap-1.5">
-                      {isBtcWithdraw ? (
-                        <BitcoinIcon className="w-4 h-4 text-btc" />
-                      ) : (
-                        <Shield className="w-4 h-4 text-sol" />
-                      )}
-                      {btcAddr ? (
-                        <>
-                          <code className="text-caption font-mono text-foreground">{truncate(btcAddr, 8, 6)}</code>
-                          <CopyButton text={btcAddr} label="BTC Address" variant="default" iconSize="sm" />
-                        </>
-                      ) : (
-                        <span className="text-caption text-gray">—</span>
-                      )}
-                    </div>
-                  </Td>
-                  <Td>
-                    <div className="flex items-center gap-1.5">
-                      <BitcoinIcon className="w-3.5 h-3.5 text-btc" />
-                      <span className="text-body2 text-foreground font-mono">
-                        {(Number(r.amountSats) / 1e8).toFixed(8)}
-                      </span>
-                    </div>
-                  </Td>
-                  <Td>
-                    <div className="flex items-center gap-1.5">
-                      <code className="text-caption font-mono text-foreground">{truncate(r.requester, 6, 4)}</code>
-                      <CopyButton text={r.requester} label="Requester" variant="default" iconSize="sm" />
-                    </div>
-                  </Td>
-                  <Td>
-                    <a
-                      href={`https://explorer.solana.com/address/${r.pubkey}?cluster=devnet`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sol hover:text-sol/80 transition-colors"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  </Td>
-                </tr>
+                    </Td>
+                    <Td>
+                      <div className="flex items-center gap-1.5">
+                        <code className="text-caption font-mono text-foreground">{truncate(r.requester, 6, 4)}</code>
+                        <CopyButton text={r.requester} label="Requester" variant="default" iconSize="sm" />
+                      </div>
+                    </Td>
+                    <Td>
+                      <span className="text-caption text-gray">{timeAgo(r.createdAt)}</span>
+                    </Td>
+                    <Td>
+                      <a
+                        href={`https://explorer.solana.com/address/${r.pubkey}?cluster=devnet`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sol hover:text-sol/80 transition-colors"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    </Td>
+                  </tr>
+                  {isOpen && (
+                    <tr>
+                      <td colSpan={6} className="p-0">
+                        <WithdrawalDetails redemption={r} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               );
             })}
           </tbody>
@@ -751,6 +1162,18 @@ function WithdrawalsTab() {
 // Main Page
 // =============================================================================
 
+function StatCard({ label, value, icon, color }: { label: string; value: string | number; icon: React.ReactNode; color: string }) {
+  return (
+    <div className={cn("flex items-center gap-3 px-4 py-3 rounded-[12px] border backdrop-blur-sm", color)}>
+      <div className="shrink-0">{icon}</div>
+      <div>
+        <p className="text-heading6 text-foreground font-mono">{value}</p>
+        <p className="text-caption text-gray">{label}</p>
+      </div>
+    </div>
+  );
+}
+
 function ExplorerContent() {
   const [activeTab, setActiveTab] = useState<TabType>("deposits");
   const { deposits } = useDeposits();
@@ -763,8 +1186,38 @@ function ExplorerContent() {
     withdrawals: redemptions.length,
   };
 
+  const totalShielded = deposits.reduce((sum, d) => sum + (d.amountSats || 0), 0);
+
   return (
     <>
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <StatCard
+          label="Deposits"
+          value={counts.deposits}
+          icon={<ArrowDownToLine className="w-4 h-4 text-green-400" />}
+          color="bg-green-500/5 border-green-500/15"
+        />
+        <StatCard
+          label="Transfers"
+          value={counts.transfers}
+          icon={<ArrowUpDown className="w-4 h-4 text-purple-400" />}
+          color="bg-purple-500/5 border-purple-500/15"
+        />
+        <StatCard
+          label="Withdrawals"
+          value={counts.withdrawals}
+          icon={<ArrowUpFromLine className="w-4 h-4 text-orange-400" />}
+          color="bg-orange-500/5 border-orange-500/15"
+        />
+        <StatCard
+          label="Total Shielded"
+          value={`${(totalShielded / 1e8).toFixed(4)}`}
+          icon={<BitcoinIcon className="w-4 h-4 text-btc" />}
+          color="bg-btc/5 border-btc/15"
+        />
+      </div>
+
       <div className="mb-4">
         <TabBar activeTab={activeTab} onTabChange={setActiveTab} counts={counts} />
       </div>
@@ -797,8 +1250,8 @@ export default function ExplorerPage() {
         </header>
 
         {/* Title */}
-        <div className="mb-6 flex items-center gap-3">
-          <div className="p-2 rounded-[10px] bg-privacy/10 border border-privacy/20">
+        <div className="mb-8 flex items-center gap-3">
+          <div className="p-2.5 rounded-[12px] bg-linear-to-br from-privacy/15 to-purple-500/10 border border-privacy/20">
             <Search className="w-5 h-5 text-privacy" />
           </div>
           <div>
