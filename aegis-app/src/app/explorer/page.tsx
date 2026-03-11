@@ -436,14 +436,15 @@ function DepositsTab() {
           </thead>
           <tbody className="divide-y divide-gray/10">
             {deposits.map((d) => {
-              const isOpen = expanded.has(d.commitment);
+              const depositKey = d.commitment || d.btcTxid || d.taprootAddress || d.txSignature || `idx-${d.leafIndex}`;
+              const isOpen = expanded.has(depositKey);
               const canExpand = !d.isDemo;
 
               return (
-                <Fragment key={d.commitment}>
+                <Fragment key={depositKey}>
                   <tr
                     className={cn("hover:bg-gray/5 transition-colors", canExpand && "cursor-pointer")}
-                    onClick={() => canExpand && toggle(d.commitment)}
+                    onClick={() => canExpand && toggle(depositKey)}
                   >
                     <Td>
                       <div className="flex items-center gap-1.5">
@@ -456,10 +457,20 @@ function DepositsTab() {
                       </div>
                     </Td>
                     <Td>
-                      <div className="flex items-center gap-1.5">
-                        <code className="text-caption font-mono text-foreground">{truncate(d.txSignature, 6, 4)}</code>
-                        <CopyButton text={d.txSignature} label="Tx" variant="default" iconSize="sm" />
-                      </div>
+                      {d.txSignature ? (
+                        <div className="flex items-center gap-1.5">
+                          <code className="text-caption font-mono text-foreground">{truncate(d.txSignature, 6, 4)}</code>
+                          <CopyButton text={d.txSignature} label="Tx" variant="default" iconSize="sm" />
+                        </div>
+                      ) : d.btcTxid ? (
+                        <div className="flex items-center gap-1.5">
+                          <BitcoinIcon className="w-3 h-3 text-btc/60" />
+                          <code className="text-caption font-mono text-foreground">{truncate(d.btcTxid, 6, 4)}</code>
+                          <CopyButton text={d.btcTxid} label="BTC Tx" variant="default" iconSize="sm" />
+                        </div>
+                      ) : (
+                        <span className="text-caption text-gray">Pending...</span>
+                      )}
                     </Td>
                     <Td>
                       <span className="inline-flex items-center gap-1.5 text-caption text-btc/90 bg-btc/6 border border-btc/15 px-2 py-0.5 rounded-full font-medium">
@@ -477,7 +488,11 @@ function DepositsTab() {
                       <span className="text-body2 text-foreground font-mono">{d.amountSats.toLocaleString()} <span className="text-gray text-caption">sats</span></span>
                     </Td>
                     <Td>
-                      <span className="text-caption text-foreground font-mono">#{d.leafIndex}</span>
+                      {d.leafIndex >= 0 ? (
+                        <span className="text-caption text-foreground font-mono">#{d.leafIndex}</span>
+                      ) : (
+                        <span className="text-caption text-gray">—</span>
+                      )}
                     </Td>
                     <Td>
                       <span className="text-caption text-gray">{timeAgo(d.timestamp)}</span>
@@ -914,6 +929,7 @@ const WITHDRAWAL_STATUS_ORDER: Record<string, number> = {
   sent: 3,
   confirming: 3,
   completed: 4,
+  Completed: 4,
   Failed: -1,
   failed: -1,
 };

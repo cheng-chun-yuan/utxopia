@@ -131,11 +131,13 @@ export async function GET() {
 
     // Filter deposits (type=0) and join with tracker + timestamps
     // Timestamp priority: block_time (RPC) > created_at (on-chain Clock) > tracker.created_at
+    const matchedTrackerSolTxs = new Set<string>();
     const deposits: ExplorerDeposit[] = announcements
       .filter((a) => a.announcement_type === 0)
       .map((a) => {
         // Match tracker by solana_tx only (leaf_index can collide after tree reset)
         const tracker = trackerBySolTx.get(a.tx_signature);
+        if (tracker) matchedTrackerSolTxs.add(a.tx_signature);
         // A deposit is demo if there's no tracker AND it's not SPV-verified.
         const isDemo = !tracker && !a.is_verified;
         const leafTime = leafTimestamps.get(a.leaf_index) ?? 0;
@@ -165,8 +167,36 @@ export async function GET() {
           isDemo,
           btcDepositAmountSats: tracker?.amount_sats ?? a.btc_deposit_amount_sats ?? null,
         };
-      })
-      .sort((a, b) => b.leafIndex - a.leafIndex);
+      });
+
+    // Add tracker-only deposits (ongoing: detected, confirming, sweeping, etc.)
+    // These don't have on-chain announcements yet since they haven't been verified on Solana.
+    for (const tracker of trackerDeposits) {
+      if (tracker.solana_tx && matchedTrackerSolTxs.has(tracker.solana_tx)) continue;
+      deposits.push({
+        txSignature: tracker.solana_tx ?? "",
+        commitment: "",
+        amountSats: tracker.amount_sats ?? 0,
+        leafIndex: tracker.leaf_index ?? -1,
+        timestamp: tracker.created_at ?? 0,
+        slot: 0,
+        ephemeralPub: tracker.ephemeral_pub,
+        status: tracker.status,
+        btcTxid: tracker.btc_txid ?? null,
+        sweepTxid: tracker.sweep_txid ?? null,
+        solanaTx: tracker.solana_tx ?? null,
+        confirmations: tracker.confirmations ?? 0,
+        sweepConfirmations: tracker.sweep_confirmations ?? 0,
+        sweepFeeSats: tracker.sweep_fee_sats ?? null,
+        mintedSats: tracker.minted_sats ?? null,
+        taprootAddress: tracker.taproot_address ?? null,
+        trackerError: tracker.error ?? null,
+        isDemo: false,
+        btcDepositAmountSats: tracker.amount_sats ?? null,
+      });
+    }
+
+    deposits.sort((a, b) => b.leafIndex - a.leafIndex);
 
     return NextResponse.json({ success: true, deposits, count: deposits.length });
   } catch (err) {
