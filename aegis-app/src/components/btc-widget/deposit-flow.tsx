@@ -190,17 +190,23 @@ export function DepositFlow() {
         refundScript: extDeposit.refundScript,
       });
 
-      // Register with backend
-      registerDeposit(
-        deposit.btcAddress,
-        npkHex,
-        0,
-        ephemeralPubHex,
-      ).then(() => {
-        setQrRegistered(true);
-      }).catch((err) => {
-        console.warn("Failed to register QR deposit:", err);
-      });
+      // Register with backend (retry up to 3 times with exponential backoff)
+      (async () => {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            await registerDeposit(deposit.btcAddress, npkHex, 0, ephemeralPubHex);
+            setQrRegistered(true);
+            return;
+          } catch (err) {
+            if (attempt < 2) {
+              await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+            } else {
+              console.error("Failed to register QR deposit after 3 attempts:", err);
+              notifyError("Failed to register deposit with backend. Your deposit may not be tracked automatically.");
+            }
+          }
+        }
+      })();
 
       // Save refund data locally
       useNotesStore.getState().saveNote({
@@ -370,21 +376,32 @@ export function DepositFlow() {
         expiresAt: Math.floor(Date.now() / 1000) + 86400 * 30, // 30 days
       });
 
-      // Register with backend tracker and save depositId
+      // Register with backend tracker and save depositId (retry up to 3 times)
       const ephemeralPubHex = opReturnHex.slice(0, 64); // first 32 bytes
       const npkHex = opReturnHex.slice(64); // second 32 bytes
-      registerDeposit(
-        depositPreview.depositAddress,
-        npkHex,
-        depositPreview.depositAmountSats,
-        ephemeralPubHex,
-      ).then((res) => {
-        if (res.deposit_id) {
-          useNotesStore.getState().updateNote(opReturnHex, { depositId: res.deposit_id });
+      (async () => {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const res = await registerDeposit(
+              depositPreview.depositAddress,
+              npkHex,
+              depositPreview.depositAmountSats,
+              ephemeralPubHex,
+            );
+            if (res.deposit_id) {
+              useNotesStore.getState().updateNote(opReturnHex, { depositId: res.deposit_id });
+            }
+            return;
+          } catch (err) {
+            if (attempt < 2) {
+              await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+            } else {
+              console.error("Failed to register deposit after 3 attempts:", err);
+              notifyError("Failed to register deposit with backend. Your deposit may not be tracked automatically.");
+            }
+          }
         }
-      }).catch((err) => {
-        console.warn("Failed to register deposit with tracker:", err);
-      });
+      })();
 
       setWalletDepositResult({
         txid,

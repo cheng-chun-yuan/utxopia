@@ -253,6 +253,19 @@ impl AddressWatcher {
         })
     }
 
+    /// Get unconfirmed (mempool) transactions for an address
+    pub async fn get_address_mempool_txs(&self, address: &str) -> Result<Vec<EsploraTxFull>, WatcherError> {
+        let url = format!("{}/address/{}/txs/mempool", self.base_url, address);
+        let resp = self.client.get(&url).send().await?;
+
+        if !resp.status().is_success() {
+            return Ok(Vec::new());
+        }
+
+        let txs: Vec<EsploraTxFull> = resp.json().await?;
+        Ok(txs)
+    }
+
     /// Get block hash at a given height
     pub async fn get_block_hash(&self, height: u64) -> Result<String, WatcherError> {
         let url = format!("{}/block-height/{}", self.base_url, height);

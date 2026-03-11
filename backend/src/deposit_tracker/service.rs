@@ -279,6 +279,33 @@ impl DepositTrackerService {
         Ok(recovered)
     }
 
+    /// Startup recovery: check all pending deposits with no txid for missed BTC arrivals
+    async fn recover_pending_deposits(&self) {
+        let pending = match self.db.get_by_status(DepositStatus::Pending) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("[startup] Failed to load pending deposits: {}", e);
+                return;
+            }
+        };
+
+        let needs_check: Vec<_> = pending.into_iter()
+            .filter(|r| r.deposit_txid.is_none())
+            .collect();
+
+        if needs_check.is_empty() {
+            return;
+        }
+
+        println!("[startup] Checking {} pending deposits for missed BTC...", needs_check.len());
+
+        for record in &needs_check {
+            if let Err(e) = self.check_and_update_confirmations(&record.taproot_address).await {
+                eprintln!("[startup] Error checking {}: {}", record.id, e);
+            }
+        }
+    }
+
     /// Determine the appropriate status to resume from based on deposit progress
     fn determine_resume_status(&self, record: &DepositRecord) -> DepositStatus {
         if record.sweep_txid.is_some() {
@@ -374,16 +401,27 @@ impl DepositTrackerService {
 
         let tip_height = self.watcher.get_tip_height().await?;
 
-        // Initialize last_scanned_height to tip on first run (don't scan entire chain)
+        // Initialize last_scanned_height: load from DB, fall back to tip-10
         let last = self.last_scanned_height.load(Ordering::Relaxed);
         if last == 0 {
-            // On first run, scan the last 10 blocks to catch recent deposits
-            let start = tip_height.saturating_sub(10);
-            self.last_scanned_height.store(start, Ordering::Relaxed);
-            println!(
-                "[block-scan] First run, scanning from block {} to {}",
-                start, tip_height
-            );
+            if let Ok(Some(stored)) = self.db.get_metadata("last_scanned_height") {
+                if let Ok(h) = stored.parse::<u64>() {
+                    self.last_scanned_height.store(h, Ordering::Relaxed);
+                    println!(
+                        "[block-scan] Resumed from persisted height {}, tip is {}",
+                        h, tip_height
+                    );
+                }
+            }
+            // If still 0 (no DB value), use tip-10
+            if self.last_scanned_height.load(Ordering::Relaxed) == 0 {
+                let start = tip_height.saturating_sub(10);
+                self.last_scanned_height.store(start, Ordering::Relaxed);
+                println!(
+                    "[block-scan] First run, scanning from block {} to {}",
+                    start, tip_height
+                );
+            }
         }
 
         let scan_from = self.last_scanned_height.load(Ordering::Relaxed) + 1;
@@ -408,6 +446,8 @@ impl DepositTrackerService {
             total_detected += detected;
 
             self.last_scanned_height.store(height, Ordering::Relaxed);
+            // Persist to DB so restarts don't re-scan from tip-10
+            let _ = self.db.set_metadata("last_scanned_height", &height.to_string());
         }
 
         if total_detected > 0 {
@@ -690,6 +730,9 @@ impl DepositTrackerService {
         // Recover any interrupted deposits
         self.recover_in_progress_deposits()?;
 
+        // Startup recovery: check pending deposits that may have received BTC while offline
+        self.recover_pending_deposits().await;
+
         // Backfill sweep fees for older deposits missing fee data
         self.backfill_sweep_fees().await;
 
@@ -871,8 +914,41 @@ impl DepositTrackerService {
         Ok(())
     }
 
-    /// Check address for deposits and update confirmation count
+    /// Check address for deposits and update confirmation count.
+    /// For pending deposits with no txid, also checks mempool for unconfirmed txs.
     async fn check_and_update_confirmations(&self, address: &str) -> Result<(), TrackerError> {
+        let mut record = self.db.get_by_address(address)?
+            .ok_or_else(|| TrackerError::NotFound(address.to_string()))?;
+
+        // If no deposit txid yet, check mempool first for early detection
+        if record.deposit_txid.is_none() {
+            match self.watcher.get_address_mempool_txs(address).await {
+                Ok(mempool_txs) => {
+                    for tx in &mempool_txs {
+                        // Find the output paying to this address
+                        for (vout_idx, vout) in tx.vout.iter().enumerate() {
+                            if vout.scriptpubkey_address.as_deref() == Some(address) {
+                                record.mark_detected(tx.txid.clone(), vout_idx as u32);
+                                record.amount_sats = vout.value;
+                                self.db.update(&record)?;
+                                println!(
+                                    "[{}] Deposit detected in mempool: {} ({} sats)",
+                                    record.id, tx.txid, vout.value
+                                );
+                                break;
+                            }
+                        }
+                        if record.deposit_txid.is_some() {
+                            break;
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[{}] Mempool check failed: {}", record.id, e);
+                }
+            }
+        }
+
         let addr_status = self.watcher.check_address(address).await?;
 
         if addr_status.utxos.is_empty() {
@@ -881,6 +957,7 @@ impl DepositTrackerService {
 
         let utxo = addr_status.utxos[0].clone();
 
+        // Re-read record in case mempool check updated it
         let mut record = self.db.get_by_address(address)?
             .ok_or_else(|| TrackerError::NotFound(address.to_string()))?;
 

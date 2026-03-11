@@ -143,6 +143,32 @@ impl SqliteDepositStore {
             ).ok();
         }
 
+        // Metadata table for persisting service state (e.g. last_scanned_height)
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);"
+        )?;
+
+        Ok(())
+    }
+
+    /// Get a metadata value by key
+    pub fn get_metadata(&self, key: &str) -> Result<Option<String>, SqliteError> {
+        let conn = self.conn()?;
+        let value = conn.query_row(
+            "SELECT value FROM metadata WHERE key = ?1",
+            params![key],
+            |row| row.get(0),
+        ).optional()?;
+        Ok(value)
+    }
+
+    /// Set a metadata key-value pair (upsert)
+    pub fn set_metadata(&self, key: &str, value: &str) -> Result<(), SqliteError> {
+        let conn = self.conn()?;
+        conn.execute(
+            "INSERT INTO metadata (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = ?2",
+            params![key, value],
+        )?;
         Ok(())
     }
 
