@@ -374,8 +374,10 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   ]);
 
   const isPurePrivateSend = !outputs.some(o => o.mode === "btc" || o.mode === "public");
-  const effectiveRelayerFee = relayerMeta?.relayerFeeSats ?? RELAYER_FEE_SATS;
-  const effectiveServiceFee = relayerMeta?.serviceFeeSats ?? SERVICE_FEE_SATS;
+  // Use 0 until relayer meta is fetched to avoid flash from default → actual value
+  const relayerMetaLoaded = relayerMeta !== null;
+  const effectiveRelayerFee = relayerMeta?.relayerFeeSats ?? 0;
+  const effectiveServiceFee = relayerMeta?.serviceFeeSats ?? 0;
 
   // Available unspent notes
   const availableNotes = useMemo(() => {
@@ -565,6 +567,8 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 
   const validationErrors = useMemo(() => {
     const errors: string[] = [];
+    if (!relayerMetaLoaded) errors.push("Loading fee configuration...");
+
     // For public redeem, no shielded notes needed
     const hasBtcOut = outputs.some(o => o.mode === "btc");
     const canPublicRedeem = hasBtcOut && selectedNotes.length === 0 && !hasImportedNotes && publicZkbtcBalance > 0n;
@@ -1666,7 +1670,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                     </div>
                     <div className="flex justify-between items-center text-caption mb-1 ml-5">
                       <span className="text-gray/80">You receive</span>
-                      <span className="text-btc font-medium">~{Math.max(0, userReceives - 2000).toLocaleString()}-{Math.max(0, userReceives).toLocaleString()} sats</span>
+                      <span className="text-btc font-medium">~{Math.max(0, userReceives - 3000).toLocaleString()}-{Math.max(0, userReceives - 1000).toLocaleString()} sats</span>
                     </div>
                   </>
                 );
@@ -1689,7 +1693,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                 Relayer fee (shielded note → relayer)
               </span>
               <span className="text-gray/60">
-                {(relayerMeta?.relayerFeeSats ?? RELAYER_FEE_SATS).toLocaleString()} sats
+                {relayerMetaLoaded ? effectiveRelayerFee.toLocaleString() : "..."} sats
               </span>
             </div>
           )}
