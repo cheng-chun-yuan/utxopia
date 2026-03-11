@@ -68,7 +68,17 @@ pub fn process_mark_processing(
 
         // Record the slot for timeout tracking
         let clock = Clock::get()?;
-        redemption.set_processing_slot(clock.slot as u32);
+        let slot = clock.slot as u32;
+        redemption.set_processing_slot(slot);
+
+        // Emit processing event
+        let requester: &[u8; 32] = &redemption.requester;
+        crate::utils::events::emit_redemption_processing(
+            requester,
+            redemption.amount_sats(),
+            redemption.request_id(),
+            slot,
+        );
     }
 
     Ok(())

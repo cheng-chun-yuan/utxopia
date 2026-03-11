@@ -178,6 +178,10 @@ pub fn event_indexer_router_with_deposits(store: Arc<EventStore>, tree_cache: Ar
         .route("/api/transfers", get(get_transfers))
         // Redemption tracking (reads from persistent JSON file)
         .route("/api/redemption/tracking", get(get_redemption_tracking))
+        // Completed redemptions (from on-chain events, backend-independent)
+        .route("/api/redemption/completed", get(get_completed_redemptions))
+        // Requested redemptions (from on-chain events 0x08)
+        .route("/api/redemption/requested", get(get_requested_redemptions))
         // Global
         .route("/api/sync", post(post_sync_all))
         .route("/api/reset", post(post_reset_all))
@@ -604,6 +608,56 @@ async fn handle_events_socket(socket: WebSocket, tree_cache: Arc<TreeCache>) {
 // =============================================================================
 // Redemption Tracking (reads from persistent JSON file)
 // =============================================================================
+
+/// GET /api/redemption/completed — completed redemptions from on-chain events (no backend dependency)
+async fn get_completed_redemptions(
+    State(state): State<IndexerAppState>,
+) -> Json<serde_json::Value> {
+    match state.store.get_completed_redemptions() {
+        Ok(rows) => {
+            let count = rows.len();
+            Json(serde_json::json!({
+                "success": true,
+                "redemptions": rows,
+                "count": count,
+            }))
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to query completed redemptions");
+            Json(serde_json::json!({
+                "success": false,
+                "redemptions": [],
+                "count": 0,
+                "error": e,
+            }))
+        }
+    }
+}
+
+/// GET /api/redemption/requested — requested redemptions from on-chain events (0x08)
+async fn get_requested_redemptions(
+    State(state): State<IndexerAppState>,
+) -> Json<serde_json::Value> {
+    match state.store.get_requested_redemptions() {
+        Ok(rows) => {
+            let count = rows.len();
+            Json(serde_json::json!({
+                "success": true,
+                "redemptions": rows,
+                "count": count,
+            }))
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "Failed to query requested redemptions");
+            Json(serde_json::json!({
+                "success": false,
+                "redemptions": [],
+                "count": 0,
+                "error": e,
+            }))
+        }
+    }
+}
 
 /// GET /api/redemption/tracking — expose local redemption tracking state
 ///

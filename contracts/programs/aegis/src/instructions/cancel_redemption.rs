@@ -109,14 +109,29 @@ pub fn process_cancel_redemption(
 
     // Compute new commitment and insert into Merkle tree
     let commitment = compute_deposit_commitment(&ix_data.npk, amount_sats)?;
-    {
+    let leaf_index = {
         let mut tree_data = commitment_tree_info.try_borrow_mut_data()?;
         let tree = CommitmentTree::from_bytes_mut(&mut tree_data)?;
-        tree.insert_leaf(&commitment)?;
+        tree.insert_leaf(&commitment)?
+    };
+
+    // Emit leaf inserted + stealth announcement for the re-minted commitment
+    let clock = Clock::get()?;
+    crate::utils::events::emit_leaf_inserted(&commitment, clock.unix_timestamp);
+    {
+        // For cancel_redemption, use zero ephemeral_pub (self-transfer, no stealth needed)
+        let zero_ephemeral = [0u8; 32];
+        let amount_bytes = amount_sats.to_le_bytes();
+        crate::utils::events::emit_stealth_announcement(
+            crate::utils::events::ANNOUNCEMENT_TYPE_DEPOSIT,
+            &zero_ephemeral,
+            &amount_bytes,
+            &commitment,
+            leaf_index as u32,
+        );
     }
 
     // Unlock funds in pool state
-    let clock = Clock::get()?;
     {
         let mut pool_data = pool_state_info.try_borrow_mut_data()?;
         let pool = PoolState::from_bytes_mut(&mut pool_data)?;

@@ -5,7 +5,7 @@ use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
 use std::path::Path;
 
-use super::parser::{LeafInsertedEvent, NullifierSpentEvent, StealthAnnouncementEvent};
+use super::parser::{LeafInsertedEvent, NullifierSpentEvent, RedemptionCompletedEvent, RedemptionRequestedEvent, StealthAnnouncementEvent};
 
 /// SQLite-backed event store
 pub struct EventStore {
@@ -84,6 +84,31 @@ pub struct AnnouncementRow {
     /// Original BTC deposit amount in sats (from mempool, before sweep fee)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub btc_deposit_amount_sats: Option<i64>,
+}
+
+/// A completed redemption row (from on-chain event 0x07)
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RedemptionCompletedRow {
+    pub requester: String,     // base58
+    pub amount_sats: i64,
+    pub request_id: i64,
+    pub btc_txid: String,      // display hex (reversed)
+    pub btc_script: String,    // hex
+    pub tx_signature: String,  // Solana tx sig
+    pub slot: i64,
+    pub block_time: i64,
+}
+
+/// A requested redemption row (from on-chain event 0x08)
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RedemptionRequestedRow {
+    pub requester: String,     // base58
+    pub amount_sats: i64,
+    pub request_id: i64,
+    pub btc_script: String,    // hex
+    pub tx_signature: String,  // Solana tx sig
+    pub slot: i64,
+    pub block_time: i64,
 }
 
 impl EventStore {
@@ -190,6 +215,34 @@ impl EventStore {
             "ALTER TABLE stealth_announcements ADD COLUMN btc_deposit_amount_sats INTEGER",
         );
 
+        // Redemption completed events table
+        let _ = conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS redemption_completed_events (
+                request_id INTEGER PRIMARY KEY,
+                requester TEXT NOT NULL,
+                amount_sats INTEGER NOT NULL,
+                btc_txid TEXT NOT NULL,
+                btc_script BLOB NOT NULL,
+                tx_signature TEXT NOT NULL,
+                slot INTEGER NOT NULL,
+                block_time INTEGER NOT NULL DEFAULT 0
+            )",
+        );
+
+        // Redemption requested events table
+        let _ = conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS redemption_requested_events (
+                request_id INTEGER NOT NULL,
+                requester TEXT NOT NULL,
+                amount_sats INTEGER NOT NULL,
+                btc_script BLOB NOT NULL,
+                tx_signature TEXT NOT NULL,
+                slot INTEGER NOT NULL,
+                block_time INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (requester, request_id)
+            )",
+        );
+
         // Add instruction_disc column to nullifier_events (Aegis instruction discriminator)
         let _ = conn.execute_batch(
             "ALTER TABLE nullifier_events ADD COLUMN instruction_disc INTEGER",
@@ -267,6 +320,130 @@ impl EventStore {
             Ok(n) => Ok(n > 0),
             Err(e) => Err(format!("insert nullifier error: {}", e)),
         }
+    }
+
+    /// Insert a redemption completed event. Returns true if inserted, false if duplicate.
+    pub fn insert_redemption_completed(
+        &self,
+        event: &RedemptionCompletedEvent,
+        tx_signature: &str,
+        slot: i64,
+        block_time: i64,
+    ) -> Result<bool, String> {
+        let conn = self.conn()?;
+        // requester: base58, btc_txid: display hex (reversed)
+        let requester = bs58::encode(&event.requester).into_string();
+        let mut txid_display = event.btc_txid;
+        txid_display.reverse();
+        let btc_txid = hex::encode(txid_display);
+
+        let result = conn.execute(
+            "INSERT OR IGNORE INTO redemption_completed_events (request_id, requester, amount_sats, btc_txid, btc_script, tx_signature, slot, block_time)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                event.request_id as i64,
+                requester,
+                event.amount_sats as i64,
+                btc_txid,
+                event.btc_script.as_slice(),
+                tx_signature,
+                slot,
+                block_time,
+            ],
+        );
+        match result {
+            Ok(n) => Ok(n > 0),
+            Err(e) => Err(format!("insert redemption_completed error: {}", e)),
+        }
+    }
+
+    /// Get all completed redemptions from on-chain events.
+    pub fn get_completed_redemptions(&self) -> Result<Vec<RedemptionCompletedRow>, String> {
+        let conn = self.conn()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT requester, amount_sats, request_id, btc_txid, btc_script, tx_signature, slot, block_time
+                 FROM redemption_completed_events ORDER BY block_time DESC",
+            )
+            .map_err(|e| format!("query error: {}", e))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                let btc_script_blob: Vec<u8> = row.get(4)?;
+                Ok(RedemptionCompletedRow {
+                    requester: row.get(0)?,
+                    amount_sats: row.get(1)?,
+                    request_id: row.get(2)?,
+                    btc_txid: row.get(3)?,
+                    btc_script: hex::encode(btc_script_blob),
+                    tx_signature: row.get(5)?,
+                    slot: row.get(6)?,
+                    block_time: row.get(7)?,
+                })
+            })
+            .map_err(|e| format!("query error: {}", e))?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("row error: {}", e))
+    }
+
+    /// Insert a redemption requested event. Returns true if inserted, false if duplicate.
+    pub fn insert_redemption_requested(
+        &self,
+        event: &RedemptionRequestedEvent,
+        tx_signature: &str,
+        slot: i64,
+        block_time: i64,
+    ) -> Result<bool, String> {
+        let conn = self.conn()?;
+        let requester = bs58::encode(&event.requester).into_string();
+
+        let result = conn.execute(
+            "INSERT OR IGNORE INTO redemption_requested_events (request_id, requester, amount_sats, btc_script, tx_signature, slot, block_time)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                event.request_id as i64,
+                requester,
+                event.amount_sats as i64,
+                event.btc_script.as_slice(),
+                tx_signature,
+                slot,
+                block_time,
+            ],
+        );
+        match result {
+            Ok(n) => Ok(n > 0),
+            Err(e) => Err(format!("insert redemption_requested error: {}", e)),
+        }
+    }
+
+    /// Get all requested redemptions from on-chain events.
+    pub fn get_requested_redemptions(&self) -> Result<Vec<RedemptionRequestedRow>, String> {
+        let conn = self.conn()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT requester, amount_sats, request_id, btc_script, tx_signature, slot, block_time
+                 FROM redemption_requested_events ORDER BY block_time DESC",
+            )
+            .map_err(|e| format!("query error: {}", e))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                let btc_script_blob: Vec<u8> = row.get(3)?;
+                Ok(RedemptionRequestedRow {
+                    requester: row.get(0)?,
+                    amount_sats: row.get(1)?,
+                    request_id: row.get(2)?,
+                    btc_script: hex::encode(btc_script_blob),
+                    tx_signature: row.get(4)?,
+                    slot: row.get(5)?,
+                    block_time: row.get(6)?,
+                })
+            })
+            .map_err(|e| format!("query error: {}", e))?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("row error: {}", e))
     }
 
     /// Get all leaves, optionally filtered by leaf_index > since.
@@ -537,6 +714,7 @@ impl EventStore {
             "DELETE FROM leaf_events;
              DELETE FROM nullifier_events;
              DELETE FROM stealth_announcements;
+             DELETE FROM redemption_requested_events;
              DELETE FROM indexer_state;"
         )
         .map_err(|e| format!("clear error: {}", e))?;

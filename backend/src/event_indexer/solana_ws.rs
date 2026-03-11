@@ -174,6 +174,10 @@ impl SolanaWsSubscriber {
                 ProgramEvent::LeafInserted(e) => leaf_events.push(e),
                 ProgramEvent::StealthAnnouncement(e) => announcements.push(e),
                 ProgramEvent::NullifierSpent(e) => nullifiers.push(e),
+                ProgramEvent::RedemptionCompleted(_) => {} // handled by batch indexer
+                ProgramEvent::RedemptionRequested(_) => {} // handled by batch indexer
+                ProgramEvent::PoolPaused(_) => {} // handled by batch indexer
+                ProgramEvent::RedemptionProcessing(_) => {} // handled by batch indexer
             }
         }
 

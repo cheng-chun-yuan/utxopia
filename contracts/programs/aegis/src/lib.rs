@@ -229,7 +229,10 @@ fn process_set_paused(
         }
 
         pool.set_paused(paused);
-        pool.set_last_update(Clock::get()?.unix_timestamp);
+        let ts = Clock::get()?.unix_timestamp;
+        pool.set_last_update(ts);
+
+        crate::utils::events::emit_pool_paused(paused, ts);
     }
 
     Ok(())

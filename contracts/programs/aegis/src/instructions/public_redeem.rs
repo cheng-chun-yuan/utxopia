@@ -177,6 +177,14 @@ pub fn process_public_redeem(
         redemption.set_status(RedemptionStatus::Pending);
     }
 
+    // Emit redemption requested event
+    crate::utils::events::emit_redemption_requested(
+        user.key().as_ref().try_into().unwrap(),
+        amount_sats,
+        request_nonce,
+        btc_script,
+    );
+
     // Update pool state: add_burned (these are already-public tokens), increment pending_redemptions
     {
         let mut pool_data = pool_state_info.try_borrow_mut_data()?;

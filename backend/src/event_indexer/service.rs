@@ -227,12 +227,27 @@ impl EventIndexerService {
         let mut leaf_events = Vec::new();
         let mut announcements = Vec::new();
         let mut nullifiers = Vec::new();
+        let mut redemption_completions = Vec::new();
+        let mut redemption_requests = Vec::new();
 
         for event in events {
             match event {
                 ProgramEvent::LeafInserted(e) => leaf_events.push(e),
                 ProgramEvent::StealthAnnouncement(e) => announcements.push(e),
                 ProgramEvent::NullifierSpent(e) => nullifiers.push(e),
+                ProgramEvent::RedemptionCompleted(e) => redemption_completions.push(e),
+                ProgramEvent::RedemptionRequested(e) => redemption_requests.push(e),
+                ProgramEvent::PoolPaused(e) => {
+                    tracing::info!(is_paused = e.is_paused, timestamp = e.timestamp, "Pool paused/unpaused event");
+                }
+                ProgramEvent::RedemptionProcessing(e) => {
+                    tracing::info!(
+                        request_id = e.request_id,
+                        amount_sats = e.amount_sats,
+                        processing_slot = e.processing_slot,
+                        "Redemption processing event"
+                    );
+                }
             }
         }
 
@@ -279,6 +294,28 @@ impl EventIndexerService {
                 }
             }
             tracing::debug!(nullifier = hex::encode(&null.nullifier_hash[..8]), disc = ?instruction_disc, "Indexed nullifier");
+        }
+
+        // Handle redemption completions
+        for rc in &redemption_completions {
+            let inserted = self.store.insert_redemption_completed(rc, signature, slot, block_time)?;
+            tracing::info!(
+                request_id = rc.request_id,
+                amount_sats = rc.amount_sats,
+                inserted,
+                "Indexed redemption completion"
+            );
+        }
+
+        // Handle redemption requests
+        for rr in &redemption_requests {
+            let inserted = self.store.insert_redemption_requested(rr, signature, slot, block_time)?;
+            tracing::info!(
+                request_id = rr.request_id,
+                amount_sats = rr.amount_sats,
+                inserted,
+                "Indexed redemption request"
+            );
         }
 
         Ok(())

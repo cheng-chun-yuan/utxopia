@@ -1,8 +1,11 @@
 /**
  * GET /api/explorer/redemptions
  *
- * Server-side join of on-chain RedemptionRequest PDAs + backend tracking data.
- * Returns enriched redemption records with BTC txids, timestamps, and error info.
+ * Server-side join of:
+ * 1. On-chain RedemptionRequest PDAs (active: Pending/Processing/Failed)
+ * 2. Backend tracking data (enrichment: BTC txids, status, errors)
+ * 3. On-chain completion events via /api/redemption/completed (completed redemptions
+ *    whose PDAs are closed — reconstructed purely from indexed on-chain events)
  */
 
 import { NextResponse } from "next/server";
@@ -28,6 +31,31 @@ interface TrackingEntry {
   created_at: number;
   last_updated: number;
   error: string | null;
+  requester: string | null;
+  amount_sats: number | null;
+  btc_script: string | null;
+  request_id: number | null;
+}
+
+interface CompletedEntry {
+  requester: string;
+  amount_sats: number;
+  request_id: number;
+  btc_txid: string;
+  btc_script: string;
+  tx_signature: string;
+  slot: number;
+  block_time: number;
+}
+
+interface RequestedEntry {
+  requester: string;
+  amount_sats: number;
+  request_id: number;
+  btc_script: string;
+  tx_signature: string;
+  slot: number;
+  block_time: number;
 }
 
 function createServerRpc(): RpcClient {
@@ -66,13 +94,15 @@ function createServerRpc(): RpcClient {
 
 export async function GET() {
   try {
-    // Fetch on-chain PDAs and backend tracking data in parallel
-    const [redemptions, trackingResp] = await Promise.all([
+    // Fetch all 3 sources in parallel
+    const [redemptions, trackingResp, completedResp, requestedResp] = await Promise.all([
       fetchExplorerRedemptions(
         createServerRpc(),
         DEVNET_CONFIG.aegisProgramId,
       ),
       fetch(`${BACKEND_URL}/api/redemption/tracking`).catch(() => null),
+      fetch(`${BACKEND_URL}/api/redemption/completed`).catch(() => null),
+      fetch(`${BACKEND_URL}/api/redemption/requested`).catch(() => null),
     ]);
 
     // Parse tracking data (keyed by PDA address)
@@ -86,6 +116,28 @@ export async function GET() {
         }
       } catch {
         // Ignore parse errors — tracking data is optional enrichment
+      }
+    }
+
+    // Parse completed redemptions from on-chain events (backend-independent source)
+    let completedEntries: CompletedEntry[] = [];
+    if (completedResp?.ok) {
+      try {
+        const completedData = await completedResp.json();
+        completedEntries = completedData.redemptions ?? [];
+      } catch {
+        // Ignore parse errors
+      }
+    }
+
+    // Parse requested redemptions from on-chain events (fallback for missing PDAs)
+    let requestedEntries: RequestedEntry[] = [];
+    if (requestedResp?.ok) {
+      try {
+        const requestedData = await requestedResp.json();
+        requestedEntries = requestedData.redemptions ?? [];
+      } catch {
+        // Ignore parse errors
       }
     }
 
@@ -117,7 +169,7 @@ export async function GET() {
       );
     }
 
-    // Join PDA data with tracking data
+    // Join PDA data with tracking data (active redemptions)
     const serialized = redemptions.map((r) => {
       const tracking = trackingMap.get(r.pubkey);
       const trackingTime = tracking?.created_at ?? 0;
@@ -129,7 +181,6 @@ export async function GET() {
         status: r.status,
         requester: r.requester,
         btcScript: r.btcScript,
-        // Enriched from backend tracking
         btcTxid: tracking?.btc_txid ?? null,
         localStatus: tracking?.local_status ?? null,
         createdAt: trackingTime || slotTime,
@@ -138,6 +189,48 @@ export async function GET() {
         trackerError: tracking?.error ?? null,
       };
     });
+
+    // Add completed redemptions from on-chain events (PDAs are closed, data from indexed events)
+    const activeRequestIds = new Set(redemptions.map((r) => r.requestId.toString()));
+    for (const c of completedEntries) {
+      if (activeRequestIds.has(c.request_id.toString())) continue; // still has PDA, skip
+      serialized.push({
+        pubkey: "", // PDA is closed
+        requestId: c.request_id.toString(),
+        amountSats: c.amount_sats.toString(),
+        status: "Completed",
+        requester: c.requester,
+        btcScript: c.btc_script,
+        btcTxid: c.btc_txid,
+        localStatus: "Completed",
+        createdAt: c.block_time,
+        updatedAt: c.block_time,
+        retryCount: 0,
+        trackerError: null,
+      });
+    }
+
+    // Add requested redemptions from on-chain events for any that don't have
+    // a PDA or completed entry (e.g., PDA closed by cancel but event exists)
+    const knownRequestIds = new Set(serialized.map((r) => r.requestId));
+    for (const req of requestedEntries) {
+      const rid = req.request_id.toString();
+      if (knownRequestIds.has(rid)) continue; // already present
+      serialized.push({
+        pubkey: "",
+        requestId: rid,
+        amountSats: req.amount_sats.toString(),
+        status: "Cancelled", // PDA gone + not completed = cancelled
+        requester: req.requester,
+        btcScript: req.btc_script,
+        btcTxid: null,
+        localStatus: "Cancelled",
+        createdAt: req.block_time,
+        updatedAt: req.block_time,
+        retryCount: 0,
+        trackerError: null,
+      });
+    }
 
     return NextResponse.json({
       success: true,

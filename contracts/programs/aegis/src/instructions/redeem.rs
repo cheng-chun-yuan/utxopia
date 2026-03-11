@@ -425,6 +425,14 @@ pub fn process_redeem(
         }
     }
 
+    // Emit redemption requested event
+    crate::utils::events::emit_redemption_requested(
+        user.key().as_ref().try_into().unwrap(),
+        redeem_amount,
+        request_nonce,
+        btc_script,
+    );
+
     // Update pool state: decrement total_shielded, increment pending_redemptions
     {
         let mut pool_data = pool_state_info.try_borrow_mut_data()?;

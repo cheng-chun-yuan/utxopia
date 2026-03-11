@@ -29,6 +29,18 @@ const EVENT_POOL_UPDATE_EXECUTED: u8 = 0x05;
 /// Event discriminator: pool update cancelled (timelock)
 const EVENT_POOL_UPDATE_CANCELLED: u8 = 0x06;
 
+/// Event discriminator: redemption completed (PDA about to close)
+const EVENT_REDEMPTION_COMPLETED: u8 = 0x07;
+
+/// Event discriminator: redemption requested (PDA created)
+const EVENT_REDEMPTION_REQUESTED: u8 = 0x08;
+
+/// Event discriminator: pool paused/unpaused
+const EVENT_POOL_PAUSED: u8 = 0x09;
+
+/// Event discriminator: redemption marked as processing
+const EVENT_REDEMPTION_PROCESSING: u8 = 0x0A;
+
 /// Emit when a commitment is inserted into the Merkle tree.
 ///
 /// Layout: disc(1) + commitment(32) + created_at(8) = 41 bytes
@@ -97,10 +109,70 @@ pub fn emit_pool_update_executed(min_deposit: u64, max_deposit: u64, service_fee
     sol_log_data(&[&disc, &min, &max, &fee]);
 }
 
+/// Emit when a redemption is completed (before PDA is closed).
+///
+/// Layout: disc(1) + requester(32) + amount_sats(8) + request_id(8) + btc_txid(32) + btc_script_len(1) + btc_script(var)
+/// = 82 + btc_script_len bytes
+pub fn emit_redemption_completed(
+    requester: &[u8; 32],
+    amount_sats: u64,
+    request_id: u64,
+    btc_txid: &[u8; 32],
+    btc_script: &[u8],
+) {
+    let disc = [EVENT_REDEMPTION_COMPLETED];
+    let amt = amount_sats.to_le_bytes();
+    let rid = request_id.to_le_bytes();
+    let script_len = [btc_script.len() as u8];
+    sol_log_data(&[&disc, requester, &amt, &rid, btc_txid, &script_len, btc_script]);
+}
+
 /// Emit when a pool update proposal is cancelled.
 ///
 /// Layout: disc(1) = 1 byte
 pub fn emit_pool_update_cancelled() {
     let disc = [EVENT_POOL_UPDATE_CANCELLED];
     sol_log_data(&[&disc]);
+}
+
+/// Emit when a redemption request is created (PDA initialized).
+///
+/// Layout: disc(1) + requester(32) + amount_sats(8) + request_id(8) + btc_script_len(1) + btc_script(var)
+pub fn emit_redemption_requested(
+    requester: &[u8; 32],
+    amount_sats: u64,
+    request_id: u64,
+    btc_script: &[u8],
+) {
+    let disc = [EVENT_REDEMPTION_REQUESTED];
+    let amt = amount_sats.to_le_bytes();
+    let rid = request_id.to_le_bytes();
+    let script_len = [btc_script.len() as u8];
+    sol_log_data(&[&disc, requester, &amt, &rid, &script_len, btc_script]);
+}
+
+/// Emit when the pool is paused or unpaused.
+///
+/// Layout: disc(1) + is_paused(1) + timestamp(8)
+pub fn emit_pool_paused(is_paused: bool, timestamp: i64) {
+    let disc = [EVENT_POOL_PAUSED];
+    let paused = [is_paused as u8];
+    let ts = timestamp.to_le_bytes();
+    sol_log_data(&[&disc, &paused, &ts]);
+}
+
+/// Emit when a redemption transitions to Processing state.
+///
+/// Layout: disc(1) + requester(32) + amount_sats(8) + request_id(8) + processing_slot(4)
+pub fn emit_redemption_processing(
+    requester: &[u8; 32],
+    amount_sats: u64,
+    request_id: u64,
+    processing_slot: u32,
+) {
+    let disc = [EVENT_REDEMPTION_PROCESSING];
+    let amt = amount_sats.to_le_bytes();
+    let rid = request_id.to_le_bytes();
+    let slot = processing_slot.to_le_bytes();
+    sol_log_data(&[&disc, requester, &amt, &rid, &slot]);
 }
