@@ -169,6 +169,16 @@ export async function GET() {
       );
     }
 
+    // Index requested/completed events by request_id for tx signature lookup
+    const requestedByReqId = new Map<string, RequestedEntry>();
+    for (const req of requestedEntries) {
+      requestedByReqId.set(req.request_id.toString(), req);
+    }
+    const completedByReqId = new Map<string, CompletedEntry>();
+    for (const c of completedEntries) {
+      completedByReqId.set(c.request_id.toString(), c);
+    }
+
     // Join PDA data with tracking data (active redemptions)
     const serialized: Array<{
       pubkey: string;
@@ -183,13 +193,16 @@ export async function GET() {
       updatedAt: number;
       retryCount: number;
       trackerError: string | null;
+      requestTxSignature: string | null;
+      completeTxSignature: string | null;
     }> = redemptions.map((r) => {
       const tracking = trackingMap.get(r.pubkey);
       const trackingTime = tracking?.created_at ?? 0;
       const slotTime = r.processingSlot > 0 ? (slotTimeMap.get(r.processingSlot) ?? 0) : 0;
+      const reqId = r.requestId.toString();
       return {
         pubkey: r.pubkey,
-        requestId: r.requestId.toString(),
+        requestId: reqId,
         amountSats: r.amountSats.toString(),
         status: r.status,
         requester: r.requester,
@@ -200,16 +213,19 @@ export async function GET() {
         updatedAt: tracking?.last_updated ?? 0,
         retryCount: tracking?.retry_count ?? 0,
         trackerError: tracking?.error ?? null,
+        requestTxSignature: requestedByReqId.get(reqId)?.tx_signature ?? null,
+        completeTxSignature: completedByReqId.get(reqId)?.tx_signature ?? null,
       };
     });
 
     // Add completed redemptions from on-chain events (PDAs are closed, data from indexed events)
     const activeRequestIds = new Set(redemptions.map((r) => r.requestId.toString()));
     for (const c of completedEntries) {
-      if (activeRequestIds.has(c.request_id.toString())) continue; // still has PDA, skip
+      const rid = c.request_id.toString();
+      if (activeRequestIds.has(rid)) continue; // still has PDA, skip
       serialized.push({
         pubkey: "", // PDA is closed
-        requestId: c.request_id.toString(),
+        requestId: rid,
         amountSats: c.amount_sats.toString(),
         status: "Completed",
         requester: c.requester,
@@ -220,6 +236,8 @@ export async function GET() {
         updatedAt: c.block_time,
         retryCount: 0,
         trackerError: null,
+        requestTxSignature: requestedByReqId.get(rid)?.tx_signature ?? null,
+        completeTxSignature: c.tx_signature,
       });
     }
 
@@ -242,6 +260,8 @@ export async function GET() {
         updatedAt: req.block_time,
         retryCount: 0,
         trackerError: null,
+        requestTxSignature: req.tx_signature,
+        completeTxSignature: null,
       });
     }
 

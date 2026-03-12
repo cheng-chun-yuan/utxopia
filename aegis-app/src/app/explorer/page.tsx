@@ -949,18 +949,33 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
       active: stepOrder === 0 && !isFailed,
       detail: (
         <div className="space-y-1">
-          <div className="flex items-center gap-1.5">
-            <a
-              href={`https://explorer.solana.com/address/${redemption.pubkey}?cluster=devnet`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[11px] text-sol/70 hover:text-sol flex items-center gap-1 transition-colors"
-            >
-              Request PDA <ExternalLink className="w-2.5 h-2.5" />
-            </a>
-            <code className="text-[10px] font-mono text-gray">{truncate(redemption.pubkey, 6, 4)}</code>
-            <CopyButton text={redemption.pubkey} label="PDA" variant="default" iconSize="sm" />
-          </div>
+          {redemption.requestTxSignature ? (
+            <div className="flex items-center gap-1.5">
+              <a
+                href={`https://explorer.solana.com/tx/${redemption.requestTxSignature}?cluster=devnet`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-sol/70 hover:text-sol flex items-center gap-1 transition-colors"
+              >
+                Request tx <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+              <code className="text-[10px] font-mono text-gray">{truncate(redemption.requestTxSignature, 6, 4)}</code>
+              <CopyButton text={redemption.requestTxSignature} label="Request TX" variant="default" iconSize="sm" />
+            </div>
+          ) : redemption.pubkey ? (
+            <div className="flex items-center gap-1.5">
+              <a
+                href={`https://explorer.solana.com/address/${redemption.pubkey}?cluster=devnet`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-sol/70 hover:text-sol flex items-center gap-1 transition-colors"
+              >
+                Request PDA <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+              <code className="text-[10px] font-mono text-gray">{truncate(redemption.pubkey, 6, 4)}</code>
+              <CopyButton text={redemption.pubkey} label="PDA" variant="default" iconSize="sm" />
+            </div>
+          ) : null}
           {btcAddr && (
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] text-gray">Destination</span>
@@ -980,9 +995,25 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
       done: !isFailed && stepOrder >= 1,
       active: stepOrder === 1 && !isFailed,
       detail: !isFailed && stepOrder >= 1 ? (
-        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400">
-          <CheckCircle2 className="w-2.5 h-2.5" /> Backend picked up
-        </span>
+        <div className="space-y-1">
+          <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400">
+            <CheckCircle2 className="w-2.5 h-2.5" /> Backend picked up
+          </span>
+          {redemption.pubkey && (
+            <div className="flex items-center gap-1.5">
+              <a
+                href={`https://explorer.solana.com/address/${redemption.pubkey}?cluster=devnet`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-sol/70 hover:text-sol flex items-center gap-1 transition-colors"
+              >
+                PDA <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+              <code className="text-[10px] font-mono text-gray">{truncate(redemption.pubkey, 6, 4)}</code>
+              <CopyButton text={redemption.pubkey} label="PDA" variant="default" iconSize="sm" />
+            </div>
+          )}
+        </div>
       ) : null,
     },
     {
@@ -990,17 +1021,27 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
       done: !isFailed && stepOrder >= 3,
       active: stepOrder === 2 && !isFailed,
       detail: redemption.btcTxid ? (
-        <div className="flex items-center gap-1.5">
-          <a
-            href={`${getMempoolExplorerUrl()}/tx/${redemption.btcTxid}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[11px] text-btc/70 hover:text-btc flex items-center gap-1 transition-colors"
-          >
-            BTC tx <ExternalLink className="w-2.5 h-2.5" />
-          </a>
-          <code className="text-[10px] font-mono text-gray">{truncate(redemption.btcTxid, 6, 4)}</code>
-          <CopyButton text={redemption.btcTxid} label="BTC TX" variant="default" iconSize="sm" />
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5">
+            <a
+              href={`${getMempoolExplorerUrl()}/tx/${redemption.btcTxid}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] text-btc/70 hover:text-btc flex items-center gap-1 transition-colors"
+            >
+              BTC tx <ExternalLink className="w-2.5 h-2.5" />
+            </a>
+            <code className="text-[10px] font-mono text-gray">{truncate(redemption.btcTxid, 6, 4)}</code>
+            <CopyButton text={redemption.btcTxid} label="BTC TX" variant="default" iconSize="sm" />
+          </div>
+          {btcAddr && (
+            <div className="flex items-center gap-1.5">
+              <BitcoinIcon className="w-3 h-3 text-btc/50" />
+              <span className="text-[10px] text-gray">→</span>
+              <code className="text-[10px] font-mono text-btc/70">{truncate(btcAddr, 8, 6)}</code>
+              <CopyButton text={btcAddr} label="BTC Address" variant="default" iconSize="sm" />
+            </div>
+          )}
         </div>
       ) : null,
     },
@@ -1009,7 +1050,23 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
       done: !isFailed && stepOrder >= 4,
       active: false,
       detail: !isFailed && stepOrder >= 4 ? (
-        <span className="text-[10px] text-green-400 font-mono">Redemption completed on-chain</span>
+        <div className="space-y-1">
+          <span className="text-[10px] text-green-400 font-mono">Redemption completed on-chain</span>
+          {redemption.completeTxSignature && (
+            <div className="flex items-center gap-1.5">
+              <a
+                href={`https://explorer.solana.com/tx/${redemption.completeTxSignature}?cluster=devnet`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-sol/70 hover:text-sol flex items-center gap-1 transition-colors"
+              >
+                Complete tx <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+              <code className="text-[10px] font-mono text-gray">{truncate(redemption.completeTxSignature, 6, 4)}</code>
+              <CopyButton text={redemption.completeTxSignature} label="Complete TX" variant="default" iconSize="sm" />
+            </div>
+          )}
+        </div>
       ) : null,
     },
   ];

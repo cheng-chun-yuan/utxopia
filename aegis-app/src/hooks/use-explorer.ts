@@ -66,6 +66,9 @@ export interface RedemptionRecord {
   updatedAt: number;
   retryCount: number;
   trackerError: string | null;
+  // On-chain event tx signatures
+  requestTxSignature: string | null;
+  completeTxSignature: string | null;
 }
 
 // Backend transfer row from /api/transfers
