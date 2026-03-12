@@ -4,7 +4,7 @@ frost_server/
 contracts/
 circuits/
 devnet-test/
-docs/
+/docs/
 scripts/
 aegis-app/public/circuits/
 aegis-app/build-tools/
@@ -13,4 +13,5 @@ aegis-app/platform-tools/
 aegis-app/licenses/
 **/target/
 **/node_modules/
-**/.next/
+# Note: aegis-app/.next is the outputDirectory, don't exclude it
+.next/
