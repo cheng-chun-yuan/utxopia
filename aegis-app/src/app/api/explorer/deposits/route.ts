@@ -196,7 +196,8 @@ export async function GET() {
       });
     }
 
-    deposits.sort((a, b) => b.leafIndex - a.leafIndex);
+    // Sort by timestamp descending (newest first); ongoing deposits (with recent created_at) appear at top
+    deposits.sort((a, b) => b.timestamp - a.timestamp);
 
     return NextResponse.json({ success: true, deposits, count: deposits.length });
   } catch (err) {
@@ -232,7 +233,7 @@ export async function GET() {
         }
       }
 
-      deposits.sort((a, b) => b.leafIndex - a.leafIndex);
+      deposits.sort((a, b) => b.timestamp - a.timestamp);
 
       return NextResponse.json({
         success: true,

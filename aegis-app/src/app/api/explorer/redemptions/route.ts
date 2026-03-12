@@ -58,6 +58,16 @@ interface RequestedEntry {
   block_time: number;
 }
 
+interface ProcessingEntry {
+  requester: string;
+  amount_sats: number;
+  request_id: number;
+  processing_slot: number;
+  tx_signature: string;
+  slot: number;
+  block_time: number;
+}
+
 function createServerRpc(): RpcClient {
   const rpc = createSolanaRpc(RPC_URL);
   return {
@@ -95,7 +105,7 @@ function createServerRpc(): RpcClient {
 export async function GET() {
   try {
     // Fetch all 3 sources in parallel
-    const [redemptions, trackingResp, completedResp, requestedResp] = await Promise.all([
+    const [redemptions, trackingResp, completedResp, requestedResp, processingResp] = await Promise.all([
       fetchExplorerRedemptions(
         createServerRpc(),
         DEVNET_CONFIG.aegisProgramId,
@@ -103,6 +113,7 @@ export async function GET() {
       fetch(`${BACKEND_URL}/api/redemption/tracking`).catch(() => null),
       fetch(`${BACKEND_URL}/api/redemption/completed`).catch(() => null),
       fetch(`${BACKEND_URL}/api/redemption/requested`).catch(() => null),
+      fetch(`${BACKEND_URL}/api/redemption/processing`).catch(() => null),
     ]);
 
     // Parse tracking data (keyed by PDA address)
@@ -136,6 +147,17 @@ export async function GET() {
       try {
         const requestedData = await requestedResp.json();
         requestedEntries = requestedData.redemptions ?? [];
+      } catch {
+        // Ignore parse errors
+      }
+    }
+
+    // Parse processing redemptions from on-chain events (0x0A mark_processing)
+    let processingEntries: ProcessingEntry[] = [];
+    if (processingResp?.ok) {
+      try {
+        const processingData = await processingResp.json();
+        processingEntries = processingData.redemptions ?? [];
       } catch {
         // Ignore parse errors
       }
@@ -178,6 +200,10 @@ export async function GET() {
     for (const c of completedEntries) {
       completedByReqId.set(c.request_id.toString(), c);
     }
+    const processingByReqId = new Map<string, ProcessingEntry>();
+    for (const p of processingEntries) {
+      processingByReqId.set(p.request_id.toString(), p);
+    }
 
     // Join PDA data with tracking data (active redemptions)
     const serialized: Array<{
@@ -194,6 +220,7 @@ export async function GET() {
       retryCount: number;
       trackerError: string | null;
       requestTxSignature: string | null;
+      processingTxSignature: string | null;
       completeTxSignature: string | null;
     }> = redemptions.map((r) => {
       const tracking = trackingMap.get(r.pubkey);
@@ -214,6 +241,7 @@ export async function GET() {
         retryCount: tracking?.retry_count ?? 0,
         trackerError: tracking?.error ?? null,
         requestTxSignature: requestedByReqId.get(reqId)?.tx_signature ?? null,
+        processingTxSignature: processingByReqId.get(reqId)?.tx_signature ?? null,
         completeTxSignature: completedByReqId.get(reqId)?.tx_signature ?? null,
       };
     });
@@ -237,6 +265,7 @@ export async function GET() {
         retryCount: 0,
         trackerError: null,
         requestTxSignature: requestedByReqId.get(rid)?.tx_signature ?? null,
+        processingTxSignature: processingByReqId.get(rid)?.tx_signature ?? null,
         completeTxSignature: c.tx_signature,
       });
     }
@@ -261,9 +290,13 @@ export async function GET() {
         retryCount: 0,
         trackerError: null,
         requestTxSignature: req.tx_signature,
+        processingTxSignature: processingByReqId.get(rid)?.tx_signature ?? null,
         completeTxSignature: null,
       });
     }
+
+    // Sort by time descending (newest first)
+    serialized.sort((a, b) => b.createdAt - a.createdAt);
 
     return NextResponse.json({
       success: true,

@@ -5,7 +5,7 @@ use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
 use std::path::Path;
 
-use super::parser::{LeafInsertedEvent, NullifierSpentEvent, RedemptionCompletedEvent, RedemptionRequestedEvent, StealthAnnouncementEvent};
+use super::parser::{LeafInsertedEvent, NullifierSpentEvent, RedemptionCompletedEvent, RedemptionProcessingEvent, RedemptionRequestedEvent, StealthAnnouncementEvent};
 
 /// SQLite-backed event store
 pub struct EventStore {
@@ -106,6 +106,18 @@ pub struct RedemptionRequestedRow {
     pub amount_sats: i64,
     pub request_id: i64,
     pub btc_script: String,    // hex
+    pub tx_signature: String,  // Solana tx sig
+    pub slot: i64,
+    pub block_time: i64,
+}
+
+/// A redemption processing row (from on-chain event 0x0A)
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RedemptionProcessingRow {
+    pub requester: String,     // base58
+    pub amount_sats: i64,
+    pub request_id: i64,
+    pub processing_slot: i64,
     pub tx_signature: String,  // Solana tx sig
     pub slot: i64,
     pub block_time: i64,
@@ -236,6 +248,20 @@ impl EventStore {
                 requester TEXT NOT NULL,
                 amount_sats INTEGER NOT NULL,
                 btc_script BLOB NOT NULL,
+                tx_signature TEXT NOT NULL,
+                slot INTEGER NOT NULL,
+                block_time INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (requester, request_id)
+            )",
+        );
+
+        // Redemption processing events table (mark_processing, 0x0A)
+        let _ = conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS redemption_processing_events (
+                request_id INTEGER NOT NULL,
+                requester TEXT NOT NULL,
+                amount_sats INTEGER NOT NULL,
+                processing_slot INTEGER NOT NULL,
                 tx_signature TEXT NOT NULL,
                 slot INTEGER NOT NULL,
                 block_time INTEGER NOT NULL DEFAULT 0,
@@ -435,6 +461,64 @@ impl EventStore {
                     amount_sats: row.get(1)?,
                     request_id: row.get(2)?,
                     btc_script: hex::encode(btc_script_blob),
+                    tx_signature: row.get(4)?,
+                    slot: row.get(5)?,
+                    block_time: row.get(6)?,
+                })
+            })
+            .map_err(|e| format!("query error: {}", e))?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("row error: {}", e))
+    }
+
+    /// Insert a redemption processing event. Returns true if inserted, false if duplicate.
+    pub fn insert_redemption_processing(
+        &self,
+        event: &RedemptionProcessingEvent,
+        tx_signature: &str,
+        slot: i64,
+        block_time: i64,
+    ) -> Result<bool, String> {
+        let conn = self.conn()?;
+        let requester = bs58::encode(&event.requester).into_string();
+
+        let result = conn.execute(
+            "INSERT OR IGNORE INTO redemption_processing_events (request_id, requester, amount_sats, processing_slot, tx_signature, slot, block_time)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                event.request_id as i64,
+                requester,
+                event.amount_sats as i64,
+                event.processing_slot as i64,
+                tx_signature,
+                slot,
+                block_time,
+            ],
+        );
+        match result {
+            Ok(n) => Ok(n > 0),
+            Err(e) => Err(format!("insert redemption_processing error: {}", e)),
+        }
+    }
+
+    /// Get all processing redemptions from on-chain events.
+    pub fn get_processing_redemptions(&self) -> Result<Vec<RedemptionProcessingRow>, String> {
+        let conn = self.conn()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT requester, amount_sats, request_id, processing_slot, tx_signature, slot, block_time
+                 FROM redemption_processing_events ORDER BY block_time DESC",
+            )
+            .map_err(|e| format!("query error: {}", e))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(RedemptionProcessingRow {
+                    requester: row.get(0)?,
+                    amount_sats: row.get(1)?,
+                    request_id: row.get(2)?,
+                    processing_slot: row.get(3)?,
                     tx_signature: row.get(4)?,
                     slot: row.get(5)?,
                     block_time: row.get(6)?,
@@ -715,6 +799,7 @@ impl EventStore {
              DELETE FROM nullifier_events;
              DELETE FROM stealth_announcements;
              DELETE FROM redemption_requested_events;
+             DELETE FROM redemption_processing_events;
              DELETE FROM indexer_state;"
         )
         .map_err(|e| format!("clear error: {}", e))?;

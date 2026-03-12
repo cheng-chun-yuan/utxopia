@@ -232,48 +232,111 @@ impl DepositTrackerService {
         }
     }
 
-    /// Recover in-progress deposits after service restart
+    /// Check if a deposit UTXO was spent to the pool address (external sweep).
+    /// Returns `Some((spending_txid, fee))` if the UTXO was swept to the pool.
+    async fn check_external_sweep(&self, deposit_txid: &str, deposit_vout: u32) -> Option<(String, u64)> {
+        let spending_txid = match self.watcher.get_outspend(deposit_txid, deposit_vout).await {
+            Ok(Some(txid)) => txid,
+            _ => return None,
+        };
+
+        let tx = match self.watcher.get_tx(&spending_txid).await {
+            Ok(tx) => tx,
+            Err(_) => return None,
+        };
+
+        let pool_addr = &self.config.pool_receive_address;
+        let sends_to_pool = tx.vout.iter().any(|o| {
+            o.scriptpubkey_address.as_deref() == Some(pool_addr)
+        });
+
+        if sends_to_pool {
+            Some((spending_txid, tx.fee))
+        } else {
+            None
+        }
+    }
+
+    /// Recover in-progress deposits after service restart.
     ///
-    /// Finds deposits that were interrupted mid-processing and resets them
-    /// to an appropriate state to resume.
-    pub fn recover_in_progress_deposits(&self) -> Result<u32, TrackerError> {
+    /// For each active deposit:
+    /// 1. Reset mid-operation states (sweeping/verifying)
+    /// 2. Check on-chain if the deposit UTXO was already spent (external sweep)
+    /// 3. If swept to pool address, record the sweep txid and advance to SweepConfirming
+    pub async fn recover_in_progress_deposits(&self) -> Result<u32, TrackerError> {
         let active = self.db.get_active()?;
         let mut recovered = 0;
 
         for mut record in active {
-            let should_reset = match record.status {
-                // These mid-operation states should be reset
+            let old_status = record.status;
+
+            // Step 1: Reset mid-operation states
+            match record.status {
                 DepositStatus::Sweeping => {
-                    // Was in the middle of sweeping - check if sweep actually happened
                     if record.sweep_txid.is_none() {
                         record.status = DepositStatus::Confirmed;
-                        true
                     } else {
                         record.status = DepositStatus::SweepConfirming;
-                        true
                     }
+                    record.error = None;
+                    self.db.update(&record)?;
+                    println!(
+                        "[{}] Recovered interrupted deposit, reset to {:?}",
+                        record.id, record.status
+                    );
+                    recovered += 1;
                 }
                 DepositStatus::Verifying => {
-                    // Was verifying - reset to sweep confirming to re-verify
                     record.status = DepositStatus::SweepConfirming;
-                    true
+                    record.error = None;
+                    self.db.update(&record)?;
+                    println!(
+                        "[{}] Recovered interrupted deposit, reset to {:?}",
+                        record.id, record.status
+                    );
+                    recovered += 1;
                 }
-                _ => false,
-            };
+                _ => {}
+            }
 
-            if should_reset {
-                record.error = None;
-                self.db.update(&record)?;
-                println!(
-                    "[{}] Recovered interrupted deposit, reset to {:?}",
-                    record.id, record.status
-                );
-                recovered += 1;
+            // Step 2: For deposits with a known txid but no sweep, check on-chain
+            if record.sweep_txid.is_none() {
+                if let (Some(ref dep_txid), Some(dep_vout)) = (&record.deposit_txid, record.deposit_vout) {
+                    if let Some((sweep_txid, fee)) = self.check_external_sweep(dep_txid, dep_vout).await {
+                        println!(
+                            "[{}] Startup: external sweep detected {} (fee: {} sats), {:?} → SweepConfirming",
+                            record.id, sweep_txid, fee, old_status
+                        );
+                        record.mark_sweep_broadcast(sweep_txid, self.config.pool_receive_address.clone(), fee);
+                        self.db.update(&record)?;
+                        recovered += 1;
+                    }
+                }
+            }
+        }
+
+        // Also recover failed deposits whose UTXO may have been swept while offline
+        let failed = self.db.get_by_status(DepositStatus::Failed).unwrap_or_default();
+        for mut record in failed {
+            if record.sweep_txid.is_some() {
+                continue; // Already has sweep tx, retry will handle
+            }
+            if let (Some(ref dep_txid), Some(dep_vout)) = (&record.deposit_txid, record.deposit_vout) {
+                if let Some((sweep_txid, fee)) = self.check_external_sweep(dep_txid, dep_vout).await {
+                    println!(
+                        "[{}] Startup: failed deposit has external sweep {}, recovering",
+                        record.id, sweep_txid
+                    );
+                    record.mark_sweep_broadcast(sweep_txid, self.config.pool_receive_address.clone(), fee);
+                    record.error = None;
+                    self.db.update(&record)?;
+                    recovered += 1;
+                }
             }
         }
 
         if recovered > 0 {
-            println!("Recovered {} interrupted deposits", recovered);
+            println!("Recovered {} deposits via on-chain checks", recovered);
         }
 
         Ok(recovered)
@@ -591,8 +654,9 @@ impl DepositTrackerService {
             record.deposit_txid = Some(txid.to_string());
             record.deposit_vout = Some(vout as u32);
             record.deposit_block_height = Some(block_height);
-            record.status = DepositStatus::Detected;
-            record.confirmations = 1; // It's in a block
+            // Use update_confirmations so status advances correctly
+            // (e.g., Confirmed when confirmations >= required)
+            record.update_confirmations(1, Some(block_height));
 
             if let Err(e) = self.db.insert(&record) {
                 eprintln!("[block-scan] Failed to insert deposit: {}", e);
@@ -728,7 +792,7 @@ impl DepositTrackerService {
         println!();
 
         // Recover any interrupted deposits
-        self.recover_in_progress_deposits()?;
+        self.recover_in_progress_deposits().await?;
 
         // Startup recovery: check pending deposits that may have received BTC while offline
         self.recover_pending_deposits().await;
@@ -952,6 +1016,23 @@ impl DepositTrackerService {
         let addr_status = self.watcher.check_address(address).await?;
 
         if addr_status.utxos.is_empty() {
+            // UTXO already spent — check if it was swept externally (e.g., by FROST)
+            let mut record = self.db.get_by_address(address)?
+                .ok_or_else(|| TrackerError::NotFound(address.to_string()))?;
+
+            if record.sweep_txid.is_none() {
+                if let (Some(ref dep_txid), Some(dep_vout)) = (&record.deposit_txid, record.deposit_vout) {
+                    if let Some((sweep_txid, fee)) = self.check_external_sweep(dep_txid, dep_vout).await {
+                        println!(
+                            "[{}] External sweep detected: {} (fee: {} sats)",
+                            record.id, sweep_txid, fee
+                        );
+                        record.mark_sweep_broadcast(sweep_txid, self.config.pool_receive_address.clone(), fee);
+                        self.db.update(&record)?;
+                    }
+                }
+            }
+
             return Ok(());
         }
 
@@ -1033,17 +1114,35 @@ impl DepositTrackerService {
             }
         }
 
-        let result = sweeper
+        match sweeper
             .sweep_utxo(address, commitment, self.config.required_confirmations)
-            .await?;
-
-        record.mark_sweep_broadcast(result.txid.clone(), result.pool_address, result.fee_sats);
-        self.db.update(&record)?;
-
-        println!(
-            "[{}] Sweep broadcast: {} (fee: {} sats)",
-            record.id, result.txid, result.fee_sats
-        );
+            .await
+        {
+            Ok(result) => {
+                record.mark_sweep_broadcast(result.txid.clone(), result.pool_address, result.fee_sats);
+                self.db.update(&record)?;
+                println!(
+                    "[{}] Sweep broadcast: {} (fee: {} sats)",
+                    record.id, result.txid, result.fee_sats
+                );
+            }
+            Err(super::sweeper::SweeperError::NoUtxo) => {
+                // UTXO already spent — check if swept externally (e.g., by FROST)
+                if let (Some(ref dep_txid), Some(dep_vout)) = (&record.deposit_txid, record.deposit_vout) {
+                    if let Some((sweep_txid, fee)) = self.check_external_sweep(dep_txid, dep_vout).await {
+                        println!(
+                            "[{}] External sweep detected: {} (fee: {} sats)",
+                            record.id, sweep_txid, fee
+                        );
+                        record.mark_sweep_broadcast(sweep_txid, self.config.pool_receive_address.clone(), fee);
+                        self.db.update(&record)?;
+                        return Ok(());
+                    }
+                }
+                return Err(super::sweeper::SweeperError::NoUtxo.into());
+            }
+            Err(e) => return Err(e.into()),
+        }
 
         Ok(())
     }

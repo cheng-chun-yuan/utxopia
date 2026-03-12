@@ -68,6 +68,7 @@ export interface RedemptionRecord {
   trackerError: string | null;
   // On-chain event tx signatures
   requestTxSignature: string | null;
+  processingTxSignature: string | null;
   completeTxSignature: string | null;
 }
 

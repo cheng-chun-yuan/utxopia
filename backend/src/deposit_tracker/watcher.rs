@@ -324,6 +324,26 @@ impl AddressWatcher {
         Ok(all_txs)
     }
 
+    /// Check if a specific output has been spent and return the spending txid.
+    /// Uses Esplora `GET /tx/:txid/outspend/:vout`.
+    pub async fn get_outspend(&self, txid: &str, vout: u32) -> Result<Option<String>, WatcherError> {
+        let url = format!("{}/tx/{}/outspend/{}", self.base_url, txid, vout);
+        let resp = self.client.get(&url).send().await?;
+
+        if !resp.status().is_success() {
+            return Ok(None);
+        }
+
+        let data: serde_json::Value = resp.json().await
+            .map_err(|e| WatcherError::ParseError(format!("outspend parse: {}", e)))?;
+
+        if data.get("spent").and_then(|v| v.as_bool()) == Some(true) {
+            Ok(data.get("txid").and_then(|v| v.as_str()).map(String::from))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Get block header by height
     pub async fn get_block_header(&self, height: u64) -> Result<BlockHeaderData, WatcherError> {
         // Get block hash at height

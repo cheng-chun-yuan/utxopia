@@ -241,11 +241,14 @@ impl EventIndexerService {
                     tracing::info!(is_paused = e.is_paused, timestamp = e.timestamp, "Pool paused/unpaused event");
                 }
                 ProgramEvent::RedemptionProcessing(e) => {
+                    let inserted = self.store.insert_redemption_processing(&e, signature, slot, block_time)
+                        .unwrap_or(false);
                     tracing::info!(
                         request_id = e.request_id,
                         amount_sats = e.amount_sats,
                         processing_slot = e.processing_slot,
-                        "Redemption processing event"
+                        inserted,
+                        "Indexed redemption processing"
                     );
                 }
             }

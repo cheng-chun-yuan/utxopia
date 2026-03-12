@@ -999,20 +999,20 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
           <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400">
             <CheckCircle2 className="w-2.5 h-2.5" /> Backend picked up
           </span>
-          {redemption.pubkey && (
+          {redemption.processingTxSignature ? (
             <div className="flex items-center gap-1.5">
               <a
-                href={`https://explorer.solana.com/address/${redemption.pubkey}?cluster=devnet`}
+                href={`https://explorer.solana.com/tx/${redemption.processingTxSignature}?cluster=devnet`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-[11px] text-sol/70 hover:text-sol flex items-center gap-1 transition-colors"
               >
-                PDA <ExternalLink className="w-2.5 h-2.5" />
+                Processing tx <ExternalLink className="w-2.5 h-2.5" />
               </a>
-              <code className="text-[10px] font-mono text-gray">{truncate(redemption.pubkey, 6, 4)}</code>
-              <CopyButton text={redemption.pubkey} label="PDA" variant="default" iconSize="sm" />
+              <code className="text-[10px] font-mono text-gray">{truncate(redemption.processingTxSignature, 6, 4)}</code>
+              <CopyButton text={redemption.processingTxSignature} label="Processing TX" variant="default" iconSize="sm" />
             </div>
-          )}
+          ) : null}
         </div>
       ) : null,
     },
