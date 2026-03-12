@@ -12,6 +12,7 @@ use axum::{
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 use crate::common::ws::run_broadcast_ws;
 
@@ -19,6 +20,7 @@ use solana_sdk::pubkey::Pubkey;
 
 use crate::deposit_tracker::sqlite_db::SqliteDepositStore;
 
+use super::reconciler::ReconciliationResult;
 use super::storage::EventStore;
 use super::tree_cache::TreeCache;
 
@@ -30,6 +32,8 @@ pub struct IndexerAppState {
     pub program_id: Pubkey,
     /// Optional deposit tracker store — reset endpoints clear this too
     pub deposit_store: Option<Arc<SqliteDepositStore>>,
+    /// Latest reconciliation result (updated by background Reconciler)
+    pub reconciler_status: Arc<RwLock<Option<ReconciliationResult>>>,
 }
 
 /// Query params for proof endpoint
@@ -156,11 +160,17 @@ pub struct SyncResponse {
 
 /// Create the event indexer router with tree cache
 pub fn event_indexer_router(store: Arc<EventStore>, tree_cache: Arc<TreeCache>, program_id: Pubkey) -> Router {
-    event_indexer_router_with_deposits(store, tree_cache, program_id, None)
+    event_indexer_router_with_deposits(store, tree_cache, program_id, None, Arc::new(RwLock::new(None)))
 }
 
-pub fn event_indexer_router_with_deposits(store: Arc<EventStore>, tree_cache: Arc<TreeCache>, program_id: Pubkey, deposit_store: Option<Arc<SqliteDepositStore>>) -> Router {
-    let state = IndexerAppState { store, tree_cache, program_id, deposit_store };
+pub fn event_indexer_router_with_deposits(
+    store: Arc<EventStore>,
+    tree_cache: Arc<TreeCache>,
+    program_id: Pubkey,
+    deposit_store: Option<Arc<SqliteDepositStore>>,
+    reconciler_status: Arc<RwLock<Option<ReconciliationResult>>>,
+) -> Router {
+    let state = IndexerAppState { store, tree_cache, program_id, deposit_store, reconciler_status };
 
     Router::new()
         // Tree
@@ -184,6 +194,8 @@ pub fn event_indexer_router_with_deposits(store: Arc<EventStore>, tree_cache: Ar
         .route("/api/redemption/requested", get(get_requested_redemptions))
         // Processing redemptions (from on-chain events 0x0A)
         .route("/api/redemption/processing", get(get_processing_redemptions))
+        // Reconciliation
+        .route("/api/reconciliation/status", get(get_reconciliation_status))
         // Global
         .route("/api/sync", post(post_sync_all))
         .route("/api/reset", post(post_reset_all))
@@ -529,6 +541,24 @@ async fn post_reset_all(State(state): State<IndexerAppState>) -> Json<SyncRespon
             size: None,
             error: Some(e),
         }),
+    }
+}
+
+/// GET /api/reconciliation/status — latest on-chain vs local state comparison
+async fn get_reconciliation_status(
+    State(state): State<IndexerAppState>,
+) -> Json<serde_json::Value> {
+    let status = state.reconciler_status.read().await;
+    match status.as_ref() {
+        Some(result) => Json(serde_json::json!({
+            "success": true,
+            "reconciliation": result,
+        })),
+        None => Json(serde_json::json!({
+            "success": true,
+            "reconciliation": null,
+            "message": "No reconciliation check has run yet",
+        })),
     }
 }
 

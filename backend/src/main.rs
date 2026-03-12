@@ -18,7 +18,7 @@ use zkbtc::api_server as api;
 use zkbtc::config::AEGISConfig;
 use zkbtc::deposit_tracker::{self, TrackerConfig};
 use zkbtc::deposit_tracker::sqlite_db::SqliteDepositStore;
-use zkbtc::event_indexer::{EventIndexerConfig, EventIndexerService, EventStore, TreeCache, event_indexer_router_with_deposits, SolanaWsConfig, SolanaWsSubscriber};
+use zkbtc::event_indexer::{EventIndexerConfig, EventIndexerService, EventStore, TreeCache, event_indexer_router_with_deposits, SolanaWsConfig, SolanaWsSubscriber, Reconciler};
 use zkbtc::redemption::{MpcSigner, RedemptionConfig, RedemptionService, SingleKeySigner};
 use zkbtc::stealth::StealthDepositService;
 use zkbtc::units;
@@ -417,7 +417,40 @@ async fn run_tracker_service(args: &[String]) {
     let deposit_store = Arc::new(
         SqliteDepositStore::new(&config.db_path).expect("Failed to open deposit store for indexer")
     );
-    let indexer_router = event_indexer_router_with_deposits(event_store.clone(), tree_cache.clone(), program_pubkey, Some(deposit_store));
+
+    // Reconciler: compare on-chain state with local SQLite periodically
+    let reconcile_interval: u64 = env_or("RECONCILE_INTERVAL_SECS", 60);
+    let reconciler_status = Arc::new(tokio::sync::RwLock::new(None));
+
+    let pool_state_pda = env_string(
+        "POOL_STATE_PDA",
+        "4654vJpq3E3A6nwtUwNWeJuTkHDcqT761uoBX7AHjm5x",
+    );
+    let commitment_tree_pda = env_string(
+        "COMMITMENT_TREE_PDA",
+        "2bjcEufNf6Xa7YwH1ci99k1NjRg6jjirCQXsPjC5Qgk6",
+    );
+
+    let reconciler = Reconciler::new(
+        solana_rpc.clone(),
+        pool_state_pda,
+        commitment_tree_pda,
+        event_store.clone(),
+        tree_cache.clone(),
+        reconcile_interval,
+        reconciler_status.clone(),
+    );
+    tokio::spawn(async move {
+        reconciler.run().await;
+    });
+
+    let indexer_router = event_indexer_router_with_deposits(
+        event_store.clone(),
+        tree_cache.clone(),
+        program_pubkey,
+        Some(deposit_store),
+        reconciler_status,
+    );
 
     // Start the event indexer service in background
     let solana_rpc_clone = solana_rpc.clone();

@@ -1205,7 +1205,9 @@ function WithdrawalsTab() {
                     </Td>
                     <Td>
                       <a
-                        href={`https://explorer.solana.com/address/${r.pubkey}?cluster=devnet`}
+                        href={r.status === "Completed" && r.completeTxSignature
+                          ? `https://explorer.solana.com/tx/${r.completeTxSignature}?cluster=devnet`
+                          : `https://explorer.solana.com/address/${r.pubkey}?cluster=devnet`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-sol hover:text-sol/80 transition-colors"

@@ -735,6 +735,24 @@ impl EventStore {
             .map_err(|e| format!("query error: {}", e))
     }
 
+    /// Count of nullifier events
+    pub fn get_nullifier_count(&self) -> Result<i64, String> {
+        let conn = self.conn()?;
+        conn.query_row("SELECT COUNT(*) FROM nullifier_events", [], |row| row.get(0))
+            .map_err(|e| format!("query error: {}", e))
+    }
+
+    /// Count of deposit announcements (announcement_type = 0)
+    pub fn get_deposit_count(&self) -> Result<i64, String> {
+        let conn = self.conn()?;
+        conn.query_row(
+            "SELECT COUNT(*) FROM stealth_announcements WHERE announcement_type = 0",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|e| format!("query error: {}", e))
+    }
+
     pub fn get_announcement_count(&self) -> Result<i64, String> {
         let conn = self.conn()?;
         conn.query_row("SELECT COUNT(*) FROM stealth_announcements", [], |row| row.get(0))
