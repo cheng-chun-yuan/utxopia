@@ -476,9 +476,9 @@ impl DepositTrackerService {
                     );
                 }
             }
-            // If still 0 (no DB value), use tip-10
+            // If still 0 (no DB value), use tip-100 to catch older deposits after fresh deploy
             if self.last_scanned_height.load(Ordering::Relaxed) == 0 {
-                let start = tip_height.saturating_sub(10);
+                let start = tip_height.saturating_sub(100);
                 self.last_scanned_height.store(start, Ordering::Relaxed);
                 println!(
                     "[block-scan] First run, scanning from block {} to {}",
