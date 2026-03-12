@@ -441,7 +441,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_tip_height() {
         let generator = SpvProofGenerator::new(
-            crate::config::Network::Testnet.default_bitcoin_api(),
+            &crate::config::Network::Testnet.default_bitcoin_api(),
         );
         let height = generator.get_tip_height().await;
         assert!(height.is_ok());
