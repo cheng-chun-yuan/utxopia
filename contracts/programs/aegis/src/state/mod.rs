@@ -18,6 +18,7 @@
 
 // Core state
 pub mod commitment_tree;
+pub mod completion_receipt;
 pub mod deposit_intent;
 pub mod deposit_receipt;
 pub mod nullifier;
@@ -28,6 +29,7 @@ pub mod vk_registry;
 
 // Re-exports
 pub use commitment_tree::*;
+pub use completion_receipt::*;
 pub use deposit_intent::*;
 pub use deposit_receipt::*;
 pub use nullifier::*;

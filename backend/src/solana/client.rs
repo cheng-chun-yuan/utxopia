@@ -763,6 +763,12 @@ impl SolClient {
         let pool_vault = Pubkey::try_from(&pool_account.data[68..100])
             .map_err(|_| SolError::RpcError("pool_vault parse from pool_state".into()))?;
 
+        // Derive completion_receipt PDA: seeds = ["completion_receipt", btc_txid]
+        let (completion_receipt_pda, _) = Pubkey::find_program_address(
+            &[b"completion_receipt", btc_txid],
+            &self.program_id,
+        );
+
         let accounts = vec![
             AccountMeta::new(self.pool_state, false),                   // 0: pool_state (writable)
             AccountMeta::new(*redemption_pda, false),                   // 1: redemption_pda (writable)
@@ -774,6 +780,8 @@ impl SolClient {
             AccountMeta::new(self.zkbtc_mint, false),                  // 7: zkbtc_mint (writable)
             AccountMeta::new(pool_vault, false),                       // 8: pool_vault (writable)
             AccountMeta::new_readonly(TOKEN_2022_PROGRAM_ID, false),   // 9: TOKEN_2022
+            AccountMeta::new(completion_receipt_pda, false),            // 10: completion_receipt (writable)
+            AccountMeta::new_readonly(solana_sdk::system_program::ID, false), // 11: system_program
         ];
 
         let ix = Instruction {

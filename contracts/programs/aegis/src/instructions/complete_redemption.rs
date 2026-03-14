@@ -9,8 +9,8 @@
 use pinocchio::{
     account_info::AccountInfo,
     program_error::ProgramError,
-    pubkey::Pubkey,
-    sysvars::{clock::Clock, Sysvar},
+    pubkey::{find_program_address, Pubkey},
+    sysvars::{clock::Clock, rent::Rent, Sysvar},
     ProgramResult,
 };
 
@@ -18,11 +18,13 @@ use crate::error::AegisError;
 use crate::state::{
     PoolState, RedemptionRequest, RedemptionStatus,
     VerifiedTransactionView, light_client_tip_height,
+    completion_receipt::{CompletionReceipt, COMPLETION_RECEIPT_DISCRIMINATOR},
 };
 use crate::utils::bitcoin::{compute_tx_hash, ParsedTransaction};
 use crate::utils::chadbuffer::read_transaction_from_buffer;
 use crate::utils::{
-    burn_zkbtc_signed, close_account_securely, validate_account_writable, validate_program_owner,
+    burn_zkbtc_signed, close_account_securely, create_pda_account,
+    validate_account_writable, validate_program_owner,
     validate_token_2022_owner, validate_token_program_key,
 };
 
@@ -75,12 +77,14 @@ impl CompleteRedemptionData {
 /// 7.  `[writable]` zkBTC mint
 /// 8.  `[writable]` Pool vault
 /// 9.  `[]`         Token-2022 program
+/// 10. `[writable]` Completion receipt PDA (prevents same BTC txid being used twice)
+/// 11. `[]`         System program
 pub fn process_complete_redemption(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     data: &[u8],
 ) -> ProgramResult {
-    if accounts.len() < 10 {
+    if accounts.len() < 12 {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
@@ -94,6 +98,8 @@ pub fn process_complete_redemption(
     let zkbtc_mint = &accounts[7];
     let pool_vault = &accounts[8];
     let token_program = &accounts[9];
+    let completion_receipt_info = &accounts[10];
+    let _system_program = &accounts[11];
 
     // Parse instruction data (no merkle proof)
     let ix_data = CompleteRedemptionData::from_bytes(data)?;
@@ -106,6 +112,7 @@ pub fn process_complete_redemption(
     // Validate account owners
     validate_program_owner(pool_state_info, program_id)?;
     validate_program_owner(redemption_info, program_id)?;
+    validate_account_writable(completion_receipt_info)?;
     let btc_lc_id: &Pubkey = unsafe {
         &*(&crate::constants::BTC_LIGHT_CLIENT_PROGRAM_ID as *const [u8; 32] as *const Pubkey)
     };
@@ -132,6 +139,45 @@ pub fn process_complete_redemption(
 
         (pool.bump, pool.pending_redemptions())
     };
+
+    // --- Completion receipt: prevent same BTC txid from completing two redemptions ---
+    {
+        let receipt_seeds: &[&[u8]] = &[CompletionReceipt::SEED, &ix_data.btc_txid];
+        let (expected_receipt_pda, receipt_bump) = find_program_address(receipt_seeds, program_id);
+        if completion_receipt_info.key() != &expected_receipt_pda {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        // Check if this BTC txid was already used for a completion
+        {
+            let receipt_data = completion_receipt_info.try_borrow_data()?;
+            if !receipt_data.is_empty() && receipt_data[0] == COMPLETION_RECEIPT_DISCRIMINATOR {
+                pinocchio::msg!("Aegis: BTC txid already used for completion");
+                return Err(AegisError::DuplicateDeposit.into());
+            }
+        }
+
+        // Create completion receipt PDA
+        let rent = Rent::get()?;
+        let bump_bytes = [receipt_bump];
+        let signer_seeds: &[&[u8]] = &[
+            CompletionReceipt::SEED,
+            &ix_data.btc_txid,
+            &bump_bytes,
+        ];
+
+        create_pda_account(
+            authority,
+            completion_receipt_info,
+            program_id,
+            rent.minimum_balance(CompletionReceipt::LEN),
+            CompletionReceipt::LEN as u64,
+            signer_seeds,
+        )?;
+
+        let mut receipt_data = completion_receipt_info.try_borrow_mut_data()?;
+        CompletionReceipt::init(&mut receipt_data)?;
+    }
 
     // Validate redemption state (must be Pending or Processing) and get details
     let (amount_sats, service_fee, expected_script_len, expected_script, requester_key, request_id) = {
