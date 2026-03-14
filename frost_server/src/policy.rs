@@ -316,20 +316,14 @@ impl SigningPolicy {
         }
 
         // 7. Duplicate signing prevention (withdrawal only)
-        //    Allow re-signing if the on-chain PDA is still in Processing status
-        //    (means BTC was never broadcast despite a previous signing attempt).
-        //    The Solana verifier (step 6) already ensures PDA status == Processing,
-        //    so if we reach here, the PDA hasn't been completed yet — safe to re-sign.
         if let Some(ref verification) = request.solana_verification {
             if let SolanaVerification::Withdrawal { ref requester, nonce, .. } = verification {
                 if let Some(ref tracker) = self.duplicate_tracker {
                     if tracker.is_signed(requester, *nonce) {
-                        // PDA status was already verified as Processing in step 6,
-                        // so this is a legitimate retry — allow it
-                        tracing::info!(
-                            "allowing re-sign for {}:{} — PDA still in Processing status",
-                            requester, nonce
-                        );
+                        return Err(PolicyError::DuplicateSigning {
+                            requester: requester.clone(),
+                            nonce: *nonce,
+                        });
                     }
                 }
             }

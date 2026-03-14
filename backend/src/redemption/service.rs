@@ -365,14 +365,51 @@ impl RedemptionService {
                     continue;
                 }
             } else {
-                // Processing on-chain but not tracked locally (e.g., after redeploy or retry).
-                // Always re-sign: the previous BTC tx may have used wrong fees.
-                println!(
-                    "[tick] Processing PDA {} not tracked locally, building fresh BTC tx",
-                    &pda.pda_address[..8]
-                );
-                {
-                    match self.build_sign_broadcast(pda).await {
+                // Processing on-chain but not tracked locally (e.g., after redeploy).
+                // Try to recover an existing BTC tx before re-signing.
+                let btc_address = match script_to_address(&pda.btc_script, bitcoin::Network::Testnet) {
+                    Ok(addr) => addr,
+                    Err(e) => {
+                        eprintln!("[tick] Cannot parse btc_script for PDA {}: {}", &pda.pda_address[..8], e);
+                        continue;
+                    }
+                };
+
+                // Check if a BTC tx was already sent to this destination
+                match self.esplora.get_address_txids(&btc_address).await {
+                    Ok(txids) if !txids.is_empty() => {
+                        // Found existing tx(s) — recover the most recent one
+                        let recovered_txid = txids[0].clone();
+                        println!(
+                            "[tick] Recovered existing BTC tx {} for untracked PDA {} (dest: {})",
+                            &recovered_txid[..12], &pda.pda_address[..8], &btc_address
+                        );
+                        let entry = RedemptionTracking {
+                            pda_address: pda.pda_address.clone(),
+                            btc_txid: Some(recovered_txid),
+                            local_status: LocalRedemptionStatus::AwaitingConfirmation,
+                            retry_count: 0,
+                            created_at: now_secs(),
+                            last_updated: now_secs(),
+                            error: None,
+                            verified_tx_pda: None,
+                            buffer_pubkey: None,
+                            tx_size: None,
+                            requester: Some(pda.requester.clone()),
+                            amount_sats: Some(pda.amount_sats),
+                            btc_script: Some(hex::encode(&pda.btc_script)),
+                            request_id: Some(pda.request_id),
+                            simulated: false,
+                        };
+                        self.tracking.upsert(entry).await;
+                    }
+                    _ => {
+                        // No existing tx found — need to sign fresh
+                        println!(
+                            "[tick] No existing BTC tx for untracked PDA {}, building fresh",
+                            &pda.pda_address[..8]
+                        );
+                        match self.build_sign_broadcast(pda).await {
                             Ok(_) => result.withdrawals_processed += 1,
                             Err(e) => {
                                 eprintln!(
@@ -382,6 +419,7 @@ impl RedemptionService {
                                 );
                             }
                         }
+                    }
                 }
                 continue;
             }
