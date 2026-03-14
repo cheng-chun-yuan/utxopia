@@ -163,7 +163,89 @@ impl HeaderRelayer {
 
     // ── Sync ──
 
+    /// Extract prev_block_hash from a raw 80-byte Bitcoin header (bytes 4..36).
+    fn extract_prev_hash(raw_header: &[u8]) -> [u8; 32] {
+        let mut hash = [0u8; 32];
+        hash.copy_from_slice(&raw_header[4..36]);
+        hash
+    }
+
+    /// Check if a block hash has a valid on-chain PDA (disc=0x07).
+    fn has_on_chain_block(&self, block_hash: &[u8; 32]) -> bool {
+        let pda = self.block_header_pda(block_hash);
+        match self.rpc.get_account(&pda) {
+            Ok(account) => !account.data.is_empty() && account.data[0] == 0x07,
+            Err(_) => false,
+        }
+    }
+
+    /// Detect reorg by walking back the Bitcoin chain via prev_hash links.
+    ///
+    /// Strategy:
+    /// 1. Fetch real Bitcoin header at on-chain tip height, compute its hash
+    /// 2. If hash == on-chain tip hash → no reorg, sync normally
+    /// 3. If different → reorg detected. Walk back via prev_hash:
+    ///    fetch header at height-1, check if its hash exists on-chain as a block PDA
+    /// 4. Repeat until we find a block that exists on-chain (common ancestor)
+    ///
+    /// Returns (parent_hash, parent_height) to start syncing from.
+    async fn find_sync_start(
+        &self,
+        on_chain_tip_hash: [u8; 32],
+        on_chain_tip_height: u64,
+        max_lookback: u64,
+    ) -> Result<([u8; 32], u64), RelayerError> {
+        // Quick check: does the real block at tip height match on-chain?
+        let tip_header = self.get_raw_header(on_chain_tip_height).await?;
+        let real_tip_hash = Self::compute_block_hash(&tip_header);
+
+        if real_tip_hash == on_chain_tip_hash {
+            // No reorg — on-chain tip matches canonical chain
+            return Ok((on_chain_tip_hash, on_chain_tip_height));
+        }
+
+        println!(
+            "[header-relay] Reorg detected at height {}! On-chain hash {} != real hash {}",
+            on_chain_tip_height,
+            hex::encode(on_chain_tip_hash),
+            hex::encode(real_tip_hash),
+        );
+
+        // Walk back via prev_hash to find common ancestor
+        let mut check_height = on_chain_tip_height;
+        let mut prev_hash = Self::extract_prev_hash(&tip_header);
+        let min_height = on_chain_tip_height.saturating_sub(max_lookback);
+
+        while check_height > min_height {
+            check_height -= 1;
+
+            // Does this prev_hash exist on-chain?
+            if self.has_on_chain_block(&prev_hash) {
+                println!(
+                    "[header-relay] Common ancestor found at height {} ({} blocks back)",
+                    check_height,
+                    on_chain_tip_height - check_height,
+                );
+                return Ok((prev_hash, check_height));
+            }
+
+            // Keep walking back: fetch header at check_height, get its prev_hash
+            let header = self.get_raw_header(check_height).await?;
+            prev_hash = Self::extract_prev_hash(&header);
+        }
+
+        Err(RelayerError::Parse(format!(
+            "No common ancestor within {} blocks of height {}",
+            max_lookback, on_chain_tip_height
+        )))
+    }
+
     /// Sync from on-chain tip to Bitcoin tip. Returns number of headers submitted.
+    ///
+    /// Safety rules:
+    /// 1. Only submit when the new chain connects to an on-chain block (common ancestor found)
+    /// 2. Only submit when the new chain is longer than the current on-chain tip
+    /// 3. Verify prev_hash linkage before each batch submission
     pub async fn sync_headers(&self) -> Result<u32, RelayerError> {
         let state = self
             .get_light_client_state()?
@@ -175,16 +257,45 @@ impl HeaderRelayer {
             return Err(RelayerError::AlreadyAtTip);
         }
 
-        println!(
-            "[header-relay] Syncing {} blocks ({} -> {})",
-            btc_tip - state.tip_height,
-            state.tip_height + 1,
-            btc_tip
-        );
+        // Find where to start syncing — detects reorgs automatically
+        let (parent_hash, parent_height) = self
+            .find_sync_start(state.tip_hash, state.tip_height, 20)
+            .await?;
 
-        let mut parent_hash = state.tip_hash;
-        let mut parent_height = state.tip_height;
-        let mut height = state.tip_height + 1;
+        let start_height = parent_height + 1;
+        if start_height > btc_tip {
+            return Err(RelayerError::AlreadyAtTip);
+        }
+
+        // Safety: new chain must be strictly longer than current on-chain tip
+        if btc_tip <= state.tip_height {
+            println!(
+                "[header-relay] New chain tip {} is not longer than on-chain tip {}, skipping",
+                btc_tip, state.tip_height
+            );
+            return Ok(0);
+        }
+
+        if parent_height < state.tip_height {
+            println!(
+                "[header-relay] Reorg: rolling back {} blocks from {} to common ancestor {}, then extending to {}",
+                state.tip_height - parent_height,
+                state.tip_height,
+                parent_height,
+                btc_tip,
+            );
+        } else {
+            println!(
+                "[header-relay] Syncing {} blocks ({} -> {})",
+                btc_tip - parent_height,
+                start_height,
+                btc_tip
+            );
+        }
+
+        let mut current_parent_hash = parent_hash;
+        let mut current_parent_height = parent_height;
+        let mut height = start_height;
         let mut total = 0u32;
 
         while height <= btc_tip {
@@ -204,7 +315,21 @@ impl HeaderRelayer {
 
             let batch_len = raw_headers.len() as u64;
 
-            match self.submit_batch(&parent_hash, &raw_headers, parent_height) {
+            // Verify first header's prev_hash links to our expected parent
+            let first_prev = Self::extract_prev_hash(&raw_headers[0]);
+            if first_prev != current_parent_hash {
+                eprintln!(
+                    "[header-relay] prev_hash mismatch at height {}: expected {}, got {} — aborting batch",
+                    height,
+                    hex::encode(current_parent_hash),
+                    hex::encode(first_prev)
+                );
+                return Err(RelayerError::Parse(format!(
+                    "prev_hash mismatch at height {}", height
+                )));
+            }
+
+            match self.submit_batch(&current_parent_hash, &raw_headers, current_parent_height) {
                 Ok(sig) => {
                     println!(
                         "[header-relay] Batch {} headers ({} -> {}): {}",
@@ -219,9 +344,9 @@ impl HeaderRelayer {
             }
 
             // Advance past this batch
-            parent_hash = Self::compute_block_hash(&raw_headers[raw_headers.len() - 1]);
-            parent_height = height + batch_len - 1;
-            height = parent_height + 1;
+            current_parent_hash = Self::compute_block_hash(&raw_headers[raw_headers.len() - 1]);
+            current_parent_height = height + batch_len - 1;
+            height = current_parent_height + 1;
         }
 
         Ok(total)
