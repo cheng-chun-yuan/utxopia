@@ -27,7 +27,7 @@ import { fetchAccountInfo } from "@/lib/adapters/connection-adapter";
 // =============================================================================
 
 import {
-  DEVNET_CONFIG,
+  getConfig,
   INSTRUCTION_DISCRIMINATORS,
   buildTransactInstructionData,
   buildRedemptionRequestInstructionData as sdkBuildRedemptionRequestInstructionData,
@@ -44,20 +44,22 @@ export { INSTRUCTION_DISCRIMINATORS, bigintTo32Bytes, hexToBytes, bytesToHex };
 // Constants - All from SDK config
 // =============================================================================
 
-/** Aegis Program ID */
-export const AEGIS_PROGRAM_ID = new PublicKey(DEVNET_CONFIG.aegisProgramId);
+/** Aegis Program ID (dynamic — reads from SDK config) */
+export const getAegisProgramId = () => new PublicKey(getConfig().aegisProgramId);
+export const AEGIS_PROGRAM_ID = new PublicKey(getConfig().aegisProgramId);
 
 /** BTC Light Client Program ID */
-export const BTC_LIGHT_CLIENT_PROGRAM_ID = new PublicKey(DEVNET_CONFIG.btcLightClientProgramId);
+export const BTC_LIGHT_CLIENT_PROGRAM_ID = new PublicKey(getConfig().btcLightClientProgramId);
 
 /** Token-2022 Program ID */
-export const TOKEN_2022_PROGRAM_ID = new PublicKey(DEVNET_CONFIG.token2022ProgramId);
+export const TOKEN_2022_PROGRAM_ID = new PublicKey(getConfig().token2022ProgramId);
 
 /** zkBTC Mint Address */
-export const ZKBTC_MINT_ADDRESS = new PublicKey(DEVNET_CONFIG.zkbtcMint);
+export const getZkbtcMintAddress = () => new PublicKey(getConfig().zkbtcMint);
+export const ZKBTC_MINT_ADDRESS = new PublicKey(getConfig().zkbtcMint);
 
 /** Groth16 Verifier Program ID */
-export const GROTH16_VERIFIER_PROGRAM_ID = new PublicKey(DEVNET_CONFIG.groth16VerifierProgramId);
+export const GROTH16_VERIFIER_PROGRAM_ID = new PublicKey(getConfig().groth16VerifierProgramId);
 
 // =============================================================================
 // PDA Derivation (using SDK seeds)
@@ -275,7 +277,7 @@ export async function isNullifierUsed(
  */
 export async function getMerkleRoot(): Promise<Uint8Array | null> {
   try {
-    const account = await fetchAccountInfo(DEVNET_CONFIG.commitmentTreePda);
+    const account = await fetchAccountInfo(getConfig().commitmentTreePda);
     if (!account) return null;
     // Root is at offset 8 (after discriminator), 32 bytes
     return account.data.slice(8, 40);
@@ -457,7 +459,7 @@ export function deriveDepositReceiptPDA(
 // =============================================================================
 
 /** ChadBuffer Program ID */
-export const CHADBUFFER_PROGRAM_ID = new PublicKey(DEVNET_CONFIG.chadbufferProgramId);
+export const CHADBUFFER_PROGRAM_ID = new PublicKey(getConfig().chadbufferProgramId);
 
 /** ChadBuffer instruction discriminators */
 const CHADBUFFER_IX = {

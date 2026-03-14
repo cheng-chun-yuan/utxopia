@@ -1,5 +1,5 @@
 import { PublicKey } from "@solana/web3.js";
-import { PDA_SEEDS, DEVNET_CONFIG } from "@aegis/sdk";
+import { PDA_SEEDS, getConfig } from "@aegis/sdk";
 
 /** Derive nullifier PDA address (base58) from nullifier hash hex */
 export function nullifierHashToPDA(hashHex: string): string {
@@ -10,7 +10,7 @@ export function nullifierHashToPDA(hashHex: string): string {
   }
   const [pda] = PublicKey.findProgramAddressSync(
     [Buffer.from(PDA_SEEDS.NULLIFIER), bytes],
-    new PublicKey(DEVNET_CONFIG.aegisProgramId)
+    new PublicKey(getConfig().aegisProgramId)
   );
   return pda.toBase58();
 }
@@ -41,7 +41,7 @@ export async function fetchSpentNullifierPDAs(backendUrl: string): Promise<Set<s
           id: 1,
           method: "getProgramAccounts",
           params: [
-            DEVNET_CONFIG.aegisProgramId,
+            getConfig().aegisProgramId,
             { filters: [{ dataSize: 1 }], encoding: "base64" },
           ],
         }),

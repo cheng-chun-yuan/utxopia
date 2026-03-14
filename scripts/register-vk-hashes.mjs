@@ -7,14 +7,27 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 
-const PROGRAM_ID = new PublicKey('4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1');
-const POOL_STATE = new PublicKey('4654vJpq3E3A6nwtUwNWeJuTkHDcqT761uoBX7AHjm5x');
+const PROGRAM_ID = new PublicKey(
+  process.env.AEGIS_PROGRAM_ID || '7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ'
+);
+// Derive pool state PDA from program ID
+const [POOL_STATE] = PublicKey.findProgramAddressSync(
+  [Buffer.from('pool_state')],
+  PROGRAM_ID
+);
 
-// Read keypair from .env.local
-const envContent = fs.readFileSync(path.join(ROOT, 'aegis-app/.env.local'), 'utf-8');
-const keypairMatch = envContent.match(/RELAYER_KEYPAIR=(\[.*?\])/);
-if (!keypairMatch) throw new Error('RELAYER_KEYPAIR not found in .env.local');
-const authority = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(keypairMatch[1])));
+// Read keypair from .env.local or KEYPAIR_PATH
+const keypairPath = process.env.KEYPAIR_PATH || null;
+let authority;
+if (keypairPath) {
+  const kpData = JSON.parse(fs.readFileSync(keypairPath.replace('~', process.env.HOME), 'utf-8'));
+  authority = Keypair.fromSecretKey(Uint8Array.from(kpData));
+} else {
+  const envContent = fs.readFileSync(path.join(ROOT, 'aegis-app/.env.local'), 'utf-8');
+  const keypairMatch = envContent.match(/RELAYER_KEYPAIR="?(\[.*?\])"?/);
+  if (!keypairMatch) throw new Error('RELAYER_KEYPAIR not found in .env.local');
+  authority = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(keypairMatch[1])));
+}
 console.log('Authority:', authority.publicKey.toBase58());
 
 const connection = new Connection('https://api.devnet.solana.com', 'confirmed');

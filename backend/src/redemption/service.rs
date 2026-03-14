@@ -58,8 +58,8 @@ pub struct RedemptionService {
     /// Withdrawal queue (kept for submit_withdrawal / get_all_requests compatibility)
     queue: WithdrawalQueue,
 
-    /// Transaction builder
-    builder: TxBuilder,
+    /// Transaction builder (behind RwLock for periodic fee refresh from chain)
+    builder: RwLock<TxBuilder>,
 
     /// Transaction signer
     signer: Arc<dyn TxSigner>,
@@ -83,7 +83,7 @@ pub struct RedemptionService {
 impl RedemptionService {
     /// Create a new redemption service with any TxSigner implementation
     pub fn new_with_signer(
-        config: RedemptionConfig,
+        mut config: RedemptionConfig,
         signer: impl TxSigner + 'static,
         sol_client: SolClient,
     ) -> Self {
@@ -93,7 +93,23 @@ impl RedemptionService {
         let ws_notify = Arc::new(Notify::new());
 
         let mut builder = TxBuilder::new_testnet();
-        builder.set_service_fee(config.service_fee_sats);
+        // Fetch all pool config from on-chain PoolState (source of truth)
+        match sol_client.fetch_pool_config() {
+            Ok(pool_cfg) => {
+                println!(
+                    "[redemption] Loaded on-chain PoolState: fee_bps={}, fee_base={}, min={}, max={}",
+                    pool_cfg.service_fee_bps, pool_cfg.service_fee_base,
+                    pool_cfg.min_deposit, pool_cfg.max_deposit,
+                );
+                builder.set_service_fee_model(pool_cfg.service_fee_bps, pool_cfg.service_fee_base);
+                config.min_withdrawal = pool_cfg.min_deposit;
+                config.max_withdrawal = pool_cfg.max_deposit;
+            }
+            Err(e) => {
+                eprintln!("[redemption] Warning: failed to fetch on-chain pool config ({:?}), using fallback defaults", e);
+                builder.set_service_fee_model(config.service_fee_bps, config.service_fee_base);
+            }
+        }
 
         // Auto-init header relayer if env vars are set
         let header_relayer = Self::try_create_header_relayer();
@@ -104,7 +120,7 @@ impl RedemptionService {
             sol_client,
             ws_notify,
             queue: WithdrawalQueue::default(),
-            builder,
+            builder: RwLock::new(builder),
             signer: Arc::new(signer),
             esplora: EsploraClient::from_network(crate::config::Network::Devnet),
             pool_utxos: Arc::new(RwLock::new(Vec::new())),
@@ -135,7 +151,8 @@ impl RedemptionService {
 
         let keypair = crate::common::keypair::load_keypair(&relayer_keypair_val).ok()?;
 
-        let solana_rpc = std::env::var("SOLANA_RPC_URL")
+        let solana_rpc = std::env::var("AEGIS_SOLANA_RPC")
+            .or_else(|_| std::env::var("SOLANA_RPC_URL"))
             .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
         let esplora_url = std::env::var("ESPLORA_URL")
             .unwrap_or_else(|_| "https://mempool.space/testnet4/api".to_string());
@@ -190,7 +207,7 @@ impl RedemptionService {
         }
 
         // Validate BTC address
-        self.builder
+        self.builder.read().await
             .validate_address(&btc_address)
             .map_err(|e| ServiceError::InvalidAddress(e.to_string()))?;
 
@@ -275,7 +292,22 @@ impl RedemptionService {
     pub async fn tick(&self) -> Result<TickResult, ServiceError> {
         let mut result = TickResult::default();
 
-        // Phase 0: Refresh pool UTXOs from Esplora
+        // Phase 0a: Refresh pool config from on-chain PoolState (fees, limits)
+        match self.sol_client.fetch_pool_config() {
+            Ok(pool_cfg) => {
+                self.builder.write().await.set_service_fee_model(
+                    pool_cfg.service_fee_bps,
+                    pool_cfg.service_fee_base,
+                );
+                // min/max are in self.config which is not mutable here;
+                // they were set at startup and rarely change
+            }
+            Err(e) => {
+                eprintln!("[tick] Warning: failed to refresh on-chain pool config: {:?}", e);
+            }
+        }
+
+        // Phase 0b: Refresh pool UTXOs from Esplora
         if let Err(e) = self.refresh_pool_utxos().await {
             eprintln!("[tick] Warning: failed to refresh UTXOs: {}", e);
         }
@@ -333,54 +365,14 @@ impl RedemptionService {
                     continue;
                 }
             } else {
-                // Processing on-chain but not tracked locally (e.g., after redeploy).
-                // Check if BTC was already sent to this address to avoid duplicate broadcasts.
-                let btc_address = match script_to_address(
-                    &pda.btc_script,
-                    bitcoin::Network::Testnet,
-                ) {
-                    Ok(addr) => addr,
-                    Err(e) => {
-                        eprintln!(
-                            "[tick] Cannot parse BTC address for PDA {}: {}",
-                            &pda.pda_address[..8], e
-                        );
-                        continue;
-                    }
-                };
-
-                // Check for existing payments to this address
-                match self.esplora.get_address_txids(&btc_address).await {
-                    Ok(txs) if !txs.is_empty() => {
-                        // Found existing tx(s) — recover tracking with the first confirmed txid
-                        let txid = txs[0].clone();
-                        println!(
-                            "[tick] PDA {} already has BTC tx {}, recovering tracking",
-                            &pda.pda_address[..8], &txid[..8]
-                        );
-                        let now = now_secs();
-                        let entry = RedemptionTracking {
-                            pda_address: pda.pda_address.clone(),
-                            btc_txid: Some(txid),
-                            local_status: LocalRedemptionStatus::AwaitingConfirmation,
-                            retry_count: 0,
-                            created_at: now,
-                            last_updated: now,
-                            error: None,
-                            verified_tx_pda: None,
-                            buffer_pubkey: None,
-                            tx_size: None,
-                            requester: Some(pda.requester.clone()),
-                            amount_sats: Some(pda.amount_sats),
-                            btc_script: Some(hex::encode(&pda.btc_script)),
-                            request_id: Some(pda.request_id),
-                        };
-                        self.tracking.upsert(entry).await;
-                        result.withdrawals_processed += 1;
-                    }
-                    _ => {
-                        // No existing payments — safe to broadcast
-                        match self.build_sign_broadcast(pda).await {
+                // Processing on-chain but not tracked locally (e.g., after redeploy or retry).
+                // Always re-sign: the previous BTC tx may have used wrong fees.
+                println!(
+                    "[tick] Processing PDA {} not tracked locally, building fresh BTC tx",
+                    &pda.pda_address[..8]
+                );
+                {
+                    match self.build_sign_broadcast(pda).await {
                             Ok(_) => result.withdrawals_processed += 1,
                             Err(e) => {
                                 eprintln!(
@@ -390,7 +382,6 @@ impl RedemptionService {
                                 );
                             }
                         }
-                    }
                 }
                 continue;
             }
@@ -459,6 +450,7 @@ impl RedemptionService {
             btc_address,
         );
         request.redemption_nonce = Some(pda.request_id);
+        request.pda_service_fee = Some(pda.service_fee);
 
         // Get UTXOs and build tx
         let utxos = self.pool_utxos.read().await.clone();
@@ -482,24 +474,33 @@ impl RedemptionService {
                 amount_sats: Some(pda.amount_sats),
                 btc_script: Some(hex::encode(&pda.btc_script)),
                 request_id: Some(pda.request_id),
+                simulated: false,
             };
             self.tracking.upsert(entry).await;
             return Err(ServiceError::NoUtxos);
         }
 
         let mut unsigned = self
-            .builder
+            .builder.read().await
             .build_withdrawal(&request, &utxos)
             .map_err(|e| ServiceError::BuildError(e.to_string()))?;
 
         // Attach Solana verification data for FROST signers
         if let Some(nonce) = request.redemption_nonce {
+            // FROST policy expects hex scriptPubKey, not bech32 address
+            let btc_script_hex = {
+                let addr = bitcoin::Address::from_str(&request.btc_address)
+                    .map_err(|e| ServiceError::InvalidAddress(format!("parse address: {}", e)))?
+                    .assume_checked();
+                hex::encode(addr.script_pubkey().as_bytes())
+            };
             unsigned.solana_verification =
                 Some(crate::bitcoin::frost_client::SolanaVerification::Withdrawal {
                     requester: request.user_solana_address.clone(),
                     nonce,
-                    expected_amount_sats: request.amount_sats,
-                    expected_btc_address: request.btc_address.clone(),
+                    expected_amount_sats: request.amount_sats,  // gross (PDA)
+                    expected_send_amount: Some(unsigned.send_amount),  // net (tx output)
+                    expected_btc_address: btc_script_hex,
                 });
         }
 
@@ -540,6 +541,7 @@ impl RedemptionService {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
+        let is_simulated = broadcast_mode != "real";
         let entry = RedemptionTracking {
             pda_address: pda.pda_address.clone(),
             btc_txid: Some(txid.clone()),
@@ -555,6 +557,7 @@ impl RedemptionService {
             amount_sats: Some(pda.amount_sats),
             btc_script: Some(hex::encode(&pda.btc_script)),
             request_id: Some(pda.request_id),
+            simulated: is_simulated,
         };
         self.tracking.upsert(entry).await;
 
@@ -606,22 +609,10 @@ impl RedemptionService {
         let broadcast_mode =
             std::env::var("AEGIS_BROADCAST_MODE").unwrap_or_else(|_| "simulated".to_string());
 
-        // Simulated mode: no real BTC tx to verify, just mark locally complete
+        // Simulated mode: no real BTC tx to verify — leave as AwaitingConfirmation
+        // so the explorer correctly shows that BTC broadcast + SPV + completion are pending.
         if broadcast_mode != "real" {
-            println!(
-                "[redemption] PDA {} simulated mode, marking complete",
-                &pda.pda_address[..8],
-            );
-            let now = now_secs();
-            let mut entry = tracking;
-            entry.local_status = LocalRedemptionStatus::Completed;
-            entry.last_updated = now;
-            self.tracking.upsert(entry).await;
-
-            let mut stats = self.stats.write().await;
-            stats.processing = stats.processing.saturating_sub(1);
-            stats.complete += 1;
-            return Ok(true);
+            return Ok(false);
         }
 
         // If already SpvVerified, verify the PDA still exists before skipping ahead
@@ -992,6 +983,17 @@ impl RedemptionService {
     /// Get current statistics
     pub async fn stats(&self) -> RedemptionStats {
         self.stats.read().await.clone()
+    }
+
+    /// Get current service fee config (bps, base) from the builder (refreshed from chain each tick)
+    pub async fn service_fee_config(&self) -> (u16, u64) {
+        let b = self.builder.read().await;
+        (b.service_fee_bps(), b.service_fee_base())
+    }
+
+    /// Get min/max withdrawal limits (loaded from on-chain PoolState at startup)
+    pub fn withdrawal_limits(&self) -> (u64, u64) {
+        (self.config.min_withdrawal, self.config.max_withdrawal)
     }
 
     /// Get all withdrawal requests

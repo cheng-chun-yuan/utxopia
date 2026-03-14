@@ -345,16 +345,22 @@ pub fn create_router(service: RedemptionService) -> Router {
 /// Two separate fees:
 /// - `relayer_fee_sats`: paid to the relayer as a shielded note (for submitting Solana txs
 ///   on behalf of users during private JoinSplit transfers)
-/// - `service_fee_sats`: deducted from BTC withdrawal amount, goes to the pool as protocol revenue
-async fn handle_relayer_meta() -> impl IntoResponse {
+/// - `service_fee_base` + `service_fee_bps`: withdrawal fee = (amount * bps / 10000) + base
+async fn handle_relayer_meta(
+    State(state): State<SharedCombinedState>,
+) -> impl IntoResponse {
     #[derive(Serialize)]
     struct RelayerMetaResponse {
         /// Relayer's stealth meta-address (hex). Users send a fee note to this address.
         stealth_meta: Option<String>,
         /// Flat fee for private sends — paid to relayer as a shielded output note
         relayer_fee_sats: u64,
-        /// Flat fee for BTC withdrawals — deducted from amount, protocol revenue to pool
-        service_fee_sats: u64,
+        /// Base service fee for BTC withdrawals (sats)
+        service_fee_base: u64,
+        /// Service fee in basis points (e.g., 30 = 0.3%)
+        service_fee_bps: u16,
+        /// Minimum withdrawal amount (sats)
+        min_withdrawal: u64,
     }
 
     let relayer_fee_sats: u64 = std::env::var("RELAYER_FEE_SATS")
@@ -362,17 +368,22 @@ async fn handle_relayer_meta() -> impl IntoResponse {
         .and_then(|v| v.parse().ok())
         .unwrap_or(500);
 
-    let service_fee_sats: u64 = std::env::var("SERVICE_FEE_SATS")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(500);
+    // Read fee + limit config from on-chain PoolState (refreshed each tick)
+    let (service_fee_bps, service_fee_base, min_withdrawal) = {
+        let svc = state.redemption.read().await;
+        let (bps, base) = svc.service_fee_config().await;
+        let (min, _max) = svc.withdrawal_limits();
+        (bps, base, min)
+    };
 
     let stealth_meta = std::env::var("RELAYER_STEALTH_META").ok();
 
     Json(RelayerMetaResponse {
         stealth_meta,
         relayer_fee_sats,
-        service_fee_sats,
+        service_fee_base,
+        service_fee_bps,
+        min_withdrawal,
     })
 }
 
@@ -395,7 +406,8 @@ pub fn create_combined_router(
 
     let public = Router::new()
         .route("/api/health", get(handle_health))
-        .route("/api/relayer/meta", get(handle_relayer_meta));
+        .route("/api/relayer/meta", get(handle_relayer_meta))
+        .with_state(state.clone());
 
     Router::new()
         .merge(authed)

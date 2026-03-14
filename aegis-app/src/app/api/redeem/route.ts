@@ -19,7 +19,7 @@ import {
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import {
-  DEVNET_CONFIG,
+  getConfig,
   INSTRUCTION_DISCRIMINATORS,
   hexToBytes,
   PDA_SEEDS,
@@ -37,7 +37,7 @@ import {
 // =============================================================================
 
 const STEALTH_DATA_PER_OUTPUT = 40;
-const CHADBUFFER_PROGRAM_ID = new PublicKey(DEVNET_CONFIG.chadbufferProgramId);
+const CHADBUFFER_PROGRAM_ID = new PublicKey(getConfig().chadbufferProgramId);
 const CHADBUFFER = { INIT: 0, WRITE: 2, CLOSE: 3 } as const;
 const AUTHORITY_SIZE = 32;
 const MAX_CHUNK_SIZE = 950;

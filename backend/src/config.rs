@@ -232,25 +232,25 @@ impl AEGISConfig {
         // Program IDs (required for non-devnet)
         let program_id = get_required_or_devnet_default(
             "AEGIS_PROGRAM_ID",
-            "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1",
+            "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ",
             network,
         )?;
 
-        let pool_state = get_required_or_devnet_default(
-            "AEGIS_POOL_STATE",
-            "4654vJpq3E3A6nwtUwNWeJuTkHDcqT761uoBX7AHjm5x",
-            network,
-        )?;
-
-        let commitment_tree = get_required_or_devnet_default(
-            "AEGIS_COMMITMENT_TREE",
-            "2bjcEufNf6Xa7YwH1ci99k1NjRg6jjirCQXsPjC5Qgk6",
-            network,
-        )?;
+        // Derive PDAs from program ID (deterministic)
+        let program_pubkey: solana_sdk::pubkey::Pubkey = program_id.parse()
+            .map_err(|_| ConfigError::MissingEnvVar("AEGIS_PROGRAM_ID (invalid pubkey)".into()))?;
+        let (pool_state_pubkey, _) = solana_sdk::pubkey::Pubkey::find_program_address(
+            &[b"pool_state"], &program_pubkey,
+        );
+        let (commitment_tree_pubkey, _) = solana_sdk::pubkey::Pubkey::find_program_address(
+            &[b"commitment_tree"], &program_pubkey,
+        );
+        let pool_state = pool_state_pubkey.to_string();
+        let commitment_tree = commitment_tree_pubkey.to_string();
 
         let zkbtc_mint = get_required_or_devnet_default(
             "AEGIS_ZKBTC_MINT",
-            "GvFAyHsbWDbwvHxecaFnnGrhM1MR72E3cSX78qQbAyC7",
+            "G5CHaLkWjdUxxmnrVqNLQ29K7PoNwJAzvVT11jjkdGKC",
             network,
         )?;
 

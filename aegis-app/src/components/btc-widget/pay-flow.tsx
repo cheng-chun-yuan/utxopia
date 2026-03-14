@@ -7,7 +7,7 @@ import { useConnection } from "@solana/wallet-adapter-react";
 import {
   CheckCircle2, Send, Wallet, Shield, Clock, AlertCircle, AlertTriangle,
   Key, Copy, Check, X, Loader2, Zap, Plus, Trash2, Bitcoin, FileText,
-  Download, Search,
+  Download, Search, ChevronRight, ArrowRight, Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { parseSats, validateWithdrawalAmount } from "@/lib/utils/validation";
@@ -24,7 +24,7 @@ import { useProver } from "@/hooks/use-prover";
 import {
   initPoseidon,
   prepareClaimInputs,
-  DEVNET_CONFIG,
+  getConfig,
   deriveMasterKey,
   eddsaGetPubKey,
   deriveKeysFromSeed,
@@ -96,25 +96,20 @@ function reduceToFieldOnChain(bytes: Uint8Array): bigint {
  * Estimate Solana transaction size for a JoinSplit(N,M).
  * Solana max tx size = 1232 bytes.
  *
- * Layout:
- *  - 1 byte: signature count (compact-u16)
- *  - 64 bytes: 1 signature (relayer/user)
- *  - 3 bytes: message header (num_signers, num_readonly_signed, num_readonly_unsigned)
- *  - 1 byte: account count (compact-u16, up to 127 fits in 1 byte)
- *  - 32 * numAccounts: account public keys
- *  - 32 bytes: recent blockhash
- *  - 1 byte: instruction count (compact-u16)
- *  - Per instruction: 1 (program_id idx) + 1 (compact-u16 acct count) + numAccounts (indices) + 2 (compact-u16 data len) + data
+ * Relay uses proof_source=1: proof (256 bytes) offloaded to ChadBuffer,
+ * stealth data (M×40 bytes) remains in instruction data.
  *
- * Accounts: pool_state, commitment_tree, vk_registry, user, system_program, N nullifier PDAs = 5 + N
- * But some accounts are deduped (program ID counted once). Total unique ≈ 6 + N (5 + N accounts + aegis program).
- * Instruction data: 1 + 2 + 256 + 32 + 32 + (N*32) + (M*32) + (M*40) = 323 + 32N + 72M
+ * Accounts: pool_state, commitment_tree, vk_registry, user, system_program,
+ *   N nullifier PDAs, proof_buffer = 7 + N unique (5 + N instruction accounts + program + buffer).
+ *
+ * Instruction data (mode 1): disc(1) + header(3) + root(32) + bph(32)
+ *   + nullifiers(N×32) + commitments(M×32) + stealth(M×40) = 68 + 32N + 72M
  */
 const SOLANA_MAX_TX_SIZE = 1232;
 
 function estimateTransactionSize(nInputs: number, nOutputs: number): number {
-  const numAccounts = 6 + nInputs; // 5 instruction accounts + N nullifier PDAs + 1 program
-  const instructionDataSize = 323 + (nInputs * 32) + (nOutputs * 72);
+  const numAccounts = 7 + nInputs; // 5 base + N nullifiers + 1 program + 1 proof_buffer
+  const instructionDataSize = 68 + (nInputs * 32) + (nOutputs * 72);
 
   return (
     1 +                       // signature count (compact-u16)
@@ -126,7 +121,7 @@ function estimateTransactionSize(nInputs: number, nOutputs: number): number {
     1 +                       // instruction count (compact-u16)
     1 +                       // program ID index
     1 +                       // account indices count (compact-u16)
-    (5 + nInputs) +           // account indices (one byte each)
+    (6 + nInputs) +           // account indices (one byte each, +1 for buffer)
     2 +                       // instruction data length (compact-u16)
     instructionDataSize       // instruction data
   );
@@ -1191,7 +1186,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         // Get or create associated token account for recipient
         const { getAssociatedTokenAddressSync } = await import("@solana/spl-token");
         const recipientPubkey = new PublicKey(publicOutput!.solanaAddress);
-        const zkbtcMint = new PublicKey(DEVNET_CONFIG.zkbtcMint);
+        const zkbtcMint = new PublicKey(getConfig().zkbtcMint);
         const TOKEN_2022_PID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
         const recipientTokenAccount = getAssociatedTokenAddressSync(
           zkbtcMint, recipientPubkey, false, TOKEN_2022_PID
@@ -1367,14 +1362,21 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
             <p className="text-body2-semibold text-gray-light uppercase tracking-wider text-xs">
               Inputs
             </p>
-            {!hasImportedNotes && !(initialSecretPhrase && (importLoading || importError)) && (
-              <button
-                onClick={() => setShowNoteSelector(!showNoteSelector)}
-                className="text-caption text-purple hover:text-purple/80 transition-colors"
-              >
-                {showNoteSelector ? "Done" : "Edit"}
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {availableNotes.length > 0 && (
+                <span className="text-caption text-gray">
+                  Balance: {formatBtc(availableNotes.reduce((sum, n) => sum + Number(n.amount), 0))} zkBTC
+                </span>
+              )}
+              {!hasImportedNotes && !(initialSecretPhrase && (importLoading || importError)) && (
+                <button
+                  onClick={() => setShowNoteSelector(!showNoteSelector)}
+                  className="text-caption text-purple hover:text-purple/80 transition-colors"
+                >
+                  {showNoteSelector ? "Done" : "Select"}
+                </button>
+              )}
+            </div>
           </div>
 
           {hasImportedNotes ? null : initialSecretPhrase && !hasImportedNotes && (importLoading || importError) ? (
@@ -1436,8 +1438,8 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
               ))}
             </div>
           ) : (
-            /* Compact selected notes list */
-            <div className="space-y-1.5 mb-2">
+            /* Collapsed summary — just total + note count */
+            <div className="mb-2">
               {selectedNotes.length === 0 ? (
                 <div className="p-3 rounded-[10px] bg-muted border border-gray/15 text-center">
                   <p className="text-caption text-gray">
@@ -1445,21 +1447,35 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                   </p>
                 </div>
               ) : (
-                selectedNotes.map((note) => (
-                  <div
-                    key={note.id}
-                    className="flex items-center gap-2 p-2.5 rounded-[10px] bg-purple/5 border border-purple/20"
-                  >
-                    <Key className="w-4 h-4 text-purple shrink-0" />
-                    <span className="text-body2-semibold text-foreground">
-                      {formatBtc(Number(note.amount))} zkBTC
-                    </span>
-                    <span className="text-caption text-gray font-mono ml-auto">
-                      leaf #{note.leafIndex}
-                    </span>
-                    <Check className="w-4 h-4 text-purple" />
+                <button
+                  onClick={() => setShowNoteSelector(true)}
+                  className="w-full p-3 rounded-[10px] bg-purple/5 border border-purple/20 hover:border-purple/40 transition-colors text-left"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-body2-semibold text-foreground">
+                          {formatBtc(totalInputSats)} zkBTC
+                        </span>
+                        {changeSats > 0 && totalOutputSats > 0 && (
+                          <span className="text-[11px] text-gray">
+                            {changeSats.toLocaleString()} change
+                          </span>
+                        )}
+                        {changeSats < 0 && (
+                          <span className="text-[11px] text-error">
+                            {(-changeSats).toLocaleString()} short
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-gray mt-0.5">Selected</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-caption text-gray">
+                      <span>{selectedNotes.length} note{selectedNotes.length !== 1 ? "s" : ""}</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </div>
                   </div>
-                ))
+                </button>
               )}
             </div>
           )}
@@ -1546,13 +1562,15 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                 )}
               </div>
             ) : (
-              <button
-                onClick={() => setShowImportInput(true)}
-                className="mb-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-[8px] text-caption text-btc hover:bg-btc/5 border border-dashed border-btc/20 hover:border-btc/40 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Import from Secret
-              </button>
+              <div className="mb-2 flex justify-end px-1">
+                <button
+                  onClick={() => setShowImportInput(true)}
+                  className="text-[11px] text-gray hover:text-btc transition-colors flex items-center gap-1"
+                >
+                  Import from Secret
+                  <ArrowRight className="w-3 h-3" />
+                </button>
+              </div>
             )
           )}
 
@@ -1563,15 +1581,17 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
             </p>
           )}
 
-          {/* Input total */}
-          <div className="flex justify-between items-center px-2 text-body2">
-            <span className="text-gray">
-              {isPublicRedeem ? "Public zkBTC Balance" : "Total Input"}
-            </span>
-            <span className="text-foreground font-semibold">
-              {isPublicRedeem ? formatBtc(Number(publicZkbtcBalance)) : formatBtc(totalInputSats)} zkBTC
-            </span>
-          </div>
+          {/* Input total — show only when expanded or public redeem (collapsed card already shows total) */}
+          {(showNoteSelector || isPublicRedeem) && (
+            <div className="flex justify-between items-center px-2 text-body2">
+              <span className="text-gray">
+                {isPublicRedeem ? "Public zkBTC Balance" : "Total Input"}
+              </span>
+              <span className="text-foreground font-semibold">
+                {isPublicRedeem ? formatBtc(Number(publicZkbtcBalance)) : formatBtc(totalInputSats)} zkBTC
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="border-t border-gray/10 my-2" />
@@ -1605,6 +1625,8 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                 disablePublic={outputs.some(o => o.id !== output.id && (o.mode === "public" || o.mode === "btc"))}
                 disableBtc={outputs.some(o => o.id !== output.id && (o.mode === "public" || o.mode === "btc"))}
                 selfMeta={stealthAddress ?? null}
+                maxAmount={Math.max(0, totalInputSats - outputs.reduce((sum, o, j) => j === index ? sum : sum + (parseSats(o.amount) ?? 0), 0) - effectiveRelayerFee)}
+                serviceFeeSats={effectiveServiceFee}
               />
             ))}
           </div>
@@ -1633,7 +1655,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                 <span className="text-gray flex items-center gap-1.5">
                   <Shield className="w-3.5 h-3.5 text-purple" /> Stealth
                 </span>
-                <span className="text-purple font-semibold">
+                <span className="text-gray-light font-semibold">
                   {outputs.filter(o => o.mode === "stealth" || o.mode === "note").reduce((s, o) => s + (parseSats(o.amount) ?? 0), 0).toLocaleString()} sats
                 </span>
               </div>
@@ -1642,35 +1664,29 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                   <span className="text-gray flex items-center gap-1.5">
                     <Wallet className="w-3.5 h-3.5 text-privacy" /> Unshield
                   </span>
-                  <span className="text-privacy font-semibold">
+                  <span className="text-gray-light font-semibold">
                     {outputs.filter(o => o.mode === "public").reduce((s, o) => s + (parseSats(o.amount) ?? 0), 0).toLocaleString()} sats
                   </span>
                 </div>
               )}
               {hasBtcOutput && (() => {
                 const btcTotalSats = outputs.filter(o => o.mode === "btc").reduce((s, o) => s + (parseSats(o.amount) ?? 0), 0);
-                const userReceives = btcTotalSats - effectiveServiceFee;
+                const percentFee = Math.ceil(btcTotalSats * 0.003);
+                const totalFee = effectiveServiceFee + percentFee;
+                const userReceives = Math.max(0, btcTotalSats - totalFee);
                 return (
                   <>
                     <div className="flex justify-between items-center text-body2 mb-1">
                       <span className="text-gray flex items-center gap-1.5">
                         <Bitcoin className="w-3.5 h-3.5 text-btc" /> BTC Withdrawal
                       </span>
-                      <span className="text-btc font-semibold">
+                      <span className="text-gray-light font-semibold">
                         {btcTotalSats.toLocaleString()} sats
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-caption mb-1 ml-5">
-                      <span className="text-gray/60">Service fee (to pool)</span>
-                      <span className="text-gray/60">−{effectiveServiceFee.toLocaleString()} sats</span>
-                    </div>
-                    <div className="flex justify-between items-center text-caption mb-1 ml-5">
-                      <span className="text-gray/60">Est. miner fee</span>
-                      <span className="text-gray/60">~1,000-3,000 sats</span>
-                    </div>
-                    <div className="flex justify-between items-center text-caption mb-1 ml-5">
-                      <span className="text-gray/80">You receive</span>
-                      <span className="text-btc font-medium">~{Math.max(0, userReceives - 3000).toLocaleString()}-{Math.max(0, userReceives - 1000).toLocaleString()} sats</span>
+                      <span className="text-gray/80">You receive (after fees)</span>
+                      <span className="text-gray/80 font-medium">{userReceives.toLocaleString()} sats</span>
                     </div>
                   </>
                 );
@@ -1702,7 +1718,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
               <span className="text-gray">{hasImportedNotes ? "Change (as Note)" : "Change (kept shielded)"}</span>
               <span className={cn(
                 "font-semibold",
-                changeSats >= 0 ? "text-privacy" : "text-error"
+                changeSats >= 0 ? "text-gray-light" : "text-error"
               )}>
                 {changeSats >= 0 ? formatBtc(changeSats) : "-" + formatBtc(-changeSats)} zkBTC
               </span>
@@ -1710,7 +1726,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
           )}
           <div className="flex justify-between items-center text-body2 pt-1 border-t border-gray/10">
             <span className="text-gray">Privacy</span>
-            <span className={cn("font-mono text-xs", isPublicRedeem ? "text-btc" : "text-purple")}>
+            <span className={cn("font-mono text-xs", isPublicRedeem ? "text-btc" : "text-gray-light")}>
               {isPublicRedeem
                 ? "Public (no proof)"
                 : <>
@@ -1968,6 +1984,35 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   return null;
 }
 
+// ===== NOTE LINK PREVIEW (inline in compose step) =====
+
+function NoteLinkPreview({ phrase }: { phrase: string }) {
+  const [copied, setCopied] = useState(false);
+  const claimUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/claim#note=${encodeURIComponent(phrase)}`
+    : "";
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(claimUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div className="mt-1 space-y-0.5">
+      <p className="text-[11px] font-mono text-gray/50 truncate">{claimUrl}</p>
+      <button
+        onClick={handleCopy}
+        className="flex items-center gap-1 text-[11px] text-gray/60 hover:text-gray transition-colors cursor-pointer"
+      >
+        {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+        {copied ? "Copied!" : "Copy link"}
+      </button>
+    </div>
+  );
+}
+
 // ===== NOTE CLAIM LINK COMPONENT =====
 
 function NoteClaimLink({ phrase, amount }: { phrase: string; amount: number }) {
@@ -2022,6 +2067,8 @@ interface OutputRowCardProps {
   disablePublic?: boolean;
   disableBtc?: boolean;
   selfMeta?: StealthMetaAddress | null;
+  maxAmount: number;
+  serviceFeeSats?: number;
 }
 
 function OutputRowCard({
@@ -2034,62 +2081,61 @@ function OutputRowCard({
   disablePublic = false,
   disableBtc = false,
   selfMeta,
+  maxAmount,
+  serviceFeeSats = 0,
 }: OutputRowCardProps) {
 
   return (
     <div className="p-4 rounded-[12px] bg-card border border-gray/15">
-      {/* Header row */}
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-caption text-gray">Output {index + 1}</span>
-        <div className="flex items-center gap-2">
-          {/* Mode toggle — segmented control */}
-          <div className="flex p-0.5 bg-muted rounded-[8px] border border-gray/10">
-            {([
-              { mode: "stealth" as const, label: "Stealth", activeClass: "bg-purple/20 text-purple", disabled: false },
-              { mode: "note" as const, label: "Note", activeClass: "bg-btc/20 text-btc", disabled: false },
-              { mode: "public" as const, label: "SOL", activeClass: "bg-privacy/20 text-privacy", disabled: disablePublic && output.mode !== "public" },
-              { mode: "btc" as const, label: "BTC", activeClass: "bg-btc/20 text-btc", disabled: disableBtc && output.mode !== "btc" },
-            ] as const).map((tab) => (
-              <button
-                key={tab.mode}
-                onClick={() => {
-                  if (tab.disabled) return;
-                  const reset: Partial<OutputRow> = { mode: tab.mode };
-                  if (tab.mode === "public") { reset.stealthError = null; reset.solanaAddress = defaultAddress; }
-                  else if (tab.mode === "stealth") { reset.addressError = null; }
-                  else if (tab.mode === "note") { reset.addressError = null; reset.stealthError = null; }
-                  else { reset.addressError = null; reset.stealthError = null; }
-                  onUpdate(reset);
-                }}
-                disabled={tab.disabled}
-                className={cn(
-                  "px-2.5 py-1 rounded-[6px] text-[11px] font-medium transition-colors min-w-[48px] text-center",
-                  output.mode === tab.mode
-                    ? tab.activeClass
-                    : tab.disabled
-                      ? "text-gray/30 cursor-not-allowed"
-                      : "text-gray hover:text-gray-light"
-                )}
-                title={
-                  tab.mode === "public" && tab.disabled ? "Only 1 public/BTC output per transaction" :
-                  tab.mode === "btc" && tab.disabled ? "Only 1 public/BTC output per transaction" :
-                  undefined
-                }
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-          {/* Remove */}
-          {canRemove && (
+      {/* Type selector row */}
+      <div className="flex items-center gap-2 mb-3">
+        <div className="flex flex-1 p-0.5 bg-muted rounded-[8px] border border-gray/10">
+          {([
+            { mode: "stealth" as const, label: "Private", icon: Shield, activeClass: "bg-purple/20 text-purple", disabled: false },
+            { mode: "note" as const, label: "Link", icon: Link2, activeClass: "bg-btc/20 text-btc", disabled: false },
+            { mode: "public" as const, label: "Solana", icon: Wallet, activeClass: "bg-privacy/20 text-privacy", disabled: disablePublic && output.mode !== "public" },
+            { mode: "btc" as const, label: "Bitcoin", icon: Bitcoin, activeClass: "bg-btc/20 text-btc", disabled: disableBtc && output.mode !== "btc" },
+          ] as const).map((tab) => (
             <button
-              onClick={onRemove}
-              className="p-1 rounded text-gray/50 hover:text-error transition-colors"
+              key={tab.mode}
+              onClick={() => {
+                if (tab.disabled) return;
+                const reset: Partial<OutputRow> = { mode: tab.mode };
+                if (tab.mode === "public") { reset.stealthError = null; reset.solanaAddress = defaultAddress; }
+                else if (tab.mode === "stealth") { reset.addressError = null; }
+                else if (tab.mode === "note") { reset.addressError = null; reset.stealthError = null; }
+                else { reset.addressError = null; reset.stealthError = null; }
+                onUpdate(reset);
+              }}
+              disabled={tab.disabled}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-[6px] text-[11px] font-medium transition-colors",
+                output.mode === tab.mode
+                  ? tab.activeClass
+                  : tab.disabled
+                    ? "text-gray/30 cursor-not-allowed"
+                    : "text-gray hover:text-gray-light"
+              )}
+              title={
+                tab.mode === "public" && tab.disabled ? "Only 1 public/BTC output per transaction" :
+                tab.mode === "btc" && tab.disabled ? "Only 1 public/BTC output per transaction" :
+                undefined
+              }
             >
-              <Trash2 className="w-3.5 h-3.5" />
+              <tab.icon className="w-3 h-3" />
+              {tab.label}
             </button>
-          )}
+          ))}
         </div>
+        {/* Remove */}
+        {canRemove && (
+          <button
+            onClick={onRemove}
+            className="p-1 rounded text-gray/50 hover:text-error transition-colors shrink-0"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
 
       {/* Recipient */}
@@ -2130,6 +2176,9 @@ function OutputRowCard({
             <p className="text-caption text-gray mt-1 pl-2">
               Min 8 characters ({8 - output.secretPhrase.trim().length} more)
             </p>
+          )}
+          {output.secretPhrase.trim().length >= 8 && (
+            <NoteLinkPreview phrase={output.secretPhrase.trim()} />
           )}
         </div>
       ) : output.mode === "stealth" ? (
@@ -2201,8 +2250,42 @@ function OutputRowCard({
             "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           )}
         />
+        <button
+          type="button"
+          onClick={() => onUpdate({ amount: String(maxAmount) })}
+          className="text-xs text-purple hover:text-purple/80 font-medium shrink-0"
+        >
+          Max
+        </button>
         <span className="text-body2 text-gray shrink-0">sats</span>
       </div>
+
+      {/* BTC receive estimate */}
+      {output.mode === "btc" && (() => {
+        const amountSats = parseSats(output.amount) ?? 0;
+        if (amountSats <= 0) return null;
+        const percentFee = Math.ceil(amountSats * 0.003);
+        const totalFee = serviceFeeSats + percentFee;
+        const receiveSats = Math.max(0, amountSats - totalFee);
+        return (
+          <div className="mt-2 px-2 py-2 rounded-[8px] bg-btc/5 border border-btc/10 space-y-1">
+            <div className="flex justify-between text-[11px]">
+              <span className="text-gray">Base fee (incl. miner fee)</span>
+              <span className="text-gray">−{serviceFeeSats.toLocaleString()} sats</span>
+            </div>
+            <div className="flex justify-between text-[11px]">
+              <span className="text-gray">Protocol fee (0.3%)</span>
+              <span className="text-gray">−{percentFee.toLocaleString()} sats</span>
+            </div>
+            <div className="flex justify-between text-[11px] pt-1 border-t border-btc/10">
+              <span className="text-btc font-medium">You receive</span>
+              <span className="text-btc font-semibold">
+                {receiveSats.toLocaleString()} sats
+              </span>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

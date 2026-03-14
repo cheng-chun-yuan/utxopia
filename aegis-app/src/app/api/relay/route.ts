@@ -25,7 +25,7 @@ import {
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import {
-  DEVNET_CONFIG,
+  getConfig,
   INSTRUCTION_DISCRIMINATORS,
   hexToBytes,
   PDA_SEEDS,
@@ -47,7 +47,7 @@ const RELAYER_FEE_SATS = parseInt(process.env.RELAYER_FEE_SATS || "2000", 10);
 /** Relayer stealth meta-address (96-byte hex: spendingPub + viewingPub + mpk) */
 const RELAYER_STEALTH_META = process.env.RELAYER_STEALTH_META || "";
 
-const CHADBUFFER_PROGRAM_ID = new PublicKey(DEVNET_CONFIG.chadbufferProgramId);
+const CHADBUFFER_PROGRAM_ID = new PublicKey(getConfig().chadbufferProgramId);
 
 const CHADBUFFER = {
   INIT: 0,

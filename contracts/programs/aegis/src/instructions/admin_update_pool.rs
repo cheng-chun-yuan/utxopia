@@ -6,7 +6,7 @@
 //! - `execute_pool_update` (disc 22): Anyone executes after timelock expires
 //! - `cancel_pool_update` (disc 23): Authority cancels pending proposal
 //!
-//! Propose instruction data: min_deposit(u64 LE) + max_deposit(u64 LE) + service_fee_sats(u64 LE) = 24 bytes
+//! Propose instruction data: min_deposit(u64 LE) + max_deposit(u64 LE) + service_fee_base(u64 LE) + [service_fee_bps(u16 LE)] = 24 or 26 bytes
 //! Execute/Cancel instruction data: (none)
 //!
 //! Accounts (all three):
@@ -25,7 +25,6 @@ use crate::constants::TIMELOCK_DELAY_SECS;
 use crate::error::AegisError;
 use crate::state::PoolState;
 use crate::utils::{
-    emit_pool_update_cancelled, emit_pool_update_executed, emit_pool_update_proposed,
     validate_account_writable, validate_program_owner,
 };
 
@@ -57,11 +56,22 @@ pub fn process_propose_pool_update(
     let max_deposit = u64::from_le_bytes(data[8..16].try_into().unwrap());
     let service_fee = u64::from_le_bytes(data[16..24].try_into().unwrap());
 
+    // Optional service_fee_bps (u16 LE) at offset 24..26
+    let service_fee_bps: u16 = if data.len() >= 26 {
+        u16::from_le_bytes(data[24..26].try_into().unwrap())
+    } else {
+        0 // backward compat: no bps change
+    };
+
     // Validate bounds: min <= max, max <= 21M BTC in sats
     if min_deposit > max_deposit {
         return Err(ProgramError::InvalidInstructionData);
     }
     if max_deposit > 2_100_000_000_000_000 {
+        return Err(ProgramError::InvalidInstructionData);
+    }
+    // bps must be < 10000 (< 100%)
+    if service_fee_bps >= 10_000 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
@@ -83,7 +93,10 @@ pub fn process_propose_pool_update(
     pool.set_pending_service_fee(service_fee);
     pool.set_pending_execute_after(execute_after);
 
-    emit_pool_update_proposed(min_deposit, max_deposit, service_fee, execute_after);
+    // bps applied immediately (authority-gated, no timelock needed)
+    if service_fee_bps > 0 || data.len() >= 26 {
+        pool.set_service_fee_bps(service_fee_bps);
+    }
 
     Ok(())
 }
@@ -124,13 +137,11 @@ pub fn process_execute_pool_update(
 
     pool.set_min_deposit(min);
     pool.set_max_deposit(max);
-    pool.set_service_fee_sats(fee);
+    pool.set_service_fee_base(fee);
     pool.set_last_update(clock.unix_timestamp);
 
     // Clear pending proposal
     pool.clear_pending_proposal();
-
-    emit_pool_update_executed(min, max, fee);
 
     Ok(())
 }
@@ -167,8 +178,6 @@ pub fn process_cancel_pool_update(
     }
 
     pool.clear_pending_proposal();
-
-    emit_pool_update_cancelled();
 
     Ok(())
 }

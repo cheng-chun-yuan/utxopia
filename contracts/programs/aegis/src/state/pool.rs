@@ -57,9 +57,9 @@ pub struct PoolState {
     /// Total zkBTC in shielded pool (users hold commitments, not public tokens)
     total_shielded: [u8; 8],
 
-    /// Flat service fee per BTC withdrawal (satoshis) — deducted from withdrawal amount,
-    /// protocol revenue goes to pool. Separate from relayer fee (which is a shielded note).
-    service_fee_sats: [u8; 8],
+    /// Base service fee per BTC withdrawal (satoshis) — combined with service_fee_bps
+    /// for percentage + base fee model. Protocol revenue goes to pool.
+    service_fee_base: [u8; 8],
 
     /// Cumulative protocol revenue collected from withdrawal service fees (satoshis).
     /// fee_pool = sum(service_fee - miner_fee) across all completed withdrawals.
@@ -71,15 +71,20 @@ pub struct PoolState {
     /// Pending timelock: proposed max_deposit (satoshis)
     pending_max_deposit: [u8; 8],
 
-    /// Pending timelock: proposed service_fee_sats (satoshis)
+    /// Pending timelock: proposed service_fee_base (satoshis)
     pending_service_fee: [u8; 8],
 
     /// Pending timelock: unix timestamp after which the proposal can be executed.
     /// 0 means no active proposal.
     pending_execute_after: [u8; 8],
 
+    /// Service fee in basis points (0.01% units). E.g., 30 = 0.3%.
+    /// Carved from first 2 bytes of old _reserved field.
+    /// Backward compat: old PDAs have 0 here, formula degrades to flat base fee only.
+    service_fee_bps: [u8; 2],
+
     /// Reserved for future use
-    _reserved: [u8; 24],
+    _reserved: [u8; 22],
 }
 
 impl PoolState {
@@ -159,8 +164,22 @@ impl PoolState {
         u64::from_le_bytes(self.total_shielded)
     }
 
-    pub fn service_fee_sats(&self) -> u64 {
-        u64::from_le_bytes(self.service_fee_sats)
+    pub fn service_fee_base(&self) -> u64 {
+        u64::from_le_bytes(self.service_fee_base)
+    }
+
+
+    pub fn service_fee_bps(&self) -> u16 {
+        u16::from_le_bytes(self.service_fee_bps)
+    }
+
+    /// Compute total service fee: (amount * bps / 10000) + base
+    /// At 30 bps, max product is 2.1e15 * 30 = 6.3e16, well within u64 range.
+    pub fn compute_service_fee(&self, amount: u64) -> u64 {
+        let bps = self.service_fee_bps() as u64;
+        let base = self.service_fee_base();
+        let pct_fee = amount.saturating_mul(bps) / 10_000;
+        pct_fee.saturating_add(base)
     }
 
     pub fn fee_pool(&self) -> u64 {
@@ -228,8 +247,13 @@ impl PoolState {
         self.total_shielded = value.to_le_bytes();
     }
 
-    pub fn set_service_fee_sats(&mut self, value: u64) {
-        self.service_fee_sats = value.to_le_bytes();
+    pub fn set_service_fee_base(&mut self, value: u64) {
+        self.service_fee_base = value.to_le_bytes();
+    }
+
+
+    pub fn set_service_fee_bps(&mut self, value: u16) {
+        self.service_fee_bps = value.to_le_bytes();
     }
 
     pub fn set_fee_pool(&mut self, value: u64) {

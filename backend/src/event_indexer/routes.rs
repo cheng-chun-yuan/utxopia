@@ -125,6 +125,8 @@ pub struct TransferItem {
     pub output_count: i64,
     pub input_count: i64,
     pub timestamp: i64,
+    /// "confirmed" when timestamp > 0, "processing" when not yet confirmed
+    pub status: String,
     /// NullifierOperationType: 0=FullWithdrawal (unshield/redeem), 2=PrivateTransfer
     pub operation_type: i64,
     /// Aegis instruction discriminator: 14=transact, 15=unshield
@@ -394,6 +396,7 @@ async fn get_transfers(
                     output_count: t.output_count,
                     input_count: t.input_count,
                     timestamp: t.timestamp,
+                    status: t.status,
                     operation_type: t.operation_type,
                     instruction_disc: t.instruction_disc,
                     unshield_amount: t.unshield_amount,

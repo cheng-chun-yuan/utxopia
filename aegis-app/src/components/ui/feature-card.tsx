@@ -73,7 +73,7 @@ export function FeatureCard({ icon, title, description, subtext, href, color, di
     return (
       <div
         className={cn(
-          "flex flex-col items-center p-3 sm:p-6 rounded-[16px] relative",
+          "flex flex-col items-center p-3 sm:p-6 rounded-[20px] relative",
           "bg-card/50 border border-gray/20",
           "cursor-not-allowed select-none"
         )}
@@ -104,8 +104,8 @@ export function FeatureCard({ icon, title, description, subtext, href, color, di
     <Link
       href={href}
       className={cn(
-        "flex flex-col items-center p-3 sm:p-6 rounded-[16px]",
-        "bg-card border border-gray/20",
+        "flex flex-col items-center p-3 sm:p-6 rounded-[20px]",
+        "glass-card",
         "transition-all duration-300 cursor-pointer",
         config.hoverBorder,
         config.hoverBg,

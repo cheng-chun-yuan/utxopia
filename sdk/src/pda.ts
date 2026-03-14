@@ -27,6 +27,7 @@ export {
   BTC_LIGHT_CLIENT_PROGRAM_ID,
   getConfig,
   setConfig,
+  initConfig,
   DEVNET_CONFIG,
   MAINNET_CONFIG,
   LOCALNET_CONFIG,

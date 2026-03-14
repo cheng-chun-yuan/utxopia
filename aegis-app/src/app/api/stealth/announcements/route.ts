@@ -10,7 +10,7 @@
 import { NextResponse } from "next/server";
 import { PublicKey } from "@solana/web3.js";
 import {
-  DEVNET_CONFIG,
+  getConfig,
   parseCommitmentTreeData,
   parseProgramEvents,
   type StealthAnnouncementEvent,
@@ -41,7 +41,7 @@ interface CacheData {
 // =============================================================================
 
 const CACHE_TTL_MS = 30_000; // 30 seconds
-const AEGIS_PROGRAM_ID = new PublicKey(DEVNET_CONFIG.aegisProgramId);
+const AEGIS_PROGRAM_ID = new PublicKey(getConfig().aegisProgramId);
 
 // In-memory cache
 let announcementCache: CacheData | null = null;
@@ -124,7 +124,7 @@ async function fetchAnnouncements(): Promise<CacheData> {
   // Fetch tree state to get current nextIndex
   let treeNextIndex = Number.MAX_SAFE_INTEGER;
   try {
-    const commitmentTreePda = new PublicKey(DEVNET_CONFIG.commitmentTreePda);
+    const commitmentTreePda = new PublicKey(getConfig().commitmentTreePda);
     const treeAccount = await connection.getAccountInfo(commitmentTreePda);
     if (treeAccount) {
       const treeState = parseCommitmentTreeData(new Uint8Array(treeAccount.data));

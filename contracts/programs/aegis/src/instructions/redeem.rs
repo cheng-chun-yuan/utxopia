@@ -50,7 +50,6 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::debug_msg;
 use crate::error::AegisError;
 use crate::state::{
     CommitmentTree, NullifierOperationType, NullifierRecord, PoolState,
@@ -91,7 +90,6 @@ pub fn process_redeem(
 
     // n_outputs must be >= 1 (the redeem output itself)
     if n_inputs == 0 || n_outputs == 0 || n_inputs + n_outputs > MAX_JOINSPLIT_SIZE {
-        debug_msg!("Invalid JoinSplit dimensions");
         return Err(ProgramError::InvalidInstructionData);
     }
 
@@ -108,7 +106,6 @@ pub fn process_redeem(
     let min_len = header_size + nullifiers_size + commitments_size + stealth_size + redeem_fixed_size;
 
     if data.len() < min_len {
-        debug_msg!("Instruction data too short");
         return Err(ProgramError::InvalidInstructionData);
     }
 
@@ -130,7 +127,6 @@ pub fn process_redeem(
         let buf_data = buf_info.try_borrow_data()?;
         // ChadBuffer layout: authority(32) + data(256)
         if buf_data.len() < CHADBUFFER_AUTHORITY_SIZE + GROTH16_PROOF_SIZE {
-            debug_msg!("Proof buffer too small");
             return Err(ProgramError::InvalidAccountData);
         }
         let src = &buf_data[CHADBUFFER_AUTHORITY_SIZE..CHADBUFFER_AUTHORITY_SIZE + GROTH16_PROOF_SIZE];
@@ -172,12 +168,10 @@ pub fn process_redeem(
     offset += 1;
 
     if btc_script_len == 0 || btc_script_len > crate::constants::MAX_BTC_SCRIPT_LEN {
-        debug_msg!("Invalid BTC script length");
         return Err(AegisError::InvalidBtcAddress.into());
     }
 
     if data.len() < offset + btc_script_len + 8 {
-        debug_msg!("Instruction data too short for btc_script + nonce");
         return Err(ProgramError::InvalidInstructionData);
     }
 
@@ -193,7 +187,6 @@ pub fn process_redeem(
             crate::constants::CHAIN_ID,
         );
         if *bound_params_hash != expected {
-            debug_msg!("Invalid bound params hash for redeem");
             return Err(AegisError::InvalidBoundParams.into());
         }
     }
@@ -246,7 +239,6 @@ pub fn process_redeem(
         let vk = VkRegistry::from_bytes(&vk_data)?;
 
         if vk.n_inputs != n_inputs as u8 || vk.n_outputs != n_outputs as u8 {
-            debug_msg!("VK registry mismatch");
             return Err(AegisError::InvalidVkRegistry.into());
         }
     }
@@ -256,7 +248,6 @@ pub fn process_redeem(
         let tree_data = commitment_tree_info.try_borrow_data()?;
         let tree = CommitmentTree::from_bytes(&tree_data)?;
         if !tree.is_valid_root(merkle_root) {
-            debug_msg!("Invalid Merkle root");
             return Err(AegisError::InvalidMerkleProof.into());
         }
     }
@@ -283,8 +274,6 @@ pub fn process_redeem(
         proof_bytes, &public_inputs[..pi_len], delta_g2, ic,
     )?;
 
-    debug_msg!("Redeem JoinSplit proof verified");
-
     // Get clock and rent for PDA creation
     let clock = Clock::get()?;
     let rent = Rent::get()?;
@@ -297,14 +286,12 @@ pub fn process_redeem(
         let nullifier_seeds: &[&[u8]] = &[NullifierRecord::SEED, nullifiers[i].as_ref()];
         let (expected_pda, nbump) = find_program_address(nullifier_seeds, program_id);
         if nullifier_info.key() != &expected_pda {
-            debug_msg!("Invalid nullifier PDA");
             return Err(ProgramError::InvalidSeeds);
         }
 
         {
             let nullifier_data = nullifier_info.try_borrow_data()?;
             if !nullifier_data.is_empty() && nullifier_data[0] == NULLIFIER_RECORD_DISCRIMINATOR {
-                debug_msg!("Nullifier already spent");
                 return Err(AegisError::NullifierAlreadyUsed.into());
             }
         }
@@ -329,15 +316,14 @@ pub fn process_redeem(
             let mut nullifier_data = nullifier_info.try_borrow_mut_data()?;
             NullifierRecord::init(&mut nullifier_data)?;
         }
-
-        let null_hash: &[u8; 32] = nullifiers[i].try_into().unwrap();
-        crate::utils::events::emit_nullifier_spent(
-            null_hash,
-            NullifierOperationType::FullWithdrawal as u8,
-            clock.unix_timestamp,
-            user.key().as_ref().try_into().unwrap(),
-        );
     }
+
+    // Emit nullifiers batch
+    crate::utils::events::emit_nullifiers_batch(
+        &nullifiers[..n_inputs],
+        NullifierOperationType::FullWithdrawal as u8,
+        16, // instruction::REDEEM
+    );
 
     // Insert tree outputs (all except the last redeem output) into Merkle tree
     {
@@ -347,8 +333,6 @@ pub fn process_redeem(
         for i in 0..n_tree_outputs {
             let leaf_index = tree.insert_leaf(commitments_out[i])?;
 
-            debug_msg!("Inserted commitment into tree");
-
             let stealth_offset = stealth_data_start + i * STEALTH_DATA_PER_OUTPUT;
             let ephemeral_pub: &[u8; 32] = data[stealth_offset..stealth_offset + 32]
                 .try_into()
@@ -357,7 +341,6 @@ pub fn process_redeem(
                 .try_into()
                 .unwrap();
 
-            // Emit stealth announcement as log event (replaces PDA creation)
             crate::utils::events::emit_stealth_announcement(
                 crate::utils::events::ANNOUNCEMENT_TYPE_TRANSFER,
                 ephemeral_pub,
@@ -365,10 +348,14 @@ pub fn process_redeem(
                 commitments_out[i],
                 leaf_index as u32,
             );
-
-            crate::utils::events::emit_leaf_inserted(commitments_out[i], clock.unix_timestamp);
         }
     }
+
+    // Emit redeem metadata for indexer
+    crate::utils::events::emit_unshield_meta(
+        redeem_amount,
+        user.key().as_ref().try_into().unwrap(),
+    );
 
     // Create RedemptionRequest PDA — same pattern as request_redemption.rs
     {
@@ -384,7 +371,6 @@ pub fn process_redeem(
         let (expected_redemption_pda, redemption_bump) =
             find_program_address(redemption_seeds, program_id);
         if redemption_info.key() != &expected_redemption_pda {
-            debug_msg!("Invalid redemption request PDA");
             return Err(ProgramError::InvalidSeeds);
         }
 
@@ -442,6 +428,6 @@ pub fn process_redeem(
         pool.set_last_update(clock.unix_timestamp);
     }
 
-    debug_msg!("Redeem completed");
+    pinocchio::msg!("Aegis: redeem");
     Ok(())
 }

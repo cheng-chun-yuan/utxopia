@@ -10,10 +10,10 @@ vi.mock("@/lib/adapters/connection-adapter", () => ({
 
 // Mock SDK config
 vi.mock("@aegis/sdk", () => ({
-  DEVNET_CONFIG: {
+  getConfig: () => ({
     poolStatePda: "MockPoolStatePda111111111111111111111111111",
     poolVault: "MockPoolVault111111111111111111111111111111",
-  },
+  }),
 }));
 
 import { usePoolStats, type PoolStats } from "../use-pool-stats";

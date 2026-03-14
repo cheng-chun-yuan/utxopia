@@ -1,10 +1,21 @@
 // Centralized application constants
 
-// Import all addresses from SDK (single source of truth)
-// No more hardcoded addresses or env var fallbacks!
-import { DEVNET_CONFIG, AEGIS_PROGRAM_ID } from "@aegis/sdk";
+// Import SDK config (single source of truth)
+// initConfig() reads NEXT_PUBLIC_AEGIS_PROGRAM_ID + NEXT_PUBLIC_ZKBTC_MINT env vars
+// and derives all PDAs automatically.
+import { initConfig, getConfig } from "@aegis/sdk";
 
-export { AEGIS_PROGRAM_ID };
+// Initialize SDK once at module load — reads env vars, derives PDAs.
+// Eagerly called so getConfig() returns devnet2 addresses from the start.
+let _initPromise: Promise<void> | null = null;
+export function ensureSdkInit(): Promise<void> {
+  if (!_initPromise) {
+    _initPromise = initConfig().then(() => {});
+  }
+  return _initPromise;
+}
+// Kick off immediately on first import
+ensureSdkInit();
 
 // Timing constants
 export const POLLING_INTERVAL_MS = 30_000;
@@ -22,10 +33,11 @@ export const MIN_WITHDRAWAL_SATS = 1_000;
 // Bitcoin address regex (bech32 and legacy)
 export const BTC_ADDRESS_REGEX = /^(bc1|[13]|tb1)[a-zA-HJ-NP-Z0-9]{25,62}$/;
 
-// Aegis Solana Program Configuration - ALL from SDK config (single source of truth)
-export const BTC_LIGHT_CLIENT_ID = DEVNET_CONFIG.btcLightClientProgramId;
-export const POOL_STATE_ADDRESS = DEVNET_CONFIG.poolStatePda;
-export const COMMITMENT_TREE_ADDRESS = DEVNET_CONFIG.commitmentTreePda;
-export const ZKBTC_MINT_ADDRESS = DEVNET_CONFIG.zkbtcMint;
-export const POOL_VAULT_ADDRESS = DEVNET_CONFIG.poolVault;
-export const CHADBUFFER_PROGRAM_ID = DEVNET_CONFIG.chadbufferProgramId;
+// Dynamic getters — call after ensureSdkInit() resolves
+export const getAegisProgramId = () => getConfig().aegisProgramId;
+export const getBtcLightClientId = () => getConfig().btcLightClientProgramId;
+export const getPoolStateAddress = () => getConfig().poolStatePda;
+export const getCommitmentTreeAddress = () => getConfig().commitmentTreePda;
+export const getZkbtcMintAddress = () => getConfig().zkbtcMint;
+export const getPoolVaultAddress = () => getConfig().poolVault;
+export const getChadbufferProgramId = () => getConfig().chadbufferProgramId;

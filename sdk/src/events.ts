@@ -4,30 +4,26 @@
  * Events are emitted by the on-chain program as base64-encoded log data.
  * Transaction logs contain lines like: "Program data: <base64>"
  * Each base64 segment decodes to one slice from sol_log_data.
+ *
+ * ## Events
+ *
+ * - 0x02 NullifierSpent: disc(1) + hash(32) + op_type(1) = 34 bytes
+ * - 0x03 StealthAnnouncement: disc(1) + type(1) + ephemeral(32) + amount(8) + commitment(32) + leaf_index(4) = 78 bytes
+ * - 0x0B NullifiersBatch: flat payload in single segment
+ * - 0x0C AnnouncementsBatch: flat payload in single segment
  */
 
 /** Event discriminators matching contracts/programs/aegis/src/utils/events.rs */
-export const EVENT_LEAF_INSERTED = 0x01;
 export const EVENT_NULLIFIER_SPENT = 0x02;
 export const EVENT_STEALTH_ANNOUNCEMENT = 0x03;
-export const EVENT_POOL_UPDATE_PROPOSED = 0x04;
-export const EVENT_POOL_UPDATE_EXECUTED = 0x05;
-export const EVENT_POOL_UPDATE_CANCELLED = 0x06;
-
-/** Parsed leaf inserted event */
-export interface LeafInsertedEvent {
-  type: "leaf_inserted";
-  commitment: Uint8Array; // 32 bytes
-  createdAt: number; // unix timestamp
-}
+export const EVENT_NULLIFIERS_BATCH = 0x0b;
+export const EVENT_ANNOUNCEMENTS_BATCH = 0x0c;
 
 /** Parsed nullifier spent event */
 export interface NullifierSpentEvent {
   type: "nullifier_spent";
   nullifierHash: Uint8Array; // 32 bytes
   operationType: number;
-  spentAt: number; // unix timestamp
-  spentBy: Uint8Array; // 32 bytes (pubkey)
 }
 
 /** Parsed stealth announcement event */
@@ -40,61 +36,16 @@ export interface StealthAnnouncementEvent {
   leafIndex: number;
 }
 
-/** Parsed pool update proposed event */
-export interface PoolUpdateProposedEvent {
-  type: "pool_update_proposed";
-  minDeposit: bigint;
-  maxDeposit: bigint;
-  serviceFee: bigint;
-  executeAfter: number; // unix timestamp
-}
-
-/** Parsed pool update executed event */
-export interface PoolUpdateExecutedEvent {
-  type: "pool_update_executed";
-  minDeposit: bigint;
-  maxDeposit: bigint;
-  serviceFee: bigint;
-}
-
-/** Parsed pool update cancelled event */
-export interface PoolUpdateCancelledEvent {
-  type: "pool_update_cancelled";
-}
-
 export type ProgramEvent =
-  | LeafInsertedEvent
   | NullifierSpentEvent
-  | StealthAnnouncementEvent
-  | PoolUpdateProposedEvent
-  | PoolUpdateExecutedEvent
-  | PoolUpdateCancelledEvent;
-
-/**
- * Parse a leaf inserted event from decoded sol_log_data segments.
- * Expected: disc(1) + commitment(32) + created_at(8)
- */
-export function parseLeafInsertedEvent(segments: Uint8Array[]): LeafInsertedEvent | null {
-  if (segments.length < 3) return null;
-  if (segments[0].length !== 1 || segments[0][0] !== EVENT_LEAF_INSERTED) return null;
-
-  const commitment = segments[1];
-  if (commitment.length !== 32) return null;
-
-  const tsBytes = segments[2];
-  if (tsBytes.length !== 8) return null;
-  const view = new DataView(tsBytes.buffer, tsBytes.byteOffset, 8);
-  const createdAt = Number(view.getBigInt64(0, true));
-
-  return { type: "leaf_inserted", commitment, createdAt };
-}
+  | StealthAnnouncementEvent;
 
 /**
  * Parse a nullifier spent event from decoded sol_log_data segments.
- * Expected: disc(1) + nullifier_hash(32) + op_type(1) + spent_at(8) + spent_by(32)
+ * Expected: disc(1) + nullifier_hash(32) + op_type(1)
  */
 export function parseNullifierSpentEvent(segments: Uint8Array[]): NullifierSpentEvent | null {
-  if (segments.length < 5) return null;
+  if (segments.length < 3) return null;
   if (segments[0].length !== 1 || segments[0][0] !== EVENT_NULLIFIER_SPENT) return null;
 
   const nullifierHash = segments[1];
@@ -103,20 +54,10 @@ export function parseNullifierSpentEvent(segments: Uint8Array[]): NullifierSpent
   const opType = segments[2];
   if (opType.length !== 1) return null;
 
-  const tsBytes = segments[3];
-  if (tsBytes.length !== 8) return null;
-  const view = new DataView(tsBytes.buffer, tsBytes.byteOffset, 8);
-  const spentAt = Number(view.getBigInt64(0, true));
-
-  const spentBy = segments[4];
-  if (spentBy.length !== 32) return null;
-
   return {
     type: "nullifier_spent",
     nullifierHash,
     operationType: opType[0],
-    spentAt,
-    spentBy,
   };
 }
 
@@ -156,60 +97,53 @@ export function parseStealthAnnouncementEvent(segments: Uint8Array[]): StealthAn
 }
 
 /**
- * Parse a pool update proposed event from decoded sol_log_data segments.
- * Expected: disc(1) + min_deposit(8) + max_deposit(8) + service_fee(8) + execute_after(8)
+ * Parse batched nullifiers from a single flat segment.
+ * Layout: disc(1) + count(1) + op_type(1) + [hash(32)] x count
  */
-export function parsePoolUpdateProposedEvent(segments: Uint8Array[]): PoolUpdateProposedEvent | null {
-  if (segments.length < 5) return null;
-  if (segments[0].length !== 1 || segments[0][0] !== EVENT_POOL_UPDATE_PROPOSED) return null;
+function parseNullifiersBatch(data: Uint8Array): NullifierSpentEvent[] {
+  if (data.length < 3) return [];
+  const count = data[1];
+  const opType = data[2];
+  const expectedLen = 3 + count * 32;
+  if (data.length < expectedLen) return [];
 
-  if (segments[1].length !== 8 || segments[2].length !== 8 || segments[3].length !== 8 || segments[4].length !== 8) return null;
-
-  const minView = new DataView(segments[1].buffer, segments[1].byteOffset, 8);
-  const maxView = new DataView(segments[2].buffer, segments[2].byteOffset, 8);
-  const feeView = new DataView(segments[3].buffer, segments[3].byteOffset, 8);
-  const tsView = new DataView(segments[4].buffer, segments[4].byteOffset, 8);
-
-  return {
-    type: "pool_update_proposed",
-    minDeposit: minView.getBigUint64(0, true),
-    maxDeposit: maxView.getBigUint64(0, true),
-    serviceFee: feeView.getBigUint64(0, true),
-    executeAfter: Number(tsView.getBigInt64(0, true)),
-  };
+  const events: NullifierSpentEvent[] = [];
+  for (let i = 0; i < count; i++) {
+    const offset = 3 + i * 32;
+    events.push({
+      type: "nullifier_spent",
+      nullifierHash: data.slice(offset, offset + 32),
+      operationType: opType,
+    });
+  }
+  return events;
 }
 
 /**
- * Parse a pool update executed event from decoded sol_log_data segments.
- * Expected: disc(1) + min_deposit(8) + max_deposit(8) + service_fee(8)
+ * Parse batched announcements from a single flat segment.
+ * Layout: disc(1) + count(1) + [type(1) + ephemeral(32) + amount(8) + commitment(32) + leaf_index(4)] x count
  */
-export function parsePoolUpdateExecutedEvent(segments: Uint8Array[]): PoolUpdateExecutedEvent | null {
-  if (segments.length < 4) return null;
-  if (segments[0].length !== 1 || segments[0][0] !== EVENT_POOL_UPDATE_EXECUTED) return null;
+function parseAnnouncementsBatch(data: Uint8Array): StealthAnnouncementEvent[] {
+  if (data.length < 2) return [];
+  const count = data[1];
+  const itemSize = 77; // 1 + 32 + 8 + 32 + 4
+  const expectedLen = 2 + count * itemSize;
+  if (data.length < expectedLen) return [];
 
-  if (segments[1].length !== 8 || segments[2].length !== 8 || segments[3].length !== 8) return null;
-
-  const minView = new DataView(segments[1].buffer, segments[1].byteOffset, 8);
-  const maxView = new DataView(segments[2].buffer, segments[2].byteOffset, 8);
-  const feeView = new DataView(segments[3].buffer, segments[3].byteOffset, 8);
-
-  return {
-    type: "pool_update_executed",
-    minDeposit: minView.getBigUint64(0, true),
-    maxDeposit: maxView.getBigUint64(0, true),
-    serviceFee: feeView.getBigUint64(0, true),
-  };
-}
-
-/**
- * Parse a pool update cancelled event from decoded sol_log_data segments.
- * Expected: disc(1)
- */
-export function parsePoolUpdateCancelledEvent(segments: Uint8Array[]): PoolUpdateCancelledEvent | null {
-  if (segments.length < 1) return null;
-  if (segments[0].length !== 1 || segments[0][0] !== EVENT_POOL_UPDATE_CANCELLED) return null;
-
-  return { type: "pool_update_cancelled" };
+  const events: StealthAnnouncementEvent[] = [];
+  for (let i = 0; i < count; i++) {
+    const offset = 2 + i * itemSize;
+    const liView = new DataView(data.buffer, data.byteOffset + offset + 73, 4);
+    events.push({
+      type: "stealth_announcement",
+      announcementType: data[offset],
+      ephemeralPub: data.slice(offset + 1, offset + 33),
+      encryptedAmount: data.slice(offset + 33, offset + 41),
+      commitment: data.slice(offset + 41, offset + 73),
+      leafIndex: liView.getUint32(0, true),
+    });
+  }
+  return events;
 }
 
 function decodeBase64(b64: string): Uint8Array {
@@ -240,27 +174,30 @@ export function parseProgramEvents(logs: string[], programId?: string): ProgramE
     const b64Parts = line.slice(DATA_PREFIX.length).split(" ");
     const segments = b64Parts.map(decodeBase64);
 
-    if (segments.length === 0 || segments[0].length !== 1) continue;
+    if (segments.length === 0) continue;
+
+    // Handle batch events (single flat segment)
+    if (segments.length === 1 && segments[0].length > 1) {
+      const disc = segments[0][0];
+      if (disc === EVENT_NULLIFIERS_BATCH) {
+        events.push(...parseNullifiersBatch(segments[0]));
+        continue;
+      }
+      if (disc === EVENT_ANNOUNCEMENTS_BATCH) {
+        events.push(...parseAnnouncementsBatch(segments[0]));
+        continue;
+      }
+    }
+
+    if (segments[0].length !== 1) continue;
 
     const disc = segments[0][0];
 
-    if (disc === EVENT_LEAF_INSERTED) {
-      const event = parseLeafInsertedEvent(segments);
-      if (event) events.push(event);
-    } else if (disc === EVENT_NULLIFIER_SPENT) {
+    if (disc === EVENT_NULLIFIER_SPENT) {
       const event = parseNullifierSpentEvent(segments);
       if (event) events.push(event);
     } else if (disc === EVENT_STEALTH_ANNOUNCEMENT) {
       const event = parseStealthAnnouncementEvent(segments);
-      if (event) events.push(event);
-    } else if (disc === EVENT_POOL_UPDATE_PROPOSED) {
-      const event = parsePoolUpdateProposedEvent(segments);
-      if (event) events.push(event);
-    } else if (disc === EVENT_POOL_UPDATE_EXECUTED) {
-      const event = parsePoolUpdateExecutedEvent(segments);
-      if (event) events.push(event);
-    } else if (disc === EVENT_POOL_UPDATE_CANCELLED) {
-      const event = parsePoolUpdateCancelledEvent(segments);
       if (event) events.push(event);
     }
   }

@@ -119,6 +119,7 @@ mod tests {
             status: 0,
             requester: String::new(),
             amount_sats: 0,
+            service_fee: 0,
             btc_script: vec![],
             request_id: 0,
             processing_slot: 0,

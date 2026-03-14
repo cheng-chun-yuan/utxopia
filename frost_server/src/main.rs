@@ -50,8 +50,8 @@ enum Commands {
         #[arg(long, env = "FROST_MAX_AMOUNT", default_value = "1000000000")]
         max_amount: u64,
 
-        /// Maximum fee in sats (default: 50000)
-        #[arg(long, env = "FROST_MAX_FEE", default_value = "50000")]
+        /// Maximum miner fee in sats (default: 2000, matching service fee base)
+        #[arg(long, env = "FROST_MAX_FEE", default_value = "2000")]
         max_fee: u64,
 
         /// Require signing context (reject blind signing)

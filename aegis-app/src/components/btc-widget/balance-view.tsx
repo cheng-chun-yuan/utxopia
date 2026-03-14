@@ -254,7 +254,11 @@ const DepositCard = memo(({ deposit }: { deposit: TrackerDepositStatus }) => {
             <span className="text-xs text-gray">Receive</span>
             <span className="flex items-center gap-1.5">
               <Image src="/zkbtc.png" alt="zkBTC" width={16} height={16} className="rounded-full" />
-              <span className="text-base font-semibold text-white">{formatBtc(deposit.minted_sats ?? deposit.amount_sats)}</span>
+              {deposit.minted_sats != null ? (
+                <span className="text-base font-semibold text-white">{formatBtc(deposit.minted_sats)}</span>
+              ) : (
+                <span className="text-base font-semibold text-gray">~</span>
+              )}
               <span className="text-xs text-purple">zkBTC</span>
             </span>
           </div>

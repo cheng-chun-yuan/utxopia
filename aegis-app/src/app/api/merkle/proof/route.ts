@@ -3,7 +3,7 @@ import { PublicKey } from "@solana/web3.js";
 import {
   buildCommitmentTreeFromChain,
   getMerkleProofFromTree,
-  DEVNET_CONFIG,
+  getConfig,
   initPoseidon,
   parseCommitmentTreeData,
   bytesToBigint,
@@ -64,7 +64,7 @@ async function getTreeAndRoot(): Promise<{
 
   cacheBuildPromise = (async () => {
     const connection = getHeliusConnection("devnet");
-    const commitmentTreePda = new PublicKey(DEVNET_CONFIG.commitmentTreePda);
+    const commitmentTreePda = new PublicKey(getConfig().commitmentTreePda);
 
     // Fetch on-chain tree state (root + nextIndex) in one RPC call
     const treeAccountInfo = await connection.getAccountInfo(commitmentTreePda);
@@ -109,7 +109,7 @@ async function getTreeAndRoot(): Promise<{
           }));
         },
       },
-      DEVNET_CONFIG.aegisProgramId,
+      getConfig().aegisProgramId,
       maxLeafIndex !== undefined ? { maxLeafIndex } : undefined
     );
 

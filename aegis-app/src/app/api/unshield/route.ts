@@ -22,7 +22,7 @@ import {
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import {
-  DEVNET_CONFIG,
+  getConfig,
   INSTRUCTION_DISCRIMINATORS,
   hexToBytes,
   PDA_SEEDS,

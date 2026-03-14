@@ -144,7 +144,7 @@ pub fn process_init_vk_registry(
         registry.vk_hash.copy_from_slice(&ix_data.vk_hash);
     }
 
-    crate::debug_msg!("VK registry initialized");
+    pinocchio::msg!("Aegis: VK registry initialized");
 
     Ok(())
 }
@@ -190,7 +190,7 @@ pub fn process_update_vk_registry(
         registry.vk_hash.copy_from_slice(&ix_data.vk_hash);
     }
 
-    crate::debug_msg!("VK registry updated");
+    pinocchio::msg!("Aegis: VK registry updated");
 
     Ok(())
 }

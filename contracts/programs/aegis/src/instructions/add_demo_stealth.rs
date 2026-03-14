@@ -141,7 +141,7 @@ pub fn process_add_demo_stealth(
         tree.insert_leaf(&commitment)?
     };
 
-    // Emit stealth announcement as log event (replaces PDA creation)
+    // Emit stealth announcement as log event (LeafInserted merged into announcement)
     let amount_bytes = ix_data.amount_sats.to_le_bytes();
     crate::utils::events::emit_stealth_announcement(
         ANNOUNCEMENT_TYPE_DEPOSIT,
@@ -150,9 +150,6 @@ pub fn process_add_demo_stealth(
         &commitment,
         leaf_index as u32,
     );
-
-    // Emit leaf inserted event
-    crate::utils::events::emit_leaf_inserted(&commitment, clock.unix_timestamp);
 
     // Mint zkBTC to pool vault so users can claim
     let bump_bytes = [pool_bump];
@@ -178,7 +175,7 @@ pub fn process_add_demo_stealth(
         pool.set_last_update(clock.unix_timestamp);
     }
 
-    crate::debug_msg!("Demo stealth deposit added");
+    pinocchio::msg!("Aegis: demo deposit added");
 
     Ok(())
 }

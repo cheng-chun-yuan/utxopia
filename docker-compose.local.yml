@@ -1,0 +1,47 @@
+# Local dev: FROST signers only (backend runs natively)
+#
+# Usage:
+#   docker compose -f docker-compose.local.yml up --build -d
+#   docker compose -f docker-compose.local.yml logs -f
+#   docker compose -f docker-compose.local.yml down
+
+x-frost-common: &frost-common
+  build:
+    context: ./frost_server
+    dockerfile: Dockerfile
+  volumes:
+    - ./frost_server/config:/app/config
+    - ./frost_server/logs:/app/logs
+  environment: &frost-env
+    RUST_LOG: info,frost_server=debug
+    FROST_KEY_PASSWORD: "${FROST_KEY_PASSWORD:-test}"
+    FROST_API_KEY: "${FROST_API_KEY}"
+  restart: unless-stopped
+
+services:
+  frost-signer-1:
+    <<: *frost-common
+    container_name: aegis-frost-1
+    ports:
+      - "9001:9001"
+    command: >
+      run --bind 0.0.0.0:9001 --id 1
+      --password "${FROST_KEY_PASSWORD:-test}" --network testnet4
+
+  frost-signer-2:
+    <<: *frost-common
+    container_name: aegis-frost-2
+    ports:
+      - "9002:9002"
+    command: >
+      run --bind 0.0.0.0:9002 --id 2
+      --password "${FROST_KEY_PASSWORD:-test}" --network testnet4
+
+  frost-signer-3:
+    <<: *frost-common
+    container_name: aegis-frost-3
+    ports:
+      - "9003:9003"
+    command: >
+      run --bind 0.0.0.0:9003 --id 3
+      --password "${FROST_KEY_PASSWORD:-test}" --network testnet4

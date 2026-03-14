@@ -16,7 +16,7 @@ import {
   computeJoinSplitNullifierSync,
   bigintToBytes,
   EventClient,
-  DEVNET_CONFIG,
+  getConfig,
   type AegisKeys,
   type StealthMetaAddress,
   type ViewOnlyKeys,
@@ -158,8 +158,8 @@ export function getEventClient(): EventClient {
       backendUrl,
       backendWsUrl: wsUrl,
       solanaRpcUrl: process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com",
-      programId: DEVNET_CONFIG.aegisProgramId,
-      commitmentTreeAddress: DEVNET_CONFIG.commitmentTreePda,
+      programId: getConfig().aegisProgramId,
+      commitmentTreeAddress: getConfig().commitmentTreePda,
     });
   }
   return eventClient;
@@ -587,7 +587,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
           method: "getTokenAccountsByOwner",
           params: [
             walletPubkey.toBase58(),
-            { mint: DEVNET_CONFIG.zkbtcMint },
+            { mint: getConfig().zkbtcMint },
             { encoding: "jsonParsed", commitment: "confirmed" },
           ],
         }),

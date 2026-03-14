@@ -550,6 +550,11 @@ body {
   pointer-events: none;
 }
 
+@keyframes sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
 @keyframes privacy-pulse {
   0%, 100% {
     transform: scale(1) rotate(0deg);
@@ -1232,4 +1237,407 @@ body {
 
 .btc-neon-border-pulse {
   animation: btc-neon-pulse 2s ease-in-out infinite;
+}
+
+/* ============================================
+   FLUID DESIGN UPLIFT
+   ============================================ */
+
+/* Glass card — green-tinted hacker glass */
+.glass-card {
+  backdrop-filter: blur(40px);
+  background: rgba(15, 15, 18, 0.8);
+  border: 1px solid rgba(20, 241, 149, 0.08);
+  box-shadow: inset 0 1px 0 rgba(20, 241, 149, 0.04), 0 0 80px rgba(20, 241, 149, 0.03);
+}
+
+.glass-card-strong {
+  backdrop-filter: blur(48px);
+  background: rgba(15, 15, 18, 0.85);
+  border: 1px solid rgba(20, 241, 149, 0.12);
+  box-shadow: inset 0 1px 0 rgba(20, 241, 149, 0.06), 0 0 120px rgba(20, 241, 149, 0.05), 0 0 60px rgba(153, 69, 255, 0.02);
+}
+
+/* Wave divider — three-color brand gradient */
+.wave-divider {
+  position: relative;
+  height: clamp(30px, 5vw, 60px);
+}
+
+.wave-divider::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(20,241,149,0.06), rgba(247,147,26,0.04) 50%, rgba(153,69,255,0.05));
+  clip-path: polygon(0% 60%, 15% 40%, 30% 55%, 50% 30%, 70% 50%, 85% 35%, 100% 45%, 100% 100%, 0% 100%);
+}
+
+/* Hero typography */
+.hero-title {
+  font-size: clamp(2.25rem, 5vw + 1rem, 4.5rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-weight: 800;
+}
+
+/* Saturated hero glow — privacy green dominant with BTC + Sol accents */
+.hero-saturated {
+  position: relative;
+}
+
+.hero-saturated::after {
+  content: "";
+  position: absolute;
+  top: -20%;
+  left: 5%;
+  width: 90%;
+  height: 80%;
+  background:
+    radial-gradient(ellipse at 30% 30%, rgba(20,241,149,0.15) 0%, transparent 50%),
+    radial-gradient(ellipse at 70% 60%, rgba(247,147,26,0.08) 0%, transparent 40%),
+    radial-gradient(ellipse at 50% 80%, rgba(153,69,255,0.08) 0%, transparent 40%);
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(60px);
+}
+
+/* Pill button */
+.btn-pill {
+  border-radius: 9999px !important;
+}
+
+/* Text shimmer — animated gradient sweep */
+.text-shimmer {
+  background: linear-gradient(
+    110deg,
+    #14f195 0%,
+    #f7931a 35%,
+    #14f195 50%,
+    #9945ff 65%,
+    #14f195 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer-slide 4s ease-in-out infinite;
+}
+
+@keyframes shimmer-slide {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+/* Moving border — animated gradient border on buttons */
+.btn-moving-border {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.btn-moving-border::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 2px;
+  border-radius: inherit;
+  background: conic-gradient(from var(--border-angle, 0deg), #14f195, #f7931a, #9945ff, #14f195);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: border-spin 3s linear infinite;
+}
+
+@property --border-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@keyframes border-spin {
+  to { --border-angle: 360deg; }
+}
+
+/* Spotlight card — used with GlowCard component */
+.spotlight-card {
+  backdrop-filter: blur(40px);
+  background: rgba(15, 15, 18, 0.75);
+  border: 1px solid rgba(20, 241, 149, 0.08);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.spotlight-card:hover {
+  border-color: rgba(20, 241, 149, 0.2);
+  box-shadow: 0 0 40px rgba(20, 241, 149, 0.06), 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+/* Animated gradient line — horizontal decorative divider */
+.gradient-line {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #14f195, #f7931a, #9945ff, transparent);
+  background-size: 200% 100%;
+  animation: gradient-line-move 4s ease-in-out infinite;
+}
+
+@keyframes gradient-line-move {
+  0%, 100% { background-position: 0% 0; }
+  50% { background-position: 100% 0; }
+}
+
+/* Pulse ring — animated ring for status indicators */
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 0; }
+}
+
+.pulse-ring {
+  position: relative;
+}
+
+.pulse-ring::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  animation: pulse-ring 2s ease-out infinite;
+}
+
+/* ============================================
+   AURA-INSPIRED INTERACTIVE EFFECTS
+   ============================================ */
+
+/* Global mouse spotlight — follows cursor */
+#mouse-spotlight {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(circle 600px at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(20, 241, 149, 0.04), transparent 70%);
+  transition: background 0.15s ease;
+}
+
+/* 3D perspective card reveal (Aura-style) */
+.reveal-3d {
+  opacity: 0;
+  transform: perspective(1000px) rotateX(15deg) translateY(50px) scale(0.95);
+  transform-style: preserve-3d;
+  transition: all 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform, opacity;
+}
+
+.reveal-3d.active {
+  opacity: 1;
+  transform: perspective(1000px) rotateX(0deg) translateY(0) scale(1);
+}
+
+/* Gradient border card (Aura-style) */
+.gradient-border-card {
+  position: relative;
+  padding: 1px;
+  border-radius: 16px;
+  background: linear-gradient(to bottom, rgba(255,255,255,0.1), transparent);
+  transition: all 0.5s ease;
+}
+
+.gradient-border-card:hover {
+  background: linear-gradient(to bottom, rgba(20,241,149,0.4), rgba(153,69,255,0.2));
+  transform: translateY(-4px);
+  box-shadow: 0 0 30px rgba(20, 241, 149, 0.12);
+}
+
+.gradient-border-card > .card-inner {
+  background: #080810;
+  border-radius: 15px;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.gradient-border-card > .card-inner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(20,241,149,0.05), transparent);
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.gradient-border-card:hover > .card-inner::before {
+  opacity: 1;
+}
+
+/* Shimmer button hover effect */
+.btn-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  transform: translateX(-100%);
+  transition: none;
+}
+
+.btn-shimmer:hover::after {
+  animation: btn-shimmer-sweep 0.8s ease forwards;
+}
+
+@keyframes btn-shimmer-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Twinkle stars */
+@keyframes twinkle {
+  0%, 100% { opacity: 0.2; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.6); }
+}
+
+.twinkle-star {
+  position: absolute;
+  border-radius: 50%;
+  animation: twinkle 4s ease-in-out infinite;
+}
+
+/* Scanning beam — sweeps across sections */
+@keyframes scan-beam {
+  0% { left: -20%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { left: 120%; opacity: 0; }
+}
+
+.scan-beam-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.scan-beam-container::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  background: linear-gradient(to bottom, transparent, rgba(20,241,149,0.2), transparent);
+  animation: scan-beam 8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  filter: blur(0.5px);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.scan-beam-container::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 150px;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(20,241,149,0.03), transparent);
+  animation: scan-beam 8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Slow rotating background glows */
+@keyframes rotate-slow {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.rotate-glow {
+  animation: rotate-slow 60s linear infinite;
+}
+
+.rotate-glow-reverse {
+  animation: rotate-slow 60s linear infinite reverse;
+}
+
+/* Floating pill navigation */
+.nav-pill {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+}
+
+.nav-pill:hover {
+  transform: scale(1.01);
+  border-color: rgba(20, 241, 149, 0.15);
+}
+
+/* Animated bar chart mini-viz */
+.mini-bar {
+  transition: all 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* Grid drift animation */
+@keyframes grid-drift {
+  0% { background-position: 0 0; }
+  100% { background-position: 40px 40px; }
+}
+
+.animate-grid-drift {
+  animation: grid-drift 30s linear infinite;
+}
+
+/* Ambient pulse glow for background blobs */
+@keyframes ambient-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(1); filter: blur(100px); }
+  50% { opacity: 0.5; transform: scale(1.1); filter: blur(120px); }
+}
+
+.ambient-blob {
+  animation: ambient-pulse 8s ease-in-out infinite;
+}
+
+/* Status ping dot (like Aura's live badge) */
+.status-ping {
+  position: relative;
+  display: inline-flex;
+  width: 8px;
+  height: 8px;
+}
+
+.status-ping::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #14f195;
+  animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.status-ping::after {
+  content: "";
+  position: relative;
+  display: inline-flex;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #14f195;
+}
+
+@keyframes ping {
+  75%, 100% { transform: scale(2); opacity: 0; }
+}
+
+/* Gradient text utility */
+.text-gradient-brand {
+  background: linear-gradient(to right, #f1f0f3, #8b8a9e);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-privacy {
+  background: linear-gradient(to right, #14f195, #10b981, #2dd4bf);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }

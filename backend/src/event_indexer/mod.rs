@@ -1,6 +1,6 @@
 //! Event indexer for Aegis sol_log_data events
 //!
-//! Parses LeafInserted and NullifierSpent events from on-chain transaction logs,
+//! Parses NullifierSpent and StealthAnnouncement events from on-chain transaction logs,
 //! stores them in SQLite, and serves them via REST API endpoints.
 //! Maintains an in-memory Merkle tree cache for instant proof serving.
 
@@ -12,7 +12,7 @@ pub mod tree_cache;
 pub mod solana_ws;
 pub mod reconciler;
 
-pub use parser::{ProgramEvent, LeafInsertedEvent, NullifierSpentEvent, StealthAnnouncementEvent};
+pub use parser::{ProgramEvent, NullifierSpentEvent, StealthAnnouncementEvent};
 pub use storage::EventStore;
 pub use service::{EventIndexerConfig, EventIndexerService};
 pub use routes::{event_indexer_router, event_indexer_router_with_deposits};

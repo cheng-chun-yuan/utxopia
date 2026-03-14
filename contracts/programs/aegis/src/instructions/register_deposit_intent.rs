@@ -77,7 +77,7 @@ pub fn process_register_deposit_intent(
     let mut intent_data = deposit_intent_info.try_borrow_mut_data()?;
     DepositIntent::init(&mut intent_data, &ephemeral_pub, &npk)?;
 
-    crate::debug_msg!("DepositIntent PDA created");
+    pinocchio::msg!("Aegis: deposit intent registered");
 
     Ok(())
 }

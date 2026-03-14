@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
 import { Connection, PublicKey } from "@solana/web3.js";
-import { DEVNET_CONFIG } from "@aegis/sdk";
+import { getConfig } from "@aegis/sdk";
 
 export const runtime = "nodejs";
 
 
-const BTC_LIGHT_CLIENT_PROGRAM_ID = new PublicKey(DEVNET_CONFIG.btcLightClientProgramId);
+const getBtcLightClientProgramId = () => new PublicKey(getConfig().btcLightClientProgramId);
 
 function deriveLightClientPDA(): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("btc_light_client")],
-    BTC_LIGHT_CLIENT_PROGRAM_ID
+    getBtcLightClientProgramId()
   );
 }
 

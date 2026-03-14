@@ -278,10 +278,41 @@ impl SigningPolicy {
         }
 
         // 6. Solana on-chain verification (if both verifier and verification data present)
-        if let (Some(ref verifier), Some(ref verification)) =
+        // Returns verified on-chain redemption data (amount, service_fee, btc_script)
+        let verified_redemption = if let (Some(ref verifier), Some(ref verification)) =
             (&self.solana_verifier, &request.solana_verification)
         {
-            self.verify_solana(verifier, verification).await?;
+            self.verify_solana(verifier, verification).await?
+        } else {
+            None
+        };
+
+        // 6b. Validate PDA service_fee against on-chain PoolState fee config
+        //     The PDA locks service_fee at request time; verify it's reasonable.
+        if let (Some(ref verifier), Some(ref vr)) = (&self.solana_verifier, &verified_redemption) {
+            match verifier.fetch_pool_fees().await {
+                Ok(pool_fees) => {
+                    let expected_fee = pool_fees.compute_fee(vr.amount_sats);
+                    // Allow PDA fee to be <= current pool fee (fee may have changed between request and signing)
+                    // But reject if PDA fee is unreasonably high (> 2x current or > 50% of amount)
+                    let max_reasonable = std::cmp::max(expected_fee * 2, vr.amount_sats / 2);
+                    if vr.service_fee > max_reasonable {
+                        return Err(PolicyError::CrossValidationFailed(format!(
+                            "PDA service_fee {} is unreasonable (pool expects ~{}, max allowed {})",
+                            vr.service_fee, expected_fee, max_reasonable
+                        )));
+                    }
+                    tracing::debug!(
+                        pda_fee = vr.service_fee,
+                        pool_expected_fee = expected_fee,
+                        "service_fee sanity check passed"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!("failed to fetch PoolState for fee validation: {:?}", e);
+                    // Non-fatal: PDA service_fee is still used for net amount calc
+                }
+            }
         }
 
         // 7. Duplicate signing prevention (withdrawal only)
@@ -298,33 +329,63 @@ impl SigningPolicy {
             }
         }
 
-        // 8. Cross-validate tx outputs match on-chain PDA btc_script (withdrawal only)
+        // 8. Cross-validate tx outputs match on-chain PDA data (withdrawal only)
+        //    Uses service_fee from the PDA (locked at request time) to compute expected net amount.
+        //    Does NOT trust backend's expected_send_amount — computes independently from on-chain data.
         if let Some(ref verification) = request.solana_verification {
             if let SolanaVerification::Withdrawal {
                 ref expected_btc_address,
-                expected_amount_sats,
                 ..
             } = verification
             {
+                // Compute expected send amount from on-chain PDA data
+                let output_check_amount = if let Some(ref vr) = verified_redemption {
+                    // Use on-chain service_fee from PDA (locked at request time)
+                    let net = vr.expected_send_amount();
+                    tracing::info!(
+                        gross = vr.amount_sats,
+                        service_fee = vr.service_fee,
+                        net_send = net,
+                        "cross-validating tx output against on-chain PDA (amount - service_fee)"
+                    );
+                    net
+                } else {
+                    // No Solana verifier — fall back to backend's claim (dev mode only)
+                    if let SolanaVerification::Withdrawal { expected_send_amount, expected_amount_sats, .. } = verification {
+                        expected_send_amount.unwrap_or(*expected_amount_sats)
+                    } else {
+                        unreachable!()
+                    }
+                };
+
                 self.cross_validate_tx_outputs(
                     &tx,
                     expected_btc_address,
-                    *expected_amount_sats,
+                    output_check_amount,
                 )?;
             }
         }
 
-        // 9. Mempool/previous tx check — reject if destination already received payment
+        // 9. Mempool/previous tx check — warn if destination already received payment
+        //    (downgraded from hard reject to warning to support retries with corrected amounts)
         if let Some(ref verification) = request.solana_verification {
             if let SolanaVerification::Withdrawal { ref expected_btc_address, .. } = verification {
-                // expected_btc_address is hex scriptPubKey; convert to bech32 for Esplora
                 if let Some(ref base_url) = self.esplora_url {
-                    self.check_destination_not_already_paid(
+                    match self.check_destination_not_already_paid(
                         base_url,
                         expected_btc_address,
                         &tx,
-                    )
-                    .await?;
+                    ).await {
+                        Ok(()) => {}
+                        Err(PolicyError::AlreadyPaid { ref address, tx_count }) => {
+                            tracing::warn!(
+                                address = %address,
+                                tx_count = tx_count,
+                                "destination already has transactions — allowing retry (on-chain PDA still valid)"
+                            );
+                        }
+                        Err(e) => return Err(e),
+                    }
                 }
             }
         }
@@ -605,19 +666,21 @@ impl SigningPolicy {
     }
 
     /// Verify Solana on-chain state for the given verification type.
+    /// For withdrawals, returns the verified on-chain data (amount, service_fee, btc_script).
     async fn verify_solana(
         &self,
         verifier: &SolanaVerifier,
         verification: &SolanaVerification,
-    ) -> Result<(), PolicyError> {
+    ) -> Result<Option<crate::solana_verifier::VerifiedRedemption>, PolicyError> {
         match verification {
             SolanaVerification::Withdrawal {
                 requester,
                 nonce,
                 expected_amount_sats,
                 expected_btc_address,
+                ..
             } => {
-                verifier
+                let verified = verifier
                     .verify_redemption(requester, *nonce, *expected_amount_sats, expected_btc_address)
                     .await
                     .map_err(|e| {
@@ -648,12 +711,14 @@ impl SigningPolicy {
                                 PolicyError::SolanaRpcError(msg)
                             }
                         }
-                    })
+                    })?;
+                Ok(Some(verified))
             }
             SolanaVerification::Sweep { npk } => {
                 verifier.verify_deposit_intent(npk).await.map_err(|e| {
                     PolicyError::SolanaVerificationFailed(format!("DepositIntent verification failed: {}", e))
-                })
+                })?;
+                Ok(None)
             }
         }
     }

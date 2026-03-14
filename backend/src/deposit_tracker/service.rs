@@ -147,15 +147,10 @@ impl DepositTrackerService {
     /// Set up verifier with Solana keypair
     pub fn with_verifier(mut self, keypair: Keypair) -> Self {
         let program_id = std::env::var("AEGIS_PROGRAM_ID")
-            .unwrap_or_else(|_| "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1".to_string());
-        let mut verifier = if self.config.esplora_url.contains("localhost") || self.config.esplora_url.contains("127.0.0.1") {
-            // Custom esplora URL (e.g., regtest) — use it for the verifier too
-            match SpvVerifier::new(&self.config.solana_rpc, &self.config.esplora_url, &program_id) {
-                Ok(v) => v,
-                Err(_) => SpvVerifier::new_testnet(&self.config.solana_rpc),
-            }
-        } else {
-            SpvVerifier::new_testnet(&self.config.solana_rpc)
+            .unwrap_or_else(|_| "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ".to_string());
+        let mut verifier = match SpvVerifier::new(&self.config.solana_rpc, &self.config.esplora_url, &program_id) {
+            Ok(v) => v,
+            Err(_) => SpvVerifier::new_testnet(&self.config.solana_rpc),
         };
         verifier.set_payer(keypair);
         self.verifier = Some(verifier);

@@ -16,8 +16,8 @@ import type { RpcClient } from "./commitment-tree";
 /** NullifierRecord account size (1 byte — slim layout, just discriminator) */
 export const NULLIFIER_RECORD_SIZE = 1;
 
-/** RedemptionRequest account size (90 bytes) */
-export const REDEMPTION_REQUEST_SIZE = 90;
+/** RedemptionRequest account size (98 bytes) */
+export const REDEMPTION_REQUEST_SIZE = 98;
 
 /** NullifierRecord discriminator byte */
 export const NULLIFIER_RECORD_DISCRIMINATOR = 0x03;
@@ -74,6 +74,8 @@ export interface ExplorerRedemption {
   pubkey: string;
   requestId: bigint;
   amountSats: bigint;
+  /** Service fee in satoshis, locked at request time */
+  serviceFee: bigint;
   status: "Pending" | "Processing" | "Failed";
   requester: string;
   btcScript: string;
@@ -146,7 +148,7 @@ export function parseNullifierRecord(
   };
 }
 
-/** Parse a RedemptionRequest account (90 bytes, raw scriptPubKey) */
+/** Parse a RedemptionRequest account (98 bytes, raw scriptPubKey) */
 export function parseRedemptionRequest(
   pubkey: string,
   data: Uint8Array
@@ -163,9 +165,10 @@ export function parseRedemptionRequest(
     pubkey,
     requestId: readU64LE(data, 8),
     amountSats: readU64LE(data, 48),
+    serviceFee: readU64LE(data, 56),
     status,
     requester: bs58Encode(data.slice(16, 48)),
-    btcScript: toHex(data.slice(56, 56 + Math.min(scriptLen, 34))),
+    btcScript: toHex(data.slice(64, 64 + Math.min(scriptLen, 34))),
     processingSlot,
   };
 }

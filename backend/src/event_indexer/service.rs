@@ -12,7 +12,7 @@ use super::tree_cache::TreeCache;
 
 /// BTC Light Client program ID — used to detect real vs demo deposits.
 /// Transactions that reference this account are SPV-verified BTC deposits.
-const BTC_LIGHT_CLIENT_PROGRAM_ID: &str = "Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq";
+
 
 /// Configuration for the event indexer
 #[derive(Debug, Clone)]
@@ -34,15 +34,14 @@ pub struct EventIndexerService {
     tree_cache: Option<Arc<TreeCache>>,
 }
 
-/// Aegis program ID — used to find verify_stealth_deposit instructions.
-const AEGIS_PROGRAM_ID: &str = "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1";
+// Aegis program ID is read from config.program_id (set via AEGIS_PROGRAM_ID env var)
 
 /// Data extracted from a getTransaction RPC response
 struct TransactionData {
     logs: Vec<String>,
     block_time: i64,
     /// Whether the tx references the BTC light client program (SPV-verified deposit)
-    is_verified_deposit: bool,
+
     /// BTC deposit txid (extracted from verify_stealth_deposit instruction data)
     btc_deposit_txid: Option<String>,
     /// BTC sweep txid (extracted from verify_stealth_deposit instruction data)
@@ -207,10 +206,8 @@ impl EventIndexerService {
 
     /// Process a single transaction: fetch logs + blockTime, parse events, store.
     ///
-    /// Uses the on-chain `leaf_index` from StealthAnnouncement events (which carry
-    /// the authoritative leaf_index) to assign leaf indices to LeafInserted events.
-    /// This eliminates the need for an in-memory counter and avoids race conditions
-    /// between the poll service and the WebSocket subscriber.
+    /// Leaf data is derived from StealthAnnouncement events (which carry
+    /// commitment + leaf_index). LeafInserted is no longer emitted on-chain.
     async fn process_transaction(&mut self, signature: &str, slot: i64) -> Result<(), String> {
         let tx_data = self.get_transaction_data(signature).await?;
         let events = parse_program_events(&tx_data.logs);
@@ -221,25 +218,25 @@ impl EventIndexerService {
         tracing::debug!(signature = &signature[..20], count = events.len(), block_time = tx_data.block_time, "Parsed events");
 
         let block_time = tx_data.block_time;
-        let is_verified = tx_data.is_verified_deposit;
+        // Determine is_verified from instruction discriminator:
+        //   disc 1 (verify_stealth_deposit) or 25 (verify_deposit_v2) = real SPV deposit
+        //   disc 15 (add_demo_stealth) or anything else = demo/non-SPV
+        let is_verified = matches!(tx_data.instruction_disc, Some(1) | Some(25));
 
         // Separate events by type
-        let mut leaf_events = Vec::new();
         let mut announcements = Vec::new();
         let mut nullifiers = Vec::new();
         let mut redemption_completions = Vec::new();
         let mut redemption_requests = Vec::new();
+        let mut deposit_verified: Option<super::parser::DepositVerifiedEvent> = None;
+        let mut unshield_meta: Option<super::parser::UnshieldMetaEvent> = None;
 
         for event in events {
             match event {
-                ProgramEvent::LeafInserted(e) => leaf_events.push(e),
                 ProgramEvent::StealthAnnouncement(e) => announcements.push(e),
                 ProgramEvent::NullifierSpent(e) => nullifiers.push(e),
                 ProgramEvent::RedemptionCompleted(e) => redemption_completions.push(e),
                 ProgramEvent::RedemptionRequested(e) => redemption_requests.push(e),
-                ProgramEvent::PoolPaused(e) => {
-                    tracing::info!(is_paused = e.is_paused, timestamp = e.timestamp, "Pool paused/unpaused event");
-                }
                 ProgramEvent::RedemptionProcessing(e) => {
                     let inserted = self.store.insert_redemption_processing(&e, signature, slot, block_time)
                         .unwrap_or(false);
@@ -251,30 +248,51 @@ impl EventIndexerService {
                         "Indexed redemption processing"
                     );
                 }
+                ProgramEvent::DepositVerified(e) => {
+                    deposit_verified = Some(e);
+                }
+                ProgramEvent::UnshieldMeta(e) => {
+                    unshield_meta = Some(e);
+                }
             }
         }
 
-        // Match LeafInserted with StealthAnnouncement by commitment.
-        // The announcement carries the authoritative on-chain leaf_index.
+        // Prefer event-sourced BTC txids (from DepositVerified event) over instruction data extraction
+        let (btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats) = if let Some(ref dv) = deposit_verified {
+            let dep_txid = Self::btc_internal_to_hex(&dv.deposit_txid);
+            let sweep_txid = Self::btc_internal_to_hex(&dv.sweep_txid);
+            tracing::debug!(deposit = %dep_txid, sweep = %sweep_txid, amount = dv.amount_sats, "Using event-sourced deposit data");
+            (Some(dep_txid), Some(sweep_txid), Some(dv.amount_sats as i64))
+        } else {
+            (tx_data.btc_deposit_txid, tx_data.btc_sweep_txid, tx_data.btc_deposit_amount_sats)
+        };
+
+        // Prefer event-sourced unshield data (from UnshieldMeta event) over instruction data extraction
+        let (unshield_amount, unshield_recipient) = if let Some(ref um) = unshield_meta {
+            let recipient = bs58::encode(&um.recipient).into_string();
+            tracing::debug!(amount = um.amount, recipient = %recipient, "Using event-sourced unshield data");
+            (Some(um.amount as i64), Some(recipient))
+        } else {
+            (tx_data.unshield_amount, tx_data.unshield_recipient)
+        };
+
+        // Process announcements — leaf data derived from announcement (commitment + leaf_index)
         for ann in &announcements {
             let leaf_index = ann.leaf_index as i64;
 
-            // Find matching leaf event by commitment
-            if let Some(leaf) = leaf_events.iter().find(|l| l.commitment == ann.commitment) {
-                let inserted = self.store.insert_leaf(leaf_index, leaf, signature, slot, block_time)?;
-                if inserted {
-                    if let Some(ref cache) = self.tree_cache {
-                        cache.on_leaf_inserted(leaf_index as u64, leaf.commitment).await;
-                    }
+            let inserted = self.store.insert_leaf_from_announcement(leaf_index, &ann.commitment, signature, slot, block_time)?;
+            if inserted {
+                if let Some(ref cache) = self.tree_cache {
+                    cache.on_leaf_inserted(leaf_index as u64, ann.commitment).await;
                 }
-                tracing::debug!(leaf_index, inserted, "Indexed leaf");
             }
+            tracing::debug!(leaf_index, inserted, "Indexed leaf");
 
             // Insert announcement (with is_verified flag + BTC txids + deposit amount for real deposits)
             let inserted = self.store.insert_announcement(
                 ann, signature, slot, block_time, is_verified,
-                tx_data.btc_deposit_txid.as_deref(), tx_data.btc_sweep_txid.as_deref(),
-                tx_data.btc_deposit_amount_sats,
+                btc_deposit_txid.as_deref(), btc_sweep_txid.as_deref(),
+                btc_deposit_amount_sats,
             )?;
             if inserted {
                 if let Some(ref cache) = self.tree_cache {
@@ -284,19 +302,23 @@ impl EventIndexerService {
             tracing::debug!(leaf_index = ann.leaf_index, is_verified, "Indexed stealth announcement");
         }
 
-        // Handle nullifiers
-        let instruction_disc = tx_data.instruction_disc;
+        // Handle nullifiers — use instruction_disc from event when available, fall back to tx-level extraction
         for null in &nullifiers {
+            let disc = if null.instruction_disc > 0 {
+                Some(null.instruction_disc)
+            } else {
+                tx_data.instruction_disc
+            };
             let inserted = self.store.insert_nullifier(
-                null, signature, slot, block_time, instruction_disc,
-                tx_data.unshield_amount, tx_data.unshield_recipient.as_deref(),
+                null, signature, slot, block_time, disc,
+                unshield_amount, unshield_recipient.as_deref(),
             )?;
             if inserted {
                 if let Some(ref cache) = self.tree_cache {
                     cache.broadcast_nullifier(&hex::encode(null.nullifier_hash), slot);
                 }
             }
-            tracing::debug!(nullifier = hex::encode(&null.nullifier_hash[..8]), disc = ?instruction_disc, "Indexed nullifier");
+            tracing::debug!(nullifier = hex::encode(&null.nullifier_hash[..8]), disc = ?disc, "Indexed nullifier");
         }
 
         // Handle redemption completions
@@ -429,34 +451,65 @@ impl EventIndexerService {
             .unwrap_or_default();
 
         // Extract blockTime (Unix timestamp from the validator)
-        let block_time = json["result"]["blockTime"].as_i64().unwrap_or(0);
+        // If blockTime is null (can happen on some RPC providers), fetch via getBlockTime
+        let block_time = match json["result"]["blockTime"].as_i64() {
+            Some(bt) if bt > 0 => bt,
+            _ => {
+                let slot = json["result"]["slot"].as_i64().unwrap_or(0);
+                if slot > 0 {
+                    match self.get_block_time(slot).await {
+                        Ok(bt) if bt > 0 => bt,
+                        _ => {
+                            tracing::warn!(signature = &signature[..20], slot, "blockTime unavailable, using current time");
+                            std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map(|d| d.as_secs() as i64)
+                                .unwrap_or(0)
+                        }
+                    }
+                } else {
+                    tracing::warn!(signature = &signature[..20], "No blockTime or slot available");
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0)
+                }
+            }
+        };
 
-        let account_keys: Vec<&str> = json["result"]["transaction"]["message"]["accountKeys"]
+        // Collect all account keys: static keys + loaded addresses (v0 address lookup tables)
+        let mut account_keys_owned: Vec<String> = json["result"]["transaction"]["message"]["accountKeys"]
             .as_array()
-            .map(|keys| keys.iter().filter_map(|k| k.as_str()).collect())
+            .map(|keys| keys.iter().filter_map(|k| k.as_str().map(|s| s.to_string())).collect())
             .unwrap_or_default();
-
-        // Detect if this tx references the BTC light client program (real SPV-verified deposit)
-        let is_verified_deposit = account_keys.iter().any(|k| *k == BTC_LIGHT_CLIENT_PROGRAM_ID);
+        // V0 transactions may have additional keys from address lookup tables
+        if let Some(loaded) = json["result"]["meta"]["loadedAddresses"].as_object() {
+            for field in &["writable", "readonly"] {
+                if let Some(arr) = loaded.get(*field).and_then(|v| v.as_array()) {
+                    for k in arr {
+                        if let Some(s) = k.as_str() {
+                            account_keys_owned.push(s.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        let account_keys: Vec<&str> = account_keys_owned.iter().map(|s| s.as_str()).collect();
 
         // Extract BTC txids from verify_stealth_deposit instruction data (disc=0x01, 81 bytes)
-        let (btc_deposit_txid, btc_sweep_txid) = if is_verified_deposit {
-            Self::extract_btc_txids(&json["result"]["transaction"]["message"]["instructions"], &account_keys)
-                .or_else(|| {
-                    // Also check inner instructions
-                    json["result"]["meta"]["innerInstructions"].as_array().and_then(|inners| {
-                        for inner in inners {
-                            if let Some(result) = Self::extract_btc_txids(&inner["instructions"], &account_keys) {
-                                return Some(result);
-                            }
+        let (btc_deposit_txid, btc_sweep_txid) = Self::extract_btc_txids(&json["result"]["transaction"]["message"]["instructions"], &account_keys, &self.config.program_id)
+            .or_else(|| {
+                // Also check inner instructions
+                json["result"]["meta"]["innerInstructions"].as_array().and_then(|inners| {
+                    for inner in inners {
+                        if let Some(result) = Self::extract_btc_txids(&inner["instructions"], &account_keys, &self.config.program_id) {
+                            return Some(result);
                         }
-                        None
-                    })
+                    }
+                    None
                 })
-                .unwrap_or((None, None))
-        } else {
-            (None, None)
-        };
+            })
+            .unwrap_or((None, None));
 
         // Fetch original BTC deposit amount from mempool using the sweep tx.
         // The sweep tx's input spends the deposit output, so vin[].prevout.value
@@ -471,6 +524,7 @@ impl EventIndexerService {
         let instruction_disc = Self::extract_aegis_instruction_disc(
             &json["result"]["transaction"]["message"]["instructions"],
             &account_keys,
+            &self.config.program_id,
         );
 
         // Extract withdrawal amount + recipient from instruction data (disc=15 unshield, disc=16 redeem)
@@ -480,6 +534,7 @@ impl EventIndexerService {
                 Self::extract_unshield_from_ix_data(
                     &json["result"]["transaction"]["message"]["instructions"],
                     &account_keys,
+                    &self.config.program_id,
                 ).or_else(|| {
                     tracing::debug!(sig = &signature[..20], "Falling back to token balance extraction");
                     Self::extract_unshield_from_token_balances(&json["result"]["meta"])
@@ -490,16 +545,44 @@ impl EventIndexerService {
                 Self::extract_redeem_from_ix_data(
                     &json["result"]["transaction"]["message"]["instructions"],
                     &account_keys,
+                    &self.config.program_id,
                 ).unwrap_or((None, None))
             }
             _ => (None, None),
         };
 
-        Ok(TransactionData { logs, block_time, is_verified_deposit, btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats, instruction_disc, unshield_amount, unshield_recipient })
+        Ok(TransactionData { logs, block_time, btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats, instruction_disc, unshield_amount, unshield_recipient })
     }
 }
 
 impl EventIndexerService {
+    /// Fetch blockTime for a given slot via getBlockTime RPC.
+    async fn get_block_time(&self, slot: i64) -> Result<i64, String> {
+        let body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getBlockTime",
+            "params": [slot],
+        });
+
+        let resp = self
+            .http
+            .post(&self.config.rpc_url)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("rpc error: {}", e))?;
+
+        let json: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| format!("json error: {}", e))?;
+
+        json["result"]
+            .as_i64()
+            .ok_or_else(|| format!("getBlockTime returned null for slot {}", slot))
+    }
+
     /// Fetch the original BTC deposit amount using the sweep transaction.
     ///
     /// The sweep tx spends the deposit output, so we look at its inputs:
@@ -554,11 +637,12 @@ impl EventIndexerService {
     fn extract_btc_txids(
         instructions: &serde_json::Value,
         account_keys: &[&str],
+        program_id: &str,
     ) -> Option<(Option<String>, Option<String>)> {
         let ixs = instructions.as_array()?;
         for ix in ixs {
             let program_idx = ix["programIdIndex"].as_u64()? as usize;
-            if program_idx >= account_keys.len() || account_keys[program_idx] != AEGIS_PROGRAM_ID {
+            if program_idx >= account_keys.len() || account_keys[program_idx] != program_id {
                 continue;
             }
             let data_b58 = ix["data"].as_str()?;
@@ -580,11 +664,12 @@ impl EventIndexerService {
     fn extract_aegis_instruction_disc(
         instructions: &serde_json::Value,
         account_keys: &[&str],
+        program_id: &str,
     ) -> Option<u8> {
         let ixs = instructions.as_array()?;
         for ix in ixs {
             let program_idx = ix["programIdIndex"].as_u64()? as usize;
-            if program_idx >= account_keys.len() || account_keys[program_idx] != AEGIS_PROGRAM_ID {
+            if program_idx >= account_keys.len() || account_keys[program_idx] != program_id {
                 continue;
             }
             let data_b58 = ix["data"].as_str()?;
@@ -612,11 +697,12 @@ impl EventIndexerService {
     fn extract_unshield_from_ix_data(
         instructions: &serde_json::Value,
         account_keys: &[&str],
+        program_id: &str,
     ) -> Option<(Option<i64>, Option<String>)> {
         let ixs = instructions.as_array()?;
         for ix in ixs {
             let program_idx = ix["programIdIndex"].as_u64()? as usize;
-            if program_idx >= account_keys.len() || account_keys[program_idx] != AEGIS_PROGRAM_ID {
+            if program_idx >= account_keys.len() || account_keys[program_idx] != program_id {
                 continue;
             }
             let data_b58 = ix["data"].as_str()?;
@@ -673,11 +759,12 @@ impl EventIndexerService {
     fn extract_redeem_from_ix_data(
         instructions: &serde_json::Value,
         account_keys: &[&str],
+        program_id: &str,
     ) -> Option<(Option<i64>, Option<String>)> {
         let ixs = instructions.as_array()?;
         for ix in ixs {
             let program_idx = ix["programIdIndex"].as_u64()? as usize;
-            if program_idx >= account_keys.len() || account_keys[program_idx] != AEGIS_PROGRAM_ID {
+            if program_idx >= account_keys.len() || account_keys[program_idx] != program_id {
                 continue;
             }
             let data_b58 = ix["data"].as_str()?;
@@ -787,8 +874,8 @@ impl EventIndexerService {
     fn extract_unshield_from_token_balances(
         meta: &serde_json::Value,
     ) -> Option<(Option<i64>, Option<String>)> {
-        const ZKBTC_MINT: &str = "GvFAyHsbWDbwvHxecaFnnGrhM1MR72E3cSX78qQbAyC7";
-        const POOL_STATE: &str = "4654vJpq3E3A6nwtUwNWeJuTkHDcqT761uoBX7AHjm5x";
+        const ZKBTC_MINT: &str = "G5CHaLkWjdUxxmnrVqNLQ29K7PoNwJAzvVT11jjkdGKC";
+        const POOL_STATE: &str = "5e5t7AgafazhjYA7Aa66Kbfh5nGjHJqzYdEy9jGNQ8Ny";
 
         let post_balances = meta.get("postTokenBalances").and_then(|b| b.as_array())?;
         let pre_balances = meta.get("preTokenBalances").and_then(|b| b.as_array());

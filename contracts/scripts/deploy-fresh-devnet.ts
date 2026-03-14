@@ -21,7 +21,7 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const RPC_URL = "https://solana-devnet.g.alchemy.com/v2/y1zYW-ovVofq7OzZo0Z6IHenRnyq_Pbd";
+const RPC_URL = "https://api.devnet.solana.com";
 
 // Keep these existing programs
 const CHADBUFFER_ID = new PublicKey("C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF");
@@ -83,9 +83,14 @@ function buildInitializeIx(
   });
 }
 
+// Parse --env flag (default: "devnet")
+const envArg = process.argv.find((a) => a.startsWith("--env="))?.split("=")[1]
+  || process.argv[process.argv.indexOf("--env") + 1]
+  || "devnet";
+
 async function main() {
   console.log("=".repeat(60));
-  console.log("Deploy Fresh Aegis to Devnet");
+  console.log(`Deploy Fresh Aegis to Devnet (env: ${envArg})`);
   console.log("=".repeat(60));
   console.log();
   console.log("This will:");
@@ -247,22 +252,35 @@ async function main() {
     createdAt: new Date().toISOString(),
   };
 
+  const configFileName = `.${envArg}-config.json`;
   fs.writeFileSync(
-    path.join(__dirname, "..", ".devnet-config.json"),
+    path.join(__dirname, "..", configFileName),
     JSON.stringify(devnetConfig, null, 2) + "\n"
   );
-  console.log("\n✓ Saved .devnet-config.json");
+  console.log(`\n✓ Saved ${configFileName}`);
 
   console.log("\n" + "=".repeat(60));
   console.log("Deployment Complete!");
   console.log("=".repeat(60));
+  console.log(`  Environment:   ${envArg}`);
   console.log(`  Program ID:    ${programId.toBase58()}`);
   console.log(`  Pool State:    ${poolStatePda.toBase58()}`);
   console.log(`  Commit Tree:   ${commitmentTreePda.toBase58()}`);
   console.log(`  zkBTC Mint:    ${zkbtcMint.toBase58()}`);
   console.log(`  Pool Vault:    ${poolVaultAccount.address.toBase58()}`);
   console.log();
-  console.log("IMPORTANT: Update sdk/src/config.ts with the new addresses!");
+  console.log("Set these env vars to use this deployment:");
+  console.log();
+  console.log("  # Frontend (aegis-app/.env.local):");
+  console.log(`  NEXT_PUBLIC_AEGIS_PROGRAM_ID=${programId.toBase58()}`);
+  console.log(`  NEXT_PUBLIC_ZKBTC_MINT=${zkbtcMint.toBase58()}`);
+  console.log();
+  console.log("  # Backend (.env):");
+  console.log(`  AEGIS_PROGRAM_ID=${programId.toBase58()}`);
+  console.log(`  AEGIS_ZKBTC_MINT=${zkbtcMint.toBase58()}`);
+  console.log();
+  console.log("  # Scripts:");
+  console.log(`  AEGIS_PROGRAM_ID=${programId.toBase58()}`);
 }
 
 main().catch((err) => {

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { fetchAccountInfo, isHeliusConfigured } from "@/lib/helius-server";
-import { DEVNET_CONFIG, parseCommitmentTreeData } from "@aegis/sdk";
+import { getConfig, parseCommitmentTreeData } from "@aegis/sdk";
 
 export const runtime = "nodejs";
 
-// Commitment tree PDA from SDK (single source of truth)
-const COMMITMENT_TREE_ADDRESS = DEVNET_CONFIG.commitmentTreePda;
+// Commitment tree PDA from SDK config (single source of truth)
+const getCommitmentTreeAddress = () => getConfig().commitmentTreePda;
 
 /**
  * GET /api/solana/commitment-tree
@@ -15,7 +15,7 @@ const COMMITMENT_TREE_ADDRESS = DEVNET_CONFIG.commitmentTreePda;
  */
 export async function GET() {
   try {
-    const accountInfo = await fetchAccountInfo(COMMITMENT_TREE_ADDRESS, "devnet");
+    const accountInfo = await fetchAccountInfo(getCommitmentTreeAddress(), "devnet");
 
     if (!accountInfo) {
       return NextResponse.json(
@@ -38,7 +38,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       helius: isHeliusConfigured(),
-      address: COMMITMENT_TREE_ADDRESS,
+      address: getCommitmentTreeAddress(),
       state,
     });
   } catch (error) {

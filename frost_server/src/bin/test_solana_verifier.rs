@@ -14,7 +14,7 @@ use clap::Parser;
 use frost_server::solana_verifier::{find_program_address, SolanaVerifier};
 
 /// Default devnet Aegis program ID
-const DEVNET_PROGRAM_ID: &str = "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1";
+const DEVNET_PROGRAM_ID: &str = "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ";
 const DEVNET_RPC_URL: &str = "https://api.devnet.solana.com";
 
 #[derive(Parser)]
@@ -152,7 +152,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("  Got error: {} (may be OK if it's RPC error)", e);
                 println!("  PASS (conditional)\n");
             }
-            Ok(()) => {
+            Ok(_) => {
                 println!("  FAIL: Should not have found a fake RedemptionRequest!");
                 std::process::exit(1);
             }
@@ -176,8 +176,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .verify_redemption(requester, nonce, amount, btc_addr)
             .await
         {
-            Ok(()) => {
-                println!("  PASS: RedemptionRequest verified on-chain!\n");
+            Ok(verified) => {
+                println!("  PASS: RedemptionRequest verified on-chain!");
+                println!("    amount: {} sats, service_fee: {} sats, net: {} sats\n",
+                    verified.amount_sats, verified.service_fee, verified.expected_send_amount());
             }
             Err(e) => {
                 println!("  FAIL: {}\n", e);

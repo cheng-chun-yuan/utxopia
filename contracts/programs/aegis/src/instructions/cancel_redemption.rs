@@ -115,9 +115,8 @@ pub fn process_cancel_redemption(
         tree.insert_leaf(&commitment)?
     };
 
-    // Emit leaf inserted + stealth announcement for the re-minted commitment
+    // Emit stealth announcement for the re-minted commitment (LeafInserted merged)
     let clock = Clock::get()?;
-    crate::utils::events::emit_leaf_inserted(&commitment, clock.unix_timestamp);
     {
         // For cancel_redemption, use zero ephemeral_pub (self-transfer, no stealth needed)
         let zero_ephemeral = [0u8; 32];
@@ -145,5 +144,6 @@ pub fn process_cancel_redemption(
     // Close RedemptionRequest PDA — return rent to user
     close_account_securely(redemption_info, user)?;
 
+    pinocchio::msg!("Aegis: redemption cancelled");
     Ok(())
 }

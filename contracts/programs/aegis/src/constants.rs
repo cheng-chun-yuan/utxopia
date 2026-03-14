@@ -46,9 +46,9 @@ pub const CHAIN_ID: u64 = 103; // Solana devnet
 #[cfg(feature = "mainnet")]
 pub const CHAIN_ID: u64 = 101; // Solana mainnet
 
-/// Redemption processing timeout in slots (~1 hour at ~2.5 slots/sec).
+/// Redemption processing timeout in slots (~24 hours at ~2.5 slots/sec).
 /// If a redemption stays in Processing longer than this, the user can cancel.
-pub const REDEMPTION_TIMEOUT_SLOTS: u64 = 9000;
+pub const REDEMPTION_TIMEOUT_SLOTS: u64 = 216_000;
 
 /// Timelock delay for pool parameter updates (48 hours in seconds)
 pub const TIMELOCK_DELAY_SECS: i64 = 48 * 60 * 60;

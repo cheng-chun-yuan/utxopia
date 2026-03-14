@@ -672,10 +672,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_info_without_key() {
+        // Set API key so auth middleware doesn't block the request
+        env::set_var("FROST_API_KEY", "test-key");
         let app = create_test_app();
 
         let request = Request::builder()
             .uri("/info")
+            .header("X-API-Key", "test-key")
             .body(Body::empty())
             .unwrap();
 

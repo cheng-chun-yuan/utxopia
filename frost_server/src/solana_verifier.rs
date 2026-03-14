@@ -35,15 +35,55 @@ pub enum SolanaVerifyError {
 
 /// RedemptionRequest account layout offsets (from contracts/programs/aegis/src/state/redemption.rs)
 ///
-/// Layout (90 bytes): disc(1) + status(1) + btc_script_len(1) + padding(1) +
-///         processing_slot(4) + request_id(8) + requester(32) + amount_sats(8) + btc_script(34)
+/// Layout (98 bytes): disc(1) + status(1) + btc_script_len(1) + padding(1) +
+///         processing_slot(4) + request_id(8) + requester(32) + amount_sats(8) + btc_script(34) + service_fee(8)
 /// Note: btc_script stores raw scriptPubKey bytes, not bech32 address strings.
 const REDEMPTION_DISCRIMINATOR: u8 = 0x04;
 const REDEMPTION_STATUS_OFFSET: usize = 1;
 const REDEMPTION_BTC_ADDR_LEN_OFFSET: usize = 2;
 const REDEMPTION_AMOUNT_OFFSET: usize = 48; // 1+1+1+1+4+8+32
-const REDEMPTION_BTC_ADDR_OFFSET: usize = 56; // 48+8
-const REDEMPTION_MIN_LEN: usize = 90; // full struct size
+const REDEMPTION_SERVICE_FEE_OFFSET: usize = 56; // 48+8
+const REDEMPTION_BTC_ADDR_OFFSET: usize = 64; // 56+8
+const REDEMPTION_MIN_LEN: usize = 98; // full struct size
+
+/// PoolState layout offsets for fee config
+const POOL_STATE_DISCRIMINATOR: u8 = 0x01;
+const POOL_STATE_SERVICE_FEE_BASE_OFFSET: usize = 196;
+const POOL_STATE_SERVICE_FEE_BPS_OFFSET: usize = 244;
+const POOL_STATE_MIN_LEN: usize = 268;
+
+/// Verified redemption data read directly from on-chain PDA
+#[derive(Debug, Clone)]
+pub struct VerifiedRedemption {
+    /// Gross amount from PDA (amount_sats)
+    pub amount_sats: u64,
+    /// Service fee locked at request time (from PDA)
+    pub service_fee: u64,
+    /// BTC scriptPubKey hex from PDA
+    pub btc_script_hex: String,
+}
+
+impl VerifiedRedemption {
+    /// Expected net send amount = gross - service_fee
+    pub fn expected_send_amount(&self) -> u64 {
+        self.amount_sats.saturating_sub(self.service_fee)
+    }
+}
+
+/// On-chain fee config from PoolState PDA
+#[derive(Debug, Clone)]
+pub struct PoolFeeConfig {
+    pub service_fee_bps: u16,
+    pub service_fee_base: u64,
+}
+
+impl PoolFeeConfig {
+    /// Compute expected service fee for a given amount
+    pub fn compute_fee(&self, amount: u64) -> u64 {
+        let pct = (amount as u128 * self.service_fee_bps as u128 / 10_000) as u64;
+        pct.saturating_add(self.service_fee_base)
+    }
+}
 
 /// Solana on-chain verifier
 pub struct SolanaVerifier {
@@ -87,13 +127,15 @@ impl SolanaVerifier {
     ///
     /// Derives the PDA from seeds `["redemption", requester(32), nonce_le(8)]`,
     /// fetches via RPC, and validates discriminator, status, amount, and BTC address.
+    ///
+    /// Returns `VerifiedRedemption` with the on-chain data for further validation.
     pub async fn verify_redemption(
         &self,
         requester_base58: &str,
         nonce: u64,
         expected_amount_sats: u64,
         expected_btc_address: &str,
-    ) -> Result<(), SolanaVerifyError> {
+    ) -> Result<VerifiedRedemption, SolanaVerifyError> {
         // Decode requester pubkey
         let requester_bytes = bs58::decode(requester_base58)
             .into_vec()
@@ -168,7 +210,14 @@ impl SolanaVerifier {
             });
         }
 
-        // Check BTC scriptPubKey (stored as raw bytes, not bech32 string)
+        // Read service_fee locked at request time (offset 56, 8 bytes LE)
+        let on_chain_service_fee = u64::from_le_bytes(
+            data[REDEMPTION_SERVICE_FEE_OFFSET..REDEMPTION_SERVICE_FEE_OFFSET + 8]
+                .try_into()
+                .unwrap(),
+        );
+
+        // Check BTC scriptPubKey (stored as raw bytes at offset 64, not bech32 string)
         let script_len = data[REDEMPTION_BTC_ADDR_LEN_OFFSET] as usize;
         if REDEMPTION_BTC_ADDR_OFFSET + script_len > data.len() {
             return Err(SolanaVerifyError::InvalidAccountData(
@@ -189,12 +238,53 @@ impl SolanaVerifier {
         tracing::info!(
             pda = %pda_base58,
             amount = on_chain_amount,
+            service_fee = on_chain_service_fee,
             btc_script = %on_chain_addr,
             status = status,
             "RedemptionRequest verified on-chain"
         );
 
-        Ok(())
+        Ok(VerifiedRedemption {
+            amount_sats: on_chain_amount,
+            service_fee: on_chain_service_fee,
+            btc_script_hex: on_chain_addr,
+        })
+    }
+
+    /// Fetch on-chain fee config from PoolState PDA.
+    ///
+    /// Derives PDA from seeds ["pool_state"], fetches account, parses fee fields.
+    pub async fn fetch_pool_fees(&self) -> Result<PoolFeeConfig, SolanaVerifyError> {
+        let seeds: &[&[u8]] = &[b"pool_state"];
+        let pda = find_program_address(seeds, &self.program_id)
+            .ok_or_else(|| SolanaVerifyError::RpcError("failed to derive pool_state PDA".to_string()))?;
+
+        let pda_base58 = bs58::encode(&pda.0).into_string();
+        let data = self.get_account_data(&pda_base58).await?.ok_or_else(|| {
+            SolanaVerifyError::AccountNotFound(format!("PoolState PDA {} not found", pda_base58))
+        })?;
+
+        if data.len() < POOL_STATE_MIN_LEN {
+            return Err(SolanaVerifyError::InvalidAccountData(format!(
+                "pool_state too small: {} < {}", data.len(), POOL_STATE_MIN_LEN
+            )));
+        }
+        if data[0] != POOL_STATE_DISCRIMINATOR {
+            return Err(SolanaVerifyError::InvalidAccountData(format!(
+                "pool_state wrong discriminator: 0x{:02x}", data[0]
+            )));
+        }
+
+        let base = u64::from_le_bytes(
+            data[POOL_STATE_SERVICE_FEE_BASE_OFFSET..POOL_STATE_SERVICE_FEE_BASE_OFFSET + 8]
+                .try_into().unwrap(),
+        );
+        let bps = u16::from_le_bytes(
+            data[POOL_STATE_SERVICE_FEE_BPS_OFFSET..POOL_STATE_SERVICE_FEE_BPS_OFFSET + 2]
+                .try_into().unwrap(),
+        );
+
+        Ok(PoolFeeConfig { service_fee_bps: bps, service_fee_base: base })
     }
 
     /// Verify that a DepositIntent PDA exists on-chain.
@@ -380,8 +470,8 @@ mod tests {
     #[test]
     fn test_pda_derivation_known_vector() {
         // Test with a known program ID and seeds
-        // Using the Aegis program ID: 4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1
-        let program_id_bytes = bs58::decode("4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1")
+        // Using the Aegis program ID: 7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ
+        let program_id_bytes = bs58::decode("7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ")
             .into_vec()
             .unwrap();
         let mut program_id = [0u8; 32];
@@ -404,7 +494,7 @@ mod tests {
     #[test]
     fn test_pda_with_redemption_seeds() {
         // Simulate a real redemption PDA derivation
-        let program_id_bytes = bs58::decode("4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1")
+        let program_id_bytes = bs58::decode("7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ")
             .into_vec()
             .unwrap();
         let mut program_id = [0u8; 32];

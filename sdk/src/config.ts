@@ -12,7 +12,7 @@
  * @module config
  */
 
-import { address, type Address } from "@solana/kit";
+import { address, getAddressEncoder, getProgramDerivedAddress, type Address } from "@solana/kit";
 
 // =============================================================================
 // Network Types
@@ -173,25 +173,25 @@ export const LOCALNET_CHADBUFFER_PROGRAM_ID: Address = address(
 /**
  * Devnet Configuration (v3.3.0)
  *
- * Fresh deployment 2026-03-09:
- * - Deposit receipt PDA prevents duplicate verification
- * - Program ID: 4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1
+ * Fresh deployment 2026-03-13:
+ * - RedemptionRequest PDA now 98 bytes (service_fee locked at request time)
+ * - Program ID: 7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ
  */
 export const DEVNET_CONFIG: NetworkConfig = {
   network: "devnet",
 
-  // Program IDs (fresh deployment 2026-03-09)
-  aegisProgramId: address("4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1"),
+  // Program IDs (fresh deployment 2026-03-13)
+  aegisProgramId: address("7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ"),
   btcLightClientProgramId: address("Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"),
   chadbufferProgramId: CHADBUFFER_PROGRAM_ID,
   token2022ProgramId: TOKEN_2022_PROGRAM_ID,
   ataProgramId: ATA_PROGRAM_ID,
 
-  // Deployed Accounts (fresh deployment 2026-03-09)
-  poolStatePda: address("4654vJpq3E3A6nwtUwNWeJuTkHDcqT761uoBX7AHjm5x"),
-  commitmentTreePda: address("2bjcEufNf6Xa7YwH1ci99k1NjRg6jjirCQXsPjC5Qgk6"),
-  zkbtcMint: address("GvFAyHsbWDbwvHxecaFnnGrhM1MR72E3cSX78qQbAyC7"),
-  poolVault: address("DHM2r1jXqvv9CqTYqy97x4ppAEFyWaKdRMby18gkLwhm"),
+  // Deployed Accounts (fresh deployment 2026-03-13)
+  poolStatePda: address("5e5t7AgafazhjYA7Aa66Kbfh5nGjHJqzYdEy9jGNQ8Ny"),
+  commitmentTreePda: address("FQRHN9yQ97HmgVmhDGf3EdbhCek7QuuDv1C3hpAGPtjv"),
+  zkbtcMint: address("G5CHaLkWjdUxxmnrVqNLQ29K7PoNwJAzvVT11jjkdGKC"),
+  poolVault: address("D1UXjKfHeUe6kMKNEz2DrMDnRWKjJayMejZryATMMrGz"),
 
   // RPC Endpoints
   solanaRpcUrl: "https://api.devnet.solana.com",
@@ -205,7 +205,7 @@ export const DEVNET_CONFIG: NetworkConfig = {
   circuitCdnUrl: "https://circuits.amidoggy.xyz",
 
   // Groth16 Verifier: verification is inline in the Aegis program (no separate verifier program)
-  groth16VerifierProgramId: address("4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1"),
+  groth16VerifierProgramId: address("7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ"),
 
   // VK Hashes (SHA256 of serialized VK bytes, generated from circom trusted setup)
   vkHashes: {
@@ -361,8 +361,22 @@ export const LOCALNET_CONFIG: NetworkConfig = {
 // Default Configuration
 // =============================================================================
 
-/** Current active configuration (defaults to devnet) */
+/** Current active configuration (defaults to devnet, overridden by env vars) */
 let currentConfig: NetworkConfig = DEVNET_CONFIG;
+
+// Eagerly apply env var overrides synchronously (program ID + mint only).
+// PDA derivation happens async in initConfig(), but at least getConfig()
+// returns the correct program ID immediately.
+if (typeof process !== "undefined") {
+  const _pid = process.env?.NEXT_PUBLIC_AEGIS_PROGRAM_ID || process.env?.AEGIS_PROGRAM_ID;
+  const _mint = process.env?.NEXT_PUBLIC_ZKBTC_MINT || process.env?.AEGIS_ZKBTC_MINT;
+  if (_pid) {
+    currentConfig = { ...currentConfig, aegisProgramId: address(_pid), groth16VerifierProgramId: address(_pid) };
+  }
+  if (_mint) {
+    currentConfig = { ...currentConfig, zkbtcMint: address(_mint) };
+  }
+}
 
 /** Esplora URL for a given Bitcoin network */
 function esploraUrlForNetwork(net: string): string {
@@ -440,6 +454,83 @@ export function createConfig(
   overrides: Partial<NetworkConfig>
 ): NetworkConfig {
   return { ...base, ...overrides };
+}
+
+// =============================================================================
+// Environment-based Initialization
+// =============================================================================
+
+/**
+ * Initialize SDK configuration with optional overrides.
+ *
+ * Reads `aegisProgramId` and `zkbtcMint` from params, then env vars, then
+ * falls back to DEVNET_CONFIG defaults. All PDAs are auto-derived from these
+ * two values.
+ *
+ * Env vars checked (in order):
+ * - NEXT_PUBLIC_AEGIS_PROGRAM_ID / AEGIS_PROGRAM_ID
+ * - NEXT_PUBLIC_ZKBTC_MINT / AEGIS_ZKBTC_MINT
+ *
+ * @example
+ * // Use env vars (set NEXT_PUBLIC_AEGIS_PROGRAM_ID + NEXT_PUBLIC_ZKBTC_MINT)
+ * await initConfig();
+ *
+ * // Or pass explicitly
+ * await initConfig({ aegisProgramId: "...", zkbtcMint: "..." });
+ */
+export async function initConfig(overrides?: {
+  aegisProgramId?: string;
+  zkbtcMint?: string;
+}): Promise<NetworkConfig> {
+  const config = { ...DEVNET_CONFIG };
+
+  // Resolve program ID: param > env > default
+  const programId =
+    overrides?.aegisProgramId ||
+    (typeof process !== "undefined" && (process.env?.NEXT_PUBLIC_AEGIS_PROGRAM_ID || process.env?.AEGIS_PROGRAM_ID)) ||
+    undefined;
+
+  // Resolve mint: param > env > default
+  const mint =
+    overrides?.zkbtcMint ||
+    (typeof process !== "undefined" && (process.env?.NEXT_PUBLIC_ZKBTC_MINT || process.env?.AEGIS_ZKBTC_MINT)) ||
+    undefined;
+
+  if (programId) {
+    config.aegisProgramId = address(programId);
+    config.groth16VerifierProgramId = address(programId); // same program
+
+    // Derive PDAs from program ID
+    const [poolStatePda] = await getProgramDerivedAddress({
+      programAddress: config.aegisProgramId,
+      seeds: [new TextEncoder().encode("pool_state")],
+    });
+    const [commitmentTreePda] = await getProgramDerivedAddress({
+      programAddress: config.aegisProgramId,
+      seeds: [new TextEncoder().encode("commitment_tree")],
+    });
+    config.poolStatePda = poolStatePda;
+    config.commitmentTreePda = commitmentTreePda;
+  }
+
+  if (mint) {
+    config.zkbtcMint = address(mint);
+
+    // Derive pool vault (ATA: seeds = [owner, TOKEN_2022, mint] under ATA program)
+    const encoder = getAddressEncoder();
+    const [poolVault] = await getProgramDerivedAddress({
+      programAddress: config.ataProgramId,
+      seeds: [
+        encoder.encode(config.poolStatePda),
+        encoder.encode(config.token2022ProgramId),
+        encoder.encode(config.zkbtcMint),
+      ],
+    });
+    config.poolVault = poolVault;
+  }
+
+  currentConfig = config;
+  return config;
 }
 
 // =============================================================================

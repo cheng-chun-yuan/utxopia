@@ -1,396 +1,454 @@
 "use client";
 
 import Link from "next/link";
+import { type LucideIcon } from "lucide-react";
 import {
   Shield,
-  EyeOff,
   Lock,
-  Key,
-  Fingerprint,
   Bitcoin,
   ArrowRight,
-  ArrowLeft,
-  Zap,
   ShieldCheck,
-  Search,
+  TreePine,
+  Layers,
+  KeyRound,
+  Eye,
+  Network,
+  GitBranch,
+  ChevronRight,
+  AlertTriangle,
 } from "lucide-react";
 import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
+import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
+import { DocsSection } from "@/components/docs/docs-section";
+import { FlowDiagram } from "@/components/docs/flow-diagram";
+import {
+  DocsSidebar,
+  MobileSidebarBar,
+  useAllSectionIds,
+} from "@/components/docs/docs-sidebar";
+import { useActiveSection } from "@/hooks/use-active-section";
 
-const steps = [
-  {
-    number: 1,
-    title: "Deposit BTC",
-    description:
-      "Send Bitcoin to a unique Taproot address generated from your stealth keys. Any amount, one transaction.",
-    icon: Bitcoin,
-    color: "btc",
-    bgClass: "bg-btc/10",
-    borderClass: "border-btc/20",
-    textClass: "text-btc",
-  },
-  {
-    number: 2,
-    title: "Shield with ZK",
-    description:
-      "Your deposit becomes a hidden Poseidon commitment inserted into a Merkle tree. The amount disappears from public view.",
-    icon: Shield,
-    color: "privacy",
-    bgClass: "bg-privacy/10",
-    borderClass: "border-privacy/20",
-    textClass: "text-privacy",
-  },
-  {
-    number: 3,
-    title: "Transact Privately",
-    description:
-      "JoinSplit proofs let you transfer to anyone without revealing amounts, senders, or recipients.",
-    icon: Lock,
-    color: "purple",
-    bgClass: "bg-purple/10",
-    borderClass: "border-purple/20",
-    textClass: "text-purple",
-  },
-  {
-    number: 4,
-    title: "Withdraw to BTC",
-    description:
-      "Burn your private note and receive BTC back via FROST threshold signing. No single party controls your funds.",
-    icon: ArrowRight,
-    color: "cyan",
-    bgClass: "bg-cyan/10",
-    borderClass: "border-cyan/20",
-    textClass: "text-cyan",
-  },
-] as const;
+/* ── Simple card wrapper ── */
 
-const features = [
-  {
-    icon: EyeOff,
-    title: "Shielded-Only",
-    description:
-      "No public zkBTC token ever exists. Your BTC lives only as cryptographic commitments.",
-    variant: "cyber" as const,
-  },
-  {
-    icon: Shield,
-    title: "Zero-Knowledge Proofs",
-    description:
-      "Groth16 proofs (256 bytes) verify every transfer without revealing amounts or parties.",
-    variant: "privacy" as const,
-  },
-  {
-    icon: Fingerprint,
-    title: "Stealth Addresses",
-    description:
-      "One-time addresses ensure recipients can\u2019t be linked across transactions.",
-    variant: "default" as const,
-  },
-  {
-    icon: Key,
-    title: "3-Key Architecture",
-    description:
-      "Separate spending, nullifying, and viewing keys. Share your viewing key for compliance without spending risk.",
-    variant: "bitcoin" as const,
-  },
-] as const;
-
-const technicalDetails = [
-  {
-    label: "Commitment",
-    code: "Poseidon(npk, token, amount)",
-    description: "a hiding hash of your note",
-  },
-  {
-    label: "Nullifier",
-    code: "Poseidon(nullifyingKey, leafIndex)",
-    description: "prevents double-spending without revealing which note was spent",
-  },
-  {
-    label: "Merkle Tree",
-    code: "Depth 16, Poseidon hashing",
-    description: "supports 65,536 private notes",
-  },
-  {
-    label: "JoinSplit(N,M)",
-    code: "N inputs \u2192 M outputs",
-    description: "all verified by a single ZK proof",
-  },
-  {
-    label: "FROST Signing",
-    code: "t-of-n threshold",
-    description: "trustless BTC withdrawals \u2014 no single party controls funds",
-  },
-];
-
-const securityItems = [
-  { icon: Zap, text: "Permissionless \u2014 no KYC required to deposit or transact privately" },
-  { icon: ShieldCheck, text: "Trustless \u2014 BTC verified via SPV proofs on Solana, no custodian" },
-  { icon: Key, text: "Self-custody \u2014 only you hold the keys to your private notes" },
-  { icon: Shield, text: "OFAC Compliant \u2014 built-in screening at deposit to ensure regulatory compliance" },
-];
-
-const variantStyles = {
-  default: {
-    iconBg: "bg-purple/10",
-    iconColor: "text-purple",
-    cardClass: "gradient-bg-card",
-  },
-  bitcoin: {
-    iconBg: "bg-btc/10",
-    iconColor: "text-btc btc-glow",
-    cardClass: "gradient-bg-bitcoin",
-  },
-  privacy: {
-    iconBg: "bg-privacy/10",
-    iconColor: "text-privacy privacy-glow",
-    cardClass: "gradient-bg-card privacy-lines",
-  },
-  cyber: {
-    iconBg: "bg-cyan/10",
-    iconColor: "text-cyan",
-    cardClass: "gradient-bg-cyber",
-  },
-};
-
-export default function DocsPage() {
+function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <main className="min-h-screen bg-background hacker-bg noise-overlay">
-      <div className="container mx-auto px-4 py-8 relative z-10 max-w-5xl">
-        {/* Header */}
-        <header className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-              <div className="p-2 rounded-[12px] bg-linear-to-br from-btc/20 to-privacy/20 border border-btc/20">
-                <div className="relative">
-                  <BitcoinIcon className="h-6 w-6 btc-glow" />
-                  <Shield className="h-3 w-3 text-privacy absolute -bottom-1 -right-1" />
-                </div>
-              </div>
-              <span className="text-heading6 text-foreground">Private Bitcoin</span>
-            </Link>
+    <div className={`rounded-xl border border-gray/10 bg-muted/10 p-5 sm:p-6 ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+/* ── Section heading ── */
+
+function SectionHeading({ label, title, subtitle }: { label: string; title: React.ReactNode; subtitle?: string }) {
+  return (
+    <div className="mb-8">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="h-px w-8 bg-gray/20" />
+        <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-gray/50">
+          {label}
+        </span>
+      </div>
+      <h2 className="text-2xl md:text-3xl font-semibold tracking-tight text-foreground mb-3">
+        {title}
+      </h2>
+      {subtitle && (
+        <p className="text-gray text-sm max-w-2xl font-light leading-relaxed">
+          {subtitle}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ── Step card ── */
+
+interface StepCardProps {
+  num: string;
+  icon: LucideIcon;
+  title: string;
+  desc: string;
+  detail: string;
+}
+
+function StepCard({ num, icon: Icon, title, desc, detail }: StepCardProps) {
+  return (
+    <Card>
+      <div className="flex flex-col">
+        <div className="flex items-center gap-3 mb-2">
+          <span className="text-xs font-mono text-gray/40">{num}</span>
+          <div className="p-2 rounded-lg border border-gray/10 bg-background/50">
+            <Icon className="w-4 h-4 text-gray-light" />
           </div>
-          <div className="flex items-center gap-4">
-            <Link
-              href="/explorer"
-              className="text-body2 text-gray hover:text-gray-light transition-colors flex items-center gap-1"
-            >
-              Explorer
-              <Search className="w-3 h-3" />
-            </Link>
-            <Link
-              href="/vault"
-              className="text-body2 text-gray hover:text-gray-light transition-colors"
-            >
-              Vault
-            </Link>
-          </div>
-        </header>
-
-        {/* Content */}
-        <div className="max-w-4xl mx-auto space-y-10">
-          {/* Back link */}
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-body2 text-gray hover:text-gray-light transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to Home
-          </Link>
-
-          {/* Main card */}
-          <div className="bg-card/80 backdrop-blur-sm border border-gray/30 rounded-[16px] glow-border cyber-corners p-5 sm:p-8 md:p-10 space-y-8 sm:space-y-10">
-            {/* 1. Welcome Hero */}
-            <section className="space-y-4 text-center">
-              <div className="flex justify-center">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-privacy/10 border border-privacy/20">
-                  <Shield className="w-4 h-4 text-privacy" />
-                  <span className="text-caption text-privacy">Privacy Documentation</span>
-                </div>
-              </div>
-              <h1 className="text-3xl md:text-4xl font-bold text-foreground">
-                Privacy on zkBTC
-              </h1>
-              <p className="text-body1 text-gray-light">
-                One protocol for private Bitcoin on Solana
-              </p>
-              <p className="text-body2 text-gray max-w-lg mx-auto">
-                Private Bitcoin lets you deposit BTC and transact privately on Solana using
-                zero-knowledge proofs. No public tokens, no traceable amounts, no
-                linked addresses.
-              </p>
-            </section>
-
-            <div className="border-t border-gray/15" />
-
-            {/* 2. Why Privacy Matters */}
-            <section className="space-y-4">
-              <h2 className="text-heading5 text-foreground">Why Privacy Matters</h2>
-              <div className="bitcoin-box rounded-[12px] p-6 space-y-3">
-                <ul className="space-y-2.5 text-body2 text-gray">
-                  <li className="flex items-start gap-2">
-                    <span className="text-btc mt-1 shrink-0">&bull;</span>
-                    Bitcoin transactions are fully public &mdash; anyone can trace your balance and history
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-btc mt-1 shrink-0">&bull;</span>
-                    Addresses can be linked to your identity through exchanges and analytics
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-btc mt-1 shrink-0">&bull;</span>
-                    Payment amounts are visible to everyone on the blockchain
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-btc mt-1 shrink-0">&bull;</span>
-                    Without privacy, financial surveillance is the default
-                  </li>
-                </ul>
-              </div>
-            </section>
-
-            <div className="border-t border-gray/15" />
-
-            {/* 3. How Private Bitcoin Works */}
-            <section className="space-y-6">
-              <h2 className="text-heading5 text-foreground">How Private Bitcoin Works</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {steps.map((step) => {
-                  const Icon = step.icon;
-                  return (
-                    <div
-                      key={step.number}
-                      className="flex items-start gap-4 p-4 rounded-[12px] bg-card/50 border border-gray/15"
-                    >
-                      <div
-                        className={`w-10 h-10 rounded-full ${step.bgClass} border ${step.borderClass} flex items-center justify-center shrink-0`}
-                      >
-                        <Icon className={`w-5 h-5 ${step.textClass}`} />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`text-caption font-mono ${step.textClass}`}
-                          >
-                            Step {step.number}
-                          </span>
-                          <h3 className="text-body2-semibold text-foreground">
-                            {step.title}
-                          </h3>
-                        </div>
-                        <p className="text-body2 text-gray">{step.description}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-
-            <div className="border-t border-gray/15" />
-
-            {/* 4. Privacy Features */}
-            <section className="space-y-6">
-              <h2 className="text-heading5 text-foreground">Privacy Features</h2>
-              <div className="grid sm:grid-cols-2 gap-4">
-                {features.map((feature) => {
-                  const Icon = feature.icon;
-                  const style = variantStyles[feature.variant];
-                  return (
-                    <div
-                      key={feature.title}
-                      className={`p-6 rounded-[16px] ${style.cardClass} space-y-3 text-left`}
-                    >
-                      <div className="flex justify-start">
-                        <div className={`p-3 rounded-[12px] ${style.iconBg}`}>
-                          <Icon className={`h-6 w-6 ${style.iconColor}`} />
-                        </div>
-                      </div>
-                      <h3 className="text-heading6 text-foreground">
-                        {feature.title}
-                      </h3>
-                      <p className="text-body2 text-gray">{feature.description}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-
-            <div className="border-t border-gray/15" />
-
-            {/* 5. Under the Hood */}
-            <section className="space-y-6">
-              <h2 className="text-heading5 text-foreground">Under the Hood</h2>
-              <div className="gradient-bg-card rounded-[16px] p-6 space-y-4">
-                {technicalDetails.map((item) => (
-                  <div key={item.label} className="space-y-1">
-                    <div className="flex items-baseline gap-2 flex-wrap">
-                      <span className="text-body2-semibold text-foreground">
-                        {item.label}
-                      </span>
-                      <code className="font-mono text-xs bg-muted/50 px-2 py-1 rounded text-privacy">
-                        {item.code}
-                      </code>
-                    </div>
-                    <p className="text-caption text-gray">{item.description}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <div className="border-t border-gray/15" />
-
-            {/* 6. Security & Compliance */}
-            <section className="space-y-4">
-              <h2 className="text-heading5 text-foreground">
-                Security &amp; Compliance
-              </h2>
-              <div className="privacy-box rounded-[12px] p-6 space-y-3">
-                {securityItems.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <div key={item.text} className="flex items-start gap-3">
-                      <Icon className="w-4 h-4 text-privacy mt-0.5 shrink-0" />
-                      <span className="text-body2 text-gray">{item.text}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-
-            <div className="border-t border-gray/15" />
-
-            {/* 7. CTA */}
-            <section className="text-center space-y-4">
-              <h2 className="text-heading5 text-foreground">
-                Ready to get started?
-              </h2>
-              <Link
-                href="/vault"
-                className="btn-bitcoin inline-flex items-center gap-2 px-8 py-4 text-lg"
-              >
-                <BitcoinIcon className="w-5 h-5" />
-                Launch App
-                <ArrowRight className="w-5 h-5" />
-              </Link>
-            </section>
-          </div>
-
-          {/* 8. Footer */}
-          <footer className="pt-8 border-t border-gray/15">
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-              <div className="flex items-center gap-4">
-                <Link
-                  href="/"
-                  className="text-caption text-gray hover:text-gray-light transition-colors"
-                >
-                  Private Bitcoin
-                </Link>
-              </div>
-              <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption text-gray hover:text-gray-light transition-colors flex items-center gap-1.5">
-                Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network
-              </a>
-            </div>
-          </footer>
+          <h3 className="text-sm sm:text-base font-semibold text-foreground">{title}</h3>
+        </div>
+        <p className="text-xs sm:text-sm text-gray font-light leading-relaxed mb-3">
+          {desc}
+        </p>
+        <div className="pt-2 border-t border-gray/5">
+          <span className="text-[10px] font-mono text-gray/30">{detail}</span>
         </div>
       </div>
+    </Card>
+  );
+}
+
+/* ── Crypto card ── */
+
+function CryptoCard({ title, formula, desc }: { title: string; formula: string; desc: string }) {
+  return (
+    <Card>
+      <h3 className="text-sm sm:text-base font-semibold text-foreground mb-2">{title}</h3>
+      <code className="inline-block text-[10px] sm:text-xs font-mono bg-background/50 border border-gray/10 px-2 sm:px-3 py-1.5 rounded-lg text-gray-light mb-3 self-start break-all">
+        {formula}
+      </code>
+      <p className="text-xs sm:text-sm text-gray font-light leading-relaxed">{desc}</p>
+    </Card>
+  );
+}
+
+/* ── Security card ── */
+
+function SecurityCard({ icon: Icon, title, desc }: { icon: LucideIcon; title: string; desc: string }) {
+  return (
+    <Card className="h-full">
+      <div className="flex items-center gap-3 mb-2">
+        <div className="p-2 rounded-lg border border-gray/10 bg-background/50">
+          <Icon className="w-4 h-4 text-gray-light" />
+        </div>
+        <h3 className="text-sm sm:text-base font-semibold text-foreground">{title}</h3>
+      </div>
+      <p className="text-xs sm:text-sm text-gray font-light leading-relaxed">{desc}</p>
+    </Card>
+  );
+}
+
+/* ── Key card ── */
+
+function KeyCard({ icon: Icon, title, desc, features }: { icon: LucideIcon; title: string; desc: string; features: string[] }) {
+  return (
+    <Card className="h-full">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="p-2 rounded-lg border border-gray/10 bg-background/50">
+          <Icon className="w-5 h-5 text-gray-light" />
+        </div>
+        <h3 className="text-base sm:text-lg font-semibold text-foreground">{title}</h3>
+      </div>
+      <p className="text-xs sm:text-sm text-gray font-light leading-relaxed mb-4">{desc}</p>
+      <div className="space-y-2 mt-auto">
+        {features.map((f) => (
+          <div key={f} className="flex items-center gap-2 text-[10px] sm:text-[11px] font-mono text-gray/50">
+            <span className="w-1.5 h-1.5 rounded-full bg-gray/30 shrink-0" />
+            {f}
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+/* ── Comparison table ── */
+
+const COMPARISON_ROWS = [
+  { label: "Balances", traditional: "Visible on-chain", privateBtc: "Hidden as commitments" },
+  { label: "Transfers", traditional: "Traceable amounts", privateBtc: "ZK-proven, zero knowledge" },
+  { label: "Addresses", traditional: "Linkable & reusable", privateBtc: "One-time stealth addresses" },
+  { label: "Deposits", traditional: "Public token minting", privateBtc: "Shielded Merkle insertion" },
+  { label: "Withdrawals", traditional: "Traceable burn + send", privateBtc: "Unlinkable via nullifiers" },
+  { label: "Custody", traditional: "Multisig / MPC", privateBtc: "FROST threshold + policy" },
+];
+
+function ComparisonTable() {
+  return (
+    <Card>
+      {/* Desktop header */}
+      <div className="hidden sm:grid grid-cols-3 gap-4 pb-3 mb-2 border-b border-gray/10">
+        <span className="text-[11px] font-mono uppercase tracking-wider text-gray/40">Aspect</span>
+        <span className="text-[11px] font-mono uppercase tracking-wider text-gray/40">Traditional Bridges</span>
+        <span className="text-[11px] font-mono uppercase tracking-wider text-gray/50">Private Bitcoin</span>
+      </div>
+      {/* Mobile header */}
+      <div className="sm:hidden pb-3 mb-2 border-b border-gray/10">
+        <span className="text-[11px] font-mono uppercase tracking-wider text-gray/40">Comparison</span>
+      </div>
+      {COMPARISON_ROWS.map((row) => (
+        <div key={row.label}>
+          {/* Desktop row */}
+          <div className="hidden sm:grid grid-cols-3 gap-4 py-3 border-b border-gray/5 last:border-0">
+            <span className="text-sm text-gray-light font-medium">{row.label}</span>
+            <span className="text-[12px] text-gray">{row.traditional}</span>
+            <span className="text-[12px] text-foreground/70">{row.privateBtc}</span>
+          </div>
+          {/* Mobile row */}
+          <div className="sm:hidden py-3 border-b border-gray/5 last:border-0 space-y-1.5">
+            <span className="text-sm text-gray-light font-medium block">{row.label}</span>
+            <div className="flex items-start gap-1.5 pl-2">
+              <span className="text-[11px] text-gray">Traditional: {row.traditional}</span>
+            </div>
+            <div className="flex items-start gap-1.5 pl-2">
+              <span className="text-[11px] text-foreground/70">Private: {row.privateBtc}</span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </Card>
+  );
+}
+
+/* ── Data ── */
+
+const PROTOCOL_STEPS = [
+  {
+    id: "deposit-btc", num: "01", icon: Bitcoin, title: "Deposit BTC",
+    desc: "Send any amount of Bitcoin to a unique Taproot address derived from your stealth keys. The OP_RETURN output embeds your ephemeral public key (32 bytes) and note public key (32 bytes) — everything the system needs to create your private commitment.",
+    detail: "Taproot P2TR · OP_RETURN 64 bytes",
+  },
+  {
+    id: "spv-verification", num: "02", icon: GitBranch, title: "SPV Verification",
+    desc: "The backend submits an SPV Merkle inclusion proof to the on-chain BTC light client. The Solana program independently validates the Bitcoin transaction was confirmed in a real block — no trusted relayer needed.",
+    detail: "On-chain header chain · Merkle proof",
+  },
+  {
+    id: "shielded-commitment", num: "03", icon: TreePine, title: "Shielded Commitment",
+    desc: "Your deposit becomes Poseidon(npk, tokenId, amount) — a cryptographic commitment inserted into a depth-16 Merkle tree. The amount and owner are invisible. Only your spending key can create the matching nullifier to spend it.",
+    detail: "Poseidon hash · 65,536 leaf tree",
+  },
+  {
+    id: "joinsplit-transfer", num: "04", icon: Layers, title: "JoinSplit Transfer",
+    desc: "Every transfer uses a Groth16 zero-knowledge proof that consumes N input notes and produces M output notes. The proof verifies balance conservation, nullifier uniqueness, and Merkle membership — without revealing any values.",
+    detail: "Groth16 · 256 bytes · N→M inputs/outputs",
+  },
+  {
+    id: "stealth-receive", num: "05", icon: Eye, title: "Stealth Receive",
+    desc: "Recipients are identified by one-time stealth addresses generated via Diffie-Hellman key agreement. Each deposit/transfer creates a fresh address — even repeat payments to the same person are unlinkable on-chain.",
+    detail: "Baby Jubjub ECDH · Ed25519 scan",
+  },
+  {
+    id: "frost-withdrawal", num: "06", icon: Network, title: "FROST Withdrawal",
+    desc: "To withdraw BTC, you burn a private note and the FROST threshold signers (2-of-3) co-sign the Bitcoin transaction. The policy engine checks OFAC compliance, amount limits, and destination before approving each signature round.",
+    detail: "secp256k1-tr Schnorr · Policy engine",
+  },
+];
+
+const CRYPTO_ITEMS = [
+  {
+    id: "commitment-scheme", title: "Commitment Scheme",
+    formula: "Poseidon(npk, token, amount)",
+    desc: "Each note is represented by a Poseidon hash of the note public key, token identifier, and amount. The preimage is known only to the owner. Poseidon is an arithmetic-friendly hash optimized for ZK circuits on the BN254 curve.",
+  },
+  {
+    id: "nullifier-generation", title: "Nullifier Generation",
+    formula: "Poseidon(nullifyingKey, leafIndex)",
+    desc: "When spending a note, the nullifier is derived from the nullifying key (itself derived from the spending key) and the note's Merkle leaf index. Publishing a nullifier prevents double-spending without revealing which note was consumed.",
+  },
+  {
+    id: "master-public-key", title: "Master Public Key",
+    formula: "Poseidon(spendPub.x, spendPub.y, nullKey)",
+    desc: "The MPK combines the Baby Jubjub spending public key coordinates with the nullifying key. This is used to derive per-note public keys: NPK = Poseidon(MPK, random), ensuring each note has a unique cryptographic identity.",
+  },
+  {
+    id: "joinsplit-circuit", title: "JoinSplit Circuit",
+    formula: "JoinSplit(N, M, depth=16)",
+    desc: "A single parameterized circom template handles all transfer types. Inputs: N note nullifiers + Merkle proofs. Outputs: M new commitments. The circuit verifies balance (Σin = Σout), nullifier validity, Merkle membership, and EdDSA-Poseidon signatures — all in one Groth16 proof.",
+  },
+  {
+    id: "eddsa-signatures", title: "EdDSA-Poseidon Signatures",
+    formula: "Sign(spendingKey, message)",
+    desc: "Transaction authorization uses EdDSA over the Poseidon hash function on the Baby Jubjub curve. The message includes the Merkle root, bound parameters hash, all nullifiers, and all output commitments — binding the proof to a specific state.",
+  },
+  {
+    id: "stealth-key-agreement", title: "Stealth Key Agreement",
+    formula: "sharedSecret = ECDH(ephemeral, viewKey)",
+    desc: "Senders generate a random ephemeral keypair and compute a shared secret with the recipient's viewing public key. This derives the one-time note public key. Only the recipient can scan announcements using their viewing private key to detect incoming notes.",
+  },
+];
+
+const SECURITY_ITEMS = [
+  { icon: ShieldCheck, title: "OFAC Screening", desc: "The FROST policy engine screens deposit addresses and withdrawal destinations against OFAC sanctions lists before approving any signing round. Non-compliant transactions are rejected at the threshold signing level." },
+  { icon: Network, title: "Threshold Custody", desc: "No single key controls the BTC vault. FROST 2-of-3 threshold signing means at least 2 independent signers must approve every sweep and withdrawal. Each signer runs its own policy engine independently." },
+  { icon: GitBranch, title: "Trustless Verification", desc: "Bitcoin deposits are verified on-chain via SPV proofs against a light client tracking BTC block headers. The Solana program validates Merkle inclusion directly — no oracle or trusted third party." },
+  { icon: Lock, title: "Double-Spend Prevention", desc: "Each note can only be spent once. Publishing a nullifier (derived from spending key + leaf index) marks the note as consumed. The on-chain program rejects duplicate nullifiers permanently." },
+  { icon: Eye, title: "Selective Disclosure", desc: "Share your viewing key with auditors, accountants, or compliance officers. They gain read-only access to your transaction history and balances — without any ability to spend or transfer your funds." },
+  { icon: AlertTriangle, title: "Audit Trail", desc: "Every FROST signing operation is logged in an append-only JSONL audit trail. Policy decisions, sighash verification results, and signing outcomes are recorded for forensic analysis." },
+];
+
+/* ── Page ── */
+
+export default function DocsPage() {
+  const sectionIds = useAllSectionIds();
+  const activeSection = useActiveSection(sectionIds);
+
+  return (
+    <main className="min-h-screen bg-background">
+      <SiteHeader />
+
+      <MobileSidebarBar activeSection={activeSection} />
+
+      <div className="relative z-10 flex">
+        {/* Desktop sidebar */}
+        <aside className="hidden lg:block w-[260px] shrink-0">
+          <div className="sticky top-[80px] h-[calc(100vh-80px)] overflow-y-auto border-r border-gray/10 px-4 py-8">
+            <div className="mb-6">
+              <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-gray/40">
+                Documentation
+              </span>
+            </div>
+            <DocsSidebar activeSection={activeSection} />
+          </div>
+        </aside>
+
+        {/* Content area */}
+        <div className="flex-1 min-w-0">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 xl:px-12">
+
+            {/* ── Hero ── */}
+            <section className="pt-20 sm:pt-24 lg:pt-28 pb-10 sm:pb-12">
+              <div className="space-y-3 sm:space-y-4">
+                <div className="flex">
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray/15 bg-muted/20">
+                    <Shield className="w-3.5 h-3.5 text-gray-light" />
+                    <span className="text-[9px] sm:text-[10px] font-medium uppercase tracking-wider text-gray">
+                      Privacy Documentation
+                    </span>
+                  </div>
+                </div>
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-semibold tracking-tight text-foreground">
+                  How Privacy Works
+                </h1>
+                <p className="text-sm sm:text-base text-gray font-light max-w-2xl leading-relaxed">
+                  A deep dive into the cryptography, architecture, and security model
+                  that makes Private Bitcoin the most private way to use Bitcoin on Solana.
+                </p>
+              </div>
+            </section>
+
+            {/* ── Overview ── */}
+            <DocsSection id="overview" className="pb-12 sm:pb-16">
+              <SectionHeading
+                label="The Problem"
+                title="Why Bitcoin Needs Privacy"
+                subtitle="Every Bitcoin transaction is permanently public. Bridges make it worse by creating on-chain tokens that expose your exact balance to anyone watching."
+              />
+              <ComparisonTable />
+            </DocsSection>
+
+            {/* ── Protocol Flow ── */}
+            <DocsSection id="protocol-flow" className="py-12 sm:py-16 border-t border-gray/10">
+              <SectionHeading
+                label="Protocol Flow"
+                title="End-to-End Journey"
+                subtitle="From Bitcoin deposit to private transaction to withdrawal — every step preserves your privacy."
+              />
+
+              <FlowDiagram />
+
+              <div className="mt-8 sm:mt-10 space-y-4">
+                {PROTOCOL_STEPS.map((step) => (
+                  <DocsSection key={step.id} id={step.id}>
+                    <StepCard {...step} />
+                  </DocsSection>
+                ))}
+              </div>
+            </DocsSection>
+
+            {/* ── Cryptography ── */}
+            <DocsSection id="cryptography" className="py-12 sm:py-16 border-t border-gray/10">
+              <SectionHeading
+                label="Cryptography"
+                title="Under the Hood"
+                subtitle="The cryptographic primitives that make shielded transactions possible."
+              />
+
+              <div className="space-y-4">
+                {CRYPTO_ITEMS.map((item) => (
+                  <DocsSection key={item.id} id={item.id}>
+                    <CryptoCard {...item} />
+                  </DocsSection>
+                ))}
+              </div>
+            </DocsSection>
+
+            {/* ── Key Model ── */}
+            <DocsSection id="key-model" className="py-12 sm:py-16 border-t border-gray/10">
+              <SectionHeading
+                label="Key Architecture"
+                title="Dual-Key Model"
+                subtitle="Two keys give you full control: one to spend, one to observe. The nullifying key is derived automatically from your spending key — you never manage it directly."
+              />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <KeyCard
+                  icon={KeyRound}
+                  title="Spending Key"
+                  desc="Baby Jubjub elliptic curve keypair. Signs all JoinSplit transactions using EdDSA-Poseidon. The nullifying key is deterministically derived from this key — it generates the nullifier hash that prevents double-spending."
+                  features={[
+                    "Signs transactions (EdDSA-Poseidon)",
+                    "Derives nullifying key automatically",
+                    "Generates master public key (MPK)",
+                  ]}
+                />
+                <KeyCard
+                  icon={Eye}
+                  title="Viewing Key"
+                  desc="Ed25519 keypair used exclusively for scanning stealth announcements. Can detect incoming notes by matching the note public key (NPK). Share with auditors or compliance officers — they can see your balance history but never spend your funds."
+                  features={[
+                    "Scans stealth announcements",
+                    "Read-only access to balances",
+                    "Shareable for selective disclosure",
+                  ]}
+                />
+              </div>
+            </DocsSection>
+
+            {/* ── Security & Compliance ── */}
+            <DocsSection id="security" className="py-12 sm:py-16 border-t border-gray/10">
+              <SectionHeading
+                label="Security"
+                title="Security & Compliance"
+                subtitle="Privacy doesn't mean unaccountable. Multiple layers of security and compliance are built into the protocol."
+              />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {SECURITY_ITEMS.map((item) => (
+                  <SecurityCard key={item.title} {...item} />
+                ))}
+              </div>
+            </DocsSection>
+
+            {/* ── CTA ── */}
+            <section className="border-t border-gray/10 py-16 sm:py-20">
+              <div className="max-w-3xl mx-auto text-center">
+                <h2 className="text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight text-foreground mb-4">
+                  Ready to Use Bitcoin Privately?
+                </h2>
+                <p className="text-gray text-xs sm:text-sm font-light mb-6 sm:mb-8 max-w-lg mx-auto leading-relaxed">
+                  Deposit BTC, get shielded zkBTC, and transact without anyone watching.
+                </p>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+                  <Link
+                    href="/vault"
+                    className="btn-bitcoin btn-pill inline-flex items-center gap-2 px-5 sm:px-7 py-2.5 text-sm sm:text-base transition-shadow"
+                  >
+                    <BitcoinIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                    Launch Vault
+                    <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </Link>
+                  <Link
+                    href="/explorer"
+                    className="btn-tertiary btn-pill inline-flex items-center gap-2 px-4 sm:px-5 py-2.5 text-sm border border-gray/10 hover:bg-muted/50 hover:border-gray/20 transition-all"
+                  >
+                    View Explorer
+                    <ChevronRight className="w-4 h-4" />
+                  </Link>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <SiteFooter />
     </main>
   );
 }

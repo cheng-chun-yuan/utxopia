@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchAccountInfo, isHeliusConfigured } from "@/lib/helius-server";
-import { DEVNET_CONFIG } from "@aegis/sdk";
+import { getConfig } from "@aegis/sdk";
 import bs58 from "bs58";
 
 /** Read a little-endian u64 from a Uint8Array slice as bigint */
@@ -15,7 +15,7 @@ function readU64LE(data: Uint8Array, offset: number): bigint {
 export const runtime = "nodejs";
 
 // Pool state PDA from SDK (single source of truth)
-const POOL_STATE_ADDRESS = DEVNET_CONFIG.poolStatePda;
+const getPoolStateAddress = () => getConfig().poolStatePda;
 
 // Discriminator for PoolState account (not exported by SDK yet)
 const POOL_STATE_DISCRIMINATOR = 0x01;
@@ -36,7 +36,8 @@ interface PoolStateData {
   minDeposit: string;
   maxDeposit: string;
   totalShielded: string;
-  serviceFeeSats: string;
+  serviceFeeBase: string;
+  serviceFeeBps: number;
   feePool: string;
   pendingMinDeposit: string;
   pendingMaxDeposit: string;
@@ -51,7 +52,7 @@ interface PoolStateData {
  */
 export async function GET() {
   try {
-    const accountInfo = await fetchAccountInfo(POOL_STATE_ADDRESS, "devnet");
+    const accountInfo = await fetchAccountInfo(getPoolStateAddress(), "devnet");
 
     if (!accountInfo) {
       return NextResponse.json(
@@ -74,9 +75,10 @@ export async function GET() {
     // Offsets: disc(1) bump(1) flags(1) pad(1) authority(32) mint(32) poolVault(32) frostVault(32)
     //          depositCount(8)@132 totalMinted(8)@140 totalBurned(8)@148 pendingRedemptions(8)@156
     //          lastUpdate(8)@164 minDeposit(8)@172 maxDeposit(8)@180 totalShielded(8)@188
-    //          serviceFeeSats(8)@196 feePool(8)@204
+    //          serviceFeeBase(8)@196 feePool(8)@204
     //          pendingMinDeposit(8)@212 pendingMaxDeposit(8)@220
-    //          pendingServiceFee(8)@228 pendingExecuteAfter(8)@236 reserved(24)@244
+    //          pendingServiceFee(8)@228 pendingExecuteAfter(8)@236
+    //          serviceFeeBps(2)@244 reserved(22)@246
     const state: PoolStateData = {
       discriminator: data[0],
       bump: data[1],
@@ -93,18 +95,19 @@ export async function GET() {
       minDeposit: readU64LE(data, 172).toString(),
       maxDeposit: readU64LE(data, 180).toString(),
       totalShielded: readU64LE(data, 188).toString(),
-      serviceFeeSats: readU64LE(data, 196).toString(),
+      serviceFeeBase: readU64LE(data, 196).toString(),
       feePool: readU64LE(data, 204).toString(),
       pendingMinDeposit: readU64LE(data, 212).toString(),
       pendingMaxDeposit: readU64LE(data, 220).toString(),
       pendingServiceFee: readU64LE(data, 228).toString(),
       pendingExecuteAfter: Number(readU64LE(data, 236)),
+      serviceFeeBps: data[244] | (data[245] << 8),
     };
 
     return NextResponse.json({
       success: true,
       helius: isHeliusConfigured(),
-      address: POOL_STATE_ADDRESS,
+      address: getPoolStateAddress(),
       state,
     });
   } catch (error) {

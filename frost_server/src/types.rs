@@ -59,8 +59,11 @@ pub enum SolanaVerification {
         requester: String,
         /// Redemption request nonce
         nonce: u64,
-        /// Expected withdrawal amount in satoshis
+        /// Expected withdrawal amount in satoshis (gross — matches PDA)
         expected_amount_sats: u64,
+        /// Expected BTC send amount in satoshis (net — matches tx output)
+        #[serde(default)]
+        expected_send_amount: Option<u64>,
         /// Expected BTC destination address
         expected_btc_address: String,
     },

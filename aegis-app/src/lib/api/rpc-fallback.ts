@@ -5,8 +5,8 @@
  * Reconstructs deposit/transfer data from on-chain sol_log_data events.
  */
 
-const AEGIS_PROGRAM_ID = "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1";
-const COMMITMENT_TREE_PDA = "2bjcEufNf6Xa7YwH1ci99k1NjRg6jjirCQXsPjC5Qgk6";
+const AEGIS_PROGRAM_ID = "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ";
+const COMMITMENT_TREE_PDA = "FQRHN9yQ97HmgVmhDGf3EdbhCek7QuuDv1C3hpAGPtjv";
 
 // Rent-exempt minimum for a 1-byte account (NullifierRecord)
 const RENT_EXEMPT_1_BYTE = 897840;
@@ -180,7 +180,8 @@ export async function fetchAnnouncementsFromRpc(
       signal: AbortSignal.timeout(30000),
     });
 
-    const txResults: any[] = await txResp.json();
+    const txResultsRaw = await txResp.json();
+    const txResults: any[] = Array.isArray(txResultsRaw) ? txResultsRaw : [txResultsRaw];
     // Sort by id to match batch order
     txResults.sort((a, b) => a.id - b.id);
 

@@ -1,7 +1,7 @@
 {
   "programs": {
     "devnet": {
-      "Aegis": "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1",
+      "Aegis": "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ",
       "btc_light_client": "Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"
     },
     "localnet": {
@@ -9,6 +9,10 @@
       "btc_light_client": "EU5ZyFqRuUHHJcarRWPmKxezhsFKBVjcc5M2L3sobmd7",
       "chadbuffer": "6VrJmWbhN9WbEkg87JizunVMpL6CHKGVmzWCf3o3LRgy",
       "groth16_verifier": "GHpnVKv4o2vSNvyxffM16uuThfQLujoWFikjwwLdaDYb"
+    },
+    "devnet2": {
+      "Aegis": "3XsZdNitUi793MujUguGoX5bBs67Sm6BFBKXueP1Qy3y",
+      "btc_light_client": "Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"
     },
     "mainnet": {
       "Aegis": "",

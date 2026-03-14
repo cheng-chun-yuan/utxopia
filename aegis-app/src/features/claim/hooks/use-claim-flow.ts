@@ -24,7 +24,7 @@ import {
   poseidonHashSync,
   bytesToBigint,
   bytesToHex,
-  DEVNET_CONFIG,
+  getConfig,
   type StealthMetaAddress,
   type JoinSplitProofInputs,
 } from "@aegis/sdk";
@@ -292,7 +292,7 @@ export function useClaimFlow(initialNote?: string) {
               return info ? { data: new Uint8Array(info.data) } : null;
             },
           },
-          DEVNET_CONFIG.commitmentTreePda
+          getConfig().commitmentTreePda
         );
         if (treeState) {
           merkleRoot = bytesToBigint(treeState.currentRoot);
@@ -421,7 +421,7 @@ export function useClaimFlow(initialNote?: string) {
       if (isPublicUnshield) {
         // Public unshield: call /api/unshield
         const recipientPubkey = new PublicKey(solanaAddress.trim());
-        const zkbtcMint = new PublicKey(DEVNET_CONFIG.zkbtcMint);
+        const zkbtcMint = new PublicKey(getConfig().zkbtcMint);
         const TOKEN_2022_PID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
         const recipientTokenAccount = getAssociatedTokenAddressSync(
           zkbtcMint, recipientPubkey, false, TOKEN_2022_PID

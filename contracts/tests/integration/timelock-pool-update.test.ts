@@ -33,7 +33,7 @@ import {
 } from "@solana/spl-token";
 
 const RPC_URL = "http://127.0.0.1:8899";
-const PROGRAM_ID = new PublicKey("4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1");
+const PROGRAM_ID = new PublicKey("7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ");
 
 // Instruction discriminators (must match lib.rs)
 const DISC_INITIALIZE = 0;

@@ -39,6 +39,8 @@ export interface TransferOutput {
 export interface GroupedTransfer {
   txSignature: string;
   timestamp: number;
+  /** "confirmed" when timestamp > 0, "processing" when not yet confirmed */
+  status: "confirmed" | "processing";
   inputCount: number;
   nullifierPdas: string[];
   outputs: TransferOutput[];
@@ -66,10 +68,18 @@ export interface RedemptionRecord {
   updatedAt: number;
   retryCount: number;
   trackerError: string | null;
+  // Actual BTC received by user (net of fees, from completion event)
+  actualReceived: string | null;
   // On-chain event tx signatures
   requestTxSignature: string | null;
   processingTxSignature: string | null;
   completeTxSignature: string | null;
+  // Fee config + simulation flag
+  simulated: boolean;
+  /** Service fee locked at request time (from PDA), null if PDA closed */
+  serviceFee: string | null;
+  serviceFeeBps: number;
+  serviceFeeBase: number;
 }
 
 // Backend transfer row from /api/transfers
@@ -82,6 +92,7 @@ interface BackendTransferRow {
   output_count: number;
   input_count: number;
   timestamp: number;
+  status: string;
   operation_type: number;
   instruction_disc?: number;
   unshield_amount?: number;
@@ -174,7 +185,17 @@ export function useDeposits() {
         }),
       );
     },
-    SWR_OPTIONS,
+    {
+      ...SWR_OPTIONS,
+      // Auto-refetch faster when any deposit is missing leaf index or timestamp
+      refreshInterval: (data?: DepositRecord[]) => {
+        if (!data) return SWR_OPTIONS.refreshInterval;
+        const hasIncomplete = data.some(
+          (d) => !d.timestamp || d.leafIndex < 0,
+        );
+        return hasIncomplete ? 5_000 : SWR_OPTIONS.refreshInterval;
+      },
+    },
   );
   return {
     deposits: data ?? [],
@@ -199,6 +220,7 @@ export function useTransfers() {
       return json.transfers.map((t: BackendTransferRow) => ({
         txSignature: t.tx_signature,
         timestamp: t.timestamp,
+        status: t.status === "processing" ? "processing" : "confirmed",
         inputCount: t.input_count,
         nullifierPdas: t.nullifier_pdas ?? [],
         outputs: (t.commitments ?? []).map((c: string, i: number) => ({
@@ -211,7 +233,15 @@ export function useTransfers() {
         unshieldRecipient: t.unshield_recipient,
       }));
     },
-    SWR_OPTIONS,
+    {
+      ...SWR_OPTIONS,
+      // Auto-refetch faster when any transfer is processing (unconfirmed)
+      refreshInterval: (data?: GroupedTransfer[]) => {
+        if (!data) return SWR_OPTIONS.refreshInterval;
+        const hasProcessing = data.some((t) => t.status === "processing");
+        return hasProcessing ? 5_000 : SWR_OPTIONS.refreshInterval;
+      },
+    },
   );
   return {
     transfers: data ?? [],

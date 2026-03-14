@@ -134,7 +134,7 @@ pub fn process_complete_redemption(
     };
 
     // Validate redemption state (must be Pending or Processing) and get details
-    let (amount_sats, expected_script_len, expected_script, requester_key, request_id) = {
+    let (amount_sats, service_fee, expected_script_len, expected_script, requester_key, request_id) = {
         let redemption_data = redemption_info.try_borrow_data()?;
         let redemption = RedemptionRequest::from_bytes(&redemption_data)?;
 
@@ -151,7 +151,7 @@ pub fn process_complete_redemption(
         let mut req_key = [0u8; 32];
         req_key.copy_from_slice(&redemption.requester);
 
-        (redemption.amount_sats(), script_len, script_buf, req_key, redemption.request_id())
+        (redemption.amount_sats(), redemption.service_fee(), script_len, script_buf, req_key, redemption.request_id())
     };
 
     // --- VerifiedTransaction PDA check ---
@@ -201,12 +201,8 @@ pub fn process_complete_redemption(
 
     let expected_script_slice = &expected_script[..expected_script_len];
 
-    // Read service fee from pool state for fee accounting
-    let service_fee = {
-        let pool_data = pool_state_info.try_borrow_data()?;
-        let pool = PoolState::from_bytes(&pool_data)?;
-        pool.service_fee_sats()
-    };
+    // Service fee was locked at request time in the PDA — no re-computation needed.
+    // This ensures the user gets the fee they agreed to, even if pool config changes.
 
     // expected_send = amount_sats - service_fee (what we intended to send to user)
     let expected_send = amount_sats.saturating_sub(service_fee);
@@ -266,6 +262,8 @@ pub fn process_complete_redemption(
     crate::utils::events::emit_redemption_completed(
         &requester_key,
         amount_sats,
+        actual_received,
+        service_fee,
         request_id,
         &ix_data.btc_txid,
         &expected_script[..expected_script_len],
@@ -274,5 +272,6 @@ pub fn process_complete_redemption(
     // --- Close RedemptionRequest PDA ---
     close_account_securely(redemption_info, rent_recipient)?;
 
+    pinocchio::msg!("Aegis: redemption completed");
     Ok(())
 }

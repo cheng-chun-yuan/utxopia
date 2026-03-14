@@ -10,7 +10,7 @@
 
 import { NextResponse } from "next/server";
 import {
-  DEVNET_CONFIG,
+  getConfig,
   fetchExplorerRedemptions,
   type RpcClient,
 } from "@aegis/sdk";
@@ -35,11 +35,13 @@ interface TrackingEntry {
   amount_sats: number | null;
   btc_script: string | null;
   request_id: number | null;
+  simulated: boolean;
 }
 
 interface CompletedEntry {
   requester: string;
   amount_sats: number;
+  actual_received: number;
   request_id: number;
   btc_txid: string;
   btc_script: string;
@@ -104,17 +106,32 @@ function createServerRpc(): RpcClient {
 
 export async function GET() {
   try {
-    // Fetch all 3 sources in parallel
-    const [redemptions, trackingResp, completedResp, requestedResp, processingResp] = await Promise.all([
+    // Fetch all sources in parallel (including pool state for fee config)
+    const [redemptions, trackingResp, completedResp, requestedResp, processingResp, poolStateResp] = await Promise.all([
       fetchExplorerRedemptions(
         createServerRpc(),
-        DEVNET_CONFIG.aegisProgramId,
+        getConfig().aegisProgramId,
       ),
       fetch(`${BACKEND_URL}/api/redemption/tracking`).catch(() => null),
       fetch(`${BACKEND_URL}/api/redemption/completed`).catch(() => null),
       fetch(`${BACKEND_URL}/api/redemption/requested`).catch(() => null),
       fetch(`${BACKEND_URL}/api/redemption/processing`).catch(() => null),
+      fetch(`${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/solana/pool-state`).catch(() => null),
     ]);
+
+    // Parse pool state for fee config
+    let feeConfig = { bps: 30, base: 2000 }; // defaults
+    if (poolStateResp?.ok) {
+      try {
+        const poolData = await poolStateResp.json();
+        if (poolData.success && poolData.state) {
+          feeConfig = {
+            bps: poolData.state.serviceFeeBps ?? 30,
+            base: Number(poolData.state.serviceFeeBase ?? "2000"),
+          };
+        }
+      } catch { /* use defaults */ }
+    }
 
     // Parse tracking data (keyed by PDA address)
     const trackingMap = new Map<string, TrackingEntry>();
@@ -219,9 +236,14 @@ export async function GET() {
       updatedAt: number;
       retryCount: number;
       trackerError: string | null;
+      actualReceived: string | null;
       requestTxSignature: string | null;
       processingTxSignature: string | null;
       completeTxSignature: string | null;
+      simulated: boolean;
+      serviceFee: string | null;
+      serviceFeeBps: number;
+      serviceFeeBase: number;
     }> = redemptions.map((r) => {
       const tracking = trackingMap.get(r.pubkey);
       const trackingTime = tracking?.created_at ?? 0;
@@ -240,9 +262,14 @@ export async function GET() {
         updatedAt: tracking?.last_updated ?? 0,
         retryCount: tracking?.retry_count ?? 0,
         trackerError: tracking?.error ?? null,
+        actualReceived: completedByReqId.get(reqId)?.actual_received?.toString() ?? null,
         requestTxSignature: requestedByReqId.get(reqId)?.tx_signature ?? null,
         processingTxSignature: processingByReqId.get(reqId)?.tx_signature ?? null,
         completeTxSignature: completedByReqId.get(reqId)?.tx_signature ?? null,
+        simulated: tracking?.simulated ?? false,
+        serviceFee: r.serviceFee.toString(),
+        serviceFeeBps: feeConfig.bps,
+        serviceFeeBase: feeConfig.base,
       };
     });
 
@@ -264,9 +291,14 @@ export async function GET() {
         updatedAt: c.block_time,
         retryCount: 0,
         trackerError: null,
+        actualReceived: c.actual_received?.toString() ?? c.amount_sats.toString(),
         requestTxSignature: requestedByReqId.get(rid)?.tx_signature ?? null,
         processingTxSignature: processingByReqId.get(rid)?.tx_signature ?? null,
         completeTxSignature: c.tx_signature,
+        simulated: false, // completed on-chain = real
+        serviceFee: null, // PDA closed
+        serviceFeeBps: feeConfig.bps,
+        serviceFeeBase: feeConfig.base,
       });
     }
 
@@ -289,9 +321,14 @@ export async function GET() {
         updatedAt: req.block_time,
         retryCount: 0,
         trackerError: null,
+        actualReceived: null,
         requestTxSignature: req.tx_signature,
         processingTxSignature: processingByReqId.get(rid)?.tx_signature ?? null,
         completeTxSignature: null,
+        simulated: false,
+        serviceFee: null, // PDA closed
+        serviceFeeBps: feeConfig.bps,
+        serviceFeeBase: feeConfig.base,
       });
     }
 

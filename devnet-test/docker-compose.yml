@@ -41,7 +41,7 @@ services:
     build:
       context: ../frost_server
       dockerfile: Dockerfile
-    command: ["--port", "8080", "--solana-rpc-url", "https://api.devnet.solana.com", "--aegis-program-id", "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1"]
+    command: ["--port", "8080", "--solana-rpc-url", "https://api.devnet.solana.com", "--aegis-program-id", "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ"]
     ports:
       - "8081:8080"
     environment:
@@ -61,7 +61,7 @@ services:
     build:
       context: ../frost_server
       dockerfile: Dockerfile
-    command: ["--port", "8080", "--solana-rpc-url", "https://api.devnet.solana.com", "--aegis-program-id", "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1"]
+    command: ["--port", "8080", "--solana-rpc-url", "https://api.devnet.solana.com", "--aegis-program-id", "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ"]
     ports:
       - "8082:8080"
     environment:
@@ -81,7 +81,7 @@ services:
     build:
       context: ../frost_server
       dockerfile: Dockerfile
-    command: ["--port", "8080", "--solana-rpc-url", "https://api.devnet.solana.com", "--aegis-program-id", "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1"]
+    command: ["--port", "8080", "--solana-rpc-url", "https://api.devnet.solana.com", "--aegis-program-id", "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ"]
     ports:
       - "8083:8080"
     environment:

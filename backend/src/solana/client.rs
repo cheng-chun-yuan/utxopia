@@ -54,16 +54,16 @@ pub const BTC_LIGHT_CLIENT_PROGRAM_ID: Pubkey =
 // ============================================================================
 
 /// Aegis program ID (devnet default)
-pub const DEVNET_PROGRAM_ID: &str = "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1";
+pub const DEVNET_PROGRAM_ID: &str = "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ";
 
 /// Pool state PDA (devnet default)
-pub const DEVNET_POOL_STATE: &str = "4654vJpq3E3A6nwtUwNWeJuTkHDcqT761uoBX7AHjm5x";
+pub const DEVNET_POOL_STATE: &str = "5e5t7AgafazhjYA7Aa66Kbfh5nGjHJqzYdEy9jGNQ8Ny";
 
 /// Commitment tree PDA (devnet default)
-pub const DEVNET_COMMITMENT_TREE: &str = "2bjcEufNf6Xa7YwH1ci99k1NjRg6jjirCQXsPjC5Qgk6";
+pub const DEVNET_COMMITMENT_TREE: &str = "FQRHN9yQ97HmgVmhDGf3EdbhCek7QuuDv1C3hpAGPtjv";
 
 /// zkBTC mint address (devnet default)
-pub const DEVNET_ZKBTC_MINT: &str = "GvFAyHsbWDbwvHxecaFnnGrhM1MR72E3cSX78qQbAyC7";
+pub const DEVNET_ZKBTC_MINT: &str = "G5CHaLkWjdUxxmnrVqNLQ29K7PoNwJAzvVT11jjkdGKC";
 
 // ============================================================================
 // Helper Functions
@@ -127,6 +127,19 @@ impl SpvMerkleProof {
             tx_index,
         }
     }
+}
+
+// ============================================================================
+// On-chain Pool Config (read from PoolState PDA)
+// ============================================================================
+
+/// Fee and limit parameters read from the on-chain PoolState PDA.
+#[derive(Debug, Clone)]
+pub struct OnChainPoolConfig {
+    pub min_deposit: u64,
+    pub max_deposit: u64,
+    pub service_fee_base: u64,
+    pub service_fee_bps: u16,
 }
 
 // ============================================================================
@@ -242,6 +255,28 @@ impl SolClient {
             .confirm_transaction(&sig)
             .map_err(|e| SolError::RpcError(e.to_string()))?;
         Ok(sig.to_string())
+    }
+
+    /// On-chain pool config fetched from PoolState PDA.
+    pub fn fetch_pool_config(&self) -> Result<OnChainPoolConfig, SolError> {
+        let account = self.rpc.get_account(&self.pool_state)
+            .map_err(|e| SolError::RpcError(format!("fetch pool_state: {}", e)))?;
+        let data = &account.data;
+        if data.len() < 268 {
+            return Err(SolError::RpcError("pool_state data too short".into()));
+        }
+        Ok(OnChainPoolConfig {
+            min_deposit: u64::from_le_bytes(data[172..180].try_into().unwrap()),
+            max_deposit: u64::from_le_bytes(data[180..188].try_into().unwrap()),
+            service_fee_base: u64::from_le_bytes(data[196..204].try_into().unwrap()),
+            service_fee_bps: u16::from_le_bytes(data[244..246].try_into().unwrap()),
+        })
+    }
+
+    /// Shortcut: fetch only fees (bps, base) from on-chain PoolState.
+    pub fn fetch_pool_fees(&self) -> Result<(u16, u64), SolError> {
+        let cfg = self.fetch_pool_config()?;
+        Ok((cfg.service_fee_bps, cfg.service_fee_base))
     }
 
     /// Get current slot
@@ -589,11 +624,11 @@ impl SolClient {
     // Redemption Instructions
     // ========================================================================
 
-    /// Fetch all on-chain RedemptionRequest PDAs (90-byte accounts with discriminator 0x04)
+    /// Fetch all on-chain RedemptionRequest PDAs (98-byte accounts with discriminator 0x04)
     pub fn fetch_redemption_pdas(&self) -> Result<Vec<ParsedRedemption>, SolError> {
         let config = RpcProgramAccountsConfig {
             filters: Some(vec![
-                RpcFilterType::DataSize(90),
+                RpcFilterType::DataSize(98),
                 RpcFilterType::Memcmp(Memcmp::new_raw_bytes(0, vec![0x04])),
             ]),
             account_config: solana_client::rpc_config::RpcAccountInfoConfig {
@@ -611,7 +646,7 @@ impl SolClient {
         let mut results = Vec::new();
         for (pubkey, account) in accounts {
             let data = &account.data;
-            if data.len() < 90 {
+            if data.len() < 98 {
                 continue;
             }
 
@@ -629,14 +664,19 @@ impl SolClient {
                 data[48], data[49], data[50], data[51],
                 data[52], data[53], data[54], data[55],
             ]);
-            let script_end = 56 + btc_script_len.min(34);
-            let btc_script = data[56..script_end].to_vec();
+            let service_fee = u64::from_le_bytes([
+                data[56], data[57], data[58], data[59],
+                data[60], data[61], data[62], data[63],
+            ]);
+            let script_end = 64 + btc_script_len.min(34);
+            let btc_script = data[64..script_end].to_vec();
 
             results.push(ParsedRedemption {
                 pda_address: pubkey.to_string(),
                 status,
                 requester: requester.to_string(),
                 amount_sats,
+                service_fee,
                 btc_script,
                 request_id,
                 processing_slot,

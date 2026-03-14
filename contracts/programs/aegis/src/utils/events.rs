@@ -2,11 +2,20 @@
 //!
 //! Events are emitted as base64-encoded log lines ("Program data: <base64>")
 //! and can be parsed by the backend indexer.
+//!
+//! ## Events
+//!
+//! - 0x02 NullifierSpent: disc(1) + nullifier_hash(32) + op_type(1) + ix_disc(1) = 35 bytes
+//! - 0x03 StealthAnnouncement: disc(1) + type(1) + ephemeral(32) + amount(8) + commitment(32) + leaf_index(4) = 78 bytes
+//! - 0x07 RedemptionCompleted: variable
+//! - 0x08 RedemptionRequested: variable
+//! - 0x0A RedemptionProcessing: disc(1) + requester(32) + amount(8) + request_id(8) + slot(4) = 53 bytes
+//! - 0x0B NullifiersBatch: disc(1) + count(1) + op_type(1) + ix_disc(1) + [hash(32)] x N
+//! - 0x0C AnnouncementsBatch: disc(1) + count(1) + [type(1) + ephemeral(32) + amount(8) + commitment(32) + leaf_index(4)] x N
+//! - 0x0D DepositVerified: disc(1) + sweep_txid(32) + deposit_txid(32) + amount_sats(8) + leaf_index(4) = 77 bytes
+//! - 0x0E UnshieldMeta: disc(1) + amount(8) + recipient(32) = 41 bytes
 
 use pinocchio::log::sol_log_data;
-
-/// Event discriminator: leaf inserted into commitment tree
-const EVENT_LEAF_INSERTED: u8 = 0x01;
 
 /// Event discriminator: nullifier spent
 const EVENT_NULLIFIER_SPENT: u8 = 0x02;
@@ -20,49 +29,42 @@ pub const ANNOUNCEMENT_TYPE_DEPOSIT: u8 = 0;
 /// Announcement type: transfer (XOR-encrypted amount from JoinSplit transact)
 pub const ANNOUNCEMENT_TYPE_TRANSFER: u8 = 1;
 
-/// Event discriminator: pool update proposed (timelock)
-const EVENT_POOL_UPDATE_PROPOSED: u8 = 0x04;
-
-/// Event discriminator: pool update executed (timelock)
-const EVENT_POOL_UPDATE_EXECUTED: u8 = 0x05;
-
-/// Event discriminator: pool update cancelled (timelock)
-const EVENT_POOL_UPDATE_CANCELLED: u8 = 0x06;
-
 /// Event discriminator: redemption completed (PDA about to close)
 const EVENT_REDEMPTION_COMPLETED: u8 = 0x07;
 
 /// Event discriminator: redemption requested (PDA created)
 const EVENT_REDEMPTION_REQUESTED: u8 = 0x08;
 
-/// Event discriminator: pool paused/unpaused
-const EVENT_POOL_PAUSED: u8 = 0x09;
-
 /// Event discriminator: redemption marked as processing
 const EVENT_REDEMPTION_PROCESSING: u8 = 0x0A;
 
-/// Emit when a commitment is inserted into the Merkle tree.
-///
-/// Layout: disc(1) + commitment(32) + created_at(8) = 41 bytes
-pub fn emit_leaf_inserted(commitment: &[u8; 32], created_at: i64) {
-    let disc = [EVENT_LEAF_INSERTED];
-    let ts = created_at.to_le_bytes();
-    sol_log_data(&[&disc, commitment.as_ref(), &ts]);
-}
+/// Event discriminator: batched nullifiers spent
+const EVENT_NULLIFIERS_BATCH: u8 = 0x0B;
 
-/// Emit when a nullifier is spent (audit metadata).
+/// Event discriminator: batched stealth announcements
+const EVENT_ANNOUNCEMENTS_BATCH: u8 = 0x0C;
+
+/// Event discriminator: deposit verified via SPV (carries BTC txids + amount)
+const EVENT_DEPOSIT_VERIFIED: u8 = 0x0D;
+
+/// Event discriminator: unshield/redeem metadata (amount + recipient)
+const EVENT_UNSHIELD_META: u8 = 0x0E;
+
+/// Max batch items for stack-allocated buffer (MAX_SAFE_JOINSPLIT_SIZE = 14)
+const MAX_BATCH: usize = 14;
+
+/// Emit when a nullifier is spent.
 ///
-/// Layout: disc(1) + nullifier_hash(32) + op_type(1) + spent_at(8) + spent_by(32) = 74 bytes
+/// Layout: disc(1) + nullifier_hash(32) + op_type(1) + ix_disc(1) = 35 bytes
 pub fn emit_nullifier_spent(
     nullifier_hash: &[u8; 32],
     operation_type: u8,
-    spent_at: i64,
-    spent_by: &[u8; 32],
+    instruction_disc: u8,
 ) {
     let disc = [EVENT_NULLIFIER_SPENT];
     let op = [operation_type];
-    let ts = spent_at.to_le_bytes();
-    sol_log_data(&[&disc, nullifier_hash.as_ref(), &op, &ts, spent_by.as_ref()]);
+    let ix = [instruction_disc];
+    sol_log_data(&[&disc, nullifier_hash.as_ref(), &op, &ix]);
 }
 
 /// Emit a stealth announcement as a log event (replaces on-chain PDA creation).
@@ -81,58 +83,32 @@ pub fn emit_stealth_announcement(
     sol_log_data(&[&disc, &atype, ephemeral_pub, encrypted_amount, commitment, &li]);
 }
 
-/// Emit when a pool update is proposed (timelock starts).
-///
-/// Layout: disc(1) + min_deposit(8) + max_deposit(8) + service_fee(8) + execute_after(8) = 33 bytes
-pub fn emit_pool_update_proposed(
-    min_deposit: u64,
-    max_deposit: u64,
-    service_fee: u64,
-    execute_after: i64,
-) {
-    let disc = [EVENT_POOL_UPDATE_PROPOSED];
-    let min = min_deposit.to_le_bytes();
-    let max = max_deposit.to_le_bytes();
-    let fee = service_fee.to_le_bytes();
-    let ts = execute_after.to_le_bytes();
-    sol_log_data(&[&disc, &min, &max, &fee, &ts]);
-}
-
-/// Emit when a pool update is executed (timelock elapsed).
-///
-/// Layout: disc(1) + min_deposit(8) + max_deposit(8) + service_fee(8) = 25 bytes
-pub fn emit_pool_update_executed(min_deposit: u64, max_deposit: u64, service_fee: u64) {
-    let disc = [EVENT_POOL_UPDATE_EXECUTED];
-    let min = min_deposit.to_le_bytes();
-    let max = max_deposit.to_le_bytes();
-    let fee = service_fee.to_le_bytes();
-    sol_log_data(&[&disc, &min, &max, &fee]);
-}
-
 /// Emit when a redemption is completed (before PDA is closed).
 ///
-/// Layout: disc(1) + requester(32) + amount_sats(8) + request_id(8) + btc_txid(32) + btc_script_len(1) + btc_script(var)
-/// = 82 + btc_script_len bytes
+/// Layout: disc(1) + requester(32) + amount_sats(8) + actual_received(8) + service_fee(8)
+///         + request_id(8) + btc_txid(32) + btc_script_len(1) + btc_script(var)
+/// = 98 + btc_script_len bytes
+///
+/// Fee breakdown derivable from event:
+///   expected_send    = amount_sats - service_fee
+///   miner_fee        = expected_send - actual_received
+///   protocol_revenue = service_fee - miner_fee  (added to fee_pool on-chain)
 pub fn emit_redemption_completed(
     requester: &[u8; 32],
     amount_sats: u64,
+    actual_received: u64,
+    service_fee: u64,
     request_id: u64,
     btc_txid: &[u8; 32],
     btc_script: &[u8],
 ) {
     let disc = [EVENT_REDEMPTION_COMPLETED];
     let amt = amount_sats.to_le_bytes();
+    let recv = actual_received.to_le_bytes();
+    let sfee = service_fee.to_le_bytes();
     let rid = request_id.to_le_bytes();
     let script_len = [btc_script.len() as u8];
-    sol_log_data(&[&disc, requester, &amt, &rid, btc_txid, &script_len, btc_script]);
-}
-
-/// Emit when a pool update proposal is cancelled.
-///
-/// Layout: disc(1) = 1 byte
-pub fn emit_pool_update_cancelled() {
-    let disc = [EVENT_POOL_UPDATE_CANCELLED];
-    sol_log_data(&[&disc]);
+    sol_log_data(&[&disc, requester, &amt, &recv, &sfee, &rid, btc_txid, &script_len, btc_script]);
 }
 
 /// Emit when a redemption request is created (PDA initialized).
@@ -151,16 +127,6 @@ pub fn emit_redemption_requested(
     sol_log_data(&[&disc, requester, &amt, &rid, &script_len, btc_script]);
 }
 
-/// Emit when the pool is paused or unpaused.
-///
-/// Layout: disc(1) + is_paused(1) + timestamp(8)
-pub fn emit_pool_paused(is_paused: bool, timestamp: i64) {
-    let disc = [EVENT_POOL_PAUSED];
-    let paused = [is_paused as u8];
-    let ts = timestamp.to_le_bytes();
-    sol_log_data(&[&disc, &paused, &ts]);
-}
-
 /// Emit when a redemption transitions to Processing state.
 ///
 /// Layout: disc(1) + requester(32) + amount_sats(8) + request_id(8) + processing_slot(4)
@@ -175,4 +141,114 @@ pub fn emit_redemption_processing(
     let rid = request_id.to_le_bytes();
     let slot = processing_slot.to_le_bytes();
     sol_log_data(&[&disc, requester, &amt, &rid, &slot]);
+}
+
+/// Emit a batch of nullifier spent events in a single sol_log_data call.
+///
+/// Layout: disc(1) + count(1) + op_type(1) + ix_disc(1) + [nullifier_hash(32)] x count
+pub fn emit_nullifiers_batch(
+    nullifiers: &[&[u8; 32]],
+    operation_type: u8,
+    instruction_disc: u8,
+) {
+    // For single nullifier, use the non-batch version (simpler parsing)
+    if nullifiers.len() == 1 {
+        emit_nullifier_spent(nullifiers[0], operation_type, instruction_disc);
+        return;
+    }
+
+    let disc = [EVENT_NULLIFIERS_BATCH];
+    let count = [nullifiers.len() as u8];
+    let op = [operation_type];
+    let ix = [instruction_disc];
+
+    // Build slice array: disc + count + op_type + ix_disc + N hashes
+    // Max slices = 4 + MAX_BATCH = 18
+    let mut slices: [&[u8]; 4 + MAX_BATCH] = [&[0u8; 0]; 4 + MAX_BATCH];
+    slices[0] = &disc;
+    slices[1] = &count;
+    slices[2] = &op;
+    slices[3] = &ix;
+    let n = nullifiers.len().min(MAX_BATCH);
+    for i in 0..n {
+        slices[4 + i] = nullifiers[i].as_ref();
+    }
+    sol_log_data(&slices[..4 + n]);
+}
+
+/// Emit when a BTC deposit is SPV-verified on-chain.
+///
+/// Layout: disc(1) + sweep_txid(32) + deposit_txid(32) + amount_sats(8) + leaf_index(4) = 77 bytes
+pub fn emit_deposit_verified(
+    sweep_txid: &[u8; 32],
+    deposit_txid: &[u8; 32],
+    amount_sats: u64,
+    leaf_index: u32,
+) {
+    let disc = [EVENT_DEPOSIT_VERIFIED];
+    let amt = amount_sats.to_le_bytes();
+    let li = leaf_index.to_le_bytes();
+    sol_log_data(&[&disc, sweep_txid, deposit_txid, &amt, &li]);
+}
+
+/// Emit unshield/redeem metadata so indexer doesn't need to parse instruction data.
+///
+/// Layout: disc(1) + amount(8) + recipient(32) = 41 bytes
+pub fn emit_unshield_meta(
+    amount: u64,
+    recipient: &[u8; 32],
+) {
+    let disc = [EVENT_UNSHIELD_META];
+    let amt = amount.to_le_bytes();
+    sol_log_data(&[&disc, &amt, recipient]);
+}
+
+/// Data for a single announcement in a batch
+pub struct AnnouncementItem<'a> {
+    pub announcement_type: u8,
+    pub ephemeral_pub: &'a [u8; 32],
+    pub encrypted_amount: &'a [u8; 8],
+    pub commitment: &'a [u8; 32],
+    pub leaf_index: u32,
+}
+
+/// Emit a batch of stealth announcements in a single sol_log_data call.
+///
+/// Layout: disc(1) + count(1) + [type(1) + ephemeral(32) + amount(8) + commitment(32) + leaf_index(4)] x count
+///
+/// For single items, falls back to the non-batch emit for simpler parsing.
+pub fn emit_announcements_batch(items: &[AnnouncementItem]) {
+    if items.len() == 1 {
+        emit_stealth_announcement(
+            items[0].announcement_type,
+            items[0].ephemeral_pub,
+            items[0].encrypted_amount,
+            items[0].commitment,
+            items[0].leaf_index,
+        );
+        return;
+    }
+
+    let n = items.len().min(MAX_BATCH);
+
+    // Max payload: 2 + 14 * 77 = 1080 bytes — fits comfortably on stack
+    let mut buf = [0u8; 2 + MAX_BATCH * 77];
+    buf[0] = EVENT_ANNOUNCEMENTS_BATCH;
+    buf[1] = n as u8;
+    let mut offset = 2;
+    for i in 0..n {
+        buf[offset] = items[i].announcement_type;
+        offset += 1;
+        buf[offset..offset + 32].copy_from_slice(items[i].ephemeral_pub);
+        offset += 32;
+        buf[offset..offset + 8].copy_from_slice(items[i].encrypted_amount);
+        offset += 8;
+        buf[offset..offset + 32].copy_from_slice(items[i].commitment);
+        offset += 32;
+        let li = items[i].leaf_index.to_le_bytes();
+        buf[offset..offset + 4].copy_from_slice(&li);
+        offset += 4;
+    }
+
+    sol_log_data(&[&buf[..offset]]);
 }

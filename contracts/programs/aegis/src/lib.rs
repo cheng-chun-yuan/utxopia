@@ -33,16 +33,6 @@ use pinocchio::{
     ProgramResult,
 };
 
-/// Debug message macro — only emits `pinocchio::msg!` in devnet builds.
-/// Saves ~300 CUs per call in production (no-op when `devnet` feature is off).
-#[macro_export]
-macro_rules! debug_msg {
-    ($($arg:tt)*) => {
-        #[cfg(feature = "devnet")]
-        pinocchio::msg!($($arg)*);
-    };
-}
-
 pub mod constants;
 pub mod error;
 pub mod instructions;
@@ -88,11 +78,6 @@ pub mod instruction {
     // Public redeem: burn SPL zkBTC → RedemptionRequest (no ZK proof)
     pub const PUBLIC_REDEEM: u8 = 17;
 
-    // Admin: close any program-owned PDA (devnet only)
-    #[cfg(feature = "devnet")]
-    pub const ADMIN_CLOSE_PDA: u8 = 20;
-
-
     // Timelocked pool parameter updates (enabled in all builds)
     pub const PROPOSE_POOL_UPDATE: u8 = 21;
     pub const EXECUTE_POOL_UPDATE: u8 = 22;
@@ -101,6 +86,7 @@ pub mod instruction {
     // OP_RETURN-free deposit flow
     pub const REGISTER_DEPOSIT_INTENT: u8 = 24;
     pub const VERIFY_DEPOSIT_V2: u8 = 25;
+
 }
 
 entrypoint!(process_instruction);
@@ -165,11 +151,7 @@ pub fn process_instruction(
         instruction::PUBLIC_REDEEM => {
             instructions::process_public_redeem(program_id, accounts, data)
         }
-        // Admin: close PDA
-        #[cfg(feature = "devnet")]
-        instruction::ADMIN_CLOSE_PDA => {
-            instructions::process_admin_close_pda(program_id, accounts, data)
-        }
+        // Admin: close PDA (removed — use fresh deploy instead)
         // Timelocked pool parameter updates
         instruction::PROPOSE_POOL_UPDATE => {
             instructions::process_propose_pool_update(program_id, accounts, data)
@@ -231,8 +213,6 @@ fn process_set_paused(
         pool.set_paused(paused);
         let ts = Clock::get()?.unix_timestamp;
         pool.set_last_update(ts);
-
-        crate::utils::events::emit_pool_paused(paused, ts);
     }
 
     Ok(())
@@ -260,8 +240,6 @@ mod tests {
             instruction::PUBLIC_REDEEM,
             #[cfg(feature = "devnet")]
             instruction::ADD_DEMO_STEALTH,
-            #[cfg(feature = "devnet")]
-            instruction::ADMIN_CLOSE_PDA,
             instruction::PROPOSE_POOL_UPDATE,
             instruction::EXECUTE_POOL_UPDATE,
             instruction::CANCEL_POOL_UPDATE,

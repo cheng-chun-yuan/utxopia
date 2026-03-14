@@ -333,7 +333,7 @@ pub fn process_verify_stealth_deposit(
 
     let clock = Clock::get()?;
 
-    // Emit stealth announcement as log event (replaces PDA creation)
+    // Emit stealth announcement as log event (LeafInserted merged into announcement)
     let amount_bytes = amount_sats.to_le_bytes();
     crate::utils::events::emit_stealth_announcement(
         ANNOUNCEMENT_TYPE_DEPOSIT,
@@ -343,8 +343,13 @@ pub fn process_verify_stealth_deposit(
         leaf_index as u32,
     );
 
-    // Emit leaf inserted event (commitment + timestamp for indexer)
-    crate::utils::events::emit_leaf_inserted(&commitment, clock.unix_timestamp);
+    // Emit deposit verified event (BTC txids + amount for indexer)
+    crate::utils::events::emit_deposit_verified(
+        &ix_data.sweep_txid,
+        &ix_data.deposit_txid,
+        amount_sats,
+        leaf_index as u32,
+    );
 
     // Mint zkBTC to pool vault
     let pool_bump_bytes = [pool_bump];
@@ -370,7 +375,7 @@ pub fn process_verify_stealth_deposit(
         pool.set_last_update(clock.unix_timestamp);
     }
 
-    crate::debug_msg!("npk-based deposit verified and minted");
+    pinocchio::msg!("Aegis: deposit verified (SPV)");
 
     Ok(())
 }

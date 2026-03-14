@@ -16,7 +16,7 @@
  */
 
 import useSWR from "swr";
-import { DEVNET_CONFIG } from "@aegis/sdk";
+import { getConfig } from "@aegis/sdk";
 import { fetchAccountInfo } from "@/lib/adapters/connection-adapter";
 
 export interface PoolStats {
@@ -28,8 +28,6 @@ export interface PoolStats {
   volume: bigint;
 }
 
-const POOL_STATE_ADDRESS = DEVNET_CONFIG.poolStatePda;
-
 /**
  * Fetch pool stats from on-chain data.
  */
@@ -40,7 +38,7 @@ async function fetchPoolStats(): Promise<PoolStats> {
   let totalBurned = 0n;
 
   // Fetch pool state for counters
-  const poolInfo = await fetchAccountInfo(POOL_STATE_ADDRESS);
+  const poolInfo = await fetchAccountInfo(getConfig().poolStatePda);
 
   if (poolInfo && poolInfo.data.length >= 196 && poolInfo.data[0] === 0x01) {
     const view = new DataView(

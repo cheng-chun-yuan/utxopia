@@ -73,6 +73,9 @@ pub struct WithdrawalRequest {
     /// On-chain redemption nonce (from RedemptionRequest PDA) for FROST Solana verification
     #[serde(default)]
     pub redemption_nonce: Option<u64>,
+    /// Service fee locked in the PDA at request time (used instead of recomputing from pool config)
+    #[serde(default)]
+    pub pda_service_fee: Option<u64>,
 }
 
 impl WithdrawalRequest {
@@ -109,6 +112,7 @@ impl WithdrawalRequest {
             updated_at: now,
             error: None,
             redemption_nonce: None,
+            pda_service_fee: None,
         }
     }
 
@@ -208,8 +212,10 @@ pub struct RedemptionConfig {
     pub auto_process: bool,
     /// Pool BTC address (for fetching UTXOs from Esplora)
     pub pool_address: String,
-    /// Flat service fee per withdrawal (sats) — deducted from amount before sending BTC
-    pub service_fee_sats: u64,
+    /// Base service fee per withdrawal (sats)
+    pub service_fee_base: u64,
+    /// Service fee in basis points (0.01% units). E.g., 30 = 0.3%.
+    pub service_fee_bps: u16,
 }
 
 impl Default for RedemptionConfig {
@@ -224,10 +230,9 @@ impl Default for RedemptionConfig {
             esplora_url: String::new(),
             auto_process: true,
             pool_address: std::env::var("POOL_RECEIVE_ADDRESS").unwrap_or_default(),
-            service_fee_sats: std::env::var("SERVICE_FEE_SATS")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(500),
+            // Fallback only — fees are read from on-chain PoolState at runtime
+            service_fee_base: 0,
+            service_fee_bps: 0,
         }
     }
 }
@@ -288,6 +293,8 @@ pub struct ParsedRedemption {
     pub requester: String,
     /// Withdrawal amount in satoshis
     pub amount_sats: u64,
+    /// Service fee in satoshis (locked at request time)
+    pub service_fee: u64,
     /// Raw scriptPubKey bytes for the BTC destination
     pub btc_script: Vec<u8>,
     /// On-chain request nonce
@@ -335,6 +342,9 @@ pub struct RedemptionTracking {
     /// On-chain request nonce
     #[serde(default)]
     pub request_id: Option<u64>,
+    /// Whether the BTC tx was simulated (not actually broadcast)
+    #[serde(default)]
+    pub simulated: bool,
 }
 
 /// Backend-side redemption status

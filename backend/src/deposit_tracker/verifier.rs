@@ -33,7 +33,7 @@ const TOKEN_2022_PROGRAM_ID: Pubkey = pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnB
 /// Get Aegis program ID from env or use devnet default
 fn aegis_program_id() -> String {
     std::env::var("AEGIS_PROGRAM_ID")
-        .unwrap_or_else(|_| "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1".to_string())
+        .unwrap_or_else(|_| "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ".to_string())
 }
 
 /// Get BTC light client program ID from env or use devnet default

@@ -138,8 +138,8 @@ export async function GET() {
         // Match tracker by solana_tx only (leaf_index can collide after tree reset)
         const tracker = trackerBySolTx.get(a.tx_signature);
         if (tracker) matchedTrackerSolTxs.add(a.tx_signature);
-        // A deposit is demo if there's no tracker AND it's not SPV-verified.
-        const isDemo = !tracker && !a.is_verified;
+        // Demo is determined purely by on-chain instruction discriminator (disc 1/25 = real SPV, disc 15 = demo)
+        const isDemo = !a.is_verified;
         const leafTime = leafTimestamps.get(a.leaf_index) ?? 0;
         const timestamp = a.block_time || leafTime || (tracker?.created_at ?? 0);
 

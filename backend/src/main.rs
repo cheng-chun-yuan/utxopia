@@ -105,23 +105,38 @@ fn create_service(config: RedemptionConfig) -> RedemptionService {
     }
 
     // Single-key mode
-    let sol_client = match AEGISConfig::from_env() {
+    let mut sol_client = match AEGISConfig::from_env() {
         Ok(cfg) => zkbtc::solana::client::SolClient::from_config(&cfg).unwrap_or_else(|_| {
             zkbtc::solana::client::SolClient::new(zkbtc::solana::client::SolConfig::default())
         }),
         Err(_) => zkbtc::solana::client::SolClient::new(zkbtc::solana::client::SolConfig::default()),
     };
 
+    // Set payer keypair for on-chain transactions (mark_processing, complete_redemption)
+    if let Ok(keypair_val) = env::var("RELAYER_KEYPAIR").or_else(|_| env::var("VERIFIER_KEYPAIR")) {
+        match zkbtc::common::keypair::load_keypair(&keypair_val) {
+            Ok(keypair) => {
+                println!("Redemption service: payer keypair set");
+                sol_client.set_payer(keypair);
+            }
+            Err(e) => {
+                eprintln!("Warning: Failed to load payer keypair for redemption: {}", e);
+            }
+        }
+    }
+
     if let Ok(key_hex) = env::var("POOL_SIGNING_KEY") {
         match SingleKeySigner::from_hex(&key_hex) {
             Ok(signer) => RedemptionService::new_with_signer(config, signer, sol_client),
             Err(e) => {
                 eprintln!("Warning: Invalid POOL_SIGNING_KEY: {}", e);
-                RedemptionService::new_testnet()
+                RedemptionService::new_with_signer(config, SingleKeySigner::generate(), sol_client)
             }
         }
     } else {
-        RedemptionService::new_testnet()
+        // No signing key — use generated signer but keep env-based sol_client
+        // so program_id comes from AEGIS_PROGRAM_ID env var
+        RedemptionService::new_with_signer(config, SingleKeySigner::generate(), sol_client)
     }
 }
 
@@ -259,7 +274,7 @@ async fn run_tracker_service(args: &[String]) {
     if let Ok(addr) = env::var("POOL_RECEIVE_ADDRESS") {
         config.pool_receive_address = addr;
     }
-    if let Ok(rpc) = env::var("SOLANA_RPC_URL") {
+    if let Ok(rpc) = env::var("AEGIS_SOLANA_RPC").or_else(|_| env::var("SOLANA_RPC_URL")) {
         config.solana_rpc = rpc;
     }
     if let Ok(db_path) = env::var("DEPOSIT_DB_PATH") {
@@ -399,8 +414,10 @@ async fn run_tracker_service(args: &[String]) {
 
     let indexer_db_path = env_string("INDEXER_DB_PATH", "data/events.db");
     let indexer_poll_secs: u64 = env_or("INDEXER_POLL_INTERVAL_SECS", 10);
-    let solana_rpc = env_string("SOLANA_RPC_URL", "https://api.devnet.solana.com");
-    let aegis_program_id = env_string("AEGIS_PROGRAM_ID", "4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1");
+    let solana_rpc = std::env::var("AEGIS_SOLANA_RPC")
+        .or_else(|_| std::env::var("SOLANA_RPC_URL"))
+        .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
+    let aegis_program_id = env_string("AEGIS_PROGRAM_ID", "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ");
 
     let event_store = Arc::new(
         EventStore::new(&indexer_db_path).expect("Failed to create event store")
@@ -422,14 +439,17 @@ async fn run_tracker_service(args: &[String]) {
     let reconcile_interval: u64 = env_or("RECONCILE_INTERVAL_SECS", 60);
     let reconciler_status = Arc::new(tokio::sync::RwLock::new(None));
 
-    let pool_state_pda = env_string(
-        "POOL_STATE_PDA",
-        "4654vJpq3E3A6nwtUwNWeJuTkHDcqT761uoBX7AHjm5x",
+    // Derive PDAs from program ID (deterministic, no extra env vars needed)
+    let (pool_state_pda_pubkey, _) = solana_sdk::pubkey::Pubkey::find_program_address(
+        &[b"pool_state"], &program_pubkey,
     );
-    let commitment_tree_pda = env_string(
-        "COMMITMENT_TREE_PDA",
-        "2bjcEufNf6Xa7YwH1ci99k1NjRg6jjirCQXsPjC5Qgk6",
+    let (commitment_tree_pda_pubkey, _) = solana_sdk::pubkey::Pubkey::find_program_address(
+        &[b"commitment_tree"], &program_pubkey,
     );
+    let pool_state_pda = pool_state_pda_pubkey.to_string();
+    let commitment_tree_pda = commitment_tree_pda_pubkey.to_string();
+    println!("Derived pool_state PDA: {}", pool_state_pda);
+    println!("Derived commitment_tree PDA: {}", commitment_tree_pda);
 
     let reconciler = Reconciler::new(
         solana_rpc.clone(),

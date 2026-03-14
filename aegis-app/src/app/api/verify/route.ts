@@ -27,7 +27,6 @@ import {
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import {
-  DEVNET_CONFIG,
   hexToBytes,
 } from "@aegis/sdk";
 

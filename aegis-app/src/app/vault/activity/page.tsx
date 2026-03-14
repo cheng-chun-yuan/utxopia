@@ -4,7 +4,6 @@ import { useSearchParams } from "next/navigation";
 import { useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import {
-  ArrowLeft,
   Wallet,
   ArrowDownToLine,
   Shield,
@@ -13,6 +12,8 @@ import {
   EyeOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { BalanceView, useMyDepositCount } from "@/components/btc-widget/balance-view";
 import { useAegisKeys, useStealthInbox } from "@/hooks/use-aegis";
@@ -55,7 +56,12 @@ function TabBar({
           {tab.icon}
           <span>{tab.label}</span>
           {counts[tab.id] > 0 && (
-            <span className="min-w-[22px] h-[22px] px-2 flex items-center justify-center text-sm rounded-full bg-privacy text-background font-bold">
+            <span className={cn(
+              "min-w-[18px] h-[18px] px-1.5 flex items-center justify-center text-[11px] rounded-full font-medium",
+              activeTab === tab.id
+                ? "bg-privacy/20 text-privacy"
+                : "bg-gray/15 text-gray"
+            )}>
               {counts[tab.id]}
             </span>
           )}
@@ -80,7 +86,7 @@ function BalanceBar() {
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[10px] text-gray uppercase tracking-wider">Private zkBTC</p>
-        <p className="text-[20px] font-bold font-mono text-privacy tracking-tight">{privateBtc}</p>
+        <p className="text-[20px] font-bold text-privacy tracking-tight">{privateBtc}</p>
       </div>
       {depositCount > 0 && (
         <span className="text-caption text-gray/60">
@@ -262,23 +268,8 @@ function ActivityContent() {
 
 export default function ActivityPage() {
   return (
-    <main className="min-h-screen bg-background flex flex-col items-center py-8 px-4 sm:py-12">
-      {/* Header */}
-      <div className="w-full max-w-[480px] mb-4 flex items-center justify-between">
-        <Link
-          href="/vault"
-          className="inline-flex items-center gap-2 text-body2 text-gray hover:text-gray-light transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </Link>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-privacy/10 border border-privacy/20">
-            <Wallet className="w-3 h-3 text-privacy" />
-            <span className="text-caption text-privacy">Notes</span>
-          </div>
-        </div>
-      </div>
+    <main className="min-h-screen bg-background hacker-bg noise-overlay flex flex-col items-center pt-24 pb-8 px-4">
+      <SiteHeader />
 
       {/* Widget */}
       <div
@@ -311,19 +302,8 @@ export default function ActivityPage() {
           <ActivityContent />
         </Suspense>
 
-        {/* Footer */}
-        <div className="flex flex-row justify-between items-center gap-2 mt-4 text-gray px-2 pt-4 border-t border-gray/15">
-          <div className="flex flex-row items-center gap-4">
-            <a
-              href="/docs"
-              className="hover:text-gray-light transition-colors text-caption"
-            >
-              Private Bitcoin
-            </a>
-          </div>
-          <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption hover:text-gray-light transition-colors flex items-center gap-1.5">Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network</a>
-        </div>
       </div>
+      <SiteFooter />
     </main>
   );
 }

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getProgramDerivedAddress, address } from "@solana/kit";
 import { fetchAccountInfo } from "@/lib/helius-server";
-import { DEVNET_CONFIG } from "@aegis/sdk";
+import { getConfig } from "@aegis/sdk";
 
 export const runtime = "nodejs";
 
 // Height index PDAs live under the BTC Light Client program, not Aegis
-const BTC_LIGHT_CLIENT_ID = DEVNET_CONFIG.btcLightClientProgramId;
+const getBtcLightClientId = () => getConfig().btcLightClientProgramId;
 
 // Derive height index PDA using @solana/kit (checks canonical block at height)
 async function deriveHeightIndexPDA(blockHeight: number): Promise<string> {
@@ -15,7 +15,7 @@ async function deriveHeightIndexPDA(blockHeight: number): Promise<string> {
   view.setBigUint64(0, BigInt(blockHeight), true);
 
   const [pda] = await getProgramDerivedAddress({
-    programAddress: address(BTC_LIGHT_CLIENT_ID),
+    programAddress: address(getBtcLightClientId()),
     seeds: [new TextEncoder().encode("height_index"), heightBuffer],
   });
 

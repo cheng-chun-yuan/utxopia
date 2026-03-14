@@ -165,37 +165,32 @@ impl SolanaWsSubscriber {
         );
 
         // Separate events by type
-        let mut leaf_events = Vec::new();
         let mut announcements = Vec::new();
         let mut nullifiers = Vec::new();
 
         for event in events {
             match event {
-                ProgramEvent::LeafInserted(e) => leaf_events.push(e),
                 ProgramEvent::StealthAnnouncement(e) => announcements.push(e),
                 ProgramEvent::NullifierSpent(e) => nullifiers.push(e),
-                ProgramEvent::RedemptionCompleted(_) => {} // handled by batch indexer
-                ProgramEvent::RedemptionRequested(_) => {} // handled by batch indexer
-                ProgramEvent::PoolPaused(_) => {} // handled by batch indexer
-                ProgramEvent::RedemptionProcessing(_) => {} // handled by batch indexer
+                ProgramEvent::RedemptionCompleted(_) => {} // handled by poll indexer
+                ProgramEvent::RedemptionRequested(_) => {} // handled by poll indexer
+                ProgramEvent::RedemptionProcessing(_) => {} // handled by poll indexer
+                ProgramEvent::DepositVerified(_) => {} // handled by poll indexer
+                ProgramEvent::UnshieldMeta(_) => {} // handled by poll indexer
             }
         }
 
-        // Match LeafInserted with StealthAnnouncement by commitment.
-        // The announcement carries the authoritative on-chain leaf_index.
+        // Process announcements — leaf data derived from announcement
         for ann in &announcements {
             let leaf_index = ann.leaf_index as i64;
 
-            // Find matching leaf event by commitment
-            if let Some(leaf) = leaf_events.iter().find(|l| l.commitment == ann.commitment) {
-                if let Ok(inserted) = self.store.insert_leaf(leaf_index, leaf, signature, slot, 0) {
-                    if inserted {
-                        let tree_cache = self.tree_cache.clone();
-                        let commitment = leaf.commitment;
-                        tokio::spawn(async move {
-                            tree_cache.on_leaf_inserted(leaf_index as u64, commitment).await;
-                        });
-                    }
+            if let Ok(inserted) = self.store.insert_leaf_from_announcement(leaf_index, &ann.commitment, signature, slot, 0) {
+                if inserted {
+                    let tree_cache = self.tree_cache.clone();
+                    let commitment = ann.commitment;
+                    tokio::spawn(async move {
+                        tree_cache.on_leaf_inserted(leaf_index as u64, commitment).await;
+                    });
                 }
             }
 

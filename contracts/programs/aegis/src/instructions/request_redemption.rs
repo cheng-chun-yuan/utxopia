@@ -17,6 +17,9 @@ use pinocchio::{
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::constants::MAX_BTC_SCRIPT_LEN;
+
+/// Minimum withdrawal amount in satoshis
+const MIN_WITHDRAWAL_SATS: u64 = 10_000;
 use crate::error::AegisError;
 use crate::state::{
     CommitmentTree, NullifierOperationType, NullifierRecord, PoolState,
@@ -170,13 +173,13 @@ pub fn process_request_redemption(
             pool.min_deposit(),
             pool.pending_redemptions(),
             pool.total_shielded(),
-            pool.service_fee_sats(),
+            pool.compute_service_fee(ix_data.amount_sats),
         )
     };
 
-    // Validate amount
-    if ix_data.amount_sats == 0 {
-        return Err(AegisError::ZeroAmount.into());
+    // Validate amount (MIN_WITHDRAWAL_SATS > 0, so zero check is implicit)
+    if ix_data.amount_sats < MIN_WITHDRAWAL_SATS {
+        return Err(AegisError::AmountTooSmall.into());
     }
     if ix_data.amount_sats < min_deposit {
         return Err(AegisError::AmountTooSmall.into());
@@ -266,12 +269,11 @@ pub fn process_request_redemption(
         NullifierRecord::init(&mut nullifier_data)?;
     }
 
-    // Emit nullifier spent event
+    // Emit nullifier spent event (v2: trimmed — spent_at/spent_by derived from tx metadata)
     crate::utils::events::emit_nullifier_spent(
         &ix_data.nullifier_hash,
         NullifierOperationType::FullWithdrawal as u8,
-        clock.unix_timestamp,
-        accounts.user.key().as_ref().try_into().unwrap(),
+        5, // instruction::REQUEST_REDEMPTION
     );
 
     // Create redemption request PDA
@@ -305,6 +307,7 @@ pub fn process_request_redemption(
         redemption.set_request_id(ix_data.request_nonce);
         redemption.requester.copy_from_slice(accounts.user.key().as_ref());
         redemption.set_amount_sats(ix_data.amount_sats);
+        redemption.set_service_fee(service_fee);
         redemption.set_btc_script(&ix_data.btc_script[..ix_data.btc_script_len as usize])?;
         redemption.set_status(RedemptionStatus::Pending);
     }
@@ -319,5 +322,6 @@ pub fn process_request_redemption(
         pool.set_last_update(clock.unix_timestamp);
     }
 
+    pinocchio::msg!("Aegis: redemption requested");
     Ok(())
 }

@@ -299,7 +299,7 @@ pub fn process_verify_deposit_v2(
 
     let clock = Clock::get()?;
 
-    // Emit stealth announcement as log event
+    // Emit stealth announcement as log event (LeafInserted merged into announcement)
     let amount_bytes = amount_sats.to_le_bytes();
     crate::utils::events::emit_stealth_announcement(
         ANNOUNCEMENT_TYPE_DEPOSIT,
@@ -309,8 +309,13 @@ pub fn process_verify_deposit_v2(
         leaf_index as u32,
     );
 
-    // Emit leaf inserted event
-    crate::utils::events::emit_leaf_inserted(&commitment, clock.unix_timestamp);
+    // Emit deposit verified event (BTC txids + amount for indexer)
+    crate::utils::events::emit_deposit_verified(
+        &ix_data.sweep_txid,
+        &ix_data.deposit_txid,
+        amount_sats,
+        leaf_index as u32,
+    );
 
     // Mint zkBTC to pool vault
     let pool_bump_bytes = [pool_bump];
@@ -354,7 +359,7 @@ pub fn process_verify_deposit_v2(
         intent_data.fill(0);
     }
 
-    crate::debug_msg!("v2 deposit verified and minted (OP_RETURN-free)");
+    pinocchio::msg!("Aegis: deposit verified (v2)");
 
     Ok(())
 }

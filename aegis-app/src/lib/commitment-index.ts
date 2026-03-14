@@ -9,7 +9,7 @@
 
 import {
   CommitmentTreeIndex,
-  DEVNET_CONFIG,
+  getConfig,
   parseCommitmentTreeData,
   parseProgramEvents,
   type StealthAnnouncementEvent,
@@ -20,14 +20,14 @@ import { PublicKey } from "@solana/web3.js";
 import { getHeliusConnection } from "./helius-server";
 
 // Aegis Program ID from SDK
-const AEGIS_PROGRAM_ID = new PublicKey(DEVNET_CONFIG.aegisProgramId);
+const getAegisProgramId = () => new PublicKey(getConfig().aegisProgramId);
 
 // Storage path for the commitment index
 const DATA_DIR = process.cwd() + "/data";
 const INDEX_FILE = DATA_DIR + "/commitment-index.json";
 
 // Commitment tree PDA - from SDK config (single source of truth)
-const COMMITMENT_TREE_ADDRESS = DEVNET_CONFIG.commitmentTreePda;
+const getCommitmentTreeAddress = () => getConfig().commitmentTreePda;
 
 // Server-side singleton
 let serverIndex: CommitmentTreeIndex | null = null;
@@ -160,7 +160,7 @@ export async function fetchOnChainTreeState(): Promise<{
   rootHistoryIndex: number;
 }> {
   const connection = getHeliusConnection("devnet");
-  const pubkey = new PublicKey(COMMITMENT_TREE_ADDRESS);
+  const pubkey = new PublicKey(getCommitmentTreeAddress());
   const accountInfo = await connection.getAccountInfo(pubkey);
 
   if (!accountInfo) {
@@ -220,7 +220,7 @@ export async function syncFromOnChain(): Promise<{
   // Fetch tree state to get nextIndex
   let treeNextIndex = Number.MAX_SAFE_INTEGER;
   try {
-    const treePda = new PublicKey(COMMITMENT_TREE_ADDRESS);
+    const treePda = new PublicKey(getCommitmentTreeAddress());
     const treeAccount = await connection.getAccountInfo(treePda);
     if (treeAccount) {
       const treeState = parseCommitmentTreeData(new Uint8Array(treeAccount.data));
@@ -261,7 +261,7 @@ export async function syncFromOnChain(): Promise<{
 
   // Fallback: scan transaction logs directly
   if (!fromBackend) {
-    const signatures = await connection.getSignaturesForAddress(AEGIS_PROGRAM_ID, { limit: 1000 }, "confirmed");
+    const signatures = await connection.getSignaturesForAddress(getAegisProgramId(), { limit: 1000 }, "confirmed");
     console.log(`[CommitmentIndex] Scanning ${signatures.length} transactions for events...`);
 
     const BATCH_SIZE = 20;

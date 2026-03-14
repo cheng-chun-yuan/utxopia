@@ -37,11 +37,10 @@ use pinocchio::{
     account_info::AccountInfo,
     program_error::ProgramError,
     pubkey::{find_program_address, Pubkey},
-    sysvars::{clock::Clock, rent::Rent, Sysvar},
+    sysvars::{rent::Rent, Sysvar},
     ProgramResult,
 };
 
-use crate::debug_msg;
 use crate::error::AegisError;
 use crate::state::{
     CommitmentTree, NullifierOperationType, NullifierRecord, PoolState,
@@ -77,7 +76,7 @@ pub fn process_transact(
     let proof_source = data[2]; // 0 = inline, 1 = buffer account
 
     if n_inputs == 0 || n_outputs == 0 || n_inputs + n_outputs > MAX_JOINSPLIT_SIZE {
-        debug_msg!("Invalid JoinSplit dimensions");
+
         return Err(ProgramError::InvalidInstructionData);
     }
 
@@ -90,7 +89,7 @@ pub fn process_transact(
     let expected_len = header_size + nullifiers_size + commitments_size + stealth_size;
 
     if data.len() < expected_len {
-        debug_msg!("Instruction data too short");
+
         return Err(ProgramError::InvalidInstructionData);
     }
 
@@ -111,7 +110,7 @@ pub fn process_transact(
         crate::utils::chadbuffer::validate_chadbuffer_owner(buf_info)?;
         let buf_data = buf_info.try_borrow_data()?;
         if buf_data.len() < CHADBUFFER_AUTHORITY_SIZE + GROTH16_PROOF_SIZE {
-            debug_msg!("Proof buffer too small");
+
             return Err(ProgramError::InvalidAccountData);
         }
         let src = &buf_data[CHADBUFFER_AUTHORITY_SIZE..CHADBUFFER_AUTHORITY_SIZE + GROTH16_PROOF_SIZE];
@@ -132,7 +131,7 @@ pub fn process_transact(
             crate::constants::CHAIN_ID,
         );
         if *bound_params_hash != expected {
-            debug_msg!("Invalid bound params hash");
+
             return Err(AegisError::InvalidBoundParams.into());
         }
     }
@@ -212,7 +211,7 @@ pub fn process_transact(
         let vk = VkRegistry::from_bytes(&vk_data)?;
 
         if vk.n_inputs != n_inputs as u8 || vk.n_outputs != n_outputs as u8 {
-            debug_msg!("VK registry mismatch");
+
             return Err(AegisError::InvalidVkRegistry.into());
         }
     }
@@ -222,7 +221,7 @@ pub fn process_transact(
         let tree_data = commitment_tree_info.try_borrow_data()?;
         let tree = CommitmentTree::from_bytes(&tree_data)?;
         if !tree.is_valid_root(merkle_root) {
-            debug_msg!("Invalid Merkle root");
+
             return Err(AegisError::InvalidMerkleProof.into());
         }
     }
@@ -250,13 +249,16 @@ pub fn process_transact(
         proof_bytes, &public_inputs[..pi_len], delta_g2, ic,
     )?;
 
-    debug_msg!("JoinSplit proof verified");
+    pinocchio::msg!("Aegis: transact");
 
-    // Get clock and rent for PDA creation
-    let clock = Clock::get()?;
+    // Get rent for PDA creation
     let rent = Rent::get()?;
 
     // Process nullifiers: validate PDAs, check uniqueness, create accounts
+    // Collect hashes for batched event emission
+    const ZERO_HASH: &[u8; 32] = &[0u8; 32];
+    let mut null_hashes: [&[u8; 32]; MAX_JOINSPLIT_SIZE] = [ZERO_HASH; MAX_JOINSPLIT_SIZE];
+
     for i in 0..n_inputs {
         let nullifier_info = &accounts[5 + i];
         validate_account_writable(nullifier_info)?;
@@ -265,7 +267,7 @@ pub fn process_transact(
         let nullifier_seeds: &[&[u8]] = &[NullifierRecord::SEED, nullifiers[i].as_ref()];
         let (expected_pda, bump) = find_program_address(nullifier_seeds, program_id);
         if nullifier_info.key() != &expected_pda {
-            debug_msg!("Invalid nullifier PDA");
+
             return Err(ProgramError::InvalidSeeds);
         }
 
@@ -273,7 +275,7 @@ pub fn process_transact(
         {
             let nullifier_data = nullifier_info.try_borrow_data()?;
             if !nullifier_data.is_empty() && nullifier_data[0] == NULLIFIER_RECORD_DISCRIMINATOR {
-                debug_msg!("Nullifier already spent");
+
                 return Err(AegisError::NullifierAlreadyUsed.into());
             }
         }
@@ -301,17 +303,17 @@ pub fn process_transact(
             NullifierRecord::init(&mut nullifier_data)?;
         }
 
-        // Emit nullifier spent event
-        let null_hash: &[u8; 32] = nullifiers[i].try_into().unwrap();
-        crate::utils::events::emit_nullifier_spent(
-            null_hash,
-            NullifierOperationType::PrivateTransfer as u8,
-            clock.unix_timestamp,
-            user.key().as_ref().try_into().unwrap(),
-        );
+        null_hashes[i] = nullifiers[i];
     }
 
-    // Insert output commitments into Merkle tree and emit stealth events
+    // Emit nullifiers batch (single sol_log_data call)
+    crate::utils::events::emit_nullifiers_batch(
+        &null_hashes[..n_inputs],
+        NullifierOperationType::PrivateTransfer as u8,
+        14, // instruction::TRANSACT
+    );
+
+    // Insert output commitments into Merkle tree and emit stealth announcements
     {
         let mut tree_data = commitment_tree_info.try_borrow_mut_data()?;
         let tree = CommitmentTree::from_bytes_mut(&mut tree_data)?;
@@ -319,7 +321,6 @@ pub fn process_transact(
         for i in 0..n_outputs {
             let leaf_index = tree.insert_leaf(commitments_out[i])?;
 
-            debug_msg!("Inserted commitment into tree");
 
             // Parse stealth data for this output
             let stealth_offset = stealth_data_start + i * STEALTH_DATA_PER_OUTPUT;
@@ -330,7 +331,7 @@ pub fn process_transact(
                 .try_into()
                 .unwrap();
 
-            // Emit stealth announcement as log event (replaces PDA creation)
+            // Emit stealth announcement (LeafInserted merged — announcement already has commitment + leaf_index)
             crate::utils::events::emit_stealth_announcement(
                 crate::utils::events::ANNOUNCEMENT_TYPE_TRANSFER,
                 ephemeral_pub,
@@ -338,12 +339,8 @@ pub fn process_transact(
                 commitments_out[i],
                 leaf_index as u32,
             );
-
-            // Emit leaf inserted event
-            crate::utils::events::emit_leaf_inserted(commitments_out[i], clock.unix_timestamp);
         }
     }
 
-    debug_msg!("JoinSplit transact completed");
     Ok(())
 }

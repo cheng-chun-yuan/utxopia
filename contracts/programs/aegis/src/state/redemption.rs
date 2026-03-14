@@ -21,7 +21,7 @@ pub enum RedemptionStatus {
 
 /// Redemption request - pending BTC withdrawal (zero-copy layout)
 ///
-/// Layout (90 bytes):
+/// Layout (98 bytes):
 /// - discriminator:     1 byte
 /// - status:            1 byte
 /// - btc_script_len:    1 byte
@@ -30,6 +30,7 @@ pub enum RedemptionStatus {
 /// - request_id:        8 bytes
 /// - requester:         32 bytes
 /// - amount_sats:       8 bytes
+/// - service_fee:       8 bytes (locked at request time from pool config)
 /// - btc_script:        34 bytes (raw scriptPubKey for BTC withdrawal, not bech32 string)
 #[repr(C)]
 pub struct RedemptionRequest {
@@ -57,6 +58,10 @@ pub struct RedemptionRequest {
 
     /// Amount to withdraw (satoshis)
     amount_sats: [u8; 8],
+
+    /// Service fee in satoshis — locked at request time from pool's compute_service_fee().
+    /// complete_redemption uses this instead of re-reading pool config.
+    service_fee: [u8; 8],
 
     /// Bitcoin scriptPubKey for withdrawal (fixed buffer)
     pub btc_script: [u8; MAX_BTC_SCRIPT_LEN],
@@ -116,6 +121,10 @@ impl RedemptionRequest {
         u64::from_le_bytes(self.amount_sats)
     }
 
+    pub fn service_fee(&self) -> u64 {
+        u64::from_le_bytes(self.service_fee)
+    }
+
     pub fn processing_slot(&self) -> u32 {
         u32::from_le_bytes(self.processing_slot)
     }
@@ -135,6 +144,10 @@ impl RedemptionRequest {
 
     pub fn set_amount_sats(&mut self, value: u64) {
         self.amount_sats = value.to_le_bytes();
+    }
+
+    pub fn set_service_fee(&mut self, value: u64) {
+        self.service_fee = value.to_le_bytes();
     }
 
     pub fn set_processing_slot(&mut self, value: u32) {

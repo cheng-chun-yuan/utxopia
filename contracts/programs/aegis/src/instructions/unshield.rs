@@ -41,7 +41,6 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::debug_msg;
 use crate::error::AegisError;
 use crate::state::{
     CommitmentTree, NullifierOperationType, NullifierRecord, PoolState,
@@ -78,7 +77,6 @@ pub fn process_unshield(
 
     // n_outputs must be >= 1 (the unshield output itself)
     if n_inputs == 0 || n_outputs == 0 || n_inputs + n_outputs > MAX_JOINSPLIT_SIZE {
-        debug_msg!("Invalid JoinSplit dimensions");
         return Err(ProgramError::InvalidInstructionData);
     }
 
@@ -94,7 +92,6 @@ pub fn process_unshield(
     let expected_len = header_size + nullifiers_size + commitments_size + stealth_size + unshield_data_size;
 
     if data.len() < expected_len {
-        debug_msg!("Instruction data too short");
         return Err(ProgramError::InvalidInstructionData);
     }
 
@@ -142,7 +139,6 @@ pub fn process_unshield(
             unshield_address,
         );
         if *bound_params_hash != expected {
-            debug_msg!("Invalid bound params hash for unshield");
             return Err(AegisError::InvalidBoundParams.into());
         }
     }
@@ -192,13 +188,11 @@ pub fn process_unshield(
 
         // Verify zkbtc_mint matches pool
         if zkbtc_mint.key().as_ref() != pool.zkbtc_mint {
-            debug_msg!("zkBTC mint mismatch");
             return Err(ProgramError::InvalidAccountData);
         }
 
         // Verify pool vault matches pool
         if pool_vault.key().as_ref() != pool.pool_vault {
-            debug_msg!("Pool vault mismatch");
             return Err(ProgramError::InvalidAccountData);
         }
     }
@@ -207,7 +201,6 @@ pub fn process_unshield(
     let pool_seeds: &[&[u8]] = &[PoolState::SEED];
     let (expected_pool_pda, bump) = find_program_address(pool_seeds, program_id);
     if pool_state_info.key() != &expected_pool_pda {
-        debug_msg!("Invalid pool PDA");
         return Err(ProgramError::InvalidSeeds);
     }
     pool_bump = bump;
@@ -222,7 +215,6 @@ pub fn process_unshield(
         let vk = VkRegistry::from_bytes(&vk_data)?;
 
         if vk.n_inputs != n_inputs as u8 || vk.n_outputs != n_outputs as u8 {
-            debug_msg!("VK registry mismatch");
             return Err(AegisError::InvalidVkRegistry.into());
         }
     }
@@ -232,7 +224,6 @@ pub fn process_unshield(
         let tree_data = commitment_tree_info.try_borrow_data()?;
         let tree = CommitmentTree::from_bytes(&tree_data)?;
         if !tree.is_valid_root(merkle_root) {
-            debug_msg!("Invalid Merkle root");
             return Err(AegisError::InvalidMerkleProof.into());
         }
     }
@@ -259,8 +250,6 @@ pub fn process_unshield(
         proof_bytes, &public_inputs[..pi_len], delta_g2, ic,
     )?;
 
-    debug_msg!("Unshield JoinSplit proof verified");
-
     // Verify unshield commitment: last output = Poseidon(unshield_address, ZKBTC_TOKEN_ID, unshield_amount)
     {
         let expected_commitment = crate::utils::crypto::compute_deposit_commitment(
@@ -268,7 +257,6 @@ pub fn process_unshield(
             unshield_amount,
         )?;
         if *commitments_out[n_outputs - 1] != expected_commitment {
-            debug_msg!("Unshield commitment mismatch");
             return Err(AegisError::InvalidCommitment.into());
         }
     }
@@ -285,14 +273,12 @@ pub fn process_unshield(
         let nullifier_seeds: &[&[u8]] = &[NullifierRecord::SEED, nullifiers[i].as_ref()];
         let (expected_pda, nbump) = find_program_address(nullifier_seeds, program_id);
         if nullifier_info.key() != &expected_pda {
-            debug_msg!("Invalid nullifier PDA");
             return Err(ProgramError::InvalidSeeds);
         }
 
         {
             let nullifier_data = nullifier_info.try_borrow_data()?;
             if !nullifier_data.is_empty() && nullifier_data[0] == NULLIFIER_RECORD_DISCRIMINATOR {
-                debug_msg!("Nullifier already spent");
                 return Err(AegisError::NullifierAlreadyUsed.into());
             }
         }
@@ -317,15 +303,14 @@ pub fn process_unshield(
             let mut nullifier_data = nullifier_info.try_borrow_mut_data()?;
             NullifierRecord::init(&mut nullifier_data)?;
         }
-
-        let null_hash: &[u8; 32] = nullifiers[i].try_into().unwrap();
-        crate::utils::events::emit_nullifier_spent(
-            null_hash,
-            NullifierOperationType::FullWithdrawal as u8,
-            clock.unix_timestamp,
-            user.key().as_ref().try_into().unwrap(),
-        );
     }
+
+    // Emit nullifiers batch
+    crate::utils::events::emit_nullifiers_batch(
+        &nullifiers[..n_inputs],
+        NullifierOperationType::FullWithdrawal as u8,
+        15, // instruction::UNSHIELD
+    );
 
     // Insert tree outputs (all except the last unshield output) into Merkle tree
     {
@@ -335,8 +320,6 @@ pub fn process_unshield(
         for i in 0..n_tree_outputs {
             let leaf_index = tree.insert_leaf(commitments_out[i])?;
 
-            debug_msg!("Inserted commitment into tree");
-
             let stealth_offset = stealth_data_start + i * STEALTH_DATA_PER_OUTPUT;
             let ephemeral_pub: &[u8; 32] = data[stealth_offset..stealth_offset + 32]
                 .try_into()
@@ -345,7 +328,6 @@ pub fn process_unshield(
                 .try_into()
                 .unwrap();
 
-            // Emit stealth announcement as log event (replaces PDA creation)
             crate::utils::events::emit_stealth_announcement(
                 crate::utils::events::ANNOUNCEMENT_TYPE_TRANSFER,
                 ephemeral_pub,
@@ -353,10 +335,14 @@ pub fn process_unshield(
                 commitments_out[i],
                 leaf_index as u32,
             );
-
-            crate::utils::events::emit_leaf_inserted(commitments_out[i], clock.unix_timestamp);
         }
     }
+
+    // Emit unshield metadata for indexer
+    crate::utils::events::emit_unshield_meta(
+        unshield_amount,
+        unshield_address,
+    );
 
     // Transfer unshield amount from pool vault to user's token account
     {
@@ -381,6 +367,6 @@ pub fn process_unshield(
         pool.set_last_update(clock.unix_timestamp);
     }
 
-    debug_msg!("Unshield completed");
+    pinocchio::msg!("Aegis: unshield");
     Ok(())
 }

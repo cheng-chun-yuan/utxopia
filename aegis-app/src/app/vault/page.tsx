@@ -2,8 +2,8 @@
 
 import { useState, Fragment } from "react";
 import Link from "next/link";
+import { motion } from "framer-motion";
 import {
-  ArrowLeft,
   ArrowDownToLine,
   Wallet,
   Shield,
@@ -17,6 +17,7 @@ import {
   Globe,
   RefreshCw,
   Eye,
+  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FeatureCard, type FeatureCardColor } from "@/components/ui/feature-card";
@@ -34,6 +35,10 @@ import { notifyCopied } from "@/lib/notifications";
 import { OnboardingModal } from "@/components/onboarding-modal";
 import { AuthModal } from "@/components/auth-modal";
 import { HoldButton } from "@/components/ui/hold-button";
+import { FloatingOrbs } from "@/components/ui/floating-orbs";
+import { MouseSpotlight } from "@/components/ui/mouse-spotlight";
+import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 
 interface FeatureConfig {
   icon: React.ReactNode;
@@ -51,22 +56,22 @@ const features: FeatureConfig[] = [
     icon: <ArrowDownToLine className="w-full h-full" />,
     title: "Deposit",
     description: "BTC → zkBTC",
-    subtext: "Shield Bitcoin",
+    subtext: "Bridge & shield",
     href: "/vault/deposit",
     color: "btc",
   },
   {
     icon: <Send className="w-full h-full" />,
-    title: "Pay",
+    title: "Transfer",
     description: "Send zkBTC",
-    subtext: "Public or Private",
+    subtext: "Private payments",
     href: "/vault/pay",
     color: "privacy",
   },
   {
     icon: <Wallet className="w-full h-full" />,
-    title: "My Funds",
-    description: "All your zkBTC",
+    title: "Portfolio",
+    description: "Your notes",
     subtext: "View & spend",
     href: "/vault/activity",
     color: "privacy",
@@ -75,7 +80,7 @@ const features: FeatureConfig[] = [
     icon: <Search className="w-full h-full" />,
     title: "Explorer",
     description: "On-chain data",
-    subtext: "Commitments & proofs",
+    subtext: "Txns & proofs",
     href: "/explorer",
     color: "purple",
   },
@@ -168,53 +173,47 @@ export default function VaultPage() {
     : "";
 
   return (
-    <main className="min-h-screen bg-background relative overflow-hidden">
+    <main className="min-h-screen bg-background hacker-bg noise-overlay relative overflow-hidden">
+      <MouseSpotlight />
+      <SiteHeader />
       {/* Background effects */}
-      <div className="hacker-bg fixed inset-0 pointer-events-none" />
-      <div className="hacker-grid fixed inset-0 pointer-events-none opacity-30" />
+      <div className="hacker-grid fixed inset-0 pointer-events-none opacity-30 animate-grid-drift" />
+      <FloatingOrbs className="fixed" />
 
       {/* Content */}
-      <div className="relative z-10 flex flex-col items-center min-h-screen py-8 px-4 sm:py-12">
-        {/* Header */}
-        <div className="w-full max-w-[680px] mb-6 flex items-center justify-between">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-body2 text-gray hover:text-gray-light transition-colors cursor-pointer"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Home
-          </Link>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-btc/10 border border-btc/20 backdrop-blur-sm">
-              <BitcoinIcon className="w-3.5 h-3.5" />
-              <span className="text-caption text-btc font-semibold">BTC</span>
-            </div>
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-privacy/10 border border-privacy/20 backdrop-blur-sm">
-              <Shield className="w-3.5 h-3.5 text-privacy" />
-              <span className="text-caption text-privacy font-semibold">ZK</span>
-            </div>
-          </div>
-        </div>
+      <div className="relative z-10 flex flex-col items-center min-h-screen pt-24 pb-8 px-4">
 
         {/* Dashboard Container — glassmorphism card */}
-        <div
+        <motion.div
           className={cn(
-            "backdrop-blur-xl bg-card/80 border border-gray/20",
+            "glass-card-strong",
             "w-[680px] max-w-[calc(100vw-32px)] rounded-[24px]",
-            "shadow-[0_0_60px_rgba(20,241,149,0.04),0_0_120px_rgba(153,69,255,0.03)]",
             "p-4 sm:p-8"
           )}
+          initial={{ opacity: 0, y: 20, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
         >
-          {/* Title Section */}
-          <div className="text-center mb-6 sm:mb-8">
-            <h1 className="text-[22px] sm:text-[28px] font-bold text-foreground mb-2 tracking-tight">
-              <span className="bg-gradient-to-r from-privacy/90 to-privacy bg-clip-text text-transparent">
-                Private Bitcoin
-              </span>
-            </h1>
-            <p className="text-body2 text-gray">
-              Use Bitcoin natively &amp; privately on Solana
-            </p>
+          {/* Title Section — web3 dashboard style */}
+          <div className="flex items-center justify-between mb-6 sm:mb-8">
+            <div>
+              <h1 className="text-[20px] sm:text-[24px] font-bold text-foreground tracking-tight">
+                Vault
+              </h1>
+              <p className="text-caption text-gray">
+                Deposit, transfer &amp; withdraw private BTC
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-btc/10 border border-btc/20 backdrop-blur-sm">
+                <BitcoinIcon className="w-3 h-3" />
+                <span className="text-[10px] text-btc font-semibold">BTC</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-privacy/10 border border-privacy/20 backdrop-blur-sm">
+                <Shield className="w-3 h-3 text-privacy" />
+                <span className="text-[10px] text-privacy font-semibold">ZK</span>
+              </div>
+            </div>
           </div>
 
           {/* Stealth Address Section */}
@@ -249,23 +248,27 @@ export default function VaultPage() {
 
             {!keys && !isViewOnly ? (
               <div className="text-center py-6">
-                <p className="text-body2 text-gray mb-1.5">
-                  Unlock your vault to send and receive private Bitcoin
+                <div className="w-14 h-14 rounded-2xl bg-privacy/10 border border-privacy/20 flex items-center justify-center mx-auto mb-4">
+                  <Key className="w-6 h-6 text-privacy" />
+                </div>
+                <p className="text-body2 text-foreground mb-1">
+                  Connect to Start
                 </p>
                 <p className="text-caption text-gray/60 mb-5">
-                  Use a passkey or wallet to access your funds securely
+                  Use a passkey or Solana wallet to derive your private keys
                 </p>
                 <button
                   onClick={() => setAuthModalOpen(true)}
                   className={cn(
-                    "inline-flex items-center gap-2 px-6 py-3 rounded-[12px]",
+                    "inline-flex items-center gap-2 px-7 py-3 rounded-full",
                     "bg-privacy hover:bg-privacy/80",
-                    "text-body2 text-background font-medium transition-all duration-200 cursor-pointer",
-                    "hover:shadow-[0_0_24px_rgba(20,241,149,0.2)]"
+                    "text-body2 text-background font-semibold transition-all duration-200 cursor-pointer",
+                    "hover:shadow-[0_0_24px_rgba(20,241,149,0.25)]",
+                    "active:scale-95"
                   )}
                 >
                   <Key className="w-4 h-4" />
-                  Unlock Vault
+                  Connect &amp; Unlock
                 </button>
               </div>
             ) : isViewOnly ? (
@@ -538,19 +541,28 @@ export default function VaultPage() {
             ))}
           </div>
 
-          {/* Info Section */}
-          <div className="p-4 bg-privacy/5 border border-privacy/10 rounded-[12px] mb-5">
-            <div className="flex items-start gap-3">
-              <Shield className="w-5 h-5 text-privacy shrink-0 mt-0.5" />
-              <div>
-                <p className="text-body2-semibold text-privacy mb-1">
-                  Privacy Preserving Vault
-                </p>
-                <p className="text-caption text-gray">
-                  Your deposits and withdrawals are protected by zero-knowledge proofs.
-                  No one can link your Bitcoin deposits to zkBTC claims.
-                </p>
-              </div>
+          {/* Quick guide for web3 users */}
+          <div className="p-4 bg-muted/40 border border-gray/10 rounded-[12px] mb-5 space-y-2.5">
+            <p className="text-caption font-semibold text-foreground flex items-center gap-2">
+              <Shield className="w-3.5 h-3.5 text-privacy" />
+              How Private Bitcoin Works
+            </p>
+            <div className="space-y-2">
+              {[
+                { step: "1", label: "Deposit BTC", sub: "Send to Taproot address" },
+                { step: "2", label: "Get zkBTC", sub: "Shielded via ZK proof" },
+                { step: "3", label: "Use Privately", sub: "Transfer or withdraw" },
+              ].map((s, i) => (
+                <div key={s.step} className="flex items-center gap-3">
+                  <span className="text-lg font-bold font-mono text-privacy/50 w-6 shrink-0">{s.step}</span>
+                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                    <span className="text-[12px] font-medium text-foreground">{s.label}</span>
+                    <span className="text-[10px] text-gray/40">—</span>
+                    <span className="text-[10px] text-gray/50">{s.sub}</span>
+                  </div>
+                  {i < 2 && <ChevronRight className="w-3 h-3 text-gray/20 shrink-0" />}
+                </div>
+              ))}
             </div>
           </div>
 
@@ -562,26 +574,9 @@ export default function VaultPage() {
             </span>
           </div>
 
-          {/* Footer */}
-          <div className="flex flex-row justify-between items-center gap-2 mt-6 text-gray pt-4 border-t border-gray/10">
-            <div className="flex flex-row items-center gap-4">
-              <a
-                href="/docs"
-                className="hover:text-gray-light transition-colors text-caption cursor-pointer"
-              >
-                Private Bitcoin
-              </a>
-              <a
-                href="/docs"
-                className="hover:text-gray-light transition-colors text-caption cursor-pointer"
-              >
-                Docs
-              </a>
-            </div>
-            <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption text-gray/50 hover:text-gray-light transition-colors flex items-center gap-1.5">Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network</a>
-          </div>
-        </div>
+        </motion.div>
       </div>
+      <SiteFooter />
 
       {/* First-time user onboarding */}
       <OnboardingModal />

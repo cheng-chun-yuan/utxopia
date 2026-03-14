@@ -26,7 +26,6 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::debug_msg;
 use crate::error::AegisError;
 use crate::state::{
     PoolState, RedemptionRequest, RedemptionStatus,
@@ -104,7 +103,6 @@ pub fn process_public_redeem(
 
         // Verify zkbtc_mint matches pool
         if zkbtc_mint.key().as_ref() != pool.zkbtc_mint {
-            debug_msg!("zkBTC mint mismatch");
             return Err(ProgramError::InvalidAccountData);
         }
 
@@ -122,8 +120,6 @@ pub fn process_public_redeem(
     // Burn tokens — user signs as authority (no PDA signer needed)
     burn_zkbtc(token_program, zkbtc_mint, user_token_account, user, amount_sats)?;
 
-    debug_msg!("Public redeem: burned tokens");
-
     // Create RedemptionRequest PDA
     let clock = Clock::get()?;
     let rent = Rent::get()?;
@@ -137,7 +133,6 @@ pub fn process_public_redeem(
     let (expected_redemption_pda, redemption_bump) =
         find_program_address(redemption_seeds, program_id);
     if redemption_request_info.key() != &expected_redemption_pda {
-        debug_msg!("Invalid redemption request PDA");
         return Err(ProgramError::InvalidSeeds);
     }
 
@@ -194,6 +189,6 @@ pub fn process_public_redeem(
         pool.set_last_update(clock.unix_timestamp);
     }
 
-    debug_msg!("Public redeem completed");
+    pinocchio::msg!("Aegis: public redeem");
     Ok(())
 }

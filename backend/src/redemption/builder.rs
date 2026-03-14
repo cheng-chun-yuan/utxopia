@@ -27,8 +27,10 @@ pub struct TxBuilder {
     network: Network,
     /// Default fee rate (sats/vbyte)
     default_fee_rate: u64,
-    /// Flat service fee per withdrawal (sats)
-    service_fee_sats: u64,
+    /// Base service fee per withdrawal (sats)
+    service_fee_base: u64,
+    /// Service fee in basis points (0.01% units)
+    service_fee_bps: u16,
 }
 
 impl TxBuilder {
@@ -37,7 +39,8 @@ impl TxBuilder {
         Self {
             network,
             default_fee_rate: 10,
-            service_fee_sats: 0,
+            service_fee_base: 0,
+            service_fee_bps: 0,
         }
     }
 
@@ -51,9 +54,26 @@ impl TxBuilder {
         self.default_fee_rate = rate;
     }
 
-    /// Set service fee
-    pub fn set_service_fee(&mut self, fee: u64) {
-        self.service_fee_sats = fee;
+    /// Get current service fee bps
+    pub fn service_fee_bps(&self) -> u16 {
+        self.service_fee_bps
+    }
+
+    /// Get current service fee base
+    pub fn service_fee_base(&self) -> u64 {
+        self.service_fee_base
+    }
+
+    /// Set service fee with percentage + base model
+    pub fn set_service_fee_model(&mut self, bps: u16, base: u64) {
+        self.service_fee_bps = bps;
+        self.service_fee_base = base;
+    }
+
+    /// Compute total service fee for a given amount
+    fn compute_service_fee(&self, amount: u64) -> u64 {
+        let pct_fee = (amount as u128 * self.service_fee_bps as u128 / 10_000) as u64;
+        pct_fee.saturating_add(self.service_fee_base)
     }
 
     /// Build an unsigned withdrawal transaction with UTXO selection and change output.
@@ -68,10 +88,23 @@ impl TxBuilder {
             .require_network(self.network)
             .map_err(|e| BuilderError::InvalidAddress(e.to_string()))?;
 
-        // send_amount = amount_sats - service_fee - miner_fee
-        // UTXO selection: sort by value descending, pick enough to cover the full amount
-        let after_service_fee = request.amount_sats.saturating_sub(self.service_fee_sats);
+        // Use PDA's locked service_fee if available (source of truth), else compute from pool config
+        let service_fee = request.pda_service_fee
+            .unwrap_or_else(|| self.compute_service_fee(request.amount_sats));
+        let send_amount = request.amount_sats.saturating_sub(service_fee);
 
+        let dust = dust_threshold();
+        if send_amount < dust {
+            return Err(BuilderError::AmountTooSmall {
+                send: send_amount,
+                dust,
+                request: request.amount_sats,
+                service_fee,
+                miner_fee: 0,
+            });
+        }
+
+        // UTXO selection: sort by value descending, pick enough to cover send_amount + miner fee
         let mut sorted_utxos: Vec<&PoolUtxo> = utxos.iter().collect();
         sorted_utxos.sort_by(|a, b| b.amount_sats.cmp(&a.amount_sats));
 
@@ -86,8 +119,7 @@ impl TxBuilder {
             let estimated_vsize = 10 + (selected.len() * 58) + 43 + 43;
             let estimated_fee = (estimated_vsize as u64) * self.default_fee_rate;
 
-            // Pool UTXOs need to cover: after_service_fee (user receive + miner fee) + change
-            if selected_total >= after_service_fee + estimated_fee {
+            if selected_total >= send_amount + estimated_fee {
                 break;
             }
         }
@@ -96,22 +128,9 @@ impl TxBuilder {
         let estimated_vsize = 10 + (selected.len() * 58) + 43 + 43;
         let fee = (estimated_vsize as u64) * self.default_fee_rate;
 
-        // send_amount = amount_sats - service_fee - miner_fee
-        let send_amount = after_service_fee.saturating_sub(fee);
-        let dust = dust_threshold();
-        if send_amount < dust {
-            return Err(BuilderError::AmountTooSmall {
-                send: send_amount,
-                dust,
-                request: request.amount_sats,
-                service_fee: self.service_fee_sats,
-                miner_fee: fee,
-            });
-        }
-
-        if selected_total < after_service_fee {
+        if selected_total < send_amount + fee {
             return Err(BuilderError::InsufficientFunds {
-                required: after_service_fee,
+                required: send_amount + fee,
                 available: selected_total,
             });
         }
@@ -172,7 +191,7 @@ impl TxBuilder {
             utxos: selected_utxos,
             fee,
             send_amount,
-            service_fee: self.service_fee_sats,
+            service_fee,
             solana_verification: None,
         })
     }

@@ -4,7 +4,7 @@ import { Clock, CheckCircle2, Loader2, AlertCircle, ExternalLink, Bitcoin } from
 import { cn } from "@/lib/utils";
 import { formatBtc, truncateMiddle } from "@/lib/utils/formatting";
 import { useAegisStore, type ActiveWithdrawal, type WithdrawalStatus } from "@/stores/aegis-store";
-import { DEVNET_CONFIG } from "@aegis/sdk";
+import { getConfig } from "@aegis/sdk";
 
 const STATUS_CONFIG: Record<WithdrawalStatus, {
   label: string;
@@ -48,7 +48,7 @@ function WithdrawalCard({ withdrawal }: { withdrawal: ActiveWithdrawal }) {
   const config = STATUS_CONFIG[withdrawal.status];
   const Icon = config.icon;
   const isAnimating = withdrawal.status === "processing" || withdrawal.status === "broadcasting";
-  const esploraUrl = DEVNET_CONFIG.esploraUrl.replace("/api", "");
+  const esploraUrl = getConfig().esploraUrl.replace("/api", "");
 
   return (
     <div className="p-4 rounded-[12px] border border-gray/15 bg-muted">

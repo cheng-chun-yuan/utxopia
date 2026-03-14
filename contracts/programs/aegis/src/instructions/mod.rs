@@ -42,7 +42,6 @@ pub mod register_deposit_intent;
 pub mod verify_deposit_v2;
 
 // Admin utilities
-pub mod admin_close_pda;
 pub mod admin_update_pool; // propose/execute/cancel pool updates (timelocked)
 
 // VK registry (deployment)
@@ -62,6 +61,5 @@ pub use public_redeem::*;
 pub use add_demo_stealth::*;
 pub use register_deposit_intent::*;
 pub use verify_deposit_v2::*;
-pub use admin_close_pda::*;
 pub use admin_update_pool::*;
 pub use init_vk_registry::*;

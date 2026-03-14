@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, Suspense, useCallback, Fragment } from "react";
-import Link from "next/link";
 import Image from "next/image";
 import {
   ArrowDownToLine,
@@ -19,6 +18,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatBtc } from "@/lib/utils/formatting";
 import { CopyButton } from "@/components/ui/copy-button";
 import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
 import {
@@ -27,6 +27,8 @@ import {
   useRedemptions,
 } from "@/hooks/use-explorer";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
+import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 
 // =============================================================================
 // Helpers
@@ -429,14 +431,13 @@ function DepositsTab() {
               <Th>Source</Th>
               <Th>Destination</Th>
               <Th>Amount</Th>
-              <Th>Leaf</Th>
               <Th>Time</Th>
               <Th className="w-[40px]" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray/10">
-            {deposits.map((d) => {
-              const depositKey = d.commitment || d.btcTxid || d.taprootAddress || d.txSignature || `idx-${d.leafIndex}`;
+            {deposits.map((d, i) => {
+              const depositKey = d.btcTxid || d.txSignature || d.taprootAddress || `${d.commitment}-${d.leafIndex ?? i}`;
               const isOpen = expanded.has(depositKey);
               const canExpand = !d.isDemo;
 
@@ -486,13 +487,6 @@ function DepositsTab() {
                     </Td>
                     <Td>
                       <span className="text-body2 text-foreground font-mono">{d.amountSats.toLocaleString()} <span className="text-gray text-caption">sats</span></span>
-                    </Td>
-                    <Td>
-                      {d.leafIndex >= 0 ? (
-                        <span className="text-caption text-foreground font-mono">#{d.leafIndex}</span>
-                      ) : (
-                        <span className="text-caption text-gray">—</span>
-                      )}
                     </Td>
                     <Td>
                       <span className="text-caption text-gray">{timeAgo(d.timestamp)}</span>
@@ -608,26 +602,32 @@ function TransfersTab() {
                       </div>
                     </Td>
                     <Td>
-                      <span className="inline-flex items-center gap-1 text-caption text-green-400/80 bg-green-500/6 border border-green-500/15 px-2 py-0.5 rounded-full">
+                      <span className="inline-flex items-center gap-1 text-caption text-green-400/70 bg-green-500/6 border border-green-500/12 px-2 py-0.5 rounded-full">
                         <span className="font-mono">{tx.inputCount}</span>
                         <span className="hidden sm:inline">input{tx.inputCount !== 1 ? "s" : ""}</span>
                       </span>
                     </Td>
                     <Td>
                       {tx.instructionDisc === 15 || tx.instructionDisc === 16 || tx.instructionDisc === 5 || (tx.operationType === 0 && tx.instructionDisc !== 15) ? (
-                        <span className="inline-flex items-center gap-1 text-caption text-purple-400/80 bg-purple-500/6 border border-purple-500/15 px-2 py-0.5 rounded-full">
+                        <span className="inline-flex items-center gap-1 text-caption text-purple-400/70 bg-purple-500/6 border border-purple-500/12 px-2 py-0.5 rounded-full">
                           <span className="font-mono">{1 + tx.outputs.length}</span>
                           <span className="hidden sm:inline">output{tx.outputs.length > 0 ? "s" : ""}</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-caption text-purple-400/80 bg-purple-500/6 border border-purple-500/15 px-2 py-0.5 rounded-full">
+                        <span className="inline-flex items-center gap-1 text-caption text-purple-400/70 bg-purple-500/6 border border-purple-500/12 px-2 py-0.5 rounded-full">
                           <span className="font-mono">{tx.outputs.length}</span>
                           <span className="hidden sm:inline">output{tx.outputs.length !== 1 ? "s" : ""}</span>
                         </span>
                       )}
                     </Td>
                     <Td>
-                      <span className="text-caption text-gray">{timeAgo(tx.timestamp)}</span>
+                      {tx.status === "processing" ? (
+                        <span className="inline-flex items-center gap-1 text-caption text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded-full animate-pulse">
+                          Processing
+                        </span>
+                      ) : (
+                        <span className="text-caption text-gray">{timeAgo(tx.timestamp)}</span>
+                      )}
                     </Td>
                     <Td>
                       <SolanaLink signature={tx.txSignature} />
@@ -715,10 +715,22 @@ function TransfersTab() {
                                 </div>
                                 {/* Shielded outputs (change) */}
                                 {tx.outputs.map((out, i) => (
-                                  <div key={out.leafIndex} className="group flex items-center gap-2 px-3 py-1.5 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-gray/15 transition-colors">
-                                    <span className="text-[10px] text-gray/40 font-mono w-4 shrink-0">{i + 2}</span>
-                                    <code className="text-[11px] font-mono text-foreground/60 truncate">{truncate(out.commitment, 8, 6)}</code>
-                                    <span className="text-[10px] text-gray/40 font-mono bg-gray/6 px-1 py-0.5 rounded shrink-0">#{out.leafIndex}</span>
+                                  <div key={out.leafIndex} className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-purple-500/4 border border-purple-500/10 hover:border-purple-500/20 transition-colors">
+                                    <span className="text-[10px] text-purple-400/60 font-mono font-semibold w-4 shrink-0">{i + 2}</span>
+                                    <code className="text-caption font-mono text-foreground/90 truncate">{truncate(out.commitment, 8, 6)}</code>
+                                    <span className="text-[10px] text-gray/50 font-mono bg-gray/8 px-1.5 py-0.5 rounded shrink-0">#{out.leafIndex}</span>
+                                    <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                                      <CopyButton text={out.commitment} label="Commitment" variant="default" iconSize="sm" />
+                                      <a
+                                        href={`https://explorer.solana.com/tx/${tx.txSignature}?cluster=devnet`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-sol hover:text-sol/80 transition-colors p-0.5"
+                                        title="View transaction"
+                                      >
+                                        <ExternalLink className="w-3 h-3" />
+                                      </a>
+                                    </div>
                                   </div>
                                 ))}
                               </div>
@@ -801,10 +813,22 @@ function TransfersTab() {
                                 </div>
                                 {/* Shielded outputs */}
                                 {tx.outputs.map((out, i) => (
-                                  <div key={out.leafIndex} className="group flex items-center gap-2 px-3 py-1.5 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-gray/15 transition-colors">
-                                    <span className="text-[10px] text-gray/40 font-mono w-4 shrink-0">{i + 2}</span>
-                                    <code className="text-[11px] font-mono text-foreground/60 truncate">{truncate(out.commitment, 8, 6)}</code>
-                                    <span className="text-[10px] text-gray/40 font-mono bg-gray/6 px-1 py-0.5 rounded shrink-0">#{out.leafIndex}</span>
+                                  <div key={out.leafIndex} className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-purple-500/4 border border-purple-500/10 hover:border-purple-500/20 transition-colors">
+                                    <span className="text-[10px] text-purple-400/60 font-mono font-semibold w-4 shrink-0">{i + 2}</span>
+                                    <code className="text-caption font-mono text-foreground/90 truncate">{truncate(out.commitment, 8, 6)}</code>
+                                    <span className="text-[10px] text-gray/50 font-mono bg-gray/8 px-1.5 py-0.5 rounded shrink-0">#{out.leafIndex}</span>
+                                    <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                                      <CopyButton text={out.commitment} label="Commitment" variant="default" iconSize="sm" />
+                                      <a
+                                        href={`https://explorer.solana.com/tx/${tx.txSignature}?cluster=devnet`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-sol hover:text-sol/80 transition-colors p-0.5"
+                                        title="View transaction"
+                                      >
+                                        <ExternalLink className="w-3 h-3" />
+                                      </a>
+                                    </div>
                                   </div>
                                 ))}
                               </div>
@@ -838,8 +862,9 @@ function TransfersTab() {
                                     </div>
                                   </div>
                                 )) : (
-                                  <div className="flex items-center justify-center py-4 text-caption text-gray/40">
-                                    No nullifiers (deposit claim)
+                                  <div className="flex items-center justify-center gap-2 px-3 py-3 rounded-[8px] bg-gray/4 border border-gray/8">
+                                    <Shield className="w-3.5 h-3.5 text-gray/30" />
+                                    <span className="text-caption text-gray/40">No nullifiers (deposit claim)</span>
                                   </div>
                                 )}
                               </div>
@@ -896,8 +921,13 @@ function TransfersTab() {
 
 const WITHDRAWAL_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; spinning?: boolean }> = {
   Pending: { label: "Pending", color: "text-orange-400", bg: "bg-orange-500/10 border-orange-500/20" },
+  Detected: { label: "Detected", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20", spinning: true },
   Processing: { label: "Processing", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20", spinning: true },
+  Signing: { label: "Signing", color: "text-purple-400", bg: "bg-purple-500/10 border-purple-500/20", spinning: true },
+  AwaitingConfirmation: { label: "Confirming", color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-500/20", spinning: true },
+  SpvVerified: { label: "Verified", color: "text-cyan-400", bg: "bg-cyan-500/10 border-cyan-500/20", spinning: true },
   Completed: { label: "Completed", color: "text-green-400", bg: "bg-green-500/10 border-green-500/20" },
+  Cancelled: { label: "Cancelled", color: "text-gray", bg: "bg-gray/10 border-gray/20" },
   Failed: { label: "Failed", color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" },
 };
 
@@ -923,24 +953,51 @@ function WithdrawalStatusBadge({ status }: { status: string }) {
 const WITHDRAWAL_STATUS_ORDER: Record<string, number> = {
   Pending: 0,
   pending: 0,
+  Detected: 1,
   processing: 1,
   Processing: 1,
+  Signing: 2,
   sending: 2,
+  AwaitingConfirmation: 3,
   sent: 3,
   confirming: 3,
+  SpvVerified: 3,
   completed: 4,
   Completed: 4,
+  Cancelled: -1,
   Failed: -1,
   failed: -1,
 };
 
 import type { RedemptionRecord } from "@/hooks/use-explorer";
 
+/** Derive effective status: if backend says Completed but no on-chain completion tx, use on-chain status */
+function getEffectiveStatus(r: RedemptionRecord): string {
+  const local = r.localStatus;
+  // Backend marked Completed but complete_redemption was never called (simulated or stale)
+  if (local === "Completed" && !r.completeTxSignature) {
+    return r.status ?? "Processing";
+  }
+  return local ?? r.status ?? "Pending";
+}
+
 function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
-  const status = redemption.localStatus ?? redemption.status ?? "Pending";
+  const status = getEffectiveStatus(redemption);
   const stepOrder = WITHDRAWAL_STATUS_ORDER[status] ?? 0;
   const isFailed = stepOrder === -1;
   const btcAddr = redemption.btcScript ? scriptToAddress(redemption.btcScript) : null;
+
+  // Fee calculations — prefer on-chain locked fee, fallback to pool config estimate
+  const amount = Number(redemption.amountSats);
+  const bps = redemption.serviceFeeBps ?? 0;
+  const base = redemption.serviceFeeBase ?? 0;
+  const serviceFee = redemption.serviceFee
+    ? Number(redemption.serviceFee)
+    : Math.floor(amount * bps / 10000) + base;
+  const expectedSend = amount - serviceFee;
+  const actualReceived = redemption.actualReceived ? Number(redemption.actualReceived) : null;
+  const minerFee = actualReceived !== null ? expectedSend - actualReceived : null;
+  const protocolRevenue = minerFee !== null ? serviceFee - minerFee : null;
 
   const steps = [
     {
@@ -985,7 +1042,11 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
           )}
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] text-gray">Amount</span>
-            <span className="text-[10px] font-mono text-foreground">{Number(redemption.amountSats).toLocaleString()} sats</span>
+            <span className="text-[10px] font-mono text-foreground">{amount.toLocaleString()} sats</span>
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] font-mono text-gray/70">
+            <span>Service fee: <span className="text-foreground/60">{serviceFee.toLocaleString()} sats</span>{!redemption.serviceFee && <span className="text-gray/50"> ({(bps / 100).toFixed(2)}% + {base.toLocaleString()} base)</span>}</span>
+            <span>Est. receive: <span className="text-green-400/70">{expectedSend.toLocaleString()} sats</span></span>
           </div>
         </div>
       ),
@@ -1022,24 +1083,42 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
       active: stepOrder === 2 && !isFailed,
       detail: redemption.btcTxid ? (
         <div className="space-y-1">
-          <div className="flex items-center gap-1.5">
-            <a
-              href={`${getMempoolExplorerUrl()}/tx/${redemption.btcTxid}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[11px] text-btc/70 hover:text-btc flex items-center gap-1 transition-colors"
-            >
-              BTC tx <ExternalLink className="w-2.5 h-2.5" />
-            </a>
-            <code className="text-[10px] font-mono text-gray">{truncate(redemption.btcTxid, 6, 4)}</code>
-            <CopyButton text={redemption.btcTxid} label="BTC TX" variant="default" iconSize="sm" />
-          </div>
+          {redemption.simulated ? (
+            <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+              Simulated
+            </span>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <a
+                href={`${getMempoolExplorerUrl()}/tx/${redemption.btcTxid}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-btc/70 hover:text-btc flex items-center gap-1 transition-colors"
+              >
+                BTC tx <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+              <code className="text-[10px] font-mono text-gray">{truncate(redemption.btcTxid, 6, 4)}</code>
+              <CopyButton text={redemption.btcTxid} label="BTC TX" variant="default" iconSize="sm" />
+            </div>
+          )}
           {btcAddr && (
             <div className="flex items-center gap-1.5">
               <BitcoinIcon className="w-3 h-3 text-btc/50" />
               <span className="text-[10px] text-gray">→</span>
               <code className="text-[10px] font-mono text-btc/70">{truncate(btcAddr, 8, 6)}</code>
               <CopyButton text={btcAddr} label="BTC Address" variant="default" iconSize="sm" />
+            </div>
+          )}
+          {actualReceived !== null ? (
+            <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] font-mono text-gray/70">
+              <span>Received: <span className="text-green-400/80">{actualReceived.toLocaleString()} sats</span></span>
+              <span>Service fee: <span className="text-foreground/60">{serviceFee.toLocaleString()} sats</span></span>
+              {minerFee !== null && <span>Miner fee: <span className="text-btc/70">{minerFee.toLocaleString()} sats</span></span>}
+              {protocolRevenue !== null && protocolRevenue > 0 && <span>Protocol: <span className="text-sol/70">+{protocolRevenue.toLocaleString()} sats</span></span>}
+            </div>
+          ) : (
+            <div className="mt-1.5 text-[10px] font-mono text-gray/70">
+              <span>{redemption.btcTxid ? "Receive" : "Est. receive"}: <span className="text-green-400/70">{expectedSend.toLocaleString()} sats</span></span>
             </div>
           )}
         </div>
@@ -1066,6 +1145,10 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
               <CopyButton text={redemption.completeTxSignature} label="Complete TX" variant="default" iconSize="sm" />
             </div>
           )}
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] font-mono text-gray/70">
+            <span>Burned: <span className="text-red-400/70">{amount.toLocaleString()} sats</span> from pool vault</span>
+            {protocolRevenue !== null && protocolRevenue > 0 && <span>Fee pool: <span className="text-sol/70">+{protocolRevenue.toLocaleString()} sats</span></span>}
+          </div>
         </div>
       ) : null,
     },
@@ -1159,15 +1242,16 @@ function WithdrawalsTab() {
             {redemptions.map((r) => {
               const btcAddr = r.btcScript ? scriptToAddress(r.btcScript) : null;
               const isBtcWithdraw = !!r.btcScript;
-              const isOpen = expanded.has(r.pubkey);
+              const rowKey = r.requestId || r.pubkey;
+              const isOpen = expanded.has(rowKey);
               return (
-                <Fragment key={r.pubkey}>
+                <Fragment key={rowKey}>
                   <tr
                     className="hover:bg-gray/5 transition-colors cursor-pointer"
-                    onClick={() => toggle(r.pubkey)}
+                    onClick={() => toggle(rowKey)}
                   >
                     <Td>
-                      <WithdrawalStatusBadge status={r.status} />
+                      <WithdrawalStatusBadge status={getEffectiveStatus(r)} />
                     </Td>
                     <Td>
                       <div className="flex items-center gap-1.5">
@@ -1187,11 +1271,21 @@ function WithdrawalsTab() {
                       </div>
                     </Td>
                     <Td>
-                      <div className="flex items-center gap-1.5">
-                        <BitcoinIcon className="w-3.5 h-3.5 text-btc" />
-                        <span className="text-body2 text-foreground font-mono">
-                          {(Number(r.amountSats) / 1e8).toFixed(8)}
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <BitcoinIcon className="w-3.5 h-3.5 text-btc" />
+                          <span className="text-body2 text-foreground font-mono">
+                            {Number(r.amountSats).toLocaleString()} <span className="text-[10px] text-gray">sats</span>
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-gray/60 font-mono pl-5">
+                          {formatBtc(Number(r.amountSats))}
                         </span>
+                        {r.actualReceived && r.status === "Completed" && Number(r.actualReceived) !== Number(r.amountSats) && (
+                          <span className="text-[10px] text-green-400/70 font-mono pl-5">
+                            received: {Number(r.actualReceived).toLocaleString()} sats
+                          </span>
+                        )}
                       </div>
                     </Td>
                     <Td>
@@ -1297,42 +1391,41 @@ function ExplorerContent() {
       <div className="mb-4">
         <TabBar activeTab={activeTab} onTabChange={setActiveTab} counts={counts} />
       </div>
-      {activeTab === "deposits" && <DepositsTab />}
-      {activeTab === "transfers" && <TransfersTab />}
-      {activeTab === "withdrawals" && <WithdrawalsTab />}
+      <div className="min-h-[40vh]">
+        {activeTab === "deposits" && <DepositsTab />}
+        {activeTab === "transfers" && <TransfersTab />}
+        {activeTab === "withdrawals" && <WithdrawalsTab />}
+      </div>
     </>
   );
 }
 
 export default function ExplorerPage() {
   return (
-    <main className="min-h-screen bg-background hacker-bg noise-overlay">
-      <div className="container mx-auto px-4 py-8 relative z-10 max-w-5xl">
-        {/* Header */}
-        <header className="flex items-center justify-between mb-8">
-          <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-            <div className="p-2 rounded-[12px] bg-linear-to-br from-btc/20 to-privacy/20 border border-btc/20">
-              <div className="relative">
-                <BitcoinIcon className="h-6 w-6 btc-glow" />
-                <Shield className="h-3 w-3 text-privacy absolute -bottom-1 -right-1" />
+    <main className="min-h-screen bg-background hacker-bg noise-overlay overflow-x-hidden">
+      <SiteHeader />
+      <div className="container mx-auto px-4 pt-24 pb-8 relative z-10 max-w-7xl">
+        {/* Title */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="h-px w-8 bg-gradient-to-r from-privacy/50 to-transparent" />
+            <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-privacy/60">On-Chain Data</span>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+            <div>
+              <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-foreground mb-1.5">Explorer</h1>
+              <p className="text-sm text-gray font-light">Browse all shielded pool activity — deposits, transfers &amp; withdrawals</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-privacy/5 border border-privacy/15">
+                <Shield className="w-3 h-3 text-privacy" />
+                <span className="text-[10px] font-mono text-privacy/70">Shielded Pool</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted/30 border border-gray/10">
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+                <span className="text-[10px] font-mono text-gray/50">Devnet</span>
               </div>
             </div>
-            <span className="text-heading6 text-foreground">Private Bitcoin</span>
-          </Link>
-          <div className="flex items-center gap-4">
-            <Link href="/vault" className="text-body2 text-gray hover:text-gray-light transition-colors">Vault</Link>
-            <Link href="/docs" className="text-body2 text-gray hover:text-gray-light transition-colors">Docs</Link>
-          </div>
-        </header>
-
-        {/* Title */}
-        <div className="mb-8 flex items-center gap-3">
-          <div className="p-2.5 rounded-[12px] bg-linear-to-br from-privacy/15 to-purple-500/10 border border-privacy/20">
-            <Search className="w-5 h-5 text-privacy" />
-          </div>
-          <div>
-            <h1 className="text-heading5 text-foreground">Explorer</h1>
-            <p className="text-caption text-gray">Browse all on-chain Private Bitcoin activity on Solana devnet</p>
           </div>
         </div>
 
@@ -1341,7 +1434,7 @@ export default function ExplorerPage() {
         </Suspense>
 
         {/* Privacy Note */}
-        <div className="mt-6 p-3 bg-privacy/5 border border-privacy/15 rounded-[12px]">
+        <div className="mt-6 p-3 glass-card border-privacy/15 rounded-[16px]">
           <div className="flex items-center gap-2 mb-1">
             <Shield className="w-4 h-4 text-privacy" />
             <span className="text-caption text-privacy">Privacy Preserved</span>
@@ -1352,15 +1445,8 @@ export default function ExplorerPage() {
           </p>
         </div>
 
-        <footer className="mt-8 pt-6 border-t border-gray/15">
-          <div className="flex justify-between items-center">
-            <Link href="/" className="text-caption text-gray hover:text-gray-light transition-colors">Private Bitcoin</Link>
-            <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption text-gray hover:text-gray-light transition-colors flex items-center gap-1.5">
-              Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network
-            </a>
-          </div>
-        </footer>
       </div>
+      <SiteFooter />
     </main>
   );
 }
