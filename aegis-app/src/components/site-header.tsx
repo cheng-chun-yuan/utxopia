@@ -28,7 +28,7 @@ export function SiteHeader() {
               <BitcoinIcon className="h-3.5 w-3.5 btc-glow" />
               <Shield className="h-2 w-2 text-privacy absolute -bottom-0.5 -right-0.5" />
             </motion.div>
-            <span className="text-[13px] font-semibold tracking-tight text-foreground group-hover:text-privacy transition-colors">
+            <span className="text-sm font-semibold tracking-tight text-foreground group-hover:text-privacy transition-colors">
               Private Bitcoin
             </span>
           </Link>
@@ -42,7 +42,7 @@ export function SiteHeader() {
               <motion.div key={href} whileHover={{ y: -1 }}>
                 <Link
                   href={href}
-                  className="text-[11px] font-medium text-gray hover:text-foreground transition-all"
+                  className="text-xs font-medium text-gray hover:text-foreground transition-all"
                 >
                   {label}
                 </Link>
@@ -55,7 +55,7 @@ export function SiteHeader() {
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Link
                 href="/vault"
-                className="inline-flex items-center gap-1.5 text-[10px] font-semibold border border-btc/20 px-4 py-1.5 rounded-full transition-all text-btc bg-btc/5 hover:bg-btc/10 hover:border-btc/40 hover:shadow-[0_0_15px_rgba(247,147,26,0.15)]"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold border border-btc/10 px-4 py-1.5 rounded-full transition-all text-btc bg-btc/10 hover:bg-btc/10 hover:border-btc/30 hover:shadow-[0_0_15px_rgba(247,147,26,0.15)]"
               >
                 <BitcoinIcon className="w-3 h-3" />
                 Launch App
@@ -96,17 +96,16 @@ export function SiteHeader() {
             >
               <div className="space-y-1">
                 {[
-                  { href: "/vault", label: "Launch App", icon: <BitcoinIcon className="w-4 h-4 text-btc" /> },
-                  { href: "/explorer", label: "Explorer", icon: null },
-                  { href: "/docs", label: "Docs", icon: null },
-                ].map(({ href, label, icon }) => (
+                  { href: "/vault", label: "Vault" },
+                  { href: "/explorer", label: "Explorer" },
+                  { href: "/docs", label: "Docs" },
+                ].map(({ href, label }) => (
                   <Link
                     key={href}
                     href={href}
                     onClick={() => setMobileOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-gray-light hover:text-foreground hover:bg-muted/50 transition-colors"
+                    className="flex items-center px-4 py-3 rounded-xl text-sm font-medium text-gray-light hover:text-foreground hover:bg-muted/50 transition-colors"
                   >
-                    {icon && icon}
                     {label}
                   </Link>
                 ))}

@@ -32,7 +32,7 @@ export function SiteFooter() {
           <span>ZK-Proven Privacy for Bitcoin on Solana</span>
         </div>
 
-        <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption text-gray/50 hover:text-gray-light transition-all hover:-translate-y-0.5 flex items-center gap-1.5">
+        <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption text-gray/60 hover:text-gray-light transition-all hover:-translate-y-0.5 flex items-center gap-1.5">
           Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network
         </a>
       </motion.div>
