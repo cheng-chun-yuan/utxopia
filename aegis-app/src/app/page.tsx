@@ -19,8 +19,8 @@ import { MouseSpotlight } from "@/components/ui/mouse-spotlight";
 
 /* Privacy: animated encrypted transaction stream */
 const PrivacyViz = () => (
-  <div className="flex-1 w-full rounded-xl border border-gray/10 bg-muted/20 flex flex-col items-center justify-center gap-3 p-6 group-hover:border-privacy/15 transition-colors overflow-hidden relative">
-    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(20,241,149,0.04),transparent)] opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+  <div className="flex-1 w-full rounded-xl border border-privacy/10 md:border-gray/10 bg-muted/20 flex flex-col items-center justify-center gap-3 p-6 group-hover:border-privacy/15 transition-colors overflow-hidden relative">
+    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(20,241,149,0.04),transparent)] md:opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
     {/* Encrypted rows */}
     <div className="w-full space-y-2.5 z-10">
       {[
@@ -30,69 +30,69 @@ const PrivacyViz = () => (
       ].map((row, i) => (
         <div
           key={i}
-          className="flex items-center justify-between px-3 py-2 rounded-lg bg-background/40 border border-gray/5 group-hover:border-privacy/10 transition-all duration-500"
+          className="flex items-center justify-between px-3 py-2 rounded-lg bg-background/40 border border-privacy/10 md:border-gray/5 group-hover:border-privacy/10 transition-all duration-500"
           style={{ transitionDelay: `${row.delay}ms` }}
         >
-          <span className="text-[10px] font-mono text-gray/30 group-hover:text-privacy/40 transition-colors duration-500">
-            {row.fromStart}<span className="inline-block group-hover:blur-[4px] group-hover:text-privacy/80 transition-all duration-700" style={{ transitionDelay: `${row.delay + 50}ms` }}>{row.fromMid}</span>{row.fromEnd}
+          <span className="text-[10px] font-mono text-privacy/40 md:text-gray/30 group-hover:text-privacy/40 transition-colors duration-500">
+            {row.fromStart}<span className="inline-block blur-[4px] text-privacy/80 md:blur-0 md:text-inherit group-hover:blur-[4px] group-hover:text-privacy/80 transition-all duration-700" style={{ transitionDelay: `${row.delay + 50}ms` }}>{row.fromMid}</span>{row.fromEnd}
           </span>
-          <span className="text-[8px] text-gray/15 group-hover:text-privacy/25 transition-colors">→</span>
-          <span className="text-[10px] font-mono text-gray/30 group-hover:text-privacy/40 transition-colors duration-500">
-            {row.toStart}<span className="inline-block group-hover:blur-[4px] group-hover:text-privacy/80 transition-all duration-700" style={{ transitionDelay: `${row.delay + 80}ms` }}>{row.toMid}</span>{row.toEnd}
+          <span className="text-[8px] text-privacy/25 md:text-gray/15 group-hover:text-privacy/25 transition-colors">→</span>
+          <span className="text-[10px] font-mono text-privacy/40 md:text-gray/30 group-hover:text-privacy/40 transition-colors duration-500">
+            {row.toStart}<span className="inline-block blur-[4px] text-privacy/80 md:blur-0 md:text-inherit group-hover:blur-[4px] group-hover:text-privacy/80 transition-all duration-700" style={{ transitionDelay: `${row.delay + 80}ms` }}>{row.toMid}</span>{row.toEnd}
           </span>
-          <span className="text-[10px] font-mono text-gray/30 group-hover:text-privacy/80 group-hover:blur-[4px] transition-all duration-700" style={{ transitionDelay: `${row.delay + 100}ms` }}>{row.amt}</span>
+          <span className="text-[10px] font-mono text-privacy/80 blur-[4px] md:blur-0 md:text-gray/30 group-hover:text-privacy/80 group-hover:blur-[4px] transition-all duration-700" style={{ transitionDelay: `${row.delay + 100}ms` }}>{row.amt}</span>
         </div>
       ))}
     </div>
     <div className="flex items-center gap-2 z-10 mt-1">
-      <div className="w-1.5 h-1.5 rounded-full bg-privacy/30 group-hover:bg-privacy/60 group-hover:animate-pulse transition-all duration-500" />
-      <span className="text-[9px] font-mono text-gray/20 group-hover:text-privacy/40 transition-colors duration-500">addresses & amounts hidden by ZK proof</span>
+      <div className="w-1.5 h-1.5 rounded-full bg-privacy/60 md:bg-privacy/30 group-hover:bg-privacy/60 group-hover:animate-pulse transition-all duration-500" />
+      <span className="text-[9px] font-mono text-privacy/40 md:text-gray/20 group-hover:text-privacy/40 transition-colors duration-500">addresses & amounts hidden by ZK proof</span>
     </div>
   </div>
 );
 
 /* 1:1 Backed: BTC vault visualization */
 const BackedViz = () => (
-  <div className="flex-1 w-full rounded-xl border border-gray/10 bg-muted/20 flex flex-col items-center justify-center gap-4 p-6 group-hover:border-btc/15 transition-colors relative overflow-hidden">
-    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(247,147,26,0.04),transparent)] opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+  <div className="flex-1 w-full rounded-xl border border-btc/10 md:border-gray/10 bg-muted/20 flex flex-col items-center justify-center gap-4 p-6 group-hover:border-btc/15 transition-colors relative overflow-hidden">
+    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(247,147,26,0.04),transparent)] md:opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
     {/* Vault lock visual */}
     <div className="flex items-center gap-6 z-10">
       <div className="flex flex-col items-center gap-2">
-        <div className="w-14 h-14 rounded-2xl border border-gray/10 bg-background/40 flex items-center justify-center group-hover:border-btc/25 transition-all duration-500">
-          <Bitcoin className="w-7 h-7 text-gray/20 group-hover:text-btc/70 transition-all duration-500" />
+        <div className="w-14 h-14 rounded-2xl border border-btc/25 md:border-gray/10 bg-background/40 flex items-center justify-center group-hover:border-btc/25 transition-all duration-500">
+          <Bitcoin className="w-7 h-7 text-btc/70 md:text-gray/20 group-hover:text-btc/70 transition-all duration-500" />
         </div>
-        <span className="text-[10px] font-mono text-gray/25 group-hover:text-btc/50 transition-colors duration-500">1 BTC</span>
+        <span className="text-[10px] font-mono text-btc/50 md:text-gray/25 group-hover:text-btc/50 transition-colors duration-500">1 BTC</span>
       </div>
       {/* Connecting bridge */}
       <div className="flex flex-col items-center gap-1">
         <div className="flex items-center gap-1">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="w-2 h-0.5 rounded-full bg-gray/10 group-hover:bg-btc/40 transition-all duration-500" style={{ transitionDelay: `${i * 80}ms` }} />
+            <div key={i} className="w-2 h-0.5 rounded-full bg-btc/40 md:bg-gray/10 group-hover:bg-btc/40 transition-all duration-500" style={{ transitionDelay: `${i * 80}ms` }} />
           ))}
-          <Lock className="w-3.5 h-3.5 text-gray/15 group-hover:text-btc/50 transition-all duration-500" />
+          <Lock className="w-3.5 h-3.5 text-btc/50 md:text-gray/15 group-hover:text-btc/50 transition-all duration-500" />
           {[0, 1, 2].map((i) => (
-            <div key={i} className="w-2 h-0.5 rounded-full bg-gray/10 group-hover:bg-btc/40 transition-all duration-500" style={{ transitionDelay: `${(i + 3) * 80}ms` }} />
+            <div key={i} className="w-2 h-0.5 rounded-full bg-btc/40 md:bg-gray/10 group-hover:bg-btc/40 transition-all duration-500" style={{ transitionDelay: `${(i + 3) * 80}ms` }} />
           ))}
         </div>
-        <span className="text-[8px] text-gray/15 group-hover:text-btc/30 transition-colors duration-500">escrow</span>
+        <span className="text-[8px] text-btc/30 md:text-gray/15 group-hover:text-btc/30 transition-colors duration-500">escrow</span>
       </div>
       <div className="flex flex-col items-center gap-2">
-        <div className="w-14 h-14 rounded-2xl border border-gray/10 bg-background/40 flex items-center justify-center group-hover:border-btc/25 transition-all duration-500">
-          <Shield className="w-7 h-7 text-gray/20 group-hover:text-btc/70 transition-all duration-500" />
+        <div className="w-14 h-14 rounded-2xl border border-btc/25 md:border-gray/10 bg-background/40 flex items-center justify-center group-hover:border-btc/25 transition-all duration-500">
+          <Shield className="w-7 h-7 text-btc/70 md:text-gray/20 group-hover:text-btc/70 transition-all duration-500" />
         </div>
-        <span className="text-[10px] font-mono text-gray/25 group-hover:text-btc/50 transition-colors duration-500">1 zkBTC</span>
+        <span className="text-[10px] font-mono text-btc/50 md:text-gray/25 group-hover:text-btc/50 transition-colors duration-500">1 zkBTC</span>
       </div>
     </div>
     <div className="flex items-center gap-2 z-10">
-      <span className="text-[9px] font-mono text-gray/20 group-hover:text-btc/40 transition-colors duration-500">fully collateralized 1:1</span>
+      <span className="text-[9px] font-mono text-btc/40 md:text-gray/20 group-hover:text-btc/40 transition-colors duration-500">fully collateralized 1:1</span>
     </div>
   </div>
 );
 
 /* Fast: speed metrics dashboard */
 const SpeedViz = () => (
-  <div className="flex-1 w-full rounded-xl border border-gray/10 bg-muted/20 flex flex-col items-center justify-center gap-4 p-6 group-hover:border-sol/15 transition-colors relative overflow-hidden">
-    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(153,69,255,0.04),transparent)] opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+  <div className="flex-1 w-full rounded-xl border border-sol/10 md:border-gray/10 bg-muted/20 flex flex-col items-center justify-center gap-4 p-6 group-hover:border-sol/15 transition-colors relative overflow-hidden">
+    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(153,69,255,0.04),transparent)] md:opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
     {/* Speed metrics */}
     <div className="w-full space-y-3 z-10">
       {[
@@ -102,12 +102,12 @@ const SpeedViz = () => (
       ].map((metric, i) => (
         <div key={metric.label} className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-mono text-gray/25 group-hover:text-sol/40 transition-colors duration-500" style={{ transitionDelay: `${i * 80}ms` }}>{metric.label}</span>
-            <span className="text-[10px] font-mono text-gray/20 group-hover:text-sol/50 transition-colors duration-500" style={{ transitionDelay: `${i * 80}ms` }}>{metric.value}</span>
+            <span className="text-[10px] font-mono text-sol/40 md:text-gray/25 group-hover:text-sol/40 transition-colors duration-500" style={{ transitionDelay: `${i * 80}ms` }}>{metric.label}</span>
+            <span className="text-[10px] font-mono text-sol/50 md:text-gray/20 group-hover:text-sol/50 transition-colors duration-500" style={{ transitionDelay: `${i * 80}ms` }}>{metric.value}</span>
           </div>
           <div className="w-full h-1.5 rounded-full bg-background/40 overflow-hidden">
             <div
-              className="h-full rounded-full bg-gray/10 group-hover:bg-sol/40 transition-all duration-700 ease-out"
+              className="h-full rounded-full bg-sol/40 md:bg-gray/10 group-hover:bg-sol/40 transition-all duration-700 ease-out"
               style={{ width: `0%`, transitionDelay: `${i * 120}ms` }}
               ref={(el) => {
                 if (el) {
@@ -123,18 +123,18 @@ const SpeedViz = () => (
       ))}
     </div>
     <div className="flex items-center gap-2 z-10 mt-1">
-      <Zap className="w-3 h-3 text-gray/20 group-hover:text-sol/50 transition-colors duration-500" />
-      <span className="text-[9px] font-mono text-gray/20 group-hover:text-sol/40 transition-colors duration-500">Solana 65k TPS</span>
+      <Zap className="w-3 h-3 text-sol/50 md:text-gray/20 group-hover:text-sol/50 transition-colors duration-500" />
+      <span className="text-[9px] font-mono text-sol/40 md:text-gray/20 group-hover:text-sol/40 transition-colors duration-500">Solana 65k TPS</span>
     </div>
   </div>
 );
 
 /* OFAC: compliance scan visualization */
 const ComplianceViz = () => (
-  <div className="flex-1 w-full rounded-xl border border-gray/10 bg-muted/20 flex flex-col items-center justify-center gap-3 p-6 group-hover:border-cyan/15 transition-colors relative overflow-hidden">
+  <div className="flex-1 w-full rounded-xl border border-cyan/10 md:border-gray/10 bg-muted/20 flex flex-col items-center justify-center gap-3 p-6 group-hover:border-cyan/15 transition-colors relative overflow-hidden">
     {/* Scanning sweep */}
-    <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-      <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-cyan/5 to-transparent group-hover:animate-[sweep_2s_ease-in-out_infinite]" />
+    <div className="absolute inset-0 md:opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+      <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-cyan/5 to-transparent animate-[sweep_2s_ease-in-out_infinite] md:animate-none group-hover:animate-[sweep_2s_ease-in-out_infinite]" />
     </div>
     {/* Checklist items */}
     <div className="w-full space-y-2.5 z-10">
@@ -145,32 +145,32 @@ const ComplianceViz = () => (
       ].map((item, i) => (
         <div
           key={item.label}
-          className="flex items-center justify-between px-3 py-2 rounded-lg bg-background/40 border border-gray/5 group-hover:border-cyan/10 transition-all duration-500"
+          className="flex items-center justify-between px-3 py-2 rounded-lg bg-background/40 border border-cyan/10 md:border-gray/5 group-hover:border-cyan/10 transition-all duration-500"
           style={{ transitionDelay: `${i * 100}ms` }}
         >
           <div className="flex items-center gap-2">
             <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-all duration-500 ${
               item.checked
-                ? "border-gray/15 group-hover:border-cyan/40 group-hover:bg-cyan/15"
-                : "border-gray/10 group-hover:border-gray/20"
+                ? "border-cyan/40 bg-cyan/15 md:border-gray/15 md:bg-transparent group-hover:border-cyan/40 group-hover:bg-cyan/15"
+                : "border-gray/20 md:border-gray/10 group-hover:border-gray/20"
             }`}>
               {item.checked && (
-                <span className="text-[8px] text-transparent group-hover:text-cyan/70 transition-colors duration-500" style={{ transitionDelay: `${i * 150 + 200}ms` }}>✓</span>
+                <span className="text-[8px] text-cyan/70 md:text-transparent group-hover:text-cyan/70 transition-colors duration-500" style={{ transitionDelay: `${i * 150 + 200}ms` }}>✓</span>
               )}
             </div>
-            <span className="text-[10px] font-mono text-gray/25 group-hover:text-gray/45 transition-colors duration-500">{item.label}</span>
+            <span className="text-[10px] font-mono text-gray/45 md:text-gray/25 group-hover:text-gray/45 transition-colors duration-500">{item.label}</span>
           </div>
           <span className={`text-[8px] font-mono transition-colors duration-500 ${
             item.checked
-              ? "text-gray/15 group-hover:text-cyan/40"
-              : "text-gray/10 group-hover:text-gray/25"
+              ? "text-cyan/40 md:text-gray/15 group-hover:text-cyan/40"
+              : "text-gray/25 md:text-gray/10 group-hover:text-gray/25"
           }`}>{item.status}</span>
         </div>
       ))}
     </div>
     <div className="flex items-center gap-2 z-10 mt-1">
-      <ShieldCheck className="w-3 h-3 text-gray/20 group-hover:text-cyan/50 transition-colors duration-500" />
-      <span className="text-[9px] font-mono text-gray/20 group-hover:text-cyan/40 transition-colors duration-500">regulatory compliance layer</span>
+      <ShieldCheck className="w-3 h-3 text-cyan/50 md:text-gray/20 group-hover:text-cyan/50 transition-colors duration-500" />
+      <span className="text-[9px] font-mono text-cyan/40 md:text-gray/20 group-hover:text-cyan/40 transition-colors duration-500">regulatory compliance layer</span>
     </div>
   </div>
 );
@@ -198,11 +198,11 @@ const FeatureCard = memo(function FeatureCard({
       <div className="flex flex-col h-full">
         <div className="flex items-center gap-3 mb-1.5">
           <div className="p-2 rounded-lg border border-gray/10 bg-muted/30 group-hover:border-privacy/20 transition-colors shrink-0">
-            <Icon className={`w-4 h-4 text-gray group-hover:${iconColor} transition-colors`} />
+            <Icon className={`w-4 h-4 ${iconColor} md:text-gray group-hover:${iconColor} transition-colors`} />
           </div>
           <h3 className="text-lg font-semibold text-foreground">{title}</h3>
         </div>
-        <p className="text-sm text-gray font-light mb-4 group-hover:text-gray-light transition-colors leading-relaxed">{description}</p>
+        <p className="text-sm text-gray-light md:text-gray font-light mb-4 group-hover:text-gray-light transition-colors leading-relaxed">{description}</p>
         <Viz />
       </div>
     </GradientBorderCard>
