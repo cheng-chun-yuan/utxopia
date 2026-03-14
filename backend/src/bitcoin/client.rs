@@ -146,6 +146,31 @@ impl EsploraClient {
         Ok(txs.into_iter().map(|t| t.txid).collect())
     }
 
+    /// Get txids for an address, preferring confirmed txs first.
+    /// Returns Vec<(txid, confirmed)> sorted: confirmed first, then unconfirmed.
+    pub async fn get_address_txids_with_status(&self, address: &str) -> Result<Vec<(String, bool)>, EsploraError> {
+        let url = format!("{}/address/{}/txs", self.base_url, address);
+        let resp = self.client.get(&url).send().await?;
+
+        if !resp.status().is_success() {
+            return Err(EsploraError::AddressNotFound(address.to_string()));
+        }
+
+        #[derive(serde::Deserialize)]
+        struct TxEntry {
+            txid: String,
+            status: EsploraTxStatus,
+        }
+        let txs: Vec<TxEntry> = resp.json().await?;
+        let mut result: Vec<(String, bool)> = txs
+            .into_iter()
+            .map(|t| (t.txid, t.status.confirmed))
+            .collect();
+        // Sort confirmed first
+        result.sort_by(|a, b| b.1.cmp(&a.1));
+        Ok(result)
+    }
+
     /// Get raw transaction hex
     pub async fn get_tx_hex(&self, txid: &str) -> Result<String, EsploraError> {
         let url = format!("{}/tx/{}/hex", self.base_url, txid);

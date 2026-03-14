@@ -376,13 +376,14 @@ impl RedemptionService {
                 };
 
                 // Check if a BTC tx was already sent to this destination
-                match self.esplora.get_address_txids(&btc_address).await {
+                // Prefer confirmed txs over unconfirmed ones
+                match self.esplora.get_address_txids_with_status(&btc_address).await {
                     Ok(txids) if !txids.is_empty() => {
-                        // Found existing tx(s) — recover the most recent one
-                        let recovered_txid = txids[0].clone();
+                        // Sorted: confirmed first. Pick the first confirmed, or first overall.
+                        let (recovered_txid, is_confirmed) = txids[0].clone();
                         println!(
-                            "[tick] Recovered existing BTC tx {} for untracked PDA {} (dest: {})",
-                            &recovered_txid[..12], &pda.pda_address[..8], &btc_address
+                            "[tick] Recovered existing BTC tx {} (confirmed={}) for untracked PDA {} (dest: {})",
+                            &recovered_txid[..12], is_confirmed, &pda.pda_address[..8], &btc_address
                         );
                         let entry = RedemptionTracking {
                             pda_address: pda.pda_address.clone(),
