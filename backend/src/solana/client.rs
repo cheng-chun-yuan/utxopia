@@ -703,6 +703,11 @@ impl SolClient {
         }
     }
 
+    /// Return the program ID
+    pub fn program_id(&self) -> &Pubkey {
+        &self.program_id
+    }
+
     /// Return the program ID as a base58 string
     pub fn program_id_str(&self) -> String {
         self.program_id.to_string()

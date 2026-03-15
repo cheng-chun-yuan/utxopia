@@ -375,19 +375,61 @@ impl RedemptionService {
                     }
                 };
 
-                // Check if a BTC tx was already sent to this destination
-                // Prefer confirmed txs over unconfirmed ones
-                match self.esplora.get_address_txids_with_status(&btc_address).await {
-                    Ok(txids) if !txids.is_empty() => {
-                        // Sorted: confirmed first. Pick the first confirmed, or first overall.
-                        let (recovered_txid, is_confirmed) = txids[0].clone();
+                // Untracked Processing PDA — try to recover a valid existing BTC tx,
+                // but verify amount and that it hasn't been used for a completion.
+                let expected_send = pda.amount_sats.saturating_sub(pda.service_fee);
+                let mut recovered = false;
+
+                if let Ok(txids) = self.esplora.get_address_txids_with_status(&btc_address).await {
+                    for (txid, is_confirmed) in &txids {
+                        // Check if this txid already has a completion receipt on-chain
+                        // (means it was used for a previous redemption — skip)
+                        let mut txid_bytes = [0u8; 32];
+                        if let Ok(decoded) = hex::decode(txid) {
+                            if decoded.len() == 32 {
+                                txid_bytes.copy_from_slice(&decoded);
+                                txid_bytes.reverse(); // display hex → internal byte order
+                            }
+                        }
+                        let receipt_seeds: &[&[u8]] = &[b"completion_receipt", &txid_bytes];
+                        let (receipt_pda, _) = solana_sdk::pubkey::Pubkey::find_program_address(
+                            receipt_seeds,
+                            self.sol_client.program_id(),
+                        );
+                        if self.sol_client.rpc().get_account(&receipt_pda).is_ok() {
+                            println!(
+                                "[tick] BTC tx {} already completed on-chain, skipping",
+                                &txid[..12]
+                            );
+                            continue;
+                        }
+
+                        // Fetch tx detail and verify output amount
+                        let tx_detail = match self.esplora.get_tx(txid).await {
+                            Ok(d) => d,
+                            Err(_) => continue,
+                        };
+
+                        // Check if any output pays the exact expected amount
+                        let has_matching_output = tx_detail.vout.iter().any(|o| {
+                            o.value == expected_send
+                        });
+
+                        if !has_matching_output {
+                            println!(
+                                "[tick] BTC tx {} amount mismatch for PDA {} (expected ~{} sats, skipping)",
+                                &txid[..12], &pda.pda_address[..8], expected_send
+                            );
+                            continue;
+                        }
+
                         println!(
                             "[tick] Recovered existing BTC tx {} (confirmed={}) for untracked PDA {} (dest: {})",
-                            &recovered_txid[..12], is_confirmed, &pda.pda_address[..8], &btc_address
+                            &txid[..12], *is_confirmed, &pda.pda_address[..8], &btc_address
                         );
                         let entry = RedemptionTracking {
                             pda_address: pda.pda_address.clone(),
-                            btc_txid: Some(recovered_txid),
+                            btc_txid: Some(txid.clone()),
                             local_status: LocalRedemptionStatus::AwaitingConfirmation,
                             retry_count: 0,
                             created_at: now_secs(),
@@ -403,22 +445,24 @@ impl RedemptionService {
                             simulated: false,
                         };
                         self.tracking.upsert(entry).await;
+                        recovered = true;
+                        break;
                     }
-                    _ => {
-                        // No existing tx found — need to sign fresh
-                        println!(
-                            "[tick] No existing BTC tx for untracked PDA {}, building fresh",
-                            &pda.pda_address[..8]
-                        );
-                        match self.build_sign_broadcast(pda).await {
-                            Ok(_) => result.withdrawals_processed += 1,
-                            Err(e) => {
-                                eprintln!(
-                                    "[tick] Error building tx for untracked Processing PDA {}: {}",
-                                    &pda.pda_address[..8],
-                                    e
-                                );
-                            }
+                }
+
+                if !recovered {
+                    println!(
+                        "[tick] No valid BTC tx for untracked PDA {}, FROST signing fresh (send: {} sats)",
+                        &pda.pda_address[..8], expected_send
+                    );
+                    match self.build_sign_broadcast(pda).await {
+                        Ok(_) => result.withdrawals_processed += 1,
+                        Err(e) => {
+                            eprintln!(
+                                "[tick] Error building tx for untracked Processing PDA {}: {}",
+                                &pda.pda_address[..8],
+                                e
+                            );
                         }
                     }
                 }

@@ -400,12 +400,20 @@ pub fn process_redeem(
             redemption_signer_seeds,
         )?;
 
+        // Compute service fee from pool config (locked at request time)
+        let service_fee = {
+            let pool_data = pool_state_info.try_borrow_data()?;
+            let pool = PoolState::from_bytes(&pool_data)?;
+            pool.compute_service_fee(redeem_amount)
+        };
+
         {
             let mut redemption_data = redemption_info.try_borrow_mut_data()?;
             let redemption = RedemptionRequest::init(&mut redemption_data)?;
             redemption.set_request_id(request_nonce);
             redemption.requester.copy_from_slice(user.key().as_ref());
             redemption.set_amount_sats(redeem_amount);
+            redemption.set_service_fee(service_fee);
             redemption.set_btc_script(btc_script)?;
             redemption.set_status(RedemptionStatus::Pending);
         }

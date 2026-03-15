@@ -40,6 +40,17 @@ impl EsploraClient {
         &self.base_url
     }
 
+    /// Get full transaction detail (outputs, status)
+    pub async fn get_tx(&self, txid: &str) -> Result<EsploraTxDetail, EsploraError> {
+        let url = format!("{}/tx/{}", self.base_url, txid);
+        let resp = self.client.get(&url).send().await?;
+        if !resp.status().is_success() {
+            return Err(EsploraError::TxNotFound(txid.to_string()));
+        }
+        let detail: EsploraTxDetail = resp.json().await?;
+        Ok(detail)
+    }
+
     /// Get transaction status
     pub async fn get_tx_status(&self, txid: &str) -> Result<EsploraTxStatus, EsploraError> {
         let url = format!("{}/tx/{}/status", self.base_url, txid);
@@ -224,6 +235,21 @@ impl EsploraClient {
             pos: proof.pos,
         })
     }
+}
+
+/// Transaction output from Esplora
+#[derive(Debug, Clone, Deserialize)]
+pub struct EsploraTxVout {
+    pub scriptpubkey: String,
+    pub value: u64,
+}
+
+/// Transaction detail from Esplora (partial — only what we need)
+#[derive(Debug, Clone, Deserialize)]
+pub struct EsploraTxDetail {
+    pub txid: String,
+    pub vout: Vec<EsploraTxVout>,
+    pub status: EsploraTxStatus,
 }
 
 /// Transaction status
