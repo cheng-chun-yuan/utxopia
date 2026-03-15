@@ -324,11 +324,13 @@ export async function GET() {
       if (knownRequestIds.has(rid)) continue; // already present
 
       // Check if backend has tracking data for this redemption
-      // Tracking is keyed by PDA address, but we can match by request_id via requester
       const trackingEntries = [...trackingMap.values()];
       const tracking = trackingEntries.find(
         (t) => t.request_id?.toString() === rid || (t.requester === req.requester && t.amount_sats === req.amount_sats)
       );
+
+      // Check if a processing event exists (BTC was likely sent)
+      const hasProcessingEvent = processingByReqId.has(rid);
 
       let status = "Cancelled";
       let localStatus = "Cancelled";
@@ -344,6 +346,11 @@ export async function GET() {
         } else {
           status = "Processing";
         }
+      } else if (hasProcessingEvent) {
+        // Processing event exists but no tracking — backend likely restarted
+        // and lost state. BTC was probably sent, show as awaiting confirmation.
+        status = "AwaitingConfirmation";
+        localStatus = "AwaitingConfirmation";
       }
 
       serialized.push({
