@@ -8,17 +8,16 @@
  */
 
 import { useState, useCallback, Fragment } from "react";
-import Image from "next/image";
 import {
   CheckCircle2,
   Clock,
   ExternalLink,
   Loader2,
-  Shield,
   XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "@/components/ui/copy-button";
+import Image from "next/image";
 import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
 import { useRedemptions } from "@/hooks/use-explorer";
 import type { RedemptionRecord } from "@/hooks/use-explorer";
@@ -110,54 +109,49 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
   const minerFee = actualReceived !== null ? expectedSend - actualReceived : null;
   const protocolRevenue = minerFee !== null ? serviceFee - minerFee : null;
 
+  const btcLink = "text-[11px] text-btc/70 hover:text-btc flex items-center gap-1 transition-colors";
+  const solLink = "text-[11px] text-purple-400/70 hover:text-purple-400 flex items-center gap-1 transition-colors";
+
   const steps = [
     {
       title: "Request Redemption",
       done: !isFailed && stepOrder >= 0,
       active: stepOrder === 0 && !isFailed,
       detail: (
-        <div className="space-y-1">
+        <div className="space-y-2 text-xs">
+          {/* Tx link */}
           {redemption.requestTxSignature ? (
             <div className="flex items-center gap-1.5">
-              <a
-                href={`https://explorer.solana.com/tx/${redemption.requestTxSignature}?cluster=devnet`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] text-sol/70 hover:text-sol flex items-center gap-1 transition-colors"
-              >
+              <a href={`https://explorer.solana.com/tx/${redemption.requestTxSignature}?cluster=devnet`} target="_blank" rel="noopener noreferrer" className={solLink}>
                 Request tx <ExternalLink className="w-2.5 h-2.5" />
               </a>
-              <code className="text-[10px] font-mono text-gray">{truncate(redemption.requestTxSignature, 6, 4)}</code>
+              <code className="font-mono text-[10px] text-gray/50">{truncate(redemption.requestTxSignature, 6, 4)}</code>
               <CopyButton text={redemption.requestTxSignature} label="Request TX" variant="default" iconSize="sm" />
             </div>
           ) : redemption.pubkey ? (
             <div className="flex items-center gap-1.5">
-              <a
-                href={`https://explorer.solana.com/address/${redemption.pubkey}?cluster=devnet`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] text-sol/70 hover:text-sol flex items-center gap-1 transition-colors"
-              >
+              <a href={`https://explorer.solana.com/address/${redemption.pubkey}?cluster=devnet`} target="_blank" rel="noopener noreferrer" className={solLink}>
                 Request PDA <ExternalLink className="w-2.5 h-2.5" />
               </a>
-              <code className="text-[10px] font-mono text-gray">{truncate(redemption.pubkey, 6, 4)}</code>
+              <code className="font-mono text-[10px] text-gray/50">{truncate(redemption.pubkey, 6, 4)}</code>
               <CopyButton text={redemption.pubkey} label="PDA" variant="default" iconSize="sm" />
             </div>
           ) : null}
-          {btcAddr && (
-            <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-gray">Destination</span>
-              <code className="text-[10px] font-mono text-btc/70">{truncate(btcAddr, 8, 6)}</code>
-              <CopyButton text={btcAddr} label="BTC Address" variant="default" iconSize="sm" />
-            </div>
-          )}
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] text-gray">Amount</span>
-            <span className="text-[10px] font-mono text-foreground">{amount.toLocaleString()} sats</span>
-          </div>
-          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] font-mono text-gray/70">
-            <span>Service fee: <span className="text-foreground/60">{serviceFee.toLocaleString()} sats</span>{!redemption.serviceFee && <span className="text-gray/50"> ({(bps / 100).toFixed(2)}% + {base.toLocaleString()} base)</span>}</span>
-            <span>Est. receive: <span className="text-green-400/70">{expectedSend.toLocaleString()} sats</span></span>
+          {/* Key-value rows */}
+          <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[11px]">
+            {btcAddr && <>
+              <span className="text-gray/50">Destination</span>
+              <div className="flex items-center gap-1.5">
+                <code className="font-mono text-foreground/80">{truncate(btcAddr, 10, 6)}</code>
+                <CopyButton text={btcAddr} label="BTC Address" variant="default" iconSize="sm" />
+              </div>
+            </>}
+            <span className="text-gray/50">Amount</span>
+            <span className="font-mono text-foreground/80">{amount.toLocaleString()} sats</span>
+            <span className="text-gray/50">Service fee</span>
+            <span className="font-mono text-gray">{serviceFee.toLocaleString()} sats</span>
+            <span className="text-gray/50">Est. receive</span>
+            <span className="font-mono text-foreground/80">{expectedSend.toLocaleString()} sats</span>
           </div>
         </div>
       ),
@@ -167,24 +161,19 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
       done: !isFailed && stepOrder >= 1,
       active: stepOrder === 1 && !isFailed,
       detail: !isFailed && stepOrder >= 1 ? (
-        <div className="space-y-1">
-          <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-400">
+        <div className="space-y-2 text-xs">
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gray/10 text-gray-light text-[10px]">
             <CheckCircle2 className="w-2.5 h-2.5" /> Backend picked up
           </span>
-          {redemption.processingTxSignature ? (
+          {redemption.processingTxSignature && (
             <div className="flex items-center gap-1.5">
-              <a
-                href={`https://explorer.solana.com/tx/${redemption.processingTxSignature}?cluster=devnet`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] text-sol/70 hover:text-sol flex items-center gap-1 transition-colors"
-              >
+              <a href={`https://explorer.solana.com/tx/${redemption.processingTxSignature}?cluster=devnet`} target="_blank" rel="noopener noreferrer" className={solLink}>
                 Processing tx <ExternalLink className="w-2.5 h-2.5" />
               </a>
-              <code className="text-[10px] font-mono text-gray">{truncate(redemption.processingTxSignature, 6, 4)}</code>
+              <code className="font-mono text-[10px] text-gray/50">{truncate(redemption.processingTxSignature, 6, 4)}</code>
               <CopyButton text={redemption.processingTxSignature} label="Processing TX" variant="default" iconSize="sm" />
             </div>
-          ) : null}
+          )}
         </div>
       ) : null,
     },
@@ -193,45 +182,51 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
       done: !isFailed && stepOrder >= 3,
       active: stepOrder === 2 && !isFailed,
       detail: redemption.btcTxid ? (
-        <div className="space-y-1">
+        <div className="space-y-2 text-xs">
+          {/* Tx link */}
           {redemption.simulated ? (
-            <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gray/10 text-gray-light text-[10px]">
               Simulated
             </span>
           ) : (
             <div className="flex items-center gap-1.5">
-              <a
-                href={`${getMempoolExplorerUrl()}/tx/${redemption.btcTxid}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] text-btc/70 hover:text-btc flex items-center gap-1 transition-colors"
-              >
+              <a href={`${getMempoolExplorerUrl()}/tx/${redemption.btcTxid}`} target="_blank" rel="noopener noreferrer" className={btcLink}>
                 BTC tx <ExternalLink className="w-2.5 h-2.5" />
               </a>
-              <code className="text-[10px] font-mono text-gray">{truncate(redemption.btcTxid, 6, 4)}</code>
+              <code className="font-mono text-[10px] text-gray/50">{truncate(redemption.btcTxid, 6, 4)}</code>
               <CopyButton text={redemption.btcTxid} label="BTC TX" variant="default" iconSize="sm" />
             </div>
           )}
+          {/* Destination */}
           {btcAddr && (
-            <div className="flex items-center gap-1.5">
-              <BitcoinIcon className="w-3 h-3 text-btc/50" />
-              <span className="text-[10px] text-gray">→</span>
-              <code className="text-[10px] font-mono text-btc/70">{truncate(btcAddr, 8, 6)}</code>
+            <div className="flex items-center gap-1.5 text-[11px]">
+              <span className="text-gray/50">→</span>
+              <code className="font-mono text-foreground/80">{truncate(btcAddr, 10, 6)}</code>
               <CopyButton text={btcAddr} label="BTC Address" variant="default" iconSize="sm" />
             </div>
           )}
-          {actualReceived !== null ? (
-            <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] font-mono text-gray/70">
-              <span>Received: <span className="text-green-400/80">{actualReceived.toLocaleString()} sats</span></span>
-              <span>Service fee: <span className="text-foreground/60">{serviceFee.toLocaleString()} sats</span></span>
-              {minerFee !== null && <span>Miner fee: <span className="text-btc/70">{minerFee.toLocaleString()} sats</span></span>}
-              {protocolRevenue !== null && protocolRevenue > 0 && <span>Protocol: <span className="text-sol/70">+{protocolRevenue.toLocaleString()} sats</span></span>}
-            </div>
-          ) : (
-            <div className="mt-1.5 text-[10px] font-mono text-gray/70">
-              <span>{redemption.btcTxid ? "Receive" : "Est. receive"}: <span className="text-green-400/70">{expectedSend.toLocaleString()} sats</span></span>
-            </div>
-          )}
+          {/* Fee breakdown */}
+          <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[11px]">
+            {actualReceived !== null ? (<>
+              <span className="text-gray/50">Received</span>
+              <span className="font-mono text-foreground/80">{actualReceived.toLocaleString()} sats</span>
+              <span className="text-gray/50">Service fee</span>
+              <span className="font-mono text-gray">{serviceFee.toLocaleString()} sats</span>
+              {minerFee !== null && minerFee > 0 && <>
+                <span className="text-gray/50">Miner fee</span>
+                <span className="font-mono text-gray">{minerFee.toLocaleString()} sats</span>
+              </>}
+              {protocolRevenue !== null && protocolRevenue > 0 && <>
+                <span className="text-gray/50">Protocol</span>
+                <span className="font-mono text-gray">+{protocolRevenue.toLocaleString()} sats</span>
+              </>}
+            </>) : (
+              <>
+                <span className="text-gray/50">{redemption.btcTxid ? "Receive" : "Est. receive"}</span>
+                <span className="font-mono text-foreground/80">{expectedSend.toLocaleString()} sats</span>
+              </>
+            )}
+          </div>
         </div>
       ) : null,
     },
@@ -240,25 +235,30 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
       done: !isFailed && stepOrder >= 4,
       active: false,
       detail: !isFailed && stepOrder >= 4 ? (
-        <div className="space-y-1">
-          <span className="text-[10px] text-green-400 font-mono">Redemption completed on-chain</span>
+        <div className="space-y-2 text-xs">
+          {/* Tx link */}
           {redemption.completeTxSignature && (
             <div className="flex items-center gap-1.5">
-              <a
-                href={`https://explorer.solana.com/tx/${redemption.completeTxSignature}?cluster=devnet`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] text-sol/70 hover:text-sol flex items-center gap-1 transition-colors"
-              >
+              <a href={`https://explorer.solana.com/tx/${redemption.completeTxSignature}?cluster=devnet`} target="_blank" rel="noopener noreferrer" className={solLink}>
                 Complete tx <ExternalLink className="w-2.5 h-2.5" />
               </a>
-              <code className="text-[10px] font-mono text-gray">{truncate(redemption.completeTxSignature, 6, 4)}</code>
+              <code className="font-mono text-[10px] text-gray/50">{truncate(redemption.completeTxSignature, 6, 4)}</code>
               <CopyButton text={redemption.completeTxSignature} label="Complete TX" variant="default" iconSize="sm" />
             </div>
           )}
-          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] font-mono text-gray/70">
-            <span>Burned: <span className="text-red-400/70">{amount.toLocaleString()} sats</span> from pool vault</span>
-            {protocolRevenue !== null && protocolRevenue > 0 && <span>Fee pool: <span className="text-sol/70">+{protocolRevenue.toLocaleString()} sats</span></span>}
+          {/* Summary — burn = amount - protocol_revenue (service fee stays in vault) */}
+          <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[11px]">
+            <span className="text-gray/50">Burned</span>
+            <span className="font-mono text-foreground/80">
+              {protocolRevenue !== null && protocolRevenue > 0
+                ? (amount - protocolRevenue).toLocaleString()
+                : amount.toLocaleString()
+              } sats
+            </span>
+            {protocolRevenue !== null && protocolRevenue > 0 && <>
+              <span className="text-gray/50">Fee retained</span>
+              <span className="font-mono text-gray">+{protocolRevenue.toLocaleString()} sats</span>
+            </>}
           </div>
         </div>
       ) : null,
@@ -285,18 +285,18 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
           <div className="flex flex-col items-center">
             <div className={cn(
               "w-5 h-5 rounded-full flex items-center justify-center shrink-0",
-              step.done ? "bg-green-500/20" : step.active ? "bg-btc/20" : "bg-gray/10"
+              step.done ? "bg-green-500/15" : step.active ? "bg-gray/15" : "bg-gray/8"
             )}>
               {step.done ? (
                 <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
               ) : step.active ? (
-                <Loader2 className="w-3 h-3 text-btc animate-spin" />
+                <Loader2 className="w-3 h-3 text-gray-light animate-spin" />
               ) : (
-                <Clock className="w-2.5 h-2.5 text-gray/40" />
+                <Clock className="w-2.5 h-2.5 text-gray/30" />
               )}
             </div>
             {i < steps.length - 1 && (
-              <div className={cn("w-px flex-1 min-h-[12px]", step.done ? "bg-green-500/30" : "bg-gray/10")} />
+              <div className={cn("w-px flex-1 min-h-[12px]", step.done ? "bg-green-500/20" : "bg-gray/8")} />
             )}
           </div>
           <div className={cn("pb-2 flex-1", i === steps.length - 1 && "pb-0")}>
@@ -348,7 +348,7 @@ export function WithdrawalsTab() {
               <Th>Status</Th>
               <Th>Destination</Th>
               <Th>Amount</Th>
-              <Th>Requester</Th>
+              <Th>Fee</Th>
               <Th>Time</Th>
               <Th className="w-[40px]" />
             </tr>
@@ -370,11 +370,6 @@ export function WithdrawalsTab() {
                     </Td>
                     <Td>
                       <div className="flex items-center gap-1.5">
-                        {isBtcWithdraw ? (
-                          <BitcoinIcon className="w-4 h-4 text-btc" />
-                        ) : (
-                          <Shield className="w-4 h-4 text-sol" />
-                        )}
                         {btcAddr ? (
                           <>
                             <code className="text-caption font-mono text-foreground">{truncate(btcAddr, 8, 6)}</code>
@@ -389,10 +384,7 @@ export function WithdrawalsTab() {
                       <WithdrawalAmountCell r={r} />
                     </Td>
                     <Td>
-                      <div className="flex items-center gap-1.5">
-                        <code className="text-caption font-mono text-foreground">{truncate(r.requester, 6, 4)}</code>
-                        <CopyButton text={r.requester} label="Requester" variant="default" iconSize="sm" />
-                      </div>
+                      <WithdrawalFeeCell r={r} />
                     </Td>
                     <Td>
                       <span className="text-caption text-gray">{timeAgo(r.createdAt)}</span>
@@ -413,7 +405,7 @@ export function WithdrawalsTab() {
                   </tr>
                   {isOpen && (
                     <tr>
-                      <td colSpan={6} className="p-0">
+                      <td colSpan={7} className="p-0">
                         <WithdrawalDetails redemption={r} />
                       </td>
                     </tr>
@@ -431,33 +423,36 @@ export function WithdrawalsTab() {
 // --- Amount Cell ---
 
 function WithdrawalAmountCell({ r }: { r: RedemptionRecord }) {
+  const received = r.actualReceived && r.status === "Completed"
+    ? Number(r.actualReceived).toLocaleString()
+    : r.serviceFee
+      ? (Number(r.amountSats) - Number(r.serviceFee)).toLocaleString()
+      : "...";
+
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-1.5">
-        <span className="inline-flex items-center gap-1 text-caption text-purple-400/90 bg-purple-500/6 border border-purple-500/15 px-2 py-0.5 rounded-full font-medium">
-          <Image src="/zkbtc.png" alt="zkBTC" width={14} height={14} className="rounded-full" />
-          {Number(r.amountSats).toLocaleString()}
-        </span>
-        <span className="text-gray/60">→</span>
-        <span className="inline-flex items-center gap-1 text-caption text-btc/90 bg-btc/6 border border-btc/15 px-2 py-0.5 rounded-full font-medium">
-          <BitcoinIcon className="w-3.5 h-3.5" />
-          {r.actualReceived && r.status === "Completed"
-            ? Number(r.actualReceived).toLocaleString()
-            : r.serviceFee
-              ? (Number(r.amountSats) - Number(r.serviceFee)).toLocaleString()
-              : "..."
-          }
-        </span>
-        <span className="text-[10px] text-gray">sats</span>
-      </div>
-      {(r.serviceFee || (r.actualReceived && Number(r.actualReceived) !== Number(r.amountSats))) && (
-        <span className="text-[10px] text-gray/50 font-mono pl-1">
-          fee: {r.serviceFee
-            ? Number(r.serviceFee).toLocaleString()
-            : (Number(r.amountSats) - Number(r.actualReceived)).toLocaleString()
-          } sats
-        </span>
-      )}
+    <div className="flex items-center gap-1.5 font-mono text-body2">
+      <Image src="/zkbtc.png" alt="zkBTC" width={14} height={14} className="rounded-full shrink-0" />
+      <span className="text-foreground">{Number(r.amountSats).toLocaleString()}</span>
+      <span className="text-gray/40">→</span>
+      <BitcoinIcon className="w-3.5 h-3.5 text-btc shrink-0" />
+      <span className="text-foreground">{received}</span>
+      <span className="text-[10px] text-gray">sats</span>
     </div>
+  );
+}
+
+function WithdrawalFeeCell({ r }: { r: RedemptionRecord }) {
+  const fee = r.serviceFee
+    ? Number(r.serviceFee)
+    : r.actualReceived && Number(r.actualReceived) !== Number(r.amountSats)
+      ? Number(r.amountSats) - Number(r.actualReceived)
+      : 0;
+
+  if (fee === 0) return <span className="text-caption text-gray/40">—</span>;
+
+  return (
+    <span className="text-caption font-mono text-gray">
+      {fee.toLocaleString()} sats
+    </span>
   );
 }

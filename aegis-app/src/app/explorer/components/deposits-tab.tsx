@@ -78,38 +78,31 @@ const DEPOSIT_STATUS_ORDER: Record<string, number> = {
 function DepositDetails({ deposit }: { deposit: DepositRecord }) {
   const stepOrder = DEPOSIT_STATUS_ORDER[deposit.status ?? ""] ?? 0;
 
+  const btcLink = "text-[11px] text-btc/70 hover:text-btc flex items-center gap-1 transition-colors";
+  const solLink = "text-[11px] text-purple-400/70 hover:text-purple-400 flex items-center gap-1 transition-colors";
+
   const steps = [
     {
       title: "Deposit BTC to Reserve",
       done: stepOrder >= 1,
       active: stepOrder === 1,
       detail: (deposit.btcTxid || deposit.taprootAddress) ? (
-        <div className="space-y-1">
+        <div className="space-y-1 text-[10px] font-mono text-gray">
           {deposit.btcTxid && (
             <div className="flex items-center gap-1.5">
-              <a
-                href={`${getMempoolExplorerUrl()}/tx/${deposit.btcTxid}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] text-btc/70 hover:text-btc flex items-center gap-1 transition-colors"
-              >
+              <a href={`${getMempoolExplorerUrl()}/tx/${deposit.btcTxid}`} target="_blank" rel="noopener noreferrer" className={btcLink}>
                 Deposit tx <ExternalLink className="w-2.5 h-2.5" />
               </a>
-              <code className="text-[10px] font-mono text-gray">{truncate(deposit.btcTxid, 6, 4)}</code>
+              <code className="text-gray/60">{truncate(deposit.btcTxid, 6, 4)}</code>
               <CopyButton text={deposit.btcTxid} label="TX" variant="default" iconSize="sm" />
             </div>
           )}
           {deposit.taprootAddress && (
             <div className="flex items-center gap-1.5">
-              <a
-                href={`${getMempoolExplorerUrl()}/address/${deposit.taprootAddress}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] text-btc/70 hover:text-btc flex items-center gap-1 transition-colors"
-              >
+              <a href={`${getMempoolExplorerUrl()}/address/${deposit.taprootAddress}`} target="_blank" rel="noopener noreferrer" className={btcLink}>
                 Address <ExternalLink className="w-2.5 h-2.5" />
               </a>
-              <code className="text-[10px] font-mono text-gray">{truncate(deposit.taprootAddress, 8, 6)}</code>
+              <code className="text-gray/60">{truncate(deposit.taprootAddress, 8, 6)}</code>
               <CopyButton text={deposit.taprootAddress} label="Address" variant="default" iconSize="sm" />
             </div>
           )}
@@ -121,16 +114,11 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
       done: stepOrder >= 3,
       active: stepOrder === 3,
       detail: deposit.sweepTxid ? (
-        <div className="flex items-center gap-1.5">
-          <a
-            href={`${getMempoolExplorerUrl()}/tx/${deposit.sweepTxid}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[11px] text-btc/70 hover:text-btc flex items-center gap-1 transition-colors"
-          >
+        <div className="flex items-center gap-1.5 text-[10px] font-mono text-gray">
+          <a href={`${getMempoolExplorerUrl()}/tx/${deposit.sweepTxid}`} target="_blank" rel="noopener noreferrer" className={btcLink}>
             Sweep tx <ExternalLink className="w-2.5 h-2.5" />
           </a>
-          <code className="text-[10px] font-mono text-gray">{truncate(deposit.sweepTxid, 6, 4)}</code>
+          <code className="text-gray/60">{truncate(deposit.sweepTxid, 6, 4)}</code>
           <CopyButton text={deposit.sweepTxid} label="TX" variant="default" iconSize="sm" />
         </div>
       ) : null,
@@ -140,24 +128,19 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
       done: stepOrder >= 4,
       active: stepOrder === 4,
       detail: deposit.solanaTx ? (
-        <div className="space-y-1">
+        <div className="space-y-1 text-[10px] font-mono text-gray">
           <div className="flex items-center gap-1.5">
-            <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-400">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gray/10 text-gray-light">
               <CheckCircle2 className="w-2.5 h-2.5" /> SPV Confirmed
             </span>
-            <a
-              href={`https://explorer.solana.com/tx/${deposit.solanaTx}?cluster=devnet`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[11px] text-sol/70 hover:text-sol flex items-center gap-1 transition-colors"
-            >
+            <a href={`https://explorer.solana.com/tx/${deposit.solanaTx}?cluster=devnet`} target="_blank" rel="noopener noreferrer" className={solLink}>
               Solana tx <ExternalLink className="w-2.5 h-2.5" />
             </a>
           </div>
           {deposit.commitment && (
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-gray">Commitment</span>
-              <code className="text-[10px] font-mono text-purple-400/70">{truncate(deposit.commitment, 8, 6)}</code>
+              <span>Commitment</span>
+              <code className="text-gray/60">{truncate(deposit.commitment, 8, 6)}</code>
               <CopyButton text={deposit.commitment} label="Commitment" variant="default" iconSize="sm" />
             </div>
           )}
@@ -169,7 +152,7 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
       done: stepOrder >= 5,
       active: false,
       detail: deposit.mintedSats ? (
-        <span className="text-[10px] text-green-400 font-mono">{deposit.mintedSats.toLocaleString()} sats minted</span>
+        <span className="text-[10px] text-gray-light font-mono">{deposit.mintedSats.toLocaleString()} sats minted</span>
       ) : null,
     },
   ];
@@ -181,18 +164,18 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
           <div className="flex flex-col items-center">
             <div className={cn(
               "w-5 h-5 rounded-full flex items-center justify-center shrink-0",
-              step.done ? "bg-green-500/20" : step.active ? "bg-btc/20" : "bg-gray/10"
+              step.done ? "bg-green-500/15" : step.active ? "bg-gray/15" : "bg-gray/8"
             )}>
               {step.done ? (
                 <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
               ) : step.active ? (
-                <Loader2 className="w-3 h-3 text-btc animate-spin" />
+                <Loader2 className="w-3 h-3 text-gray-light animate-spin" />
               ) : (
-                <Clock className="w-2.5 h-2.5 text-gray/40" />
+                <Clock className="w-2.5 h-2.5 text-gray/30" />
               )}
             </div>
             {i < steps.length - 1 && (
-              <div className={cn("w-px flex-1 min-h-[12px]", step.done ? "bg-green-500/30" : "bg-gray/10")} />
+              <div className={cn("w-px flex-1 min-h-[12px]", step.done ? "bg-green-500/20" : "bg-gray/8")} />
             )}
           </div>
           <div className={cn("pb-2 flex-1", i === steps.length - 1 && "pb-0")}>
