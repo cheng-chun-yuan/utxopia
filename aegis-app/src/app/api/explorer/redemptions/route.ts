@@ -314,30 +314,57 @@ export async function GET() {
     }
 
     // Add requested redemptions from on-chain events for any that don't have
-    // a PDA or completed entry (e.g., PDA closed by cancel but event exists)
+    // a PDA or completed entry. Check tracking data to determine real status:
+    // - Has tracking with BTC txid → AwaitingConfirmation (BTC sent, waiting for SPV)
+    // - Has tracking without BTC txid → Processing (backend is working on it)
+    // - No tracking, no completion → Cancelled (PDA closed without completion)
     const knownRequestIds = new Set(serialized.map((r) => r.requestId));
     for (const req of requestedEntries) {
       const rid = req.request_id.toString();
       if (knownRequestIds.has(rid)) continue; // already present
+
+      // Check if backend has tracking data for this redemption
+      // Tracking is keyed by PDA address, but we can match by request_id via requester
+      const trackingEntries = [...trackingMap.values()];
+      const tracking = trackingEntries.find(
+        (t) => t.request_id?.toString() === rid || (t.requester === req.requester && t.amount_sats === req.amount_sats)
+      );
+
+      let status = "Cancelled";
+      let localStatus = "Cancelled";
+      let btcTxid: string | null = null;
+
+      if (tracking) {
+        btcTxid = tracking.btc_txid ?? null;
+        localStatus = tracking.local_status;
+        if (tracking.local_status === "Completed" || tracking.local_status === "completed") {
+          status = "Completed";
+        } else if (tracking.btc_txid) {
+          status = "AwaitingConfirmation";
+        } else {
+          status = "Processing";
+        }
+      }
+
       serialized.push({
         pubkey: "",
         requestId: rid,
         amountSats: req.amount_sats.toString(),
-        status: "Cancelled", // PDA gone + not completed = cancelled
+        status,
         requester: req.requester,
         btcScript: req.btc_script,
-        btcTxid: null,
-        localStatus: "Cancelled",
-        createdAt: req.block_time,
-        updatedAt: req.block_time,
-        retryCount: 0,
-        trackerError: null,
+        btcTxid,
+        localStatus,
+        createdAt: tracking?.created_at ?? req.block_time,
+        updatedAt: tracking?.last_updated ?? req.block_time,
+        retryCount: tracking?.retry_count ?? 0,
+        trackerError: tracking?.error ?? null,
         actualReceived: null,
         requestTxSignature: req.tx_signature,
         processingTxSignature: processingByReqId.get(rid)?.tx_signature ?? null,
         completeTxSignature: null,
-        simulated: false,
-        serviceFee: null, // PDA closed — compute from event fee config
+        simulated: tracking?.simulated ?? false,
+        serviceFee: null,
         serviceFeeBps: req.service_fee_bps || feeConfig.bps,
         serviceFeeBase: req.service_fee_base || feeConfig.base,
         burnAmount: null,
