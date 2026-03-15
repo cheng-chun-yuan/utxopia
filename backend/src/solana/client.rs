@@ -138,6 +138,19 @@ pub struct OnChainPoolConfig {
 }
 
 // ============================================================================
+// UTXO PDA (parsed from on-chain data)
+// ============================================================================
+
+/// Parsed on-chain UTXO record
+#[derive(Debug, Clone)]
+pub struct UtxoPda {
+    pub pda_address: Pubkey,
+    pub txid: [u8; 32],
+    pub vout: u32,
+    pub amount_sats: u64,
+}
+
+// ============================================================================
 // Solana Relayer Client
 // ============================================================================
 
@@ -708,20 +721,89 @@ impl SolClient {
         self.program_id.to_string()
     }
 
+    /// Derive UTXO record PDA from txid + vout
+    pub fn derive_utxo_pda(program_id: &Pubkey, txid: &[u8; 32], vout: u32) -> Pubkey {
+        let vout_le = vout.to_le_bytes();
+        let (pda, _) = Pubkey::find_program_address(
+            &[b"utxo", txid, &vout_le],
+            program_id,
+        );
+        pda
+    }
+
+    /// Fetch all on-chain Unspent UTXO record PDAs (48-byte accounts with discriminator 0x09, status 0x00)
+    pub fn fetch_unspent_utxos(&self) -> Result<Vec<UtxoPda>, SolError> {
+        let config = RpcProgramAccountsConfig {
+            filters: Some(vec![
+                RpcFilterType::DataSize(48),
+                RpcFilterType::Memcmp(Memcmp::new_raw_bytes(0, vec![0x09, 0x00])), // disc + Unspent status
+            ]),
+            account_config: solana_client::rpc_config::RpcAccountInfoConfig {
+                encoding: Some(UiAccountEncoding::Base64),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let accounts = self
+            .rpc
+            .get_program_accounts_with_config(&self.program_id, config)
+            .map_err(|e| SolError::RpcError(e.to_string()))?;
+
+        let mut results = Vec::new();
+        for (pubkey, account) in accounts {
+            let data = &account.data;
+            if data.len() < 48 {
+                continue;
+            }
+            let vout = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
+            let mut txid = [0u8; 32];
+            txid.copy_from_slice(&data[8..40]);
+            let amount_sats = u64::from_le_bytes([
+                data[40], data[41], data[42], data[43],
+                data[44], data[45], data[46], data[47],
+            ]);
+            results.push(UtxoPda {
+                pda_address: pubkey,
+                txid,
+                vout,
+                amount_sats,
+            });
+        }
+
+        // Sort by amount descending for greedy UTXO selection
+        results.sort_by(|a, b| b.amount_sats.cmp(&a.amount_sats));
+        Ok(results)
+    }
+
     /// Send mark_processing instruction (disc=0x02) for a RedemptionRequest PDA
+    ///
+    /// When `utxo_pdas` is provided (non-empty), passes UTXO accounts as remaining accounts
+    /// for trustless total_input_sats computation. Otherwise falls back to no-UTXO mode.
     pub async fn send_mark_processing(
         &self,
         redemption_pda: &Pubkey,
+        utxo_pdas: &[Pubkey],
     ) -> Result<String, SolError> {
         let payer = self.payer.as_ref().ok_or(SolError::NoPayerSet)?;
 
-        let data = vec![0x02u8];
+        // Data: disc(1) + utxo_count(1)
+        let mut data = vec![0x02u8, utxo_pdas.len() as u8];
+        if utxo_pdas.is_empty() {
+            // Backward compat: just disc byte
+            data.truncate(1);
+        }
 
-        let accounts = vec![
+        let mut accounts = vec![
             AccountMeta::new(self.pool_state, false),
             AccountMeta::new(*redemption_pda, false),
             AccountMeta::new(payer.pubkey(), true),
         ];
+
+        // Append UTXO PDA accounts as remaining writable accounts
+        for utxo_pda in utxo_pdas {
+            accounts.push(AccountMeta::new(*utxo_pda, false));
+        }
 
         let ix = Instruction {
             program_id: self.program_id,
@@ -733,6 +815,13 @@ impl SolClient {
     }
 
     /// Send complete_redemption instruction (disc=0x06) for a RedemptionRequest PDA
+    ///
+    /// # Parameters
+    /// - `pool_script`: Pool wallet's scriptPubKey for change detection (e.g. 34-byte P2TR).
+    ///   Pass empty slice if no change tracking desired.
+    /// - `consumed_utxo_pdas`: UTXO PDAs that were Reserved at mark_processing, to be closed.
+    /// - `change_utxo_pda`: Pre-derived PDA for the change output (if pool_script provided).
+    ///   Pass None if no change expected; program will skip if no matching output found.
     pub async fn send_complete_redemption(
         &self,
         redemption_pda: &Pubkey,
@@ -740,14 +829,20 @@ impl SolClient {
         verified_tx_pda: &Pubkey,
         tx_buffer: &Pubkey,
         tx_size: u32,
+        pool_script: &[u8],
+        consumed_utxo_pdas: &[Pubkey],
+        change_utxo_pda: Option<&Pubkey>,
     ) -> Result<String, SolError> {
         let payer = self.payer.as_ref().ok_or(SolError::NoPayerSet)?;
 
-        // Data: [0x06] + btc_txid(32) + tx_size(4) = 37 bytes
-        let mut data = Vec::with_capacity(37);
+        // Data: disc(1) + btc_txid(32) + tx_size(4) + pool_script_len(1) + pool_script(0-34) + consumed_utxo_count(1)
+        let mut data = Vec::with_capacity(1 + 32 + 4 + 1 + pool_script.len() + 1);
         data.push(0x06u8);
         data.extend_from_slice(btc_txid);
         data.extend_from_slice(&tx_size.to_le_bytes());
+        data.push(pool_script.len() as u8);
+        data.extend_from_slice(pool_script);
+        data.push(consumed_utxo_pdas.len() as u8);
 
         // Derive light_client PDA under BTC_LIGHT_CLIENT_PROGRAM_ID
         let (light_client_pda, _) = Pubkey::find_program_address(
@@ -769,7 +864,7 @@ impl SolClient {
             &self.program_id,
         );
 
-        let accounts = vec![
+        let mut accounts = vec![
             AccountMeta::new(self.pool_state, false),                   // 0: pool_state (writable)
             AccountMeta::new(*redemption_pda, false),                   // 1: redemption_pda (writable)
             AccountMeta::new(payer.pubkey(), true),                     // 2: payer/authority (signer)
@@ -783,6 +878,28 @@ impl SolClient {
             AccountMeta::new(completion_receipt_pda, false),            // 10: completion_receipt (writable)
             AccountMeta::new_readonly(solana_sdk::system_program::ID, false), // 11: system_program
         ];
+
+        // Account 12: pool_config PDA (read-only, stores on-chain pool_script)
+        let (pool_config_pda, _) = Pubkey::find_program_address(
+            &[b"pool_config"],
+            &self.program_id,
+        );
+        accounts.push(AccountMeta::new_readonly(pool_config_pda, false));
+
+        // Account 13: change UTXO PDA (writable if provided, else system program placeholder)
+        if !pool_script.is_empty() {
+            if let Some(change_pda) = change_utxo_pda {
+                accounts.push(AccountMeta::new(*change_pda, false));
+            } else {
+                // Placeholder — program won't find a matching change output
+                accounts.push(AccountMeta::new_readonly(solana_sdk::system_program::ID, false));
+            }
+        }
+
+        // Consumed UTXO PDAs (writable, for closing)
+        for utxo_pda in consumed_utxo_pdas {
+            accounts.push(AccountMeta::new(*utxo_pda, false));
+        }
 
         let ix = Instruction {
             program_id: self.program_id,

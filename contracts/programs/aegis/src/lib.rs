@@ -90,6 +90,9 @@ pub mod instruction {
     // Fee management
     pub const CLAIM_FEES: u8 = 26;
 
+    // Pool config (admin)
+    pub const SET_POOL_CONFIG: u8 = 27;
+
 }
 
 entrypoint!(process_instruction);
@@ -176,6 +179,10 @@ pub fn process_instruction(
         instruction::CLAIM_FEES => {
             instructions::process_claim_fees(program_id, accounts, data)
         }
+        // Pool config (admin)
+        instruction::SET_POOL_CONFIG => {
+            instructions::process_set_pool_config(program_id, accounts, data)
+        }
         _ => Err(ProgramError::InvalidInstructionData),
     }
 }
@@ -252,6 +259,8 @@ mod tests {
             instruction::CANCEL_POOL_UPDATE,
             instruction::REGISTER_DEPOSIT_INTENT,
             instruction::VERIFY_DEPOSIT_V2,
+            instruction::CLAIM_FEES,
+            instruction::SET_POOL_CONFIG,
         ];
 
         for (i, &d1) in discriminators.iter().enumerate() {
@@ -261,5 +270,47 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_account_discriminators_unique() {
+        use crate::state::pool::POOL_STATE_DISCRIMINATOR;
+        use crate::state::nullifier::NULLIFIER_RECORD_DISCRIMINATOR;
+        use crate::state::redemption::REDEMPTION_REQUEST_DISCRIMINATOR;
+        use crate::state::commitment_tree::COMMITMENT_TREE_DISCRIMINATOR;
+        use crate::state::deposit_receipt::DEPOSIT_RECEIPT_DISCRIMINATOR;
+        use crate::state::deposit_intent::DEPOSIT_INTENT_DISCRIMINATOR;
+        use crate::state::completion_receipt::COMPLETION_RECEIPT_DISCRIMINATOR;
+        use crate::state::utxo::UTXO_RECORD_DISCRIMINATOR;
+        use crate::state::vk_registry::VK_REGISTRY_DISCRIMINATOR;
+        use crate::state::pool_config::POOL_CONFIG_DISCRIMINATOR;
+
+        // All Aegis-owned account discriminators must be unique
+        let discs: &[u8] = &[
+            POOL_STATE_DISCRIMINATOR,           // 0x01
+            NULLIFIER_RECORD_DISCRIMINATOR,     // 0x03
+            REDEMPTION_REQUEST_DISCRIMINATOR,   // 0x04
+            COMMITMENT_TREE_DISCRIMINATOR,      // 0x05
+            DEPOSIT_RECEIPT_DISCRIMINATOR,       // 0x06
+            DEPOSIT_INTENT_DISCRIMINATOR,        // 0x07
+            COMPLETION_RECEIPT_DISCRIMINATOR,    // 0x08
+            UTXO_RECORD_DISCRIMINATOR,          // 0x09
+            POOL_CONFIG_DISCRIMINATOR,          // 0x0A
+            VK_REGISTRY_DISCRIMINATOR,          // 0x14
+        ];
+
+        for (i, &d1) in discs.iter().enumerate() {
+            for (j, &d2) in discs.iter().enumerate() {
+                if i != j {
+                    assert_ne!(d1, d2, "Duplicate account discriminator at {} (0x{:02x}) and {} (0x{:02x})", i, d1, j, d2);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_utxo_discriminator_value() {
+        use crate::state::utxo::UTXO_RECORD_DISCRIMINATOR;
+        assert_eq!(UTXO_RECORD_DISCRIMINATOR, 0x09);
     }
 }

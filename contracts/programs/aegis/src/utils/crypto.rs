@@ -439,6 +439,24 @@ mod tests {
     }
 
     #[test]
+    fn test_redeem_commitment_zero_npk() {
+        // Redeem uses npk = 0x00..00 — verify it produces a deterministic non-zero result
+        let zero_npk = [0u8; 32];
+        let amount = 100_000u64;
+
+        let commitment = compute_deposit_commitment(&zero_npk, amount).unwrap();
+        assert_ne!(commitment, [0u8; 32], "Redeem commitment must be non-zero");
+
+        // Deterministic
+        let commitment2 = compute_deposit_commitment(&zero_npk, amount).unwrap();
+        assert_eq!(commitment, commitment2);
+
+        // Different amounts produce different commitments
+        let commitment3 = compute_deposit_commitment(&zero_npk, 200_000).unwrap();
+        assert_ne!(commitment, commitment3, "Different redeem amounts must produce different commitments");
+    }
+
+    #[test]
     fn test_bound_params_hash_deterministic() {
         let hash1 = compute_bound_params_hash_private_transfer(103);
         let hash2 = compute_bound_params_hash_private_transfer(103);

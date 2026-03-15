@@ -352,6 +352,13 @@ pub struct RedemptionTracking {
     /// Whether the BTC tx was simulated (not actually broadcast)
     #[serde(default)]
     pub simulated: bool,
+    /// On-chain UTXO PDA addresses reserved at mark_processing (base58).
+    /// Stored so complete_redemption can close them to reclaim rent.
+    #[serde(default)]
+    pub consumed_utxo_pdas: Vec<String>,
+    /// Pool wallet scriptPubKey (hex) for change UTXO detection
+    #[serde(default)]
+    pub pool_script_hex: Option<String>,
 }
 
 /// Backend-side redemption status

@@ -46,6 +46,55 @@ fn script_to_address(script: &[u8], network: bitcoin::Network) -> Result<String,
         .map_err(|e| format!("script_to_address: {}", e))
 }
 
+/// Parse a raw (non-witness) BTC transaction and find the vout index of the output
+/// matching the given scriptPubKey (pool change output).
+fn find_change_vout(raw_tx: &[u8], pool_script: &[u8]) -> Option<u32> {
+    let mut offset = 4; // skip version
+    if offset >= raw_tx.len() { return None; }
+
+    // Skip inputs
+    let (input_count, vs) = read_varint_service(&raw_tx[offset..])?;
+    offset += vs;
+    for _ in 0..input_count {
+        offset += 36; // prev_txid + prev_vout
+        if offset >= raw_tx.len() { return None; }
+        let (script_len, vs) = read_varint_service(&raw_tx[offset..])?;
+        offset += vs + script_len as usize + 4; // script + sequence
+    }
+
+    // Read output count
+    if offset >= raw_tx.len() { return None; }
+    let (output_count, vs) = read_varint_service(&raw_tx[offset..])?;
+    offset += vs;
+
+    for i in 0..output_count {
+        if offset + 8 > raw_tx.len() { return None; }
+        offset += 8; // skip value
+
+        let (script_len, vs) = read_varint_service(&raw_tx[offset..])?;
+        offset += vs;
+        let script_end = offset + script_len as usize;
+        if script_end > raw_tx.len() { return None; }
+
+        if &raw_tx[offset..script_end] == pool_script {
+            return Some(i as u32);
+        }
+        offset = script_end;
+    }
+    None
+}
+
+fn read_varint_service(data: &[u8]) -> Option<(u64, usize)> {
+    if data.is_empty() { return None; }
+    match data[0] {
+        0..=0xfc => Some((data[0] as u64, 1)),
+        0xfd if data.len() >= 3 => Some((u16::from_le_bytes([data[1], data[2]]) as u64, 3)),
+        0xfe if data.len() >= 5 => Some((u32::from_le_bytes([data[1], data[2], data[3], data[4]]) as u64, 5)),
+        0xff if data.len() >= 9 => Some((u64::from_le_bytes([data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8]]), 9)),
+        _ => None,
+    }
+}
+
 /// Redemption service
 pub struct RedemptionService {
     /// Configuration
@@ -451,6 +500,8 @@ impl RedemptionService {
                             btc_script: Some(hex::encode(&pda.btc_script)),
                             request_id: Some(pda.request_id),
                             simulated: false,
+                            consumed_utxo_pdas: vec![],
+                            pool_script_hex: None,
                         };
                         self.tracking.upsert(entry).await;
                         recovered = true;
@@ -495,8 +546,10 @@ impl RedemptionService {
 
     /// Phase 2: Process a newly-discovered Pending PDA.
     ///
-    /// 1. send_mark_processing on-chain
-    /// 2. Build, sign, broadcast BTC tx
+    /// 1. Build BTC tx (selects Esplora UTXOs)
+    /// 2. Match selected UTXOs to on-chain UTXO PDAs
+    /// 3. send_mark_processing with matched UTXO PDAs (reserves them + computes total_input_sats)
+    /// 4. Sign and broadcast BTC tx
     async fn process_new_redemption(
         &self,
         pda: &ParsedRedemption,
@@ -506,26 +559,62 @@ impl RedemptionService {
             .parse::<solana_sdk::pubkey::Pubkey>()
             .map_err(|e| ServiceError::BuildError(format!("invalid PDA pubkey: {}", e)))?;
 
-        // Step 1: Mark processing on-chain (transitions Pending -> Processing)
+        // Step 1: Build the BTC tx to know which UTXOs are selected
+        let btc_address = script_to_address(&pda.btc_script, bitcoin::Network::Testnet)
+            .map_err(|e| ServiceError::InvalidAddress(e))?;
+
+        let mut request = WithdrawalRequest::new(
+            String::new(),
+            pda.requester.clone(),
+            pda.amount_sats,
+            btc_address.clone(),
+        );
+        request.redemption_nonce = Some(pda.request_id);
+        request.pda_service_fee = Some(pda.service_fee);
+
+        let utxos = self.pool_utxos.read().await.clone();
+        if utxos.is_empty() {
+            return Err(ServiceError::NoUtxos);
+        }
+
+        let unsigned = self
+            .builder.read().await
+            .build_withdrawal(&request, &utxos)
+            .map_err(|e| ServiceError::BuildError(e.to_string()))?;
+
+        // Step 2: Match builder-selected UTXOs to on-chain UTXO PDAs
+        let utxo_pdas: Vec<solana_sdk::pubkey::Pubkey> = unsigned.utxos.iter()
+            .filter_map(|u| {
+                let txid_internal = crate::solana::spv::txid_to_internal(&u.txid).ok()?;
+                Some(crate::solana::client::SolClient::derive_utxo_pda(
+                    self.sol_client.program_id(),
+                    &txid_internal,
+                    u.vout,
+                ))
+            })
+            .collect();
+
+        // Step 3: Mark processing on-chain with only the selected UTXO PDAs
         self.sol_client
-            .send_mark_processing(&pda_pubkey)
+            .send_mark_processing(&pda_pubkey, &utxo_pdas)
             .await
             .map_err(|e| ServiceError::BuildError(format!("send_mark_processing: {}", e)))?;
 
         println!(
-            "[redemption] Marked PDA {} as Processing (amount={})",
+            "[redemption] Marked PDA {} as Processing (amount={}, utxos={})",
             &pda.pda_address[..8],
-            pda.amount_sats
+            pda.amount_sats,
+            utxo_pdas.len(),
         );
 
-        // Step 2: Build, sign, broadcast BTC transaction
-        self.build_sign_broadcast(pda).await
+        // Step 4: Sign and broadcast (reuses pre-built unsigned tx)
+        self.sign_broadcast_with_tx(pda, &request, unsigned, &utxo_pdas).await
     }
 
     /// Build, sign, and broadcast a BTC transaction for a PDA already marked Processing.
     ///
-    /// This is used both for newly-processed PDAs (after mark_processing) and for
-    /// retrying Processing PDAs that failed the BTC tx step.
+    /// Used for retrying Processing PDAs that failed the BTC tx step.
+    /// For new redemptions, use process_new_redemption which builds first then marks.
     async fn build_sign_broadcast(
         &self,
         pda: &ParsedRedemption,
@@ -546,10 +635,7 @@ impl RedemptionService {
         // Get UTXOs and build tx
         let utxos = self.pool_utxos.read().await.clone();
         if utxos.is_empty() {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
+            let now = now_secs();
             let entry = RedemptionTracking {
                 pda_address: pda.pda_address.clone(),
                 btc_txid: None,
@@ -566,16 +652,30 @@ impl RedemptionService {
                 btc_script: Some(hex::encode(&pda.btc_script)),
                 request_id: Some(pda.request_id),
                 simulated: false,
+                consumed_utxo_pdas: vec![],
+                pool_script_hex: None,
             };
             self.tracking.upsert(entry).await;
             return Err(ServiceError::NoUtxos);
         }
 
-        let mut unsigned = self
+        let unsigned = self
             .builder.read().await
             .build_withdrawal(&request, &utxos)
             .map_err(|e| ServiceError::BuildError(e.to_string()))?;
 
+        // For retries, UTXOs are already reserved — pass empty list
+        self.sign_broadcast_with_tx(pda, &request, unsigned, &[]).await
+    }
+
+    /// Sign and broadcast a pre-built unsigned tx, storing tracking with UTXO PDAs.
+    async fn sign_broadcast_with_tx(
+        &self,
+        pda: &ParsedRedemption,
+        request: &WithdrawalRequest,
+        mut unsigned: crate::redemption::builder::UnsignedTx,
+        reserved_utxo_pdas: &[solana_sdk::pubkey::Pubkey],
+    ) -> Result<ProcessResult, ServiceError> {
         // Attach Solana verification data for FROST signers
         if let Some(nonce) = request.redemption_nonce {
             // FROST policy expects hex scriptPubKey, not bech32 address
@@ -627,11 +727,18 @@ impl RedemptionService {
                 unsigned.fee, unsigned.service_fee, unsigned.send_amount);
         }
 
-        // Store tracking entry
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        // Derive pool scriptPubKey for change detection
+        let pool_script_hex = if !self.config.pool_address.is_empty() {
+            match bitcoin::Address::from_str(&self.config.pool_address) {
+                Ok(addr) => Some(hex::encode(addr.assume_checked().script_pubkey().as_bytes())),
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+
+        // Store tracking entry with reserved UTXO PDAs
+        let now = now_secs();
         let is_simulated = broadcast_mode != "real";
         let entry = RedemptionTracking {
             pda_address: pda.pda_address.clone(),
@@ -649,6 +756,8 @@ impl RedemptionService {
             btc_script: Some(hex::encode(&pda.btc_script)),
             request_id: Some(pda.request_id),
             simulated: is_simulated,
+            consumed_utxo_pdas: reserved_utxo_pdas.iter().map(|p| p.to_string()).collect(),
+            pool_script_hex,
         };
         self.tracking.upsert(entry).await;
 
@@ -964,6 +1073,55 @@ impl RedemptionService {
             ServiceError::BuildError("no tx_size in tracking".to_string())
         })?;
 
+        // Recover pool scriptPubKey from tracking or config
+        let pool_script: Vec<u8> = tracking.pool_script_hex.as_ref()
+            .and_then(|h| hex::decode(h).ok())
+            .unwrap_or_else(|| {
+                if !self.config.pool_address.is_empty() {
+                    bitcoin::Address::from_str(&self.config.pool_address).ok()
+                        .map(|a| a.assume_checked().script_pubkey().as_bytes().to_vec())
+                        .unwrap_or_default()
+                } else {
+                    vec![]
+                }
+            });
+
+        // Recover consumed UTXO PDAs from tracking (stored at mark_processing time)
+        let consumed_utxo_pdas: Vec<solana_sdk::pubkey::Pubkey> = tracking.consumed_utxo_pdas.iter()
+            .filter_map(|s| s.parse::<solana_sdk::pubkey::Pubkey>().ok())
+            .collect();
+
+        // Derive change UTXO PDA by parsing the raw BTC tx to find the change output.
+        // The change output pays back to the pool's scriptPubKey.
+        let change_utxo_pda = if !pool_script.is_empty() {
+            // We need the raw BTC tx to find the change vout. Read from ChadBuffer.
+            // The buffer is still open at this point (closed after complete_redemption).
+            // Parse the raw tx to find the output matching pool_script.
+            let rpc = self.sol_client.rpc();
+            match rpc.get_account(&buffer_pubkey) {
+                Ok(account) => {
+                    let buf_data = &account.data;
+                    // ChadBuffer: 32-byte header + raw tx
+                    if buf_data.len() > 32 + tx_size as usize {
+                        let raw_tx = &buf_data[32..32 + tx_size as usize];
+                        find_change_vout(raw_tx, &pool_script).map(|change_vout| {
+                            let vout_le = change_vout.to_le_bytes();
+                            let (pda, _) = solana_sdk::pubkey::Pubkey::find_program_address(
+                                &[b"utxo", &txid_internal, &vout_le],
+                                self.sol_client.program_id(),
+                            );
+                            pda
+                        })
+                    } else {
+                        None
+                    }
+                }
+                Err(_) => None,
+            }
+        } else {
+            None
+        };
+
         // Call complete_redemption on-chain
         match self.sol_client
             .send_complete_redemption(
@@ -972,6 +1130,9 @@ impl RedemptionService {
                 &verified_tx_pda,
                 &buffer_pubkey,
                 tx_size,
+                &pool_script,
+                &consumed_utxo_pdas,
+                change_utxo_pda.as_ref(),
             )
             .await
         {

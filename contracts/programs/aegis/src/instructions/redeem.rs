@@ -274,6 +274,18 @@ pub fn process_redeem(
         proof_bytes, &public_inputs[..pi_len], delta_g2, ic,
     )?;
 
+    // Verify redeem commitment: last output = Poseidon(0, ZKBTC_TOKEN_ID, redeem_amount)
+    // This binds the instruction data amount to the ZK proof — relayer cannot inflate.
+    {
+        let zero_npk = [0u8; 32];
+        let expected_commitment = crate::utils::crypto::compute_deposit_commitment(
+            &zero_npk, redeem_amount,
+        )?;
+        if *commitments_out[n_outputs - 1] != expected_commitment {
+            return Err(AegisError::InvalidCommitment.into());
+        }
+    }
+
     // Get clock and rent for PDA creation
     let clock = Clock::get()?;
     let rent = Rent::get()?;

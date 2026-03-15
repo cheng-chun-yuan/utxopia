@@ -35,7 +35,7 @@ use pinocchio::{
 
 use crate::error::AegisError;
 use crate::state::{
-    CommitmentTree, DepositReceipt, PoolState,
+    CommitmentTree, DepositReceipt, PoolState, UtxoRecord,
     VerifiedTransactionView, light_client_tip_height,
     deposit_receipt::DEPOSIT_RECEIPT_DISCRIMINATOR,
 };
@@ -115,6 +115,7 @@ impl VerifyStealthDepositData {
 /// 9.  `[]` Token-2022 program
 /// 10. `[]` Deposit TX buffer (ChadBuffer)
 /// 11. `[writable]` Deposit receipt PDA (prevents duplicate verification)
+/// 12. `[writable]` UTXO record PDA (tracks pool BTC UTXO)
 ///
 /// # Instruction data
 /// - VerifyStealthDepositData (80 bytes, fixed)
@@ -123,7 +124,7 @@ pub fn process_verify_stealth_deposit(
     accounts: &[AccountInfo],
     data: &[u8],
 ) -> ProgramResult {
-    if accounts.len() < 12 {
+    if accounts.len() < 13 {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
@@ -139,6 +140,7 @@ pub fn process_verify_stealth_deposit(
     let token_program = &accounts[9];
     let deposit_tx_buffer_info = &accounts[10];
     let deposit_receipt_info = &accounts[11];
+    let utxo_record_info = &accounts[12];
 
     // Parse instruction data (no trailing merkle proof)
     let ix_data = VerifyStealthDepositData::from_bytes(data)?;
@@ -163,6 +165,7 @@ pub fn process_verify_stealth_deposit(
     validate_account_writable(zkbtc_mint)?;
     validate_account_writable(pool_vault)?;
     validate_account_writable(deposit_receipt_info)?;
+    validate_account_writable(utxo_record_info)?;
 
     // Authority must be signer
     if !authority.is_signer() {
@@ -302,8 +305,8 @@ pub fn process_verify_stealth_deposit(
         .find_deposit_op_return()
         .ok_or(AegisError::InvalidStealthOpReturn)?;
 
-    // Extract deposit amount from sweep TX's deposit output
-    let deposit_output = sweep_parsed.find_deposit_output()
+    // Extract deposit amount and vout from sweep TX's deposit output
+    let (deposit_output, sweep_vout) = sweep_parsed.find_deposit_output_with_vout()
         .ok_or(AegisError::InvalidSpvProof)?;
     let amount_sats = deposit_output.value;
 
@@ -351,6 +354,43 @@ pub fn process_verify_stealth_deposit(
         leaf_index as u32,
     );
 
+    // --- Create UTXO record PDA for the sweep tx's pool output ---
+    {
+        let vout_le = sweep_vout.to_le_bytes();
+        let utxo_seeds: &[&[u8]] = &[UtxoRecord::SEED, &ix_data.sweep_txid, &vout_le];
+        let (expected_utxo_pda, utxo_bump) = find_program_address(utxo_seeds, program_id);
+        if utxo_record_info.key() != &expected_utxo_pda {
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        let rent = Rent::get()?;
+        let utxo_bump_bytes = [utxo_bump];
+        let utxo_signer_seeds: &[&[u8]] = &[
+            UtxoRecord::SEED,
+            &ix_data.sweep_txid,
+            &vout_le,
+            &utxo_bump_bytes,
+        ];
+
+        create_pda_account(
+            authority,
+            utxo_record_info,
+            program_id,
+            rent.minimum_balance(UtxoRecord::LEN),
+            UtxoRecord::LEN as u64,
+            utxo_signer_seeds,
+        )?;
+
+        let mut utxo_data = utxo_record_info.try_borrow_mut_data()?;
+        let utxo = UtxoRecord::init(&mut utxo_data)?;
+        utxo.set_txid(&ix_data.sweep_txid);
+        utxo.set_vout(sweep_vout);
+        utxo.set_amount_sats(amount_sats);
+        // status defaults to Unspent (0)
+
+        crate::utils::events::emit_utxo_created(&ix_data.sweep_txid, sweep_vout, amount_sats);
+    }
+
     // Mint zkBTC to pool vault
     let pool_bump_bytes = [pool_bump];
     let pool_signer_seeds: &[&[u8]] = &[PoolState::SEED, &pool_bump_bytes];
@@ -372,6 +412,7 @@ pub fn process_verify_stealth_deposit(
         pool.increment_deposit_count()?;
         pool.add_minted(amount_sats)?;
         pool.add_shielded(amount_sats)?;
+        pool.add_utxo(amount_sats)?;
         pool.set_last_update(clock.unix_timestamp);
     }
 

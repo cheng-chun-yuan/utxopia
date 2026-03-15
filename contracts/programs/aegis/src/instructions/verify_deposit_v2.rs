@@ -19,11 +19,12 @@
 //! - Mints zkBTC to pool vault
 //! - Closes DepositIntent PDA (returns rent to authority)
 //!
-//! Instruction Data (76 bytes, fixed):
+//! Instruction Data (80 bytes):
 //! - [0-31]   sweep_txid        (32 bytes) - Sweep tx ID (internal byte order)
 //! - [32-39]  block_height      (8 bytes)  - Block containing sweep tx (cross-check)
 //! - [40-43]  sweep_tx_size     (4 bytes)  - Raw sweep tx size in ChadBuffer
 //! - [44-75]  deposit_txid      (32 bytes) - Deposit tx ID (internal byte order)
+//! - [76-79]  deposit_tx_size   (4 bytes)  - Raw deposit tx size in ChadBuffer (0 = skip Taproot verify)
 
 use pinocchio::{
     account_info::AccountInfo,
@@ -35,14 +36,16 @@ use pinocchio::{
 
 use crate::error::AegisError;
 use crate::state::{
-    CommitmentTree, DepositIntent, DepositReceipt, PoolState,
+    CommitmentTree, DepositIntent, DepositReceipt, PoolConfig, PoolState,
     VerifiedTransactionView, light_client_tip_height,
     deposit_receipt::DEPOSIT_RECEIPT_DISCRIMINATOR,
+    pool_config::POOL_CONFIG_DISCRIMINATOR,
 };
 use crate::utils::events::ANNOUNCEMENT_TYPE_DEPOSIT;
 use crate::utils::crypto::compute_deposit_commitment;
 use crate::utils::bitcoin::{compute_tx_hash, ParsedTransaction};
 use crate::utils::chadbuffer::read_transaction_from_buffer;
+use crate::utils::secp256k1::{extract_p2tr_output_key, verify_taproot_output_key};
 use crate::utils::{
     create_pda_account, mint_zkbtc, validate_program_owner, validate_system_program,
     validate_token_2022_owner, validate_token_program_key, validate_account_writable,
@@ -56,13 +59,16 @@ pub struct VerifyDepositV2Data {
     pub block_height: u64,
     pub sweep_tx_size: u32,
     pub deposit_txid: [u8; 32],
+    /// Size of deposit TX in ChadBuffer (0 = skip Taproot verification, backward compat)
+    pub deposit_tx_size: u32,
 }
 
 impl VerifyDepositV2Data {
-    pub const SIZE: usize = 32 + 8 + 4 + 32; // 76 bytes
+    pub const MIN_SIZE: usize = 32 + 8 + 4 + 32; // 76 bytes (backward compat)
+    pub const FULL_SIZE: usize = 32 + 8 + 4 + 32 + 4; // 80 bytes
 
     pub fn from_bytes(data: &[u8]) -> Result<Self, ProgramError> {
-        if data.len() < Self::SIZE {
+        if data.len() < Self::MIN_SIZE {
             return Err(ProgramError::InvalidInstructionData);
         }
 
@@ -75,11 +81,19 @@ impl VerifyDepositV2Data {
         let mut deposit_txid = [0u8; 32];
         deposit_txid.copy_from_slice(&data[44..76]);
 
+        // Optional: deposit_tx_size (0 if not provided → skip Taproot verify)
+        let deposit_tx_size = if data.len() >= Self::FULL_SIZE {
+            u32::from_le_bytes(data[76..80].try_into().unwrap())
+        } else {
+            0
+        };
+
         Ok(Self {
             sweep_txid,
             block_height,
             sweep_tx_size,
             deposit_txid,
+            deposit_tx_size,
         })
     }
 }
@@ -102,6 +116,8 @@ impl VerifyDepositV2Data {
 /// 9.  `[]` Token-2022 program
 /// 10. `[writable]` DepositIntent PDA
 /// 11. `[writable]` Deposit receipt PDA (prevents duplicate verification)
+/// 12. `[]`         PoolConfig PDA (optional, for Taproot npk verification)
+/// 13. `[]`         Deposit TX buffer (ChadBuffer, optional, for Taproot verification)
 pub fn process_verify_deposit_v2(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -254,6 +270,11 @@ pub fn process_verify_deposit_v2(
     let sweep_parsed = ParsedTransaction::parse(sweep_raw_tx)
         .map_err(|_| AegisError::InvalidSpvProof)?;
 
+    // --- Verify sweep TX actually spends from deposit TX ---
+    if !sweep_parsed.find_input_with_prev_txid(&ix_data.deposit_txid) {
+        return Err(AegisError::InvalidSpvProof.into());
+    }
+
     // --- Read npk + ephemeral_pub from DepositIntent PDA ---
     let (ephemeral_pub, npk) = {
         let intent_data = deposit_intent_info.try_borrow_data()?;
@@ -268,6 +289,62 @@ pub fn process_verify_deposit_v2(
 
         (intent.ephemeral_pub, intent.npk)
     };
+
+    // --- Taproot npk ↔ deposit address verification ---
+    // If deposit TX data is provided and PoolConfig has group_pub_key,
+    // verify that npk from DepositIntent matches the actual BTC deposit address.
+    if ix_data.deposit_tx_size > 0 && accounts.len() >= 14 {
+        let pool_config_info = &accounts[12];
+        let deposit_tx_buffer_info = &accounts[13];
+
+        validate_program_owner(pool_config_info, program_id)?;
+
+        let group_pub_key = {
+            let config_data = pool_config_info.try_borrow_data()?;
+            if config_data.len() >= PoolConfig::LEN && config_data[0] == POOL_CONFIG_DISCRIMINATOR {
+                let config = PoolConfig::from_bytes(&config_data)?;
+                if config.has_group_pub_key() {
+                    Some(*config.get_group_pub_key())
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        };
+
+        if let Some(gpk) = group_pub_key {
+            // Read and verify deposit TX from ChadBuffer
+            crate::utils::chadbuffer::validate_chadbuffer_owner(deposit_tx_buffer_info)?;
+            let deposit_buffer_data = deposit_tx_buffer_info
+                .try_borrow_data()
+                .map_err(|_| AegisError::InvalidSpvProof)?;
+            let deposit_raw_tx = read_transaction_from_buffer(
+                &deposit_buffer_data,
+                ix_data.deposit_tx_size as usize,
+            )?;
+
+            // Verify deposit TX hash matches deposit_txid
+            let computed_deposit_hash = compute_tx_hash(deposit_raw_tx);
+            if computed_deposit_hash != ix_data.deposit_txid {
+                return Err(AegisError::InvalidSpvProof.into());
+            }
+
+            // Parse deposit TX and find P2TR output
+            let deposit_parsed = ParsedTransaction::parse(deposit_raw_tx)
+                .map_err(|_| AegisError::InvalidSpvProof)?;
+
+            // Find the P2TR output that was spent by the sweep TX
+            // Look for any P2TR output and extract its output key
+            let deposit_output_key = deposit_parsed
+                .outputs()
+                .find_map(|output| extract_p2tr_output_key(output.script_pubkey))
+                .ok_or(AegisError::TaprootVerificationFailed)?;
+
+            // Verify: outputKey == groupPubKey + H_TapTweak(groupPubKey || npk) * G
+            verify_taproot_output_key(&gpk, &npk, &deposit_output_key)?;
+        }
+    }
 
     // Extract deposit amount from sweep TX's deposit output (largest P2TR output)
     let deposit_output = sweep_parsed.find_deposit_output()

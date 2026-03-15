@@ -6,6 +6,7 @@
 pub mod bitcoin;
 pub mod chadbuffer;
 pub mod crypto;
+pub mod secp256k1;
 
 pub mod events;
 pub mod token;

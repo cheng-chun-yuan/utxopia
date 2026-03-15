@@ -169,10 +169,18 @@ export async function GET() {
         };
       });
 
+    // Track which btcTxids are already represented from announcements
+    const matchedBtcTxids = new Set<string>();
+    for (const d of deposits) {
+      if (d.btcTxid) matchedBtcTxids.add(d.btcTxid);
+    }
+
     // Add tracker-only deposits (ongoing: detected, confirming, sweeping, etc.)
     // These don't have on-chain announcements yet since they haven't been verified on Solana.
     for (const tracker of trackerDeposits) {
       if (tracker.solana_tx && matchedTrackerSolTxs.has(tracker.solana_tx)) continue;
+      // Skip if this btcTxid is already represented (e.g. "already_verified" tracker for a deposit that was matched by announcement)
+      if (tracker.btc_txid && matchedBtcTxids.has(tracker.btc_txid)) continue;
       deposits.push({
         txSignature: tracker.solana_tx ?? "",
         commitment: "",

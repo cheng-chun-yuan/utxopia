@@ -14,6 +14,8 @@
 //! - 0x0C AnnouncementsBatch: disc(1) + count(1) + [type(1) + ephemeral(32) + amount(8) + commitment(32) + leaf_index(4)] x N
 //! - 0x0D DepositVerified: disc(1) + sweep_txid(32) + deposit_txid(32) + amount_sats(8) + leaf_index(4) = 77 bytes
 //! - 0x0E UnshieldMeta: disc(1) + amount(8) + recipient(32) = 41 bytes
+//! - 0x0F UtxoCreated: disc(1) + txid(32) + vout(4) + amount_sats(8) = 45 bytes
+//! - 0x10 UtxoConsumed: disc(1) + txid(32) + vout(4) + amount_sats(8) = 45 bytes
 
 use pinocchio::log::sol_log_data;
 
@@ -49,6 +51,12 @@ const EVENT_DEPOSIT_VERIFIED: u8 = 0x0D;
 
 /// Event discriminator: unshield/redeem metadata (amount + recipient)
 const EVENT_UNSHIELD_META: u8 = 0x0E;
+
+/// Event discriminator: UTXO created (deposit or change)
+const EVENT_UTXO_CREATED: u8 = 0x0F;
+
+/// Event discriminator: UTXO consumed (spent in withdrawal)
+const EVENT_UTXO_CONSUMED: u8 = 0x10;
 
 /// Max batch items for stack-allocated buffer (MAX_SAFE_JOINSPLIT_SIZE = 14)
 const MAX_BATCH: usize = 14;
@@ -211,6 +219,34 @@ pub fn emit_unshield_meta(
     let disc = [EVENT_UNSHIELD_META];
     let amt = amount.to_le_bytes();
     sol_log_data(&[&disc, &amt, recipient]);
+}
+
+/// Emit when a UTXO is created (deposit or change output).
+///
+/// Layout: disc(1) + txid(32) + vout(4) + amount_sats(8) = 45 bytes
+pub fn emit_utxo_created(
+    txid: &[u8; 32],
+    vout: u32,
+    amount_sats: u64,
+) {
+    let disc = [EVENT_UTXO_CREATED];
+    let v = vout.to_le_bytes();
+    let amt = amount_sats.to_le_bytes();
+    sol_log_data(&[&disc, txid, &v, &amt]);
+}
+
+/// Emit when a UTXO is consumed (spent in a withdrawal tx).
+///
+/// Layout: disc(1) + txid(32) + vout(4) + amount_sats(8) = 45 bytes
+pub fn emit_utxo_consumed(
+    txid: &[u8; 32],
+    vout: u32,
+    amount_sats: u64,
+) {
+    let disc = [EVENT_UTXO_CONSUMED];
+    let v = vout.to_le_bytes();
+    let amt = amount_sats.to_le_bytes();
+    sol_log_data(&[&disc, txid, &v, &amt]);
 }
 
 /// Data for a single announcement in a batch

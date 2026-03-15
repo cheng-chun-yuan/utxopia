@@ -225,18 +225,17 @@ export function MobileSidebarBar({ activeSection }: MobileSidebarProps) {
 
   return (
     <>
-      {/* Sticky bar below floating header */}
-      <div className="lg:hidden sticky top-0 z-20 border-b border-gray/10 bg-background/80 backdrop-blur-md px-4 py-2.5 flex items-center gap-3">
-        <button
-          onClick={() => setOpen(true)}
-          className="p-1.5 rounded-md border border-gray/10 hover:bg-muted/30 transition-colors"
-        >
-          <Menu className="w-4 h-4 text-gray" />
-        </button>
-        <span className="text-[13px] font-medium text-gray-light truncate">
-          {activeLabel}
-        </span>
-      </div>
+      {/* Mobile menu button — aligned with nav pill */}
+      {!open && (
+        <div className="lg:hidden fixed top-[18px] left-4 z-50">
+          <button
+            onClick={() => setOpen(true)}
+            className="p-2 rounded-lg border border-gray/10 bg-background/80 backdrop-blur-md hover:bg-muted/30 transition-colors shadow-sm"
+          >
+            <Menu className="w-4 h-4 text-gray" />
+          </button>
+        </div>
+      )}
 
       {/* Drawer overlay + panel */}
       <AnimatePresence>
@@ -247,7 +246,7 @@ export function MobileSidebarBar({ activeSection }: MobileSidebarProps) {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+              className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm lg:hidden"
               onClick={() => setOpen(false)}
             />
             <motion.div
@@ -255,7 +254,7 @@ export function MobileSidebarBar({ activeSection }: MobileSidebarProps) {
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="fixed top-0 left-0 bottom-0 z-40 w-[280px] max-w-[85vw] bg-background border-r border-gray/10 overflow-y-auto lg:hidden"
+              className="fixed top-0 left-0 bottom-0 z-[60] w-[280px] max-w-[85vw] bg-background border-r border-gray/10 overflow-y-auto lg:hidden"
             >
               <div className="flex items-center justify-between px-4 py-4 border-b border-gray/10">
                 <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-gray/40">

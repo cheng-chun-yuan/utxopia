@@ -154,6 +154,18 @@ pub enum AegisError {
 
     #[error("Deposit already verified (duplicate)")]
     DuplicateDeposit = 6074,
+
+    #[error("Invalid UTXO record")]
+    InvalidUtxo = 6075,
+
+    #[error("UTXO is not in Unspent status")]
+    UtxoNotUnspent = 6076,
+
+    #[error("Pool script mismatch (instruction data vs on-chain config)")]
+    PoolScriptMismatch = 6077,
+
+    #[error("Taproot output key verification failed (npk does not match deposit address)")]
+    TaprootVerificationFailed = 6078,
 }
 
 impl From<AegisError> for ProgramError {

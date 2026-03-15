@@ -86,8 +86,14 @@ pub struct PoolState {
     /// Pending timelock: proposed service_fee_bps
     pending_service_fee_bps: [u8; 2],
 
-    /// Reserved for future use
-    _reserved: [u8; 20],
+    /// Sum of all Unspent UTXO amounts (satoshis). Carved from _reserved.
+    total_btc_held: [u8; 8],
+
+    /// Number of Unspent UTXOs. Carved from _reserved.
+    utxo_count: [u8; 2],
+
+    /// Reserved for future use (remaining 10 bytes)
+    _reserved: [u8; 10],
 }
 
 impl PoolState {
@@ -213,6 +219,14 @@ impl PoolState {
         self.pending_execute_after() != 0
     }
 
+    pub fn total_btc_held(&self) -> u64 {
+        u64::from_le_bytes(self.total_btc_held)
+    }
+
+    pub fn utxo_count(&self) -> u16 {
+        u16::from_le_bytes(self.utxo_count)
+    }
+
     // Setters
     pub fn set_paused(&mut self, paused: bool) {
         if paused {
@@ -287,6 +301,14 @@ impl PoolState {
         self.pending_service_fee_bps = value.to_le_bytes();
     }
 
+    pub fn set_total_btc_held(&mut self, value: u64) {
+        self.total_btc_held = value.to_le_bytes();
+    }
+
+    pub fn set_utxo_count(&mut self, value: u16) {
+        self.utxo_count = value.to_le_bytes();
+    }
+
     /// Clear all pending timelock fields
     pub fn clear_pending_proposal(&mut self) {
         self.pending_min_deposit = [0u8; 8];
@@ -331,5 +353,207 @@ impl PoolState {
         let total = self.fee_pool();
         self.set_fee_pool(total.checked_add(amount).ok_or(ProgramError::ArithmeticOverflow)?);
         Ok(())
+    }
+
+    /// Add a UTXO to the pool's BTC tracking
+    pub fn add_utxo(&mut self, amount: u64) -> Result<(), ProgramError> {
+        let held = self.total_btc_held();
+        self.set_total_btc_held(held.checked_add(amount).ok_or(ProgramError::ArithmeticOverflow)?);
+        let count = self.utxo_count();
+        self.set_utxo_count(count.checked_add(1).ok_or(ProgramError::ArithmeticOverflow)?);
+        Ok(())
+    }
+
+    /// Remove a UTXO from the pool's BTC tracking
+    pub fn remove_utxo(&mut self, amount: u64) -> Result<(), ProgramError> {
+        let held = self.total_btc_held();
+        self.set_total_btc_held(held.checked_sub(amount).ok_or(ProgramError::ArithmeticOverflow)?);
+        let count = self.utxo_count();
+        self.set_utxo_count(count.checked_sub(1).ok_or(ProgramError::ArithmeticOverflow)?);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn init_pool() -> Vec<u8> {
+        let mut buf = vec![0u8; PoolState::LEN];
+        PoolState::init(&mut buf).unwrap();
+        buf
+    }
+
+    #[test]
+    fn test_pool_state_size_unchanged() {
+        // PoolState size must stay constant — backward compatible with existing PDAs.
+        // _reserved was 20 bytes, now carved into: total_btc_held(8) + utxo_count(2) + _reserved(10)
+        assert_eq!(PoolState::LEN, 268);
+    }
+
+    #[test]
+    fn test_pool_state_utxo_fields_default_zero() {
+        let buf = init_pool();
+        let pool = PoolState::from_bytes(&buf).unwrap();
+        assert_eq!(pool.total_btc_held(), 0);
+        assert_eq!(pool.utxo_count(), 0);
+    }
+
+    #[test]
+    fn test_pool_state_add_utxo() {
+        let mut buf = init_pool();
+        let pool = PoolState::from_bytes_mut(&mut buf).unwrap();
+
+        pool.add_utxo(50_000).unwrap();
+        assert_eq!(pool.total_btc_held(), 50_000);
+        assert_eq!(pool.utxo_count(), 1);
+
+        pool.add_utxo(30_000).unwrap();
+        assert_eq!(pool.total_btc_held(), 80_000);
+        assert_eq!(pool.utxo_count(), 2);
+    }
+
+    #[test]
+    fn test_pool_state_remove_utxo() {
+        let mut buf = init_pool();
+        let pool = PoolState::from_bytes_mut(&mut buf).unwrap();
+
+        pool.add_utxo(50_000).unwrap();
+        pool.add_utxo(30_000).unwrap();
+
+        pool.remove_utxo(50_000).unwrap();
+        assert_eq!(pool.total_btc_held(), 30_000);
+        assert_eq!(pool.utxo_count(), 1);
+
+        pool.remove_utxo(30_000).unwrap();
+        assert_eq!(pool.total_btc_held(), 0);
+        assert_eq!(pool.utxo_count(), 0);
+    }
+
+    #[test]
+    fn test_pool_state_remove_utxo_underflow() {
+        let mut buf = init_pool();
+        let pool = PoolState::from_bytes_mut(&mut buf).unwrap();
+
+        // Removing from zero should fail
+        assert!(pool.remove_utxo(1).is_err());
+    }
+
+    #[test]
+    fn test_pool_state_remove_utxo_count_underflow() {
+        let mut buf = init_pool();
+        let pool = PoolState::from_bytes_mut(&mut buf).unwrap();
+
+        // Set total_btc_held > 0 but utxo_count = 0 (shouldn't happen, but test the guard)
+        pool.set_total_btc_held(100);
+        pool.set_utxo_count(0);
+        assert!(pool.remove_utxo(50).is_err());
+    }
+
+    #[test]
+    fn test_pool_state_utxo_counters_independent_of_other_fields() {
+        let mut buf = init_pool();
+        let pool = PoolState::from_bytes_mut(&mut buf).unwrap();
+
+        // Set some other fields
+        pool.set_deposit_count(10);
+        pool.set_total_minted(1_000_000);
+        pool.set_total_shielded(500_000);
+
+        // UTXO operations should not affect them
+        pool.add_utxo(100_000).unwrap();
+        assert_eq!(pool.deposit_count(), 10);
+        assert_eq!(pool.total_minted(), 1_000_000);
+        assert_eq!(pool.total_shielded(), 500_000);
+        assert_eq!(pool.total_btc_held(), 100_000);
+        assert_eq!(pool.utxo_count(), 1);
+    }
+
+    #[test]
+    fn test_pool_state_utxo_fields_backward_compatible() {
+        // Simulate an existing PDA with all zeros in the _reserved region
+        // (before UTXO tracking was added). The new fields should read as 0.
+        let mut buf = vec![0u8; PoolState::LEN];
+        buf[0] = POOL_STATE_DISCRIMINATOR;
+        let pool = PoolState::from_bytes(&buf).unwrap();
+
+        assert_eq!(pool.total_btc_held(), 0);
+        assert_eq!(pool.utxo_count(), 0);
+    }
+
+    #[test]
+    fn test_pool_state_set_total_btc_held() {
+        let mut buf = init_pool();
+        let pool = PoolState::from_bytes_mut(&mut buf).unwrap();
+
+        pool.set_total_btc_held(21_000_000 * 100_000_000);
+        assert_eq!(pool.total_btc_held(), 2_100_000_000_000_000);
+    }
+
+    #[test]
+    fn test_pool_state_set_utxo_count() {
+        let mut buf = init_pool();
+        let pool = PoolState::from_bytes_mut(&mut buf).unwrap();
+
+        pool.set_utxo_count(u16::MAX);
+        assert_eq!(pool.utxo_count(), u16::MAX);
+    }
+
+    #[test]
+    fn test_pool_state_add_utxo_overflow() {
+        let mut buf = init_pool();
+        let pool = PoolState::from_bytes_mut(&mut buf).unwrap();
+
+        pool.set_total_btc_held(u64::MAX);
+        assert!(pool.add_utxo(1).is_err());
+    }
+
+    #[test]
+    fn test_pool_state_add_utxo_count_overflow() {
+        let mut buf = init_pool();
+        let pool = PoolState::from_bytes_mut(&mut buf).unwrap();
+
+        pool.set_utxo_count(u16::MAX);
+        assert!(pool.add_utxo(1).is_err());
+    }
+
+    #[test]
+    fn test_pool_state_multiple_utxo_lifecycle() {
+        let mut buf = init_pool();
+        let pool = PoolState::from_bytes_mut(&mut buf).unwrap();
+
+        // Deposit 3 UTXOs
+        pool.add_utxo(10_000).unwrap();  // UTXO 1
+        pool.add_utxo(25_000).unwrap();  // UTXO 2
+        pool.add_utxo(50_000).unwrap();  // UTXO 3
+
+        assert_eq!(pool.total_btc_held(), 85_000);
+        assert_eq!(pool.utxo_count(), 3);
+
+        // Reserve 2 UTXOs for withdrawal (mark_processing)
+        pool.remove_utxo(10_000).unwrap();
+        pool.remove_utxo(25_000).unwrap();
+        assert_eq!(pool.total_btc_held(), 50_000);
+        assert_eq!(pool.utxo_count(), 1);
+
+        // Change UTXO comes back (complete_redemption)
+        pool.add_utxo(5_000).unwrap();
+        assert_eq!(pool.total_btc_held(), 55_000);
+        assert_eq!(pool.utxo_count(), 2);
+    }
+
+    #[test]
+    fn test_pool_state_service_fee_still_works() {
+        let mut buf = init_pool();
+        let pool = PoolState::from_bytes_mut(&mut buf).unwrap();
+
+        pool.set_service_fee_bps(30);
+        pool.set_service_fee_base(1000);
+
+        // UTXO operations should not interfere with fee computation
+        pool.add_utxo(100_000).unwrap();
+
+        // fee = 100000 * 30 / 10000 + 1000 = 300 + 1000 = 1300
+        assert_eq!(pool.compute_service_fee(100_000), 1300);
     }
 }

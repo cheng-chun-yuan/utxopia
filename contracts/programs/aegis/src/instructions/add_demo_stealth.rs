@@ -124,6 +124,7 @@ pub fn process_add_demo_stealth(
         if authority.key().as_ref() != pool.authority {
             return Err(AegisError::Unauthorized.into());
         }
+
         pool.bump
     };
 

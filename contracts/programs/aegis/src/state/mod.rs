@@ -23,7 +23,9 @@ pub mod deposit_intent;
 pub mod deposit_receipt;
 pub mod nullifier;
 pub mod pool;
+pub mod pool_config;
 pub mod redemption;
+pub mod utxo;
 pub mod verified_tx_reader;
 pub mod vk_registry;
 
@@ -34,7 +36,9 @@ pub use deposit_intent::*;
 pub use deposit_receipt::*;
 pub use nullifier::*;
 pub use pool::*;
+pub use pool_config::*;
 pub use redemption::*;
+pub use utxo::*;
 pub use verified_tx_reader::*;
 pub use vk_registry::*;
 

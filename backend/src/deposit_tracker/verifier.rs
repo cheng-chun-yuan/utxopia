@@ -210,6 +210,7 @@ impl SpvVerifier {
                 sweep_raw_tx.len() as u32,
                 &deposit_buffer_pubkey,
                 deposit_raw_tx.len() as u32,
+                &sweep_raw_tx,
             )
             .await;
 
@@ -594,6 +595,7 @@ impl SpvVerifier {
         sweep_tx_size: u32,
         deposit_buffer: &Pubkey,
         deposit_tx_size: u32,
+        sweep_raw_tx: &[u8],
     ) -> Result<String, VerifierError> {
         // Derive PDAs
         let (pool_state, _) = Pubkey::find_program_address(&[b"pool_state"], &self.program_id);
@@ -656,7 +658,16 @@ impl SpvVerifier {
             &self.program_id,
         );
 
-        // 12 accounts for verify_stealth_deposit
+        // Derive UTXO record PDA for the sweep tx's pool output.
+        // Find first non-OP_RETURN output with value > 0 (matches on-chain find_deposit_output_with_vout).
+        let sweep_vout = find_deposit_vout_from_raw(sweep_raw_tx).unwrap_or(0);
+        let vout_le = sweep_vout.to_le_bytes();
+        let (utxo_record_pda, _) = Pubkey::find_program_address(
+            &[b"utxo", sweep_txid, &vout_le],
+            &self.program_id,
+        );
+
+        // 13 accounts for verify_stealth_deposit
         let deposit_accounts = vec![
             AccountMeta::new(pool_state, false),                        // 0: pool_state
             AccountMeta::new_readonly(verified_tx_pda, false),          // 1: verified_tx
@@ -670,6 +681,7 @@ impl SpvVerifier {
             AccountMeta::new_readonly(TOKEN_2022_PROGRAM_ID, false),    // 9: token_program
             AccountMeta::new_readonly(*deposit_buffer, false),          // 10: deposit_tx_buffer
             AccountMeta::new(deposit_receipt_pda, false),               // 11: deposit_receipt
+            AccountMeta::new(utxo_record_pda, false),                   // 12: utxo_record
         ];
 
         let deposit_ix = Instruction {
@@ -752,6 +764,72 @@ impl SpvVerifier {
             accounts,
             data,
         })
+    }
+}
+
+/// Parse a raw (non-witness) BTC transaction and find the vout index of the first
+/// non-OP_RETURN output with value > 0. This mirrors the on-chain logic in
+/// `ParsedTransaction::find_deposit_output_with_vout`.
+fn find_deposit_vout_from_raw(raw_tx: &[u8]) -> Option<u32> {
+    // version(4) + varint(input_count) + inputs... + varint(output_count) + outputs...
+    let mut offset = 4; // skip version
+    if offset >= raw_tx.len() { return None; }
+
+    // Read input count (varint)
+    let (input_count, varint_size) = read_varint(&raw_tx[offset..])?;
+    offset += varint_size;
+
+    // Skip inputs
+    for _ in 0..input_count {
+        offset += 36; // prev_txid(32) + prev_vout(4)
+        if offset >= raw_tx.len() { return None; }
+        let (script_len, vs) = read_varint(&raw_tx[offset..])?;
+        offset += vs + script_len as usize + 4; // script + sequence
+    }
+
+    // Read output count (varint)
+    if offset >= raw_tx.len() { return None; }
+    let (output_count, varint_size) = read_varint(&raw_tx[offset..])?;
+    offset += varint_size;
+
+    // Iterate outputs
+    for i in 0..output_count {
+        if offset + 8 > raw_tx.len() { return None; }
+        let value = u64::from_le_bytes(raw_tx[offset..offset+8].try_into().ok()?);
+        offset += 8;
+
+        let (script_len, vs) = read_varint(&raw_tx[offset..])?;
+        offset += vs;
+        let script_end = offset + script_len as usize;
+        if script_end > raw_tx.len() { return None; }
+
+        let is_op_return = script_len > 0 && raw_tx[offset] == 0x6a;
+        offset = script_end;
+
+        if !is_op_return && value > 0 {
+            return Some(i as u32);
+        }
+    }
+    None
+}
+
+/// Read a Bitcoin varint (compact size encoding)
+fn read_varint(data: &[u8]) -> Option<(u64, usize)> {
+    if data.is_empty() { return None; }
+    match data[0] {
+        0..=0xfc => Some((data[0] as u64, 1)),
+        0xfd => {
+            if data.len() < 3 { return None; }
+            Some((u16::from_le_bytes([data[1], data[2]]) as u64, 3))
+        }
+        0xfe => {
+            if data.len() < 5 { return None; }
+            Some((u32::from_le_bytes([data[1], data[2], data[3], data[4]]) as u64, 5))
+        }
+        0xff => {
+            if data.len() < 9 { return None; }
+            Some((u64::from_le_bytes([data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8]]), 9))
+        }
     }
 }
 
