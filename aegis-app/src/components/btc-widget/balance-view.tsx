@@ -1,5 +1,29 @@
 "use client";
 
+/**
+ * BalanceView — displays user's shielded BTC deposits and their lifecycle status.
+ *
+ * Shows three deposit categories:
+ * - Ongoing: deposits in progress (detecting → confirming → sweeping → verifying)
+ * - Minted: successfully verified and minted as zkBTC commitments
+ * - Demo: test deposits created via the demo API
+ *
+ * Also includes an address lookup tool to check deposit status by Taproot address.
+ *
+ * Sub-components (all defined inline as memoized):
+ * - StatusBadge: color-coded deposit status pill
+ * - ProgressBar: visual progress indicator
+ * - OpReturnData: collapsible OP_RETURN data display
+ * - TimelineStep: expandable timeline step with icon + content
+ * - TxLink: transaction link with copy button
+ * - DepositCard: full deposit card with expandable timeline
+ * - DemoDepositCard: simplified card for demo deposits
+ * - RetryButton: retry failed deposits
+ *
+ * TODO(backward-compat): Method 2 fallback (explorer + inbox notes join by commitment)
+ * can be removed once all deposits flow through the backend tracker with npk matching.
+ */
+
 import React, { useState, useEffect, useCallback, useMemo, memo } from "react";
 import Image from "next/image";
 import {

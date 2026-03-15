@@ -1,5 +1,17 @@
 "use client";
 
+/**
+ * ManualVerify — manual SPV verification UI for BTC deposits.
+ *
+ * Allows users to manually verify a Bitcoin deposit by:
+ * 1. Looking up a Taproot address or txid
+ * 2. Fetching block header + Merkle proof from mempool.space
+ * 3. Checking if the block header exists on-chain (via header-relayer)
+ * 4. Displaying all verification data with copy buttons
+ *
+ * Used as a fallback when automatic verification hasn't processed yet.
+ */
+
 import { useState, useCallback } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import {

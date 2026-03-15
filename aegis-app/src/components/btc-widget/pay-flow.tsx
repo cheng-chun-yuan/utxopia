@@ -1,19 +1,32 @@
 "use client";
 
+/**
+ * PayFlow — main JoinSplit transaction UI component.
+ *
+ * Handles 4 payment modes:
+ * - Private (stealth): sender → recipient via one-time stealth address
+ * - Link (note): creates claimable note with secret phrase
+ * - Solana (public/unshield): zkBTC → SPL token to Solana address
+ * - Bitcoin (BTC redeem): zkBTC → BTC via FROST threshold signing
+ *
+ * Sub-components extracted to pay-flow/ directory:
+ * - helpers.ts: Constants, types, validation, field reduction
+ * - proving-steps.tsx: ZK proof generation progress indicator
+ * - note-links.tsx: Claim link preview and shareable link
+ * - output-row-card.tsx: Single output row with mode selector
+ */
+
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { PublicKey, Transaction, TransactionInstruction, SystemProgram, ComputeBudgetProgram, Connection } from "@solana/web3.js";
+import { PublicKey, Transaction, TransactionInstruction, SystemProgram } from "@solana/web3.js";
 import { useConnection } from "@solana/wallet-adapter-react";
 import {
   CheckCircle2, Send, Wallet, Shield, Clock, AlertCircle, AlertTriangle,
-  Key, Copy, Check, X, Loader2, Zap, Plus, Trash2, Bitcoin, FileText,
-  Download, Search, ChevronRight, ArrowRight, Link2,
+  Key, Check, X, Loader2, Zap, Plus, Bitcoin,
+  Download, Search, ChevronRight, ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { parseSats, validateWithdrawalAmount } from "@/lib/utils/validation";
-import { WalletButton } from "@/components/ui/wallet-button";
-import { StealthRecipientInput } from "@/components/ui/stealth-recipient-input";
-import { BtcAddressInput } from "@/components/ui/btc-address-input";
+import { parseSats } from "@/lib/utils/validation";
 import { formatBtc, truncateMiddle } from "@/lib/utils/formatting";
 import { useAegis, type InboxNote } from "@/hooks/use-aegis";
 import { usePasskey } from "@/hooks/use-passkey";
@@ -26,8 +39,6 @@ import {
   prepareClaimInputs,
   getConfig,
   deriveMasterKey,
-  eddsaGetPubKey,
-  deriveKeysFromSeed,
   deriveKeysFromSeedCircuit,
   createStealthMetaAddress,
   type StealthMetaAddress,
@@ -40,219 +51,22 @@ import {
   TOKEN_2022_PROGRAM_ID,
   ZKBTC_MINT_ADDRESS,
   derivePoolStatePDA,
-  deriveCommitmentTreePDA,
   deriveRedemptionRequestPDA,
   getTokenAccountAddress,
-  bigintTo32Bytes,
 } from "@/lib/solana/instructions";
 import { scanSecretPhrase, type ScannedSecretNote } from "@/lib/claim-utils";
 
-// Validate Solana address
-function isValidSolanaAddress(address: string): boolean {
-  try {
-    new PublicKey(address);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// Constants
-const MIN_PAY_SATS = 500;
-const ZKBTC_TOKEN_ID = BigInt(0x7a627463);
-const MAX_OUTPUTS = 12; // N+M<=14, need at least 1 input + 1 change
-const SERVICE_FEE_SATS = 2000; // Flat service fee for BTC withdrawals (goes to pool)
-const RELAYER_FEE_SATS = 2000; // Flat relayer fee for private sends (goes to relayer as note)
-
-// BN254 scalar field modulus (big-endian bytes)
-const BN254_FR_MODULUS = [
-  0x30, 0x64, 0x4e, 0x72, 0xe1, 0x31, 0xa0, 0x29,
-  0xb8, 0x50, 0x45, 0xb6, 0x81, 0x81, 0x58, 0x5d,
-  0x28, 0x33, 0xe8, 0x48, 0x79, 0xb9, 0x70, 0x91,
-  0x43, 0xe1, 0xf5, 0x93, 0xf0, 0x00, 0x00, 0x01,
-];
-
-/**
- * Match on-chain reduce_to_field: if bytes >= BN254 modulus, mask first byte.
- * This ensures the commitment computed off-chain matches the on-chain verification.
- */
-function reduceToFieldOnChain(bytes: Uint8Array): bigint {
-  // Check if bytes >= BN254_FR_MODULUS (big-endian comparison)
-  let isGe = true;
-  for (let i = 0; i < 32; i++) {
-    if (bytes[i] < BN254_FR_MODULUS[i]) { isGe = false; break; }
-    if (bytes[i] > BN254_FR_MODULUS[i]) { break; } // isGe stays true
-  }
-  if (!isGe) {
-    return BigInt("0x" + Buffer.from(bytes).toString("hex"));
-  }
-  // Mask first byte to bring into field range (matches on-chain result[0] &= 0x2F)
-  const reduced = new Uint8Array(bytes);
-  reduced[0] &= 0x2F;
-  return BigInt("0x" + Buffer.from(reduced).toString("hex"));
-}
-
-/**
- * Estimate Solana transaction size for a JoinSplit(N,M).
- * Solana max tx size = 1232 bytes.
- *
- * Relay uses proof_source=1: proof (256 bytes) offloaded to ChadBuffer,
- * stealth data (M×40 bytes) remains in instruction data.
- *
- * Accounts: pool_state, commitment_tree, vk_registry, user, system_program,
- *   N nullifier PDAs, proof_buffer = 7 + N unique (5 + N instruction accounts + program + buffer).
- *
- * Instruction data (mode 1): disc(1) + header(3) + root(32) + bph(32)
- *   + nullifiers(N×32) + commitments(M×32) + stealth(M×40) = 68 + 32N + 72M
- */
-const SOLANA_MAX_TX_SIZE = 1232;
-
-function estimateTransactionSize(nInputs: number, nOutputs: number): number {
-  const numAccounts = 7 + nInputs; // 5 base + N nullifiers + 1 program + 1 proof_buffer
-  const instructionDataSize = 68 + (nInputs * 32) + (nOutputs * 72);
-
-  return (
-    1 +                       // signature count (compact-u16)
-    64 +                      // 1 signature
-    3 +                       // message header
-    1 +                       // account count (compact-u16)
-    (numAccounts * 32) +      // account public keys
-    32 +                      // recent blockhash
-    1 +                       // instruction count (compact-u16)
-    1 +                       // program ID index
-    1 +                       // account indices count (compact-u16)
-    (6 + nInputs) +           // account indices (one byte each, +1 for buffer)
-    2 +                       // instruction data length (compact-u16)
-    instructionDataSize       // instruction data
-  );
-}
-
-// Available circuit variants — locally served (N+M <= 5), rest via CDN
-// Constrain to what's actually compiled and has on-chain VK registered
-const AVAILABLE_CIRCUITS = new Set(
-  Array.from({ length: 13 }, (_, n) =>
-    Array.from({ length: 14 - n - 1 }, (_, m) => `${n + 1}x${m + 1}`)
-  ).flat()
-);
-
-// Circuits served locally by Vercel (N+M <= 5, always available)
-const LOCAL_CIRCUITS = new Set([
-  "1x1", "1x2", "1x3", "1x4",
-  "2x1", "2x2", "2x3",
-  "3x1", "3x2",
-  "4x1",
-]);
-
-type PayStep = "connect" | "compose" | "proving" | "success";
-
-
-const PROVING_SUB_STEPS = [
-  { match: "Initializing", label: "Initializing" },
-  { match: "Fetching", label: "Fetching Merkle proofs" },
-  { match: "Deriving", label: "Deriving stealth keys" },
-  { match: "Preparing", label: "Preparing outputs" },
-  { match: "Signing", label: "Signing transaction" },
-  { match: "Generating", label: "Generating ZK proof" },
-  { match: "Submitting", label: "Submitting on-chain" },
-];
-
-function getProvingSubStepIndex(status: string): number {
-  for (let i = PROVING_SUB_STEPS.length - 1; i >= 0; i--) {
-    if (status.startsWith(PROVING_SUB_STEPS[i].match)) return i;
-  }
-  return 0;
-}
-
-function ProvingSubSteps({ status }: { status: string }) {
-  const currentIdx = getProvingSubStepIndex(status);
-
-  return (
-    <div className="w-full space-y-1.5">
-      {PROVING_SUB_STEPS.map((sub, i) => {
-        const isComplete = i < currentIdx;
-        const isCurrent = i === currentIdx;
-        const isPending = i > currentIdx;
-
-        return (
-          <div key={sub.match} className="flex items-center gap-3">
-            {/* Icon */}
-            <div className="w-5 h-5 flex items-center justify-center shrink-0">
-              {isComplete ? (
-                <CheckCircle2 className="w-4.5 h-4.5 text-success" />
-              ) : isCurrent ? (
-                <Loader2 className="w-4.5 h-4.5 text-purple animate-spin" />
-              ) : (
-                <div className="w-3.5 h-3.5 rounded-full border-2 border-gray/25" />
-              )}
-            </div>
-            {/* Label */}
-            <span
-              className={cn(
-                "text-body2 transition-colors",
-                isComplete && "text-success",
-                isCurrent && "text-foreground font-medium",
-                isPending && "text-gray/40",
-              )}
-            >
-              {sub.label}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-type OutputMode = "stealth" | "public" | "note" | "btc";
-
-interface OutputRow {
-  id: string;
-  mode: OutputMode;
-  amount: string;
-  secretPhrase: string;
-  resolvedMeta: StealthMetaAddress | null;
-  resolvedName: string | null;
-  stealthError: string | null;
-  solanaAddress: string;
-  addressError: string | null;
-  btcAddress: string | null;
-  btcScriptPubKey: Uint8Array | null;
-  btcAddressError: string | null;
-}
-
-function createOutputRow(mode: OutputMode = "public", defaultAddress = ""): OutputRow {
-  return {
-    id: crypto.randomUUID(),
-    mode,
-    amount: "",
-    secretPhrase: "",
-    resolvedMeta: null,
-    resolvedName: null,
-    stealthError: null,
-    solanaAddress: defaultAddress,
-    addressError: null,
-    btcAddress: null,
-    btcScriptPubKey: null,
-    btcAddressError: null,
-  };
-}
-
-/**
- * Auto-select smallest combination of notes that covers the target amount.
- * Greedy: sort ascending, pick until we cover it.
- */
-function autoSelectNotes(notes: InboxNote[], targetSats: number): Set<string> {
-  if (targetSats <= 0) return new Set();
-  const sorted = [...notes].sort((a, b) => Number(a.amount) - Number(b.amount));
-  const selected = new Set<string>();
-  let total = 0;
-  for (const note of sorted) {
-    selected.add(note.id);
-    total += Number(note.amount);
-    if (total >= targetSats) break;
-  }
-  return selected;
-}
+// Extracted sub-components
+import {
+  MIN_PAY_SATS, ZKBTC_TOKEN_ID, MAX_OUTPUTS, SERVICE_FEE_SATS, RELAYER_FEE_SATS,
+  SOLANA_MAX_TX_SIZE, AVAILABLE_CIRCUITS,
+  isValidSolanaAddress, reduceToFieldOnChain, estimateTransactionSize,
+  autoSelectNotes, createOutputRow,
+  type PayStep, type OutputMode, type OutputRow,
+} from "./pay-flow/helpers";
+import { ProvingSubSteps } from "./pay-flow/proving-steps";
+import { NoteClaimLink } from "./pay-flow/note-links";
+import { OutputRowCard } from "./pay-flow/output-row-card";
 
 interface PayFlowProps {
   initialMode?: "public" | "stealth" | "btc_withdraw";
@@ -340,7 +154,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   const [importError, setImportError] = useState<string | null>(null);
   const importAutoTriggered = useRef(false);
 
-  // Relayer config (fetched from backend)
+  // Relayer config (stealth meta + relayer fee from backend, service fees from on-chain)
   const [relayerMeta, setRelayerMeta] = useState<{
     stealthMeta: string | null;
     relayerFeeSats: number;
@@ -349,19 +163,20 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   } | null>(null);
 
   useEffect(() => {
-    fetch("/api/relayer/meta")
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data) {
-          setRelayerMeta({
-            stealthMeta: data.stealth_meta || null,
-            relayerFeeSats: data.relayer_fee_sats ?? RELAYER_FEE_SATS,
-            serviceFeeSats: data.service_fee_base ?? SERVICE_FEE_SATS,
-            serviceFeeBps: data.service_fee_bps ?? 0,
-          });
-        }
-      })
-      .catch(() => {}); // silently fail — use defaults
+    // Fetch service fees directly from on-chain pool state (no backend dependency)
+    // and relayer config from backend in parallel
+    Promise.all([
+      fetch("/api/solana/pool-state").then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch("/api/relayer/meta").then(r => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([poolData, relayerData]) => {
+      const state = poolData?.state;
+      setRelayerMeta({
+        stealthMeta: relayerData?.stealth_meta || null,
+        relayerFeeSats: relayerData?.relayer_fee_sats ?? RELAYER_FEE_SATS,
+        serviceFeeSats: state ? Number(state.serviceFeeBase) : SERVICE_FEE_SATS,
+        serviceFeeBps: state?.serviceFeeBps ?? 0,
+      });
+    });
   }, []);
 
   // Output rows state — default first output based on initialMode
@@ -1988,311 +1803,4 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   return null;
 }
 
-// ===== NOTE LINK PREVIEW (inline in compose step) =====
-
-function NoteLinkPreview({ phrase }: { phrase: string }) {
-  const [copied, setCopied] = useState(false);
-  const claimUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/claim#note=${encodeURIComponent(phrase)}`
-    : "";
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(claimUrl).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-
-  return (
-    <div className="mt-1 space-y-0.5">
-      <p className="text-[11px] font-mono text-gray/50 truncate">{claimUrl}</p>
-      <button
-        onClick={handleCopy}
-        className="flex items-center gap-1 text-[11px] text-gray/60 hover:text-gray transition-colors cursor-pointer"
-      >
-        {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-        {copied ? "Copied!" : "Copy link"}
-      </button>
-    </div>
-  );
-}
-
-// ===== NOTE CLAIM LINK COMPONENT =====
-
-function NoteClaimLink({ phrase, amount }: { phrase: string; amount: number }) {
-  const [copied, setCopied] = useState(false);
-  const claimUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/claim#note=${encodeURIComponent(phrase)}`
-    : "";
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(claimUrl).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-
-  return (
-    <div className="p-3 rounded-[12px] bg-muted border border-gray/15">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <FileText className="w-4 h-4 text-gray-light" />
-          <span className="text-body2-semibold text-foreground">
-            Note: {formatBtc(amount)} zkBTC
-          </span>
-        </div>
-        <button
-          onClick={handleCopy}
-          className="flex items-center gap-1 text-caption text-purple hover:text-purple/80 transition-colors"
-        >
-          {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-          {copied ? "Copied!" : "Copy Link"}
-        </button>
-      </div>
-      <div className="p-2 bg-background rounded-[8px] break-all">
-        <code className="text-[11px] font-mono text-gray">{claimUrl}</code>
-      </div>
-      <p className="text-[11px] text-gray mt-1.5">
-        Share this link to let someone claim this note
-      </p>
-    </div>
-  );
-}
-
-// ===== OUTPUT ROW CARD COMPONENT =====
-
-interface OutputRowCardProps {
-  output: OutputRow;
-  index: number;
-  canRemove: boolean;
-  onUpdate: (update: Partial<OutputRow>) => void;
-  onRemove: () => void;
-  defaultAddress: string;
-  disablePublic?: boolean;
-  disableBtc?: boolean;
-  selfMeta?: StealthMetaAddress | null;
-  maxAmount: number;
-  serviceFeeSats?: number;
-  serviceFeeBps?: number;
-}
-
-function OutputRowCard({
-  output,
-  index,
-  canRemove,
-  onUpdate,
-  onRemove,
-  defaultAddress,
-  disablePublic = false,
-  disableBtc = false,
-  selfMeta,
-  maxAmount,
-  serviceFeeSats = 0,
-  serviceFeeBps = 0,
-}: OutputRowCardProps) {
-
-  return (
-    <div className="p-4 rounded-[12px] bg-card border border-gray/15">
-      {/* Type selector row */}
-      <div className="flex items-center gap-2 mb-3">
-        <div className="flex flex-1 p-0.5 bg-muted rounded-[8px] border border-gray/10">
-          {([
-            { mode: "stealth" as const, label: "Private", icon: Shield, activeClass: "bg-purple/20 text-purple", disabled: false },
-            { mode: "note" as const, label: "Link", icon: Link2, activeClass: "bg-btc/20 text-btc", disabled: false },
-            { mode: "public" as const, label: "Solana", icon: Wallet, activeClass: "bg-privacy/20 text-privacy", disabled: disablePublic && output.mode !== "public" },
-            { mode: "btc" as const, label: "Bitcoin", icon: Bitcoin, activeClass: "bg-btc/20 text-btc", disabled: disableBtc && output.mode !== "btc" },
-          ] as const).map((tab) => (
-            <button
-              key={tab.mode}
-              onClick={() => {
-                if (tab.disabled) return;
-                const reset: Partial<OutputRow> = { mode: tab.mode };
-                if (tab.mode === "public") { reset.stealthError = null; reset.solanaAddress = defaultAddress; }
-                else if (tab.mode === "stealth") { reset.addressError = null; }
-                else if (tab.mode === "note") { reset.addressError = null; reset.stealthError = null; }
-                else { reset.addressError = null; reset.stealthError = null; }
-                onUpdate(reset);
-              }}
-              disabled={tab.disabled}
-              className={cn(
-                "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-[6px] text-[11px] font-medium transition-colors",
-                output.mode === tab.mode
-                  ? tab.activeClass
-                  : tab.disabled
-                    ? "text-gray/30 cursor-not-allowed"
-                    : "text-gray hover:text-gray-light"
-              )}
-              title={
-                tab.mode === "public" && tab.disabled ? "Only 1 public/BTC output per transaction" :
-                tab.mode === "btc" && tab.disabled ? "Only 1 public/BTC output per transaction" :
-                undefined
-              }
-            >
-              <tab.icon className="w-3 h-3" />
-              {tab.label}
-            </button>
-          ))}
-        </div>
-        {/* Remove */}
-        {canRemove && (
-          <button
-            onClick={onRemove}
-            className="p-1 rounded text-gray/50 hover:text-error transition-colors shrink-0"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
-
-      {/* Recipient */}
-      {output.mode === "btc" ? (
-        <div className="mb-2">
-          <BtcAddressInput
-            onValidated={(addr, script) => {
-              onUpdate({ btcAddress: addr, btcScriptPubKey: script, btcAddressError: null });
-            }}
-            validatedAddress={output.btcAddress}
-            error={output.btcAddressError}
-            onError={(err) => onUpdate({ btcAddressError: err })}
-          />
-        </div>
-      ) : output.mode === "note" ? (
-        <div className="mb-2">
-          <label className="text-body2 text-gray-light pl-2 mb-2 block">
-            Secret Phrase (share to let someone claim)
-          </label>
-          <div className="relative">
-            <FileText className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-btc" />
-            <input
-              type="text"
-              value={output.secretPhrase}
-              onChange={(e) => onUpdate({ secretPhrase: e.target.value })}
-              placeholder="alpha-bravo-charlie-1234"
-              className={cn(
-                "w-full pl-10 pr-4 py-3 bg-muted border rounded-[10px]",
-                "text-body2 font-mono text-foreground placeholder:text-gray/40",
-                "outline-none transition-colors",
-                output.secretPhrase.trim().length >= 8
-                  ? "border-btc/30"
-                  : "border-gray/20 focus:border-btc/40"
-              )}
-            />
-          </div>
-          {output.secretPhrase.trim().length > 0 && output.secretPhrase.trim().length < 8 && (
-            <p className="text-caption text-gray mt-1 pl-2">
-              Min 8 characters ({8 - output.secretPhrase.trim().length} more)
-            </p>
-          )}
-          {output.secretPhrase.trim().length >= 8 && (
-            <NoteLinkPreview phrase={output.secretPhrase.trim()} />
-          )}
-        </div>
-      ) : output.mode === "stealth" ? (
-        <div className="mb-2">
-          <StealthRecipientInput
-            onResolved={(meta, name) =>
-              onUpdate({ resolvedMeta: meta, resolvedName: name })
-            }
-            resolvedMeta={output.resolvedMeta}
-            resolvedName={output.resolvedName}
-            error={output.stealthError}
-            onError={(err) => onUpdate({ stealthError: err })}
-            icon={<Shield className="w-4 h-4 text-purple" />}
-            selfMeta={selfMeta}
-          />
-        </div>
-      ) : (
-        <div className="mb-2">
-          <label className="text-body2 text-gray-light pl-2 mb-2 block">
-            Solana Recipient Address
-          </label>
-          <div className="relative">
-            <Wallet className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-privacy" />
-            <input
-              type="text"
-              value={output.solanaAddress}
-              onChange={(e) => onUpdate({ solanaAddress: e.target.value, addressError: null })}
-              placeholder="Solana address..."
-              className={cn(
-                "w-full pl-10 pr-4 py-3 bg-muted border rounded-[10px]",
-                "text-body2 font-mono text-foreground placeholder:text-gray/40",
-                "outline-none transition-colors",
-                output.addressError
-                  ? "border-error/50"
-                  : isValidSolanaAddress(output.solanaAddress)
-                    ? "border-privacy/40"
-                    : "border-gray/20 focus:border-privacy/40"
-              )}
-            />
-          </div>
-          {output.addressError && (
-            <div className="flex items-center gap-2 text-error pl-2 mt-1">
-              <AlertCircle className="w-3.5 h-3.5" />
-              <span className="text-caption">{output.addressError}</span>
-            </div>
-          )}
-          {output.solanaAddress && isValidSolanaAddress(output.solanaAddress) && (
-            <p className="text-caption text-privacy pl-2 mt-1 flex items-center gap-1">
-              <Check className="w-3.5 h-3.5" />
-              Valid Solana address
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Amount */}
-      <label className="text-body2 text-gray-light pl-2 mb-2 block">Amount</label>
-      <div className="flex items-center gap-3">
-        <input
-          type="number"
-          value={output.amount}
-          onChange={(e) => onUpdate({ amount: e.target.value })}
-          placeholder="0"
-          min="0"
-          className={cn(
-            "flex-1 px-4 py-3 bg-muted border border-gray/20 rounded-[10px]",
-            "text-body2 font-mono text-foreground placeholder:text-gray",
-            "outline-none focus:border-purple/40 transition-colors",
-            "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-          )}
-        />
-        <button
-          type="button"
-          onClick={() => onUpdate({ amount: String(maxAmount) })}
-          className="text-xs text-purple hover:text-purple/80 font-medium shrink-0"
-        >
-          Max
-        </button>
-        <span className="text-body2 text-gray shrink-0">sats</span>
-      </div>
-
-      {/* BTC receive estimate */}
-      {output.mode === "btc" && (() => {
-        const amountSats = parseSats(output.amount) ?? 0;
-        if (amountSats <= 0) return null;
-        const percentFee = Math.ceil(amountSats * serviceFeeBps / 10000);
-        const totalFee = serviceFeeSats + percentFee;
-        const receiveSats = Math.max(0, amountSats - totalFee);
-        const bpsDisplay = (serviceFeeBps / 100).toFixed(serviceFeeBps % 100 === 0 ? 0 : 1);
-        return (
-          <div className="mt-2 px-2 py-2 rounded-[8px] bg-btc/5 border border-btc/10 space-y-1">
-            <div className="flex justify-between text-[11px]">
-              <span className="text-gray">Base fee (incl. miner fee)</span>
-              <span className="text-gray">−{serviceFeeSats.toLocaleString()} sats</span>
-            </div>
-            <div className="flex justify-between text-[11px]">
-              <span className="text-gray">Protocol fee ({bpsDisplay}%)</span>
-              <span className="text-gray">−{percentFee.toLocaleString()} sats</span>
-            </div>
-            <div className="flex justify-between text-[11px] pt-1 border-t border-btc/10">
-              <span className="text-btc font-medium">You receive</span>
-              <span className="text-btc font-semibold">
-                {receiveSats.toLocaleString()} sats
-              </span>
-            </div>
-          </div>
-        );
-      })()}
-    </div>
-  );
-}
+// OutputRowCard, NoteClaimLink, NoteLinkPreview, ProvingSubSteps extracted to pay-flow/ directory

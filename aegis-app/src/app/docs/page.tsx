@@ -1,5 +1,25 @@
 "use client";
 
+/**
+ * DocsPage — technical documentation for the Private Bitcoin protocol.
+ *
+ * Sections:
+ * - Overview: comparison table (traditional bridges vs Private Bitcoin)
+ * - Protocol Flow: 6-step journey with FlowDiagram visualization
+ * - Cryptography: commitment scheme, nullifiers, MPK, JoinSplit, EdDSA, stealth
+ * - Key Model: spending key (Baby Jubjub) + viewing key (Ed25519)
+ * - Security & Compliance: OFAC, threshold custody, SPV, double-spend, audit
+ *
+ * Sub-components (inline):
+ * - Card: generic card wrapper
+ * - SectionHeading: section title with label
+ * - StepCard: numbered protocol step
+ * - CryptoCard: formula + description
+ * - SecurityCard: icon + description
+ * - KeyCard: key type with features list
+ * - ComparisonTable: responsive traditional vs private comparison
+ */
+
 import Link from "next/link";
 import { type LucideIcon } from "lucide-react";
 import {

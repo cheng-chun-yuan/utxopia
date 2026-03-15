@@ -1,5 +1,24 @@
 "use client";
 
+/**
+ * DepositFlow — BTC deposit creation UI.
+ *
+ * Manages two deposit paths:
+ * 1. Stealth deposit: generates ephemeral key + npk, creates Taproot address
+ *    with OP_RETURN (64 bytes = ephemeralPub + npk)
+ * 2. Backend-managed deposit: prepares address via API, tracks via WebSocket/polling
+ *
+ * Flow steps:
+ * - Enter recipient (self or stealth address)
+ * - Generate Taproot deposit address
+ * - Display QR code + address for user to send BTC
+ * - Track confirmation status
+ *
+ * Key functions:
+ * - decodeBech32mPubkey(): Decode tb1p/bcrt1p address to x-only pubkey
+ * - buildDepositPsbt(): Build PSBT for wallet signing (sats-connect/Unisat)
+ */
+
 import { useState } from "react";
 import {
   Check, AlertCircle, Wallet,

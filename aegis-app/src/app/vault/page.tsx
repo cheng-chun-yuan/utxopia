@@ -1,5 +1,23 @@
 "use client";
 
+/**
+ * VaultPage — main dashboard for the private Bitcoin vault.
+ *
+ * Sections:
+ * - Stealth Address: displays user's stealth address or prompts to connect
+ * - SNS Name: register/update .btcpro.sol human-readable stealth address
+ * - Claimable Notes: shows total spendable zkBTC balance from stealth inbox
+ * - Feature Cards: quick links to Deposit, Transfer, Portfolio, Explorer
+ * - Quick Guide: 3-step overview of how Private Bitcoin works
+ * - Auth Modal: passkey registration/login or wallet connection
+ * - Viewing Key Export: hold-to-copy modal for read-only key sharing
+ *
+ * Authentication supports:
+ * - WebAuthn passkeys (PRF-derived deterministic keys)
+ * - Solana wallet (signature-derived keys)
+ * - View-only mode (viewing key import)
+ */
+
 import { useState, Fragment } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
