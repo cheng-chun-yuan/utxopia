@@ -80,6 +80,10 @@ export interface RedemptionRecord {
   serviceFee: string | null;
   serviceFeeBps: number;
   serviceFeeBase: number;
+  /** zkBTC actually burned from vault (from completion event) */
+  burnAmount: string | null;
+  /** Protocol revenue retained in vault (from completion event) */
+  protocolRevenue: string | null;
 }
 
 // Backend transfer row from /api/transfers

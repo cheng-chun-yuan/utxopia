@@ -291,16 +291,18 @@ export default function ActivityPage() {
           </div>
         </div>
 
-        {/* Content with Suspense for searchParams */}
-        <Suspense
-          fallback={
-            <div className="flex items-center justify-center py-8">
-              <div className="w-8 h-8 border-2 border-privacy border-t-transparent rounded-full animate-spin" />
-            </div>
-          }
-        >
-          <ActivityContent />
-        </Suspense>
+        {/* Content with Suspense for searchParams — min height keeps footer at bottom */}
+        <div className="min-h-[40vh]">
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center py-8">
+                <div className="w-8 h-8 border-2 border-privacy border-t-transparent rounded-full animate-spin" />
+              </div>
+            }
+          >
+            <ActivityContent />
+          </Suspense>
+        </div>
 
       </div>
       <SiteFooter />

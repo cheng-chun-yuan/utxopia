@@ -49,6 +49,8 @@ interface CompletedEntry {
   tx_signature: string;
   slot: number;
   block_time: number;
+  burn_amount: number;
+  protocol_revenue: number;
 }
 
 interface RequestedEntry {
@@ -247,6 +249,8 @@ export async function GET() {
       serviceFee: string | null;
       serviceFeeBps: number;
       serviceFeeBase: number;
+      burnAmount: string | null;
+      protocolRevenue: string | null;
     }> = redemptions.map((r) => {
       const tracking = trackingMap.get(r.pubkey);
       const trackingTime = tracking?.created_at ?? 0;
@@ -273,6 +277,8 @@ export async function GET() {
         serviceFee: r.serviceFee.toString(),
         serviceFeeBps: feeConfig.bps,
         serviceFeeBase: feeConfig.base,
+        burnAmount: completedByReqId.get(reqId)?.burn_amount?.toString() ?? null,
+        protocolRevenue: completedByReqId.get(reqId)?.protocol_revenue?.toString() ?? null,
       };
     });
 
@@ -302,6 +308,8 @@ export async function GET() {
         serviceFee: c.service_fee.toString(),
         serviceFeeBps: feeConfig.bps,
         serviceFeeBase: feeConfig.base,
+        burnAmount: c.burn_amount?.toString() ?? null,
+        protocolRevenue: c.protocol_revenue?.toString() ?? null,
       });
     }
 
@@ -332,6 +340,8 @@ export async function GET() {
         serviceFee: null, // PDA closed — compute from event fee config
         serviceFeeBps: req.service_fee_bps || feeConfig.bps,
         serviceFeeBase: req.service_fee_base || feeConfig.base,
+        burnAmount: null,
+        protocolRevenue: null,
       });
     }
 

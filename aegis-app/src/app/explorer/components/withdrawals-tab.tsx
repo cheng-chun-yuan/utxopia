@@ -210,15 +210,15 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
             {actualReceived !== null ? (<>
               <span className="text-gray/50">Received</span>
               <span className="font-mono text-foreground/80">{actualReceived.toLocaleString()} sats</span>
-              <span className="text-gray/50">Service fee</span>
-              <span className="font-mono text-gray">{serviceFee.toLocaleString()} sats</span>
-              {minerFee !== null && minerFee > 0 && <>
+              {minerFee !== null && <>
                 <span className="text-gray/50">Miner fee</span>
                 <span className="font-mono text-gray">{minerFee.toLocaleString()} sats</span>
               </>}
-              {protocolRevenue !== null && protocolRevenue > 0 && <>
-                <span className="text-gray/50">Protocol</span>
-                <span className="font-mono text-gray">+{protocolRevenue.toLocaleString()} sats</span>
+              <span className="text-gray/50">Service fee</span>
+              <span className="font-mono text-gray">{serviceFee.toLocaleString()} sats</span>
+              {protocolRevenue !== null && <>
+                <span className="text-gray/50">Protocol gets</span>
+                <span className="font-mono text-gray">{protocolRevenue.toLocaleString()} sats</span>
               </>}
             </>) : (
               <>
@@ -246,19 +246,24 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
               <CopyButton text={redemption.completeTxSignature} label="Complete TX" variant="default" iconSize="sm" />
             </div>
           )}
-          {/* Summary — burn = amount - protocol_revenue (service fee stays in vault) */}
+          {/* Summary — use event-sourced burn/revenue if available, else compute */}
           <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[11px]">
             <span className="text-gray/50">Burned</span>
             <span className="font-mono text-foreground/80">
-              {protocolRevenue !== null && protocolRevenue > 0
-                ? (amount - protocolRevenue).toLocaleString()
-                : amount.toLocaleString()
+              {redemption.burnAmount
+                ? Number(redemption.burnAmount).toLocaleString()
+                : actualReceived !== null
+                  ? ((actualReceived) + (minerFee ?? 0)).toLocaleString()
+                  : amount.toLocaleString()
               } sats
             </span>
-            {protocolRevenue !== null && protocolRevenue > 0 && <>
-              <span className="text-gray/50">Fee retained</span>
-              <span className="font-mono text-gray">+{protocolRevenue.toLocaleString()} sats</span>
-            </>}
+            {(() => {
+              const rev = redemption.protocolRevenue ? Number(redemption.protocolRevenue) : protocolRevenue;
+              return rev !== null && rev > 0 ? <>
+                <span className="text-gray/50">Fee retained</span>
+                <span className="font-mono text-gray">{rev.toLocaleString()} sats</span>
+              </> : null;
+            })()}
           </div>
         </div>
       ) : null,

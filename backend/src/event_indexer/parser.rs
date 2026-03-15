@@ -60,6 +60,10 @@ pub struct RedemptionCompletedEvent {
     pub service_fee: u64,
     pub request_id: u64,
     pub btc_txid: [u8; 32],
+    /// zkBTC actually burned from vault (= actual_received + miner_fee)
+    pub burn_amount: u64,
+    /// Protocol revenue kept in vault (= service_fee - miner_fee)
+    pub protocol_revenue: u64,
     pub btc_script: Vec<u8>,
 }
 
@@ -404,24 +408,48 @@ fn read_script(len_seg: &[u8], data_seg: &[u8]) -> Vec<u8> {
 }
 
 fn parse_redemption_completed(segments: &[Vec<u8>]) -> Option<RedemptionCompletedEvent> {
-    // disc(1) + requester(32) + amount_sats(8) + actual_received(8) + service_fee(8)
-    //         + request_id(8) + btc_txid(32) + script_len(1) + btc_script(var)
-    if segments.len() < 9 || segments[1].len() != 32 || segments[2].len() != 8
-        || segments[3].len() != 8 || segments[4].len() != 8 || segments[5].len() != 8
-        || segments[6].len() != 32 || segments[7].len() != 1
-    {
-        return None;
+    // New layout (v2): disc(1) + requester(32) + amount_sats(8) + actual_received(8) + service_fee(8)
+    //   + request_id(8) + btc_txid(32) + burn_amount(8) + protocol_revenue(8) + script_len(1) + btc_script(var)
+    // Old layout (v1): disc(1) + requester(32) + amount_sats(8) + actual_received(8) + service_fee(8)
+    //   + request_id(8) + btc_txid(32) + script_len(1) + btc_script(var)
+    if segments.len() >= 11 && segments[1].len() == 32 && segments[7].len() == 8 && segments[8].len() == 8 {
+        // v2: has burn_amount + protocol_revenue
+        return Some(RedemptionCompletedEvent {
+            requester: read_bytes32(&segments[1])?,
+            amount_sats: read_u64(&segments[2])?,
+            actual_received: read_u64(&segments[3])?,
+            service_fee: read_u64(&segments[4])?,
+            request_id: read_u64(&segments[5])?,
+            btc_txid: read_bytes32(&segments[6])?,
+            burn_amount: read_u64(&segments[7])?,
+            protocol_revenue: read_u64(&segments[8])?,
+            btc_script: read_script(&segments[9], &segments[10]),
+        });
     }
 
-    Some(RedemptionCompletedEvent {
-        requester: read_bytes32(&segments[1])?,
-        amount_sats: read_u64(&segments[2])?,
-        actual_received: read_u64(&segments[3])?,
-        service_fee: read_u64(&segments[4])?,
-        request_id: read_u64(&segments[5])?,
-        btc_txid: read_bytes32(&segments[6])?,
-        btc_script: read_script(&segments[7], &segments[8]),
-    })
+    // TODO(backward-compat): v1 fallback — derive burn/revenue from other fields
+    if segments.len() >= 9 && segments[1].len() == 32 && segments[7].len() == 1 {
+        let amount_sats = read_u64(&segments[2])?;
+        let actual_received = read_u64(&segments[3])?;
+        let service_fee = read_u64(&segments[4])?;
+        let expected_send = amount_sats.saturating_sub(service_fee);
+        let miner_fee = expected_send.saturating_sub(actual_received);
+        let protocol_revenue = service_fee.saturating_sub(miner_fee);
+        let burn_amount = amount_sats.saturating_sub(protocol_revenue);
+        return Some(RedemptionCompletedEvent {
+            requester: read_bytes32(&segments[1])?,
+            amount_sats,
+            actual_received,
+            service_fee,
+            request_id: read_u64(&segments[5])?,
+            btc_txid: read_bytes32(&segments[6])?,
+            burn_amount,
+            protocol_revenue,
+            btc_script: read_script(&segments[7], &segments[8]),
+        });
+    }
+
+    None
 }
 
 fn parse_redemption_requested(segments: &[Vec<u8>]) -> Option<RedemptionRequestedEvent> {

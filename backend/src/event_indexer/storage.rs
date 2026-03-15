@@ -106,6 +106,8 @@ pub struct RedemptionCompletedRow {
     pub tx_signature: String,  // Solana tx sig
     pub slot: i64,
     pub block_time: i64,
+    pub burn_amount: i64,      // zkBTC burned from vault (received + miner_fee)
+    pub protocol_revenue: i64, // fee retained in vault (service_fee - miner_fee)
 }
 
 /// A requested redemption row (from on-chain event 0x08)
@@ -263,6 +265,14 @@ impl EventStore {
             "ALTER TABLE redemption_completed_events ADD COLUMN service_fee INTEGER NOT NULL DEFAULT 0",
         );
 
+        // Migration: add burn_amount + protocol_revenue columns
+        let _ = conn.execute_batch(
+            "ALTER TABLE redemption_completed_events ADD COLUMN burn_amount INTEGER NOT NULL DEFAULT 0",
+        );
+        let _ = conn.execute_batch(
+            "ALTER TABLE redemption_completed_events ADD COLUMN protocol_revenue INTEGER NOT NULL DEFAULT 0",
+        );
+
         // Redemption requested events table
         let _ = conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS redemption_requested_events (
@@ -406,8 +416,8 @@ impl EventStore {
         let btc_txid = hex::encode(txid_display);
 
         let result = conn.execute(
-            "INSERT OR IGNORE INTO redemption_completed_events (request_id, requester, amount_sats, actual_received, service_fee, btc_txid, btc_script, tx_signature, slot, block_time)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT OR IGNORE INTO redemption_completed_events (request_id, requester, amount_sats, actual_received, service_fee, btc_txid, btc_script, tx_signature, slot, block_time, burn_amount, protocol_revenue)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 event.request_id as i64,
                 requester,
@@ -419,6 +429,8 @@ impl EventStore {
                 tx_signature,
                 slot,
                 block_time,
+                event.burn_amount as i64,
+                event.protocol_revenue as i64,
             ],
         );
         match result {
@@ -432,7 +444,7 @@ impl EventStore {
         let conn = self.conn()?;
         let mut stmt = conn
             .prepare(
-                "SELECT requester, amount_sats, actual_received, service_fee, request_id, btc_txid, btc_script, tx_signature, slot, block_time
+                "SELECT requester, amount_sats, actual_received, service_fee, request_id, btc_txid, btc_script, tx_signature, slot, block_time, burn_amount, protocol_revenue
                  FROM redemption_completed_events ORDER BY block_time DESC",
             )
             .map_err(|e| format!("query error: {}", e))?;
@@ -449,6 +461,8 @@ impl EventStore {
                     btc_txid: row.get(5)?,
                     btc_script: hex::encode(btc_script_blob),
                     tx_signature: row.get(7)?,
+                    burn_amount: row.get::<_, i64>(10).unwrap_or(0),
+                    protocol_revenue: row.get::<_, i64>(11).unwrap_or(0),
                     slot: row.get(8)?,
                     block_time: row.get(9)?,
                 })
