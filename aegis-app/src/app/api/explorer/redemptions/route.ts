@@ -313,10 +313,38 @@ export async function GET() {
       });
     }
 
+    // Try to recover BTC txids for orphaned redemptions by scanning pool wallet txs.
+    // This handles the case where backend restarted and lost tracking state.
+    const POOL_ADDRESS = process.env.POOL_BTC_ADDRESS || "tb1pksj664hdqkzvw2tlfvqshnevxt2qdutk47p9z964dkcsxazmf0vsjas4n4";
+    const ESPLORA = process.env.ESPLORA_URL || "https://mempool.space/testnet4/api";
+    let poolTxCache: Array<{ txid: string; outputs: Array<{ script: string; value: number }> }> | null = null;
+
+    async function findBtcTxByScript(btcScript: string): Promise<string | null> {
+      try {
+        if (!poolTxCache) {
+          const resp = await fetch(`${ESPLORA}/address/${POOL_ADDRESS}/txs`, { signal: AbortSignal.timeout(5000) });
+          if (!resp.ok) return null;
+          const txs: any[] = await resp.json();
+          poolTxCache = txs.map((tx: any) => ({
+            txid: tx.txid,
+            outputs: tx.vout.map((o: any) => ({ script: o.scriptpubkey, value: o.value })),
+          }));
+        }
+        // Find tx with an output matching the btc_script
+        for (const tx of poolTxCache) {
+          if (tx.outputs.some((o) => o.script === btcScript)) {
+            return tx.txid;
+          }
+        }
+      } catch { /* ignore */ }
+      return null;
+    }
+
     // Add requested redemptions from on-chain events for any that don't have
     // a PDA or completed entry. Check tracking data to determine real status:
     // - Has tracking with BTC txid → AwaitingConfirmation (BTC sent, waiting for SPV)
     // - Has tracking without BTC txid → Processing (backend is working on it)
+    // - Has processing event → scan pool wallet for matching BTC tx
     // - No tracking, no completion → Cancelled (PDA closed without completion)
     const knownRequestIds = new Set(serialized.map((r) => r.requestId));
     for (const req of requestedEntries) {
@@ -348,9 +376,10 @@ export async function GET() {
         }
       } else if (hasProcessingEvent) {
         // Processing event exists but no tracking — backend likely restarted
-        // and lost state. BTC was probably sent, show as awaiting confirmation.
-        status = "AwaitingConfirmation";
-        localStatus = "AwaitingConfirmation";
+        // and lost state. Try to find the BTC tx by scanning pool wallet.
+        btcTxid = await findBtcTxByScript(req.btc_script);
+        status = btcTxid ? "AwaitingConfirmation" : "AwaitingConfirmation";
+        localStatus = btcTxid ? "AwaitingConfirmation" : "Processing";
       }
 
       serialized.push({
