@@ -87,6 +87,9 @@ pub mod instruction {
     pub const REGISTER_DEPOSIT_INTENT: u8 = 24;
     pub const VERIFY_DEPOSIT_V2: u8 = 25;
 
+    // Fee management
+    pub const CLAIM_FEES: u8 = 26;
+
 }
 
 entrypoint!(process_instruction);
@@ -168,6 +171,10 @@ pub fn process_instruction(
         }
         instruction::VERIFY_DEPOSIT_V2 => {
             instructions::process_verify_deposit_v2(program_id, accounts, data)
+        }
+        // Fee management
+        instruction::CLAIM_FEES => {
+            instructions::process_claim_fees(program_id, accounts, data)
         }
         _ => Err(ProgramError::InvalidInstructionData),
     }

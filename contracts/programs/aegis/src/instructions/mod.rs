@@ -43,6 +43,7 @@ pub mod verify_deposit_v2;
 
 // Admin utilities
 pub mod admin_update_pool; // propose/execute/cancel pool updates (timelocked)
+pub mod claim_fees; // claim accumulated protocol fees from vault
 
 // VK registry (deployment)
 pub mod init_vk_registry;
@@ -62,4 +63,5 @@ pub use add_demo_stealth::*;
 pub use register_deposit_intent::*;
 pub use verify_deposit_v2::*;
 pub use admin_update_pool::*;
+pub use claim_fees::*;
 pub use init_vk_registry::*;
