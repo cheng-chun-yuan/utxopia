@@ -288,7 +288,7 @@ export default function Home() {
                   <div className="flex items-center justify-center gap-8">
                     {[
                       { label: "Vault (BTC)", value: Number(stats?.totalShielded ?? 0n) / 1e8, decimals: 4, color: "text-privacy", icon: <Shield className="w-4 h-4 text-privacy privacy-glow" /> },
-                      { label: "Transactions", value: stats?.depositCount ?? 0, decimals: 0, color: "text-foreground", icon: null },
+                      { label: "Leaves", value: stats?.totalCommitments ?? 0, decimals: 0, color: "text-foreground", icon: null },
                       { label: "Volume (BTC)", value: Number(stats?.volume ?? 0n) / 1e8, decimals: 4, color: "text-foreground", icon: null },
                     ].map(({ label, value, decimals, color, icon }, i) => (
                       <React.Fragment key={label}>

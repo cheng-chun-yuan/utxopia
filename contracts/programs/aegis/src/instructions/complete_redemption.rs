@@ -268,8 +268,19 @@ pub fn process_complete_redemption(
         return Err(AegisError::RedemptionOutputMismatch.into());
     }
 
-    // --- Burn zkBTC from pool vault ---
-    // Burn the full amount_sats (what was locked in request_redemption)
+    // --- Compute burn amount ---
+    // Only burn what actually left the pool as BTC (user receives + miner fee).
+    // Service fee stays in the vault as protocol revenue (not burned).
+    //
+    // Accounting:
+    //   expected_send = amount_sats - service_fee (intended BTC to user)
+    //   miner_fee = expected_send - actual_received (deducted by BTC network)
+    //   protocol_revenue = service_fee - miner_fee (pool keeps this in vault)
+    //   burn_amount = actual_received + miner_fee = expected_send = amount_sats - protocol_revenue
+    let miner_fee = expected_send.saturating_sub(actual_received);
+    let protocol_revenue = service_fee.saturating_sub(miner_fee);
+    let burn_amount = amount_sats.saturating_sub(protocol_revenue);
+
     let bump_bytes = [pool_bump];
     let pool_signer_seeds: &[&[u8]] = &[PoolState::SEED, &bump_bytes];
 
@@ -278,7 +289,7 @@ pub fn process_complete_redemption(
         zkbtc_mint,
         pool_vault,
         pool_state_info,
-        amount_sats,
+        burn_amount,
         pool_signer_seeds,
     )?;
 
@@ -288,15 +299,11 @@ pub fn process_complete_redemption(
         let mut pool_data = pool_state_info.try_borrow_mut_data()?;
         let pool = PoolState::from_bytes_mut(&mut pool_data)?;
 
-        // total_burned matches the token burn (full amount_sats locked in request_redemption)
-        // This keeps the invariant: total_minted - total_burned = circulating supply
-        pool.add_burned(amount_sats)?;
+        // total_burned tracks what was actually burned (= BTC that left the pool)
+        pool.add_burned(burn_amount)?;
 
-        // Service fee → pool (protocol revenue). Separate from relayer fee (shielded note).
-        // protocol_revenue = service_fee - miner_fee (what the pool actually keeps)
-        if service_fee > 0 {
-            let miner_fee = expected_send.saturating_sub(actual_received);
-            let protocol_revenue = service_fee.saturating_sub(miner_fee);
+        // Protocol revenue stays in vault as unburned tokens
+        if protocol_revenue > 0 {
             pool.add_fee_pool(protocol_revenue)?;
         }
 

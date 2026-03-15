@@ -22,8 +22,10 @@ import { fetchAccountInfo } from "@/lib/adapters/connection-adapter";
 export interface PoolStats {
   /** Total zkBTC currently in shielded commitments (sats) — "Vault" */
   totalShielded: bigint;
-  /** Number of deposits (from pool state counter) — "Deposits" */
+  /** Number of deposits (from pool state counter) */
   depositCount: number;
+  /** Total commitments in merkle tree (deposits + transfers + redeems) — "Transactions" */
+  totalCommitments: number;
   /** Total transaction volume: total_minted + total_burned (sats) — "Volume" */
   volume: bigint;
 }
@@ -36,9 +38,13 @@ async function fetchPoolStats(): Promise<PoolStats> {
   let depositCount = 0n;
   let totalMinted = 0n;
   let totalBurned = 0n;
+  let totalCommitments = 0;
 
-  // Fetch pool state for counters
-  const poolInfo = await fetchAccountInfo(getConfig().poolStatePda);
+  // Fetch pool state + commitment tree in parallel
+  const [poolInfo, treeInfo] = await Promise.all([
+    fetchAccountInfo(getConfig().poolStatePda),
+    fetchAccountInfo(getConfig().commitmentTreePda),
+  ]);
 
   if (poolInfo && poolInfo.data.length >= 196 && poolInfo.data[0] === 0x01) {
     const view = new DataView(
@@ -52,10 +58,22 @@ async function fetchPoolStats(): Promise<PoolStats> {
     totalShielded = view.getBigUint64(188, true);
   }
 
+  // Commitment tree: next_index at offset 8 (after disc(1) + bump(1) + padding(6))
+  // counts all commitments (deposits + transfers + redeems)
+  if (treeInfo && treeInfo.data.length >= 48 && treeInfo.data[0] === 0x05) {
+    const view = new DataView(
+      treeInfo.data.buffer,
+      treeInfo.data.byteOffset,
+      treeInfo.data.byteLength
+    );
+    // next_index is at offset 40 (disc:1 + bump:1 + padding:6 + current_root:32 = 40)
+    totalCommitments = Number(view.getBigUint64(40, true));
+  }
+
   // Volume = total minted + total burned (represents all BTC flow through the bridge)
   const volume = totalMinted + totalBurned;
 
-  return { totalShielded, depositCount: Number(depositCount), volume };
+  return { totalShielded, depositCount: Number(depositCount), totalCommitments, volume };
 }
 
 /**
