@@ -427,7 +427,8 @@ fn parse_redemption_completed(segments: &[Vec<u8>]) -> Option<RedemptionComplete
         });
     }
 
-    // TODO(backward-compat): v1 fallback — derive burn/revenue from other fields
+    // DEPRECATED(v1): old event format without burn_amount/protocol_revenue.
+    // Remove once all historical events have been re-indexed with v2 contract.
     if segments.len() >= 9 && segments[1].len() == 32 && segments[7].len() == 1 {
         let amount_sats = read_u64(&segments[2])?;
         let actual_received = read_u64(&segments[3])?;
