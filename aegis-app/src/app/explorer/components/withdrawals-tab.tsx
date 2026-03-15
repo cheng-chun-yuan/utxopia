@@ -7,7 +7,7 @@
  * (request → processing → FROST sign → complete & burn).
  */
 
-import { useState, useCallback, Fragment } from "react";
+import { useState, useCallback, useEffect, Fragment } from "react";
 import {
   CheckCircle2,
   Clock,
@@ -23,7 +23,69 @@ import { useRedemptions } from "@/hooks/use-explorer";
 import type { RedemptionRecord } from "@/hooks/use-explorer";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { truncate, timeAgo, scriptToAddress } from "./helpers";
+import { getEsploraApiUrl } from "@/lib/btc-network";
 import { Th, Td, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
+
+// =============================================================================
+// BTC Confirmation Status — fetches live confirmation count from mempool.space
+// =============================================================================
+
+const REQUIRED_CONFIRMATIONS = 6;
+
+function BtcConfirmationStatus({ txid }: { txid: string }) {
+  const [confirmations, setConfirmations] = useState<number | null>(null);
+  const [blockHeight, setBlockHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetch_status() {
+      try {
+        const [statusResp, tipResp] = await Promise.all([
+          fetch(`${getEsploraApiUrl()}/tx/${txid}/status`),
+          fetch(`${getEsploraApiUrl()}/blocks/tip/height`),
+        ]);
+        if (cancelled) return;
+        const status = await statusResp.json();
+        const tip = await tipResp.json();
+        if (status.confirmed && status.block_height) {
+          const confs = tip - status.block_height + 1;
+          setConfirmations(confs);
+          setBlockHeight(status.block_height);
+        } else {
+          setConfirmations(0);
+        }
+      } catch { /* ignore */ }
+    }
+    fetch_status();
+    const interval = setInterval(fetch_status, 30_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [txid]);
+
+  if (confirmations === null) return null;
+
+  const done = confirmations >= REQUIRED_CONFIRMATIONS;
+
+  return (
+    <div className="flex items-center gap-2 text-[11px]">
+      {done ? (
+        <CheckCircle2 className="w-3 h-3 text-green-400 shrink-0" />
+      ) : (
+        <Loader2 className="w-3 h-3 text-gray-light animate-spin shrink-0" />
+      )}
+      <span className={done ? "text-green-400" : "text-gray-light"}>
+        {confirmations === 0
+          ? "Unconfirmed — waiting for block..."
+          : done
+            ? `Confirmed (${confirmations} blocks)`
+            : `${confirmations}/${REQUIRED_CONFIRMATIONS} confirmations`
+        }
+      </span>
+      {blockHeight && (
+        <span className="text-gray/40 font-mono">block #{blockHeight.toLocaleString()}</span>
+      )}
+    </div>
+  );
+}
 
 // =============================================================================
 // Withdrawal Status
@@ -204,6 +266,10 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
               <code className="font-mono text-foreground/80">{truncate(btcAddr, 10, 6)}</code>
               <CopyButton text={btcAddr} label="BTC Address" variant="default" iconSize="sm" />
             </div>
+          )}
+          {/* BTC confirmation progress — only show when not yet completed on-chain */}
+          {!redemption.simulated && redemption.btcTxid && stepOrder < 4 && (
+            <BtcConfirmationStatus txid={redemption.btcTxid} />
           )}
           {/* Fee breakdown */}
           <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[11px]">
