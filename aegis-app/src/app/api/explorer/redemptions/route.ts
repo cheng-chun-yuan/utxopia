@@ -42,6 +42,7 @@ interface CompletedEntry {
   requester: string;
   amount_sats: number;
   actual_received: number;
+  service_fee: number;
   request_id: number;
   btc_txid: string;
   btc_script: string;
@@ -54,6 +55,8 @@ interface RequestedEntry {
   requester: string;
   amount_sats: number;
   request_id: number;
+  service_fee_base: number;
+  service_fee_bps: number;
   btc_script: string;
   tx_signature: string;
   slot: number;
@@ -296,7 +299,7 @@ export async function GET() {
         processingTxSignature: processingByReqId.get(rid)?.tx_signature ?? null,
         completeTxSignature: c.tx_signature,
         simulated: false, // completed on-chain = real
-        serviceFee: null, // PDA closed
+        serviceFee: c.service_fee.toString(),
         serviceFeeBps: feeConfig.bps,
         serviceFeeBase: feeConfig.base,
       });
@@ -326,9 +329,9 @@ export async function GET() {
         processingTxSignature: processingByReqId.get(rid)?.tx_signature ?? null,
         completeTxSignature: null,
         simulated: false,
-        serviceFee: null, // PDA closed
-        serviceFeeBps: feeConfig.bps,
-        serviceFeeBase: feeConfig.base,
+        serviceFee: null, // PDA closed — compute from event fee config
+        serviceFeeBps: req.service_fee_bps || feeConfig.bps,
+        serviceFeeBase: req.service_fee_base || feeConfig.base,
       });
     }
 

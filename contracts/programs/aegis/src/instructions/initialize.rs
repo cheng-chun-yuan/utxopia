@@ -163,6 +163,8 @@ pub fn process_initialize(
         pool.frost_vault.copy_from_slice(accounts.frost_vault.key().as_ref());
         pool.set_min_deposit(MIN_DEPOSIT_SATS);
         pool.set_max_deposit(MAX_DEPOSIT_SATS);
+        pool.set_service_fee_base(2_000);
+        pool.set_service_fee_bps(30);
         pool.set_last_update(clock.unix_timestamp);
         pool.set_paused(false);
     }

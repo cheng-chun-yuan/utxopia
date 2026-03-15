@@ -172,22 +172,28 @@ pub fn process_public_redeem(
         redemption.set_status(RedemptionStatus::Pending);
     }
 
-    // Emit redemption requested event
+    // Update pool state: add_burned (these are already-public tokens), increment pending_redemptions
+    // Read fee config before mutating for the event emission
+    let (fee_base, fee_bps) = {
+        let mut pool_data = pool_state_info.try_borrow_mut_data()?;
+        let pool = PoolState::from_bytes_mut(&mut pool_data)?;
+        let fb = pool.service_fee_base();
+        let fbps = pool.service_fee_bps();
+        pool.add_burned(amount_sats)?;
+        pool.set_pending_redemptions(pending_redemptions.saturating_add(1));
+        pool.set_last_update(clock.unix_timestamp);
+        (fb, fbps)
+    };
+
+    // Emit redemption requested event (includes fee config locked at request time)
     crate::utils::events::emit_redemption_requested(
         user.key().as_ref().try_into().unwrap(),
         amount_sats,
         request_nonce,
+        fee_base,
+        fee_bps,
         btc_script,
     );
-
-    // Update pool state: add_burned (these are already-public tokens), increment pending_redemptions
-    {
-        let mut pool_data = pool_state_info.try_borrow_mut_data()?;
-        let pool = PoolState::from_bytes_mut(&mut pool_data)?;
-        pool.add_burned(amount_sats)?;
-        pool.set_pending_redemptions(pending_redemptions.saturating_add(1));
-        pool.set_last_update(clock.unix_timestamp);
-    }
 
     pinocchio::msg!("Aegis: public redeem");
     Ok(())

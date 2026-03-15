@@ -109,6 +109,8 @@ pub struct RedemptionRequestedRow {
     pub requester: String,     // base58
     pub amount_sats: i64,
     pub request_id: i64,
+    pub service_fee_base: i64, // fee config at request time
+    pub service_fee_bps: i64,  // fee config at request time
     pub btc_script: String,    // hex
     pub tx_signature: String,  // Solana tx sig
     pub slot: i64,
@@ -266,8 +268,18 @@ impl EventStore {
                 tx_signature TEXT NOT NULL,
                 slot INTEGER NOT NULL,
                 block_time INTEGER NOT NULL DEFAULT 0,
+                service_fee_base INTEGER NOT NULL DEFAULT 0,
+                service_fee_bps INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (requester, request_id)
             )",
+        );
+
+        // Migration: add fee columns if missing (for existing DBs)
+        let _ = conn.execute_batch(
+            "ALTER TABLE redemption_requested_events ADD COLUMN service_fee_base INTEGER NOT NULL DEFAULT 0",
+        );
+        let _ = conn.execute_batch(
+            "ALTER TABLE redemption_requested_events ADD COLUMN service_fee_bps INTEGER NOT NULL DEFAULT 0",
         );
 
         // Redemption processing events table (mark_processing, 0x0A)
@@ -454,8 +466,8 @@ impl EventStore {
         let requester = bs58::encode(&event.requester).into_string();
 
         let result = conn.execute(
-            "INSERT OR IGNORE INTO redemption_requested_events (request_id, requester, amount_sats, btc_script, tx_signature, slot, block_time)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT OR IGNORE INTO redemption_requested_events (request_id, requester, amount_sats, btc_script, tx_signature, slot, block_time, service_fee_base, service_fee_bps)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 event.request_id as i64,
                 requester,
@@ -464,6 +476,8 @@ impl EventStore {
                 tx_signature,
                 slot,
                 block_time,
+                event.service_fee_base as i64,
+                event.service_fee_bps as i64,
             ],
         );
         match result {
@@ -477,7 +491,7 @@ impl EventStore {
         let conn = self.conn()?;
         let mut stmt = conn
             .prepare(
-                "SELECT requester, amount_sats, request_id, btc_script, tx_signature, slot, block_time
+                "SELECT requester, amount_sats, request_id, btc_script, tx_signature, slot, block_time, service_fee_base, service_fee_bps
                  FROM redemption_requested_events ORDER BY block_time DESC",
             )
             .map_err(|e| format!("query error: {}", e))?;
@@ -489,6 +503,8 @@ impl EventStore {
                     requester: row.get(0)?,
                     amount_sats: row.get(1)?,
                     request_id: row.get(2)?,
+                    service_fee_base: row.get(7)?,
+                    service_fee_bps: row.get(8)?,
                     btc_script: hex::encode(btc_script_blob),
                     tx_signature: row.get(4)?,
                     slot: row.get(5)?,

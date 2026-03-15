@@ -345,6 +345,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
     stealthMeta: string | null;
     relayerFeeSats: number;
     serviceFeeSats: number;
+    serviceFeeBps: number;
   } | null>(null);
 
   useEffect(() => {
@@ -355,7 +356,8 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
           setRelayerMeta({
             stealthMeta: data.stealth_meta || null,
             relayerFeeSats: data.relayer_fee_sats ?? RELAYER_FEE_SATS,
-            serviceFeeSats: data.service_fee_sats ?? SERVICE_FEE_SATS,
+            serviceFeeSats: data.service_fee_base ?? SERVICE_FEE_SATS,
+            serviceFeeBps: data.service_fee_bps ?? 0,
           });
         }
       })
@@ -373,6 +375,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   const relayerMetaLoaded = relayerMeta !== null;
   const effectiveRelayerFee = relayerMeta?.relayerFeeSats ?? 0;
   const effectiveServiceFee = relayerMeta?.serviceFeeSats ?? 0;
+  const effectiveServiceFeeBps = relayerMeta?.serviceFeeBps ?? 0;
 
   // Available unspent notes
   const availableNotes = useMemo(() => {
@@ -1627,6 +1630,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                 selfMeta={stealthAddress ?? null}
                 maxAmount={Math.max(0, totalInputSats - outputs.reduce((sum, o, j) => j === index ? sum : sum + (parseSats(o.amount) ?? 0), 0) - effectiveRelayerFee)}
                 serviceFeeSats={effectiveServiceFee}
+                serviceFeeBps={effectiveServiceFeeBps}
               />
             ))}
           </div>
@@ -2069,6 +2073,7 @@ interface OutputRowCardProps {
   selfMeta?: StealthMetaAddress | null;
   maxAmount: number;
   serviceFeeSats?: number;
+  serviceFeeBps?: number;
 }
 
 function OutputRowCard({
@@ -2083,6 +2088,7 @@ function OutputRowCard({
   selfMeta,
   maxAmount,
   serviceFeeSats = 0,
+  serviceFeeBps = 0,
 }: OutputRowCardProps) {
 
   return (
@@ -2264,9 +2270,10 @@ function OutputRowCard({
       {output.mode === "btc" && (() => {
         const amountSats = parseSats(output.amount) ?? 0;
         if (amountSats <= 0) return null;
-        const percentFee = Math.ceil(amountSats * 0.003);
+        const percentFee = Math.ceil(amountSats * serviceFeeBps / 10000);
         const totalFee = serviceFeeSats + percentFee;
         const receiveSats = Math.max(0, amountSats - totalFee);
+        const bpsDisplay = (serviceFeeBps / 100).toFixed(serviceFeeBps % 100 === 0 ? 0 : 1);
         return (
           <div className="mt-2 px-2 py-2 rounded-[8px] bg-btc/5 border border-btc/10 space-y-1">
             <div className="flex justify-between text-[11px]">
@@ -2274,7 +2281,7 @@ function OutputRowCard({
               <span className="text-gray">−{serviceFeeSats.toLocaleString()} sats</span>
             </div>
             <div className="flex justify-between text-[11px]">
-              <span className="text-gray">Protocol fee (0.3%)</span>
+              <span className="text-gray">Protocol fee ({bpsDisplay}%)</span>
               <span className="text-gray">−{percentFee.toLocaleString()} sats</span>
             </div>
             <div className="flex justify-between text-[11px] pt-1 border-t border-btc/10">

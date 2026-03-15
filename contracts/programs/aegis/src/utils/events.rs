@@ -113,18 +113,24 @@ pub fn emit_redemption_completed(
 
 /// Emit when a redemption request is created (PDA initialized).
 ///
-/// Layout: disc(1) + requester(32) + amount_sats(8) + request_id(8) + btc_script_len(1) + btc_script(var)
+/// Layout: disc(1) + requester(32) + amount_sats(8) + request_id(8)
+///         + service_fee_base(8) + service_fee_bps(2)
+///         + btc_script_len(1) + btc_script(var)
 pub fn emit_redemption_requested(
     requester: &[u8; 32],
     amount_sats: u64,
     request_id: u64,
+    service_fee_base: u64,
+    service_fee_bps: u16,
     btc_script: &[u8],
 ) {
     let disc = [EVENT_REDEMPTION_REQUESTED];
     let amt = amount_sats.to_le_bytes();
     let rid = request_id.to_le_bytes();
+    let sfb = service_fee_base.to_le_bytes();
+    let sbps = service_fee_bps.to_le_bytes();
     let script_len = [btc_script.len() as u8];
-    sol_log_data(&[&disc, requester, &amt, &rid, &script_len, btc_script]);
+    sol_log_data(&[&disc, requester, &amt, &rid, &sfb, &sbps, &script_len, btc_script]);
 }
 
 /// Emit when a redemption transitions to Processing state.

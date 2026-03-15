@@ -7,6 +7,7 @@
 //! - `cancel_pool_update` (disc 23): Authority cancels pending proposal
 //!
 //! Propose instruction data: min_deposit(u64 LE) + max_deposit(u64 LE) + service_fee_base(u64 LE) + [service_fee_bps(u16 LE)] = 24 or 26 bytes
+//! Both service_fee_base and service_fee_bps go through the 48h timelock.
 //! Execute/Cancel instruction data: (none)
 //!
 //! Accounts (all three):
@@ -93,9 +94,9 @@ pub fn process_propose_pool_update(
     pool.set_pending_service_fee(service_fee);
     pool.set_pending_execute_after(execute_after);
 
-    // bps applied immediately (authority-gated, no timelock needed)
-    if service_fee_bps > 0 || data.len() >= 26 {
-        pool.set_service_fee_bps(service_fee_bps);
+    // bps also goes through timelock
+    if data.len() >= 26 {
+        pool.set_pending_service_fee_bps(service_fee_bps);
     }
 
     Ok(())
@@ -131,13 +132,10 @@ pub fn process_execute_pool_update(
     }
 
     // Apply pending values
-    let min = pool.pending_min_deposit();
-    let max = pool.pending_max_deposit();
-    let fee = pool.pending_service_fee();
-
-    pool.set_min_deposit(min);
-    pool.set_max_deposit(max);
-    pool.set_service_fee_base(fee);
+    pool.set_min_deposit(pool.pending_min_deposit());
+    pool.set_max_deposit(pool.pending_max_deposit());
+    pool.set_service_fee_base(pool.pending_service_fee());
+    pool.set_service_fee_bps(pool.pending_service_fee_bps());
     pool.set_last_update(clock.unix_timestamp);
 
     // Clear pending proposal

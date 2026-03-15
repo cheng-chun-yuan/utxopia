@@ -83,8 +83,11 @@ pub struct PoolState {
     /// Backward compat: old PDAs have 0 here, formula degrades to flat base fee only.
     service_fee_bps: [u8; 2],
 
+    /// Pending timelock: proposed service_fee_bps
+    pending_service_fee_bps: [u8; 2],
+
     /// Reserved for future use
-    _reserved: [u8; 22],
+    _reserved: [u8; 20],
 }
 
 impl PoolState {
@@ -202,6 +205,10 @@ impl PoolState {
         i64::from_le_bytes(self.pending_execute_after)
     }
 
+    pub fn pending_service_fee_bps(&self) -> u16 {
+        u16::from_le_bytes(self.pending_service_fee_bps)
+    }
+
     pub fn has_pending_proposal(&self) -> bool {
         self.pending_execute_after() != 0
     }
@@ -276,12 +283,17 @@ impl PoolState {
         self.pending_execute_after = value.to_le_bytes();
     }
 
+    pub fn set_pending_service_fee_bps(&mut self, value: u16) {
+        self.pending_service_fee_bps = value.to_le_bytes();
+    }
+
     /// Clear all pending timelock fields
     pub fn clear_pending_proposal(&mut self) {
         self.pending_min_deposit = [0u8; 8];
         self.pending_max_deposit = [0u8; 8];
         self.pending_service_fee = [0u8; 8];
         self.pending_execute_after = [0u8; 8];
+        self.pending_service_fee_bps = [0u8; 2];
     }
 
     // Increment helpers with overflow check

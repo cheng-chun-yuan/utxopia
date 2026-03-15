@@ -952,8 +952,10 @@ export interface ProposePoolUpdateOptions {
   minDeposit: bigint;
   /** New maximum deposit in satoshis */
   maxDeposit: bigint;
-  /** New service fee in satoshis */
+  /** New service fee base in satoshis */
   serviceFee: bigint;
+  /** Service fee in basis points (e.g. 30 = 0.3%). Applied immediately, no timelock. */
+  serviceFeeBps?: number;
   /** Account addresses */
   accounts: {
     poolState: Address;
@@ -964,20 +966,26 @@ export interface ProposePoolUpdateOptions {
 /**
  * Build propose_pool_update instruction data
  *
- * Layout: discriminator(1) + min_deposit(8) + max_deposit(8) + service_fee(8) = 25 bytes
+ * Layout: discriminator(1) + min_deposit(8) + max_deposit(8) + service_fee(8) + [service_fee_bps(2)] = 25 or 27 bytes
  */
 export function buildProposePoolUpdateInstructionData(
   minDeposit: bigint,
   maxDeposit: bigint,
   serviceFee: bigint,
+  serviceFeeBps?: number,
 ): Uint8Array {
-  const data = new Uint8Array(25);
+  const hasBps = serviceFeeBps !== undefined;
+  const data = new Uint8Array(hasBps ? 27 : 25);
   const view = new DataView(data.buffer);
 
   data[0] = INSTRUCTION.PROPOSE_POOL_UPDATE;
   view.setBigUint64(1, minDeposit, true);
   view.setBigUint64(9, maxDeposit, true);
   view.setBigUint64(17, serviceFee, true);
+
+  if (hasBps) {
+    view.setUint16(25, serviceFeeBps, true);
+  }
 
   return data;
 }
@@ -996,6 +1004,7 @@ export function buildProposePoolUpdateInstruction(options: ProposePoolUpdateOpti
     options.minDeposit,
     options.maxDeposit,
     options.serviceFee,
+    options.serviceFeeBps,
   );
 
   return {

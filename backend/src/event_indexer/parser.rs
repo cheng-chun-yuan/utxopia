@@ -69,6 +69,8 @@ pub struct RedemptionRequestedEvent {
     pub requester: [u8; 32],
     pub amount_sats: u64,
     pub request_id: u64,
+    pub service_fee_base: u64,
+    pub service_fee_bps: u16,
     pub btc_script: Vec<u8>,
 }
 
@@ -243,24 +245,31 @@ fn parse_nullifier_spent(segments: &[Vec<u8>]) -> Option<NullifierSpentEvent> {
 /// Parse batched nullifiers from multi-segment sol_log_data.
 ///
 /// On-chain emits: sol_log_data(&[disc, count, op_type, ix_disc, hash1, hash2, ...])
-/// which arrives as separate base64 segments.
+/// The runtime may drop the ix_disc segment, producing only:
+///   [disc, count, op_type, hash1, hash2, ...]
+/// We detect both formats by checking whether segment[3] is 1 byte (ix_disc) or 32 bytes (hash).
 fn parse_nullifiers_batch_segments(segments: &[Vec<u8>]) -> Vec<NullifierSpentEvent> {
-    // segments[0] = disc(1), segments[1] = count(1), segments[2] = op_type(1),
-    // segments[3] = ix_disc(1), segments[4..] = hashes(32 each)
-    if segments.len() < 5 {
+    // Need at least disc + count + op_type + 1 hash = 4 segments minimum
+    if segments.len() < 4 {
         return Vec::new();
     }
-    if segments[1].len() != 1 || segments[2].len() != 1 || segments[3].len() != 1 {
+    if segments[1].len() != 1 || segments[2].len() != 1 {
         return Vec::new();
     }
 
     let count = segments[1][0] as usize;
     let op_type = segments[2][0];
-    let ix_disc = segments[3][0];
+
+    // Detect format: if segment[3] is 1 byte, it's ix_disc; if 32 bytes, hashes start here
+    let (ix_disc, hash_start) = if segments.len() > 3 && segments[3].len() == 1 {
+        (segments[3][0], 4)
+    } else {
+        (0, 3) // ix_disc dropped by runtime, hashes start at segment[3]
+    };
 
     let mut events = Vec::with_capacity(count);
     for i in 0..count {
-        let idx = 4 + i;
+        let idx = hash_start + i;
         if idx >= segments.len() || segments[idx].len() != 32 {
             break;
         }
@@ -416,11 +425,13 @@ fn parse_redemption_completed(segments: &[Vec<u8>]) -> Option<RedemptionComplete
 }
 
 fn parse_redemption_requested(segments: &[Vec<u8>]) -> Option<RedemptionRequestedEvent> {
-    // disc(1) + requester(32) + amount_sats(8) + request_id(8) + script_len(1) + btc_script(var)
+    // New layout: disc(1) + requester(32) + amount_sats(8) + request_id(8)
+    //             + service_fee_base(8) + service_fee_bps(2) + script_len(1) + btc_script(var)
+    // Old layout: disc(1) + requester(32) + amount_sats(8) + request_id(8) + script_len(1) + btc_script(var)
     if segments.len() < 6 {
         return None;
     }
-    if segments[1].len() != 32 || segments[2].len() != 8 || segments[3].len() != 8 || segments[4].len() != 1 {
+    if segments[1].len() != 32 || segments[2].len() != 8 || segments[3].len() != 8 {
         return None;
     }
 
@@ -430,17 +441,36 @@ fn parse_redemption_requested(segments: &[Vec<u8>]) -> Option<RedemptionRequeste
     let amount_sats = u64::from_le_bytes(segments[2][..8].try_into().ok()?);
     let request_id = u64::from_le_bytes(segments[3][..8].try_into().ok()?);
 
-    let script_len = segments[4][0] as usize;
-    let btc_script = if script_len > 0 && segments[5].len() >= script_len {
-        segments[5][..script_len].to_vec()
+    // Detect new vs old format: new has 8 segments (added fee_base + fee_bps), old has 6
+    let (service_fee_base, service_fee_bps, script_len_idx, script_data_idx) = if segments.len() >= 8
+        && segments[4].len() == 8
+        && segments[5].len() == 2
+    {
+        // New format with fee fields
+        let fee_base = u64::from_le_bytes(segments[4][..8].try_into().ok()?);
+        let fee_bps = u16::from_le_bytes(segments[5][..2].try_into().ok()?);
+        (fee_base, fee_bps, 6, 7)
     } else {
-        segments[5].clone()
+        // Old format without fee fields
+        (0u64, 0u16, 4, 5)
+    };
+
+    if segments[script_len_idx].len() != 1 {
+        return None;
+    }
+    let script_len = segments[script_len_idx][0] as usize;
+    let btc_script = if script_len > 0 && segments[script_data_idx].len() >= script_len {
+        segments[script_data_idx][..script_len].to_vec()
+    } else {
+        segments[script_data_idx].clone()
     };
 
     Some(RedemptionRequestedEvent {
         requester,
         amount_sats,
         request_id,
+        service_fee_base,
+        service_fee_bps,
         btc_script,
     })
 }
