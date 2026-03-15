@@ -23,9 +23,7 @@ const GROUP_PUBKEY_HEX: &str = "d11184211f11afe88cd40e242988d428ee5d18716f15da62
 const POOL_RECEIVE_ADDRESS: &str = "bcrt1p7gtwc7tkqp3la9y4a33q7pzt854d95s550rzvds60ajnl2pfmvzqc72yl0";
 
 fn sha256(data: &[u8]) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    hasher.update(data);
-    hasher.finalize().into()
+    zkbtc::common::crypto::sha256(data)
 }
 
 /// Compute taproot tweak: H_taptweak(P || commitment)

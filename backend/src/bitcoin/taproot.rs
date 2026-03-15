@@ -31,6 +31,8 @@ use bitcoin::{Address, Network, ScriptBuf, XOnlyPublicKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::common::crypto::sha256;
+
 /// The pool's internal key (in production: FROST aggregate key)
 /// For this POC, we use a deterministic key derived from a seed
 pub struct PoolKeys {
@@ -199,12 +201,6 @@ pub struct TaprootDepositDualPathRaw {
     pub taproot_spend_info: TaprootSpendInfo,
 }
 
-/// Compute SHA256 hash
-fn sha256(data: &[u8]) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    hasher.update(data);
-    hasher.finalize().into()
-}
 
 /// Compute the taproot tweak hash: H_taptweak(P || commitment)
 /// Uses BIP-340 tagged hash: SHA256(SHA256("TapTweak") || SHA256("TapTweak") || data)

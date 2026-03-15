@@ -71,15 +71,8 @@ pub fn txid_to_internal(txid_hex: &str) -> Result<[u8; 32], SpvError> {
     Ok(internal)
 }
 
-/// Double SHA256 hash.
-pub fn double_sha256(data: &[u8]) -> [u8; 32] {
-    use sha2::{Sha256, Digest};
-    let first = Sha256::digest(data);
-    let second = Sha256::digest(&first);
-    let mut result = [0u8; 32];
-    result.copy_from_slice(&second);
-    result
-}
+// Re-export from shared module for backward compatibility
+pub use crate::common::crypto::double_sha256;
 
 /// Strip witness data from a segwit transaction to get the non-witness serialization.
 ///

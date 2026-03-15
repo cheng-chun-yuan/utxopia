@@ -20,6 +20,7 @@ use bitcoin::{
     Witness, XOnlyPublicKey,
 };
 use sha2::{Digest, Sha256};
+use crate::common::crypto::sha256;
 use std::str::FromStr;
 use thiserror::Error;
 
@@ -457,12 +458,6 @@ struct SignedSweepTx {
     fee: u64,
 }
 
-/// Compute SHA256 hash
-fn sha256(data: &[u8]) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    hasher.update(data);
-    hasher.finalize().into()
-}
 
 /// Extract the 32-byte commitment from the OP_RETURN output of a raw Bitcoin transaction.
 ///

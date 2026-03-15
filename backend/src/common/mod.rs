@@ -9,6 +9,7 @@
 //! Configuration lives in `crate::config` (single source of truth).
 
 pub mod cors;
+pub mod crypto;
 pub mod env;
 pub mod error;
 pub mod http;

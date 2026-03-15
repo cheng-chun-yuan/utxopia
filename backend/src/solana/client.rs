@@ -18,14 +18,9 @@ use solana_sdk::{
     signature::{Keypair, Signer as SolanaSigner},
     transaction::Transaction,
 };
-use sha2::{Sha256, Digest};
 use std::str::FromStr;
 
-fn double_sha256_header(data: &[u8]) -> [u8; 32] {
-    let first = Sha256::digest(data);
-    Sha256::digest(&first).into()
-}
-
+use crate::common::crypto::double_sha256 as double_sha256_header;
 use crate::config::AEGISConfig;
 use crate::redemption::types::ParsedRedemption;
 

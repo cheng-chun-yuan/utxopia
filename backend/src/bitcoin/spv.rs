@@ -5,8 +5,9 @@
 
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use thiserror::Error;
+
+use crate::common::crypto::{double_sha256, double_sha256_pair};
 
 /// SPV-related errors
 #[derive(Debug, Error)]
@@ -371,20 +372,6 @@ struct EsploraMerkleProof {
     merkle: Vec<String>,
 }
 
-/// Double SHA256 hash (Bitcoin standard)
-fn double_sha256(data: &[u8]) -> [u8; 32] {
-    let first = Sha256::digest(data);
-    let second = Sha256::digest(first);
-    second.into()
-}
-
-/// Double SHA256 hash of two 32-byte values concatenated
-fn double_sha256_pair(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
-    let mut combined = [0u8; 64];
-    combined[0..32].copy_from_slice(left);
-    combined[32..64].copy_from_slice(right);
-    double_sha256(&combined)
-}
 
 /// Helper to convert display txid (hex) to internal bytes
 pub fn txid_to_bytes(txid: &str) -> Result<[u8; 32], SpvError> {
