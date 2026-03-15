@@ -425,6 +425,15 @@ impl<'a> ParsedTransaction<'a> {
         }
     }
 
+    /// Sum all output values in the transaction
+    pub fn sum_outputs(&self) -> u64 {
+        let mut total: u64 = 0;
+        for output in self.outputs() {
+            total = total.saturating_add(output.value);
+        }
+        total
+    }
+
     /// Find commitment from OP_RETURN output
     pub fn find_commitment(&self) -> Option<[u8; 32]> {
         for output in self.outputs() {

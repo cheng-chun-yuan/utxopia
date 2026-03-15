@@ -180,7 +180,7 @@ pub fn process_complete_redemption(
     }
 
     // Validate redemption state (must be Pending or Processing) and get details
-    let (amount_sats, service_fee, expected_script_len, expected_script, requester_key, request_id) = {
+    let (amount_sats, service_fee, expected_script_len, expected_script, requester_key, request_id, total_input_sats) = {
         let redemption_data = redemption_info.try_borrow_data()?;
         let redemption = RedemptionRequest::from_bytes(&redemption_data)?;
 
@@ -197,7 +197,7 @@ pub fn process_complete_redemption(
         let mut req_key = [0u8; 32];
         req_key.copy_from_slice(&redemption.requester);
 
-        (redemption.amount_sats(), redemption.service_fee(), script_len, script_buf, req_key, redemption.request_id())
+        (redemption.amount_sats(), redemption.service_fee(), script_len, script_buf, req_key, redemption.request_id(), redemption.total_input_sats())
     };
 
     // --- VerifiedTransaction PDA check ---
@@ -268,18 +268,34 @@ pub fn process_complete_redemption(
         return Err(AegisError::RedemptionOutputMismatch.into());
     }
 
-    // --- Compute burn amount ---
-    // Only burn what actually left the pool as BTC (user receives + miner fee).
-    // Service fee stays in the vault as protocol revenue (not burned).
+    // --- Compute miner fee trustlessly from on-chain data ---
+    //
+    // total_input_sats was committed to the PDA at mark_processing time by the backend
+    // (sum of all BTC input UTXOs selected for this withdrawal tx).
+    // sum_outputs is computed here from the verified raw BTC tx.
+    // miner_fee = total_input_sats - sum_outputs (trustless, all on-chain).
     //
     // Accounting:
-    //   expected_send = amount_sats - service_fee (intended BTC to user)
-    //   miner_fee = expected_send - actual_received (deducted by BTC network)
-    //   protocol_revenue = service_fee - miner_fee (pool keeps this in vault)
-    //   burn_amount = actual_received + miner_fee = expected_send = amount_sats - protocol_revenue
-    let miner_fee = expected_send.saturating_sub(actual_received);
+    //   miner_fee        = total_input_sats - sum(tx_outputs)  [trustless]
+    //   burn_amount      = actual_received + miner_fee          [BTC that left pool]
+    //   protocol_revenue = service_fee - miner_fee              [pool's net revenue]
+    let total_outputs = parsed_tx.sum_outputs();
+    let miner_fee = if total_input_sats > 0 {
+        // Trustless: backend committed total_input_sats at mark_processing
+        total_input_sats.saturating_sub(total_outputs)
+    } else {
+        // Backward compat: total_input_sats not set (old mark_processing)
+        // Fall back: assume miner fee = expected_send - actual_received
+        expected_send.saturating_sub(actual_received)
+    };
+
+    // Sanity: miner fee must not exceed MAX_FEE_SATS
+    if miner_fee > MAX_FEE_SATS {
+        return Err(AegisError::RedemptionOutputMismatch.into());
+    }
+
+    let burn_amount = actual_received.saturating_add(miner_fee);
     let protocol_revenue = service_fee.saturating_sub(miner_fee);
-    let burn_amount = amount_sats.saturating_sub(protocol_revenue);
 
     let bump_bytes = [pool_bump];
     let pool_signer_seeds: &[&[u8]] = &[PoolState::SEED, &bump_bytes];
@@ -299,10 +315,10 @@ pub fn process_complete_redemption(
         let mut pool_data = pool_state_info.try_borrow_mut_data()?;
         let pool = PoolState::from_bytes_mut(&mut pool_data)?;
 
-        // total_burned tracks what was actually burned (= BTC that left the pool)
+        // total_burned = actual_received + miner_fee (BTC that left the pool)
         pool.add_burned(burn_amount)?;
 
-        // Protocol revenue stays in vault as unburned tokens
+        // protocol_revenue = service_fee - miner_fee (net profit kept in vault)
         if protocol_revenue > 0 {
             pool.add_fee_pool(protocol_revenue)?;
         }
@@ -319,6 +335,8 @@ pub fn process_complete_redemption(
         service_fee,
         request_id,
         &ix_data.btc_txid,
+        burn_amount,
+        protocol_revenue,
         &expected_script[..expected_script_len],
     );
 

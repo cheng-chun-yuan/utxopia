@@ -89,10 +89,10 @@ pub fn emit_stealth_announcement(
 ///         + request_id(8) + btc_txid(32) + btc_script_len(1) + btc_script(var)
 /// = 114 + btc_script_len bytes
 ///
-/// Accounting fields:
-///   burn_amount      = actual_received + miner_fee (what was burned from vault)
-///   protocol_revenue = service_fee - miner_fee (kept in vault as fee_pool)
-///   miner_fee        = (amount_sats - service_fee) - actual_received
+/// Trustless accounting:
+///   miner_fee        = total_input_sats - sum(tx_outputs)  [computed on-chain from raw BTC tx]
+///   burn_amount      = actual_received + miner_fee          [BTC that left the pool]
+///   protocol_revenue = service_fee - miner_fee              [net profit kept in vault]
 pub fn emit_redemption_completed(
     requester: &[u8; 32],
     amount_sats: u64,
@@ -100,6 +100,8 @@ pub fn emit_redemption_completed(
     service_fee: u64,
     request_id: u64,
     btc_txid: &[u8; 32],
+    burn_amount: u64,
+    protocol_revenue: u64,
     btc_script: &[u8],
 ) {
     let disc = [EVENT_REDEMPTION_COMPLETED];
@@ -107,13 +109,8 @@ pub fn emit_redemption_completed(
     let recv = actual_received.to_le_bytes();
     let sfee = service_fee.to_le_bytes();
     let rid = request_id.to_le_bytes();
-    // Compute burn + protocol revenue for indexer
-    let expected_send = amount_sats.saturating_sub(service_fee);
-    let miner_fee = expected_send.saturating_sub(actual_received);
-    let protocol_rev = service_fee.saturating_sub(miner_fee);
-    let burn = amount_sats.saturating_sub(protocol_rev);
-    let burn_bytes = burn.to_le_bytes();
-    let proto_bytes = protocol_rev.to_le_bytes();
+    let burn_bytes = burn_amount.to_le_bytes();
+    let proto_bytes = protocol_revenue.to_le_bytes();
     let script_len = [btc_script.len() as u8];
     sol_log_data(&[&disc, requester, &amt, &recv, &sfee, &rid, btc_txid, &burn_bytes, &proto_bytes, &script_len, btc_script]);
 }

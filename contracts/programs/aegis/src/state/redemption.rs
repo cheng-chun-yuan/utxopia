@@ -21,7 +21,7 @@ pub enum RedemptionStatus {
 
 /// Redemption request - pending BTC withdrawal (zero-copy layout)
 ///
-/// Layout (98 bytes):
+/// Layout (106 bytes):
 /// - discriminator:     1 byte
 /// - status:            1 byte
 /// - btc_script_len:    1 byte
@@ -31,6 +31,7 @@ pub enum RedemptionStatus {
 /// - requester:         32 bytes
 /// - amount_sats:       8 bytes
 /// - service_fee:       8 bytes (locked at request time from pool config)
+/// - total_input_sats:  8 bytes (sum of BTC input UTXOs, set at mark_processing by backend)
 /// - btc_script:        34 bytes (raw scriptPubKey for BTC withdrawal, not bech32 string)
 #[repr(C)]
 pub struct RedemptionRequest {
@@ -62,6 +63,10 @@ pub struct RedemptionRequest {
     /// Service fee in satoshis — locked at request time from pool's compute_service_fee().
     /// complete_redemption uses this instead of re-reading pool config.
     service_fee: [u8; 8],
+
+    /// Total BTC input UTXO value in satoshis — set by backend at mark_processing.
+    /// Used by complete_redemption to compute miner_fee = total_input_sats - sum(tx_outputs).
+    total_input_sats: [u8; 8],
 
     /// Bitcoin scriptPubKey for withdrawal (fixed buffer)
     pub btc_script: [u8; MAX_BTC_SCRIPT_LEN],
@@ -129,6 +134,10 @@ impl RedemptionRequest {
         u32::from_le_bytes(self.processing_slot)
     }
 
+    pub fn total_input_sats(&self) -> u64 {
+        u64::from_le_bytes(self.total_input_sats)
+    }
+
     pub fn get_btc_script(&self) -> &[u8] {
         &self.btc_script[..self.btc_script_len as usize]
     }
@@ -152,6 +161,10 @@ impl RedemptionRequest {
 
     pub fn set_processing_slot(&mut self, value: u32) {
         self.processing_slot = value.to_le_bytes();
+    }
+
+    pub fn set_total_input_sats(&mut self, value: u64) {
+        self.total_input_sats = value.to_le_bytes();
     }
 
     pub fn set_btc_script(&mut self, script: &[u8]) -> Result<(), ProgramError> {
