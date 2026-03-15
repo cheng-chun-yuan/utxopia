@@ -1,18 +1,20 @@
-//! zkBTC Backend - Minimal Services
+//! Aegis Backend — Private Bitcoin Bridge Services
 //!
-//! Server-side services:
-//! 1. Header Relay (TypeScript) - Submits Bitcoin headers to Solana light client
-//! 2. Redemption Processor - Processes BTC withdrawals
-//! 3. Deposit Tracker - Tracks BTC deposits and handles SPV verification
-//!
-//! All other functionality is handled by the SDK on the client side.
+//! Runs as a single binary with subcommands. Each mode starts a different
+//! combination of background services:
 //!
 //! Run modes:
-//!   cargo run                    - Show usage
-//!   cargo run -- api             - Start REST API (for frontend)
-//!   cargo run -- redemption      - Start redemption processor (background)
-//!   cargo run -- tracker         - Start deposit tracker (background)
-//!   cargo run -- demo            - Run interactive demo
+//!   cargo run -- api             - REST API + event indexer + deposit tracker + redemption
+//!   cargo run -- redemption      - Standalone redemption processor
+//!   cargo run -- tracker         - Standalone deposit tracker
+//!   cargo run -- demo            - Interactive demo (create test deposits)
+//!
+//! Services (started automatically in `api` mode):
+//! - **Event Indexer**: polls Solana for JoinSplit events, stores in SQLite
+//! - **Deposit Tracker**: watches BTC addresses → sweep → SPV verify → mint
+//! - **Redemption Service**: scans RedemptionRequest PDAs → FROST sign → send BTC
+//! - **Header Relayer**: submits BTC block headers to btc-light-client program
+//! - **REST API**: serves frontend requests (deposits, transfers, redemptions, proofs)
 
 use zkbtc::api_server as api;
 use zkbtc::config::AEGISConfig;

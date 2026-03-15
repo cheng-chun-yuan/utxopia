@@ -2,6 +2,13 @@
 //!
 //! Types for tracking Bitcoin deposits through their lifecycle:
 //! pending → detected → confirming → confirmed → sweeping → sweep_confirming → verifying → ready → claimed
+//!
+//! Key types:
+//! - `DepositStatus` — enum representing each lifecycle stage
+//! - `DepositRecord` — full deposit state (address, txids, amounts, fees, OP_RETURN data)
+//! - `DepositOpReturnData` — 64-byte OP_RETURN payload (ephemeral_pub + npk)
+//! - `TrackerConfig` — configurable confirmation thresholds, poll intervals, signing mode
+//! - `TrackerStats` — aggregated stats (total deposits, amounts, active tracking count)
 
 use serde::{Deserialize, Serialize};
 

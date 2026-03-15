@@ -2,9 +2,17 @@
 //!
 //! Main service that scans on-chain RedemptionRequest PDAs and triggers BTC withdrawals.
 //! Uses a 3-phase tick loop:
-//!   Phase 1: Scan PDAs
-//!   Phase 2: Process new (Pending) PDAs
-//!   Phase 3: Try to complete (Processing) PDAs
+//!   Phase 1: Scan PDAs — find new RedemptionRequest accounts
+//!   Phase 2: Process new (Pending) PDAs — build BTC tx, FROST sign, broadcast
+//!   Phase 3: Try to complete (Processing) PDAs — wait for BTC confirmations,
+//!            submit SPV proof, call complete_redemption on-chain
+//!
+//! Also handles recovery of untracked redemptions (PDAs that exist on-chain
+//! but aren't in local tracking store — e.g. after service restart).
+//!
+//! Signing modes:
+//! - SingleKey: POC mode using a local secp256k1 key
+//! - FROST: production mode using 2-of-3 threshold signing via FROST servers
 
 use std::str::FromStr;
 use std::sync::Arc;
@@ -957,7 +965,7 @@ impl RedemptionService {
         })?;
 
         // Call complete_redemption on-chain
-        self.sol_client
+        match self.sol_client
             .send_complete_redemption(
                 &pda_pubkey,
                 &txid_internal,
@@ -966,12 +974,26 @@ impl RedemptionService {
                 tx_size,
             )
             .await
-            .map_err(|e| ServiceError::BuildError(format!("complete_redemption: {}", e)))?;
-
-        println!(
-            "[redemption] complete_redemption succeeded for PDA {}",
-            &pda.pda_address[..8]
-        );
+        {
+            Ok(_) => {
+                println!(
+                    "[redemption] complete_redemption succeeded for PDA {}",
+                    &pda.pda_address[..8]
+                );
+            }
+            Err(e) => {
+                // On-chain verification failed (wrong tx, amount mismatch, etc.)
+                // Drop tracking so next tick can re-scan or FROST sign fresh
+                eprintln!(
+                    "[redemption] complete_redemption FAILED for PDA {} (btc_tx {}): {}. Dropping tracking to retry.",
+                    &pda.pda_address[..8],
+                    btc_txid,
+                    e
+                );
+                self.tracking.remove(&pda.pda_address).await;
+                return Err(ServiceError::BuildError(format!("complete_redemption: {}", e)));
+            }
+        }
 
         // Close ChadBuffer to reclaim rent
         let payer = self.sol_client.payer_keypair().ok_or_else(|| {

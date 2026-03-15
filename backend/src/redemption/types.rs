@@ -1,6 +1,13 @@
 //! Redemption Types
 //!
 //! Types for the redemption/withdrawal service.
+//!
+//! Key types:
+//! - `WithdrawalStatus` — lifecycle: Pending → Processing → Signing → Sent → Confirming → Completed
+//! - `WithdrawalRequest` — full request state (PDA, amount, BTC script, service fee, txids)
+//! - `PoolUtxo` — unspent BTC in the pool wallet available for withdrawal
+//! - `RedemptionConfig` — signing mode (single-key vs FROST), confirmation thresholds
+//! - `RedemptionStats` — aggregated stats (total withdrawals, amounts, pending count)
 
 use serde::{Deserialize, Serialize};
 

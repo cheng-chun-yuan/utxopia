@@ -1,4 +1,9 @@
 //! SQLite storage for indexed events
+//!
+//! Tables: leaves, nullifiers, transfers, announcements, redemptions, indexer_state.
+//! Uses r2d2 connection pooling for concurrent read/write access.
+//! Provides typed query methods for each event type with efficient lookups by
+//! commitment, nullifier hash, leaf index, and transaction signature.
 
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;

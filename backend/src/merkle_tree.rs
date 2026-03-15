@@ -2,6 +2,11 @@
 //!
 //! Mirrors the on-chain `CommitmentTree` and SDK `CommitmentTreeIndex`.
 //! Uses `light-poseidon` for circom-compatible BN254 Poseidon hashing.
+//!
+//! - Depth: 16 (65,536 leaf capacity)
+//! - Hash: Poseidon(left, right) on BN254 scalar field
+//! - Provides merkle proof generation (path + indices) for any leaf
+//! - Used by event_indexer tree_cache and API proof endpoints
 
 use light_poseidon::{Poseidon, PoseidonBytesHasher, PoseidonError};
 use serde::Serialize;

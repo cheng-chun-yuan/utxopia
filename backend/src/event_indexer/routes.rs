@@ -1,4 +1,15 @@
 //! REST API + WebSocket endpoints for the event indexer
+//!
+//! Endpoints:
+//! - GET /api/tree/status — merkle tree root, leaf count, depth
+//! - GET /api/tree/proof/:leaf_index — merkle proof for a leaf
+//! - GET /api/tree/leaves — all leaves with commitments
+//! - GET /api/nullifiers — all spent nullifiers
+//! - GET /api/nullifiers/:hash — check if nullifier is spent
+//! - GET /api/transfers — all JoinSplit transactions with inputs/outputs
+//! - GET /api/announcements — stealth announcements (type 0=deposit, 1=transfer)
+//! - GET /api/redemptions — completed redemption events
+//! - WS /ws — real-time event stream (leaves, nullifiers, announcements)
 
 use axum::{
     extract::{

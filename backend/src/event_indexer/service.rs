@@ -1,7 +1,16 @@
 //! Event indexer service
 //!
-//! Polls Solana for new transactions, parses events from logs,
-//! and stores them in SQLite.
+//! Polls Solana for new transactions targeting the Aegis program,
+//! parses sol_log_data events from transaction logs, and stores them in SQLite.
+//!
+//! Event discriminators parsed:
+//! - 0x01 LeafInserted — new commitment added to merkle tree
+//! - 0x02 NullifierSpent — note consumed (nullifier published)
+//! - 0x03 StealthAnnouncement — deposit/transfer stealth data (ephemeral pub + encrypted amount)
+//! - 0x07 RedemptionCompleted — BTC withdrawal finalized on-chain
+//! - 0x08 RedemptionStatusChanged — withdrawal status update
+//!
+//! Also supports real-time indexing via Solana logsSubscribe WebSocket (solana_ws module).
 
 use std::sync::Arc;
 use tokio::time::{interval, Duration};

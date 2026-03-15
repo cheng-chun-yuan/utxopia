@@ -1,4 +1,13 @@
 //! Stealth Deposit Service
+//!
+//! Manages the lifecycle of stealth deposits:
+//! - Prepare: generate taproot address with OP_RETURN for sender
+//! - Track: poll Esplora for incoming BTC transactions
+//! - Announce: emit stealth announcement on Solana (relay mode) or return data (self-custody)
+//!
+//! Supports two modes via `StealthMode`:
+//! - Relay: backend stores ephemeral keys, auto-announces after deposit confirms
+//! - SelfCustody: user saves stealth data locally and announces manually
 
 use std::collections::HashMap;
 use std::sync::Arc;

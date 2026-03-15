@@ -1,3 +1,10 @@
+//! Stealth Deposit API Endpoints
+//!
+//! - POST /api/stealth/prepare — generate taproot address + OP_RETURN data for deposit
+//! - GET /api/stealth/:id — check deposit status by tracking ID
+//! - POST /api/stealth/announce — manual stealth announcement submission
+//! - GET /api/stealth/health — service health check
+
 use axum::{
     extract::{Path, State},
     http::StatusCode,
