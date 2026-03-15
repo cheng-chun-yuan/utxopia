@@ -35,29 +35,40 @@ const REQUIRED_CONFIRMATIONS = 6;
 function BtcConfirmationStatus({ txid }: { txid: string }) {
   const [confirmations, setConfirmations] = useState<number | null>(null);
   const [blockHeight, setBlockHeight] = useState<number | null>(null);
+  const [relayedHeight, setRelayedHeight] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    async function fetch_status() {
+    async function fetchStatus() {
       try {
-        const [statusResp, tipResp] = await Promise.all([
+        // Fetch BTC tx status + on-chain relayed header height in parallel
+        const [statusResp, tipResp, relayResp] = await Promise.all([
           fetch(`${getEsploraApiUrl()}/tx/${txid}/status`),
           fetch(`${getEsploraApiUrl()}/blocks/tip/height`),
+          fetch("/api/relayer/meta").catch(() => null),
         ]);
         if (cancelled) return;
+
         const status = await statusResp.json();
         const tip = await tipResp.json();
+
+        if (relayResp?.ok) {
+          try {
+            const relay = await relayResp.json();
+            if (relay.tip_height) setRelayedHeight(relay.tip_height);
+          } catch { /* ignore */ }
+        }
+
         if (status.confirmed && status.block_height) {
-          const confs = tip - status.block_height + 1;
-          setConfirmations(confs);
+          setConfirmations(tip - status.block_height + 1);
           setBlockHeight(status.block_height);
         } else {
           setConfirmations(0);
         }
       } catch { /* ignore */ }
     }
-    fetch_status();
-    const interval = setInterval(fetch_status, 30_000);
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 30_000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [txid]);
 
@@ -66,22 +77,35 @@ function BtcConfirmationStatus({ txid }: { txid: string }) {
   const done = confirmations >= REQUIRED_CONFIRMATIONS;
 
   return (
-    <div className="flex items-center gap-2 text-[11px]">
-      {done ? (
-        <CheckCircle2 className="w-3 h-3 text-green-400 shrink-0" />
-      ) : (
-        <Loader2 className="w-3 h-3 text-gray-light animate-spin shrink-0" />
-      )}
-      <span className={done ? "text-green-400" : "text-gray-light"}>
-        {confirmations === 0
-          ? "Unconfirmed — waiting for block..."
-          : done
-            ? `Confirmed (${confirmations} blocks)`
-            : `${confirmations}/${REQUIRED_CONFIRMATIONS} confirmations`
-        }
-      </span>
+    <div className="space-y-1">
+      <div className="flex items-center gap-2 text-[11px]">
+        {done ? (
+          <CheckCircle2 className="w-3 h-3 text-green-400 shrink-0" />
+        ) : confirmations === 0 ? (
+          <Clock className="w-3 h-3 text-gray/50 shrink-0" />
+        ) : (
+          <Loader2 className="w-3 h-3 text-gray-light animate-spin shrink-0" />
+        )}
+        <span className={done ? "text-green-400" : "text-gray-light"}>
+          {confirmations === 0
+            ? "Unconfirmed — waiting for block..."
+            : done
+              ? `Confirmed · ${confirmations} blocks`
+              : `Waiting for confirmations · ${confirmations}/${REQUIRED_CONFIRMATIONS}`
+          }
+        </span>
+      </div>
       {blockHeight && (
-        <span className="text-gray/40 font-mono">block #{blockHeight.toLocaleString()}</span>
+        <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 text-[10px] font-mono text-gray/40 pl-5">
+          <span>Confirmed at</span>
+          <span>block #{blockHeight.toLocaleString()}</span>
+          {relayedHeight && (
+            <>
+              <span>Relayed to</span>
+              <span>block #{relayedHeight.toLocaleString()}{relayedHeight >= blockHeight ? " ✓" : ""}</span>
+            </>
+          )}
+        </div>
       )}
     </div>
   );
