@@ -44,7 +44,7 @@ These apply uniformly to all tokens (BTC and SPL). Pool-level timelock (`propose
 
 | Field | Type | Size | Description |
 |-------|------|------|-------------|
-| `discriminator` | `u8` | 1 | `0x08` |
+| `discriminator` | `u8` | 1 | `0x0B` |
 | `bump` | `u8` | 1 | PDA bump seed |
 | `mint` | `[u8; 32]` | 32 | SPL mint address |
 | `token_id` | `[u8; 32]` | 32 | `Poseidon(reduce_to_field(mint))` — precomputed at registration |
@@ -94,11 +94,11 @@ The existing `UNSHIELD` (disc 15) used `Poseidon(unshield_address, ZKBTC_TOKEN_I
 | 0x05 | RedemptionRequest | Kept |
 | 0x06 | DepositReceipt | Kept |
 | 0x07 | DepositIntent | **Removed** |
-| 0x08 | TokenConfig | **New** |
+| 0x0B | TokenConfig | **New** |
 
 ### Token ID Derivation
 
-All tokens use `token_id = Poseidon(reduce_to_field(mint_address))`:
+All tokens use `token_id = Poseidon(reduce_to_field(mint_address), 0)`:
 1. **Reduce**: The 32-byte mint pubkey (256 bits) is reduced modulo the BN254 scalar field (~254 bits) to produce a valid field element. This uses the existing `reduce_to_field` function in `crypto.rs`.
 2. **Hash**: `Poseidon(reduced_mint)` produces the token_id.
 3. **Store**: Computed once at token registration, stored in TokenConfig.
