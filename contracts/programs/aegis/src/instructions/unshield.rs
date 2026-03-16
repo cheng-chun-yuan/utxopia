@@ -1,13 +1,8 @@
-//! Public Unshield instruction (disc 15)
+//! Multi-token Unshield instruction (disc 30)
 //!
-//! Converts shielded zkBTC back to public SPL tokens on Solana.
-//! User proves ownership via JoinSplit ZK proof, nullifiers are created,
-//! and pool vault transfers public zkBTC to the user's token account.
-//!
-//! The last output commitment is the "unshield output" — verified in ZK proof
-//! but NOT inserted into the Merkle tree. Instead, the unshield amount is
-//! transferred from pool vault → user's token account.
-//! Remaining M-1 outputs go into tree as normal (change notes).
+//! Unshield SPL tokens from the privacy pool. User provides JoinSplit ZK proof;
+//! last output is a burn commitment Poseidon([0], token_id, amount).
+//! Revealed amount minus fees is transferred from token vault to user.
 //!
 //! Instruction Data Layout:
 //! - [0]     n_inputs:           u8
@@ -19,16 +14,15 @@
 //! - [..]     commitments_out:   [[u8; 32]; n_outputs]  (last = unshield)
 //! - [..]     stealth_data:      [ephemeral_pub(32) + encrypted_amount(8)] × (n_outputs - 1)
 //! - [..]     unshield_amount:   u64 (8 bytes LE)
-//! - [..]     unshield_address:  [u8; 32] (recipient Solana pubkey)
 //!
 //! Accounts:
-//! 0. pool_state           (writable)
+//! 0. pool_state           (read)
 //! 1. commitment_tree      (writable)
 //! 2. vk_registry          (read)
 //! 3. user                 (signer, payer)
 //! 4. system_program       (read)
-//! 5. zkbtc_mint            (writable)
-//! 6. pool_vault           (writable)
+//! 5. token_config         (writable)
+//! 6. vault                (writable) — token-specific vault
 //! 7. user_token_account   (writable)
 //! 8. token_program        (read)
 //! 9..9+n_inputs           nullifier_records (writable, PDA)
@@ -43,7 +37,7 @@ use pinocchio::{
 
 use crate::error::AegisError;
 use crate::state::{
-    CommitmentTree, NullifierOperationType, NullifierRecord, PoolState,
+    CommitmentTree, NullifierOperationType, NullifierRecord, PoolState, TokenConfig,
     VkRegistry, NULLIFIER_RECORD_DISCRIMINATOR,
 };
 use crate::utils::groth16::GROTH16_PROOF_SIZE;
@@ -51,7 +45,7 @@ use crate::utils::{
     create_pda_account, validate_account_writable, validate_program_owner,
     validate_system_program, validate_token_2022_owner, validate_token_program_key,
 };
-use crate::utils::token::{transfer_zkbtc, validate_token_account};
+use crate::utils::token::transfer_zkbtc;
 
 /// Maximum supported N + M
 const MAX_JOINSPLIT_SIZE: usize = crate::constants::MAX_SAFE_JOINSPLIT_SIZE;
@@ -75,7 +69,6 @@ pub fn process_unshield(
     let n_inputs = data[0] as usize;
     let n_outputs = data[1] as usize;
 
-    // n_outputs must be >= 1 (the unshield output itself)
     if n_inputs == 0 || n_outputs == 0 || n_inputs + n_outputs > MAX_JOINSPLIT_SIZE {
         return Err(ProgramError::InvalidInstructionData);
     }
@@ -88,7 +81,7 @@ pub fn process_unshield(
     let nullifiers_size = n_inputs * 32;
     let commitments_size = n_outputs * 32;
     let stealth_size = n_tree_outputs * STEALTH_DATA_PER_OUTPUT;
-    let unshield_data_size = 8 + 32; // unshield_amount(8) + unshield_address(32)
+    let unshield_data_size = 8; // unshield_amount only (no address — use zero-npk burn)
     let expected_len = header_size + nullifiers_size + commitments_size + stealth_size + unshield_data_size;
 
     if data.len() < expected_len {
@@ -126,24 +119,10 @@ pub fn process_unshield(
     let stealth_data_start = offset;
     offset += n_tree_outputs * STEALTH_DATA_PER_OUTPUT;
 
-    // Parse unshield amount and address
+    // Parse unshield amount
     let unshield_amount = u64::from_le_bytes(data[offset..offset + 8].try_into().unwrap());
-    offset += 8;
 
-    let unshield_address: &[u8; 32] = data[offset..offset + 32].try_into().unwrap();
-
-    // Verify bound params hash matches expected value for unshield
-    {
-        let expected = crate::utils::crypto::compute_bound_params_hash_unshield(
-            crate::constants::CHAIN_ID,
-            unshield_address,
-        );
-        if *bound_params_hash != expected {
-            return Err(AegisError::InvalidBoundParams.into());
-        }
-    }
-
-    // Validate account count: fixed + nullifiers (no stealth PDA accounts)
+    // Validate account count
     let min_accounts = FIXED_ACCOUNTS + n_inputs;
     if accounts.len() < min_accounts {
         return Err(ProgramError::NotEnoughAccountKeys);
@@ -154,8 +133,8 @@ pub fn process_unshield(
     let vk_registry_info = &accounts[2];
     let user = &accounts[3];
     let system_program = &accounts[4];
-    let zkbtc_mint = &accounts[5];
-    let pool_vault = &accounts[6];
+    let token_config_info = &accounts[5];
+    let vault = &accounts[6];
     let user_token_account = &accounts[7];
     let token_program = &accounts[8];
 
@@ -163,51 +142,53 @@ pub fn process_unshield(
     validate_program_owner(pool_state_info, program_id)?;
     validate_program_owner(commitment_tree_info, program_id)?;
     validate_program_owner(vk_registry_info, program_id)?;
+    validate_program_owner(token_config_info, program_id)?;
     validate_system_program(system_program)?;
-    validate_token_2022_owner(zkbtc_mint)?;
-    validate_token_2022_owner(pool_vault)?;
+    validate_token_2022_owner(vault)?;
+    validate_token_2022_owner(user_token_account)?;
     validate_token_program_key(token_program)?;
-    validate_account_writable(pool_state_info)?;
     validate_account_writable(commitment_tree_info)?;
-    validate_account_writable(zkbtc_mint)?;
-    validate_account_writable(pool_vault)?;
+    validate_account_writable(token_config_info)?;
+    validate_account_writable(vault)?;
     validate_account_writable(user_token_account)?;
 
     if !user.is_signer() {
         return Err(ProgramError::MissingRequiredSignature);
     }
 
-    // Validate pool is not paused and get pool vault + bump
-    let pool_bump: u8;
-    {
+    // Read pool state — check paused, get withdrawal_fee_bps
+    let withdrawal_fee_bps = {
         let pool_data = pool_state_info.try_borrow_data()?;
         let pool = PoolState::from_bytes(&pool_data)?;
         if pool.is_paused() {
             return Err(AegisError::PoolPaused.into());
         }
+        pool.withdrawal_fee_bps()
+    };
 
-        // Verify zkbtc_mint matches pool
-        if zkbtc_mint.key().as_ref() != pool.zkbtc_mint {
-            return Err(ProgramError::InvalidAccountData);
+    // Read token config — get token_id, validate vault
+    let token_id = {
+        let tc_data = token_config_info.try_borrow_data()?;
+        let tc = TokenConfig::from_bytes(&tc_data)?;
+
+        if !tc.is_enabled() {
+            return Err(AegisError::TokenDisabled.into());
         }
 
-        // Verify pool vault matches pool
-        if pool_vault.key().as_ref() != pool.pool_vault {
-            return Err(ProgramError::InvalidAccountData);
+        // Validate vault matches
+        if vault.key().as_ref() != tc.vault {
+            return Err(AegisError::InvalidVault.into());
         }
-    }
 
-    // Derive pool PDA for signing transfer
+        tc.token_id
+    };
+
+    // Derive pool PDA for signing vault transfer
     let pool_seeds: &[&[u8]] = &[PoolState::SEED];
-    let (expected_pool_pda, bump) = find_program_address(pool_seeds, program_id);
+    let (expected_pool_pda, pool_bump) = find_program_address(pool_seeds, program_id);
     if pool_state_info.key() != &expected_pool_pda {
         return Err(ProgramError::InvalidSeeds);
     }
-    pool_bump = bump;
-
-    // Validate user token account: owned by Token-2022, correct mint
-    let unshield_recipient = Pubkey::from(*unshield_address);
-    validate_token_account(user_token_account, zkbtc_mint.key(), &unshield_recipient)?;
 
     // Validate VK registry for this (N, M) variant
     {
@@ -228,7 +209,7 @@ pub fn process_unshield(
         }
     }
 
-    // Build public inputs array for verification
+    // Build public inputs
     const MAX_PUBLIC_INPUTS: usize = 2 + MAX_JOINSPLIT_SIZE;
     let mut public_inputs: [&[u8; 32]; MAX_PUBLIC_INPUTS] = [ZERO_REF; MAX_PUBLIC_INPUTS];
     let mut pi_len = 0;
@@ -250,11 +231,11 @@ pub fn process_unshield(
         proof_bytes, &public_inputs[..pi_len], delta_g2, ic,
     )?;
 
-    // Verify unshield commitment: last output = Poseidon(unshield_address, ZKBTC_TOKEN_ID, unshield_amount)
+    // Verify burn commitment: last output = Poseidon([0u8; 32], token_id, amount)
     {
-        let expected_commitment = crate::utils::crypto::compute_deposit_commitment(
-            unshield_address,
-            unshield_amount,
+        let zero_npk = [0u8; 32];
+        let expected_commitment = crate::utils::crypto::compute_commitment(
+            &zero_npk, &token_id, unshield_amount,
         )?;
         if *commitments_out[n_outputs - 1] != expected_commitment {
             return Err(AegisError::InvalidCommitment.into());
@@ -309,7 +290,7 @@ pub fn process_unshield(
     crate::utils::events::emit_nullifiers_batch(
         &nullifiers[..n_inputs],
         NullifierOperationType::FullWithdrawal as u8,
-        15, // instruction::UNSHIELD
+        30, // instruction::UNSHIELD
     );
 
     // Insert tree outputs (all except the last unshield output) into Merkle tree
@@ -328,44 +309,54 @@ pub fn process_unshield(
                 .try_into()
                 .unwrap();
 
+            // Use v2 event with token_id
             crate::utils::events::emit_stealth_announcement(
                 crate::utils::events::ANNOUNCEMENT_TYPE_TRANSFER,
                 ephemeral_pub,
                 encrypted_amount,
                 commitments_out[i],
                 leaf_index as u32,
+                &token_id,
             );
         }
     }
 
-    // Emit unshield metadata for indexer
+    // Compute fees
+    let protocol_fee = (unshield_amount as u128 * withdrawal_fee_bps as u128 / 10_000) as u64;
+    let payout = unshield_amount
+        .checked_sub(protocol_fee)
+        .ok_or(ProgramError::ArithmeticOverflow)?;
+
+    // Emit unshield metadata
     crate::utils::events::emit_unshield_meta(
         unshield_amount,
-        unshield_address,
+        user.key().as_ref().try_into().unwrap(),
     );
 
-    // Transfer unshield amount from pool vault to user's token account
+    // Transfer payout from vault to user's token account (signed by pool PDA)
     {
         let pool_bump_bytes = [pool_bump];
         let pool_signer_seeds: &[&[u8]] = &[PoolState::SEED, &pool_bump_bytes];
 
         transfer_zkbtc(
             token_program,
-            pool_vault,
+            vault,
             user_token_account,
             pool_state_info, // Pool PDA is the vault authority
-            unshield_amount,
+            payout,
             pool_signer_seeds,
         )?;
     }
 
-    // Update pool state: decrement total_shielded
+    // Update token config: decrement total_shielded, add fees
     {
-        let mut pool_data = pool_state_info.try_borrow_mut_data()?;
-        let pool = PoolState::from_bytes_mut(&mut pool_data)?;
-        pool.sub_shielded(unshield_amount)?;
-        pool.set_last_update(clock.unix_timestamp);
+        let mut tc_data = token_config_info.try_borrow_mut_data()?;
+        let tc = TokenConfig::from_bytes_mut(&mut tc_data)?;
+        tc.sub_shielded(unshield_amount)?;
+        tc.add_fees(protocol_fee)?;
     }
+
+    let _ = clock; // suppress unused warning
 
     pinocchio::msg!("Aegis: unshield");
     Ok(())

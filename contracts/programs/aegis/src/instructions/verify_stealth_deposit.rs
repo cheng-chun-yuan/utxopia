@@ -354,7 +354,7 @@ pub fn process_verify_stealth_deposit(
 
     // Emit stealth announcement v2 with token_id
     let amount_bytes = shielded_amount.to_le_bytes();
-    crate::utils::events::emit_stealth_announcement_v2(
+    crate::utils::events::emit_stealth_announcement(
         ANNOUNCEMENT_TYPE_DEPOSIT,
         &ephemeral_pub,
         &amount_bytes,

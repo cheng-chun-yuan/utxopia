@@ -22,7 +22,7 @@ use crate::error::AegisError;
 use crate::state::{CommitmentTree, PoolState, TokenConfig};
 use crate::utils::{
     crypto::compute_commitment,
-    events::{emit_stealth_announcement_v2, ANNOUNCEMENT_TYPE_DEPOSIT},
+    events::{emit_stealth_announcement, ANNOUNCEMENT_TYPE_DEPOSIT},
     transfer_token_user,
     validate_account_writable, validate_program_owner,
     validate_token_2022_owner, validate_token_program_key,
@@ -150,7 +150,7 @@ pub fn process_shield(
 
     // Emit stealth announcement v2 with token_id
     let amount_bytes = shielded_amount.to_le_bytes();
-    emit_stealth_announcement_v2(
+    emit_stealth_announcement(
         ANNOUNCEMENT_TYPE_DEPOSIT,
         ephemeral_pub,
         &amount_bytes,

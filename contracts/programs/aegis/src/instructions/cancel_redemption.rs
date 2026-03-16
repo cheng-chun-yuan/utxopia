@@ -139,6 +139,7 @@ pub fn process_cancel_redemption(
             &amount_bytes,
             &commitment,
             leaf_index as u32,
+            &token_id,
         );
     }
 

@@ -32,9 +32,9 @@ pub mod complete_redemption;
 // Multi-token operations
 pub mod register_token;
 pub mod shield;
-pub mod unshield_v2;
+pub mod unshield;
 pub mod update_token_config;
-pub mod claim_fees_v2;
+pub mod claim_fees;
 
 // Admin utilities
 pub mod admin_update_pool;
@@ -55,9 +55,9 @@ pub use cancel_redemption::*;
 pub use complete_redemption::*;
 pub use register_token::*;
 pub use shield::*;
-pub use unshield_v2::*;
+pub use unshield::*;
 pub use update_token_config::*;
-pub use claim_fees_v2::*;
+pub use claim_fees::*;
 pub use admin_update_pool::*;
 pub use add_demo_stealth::*;
 pub use init_vk_registry::*;

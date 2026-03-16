@@ -331,13 +331,14 @@ pub fn process_transact(
                 .try_into()
                 .unwrap();
 
-            // Emit stealth announcement (LeafInserted merged — announcement already has commitment + leaf_index)
+            // Emit stealth announcement (token_id = 0 for private transfers — token is hidden in ZK proof)
             crate::utils::events::emit_stealth_announcement(
                 crate::utils::events::ANNOUNCEMENT_TYPE_TRANSFER,
                 ephemeral_pub,
                 encrypted_amount,
                 commitments_out[i],
                 leaf_index as u32,
+                &[0u8; 32], // token_id hidden in private transfer
             );
         }
     }

@@ -26,7 +26,7 @@ export interface NullifierSpentEvent {
   operationType: number;
 }
 
-/** Parsed stealth announcement event (v2 with token_id) */
+/** Parsed stealth announcement event (includes token_id) */
 export interface StealthAnnouncementEvent {
   type: "stealth_announcement";
   announcementType: number; // 0=deposit, 1=transfer
@@ -34,7 +34,7 @@ export interface StealthAnnouncementEvent {
   encryptedAmount: Uint8Array; // 8 bytes
   commitment: Uint8Array; // 32 bytes
   leafIndex: number;
-  tokenId?: Uint8Array; // 32 bytes (present in v2)
+  tokenId?: Uint8Array; // 32 bytes (present for deposit/unshield, zero for private transfers)
 }
 
 export type ProgramEvent =

@@ -145,13 +145,13 @@ pub fn process_instruction(
             instructions::process_shield(program_id, accounts, data)
         }
         instruction::UNSHIELD => {
-            instructions::process_unshield_v2(program_id, accounts, data)
+            instructions::process_unshield(program_id, accounts, data)
         }
         instruction::UPDATE_TOKEN_CONFIG => {
             instructions::process_update_token_config(program_id, accounts, data)
         }
         instruction::CLAIM_FEES => {
-            instructions::process_claim_fees_v2(program_id, accounts, data)
+            instructions::process_claim_fees(program_id, accounts, data)
         }
         _ => Err(ProgramError::InvalidInstructionData),
     }

@@ -161,6 +161,7 @@ pub fn process_add_demo_stealth(
         &amount_bytes,
         &commitment,
         leaf_index as u32,
+        &token_id,
     );
 
     // Mint zkBTC to pool vault so users can claim
