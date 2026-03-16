@@ -78,13 +78,13 @@ pub struct PoolState {
     /// 0 means no active proposal.
     pending_execute_after: [u8; 8],
 
-    /// Service fee in basis points (0.01% units). E.g., 30 = 0.3%.
-    /// Carved from first 2 bytes of old _reserved field.
-    /// Backward compat: old PDAs have 0 here, formula degrades to flat base fee only.
-    service_fee_bps: [u8; 2],
+    /// Percentage fee on all deposits (basis points, u16 LE). E.g., 50 = 0.5%.
+    /// Fresh deploy: replaces old service_fee_bps field.
+    deposit_fee_bps: [u8; 2],
 
-    /// Pending timelock: proposed service_fee_bps
-    pending_service_fee_bps: [u8; 2],
+    /// Percentage fee on all withdrawals (basis points, u16 LE). E.g., 100 = 1.0%.
+    /// Fresh deploy: replaces old pending_service_fee_bps field.
+    withdrawal_fee_bps: [u8; 2],
 
     /// Sum of all Unspent UTXO amounts (satoshis). Carved from _reserved.
     total_btc_held: [u8; 8],
@@ -178,14 +178,41 @@ impl PoolState {
     }
 
 
-    pub fn service_fee_bps(&self) -> u16 {
-        u16::from_le_bytes(self.service_fee_bps)
+    pub fn deposit_fee_bps(&self) -> u16 {
+        u16::from_le_bytes(self.deposit_fee_bps)
     }
 
-    /// Compute total service fee: (amount * bps / 10000) + base
-    /// At 30 bps, max product is 2.1e15 * 30 = 6.3e16, well within u64 range.
+    pub fn withdrawal_fee_bps(&self) -> u16 {
+        u16::from_le_bytes(self.withdrawal_fee_bps)
+    }
+
+    /// Compute deposit fee: amount * deposit_fee_bps / 10000
+    pub fn compute_deposit_fee(&self, amount: u64) -> u64 {
+        let bps = self.deposit_fee_bps() as u64;
+        amount.saturating_mul(bps) / 10_000
+    }
+
+    /// Compute withdrawal fee: amount * withdrawal_fee_bps / 10000
+    pub fn compute_withdrawal_fee(&self, amount: u64) -> u64 {
+        let bps = self.withdrawal_fee_bps() as u64;
+        amount.saturating_mul(bps) / 10_000
+    }
+
+    /// Legacy alias: reads deposit_fee_bps (was service_fee_bps).
+    /// Used by redeem.rs, public_redeem.rs, admin_update_pool.rs until removed.
+    pub fn service_fee_bps(&self) -> u16 {
+        self.deposit_fee_bps()
+    }
+
+    /// Legacy alias: writes deposit_fee_bps (was service_fee_bps).
+    pub fn set_service_fee_bps(&mut self, value: u16) {
+        self.set_deposit_fee_bps(value);
+    }
+
+    /// Legacy: compute total service fee: (amount * bps / 10000) + base
+    /// Kept for backward compat with existing BTC redemption flow during transition.
     pub fn compute_service_fee(&self, amount: u64) -> u64 {
-        let bps = self.service_fee_bps() as u64;
+        let bps = self.deposit_fee_bps() as u64;
         let base = self.service_fee_base();
         let pct_fee = amount.saturating_mul(bps) / 10_000;
         pct_fee.saturating_add(base)
@@ -211,8 +238,9 @@ impl PoolState {
         i64::from_le_bytes(self.pending_execute_after)
     }
 
+    /// Legacy: reads withdrawal_fee_bps field (was pending_service_fee_bps)
     pub fn pending_service_fee_bps(&self) -> u16 {
-        u16::from_le_bytes(self.pending_service_fee_bps)
+        u16::from_le_bytes(self.withdrawal_fee_bps)
     }
 
     pub fn has_pending_proposal(&self) -> bool {
@@ -273,8 +301,12 @@ impl PoolState {
     }
 
 
-    pub fn set_service_fee_bps(&mut self, value: u16) {
-        self.service_fee_bps = value.to_le_bytes();
+    pub fn set_deposit_fee_bps(&mut self, value: u16) {
+        self.deposit_fee_bps = value.to_le_bytes();
+    }
+
+    pub fn set_withdrawal_fee_bps(&mut self, value: u16) {
+        self.withdrawal_fee_bps = value.to_le_bytes();
     }
 
     pub fn set_fee_pool(&mut self, value: u64) {
@@ -297,8 +329,9 @@ impl PoolState {
         self.pending_execute_after = value.to_le_bytes();
     }
 
+    /// Legacy: writes withdrawal_fee_bps field (was pending_service_fee_bps)
     pub fn set_pending_service_fee_bps(&mut self, value: u16) {
-        self.pending_service_fee_bps = value.to_le_bytes();
+        self.withdrawal_fee_bps = value.to_le_bytes();
     }
 
     pub fn set_total_btc_held(&mut self, value: u64) {
@@ -315,7 +348,8 @@ impl PoolState {
         self.pending_max_deposit = [0u8; 8];
         self.pending_service_fee = [0u8; 8];
         self.pending_execute_after = [0u8; 8];
-        self.pending_service_fee_bps = [0u8; 2];
+        // Note: withdrawal_fee_bps is no longer a pending field (was pending_service_fee_bps).
+        // It's now active config, so we don't clear it here.
     }
 
     // Increment helpers with overflow check
@@ -543,17 +577,41 @@ mod tests {
     }
 
     #[test]
-    fn test_pool_state_service_fee_still_works() {
+    fn test_pool_state_deposit_withdrawal_fees() {
         let mut buf = init_pool();
         let pool = PoolState::from_bytes_mut(&mut buf).unwrap();
 
-        pool.set_service_fee_bps(30);
+        pool.set_deposit_fee_bps(50);  // 0.5%
+        pool.set_withdrawal_fee_bps(100); // 1.0%
+
+        assert_eq!(pool.deposit_fee_bps(), 50);
+        assert_eq!(pool.withdrawal_fee_bps(), 100);
+        assert_eq!(pool.compute_deposit_fee(100_000), 500);  // 0.5%
+        assert_eq!(pool.compute_withdrawal_fee(100_000), 1000); // 1.0%
+    }
+
+    #[test]
+    fn test_pool_state_deposit_withdrawal_fees_default_zero() {
+        let buf = init_pool();
+        let pool = PoolState::from_bytes(&buf).unwrap();
+        assert_eq!(pool.deposit_fee_bps(), 0);
+        assert_eq!(pool.withdrawal_fee_bps(), 0);
+        assert_eq!(pool.compute_deposit_fee(100_000), 0);
+        assert_eq!(pool.compute_withdrawal_fee(100_000), 0);
+    }
+
+    #[test]
+    fn test_pool_state_legacy_service_fee_still_works() {
+        let mut buf = init_pool();
+        let pool = PoolState::from_bytes_mut(&mut buf).unwrap();
+
+        pool.set_deposit_fee_bps(30);
         pool.set_service_fee_base(1000);
 
         // UTXO operations should not interfere with fee computation
         pool.add_utxo(100_000).unwrap();
 
-        // fee = 100000 * 30 / 10000 + 1000 = 300 + 1000 = 1300
+        // legacy fee = 100000 * 30 / 10000 + 1000 = 300 + 1000 = 1300
         assert_eq!(pool.compute_service_fee(100_000), 1300);
     }
 }
