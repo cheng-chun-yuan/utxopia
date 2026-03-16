@@ -287,6 +287,11 @@ mod tests {
             instruction::VERIFY_DEPOSIT_V2,
             instruction::CLAIM_FEES,
             instruction::SET_POOL_CONFIG,
+            instruction::REGISTER_TOKEN,
+            instruction::SHIELD,
+            instruction::UNSHIELD_V2,
+            instruction::UPDATE_TOKEN_CONFIG,
+            instruction::CLAIM_FEES_V2,
         ];
 
         for (i, &d1) in discriminators.iter().enumerate() {
@@ -310,6 +315,7 @@ mod tests {
         use crate::state::utxo::UTXO_RECORD_DISCRIMINATOR;
         use crate::state::vk_registry::VK_REGISTRY_DISCRIMINATOR;
         use crate::state::pool_config::POOL_CONFIG_DISCRIMINATOR;
+        use crate::state::token_config::TOKEN_CONFIG_DISCRIMINATOR;
 
         // All Aegis-owned account discriminators must be unique
         let discs: &[u8] = &[
@@ -322,6 +328,7 @@ mod tests {
             COMPLETION_RECEIPT_DISCRIMINATOR,    // 0x08
             UTXO_RECORD_DISCRIMINATOR,          // 0x09
             POOL_CONFIG_DISCRIMINATOR,          // 0x0A
+            TOKEN_CONFIG_DISCRIMINATOR,         // 0x0B
             VK_REGISTRY_DISCRIMINATOR,          // 0x14
         ];
 
