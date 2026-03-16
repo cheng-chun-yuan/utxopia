@@ -166,6 +166,25 @@ pub enum AegisError {
 
     #[error("Taproot output key verification failed (npk does not match deposit address)")]
     TaprootVerificationFailed = 6078,
+
+    // Multi-token errors (6080-6089)
+    #[error("Token is disabled")]
+    TokenDisabled = 6080,
+
+    #[error("Invalid vault account")]
+    InvalidVault = 6081,
+
+    #[error("Deposit amount out of configured range")]
+    AmountOutOfRange = 6082,
+
+    #[error("Deposit cap exceeded for this token")]
+    DepositCapExceeded = 6083,
+
+    #[error("Insufficient accumulated fees")]
+    InsufficientFees = 6084,
+
+    #[error("Invalid PDA derivation")]
+    InvalidPDA = 6085,
 }
 
 impl From<AegisError> for ProgramError {

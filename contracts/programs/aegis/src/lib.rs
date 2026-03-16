@@ -93,6 +93,8 @@ pub mod instruction {
     // Pool config (admin)
     pub const SET_POOL_CONFIG: u8 = 27;
 
+    // Multi-token instructions (fresh deploy: reuse freed slots)
+    pub const REGISTER_TOKEN: u8 = 28;
 }
 
 entrypoint!(process_instruction);
@@ -182,6 +184,10 @@ pub fn process_instruction(
         // Pool config (admin)
         instruction::SET_POOL_CONFIG => {
             instructions::process_set_pool_config(program_id, accounts, data)
+        }
+        // Multi-token: register new token
+        instruction::REGISTER_TOKEN => {
+            instructions::process_register_token(program_id, accounts, data)
         }
         _ => Err(ProgramError::InvalidInstructionData),
     }

@@ -46,6 +46,9 @@ pub mod admin_update_pool; // propose/execute/cancel pool updates (timelocked)
 pub mod claim_fees; // claim accumulated protocol fees from vault
 pub mod set_pool_config; // set pool BTC scriptPubKey on-chain
 
+// Multi-token instructions
+pub mod register_token;
+
 // VK registry (deployment)
 pub mod init_vk_registry;
 
@@ -66,4 +69,5 @@ pub use verify_deposit_v2::*;
 pub use admin_update_pool::*;
 pub use claim_fees::*;
 pub use set_pool_config::*;
+pub use register_token::*;
 pub use init_vk_registry::*;
