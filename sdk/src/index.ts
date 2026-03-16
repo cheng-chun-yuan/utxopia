@@ -145,6 +145,20 @@ export {
 } from "./poseidon";
 
 // ==========================================================================
+// Token Registry (multi-token support)
+// ==========================================================================
+
+export {
+  getTokenConfig,
+  getTokenId,
+  fetchSupportedTokens,
+  fetchEnabledTokens,
+  parseTokenConfig,
+  type TokenConfigData,
+  type SupportedToken,
+} from "./token-registry";
+
+// ==========================================================================
 // Note (shielded commitment) utilities
 // ==========================================================================
 
