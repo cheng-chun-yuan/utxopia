@@ -22,7 +22,7 @@ use crate::constants::MAX_BTC_SCRIPT_LEN;
 const MIN_WITHDRAWAL_SATS: u64 = 10_000;
 use crate::error::AegisError;
 use crate::state::{
-    CommitmentTree, NullifierOperationType, NullifierRecord, PoolState,
+    CommitmentTree, NullifierOperationType, NullifierRecord, PoolState, TokenConfig,
     RedemptionRequest, RedemptionStatus, NULLIFIER_RECORD_DISCRIMINATOR,
     REDEMPTION_REQUEST_DISCRIMINATOR,
 };
@@ -108,11 +108,12 @@ pub struct RequestRedemptionAccounts<'a> {
     pub redemption_request: &'a AccountInfo,
     pub user: &'a AccountInfo,
     pub system_program: &'a AccountInfo,
+    pub token_config: &'a AccountInfo,
 }
 
 impl<'a> RequestRedemptionAccounts<'a> {
     pub fn from_accounts(accounts: &'a [AccountInfo]) -> Result<Self, ProgramError> {
-        if accounts.len() < 6 {
+        if accounts.len() < 7 {
             return Err(ProgramError::NotEnoughAccountKeys);
         }
 
@@ -122,6 +123,7 @@ impl<'a> RequestRedemptionAccounts<'a> {
         let redemption_request = &accounts[3];
         let user = &accounts[4];
         let system_program = &accounts[5];
+        let token_config = &accounts[6];
 
         if !user.is_signer() {
             return Err(ProgramError::MissingRequiredSignature);
@@ -134,6 +136,7 @@ impl<'a> RequestRedemptionAccounts<'a> {
             redemption_request,
             user,
             system_program,
+            token_config,
         })
     }
 }
@@ -153,15 +156,17 @@ pub fn process_request_redemption(
     // SECURITY: Validate account owners BEFORE deserializing any data
     validate_program_owner(accounts.pool_state, program_id)?;
     validate_program_owner(accounts.commitment_tree, program_id)?;
+    validate_program_owner(accounts.token_config, program_id)?;
     validate_system_program(accounts.system_program)?;
 
     // SECURITY: Validate writable accounts
     validate_account_writable(accounts.pool_state)?;
     validate_account_writable(accounts.nullifier_record)?;
     validate_account_writable(accounts.redemption_request)?;
+    validate_account_writable(accounts.token_config)?;
 
     // Load and validate pool state
-    let (min_deposit, pending_redemptions, total_shielded, service_fee) = {
+    let (pending_redemptions, total_shielded, withdrawal_fee_bps) = {
         let pool_data = accounts.pool_state.try_borrow_data()?;
         let pool = PoolState::from_bytes(&pool_data)?;
 
@@ -170,20 +175,29 @@ pub fn process_request_redemption(
         }
 
         (
-            pool.min_deposit(),
             pool.pending_redemptions(),
             pool.total_shielded(),
-            pool.compute_service_fee(ix_data.amount_sats),
+            pool.withdrawal_fee_bps(),
         )
     };
+
+    // Load token config for service_fee
+    let tc_service_fee = {
+        let tc_data = accounts.token_config.try_borrow_data()?;
+        let tc = TokenConfig::from_bytes(&tc_data)?;
+        tc.service_fee()
+    };
+
+    // Compute total fee: withdrawal_fee_bps (pool) + service_fee (token)
+    let pct_fee = (ix_data.amount_sats as u128 * withdrawal_fee_bps as u128 / 10_000) as u64;
+    let service_fee = pct_fee.checked_add(tc_service_fee).unwrap_or(u64::MAX);
 
     // Validate amount (MIN_WITHDRAWAL_SATS > 0, so zero check is implicit)
     if ix_data.amount_sats < MIN_WITHDRAWAL_SATS {
         return Err(AegisError::AmountTooSmall.into());
     }
-    if ix_data.amount_sats < min_deposit {
-        return Err(AegisError::AmountTooSmall.into());
-    }
+    // min_deposit check removed — BTC withdrawals have MIN_WITHDRAWAL_SATS,
+    // per-token min is validated in shield/unshield, not redemption
     // Validate amount covers service fee + dust (546 sats)
     if service_fee > 0 && ix_data.amount_sats <= service_fee + 546 {
         return Err(AegisError::AmountTooSmall.into());
@@ -320,6 +334,14 @@ pub fn process_request_redemption(
         pool.sub_shielded(ix_data.amount_sats)?;
         pool.set_pending_redemptions(pending_redemptions.saturating_add(1));
         pool.set_last_update(clock.unix_timestamp);
+    }
+
+    // Update token config — track shielded decrease and fee accumulation
+    {
+        let mut tc_data = accounts.token_config.try_borrow_mut_data()?;
+        let tc = TokenConfig::from_bytes_mut(&mut tc_data)?;
+        tc.sub_shielded(ix_data.amount_sats)?;
+        tc.add_fees(service_fee)?;
     }
 
     pinocchio::msg!("Aegis: redemption requested");

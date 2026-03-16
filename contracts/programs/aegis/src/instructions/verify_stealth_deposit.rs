@@ -35,12 +35,12 @@ use pinocchio::{
 
 use crate::error::AegisError;
 use crate::state::{
-    CommitmentTree, DepositReceipt, PoolState, UtxoRecord,
+    CommitmentTree, DepositReceipt, PoolState, TokenConfig, UtxoRecord,
     VerifiedTransactionView, light_client_tip_height,
     deposit_receipt::DEPOSIT_RECEIPT_DISCRIMINATOR,
 };
 use crate::utils::events::ANNOUNCEMENT_TYPE_DEPOSIT;
-use crate::utils::crypto::compute_deposit_commitment;
+use crate::utils::crypto::compute_commitment;
 use crate::utils::bitcoin::{compute_tx_hash, DepositOpReturn, ParsedTransaction};
 use crate::utils::chadbuffer::read_transaction_from_buffer;
 use crate::utils::{
@@ -116,6 +116,7 @@ impl VerifyStealthDepositData {
 /// 10. `[]` Deposit TX buffer (ChadBuffer)
 /// 11. `[writable]` Deposit receipt PDA (prevents duplicate verification)
 /// 12. `[writable]` UTXO record PDA (tracks pool BTC UTXO)
+/// 13. `[writable]` TokenConfig PDA (for token_id, fees, total_shielded tracking)
 ///
 /// # Instruction data
 /// - VerifyStealthDepositData (80 bytes, fixed)
@@ -124,7 +125,7 @@ pub fn process_verify_stealth_deposit(
     accounts: &[AccountInfo],
     data: &[u8],
 ) -> ProgramResult {
-    if accounts.len() < 13 {
+    if accounts.len() < 14 {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
@@ -141,6 +142,7 @@ pub fn process_verify_stealth_deposit(
     let deposit_tx_buffer_info = &accounts[10];
     let deposit_receipt_info = &accounts[11];
     let utxo_record_info = &accounts[12];
+    let token_config_info = &accounts[13];
 
     // Parse instruction data (no trailing merkle proof)
     let ix_data = VerifyStealthDepositData::from_bytes(data)?;
@@ -166,14 +168,16 @@ pub fn process_verify_stealth_deposit(
     validate_account_writable(pool_vault)?;
     validate_account_writable(deposit_receipt_info)?;
     validate_account_writable(utxo_record_info)?;
+    validate_program_owner(token_config_info, program_id)?;
+    validate_account_writable(token_config_info)?;
 
     // Authority must be signer
     if !authority.is_signer() {
         return Err(ProgramError::MissingRequiredSignature);
     }
 
-    // Validate authority matches pool and get bump + bounds
-    let (pool_bump, min_deposit, max_deposit) = {
+    // Validate authority matches pool and get bump + bounds + fee bps
+    let (pool_bump, min_deposit, max_deposit, deposit_fee_bps) = {
         let pool_data = pool_state_info.try_borrow_data()?;
         let pool = PoolState::from_bytes(&pool_data)?;
 
@@ -185,7 +189,14 @@ pub fn process_verify_stealth_deposit(
             return Err(AegisError::Unauthorized.into());
         }
 
-        (pool.bump, pool.min_deposit(), pool.max_deposit())
+        (pool.bump, pool.min_deposit(), pool.max_deposit(), pool.deposit_fee_bps())
+    };
+
+    // Read token config for token_id and service_fee
+    let (token_id, service_fee) = {
+        let tc_data = token_config_info.try_borrow_data()?;
+        let tc = TokenConfig::from_bytes(&tc_data)?;
+        (tc.token_id, tc.service_fee())
     };
 
     // --- Deposit receipt dedup check ---
@@ -318,9 +329,14 @@ pub fn process_verify_stealth_deposit(
         return Err(AegisError::AmountTooLarge.into());
     }
 
-    // Compute commitment ON-CHAIN: Poseidon(npk, ZKBTC_TOKEN_ID, amount)
+    // Apply deposit fees: deposit_fee_bps (pool-level) + service_fee (per-token, BTC only)
+    let protocol_fee = (amount_sats as u128 * deposit_fee_bps as u128 / 10_000) as u64;
+    let total_fee = protocol_fee.checked_add(service_fee).ok_or(ProgramError::ArithmeticOverflow)?;
+    let shielded_amount = amount_sats.checked_sub(total_fee).ok_or(ProgramError::ArithmeticOverflow)?;
+
+    // Compute commitment ON-CHAIN: Poseidon(npk, token_id, shielded_amount)
     // npk is trustlessly extracted from the deposit TX's OP_RETURN
-    let commitment = compute_deposit_commitment(&npk, amount_sats)?;
+    let commitment = compute_commitment(&npk, &token_id, shielded_amount)?;
 
     // Insert commitment into Merkle tree
     let leaf_index = {
@@ -336,14 +352,15 @@ pub fn process_verify_stealth_deposit(
 
     let clock = Clock::get()?;
 
-    // Emit stealth announcement as log event (LeafInserted merged into announcement)
-    let amount_bytes = amount_sats.to_le_bytes();
-    crate::utils::events::emit_stealth_announcement(
+    // Emit stealth announcement v2 with token_id
+    let amount_bytes = shielded_amount.to_le_bytes();
+    crate::utils::events::emit_stealth_announcement_v2(
         ANNOUNCEMENT_TYPE_DEPOSIT,
         &ephemeral_pub,
         &amount_bytes,
         &commitment,
         leaf_index as u32,
+        &token_id,
     );
 
     // Emit deposit verified event (BTC txids + amount for indexer)
@@ -411,9 +428,17 @@ pub fn process_verify_stealth_deposit(
 
         pool.increment_deposit_count()?;
         pool.add_minted(amount_sats)?;
-        pool.add_shielded(amount_sats)?;
+        pool.add_shielded(shielded_amount)?;
         pool.add_utxo(amount_sats)?;
         pool.set_last_update(clock.unix_timestamp);
+    }
+
+    // Update token config: total_shielded and accumulated_fees
+    {
+        let mut tc_data = token_config_info.try_borrow_mut_data()?;
+        let tc = TokenConfig::from_bytes_mut(&mut tc_data)?;
+        tc.add_shielded(shielded_amount)?;
+        tc.add_fees(total_fee)?;
     }
 
     pinocchio::msg!("Aegis: deposit verified (SPV)");
