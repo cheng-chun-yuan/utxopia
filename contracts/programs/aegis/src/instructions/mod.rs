@@ -1,22 +1,26 @@
-//! Instruction handlers for Aegis (JoinSplit Architecture)
+//! Instruction handlers for Aegis (Multi-Token Shielded Pool)
 //!
 //! ## Core Operations
 //!
-//! | Instruction | Purpose |
-//! |-------------|---------|
-//! | `initialize` | Setup pool state and commitment tree |
-//! | `verify_stealth_deposit` | Verify BTC via SPV, create stealth announcement, mint to pool |
-//! | `transact` | JoinSplit N-to-M private transfer (Groth16) |
-//! | `request_redemption` | Prove ownership, burn from pool, queue BTC withdrawal |
-//! | `complete_redemption` | Relayer marks redemption complete |
+//! | Instruction | Disc | Purpose |
+//! |-------------|------|---------|
+//! | `initialize` | 0 | Setup pool state and commitment tree |
+//! | `verify_stealth_deposit` | 1 | Verify BTC via SPV, create commitment |
+//! | `transact` | 14 | JoinSplit N-to-M private transfer (Groth16) |
+//! | `request_redemption` | 5 | Queue BTC withdrawal with escrow |
+//! | `complete_redemption` | 6 | Relayer marks redemption complete |
 //!
-//! ## Demo Operations (Testing only)
+//! ## Multi-Token Operations
 //!
-//! | Instruction | Purpose |
-//! |-------------|---------|
-//! | `add_demo_stealth` | Add stealth deposit without real BTC |
+//! | Instruction | Disc | Purpose |
+//! |-------------|------|---------|
+//! | `register_token` | 28 | Admin registers SPL token for shielding |
+//! | `shield` | 29 | User deposits SPL token → shielded commitment |
+//! | `unshield` | 30 | User withdraws SPL token via ZK proof |
+//! | `update_token_config` | 31 | Admin updates per-token config |
+//! | `claim_fees` | 32 | Admin claims accumulated per-token fees |
 
-// Core operations (JoinSplit Architecture)
+// Core operations
 pub mod initialize;
 pub mod verify_stealth_deposit;
 pub mod transact;
@@ -25,33 +29,18 @@ pub mod mark_processing;
 pub mod cancel_redemption;
 pub mod complete_redemption;
 
-// Public unshield (zkBTC → SPL token)
-pub mod unshield;
-
-// Redeem: JoinSplit → BTC withdrawal
-pub mod redeem;
-
-// Public redeem: burn SPL → BTC withdrawal
-pub mod public_redeem;
-
-// Demo/testing
-pub mod add_demo_stealth;
-
-// OP_RETURN-free deposit flow
-pub mod register_deposit_intent;
-pub mod verify_deposit_v2;
-
-// Admin utilities
-pub mod admin_update_pool; // propose/execute/cancel pool updates (timelocked)
-pub mod claim_fees; // claim accumulated protocol fees from vault
-pub mod set_pool_config; // set pool BTC scriptPubKey on-chain
-
-// Multi-token instructions
+// Multi-token operations
 pub mod register_token;
 pub mod shield;
 pub mod unshield_v2;
 pub mod update_token_config;
 pub mod claim_fees_v2;
+
+// Admin utilities
+pub mod admin_update_pool;
+
+// Demo/testing
+pub mod add_demo_stealth;
 
 // VK registry (deployment)
 pub mod init_vk_registry;
@@ -64,18 +53,11 @@ pub use request_redemption::*;
 pub use mark_processing::*;
 pub use cancel_redemption::*;
 pub use complete_redemption::*;
-pub use unshield::*;
-pub use redeem::*;
-pub use public_redeem::*;
-pub use add_demo_stealth::*;
-pub use register_deposit_intent::*;
-pub use verify_deposit_v2::*;
-pub use admin_update_pool::*;
-pub use claim_fees::*;
-pub use set_pool_config::*;
 pub use register_token::*;
 pub use shield::*;
 pub use unshield_v2::*;
 pub use update_token_config::*;
 pub use claim_fees_v2::*;
+pub use admin_update_pool::*;
+pub use add_demo_stealth::*;
 pub use init_vk_registry::*;

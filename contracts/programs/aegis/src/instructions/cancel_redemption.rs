@@ -13,7 +13,8 @@ use pinocchio::{
 
 use crate::error::AegisError;
 use crate::state::{CommitmentTree, PoolState, RedemptionRequest, RedemptionStatus};
-use crate::utils::crypto::compute_deposit_commitment;
+use crate::utils::crypto::compute_commitment;
+use crate::state::TokenConfig;
 use crate::utils::{close_account_securely, validate_account_writable, validate_program_owner};
 
 /// Cancel redemption instruction data
@@ -43,12 +44,13 @@ impl CancelRedemptionData {
 /// 2. `[writable]` Redemption request
 /// 3. `[writable]` Commitment tree
 /// 4. `[]`         System program
+/// 5. `[writable]` TokenConfig PDA (for token_id to recompute commitment)
 pub fn process_cancel_redemption(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     data: &[u8],
 ) -> ProgramResult {
-    if accounts.len() < 5 {
+    if accounts.len() < 6 {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
@@ -57,6 +59,7 @@ pub fn process_cancel_redemption(
     let redemption_info = &accounts[2];
     let commitment_tree_info = &accounts[3];
     let _system_program = &accounts[4];
+    let token_config_info = &accounts[5];
 
     let ix_data = CancelRedemptionData::from_bytes(data)?;
 
@@ -107,8 +110,17 @@ pub fn process_cancel_redemption(
         redemption.amount_sats()
     };
 
+    // Read token_id from token config
+    validate_program_owner(token_config_info, program_id)?;
+    validate_account_writable(token_config_info)?;
+    let token_id = {
+        let tc_data = token_config_info.try_borrow_data()?;
+        let tc = TokenConfig::from_bytes(&tc_data)?;
+        tc.token_id
+    };
+
     // Compute new commitment and insert into Merkle tree
-    let commitment = compute_deposit_commitment(&ix_data.npk, amount_sats)?;
+    let commitment = compute_commitment(&ix_data.npk, &token_id, amount_sats)?;
     let leaf_index = {
         let mut tree_data = commitment_tree_info.try_borrow_mut_data()?;
         let tree = CommitmentTree::from_bytes_mut(&mut tree_data)?;

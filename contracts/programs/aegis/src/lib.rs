@@ -47,7 +47,7 @@ pub const ID: Pubkey = [
     0x9c, 0x5e, 0x2b, 0x8f, 0x4a, 0x7d, 0x3c, 0x1e,
 ];
 
-/// Instruction discriminators
+/// Instruction discriminators (multi-token version — fresh deploy)
 pub mod instruction {
     // Core operations
     pub const INITIALIZE: u8 = 0;
@@ -69,36 +69,17 @@ pub mod instruction {
     // JoinSplit (Railgun-aligned)
     pub const TRANSACT: u8 = 14;
 
-    // Public unshield (zkBTC → SPL token)
-    pub const UNSHIELD: u8 = 15;
-
-    // Redeem: JoinSplit N→M with BTC redemption (last output → RedemptionRequest)
-    pub const REDEEM: u8 = 16;
-
-    // Public redeem: burn SPL zkBTC → RedemptionRequest (no ZK proof)
-    pub const PUBLIC_REDEEM: u8 = 17;
-
-    // Timelocked pool parameter updates (enabled in all builds)
+    // Timelocked pool parameter updates
     pub const PROPOSE_POOL_UPDATE: u8 = 21;
     pub const EXECUTE_POOL_UPDATE: u8 = 22;
     pub const CANCEL_POOL_UPDATE: u8 = 23;
 
-    // OP_RETURN-free deposit flow
-    pub const REGISTER_DEPOSIT_INTENT: u8 = 24;
-    pub const VERIFY_DEPOSIT_V2: u8 = 25;
-
-    // Fee management
-    pub const CLAIM_FEES: u8 = 26;
-
-    // Pool config (admin)
-    pub const SET_POOL_CONFIG: u8 = 27;
-
-    // Multi-token instructions (fresh deploy: reuse freed slots)
+    // Multi-token instructions
     pub const REGISTER_TOKEN: u8 = 28;
     pub const SHIELD: u8 = 29;
-    pub const UNSHIELD_V2: u8 = 30;
+    pub const UNSHIELD: u8 = 30;
     pub const UPDATE_TOKEN_CONFIG: u8 = 31;
-    pub const CLAIM_FEES_V2: u8 = 32;
+    pub const CLAIM_FEES: u8 = 32;
 }
 
 entrypoint!(process_instruction);
@@ -135,36 +116,19 @@ pub fn process_instruction(
         instruction::SET_PAUSED => {
             process_set_paused(program_id, accounts, data)
         }
-        // Demo/testing - DISABLED IN PRODUCTION
         #[cfg(feature = "devnet")]
         instruction::ADD_DEMO_STEALTH => {
             instructions::process_add_demo_stealth(program_id, accounts, data)
         }
-        // VK Registry
         instruction::INIT_VK_REGISTRY => {
             instructions::process_init_vk_registry(program_id, accounts, data)
         }
         instruction::UPDATE_VK_REGISTRY => {
             instructions::process_update_vk_registry(program_id, accounts, data)
         }
-        // JoinSplit (Railgun-aligned)
         instruction::TRANSACT => {
             instructions::process_transact(program_id, accounts, data)
         }
-        // Public unshield
-        instruction::UNSHIELD => {
-            instructions::process_unshield(program_id, accounts, data)
-        }
-        // Redeem: JoinSplit + BTC redemption
-        instruction::REDEEM => {
-            instructions::process_redeem(program_id, accounts, data)
-        }
-        // Public redeem: burn SPL → BTC redemption
-        instruction::PUBLIC_REDEEM => {
-            instructions::process_public_redeem(program_id, accounts, data)
-        }
-        // Admin: close PDA (removed — use fresh deploy instead)
-        // Timelocked pool parameter updates
         instruction::PROPOSE_POOL_UPDATE => {
             instructions::process_propose_pool_update(program_id, accounts, data)
         }
@@ -174,39 +138,19 @@ pub fn process_instruction(
         instruction::CANCEL_POOL_UPDATE => {
             instructions::process_cancel_pool_update(program_id, accounts, data)
         }
-        // OP_RETURN-free deposit flow
-        instruction::REGISTER_DEPOSIT_INTENT => {
-            instructions::process_register_deposit_intent(program_id, accounts, data)
-        }
-        instruction::VERIFY_DEPOSIT_V2 => {
-            instructions::process_verify_deposit_v2(program_id, accounts, data)
-        }
-        // Fee management
-        instruction::CLAIM_FEES => {
-            instructions::process_claim_fees(program_id, accounts, data)
-        }
-        // Pool config (admin)
-        instruction::SET_POOL_CONFIG => {
-            instructions::process_set_pool_config(program_id, accounts, data)
-        }
-        // Multi-token: register new token
         instruction::REGISTER_TOKEN => {
             instructions::process_register_token(program_id, accounts, data)
         }
-        // Multi-token: shield SPL token
         instruction::SHIELD => {
             instructions::process_shield(program_id, accounts, data)
         }
-        // Multi-token: unshield SPL token (ZK proof)
-        instruction::UNSHIELD_V2 => {
+        instruction::UNSHIELD => {
             instructions::process_unshield_v2(program_id, accounts, data)
         }
-        // Multi-token: update token config (admin)
         instruction::UPDATE_TOKEN_CONFIG => {
             instructions::process_update_token_config(program_id, accounts, data)
         }
-        // Multi-token: claim per-token fees (admin)
-        instruction::CLAIM_FEES_V2 => {
+        instruction::CLAIM_FEES => {
             instructions::process_claim_fees_v2(program_id, accounts, data)
         }
         _ => Err(ProgramError::InvalidInstructionData),
@@ -274,24 +218,17 @@ mod tests {
             instruction::SET_PAUSED,
             instruction::INIT_VK_REGISTRY,
             instruction::UPDATE_VK_REGISTRY,
-            instruction::TRANSACT,
-            instruction::UNSHIELD,
-            instruction::REDEEM,
-            instruction::PUBLIC_REDEEM,
             #[cfg(feature = "devnet")]
             instruction::ADD_DEMO_STEALTH,
+            instruction::TRANSACT,
             instruction::PROPOSE_POOL_UPDATE,
             instruction::EXECUTE_POOL_UPDATE,
             instruction::CANCEL_POOL_UPDATE,
-            instruction::REGISTER_DEPOSIT_INTENT,
-            instruction::VERIFY_DEPOSIT_V2,
-            instruction::CLAIM_FEES,
-            instruction::SET_POOL_CONFIG,
             instruction::REGISTER_TOKEN,
             instruction::SHIELD,
-            instruction::UNSHIELD_V2,
+            instruction::UNSHIELD,
             instruction::UPDATE_TOKEN_CONFIG,
-            instruction::CLAIM_FEES_V2,
+            instruction::CLAIM_FEES,
         ];
 
         for (i, &d1) in discriminators.iter().enumerate() {

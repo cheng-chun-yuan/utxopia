@@ -198,19 +198,8 @@ impl PoolState {
         amount.saturating_mul(bps) / 10_000
     }
 
-    /// Legacy alias: reads deposit_fee_bps (was service_fee_bps).
-    /// Used by redeem.rs, public_redeem.rs, admin_update_pool.rs until removed.
-    pub fn service_fee_bps(&self) -> u16 {
-        self.deposit_fee_bps()
-    }
-
-    /// Legacy alias: writes deposit_fee_bps (was service_fee_bps).
-    pub fn set_service_fee_bps(&mut self, value: u16) {
-        self.set_deposit_fee_bps(value);
-    }
-
-    /// Legacy: compute total service fee: (amount * bps / 10000) + base
-    /// Kept for backward compat with existing BTC redemption flow during transition.
+    /// Compute deposit fee: amount * deposit_fee_bps / 10000 + service_fee_base
+    /// service_fee_base is kept for BTC deposits (relayer gas compensation)
     pub fn compute_service_fee(&self, amount: u64) -> u64 {
         let bps = self.deposit_fee_bps() as u64;
         let base = self.service_fee_base();
@@ -238,10 +227,6 @@ impl PoolState {
         i64::from_le_bytes(self.pending_execute_after)
     }
 
-    /// Legacy: reads withdrawal_fee_bps field (was pending_service_fee_bps)
-    pub fn pending_service_fee_bps(&self) -> u16 {
-        u16::from_le_bytes(self.withdrawal_fee_bps)
-    }
 
     pub fn has_pending_proposal(&self) -> bool {
         self.pending_execute_after() != 0
@@ -329,10 +314,6 @@ impl PoolState {
         self.pending_execute_after = value.to_le_bytes();
     }
 
-    /// Legacy: writes withdrawal_fee_bps field (was pending_service_fee_bps)
-    pub fn set_pending_service_fee_bps(&mut self, value: u16) {
-        self.withdrawal_fee_bps = value.to_le_bytes();
-    }
 
     pub fn set_total_btc_held(&mut self, value: u64) {
         self.total_btc_held = value.to_le_bytes();
@@ -601,7 +582,7 @@ mod tests {
     }
 
     #[test]
-    fn test_pool_state_legacy_service_fee_still_works() {
+    fn test_pool_state_service_fee_computation() {
         let mut buf = init_pool();
         let pool = PoolState::from_bytes_mut(&mut buf).unwrap();
 
@@ -611,7 +592,7 @@ mod tests {
         // UTXO operations should not interfere with fee computation
         pool.add_utxo(100_000).unwrap();
 
-        // legacy fee = 100000 * 30 / 10000 + 1000 = 300 + 1000 = 1300
+        // fee = 100000 * 30 / 10000 + 1000 = 300 + 1000 = 1300
         assert_eq!(pool.compute_service_fee(100_000), 1300);
     }
 }

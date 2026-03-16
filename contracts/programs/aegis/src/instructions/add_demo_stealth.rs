@@ -20,9 +20,10 @@ use pinocchio::{
 };
 
 use crate::error::AegisError;
-use crate::state::{CommitmentTree, PoolState};
+use crate::state::{CommitmentTree, PoolState, TokenConfig};
 use crate::utils::events::ANNOUNCEMENT_TYPE_DEPOSIT;
-use crate::utils::{mint_zkbtc, validate_program_owner, validate_system_program, validate_token_2022_owner, validate_token_program_key, compute_deposit_commitment};
+use crate::utils::{mint_zkbtc, validate_program_owner, validate_system_program, validate_token_2022_owner, validate_token_program_key};
+use crate::utils::crypto::compute_commitment;
 
 /// Add demo stealth instruction data (npk-based, matches real deposits)
 ///
@@ -76,12 +77,13 @@ impl AddDemoStealthData {
 /// 4. zkbtc_mint - zkBTC Token-2022 mint (writable)
 /// 5. pool_vault - Pool vault token account (writable)
 /// 6. token_program - Token-2022 program
+/// 7. token_config - TokenConfig PDA (for token_id)
 pub fn process_add_demo_stealth(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     data: &[u8],
 ) -> ProgramResult {
-    if accounts.len() < 7 {
+    if accounts.len() < 8 {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
@@ -92,6 +94,7 @@ pub fn process_add_demo_stealth(
     let zkbtc_mint = &accounts[4];
     let pool_vault = &accounts[5];
     let token_program = &accounts[6];
+    let token_config_info = &accounts[7];
 
     let ix_data = AddDemoStealthData::from_bytes(data)?;
 
@@ -105,8 +108,16 @@ pub fn process_add_demo_stealth(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    // Compute commitment on-chain: Poseidon(npk, ZKBTC_TOKEN_ID, amount_sats)
-    let commitment = compute_deposit_commitment(&ix_data.npk, ix_data.amount_sats)?;
+    // Read token_id from token config
+    validate_program_owner(token_config_info, program_id)?;
+    let token_id = {
+        let tc_data = token_config_info.try_borrow_data()?;
+        let tc = TokenConfig::from_bytes(&tc_data)?;
+        tc.token_id
+    };
+
+    // Compute commitment on-chain: Poseidon(npk, token_id, amount_sats)
+    let commitment = compute_commitment(&ix_data.npk, &token_id, ix_data.amount_sats)?;
 
     // Validate account owners
     validate_program_owner(pool_state, program_id)?;

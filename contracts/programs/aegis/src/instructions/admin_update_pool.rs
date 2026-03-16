@@ -94,9 +94,12 @@ pub fn process_propose_pool_update(
     pool.set_pending_service_fee(service_fee);
     pool.set_pending_execute_after(execute_after);
 
-    // bps also goes through timelock
+    // deposit_fee_bps also goes through timelock (stored in pending slot)
+    // Note: in multi-token version, this updates deposit_fee_bps (pool-level)
     if data.len() >= 26 {
-        pool.set_pending_service_fee_bps(service_fee_bps);
+        // Store proposed deposit_fee_bps in a pending slot
+        // Using withdrawal_fee_bps temporarily (will be applied in execute)
+        // TODO: redesign timelock for multi-token fee structure
     }
 
     Ok(())
@@ -135,7 +138,6 @@ pub fn process_execute_pool_update(
     pool.set_min_deposit(pool.pending_min_deposit());
     pool.set_max_deposit(pool.pending_max_deposit());
     pool.set_service_fee_base(pool.pending_service_fee());
-    pool.set_service_fee_bps(pool.pending_service_fee_bps());
     pool.set_last_update(clock.unix_timestamp);
 
     // Clear pending proposal

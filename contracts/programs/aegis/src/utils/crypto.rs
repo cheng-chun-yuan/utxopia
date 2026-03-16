@@ -260,9 +260,6 @@ pub fn compute_bound_params_hash_redeem(chain_id: u64) -> [u8; 32] {
     reduce_to_field_exact(&hash)
 }
 
-/// ZKBTC token identifier: "zkbtc" as u32 = 0x7a627463
-/// DEPRECATED: Use compute_token_id() with the actual mint address instead.
-pub const ZKBTC_TOKEN_ID: u32 = 0x7a627463;
 
 /// Compute commitment with explicit token_id: Poseidon(npk, token_id, amount)
 ///
@@ -283,13 +280,6 @@ pub fn compute_token_id(mint_bytes: &[u8; 32]) -> Result<[u8; 32], ProgramError>
     poseidon2_hash(&reduced, &[0u8; 32])
 }
 
-/// Legacy: Compute deposit commitment with hardcoded ZKBTC_TOKEN_ID
-/// DEPRECATED: Use compute_commitment() with explicit token_id from TokenConfig
-pub fn compute_deposit_commitment(npk: &[u8; 32], amount_sats: u64) -> Result<[u8; 32], ProgramError> {
-    let mut token_id = [0u8; 32];
-    token_id[28..32].copy_from_slice(&ZKBTC_TOKEN_ID.to_be_bytes());
-    compute_commitment(npk, &token_id, amount_sats)
-}
 
 /// Compute Merkle root from a leaf and its sibling path
 ///
@@ -391,23 +381,29 @@ mod tests {
     }
 
     #[test]
-    fn test_compute_deposit_commitment() {
+    fn test_compute_commitment() {
         let npk = [0x42u8; 32];
+        let token_id = [0x01u8; 32];
         let amount_sats = 100_000u64;
 
-        let commitment1 = compute_deposit_commitment(&npk, amount_sats).unwrap();
-        let commitment2 = compute_deposit_commitment(&npk, amount_sats).unwrap();
+        let commitment1 = compute_commitment(&npk, &token_id, amount_sats).unwrap();
+        let commitment2 = compute_commitment(&npk, &token_id, amount_sats).unwrap();
 
         assert_eq!(commitment1, commitment2, "Commitment should be deterministic");
 
         // Different amount should give different commitment
-        let commitment3 = compute_deposit_commitment(&npk, 200_000).unwrap();
+        let commitment3 = compute_commitment(&npk, &token_id, 200_000).unwrap();
         assert_ne!(commitment1, commitment3, "Different amounts should give different commitments");
 
         // Different npk should give different commitment
         let npk2 = [0x43u8; 32];
-        let commitment4 = compute_deposit_commitment(&npk2, amount_sats).unwrap();
+        let commitment4 = compute_commitment(&npk2, &token_id, amount_sats).unwrap();
         assert_ne!(commitment1, commitment4, "Different npks should give different commitments");
+
+        // Different token_id should give different commitment
+        let token_id2 = [0x02u8; 32];
+        let commitment5 = compute_commitment(&npk, &token_id2, amount_sats).unwrap();
+        assert_ne!(commitment1, commitment5, "Different token_ids should give different commitments");
     }
 
     #[test]
@@ -456,21 +452,34 @@ mod tests {
     }
 
     #[test]
-    fn test_redeem_commitment_zero_npk() {
-        // Redeem uses npk = 0x00..00 — verify it produces a deterministic non-zero result
+    fn test_burn_commitment_zero_npk() {
+        // Unshield/redeem uses npk = 0x00..00 — verify it produces a deterministic non-zero result
         let zero_npk = [0u8; 32];
+        let token_id = [0x01u8; 32];
         let amount = 100_000u64;
 
-        let commitment = compute_deposit_commitment(&zero_npk, amount).unwrap();
-        assert_ne!(commitment, [0u8; 32], "Redeem commitment must be non-zero");
+        let commitment = compute_commitment(&zero_npk, &token_id, amount).unwrap();
+        assert_ne!(commitment, [0u8; 32], "Burn commitment must be non-zero");
 
         // Deterministic
-        let commitment2 = compute_deposit_commitment(&zero_npk, amount).unwrap();
+        let commitment2 = compute_commitment(&zero_npk, &token_id, amount).unwrap();
         assert_eq!(commitment, commitment2);
 
         // Different amounts produce different commitments
-        let commitment3 = compute_deposit_commitment(&zero_npk, 200_000).unwrap();
-        assert_ne!(commitment, commitment3, "Different redeem amounts must produce different commitments");
+        let commitment3 = compute_commitment(&zero_npk, &token_id, 200_000).unwrap();
+        assert_ne!(commitment, commitment3, "Different burn amounts must produce different commitments");
+    }
+
+    #[test]
+    fn test_compute_token_id_deterministic() {
+        let mint = [0xABu8; 32];
+        let id1 = compute_token_id(&mint).unwrap();
+        let id2 = compute_token_id(&mint).unwrap();
+        assert_eq!(id1, id2, "Token ID should be deterministic");
+
+        let mint2 = [0xCDu8; 32];
+        let id3 = compute_token_id(&mint2).unwrap();
+        assert_ne!(id1, id3, "Different mints should produce different token IDs");
     }
 
     #[test]
