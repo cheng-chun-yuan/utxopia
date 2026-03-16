@@ -180,22 +180,22 @@ export const LOCALNET_CHADBUFFER_PROGRAM_ID: Address = address(
 export const DEVNET_CONFIG: NetworkConfig = {
   network: "devnet",
 
-  // Program IDs (multi-token deployment 2026-03-16)
+  // Program IDs (localnet multi-token deployment 2026-03-16)
   aegisProgramId: address("8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim"),
   btcLightClientProgramId: address("Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"),
   chadbufferProgramId: CHADBUFFER_PROGRAM_ID,
   token2022ProgramId: TOKEN_2022_PROGRAM_ID,
   ataProgramId: ATA_PROGRAM_ID,
 
-  // Deployed Accounts (multi-token deployment 2026-03-16)
+  // Deployed Accounts (localnet multi-token deployment 2026-03-16)
   poolStatePda: address("9XASi9bFNFLgDgdVG13UNg4Q9vzWC8XydnEBbdsd4dVt"),
   commitmentTreePda: address("CbaDvGVVQqskcu4cz6Fsu3i2q8eWG8GjeqpZiKgPiCaW"),
-  zkbtcMint: address("Ga8NYnpoZyNHJG85H8jiRxtcNYE337A25LWtzZ1FFFR1"),
-  poolVault: address("4ywyvYDUL1CEyaN3GxsnN4jwxk6BWvt9qvsU34TMcawe"),
+  zkbtcMint: address("AYJpCnAPbLbcfiCJLwRSpvNgH2yt9UktMPMYSTRA9fLL"),
+  poolVault: address("9DnSJffD5jBZXgGNQbDgGRxGw3j87J3zBi96P6REeTBa"),
 
-  // RPC Endpoints
-  solanaRpcUrl: "https://api.devnet.solana.com",
-  solanaWsUrl: "wss://api.devnet.solana.com",
+  // RPC Endpoints (local test validator)
+  solanaRpcUrl: "http://localhost:8899",
+  solanaWsUrl: "ws://localhost:8900",
 
   // Bitcoin Network
   bitcoinNetwork: "testnet4",
@@ -205,7 +205,7 @@ export const DEVNET_CONFIG: NetworkConfig = {
   circuitCdnUrl: "https://circuits.amidoggy.xyz",
 
   // Groth16 Verifier: verification is inline in the Aegis program (no separate verifier program)
-  groth16VerifierProgramId: address("8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim"),
+  groth16VerifierProgramId: address("8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim"), // inline in aegis program
 
   // VK Hashes (SHA256 of serialized VK bytes, generated from circom trusted setup)
   vkHashes: {

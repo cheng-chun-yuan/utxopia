@@ -29,7 +29,7 @@ const AEGIS_PROGRAM_ID = new PublicKey(
 );
 const TOKEN_2022 = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
-const RPC_URL = process.env.RPC_URL || "https://api.devnet.solana.com";
+const RPC_URL = process.env.RPC_URL || "http://localhost:8899";
 
 // Load keypair
 const keypairPath = process.env.KEYPAIR_PATH || path.join(process.env.HOME, ".config/solana/johnny.json");
