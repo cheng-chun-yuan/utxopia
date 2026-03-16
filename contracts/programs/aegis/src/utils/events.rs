@@ -249,6 +249,24 @@ pub fn emit_utxo_consumed(
     sol_log_data(&[&disc, txid, &v, &amt]);
 }
 
+/// Emit a stealth announcement with token_id (multi-token support).
+///
+/// Layout: disc(1) + type(1) + ephemeral_pub(32) + encrypted_amount(8)
+///         + commitment(32) + leaf_index(4) + token_id(32) = 110 bytes
+pub fn emit_stealth_announcement_v2(
+    announcement_type: u8,
+    ephemeral_pub: &[u8; 32],
+    encrypted_amount: &[u8; 8],
+    commitment: &[u8; 32],
+    leaf_index: u32,
+    token_id: &[u8; 32],
+) {
+    let disc = [EVENT_STEALTH_ANNOUNCEMENT];
+    let atype = [announcement_type];
+    let li = leaf_index.to_le_bytes();
+    sol_log_data(&[&disc, &atype, ephemeral_pub, encrypted_amount, commitment, &li, token_id]);
+}
+
 /// Data for a single announcement in a batch
 pub struct AnnouncementItem<'a> {
     pub announcement_type: u8,
@@ -294,6 +312,59 @@ pub fn emit_announcements_batch(items: &[AnnouncementItem]) {
         let li = items[i].leaf_index.to_le_bytes();
         buf[offset..offset + 4].copy_from_slice(&li);
         offset += 4;
+    }
+
+    sol_log_data(&[&buf[..offset]]);
+}
+
+/// Data for a single announcement in a v2 batch (with token_id)
+pub struct AnnouncementItemV2<'a> {
+    pub announcement_type: u8,
+    pub ephemeral_pub: &'a [u8; 32],
+    pub encrypted_amount: &'a [u8; 8],
+    pub commitment: &'a [u8; 32],
+    pub leaf_index: u32,
+    pub token_id: &'a [u8; 32],
+}
+
+/// Emit a batch of stealth announcements with token_id (multi-token support).
+///
+/// Layout: disc(1) + count(1) + [type(1) + ephemeral(32) + amount(8) + commitment(32) + leaf_index(4) + token_id(32)] x count
+/// Per-item: 109 bytes. Max payload: 2 + 14 * 109 = 1528 bytes.
+pub fn emit_announcements_batch_v2(items: &[AnnouncementItemV2]) {
+    if items.len() == 1 {
+        emit_stealth_announcement_v2(
+            items[0].announcement_type,
+            items[0].ephemeral_pub,
+            items[0].encrypted_amount,
+            items[0].commitment,
+            items[0].leaf_index,
+            items[0].token_id,
+        );
+        return;
+    }
+
+    let n = items.len().min(MAX_BATCH);
+
+    // Max payload: 2 + 14 * 109 = 1528 bytes — fits on stack
+    let mut buf = [0u8; 2 + MAX_BATCH * 109];
+    buf[0] = EVENT_ANNOUNCEMENTS_BATCH;
+    buf[1] = n as u8;
+    let mut offset = 2;
+    for i in 0..n {
+        buf[offset] = items[i].announcement_type;
+        offset += 1;
+        buf[offset..offset + 32].copy_from_slice(items[i].ephemeral_pub);
+        offset += 32;
+        buf[offset..offset + 8].copy_from_slice(items[i].encrypted_amount);
+        offset += 8;
+        buf[offset..offset + 32].copy_from_slice(items[i].commitment);
+        offset += 32;
+        let li = items[i].leaf_index.to_le_bytes();
+        buf[offset..offset + 4].copy_from_slice(&li);
+        offset += 4;
+        buf[offset..offset + 32].copy_from_slice(items[i].token_id);
+        offset += 32;
     }
 
     sol_log_data(&[&buf[..offset]]);
