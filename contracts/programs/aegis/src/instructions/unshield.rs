@@ -309,14 +309,15 @@ pub fn process_unshield(
                 .try_into()
                 .unwrap();
 
-            // Use v2 event with token_id
+            // Change outputs use zero token_id to avoid linking private notes to token type.
+            // The recipient knows the token from context (they initiated the unshield).
             crate::utils::events::emit_stealth_announcement(
                 crate::utils::events::ANNOUNCEMENT_TYPE_TRANSFER,
                 ephemeral_pub,
                 encrypted_amount,
                 commitments_out[i],
                 leaf_index as u32,
-                &token_id,
+                &[0u8; 32],
             );
         }
     }
