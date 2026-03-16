@@ -261,17 +261,34 @@ pub fn compute_bound_params_hash_redeem(chain_id: u64) -> [u8; 32] {
 }
 
 /// ZKBTC token identifier: "zkbtc" as u32 = 0x7a627463
+/// DEPRECATED: Use compute_token_id() with the actual mint address instead.
 pub const ZKBTC_TOKEN_ID: u32 = 0x7a627463;
 
-/// Compute deposit commitment on-chain: Poseidon(npk, ZKBTC_TOKEN_ID, amount_sats)
-pub fn compute_deposit_commitment(npk: &[u8; 32], amount_sats: u64) -> Result<[u8; 32], ProgramError> {
-    let mut token_id = [0u8; 32];
-    token_id[28..32].copy_from_slice(&ZKBTC_TOKEN_ID.to_be_bytes());
-
+/// Compute commitment with explicit token_id: Poseidon(npk, token_id, amount)
+///
+/// Used by multi-token shield/unshield. The token_id is Poseidon(reduce_to_field(mint), 0).
+pub fn compute_commitment(npk: &[u8; 32], token_id: &[u8; 32], amount_sats: u64) -> Result<[u8; 32], ProgramError> {
     let mut amount = [0u8; 32];
     amount[24..32].copy_from_slice(&amount_sats.to_be_bytes());
 
-    poseidon3_hash(npk, &token_id, &amount)
+    poseidon3_hash(npk, token_id, &amount)
+}
+
+/// Compute token_id from mint address: Poseidon(reduce_to_field(mint), 0)
+///
+/// Uses 2-input Poseidon (consistent with existing poseidon2_hash).
+/// The SDK must use the identical approach: poseidon([reduced_mint, 0n]).
+pub fn compute_token_id(mint_bytes: &[u8; 32]) -> Result<[u8; 32], ProgramError> {
+    let reduced = reduce_to_field_exact(mint_bytes);
+    poseidon2_hash(&reduced, &[0u8; 32])
+}
+
+/// Legacy: Compute deposit commitment with hardcoded ZKBTC_TOKEN_ID
+/// DEPRECATED: Use compute_commitment() with explicit token_id from TokenConfig
+pub fn compute_deposit_commitment(npk: &[u8; 32], amount_sats: u64) -> Result<[u8; 32], ProgramError> {
+    let mut token_id = [0u8; 32];
+    token_id[28..32].copy_from_slice(&ZKBTC_TOKEN_ID.to_be_bytes());
+    compute_commitment(npk, &token_id, amount_sats)
 }
 
 /// Compute Merkle root from a leaf and its sibling path
