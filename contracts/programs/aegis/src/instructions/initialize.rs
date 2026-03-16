@@ -15,9 +15,13 @@ use crate::error::AegisError;
 use crate::state::{CommitmentTree, PoolState, POOL_STATE_DISCRIMINATOR};
 
 /// Initialize instruction data
+/// Layout: pool_bump(1) + tree_bump(1) + [deposit_fee_bps(2) + withdrawal_fee_bps(2)]
+/// Fee fields are optional (backward compat: 2-byte data still works, defaults to 0 bps).
 pub struct InitializeData {
     pub pool_bump: u8,
     pub tree_bump: u8,
+    pub deposit_fee_bps: u16,
+    pub withdrawal_fee_bps: u16,
 }
 
 impl InitializeData {
@@ -25,9 +29,21 @@ impl InitializeData {
         if data.len() < 2 {
             return Err(ProgramError::InvalidInstructionData);
         }
+        let deposit_fee_bps = if data.len() >= 4 {
+            u16::from_le_bytes(data[2..4].try_into().unwrap())
+        } else {
+            0
+        };
+        let withdrawal_fee_bps = if data.len() >= 6 {
+            u16::from_le_bytes(data[4..6].try_into().unwrap())
+        } else {
+            0
+        };
         Ok(Self {
             pool_bump: data[0],
             tree_bump: data[1],
+            deposit_fee_bps,
+            withdrawal_fee_bps,
         })
     }
 }
@@ -81,7 +97,7 @@ pub fn process_initialize(
     data: &[u8],
 ) -> ProgramResult {
     let accounts = InitializeAccounts::from_accounts(accounts)?;
-    let _ix_data = InitializeData::from_bytes(data)?;
+    let ix_data = InitializeData::from_bytes(data)?;
 
     // Validate zkbtc_mint is owned by Token-2022
     validate_token_2022_owner(accounts.zkbtc_mint)?;
@@ -164,7 +180,8 @@ pub fn process_initialize(
         pool.set_min_deposit(MIN_DEPOSIT_SATS);
         pool.set_max_deposit(MAX_DEPOSIT_SATS);
         pool.set_service_fee_base(2_000);
-        pool.set_service_fee_bps(30);
+        pool.set_deposit_fee_bps(ix_data.deposit_fee_bps);
+        pool.set_withdrawal_fee_bps(ix_data.withdrawal_fee_bps);
         pool.set_last_update(clock.unix_timestamp);
         pool.set_paused(false);
     }
