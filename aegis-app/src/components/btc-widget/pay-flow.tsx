@@ -501,13 +501,13 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         const requestNonce = BigInt(Date.now());
 
         setProofStatus("Building public redeem transaction...");
-        const { buildPublicRedeemInstructionData } = await import("@aegis/sdk");
+        // Public redeem removed in multi-token version — use request_redemption
+        const { buildRedemptionRequestInstructionData } = await import("@aegis/sdk");
 
-        const ixData = buildPublicRedeemInstructionData({
+        const ixData = buildRedemptionRequestInstructionData(
           amountSats,
-          btcScript: btcOut.btcScriptPubKey!,
-          requestNonce,
-        });
+          btcOut.btcScriptPubKey!,
+        );
 
         const [poolState] = derivePoolStatePDA();
         const [redemptionRequest] = deriveRedemptionRequestPDA(publicKey!, requestNonce);
@@ -626,7 +626,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
             leafIndex: matchingAnn.leaf_index,
           }];
 
-          const scanned = await scanNotes(impNote.keys, parsedAnns);
+          const scanned = await scanNotes(impNote.keys, parsedAnns, ZKBTC_TOKEN_ID());
           if (scanned.length === 0) {
             throw new Error(`Failed to scan imported note ${impNote.commitment.slice(0, 16)}...`);
           }
@@ -697,7 +697,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 
             // Verify commitment
             const derivedCommitment = computeJoinSplitCommitmentSync(
-              claimInputs.npk, ZKBTC_TOKEN_ID, scannedNote.amount
+              claimInputs.npk, ZKBTC_TOKEN_ID(), scannedNote.amount
             );
             const derivedHex = derivedCommitment.toString(16).padStart(64, "0");
             if (derivedHex !== note.commitmentHex.toLowerCase()) {
@@ -744,7 +744,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
           // BTC redeem output: needs npk for ZK proof commitment, but NOT inserted into tree
           // Use self stealth address to generate a valid commitment
           if (!selfMeta) throw new Error("Cannot create BTC output without stealth address");
-          const result = await createStealthDepositWithKeys(selfMeta, amount);
+          const result = await createStealthDepositWithKeys(selfMeta, amount, ZKBTC_TOKEN_ID());
           recipientNpks.push(result.stealthPubKeyX);
           // Dummy stealth result — redeem output has no announcement (sliced off like unshield)
           stealthResults.push({
@@ -772,18 +772,18 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
           const masterKey = deriveMasterKey(output.secretPhrase.trim());
           const noteKeys = await deriveKeysFromSeedCircuit(masterKey);
           const noteMeta = createStealthMetaAddress(noteKeys);
-          const result = await createStealthDepositWithKeys(noteMeta, amount);
+          const result = await createStealthDepositWithKeys(noteMeta, amount, ZKBTC_TOKEN_ID());
           recipientNpks.push(result.stealthPubKeyX);
           stealthResults.push(result);
         } else if (output.mode === "stealth" && output.resolvedMeta) {
           // Stealth output: single call provides BOTH npk AND stealth data
-          const result = await createStealthDepositWithKeys(output.resolvedMeta, amount);
+          const result = await createStealthDepositWithKeys(output.resolvedMeta, amount, ZKBTC_TOKEN_ID());
           recipientNpks.push(result.stealthPubKeyX);
           stealthResults.push(result);
         } else {
           // Self output: create stealth deposit to self for scannable notes
           if (!selfMeta) throw new Error("Cannot create output without stealth address");
-          const result = await createStealthDepositWithKeys(selfMeta, amount);
+          const result = await createStealthDepositWithKeys(selfMeta, amount, ZKBTC_TOKEN_ID());
           recipientNpks.push(result.stealthPubKeyX);
           stealthResults.push(result);
         }
@@ -799,7 +799,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
           ? decodeStealthMetaAddress(relayerMeta.stealthMeta)
           : selfMeta;
         if (!feeMeta) throw new Error("Cannot create fee output without stealth address");
-        const feeResult = await createStealthDepositWithKeys(feeMeta, feeAmount);
+        const feeResult = await createStealthDepositWithKeys(feeMeta, feeAmount, ZKBTC_TOKEN_ID());
         if (hasSpecialLastOutput) {
           // Insert BEFORE the unshield/redeem output (which is currently last)
           const insertIdx = sendAmounts.length - 1;
@@ -833,7 +833,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
           changeMeta = selfMeta;
         }
 
-        const changeResult = await createStealthDepositWithKeys(changeMeta!, changeAmount);
+        const changeResult = await createStealthDepositWithKeys(changeMeta!, changeAmount, ZKBTC_TOKEN_ID());
 
         if (hasSpecialLastOutput) {
           // Insert change BEFORE the unshield/redeem output (which is currently last)
@@ -850,7 +850,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 
       // 4. Compute output commitments
       const outCommitments = recipientNpks.map((npk, i) =>
-        computeJoinSplitCommitmentSync(npk, ZKBTC_TOKEN_ID, sendAmounts[i])
+        computeJoinSplitCommitmentSync(npk, ZKBTC_TOKEN_ID(), sendAmounts[i])
       );
 
       // 5. Compute bound params hash
@@ -914,7 +914,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         nOutputs: actualNOutputs,
         merkleRoot,
         boundParamsHash,
-        token: ZKBTC_TOKEN_ID,
+        token: ZKBTC_TOKEN_ID(),
         publicKey: proofPublicKey,
         signature: [sigR8x, sigR8y, sigS],
         nullifyingKey: proofNullifyingKey,

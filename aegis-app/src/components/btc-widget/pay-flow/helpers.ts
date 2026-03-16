@@ -9,7 +9,11 @@ import type { InboxNote } from "@/hooks/use-aegis";
 // --- Constants ---
 
 export const MIN_PAY_SATS = 500;
-export const ZKBTC_TOKEN_ID = BigInt(0x7a627463);
+import { getActiveTokenId } from "@/lib/token-context";
+
+// Token ID is now computed dynamically from the active token's mint address.
+// This is a function call, not a constant — use ZKBTC_TOKEN_ID() in all call sites.
+export const ZKBTC_TOKEN_ID = getActiveTokenId;
 export const MAX_OUTPUTS = 12; // N+M<=14, need at least 1 input + 1 change
 export const SERVICE_FEE_SATS = 2000;
 export const RELAYER_FEE_SATS = 2000;

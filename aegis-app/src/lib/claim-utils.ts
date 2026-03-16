@@ -60,7 +60,8 @@ export async function scanSecretPhrase(
     leafIndex: ann.leaf_index,
   }));
 
-  const scannedNotes = await scanUnifiedNotes(keys, announcements);
+  const { getActiveTokenId } = await import("@/lib/token-context");
+  const scannedNotes = await scanUnifiedNotes(keys, announcements, getActiveTokenId());
 
   if (scannedNotes.length === 0) {
     throw new Error(

@@ -351,7 +351,7 @@ export async function POST(request: NextRequest) {
     const ixData = Buffer.alloc(totalSize);
     let offset = 0;
 
-    ixData[offset++] = INSTRUCTION_DISCRIMINATORS.REDEEM;
+    ixData[offset++] = 16; // Legacy REDEEM discriminator — TODO: migrate to request_redemption flow
     ixData[offset++] = nInputs;
     ixData[offset++] = nOutputs;
     ixData[offset++] = 1; // proof_source = 1 (buffer)

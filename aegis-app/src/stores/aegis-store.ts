@@ -22,6 +22,7 @@ import {
   type ViewOnlyKeys,
 } from "@aegis/sdk";
 import { fetchSpentNullifierPDAs, nullifierHashToPDA } from "@/lib/nullifier-utils";
+import { getActiveTokenId } from "@/lib/token-context";
 
 // ============================================================================
 // localStorage Key Persistence (AES-256-GCM encrypted)
@@ -473,8 +474,8 @@ export const useAegisStore = create<AegisState>((set, get) => ({
                 : (n.createdAt > 0 ? n.createdAt : 0),
             }))
           : isViewOnly && viewOnlyKeys
-            ? await scanAnnouncementsViewOnly(viewOnlyKeys, announcements)
-            : await scanUnifiedNotes(keys!, announcements);
+            ? await scanAnnouncementsViewOnly(viewOnlyKeys, announcements, getActiveTokenId())
+            : await scanUnifiedNotes(keys!, announcements, getActiveTokenId());
 
         // Check which notes are spent via backend batch nullifier API (use proxy)
         const backendUrl = "";

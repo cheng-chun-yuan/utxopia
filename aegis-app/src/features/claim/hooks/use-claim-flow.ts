@@ -50,8 +50,7 @@ import type {
   SplitResult,
 } from "../types";
 
-/** ZKBTC token ID used in Poseidon commitment */
-const ZKBTC_TOKEN_ID = BigInt(0x7a627463);
+import { getActiveTokenId } from "@/lib/token-context";
 
 /** BN254 scalar field modulus (big-endian bytes) */
 const BN254_FR_MODULUS = [
@@ -188,7 +187,7 @@ export function useClaimFlow(initialNote?: string) {
       const note = deriveNote(secretPhrase.trim(), 0, BigInt(0));
 
       // Find commitment in index by trying common amounts
-      // On-chain commitment = Poseidon(npk, ZKBTC_TOKEN_ID, amount)
+      // On-chain commitment = Poseidon(npk, getActiveTokenId(), amount)
       const commitmentIndex = getCommitmentIndex();
       let foundAmount: number | null = null;
       let foundLeafIndex: bigint = 0n;
@@ -198,7 +197,7 @@ export function useClaimFlow(initialNote?: string) {
       const exported = commitmentIndex.export();
       for (const [commitHex, entry] of exported.commitments) {
         const amt = BigInt(entry.amount);
-        const testCommitment = computeJoinSplitCommitmentSync(pubKeyX, ZKBTC_TOKEN_ID, amt);
+        const testCommitment = computeJoinSplitCommitmentSync(pubKeyX, getActiveTokenId(), amt);
         const testHex = testCommitment.toString(16).padStart(64, "0");
         if (testHex === commitHex) {
           foundAmount = Number(amt);
@@ -225,7 +224,7 @@ export function useClaimFlow(initialNote?: string) {
         throw new Error("This note has already been claimed.");
       }
 
-      const commitment = computeJoinSplitCommitmentSync(pubKeyX, ZKBTC_TOKEN_ID, BigInt(foundAmount));
+      const commitment = computeJoinSplitCommitmentSync(pubKeyX, getActiveTokenId(), BigInt(foundAmount));
       const commitmentHex = commitment.toString(16).padStart(64, "0");
 
       setVerifyResult({
@@ -302,7 +301,7 @@ export function useClaimFlow(initialNote?: string) {
       }
 
       // Look up commitment in local index (on-chain: Poseidon(npk, token, amount))
-      const commitment = computeJoinSplitCommitmentSync(pubKeyX, ZKBTC_TOKEN_ID, BigInt(amountSats));
+      const commitment = computeJoinSplitCommitmentSync(pubKeyX, getActiveTokenId(), BigInt(amountSats));
       const commitmentHex = commitment.toString(16).padStart(64, "0");
       const indexEntry = commitmentIndex.getCommitment(commitmentHex);
 
@@ -334,7 +333,7 @@ export function useClaimFlow(initialNote?: string) {
 
       if (recipientMode === "stealth" && resolvedMeta) {
         // Send to another stealth address
-        const result = await createStealthDepositWithKeys(resolvedMeta, amountBig);
+        const result = await createStealthDepositWithKeys(resolvedMeta, amountBig, getActiveTokenId());
         outputNpk = result.stealthPubKeyX;
         stealthDataEntry = new Uint8Array(40);
         stealthDataEntry.set(result.ephemeralPub, 0);
@@ -365,7 +364,7 @@ export function useClaimFlow(initialNote?: string) {
         boundParamsHashValue = computeBoundParamsHash(DEFAULT_BOUND_PARAMS);
       }
 
-      const outputCommitment = computeJoinSplitCommitmentSync(outputNpk, ZKBTC_TOKEN_ID, amountBig);
+      const outputCommitment = computeJoinSplitCommitmentSync(outputNpk, getActiveTokenId(), amountBig);
 
       // Compute EdDSA-Poseidon signature
       // msgHash = Poseidon(merkleRoot, boundParamsHash, nullifier, outputCommitment)
@@ -377,7 +376,7 @@ export function useClaimFlow(initialNote?: string) {
         nOutputs: 1,
         merkleRoot,
         boundParamsHash: boundParamsHashValue,
-        token: ZKBTC_TOKEN_ID,
+        token: getActiveTokenId(),
         publicKey: [pubKeyPoint.x, pubKeyPoint.y],
         signature: [sigR8x, sigR8y, sigS],
         nullifyingKey: note.nullifier,

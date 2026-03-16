@@ -263,7 +263,8 @@ export function DepositFlow() {
 
     try {
       // Create stealth deposit with keys to get npk (note public key)
-      const stealthData = await createStealthDepositWithKeys(resolvedMeta, amount);
+      const { getActiveTokenId } = await import("@/lib/token-context");
+      const stealthData = await createStealthDepositWithKeys(resolvedMeta, amount, getActiveTokenId());
 
       // Convert npk (bigint) to 32-byte big-endian
       const npkBytes = bigintToBytes(stealthData.stealthPubKeyX);
