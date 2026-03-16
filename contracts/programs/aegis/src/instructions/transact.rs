@@ -55,8 +55,8 @@ use crate::utils::{
 /// Maximum supported N + M (reduced from 14 to fit Solana tx limit)
 const MAX_JOINSPLIT_SIZE: usize = crate::constants::MAX_SAFE_JOINSPLIT_SIZE;
 
-/// Stealth data per output: ephemeral_pub (32) + encrypted_amount (8)
-const STEALTH_DATA_PER_OUTPUT: usize = 40;
+/// Stealth data per output: ephemeral_pub (32) + encrypted_amount (8) + encrypted_token_id (32)
+const STEALTH_DATA_PER_OUTPUT: usize = 72;
 
 /// Authority prefix size in ChadBuffer accounts
 const CHADBUFFER_AUTHORITY_SIZE: usize = 32;
@@ -330,15 +330,18 @@ pub fn process_transact(
             let encrypted_amount: &[u8; 8] = data[stealth_offset + 32..stealth_offset + 40]
                 .try_into()
                 .unwrap();
+            let encrypted_token_id: &[u8; 32] = data[stealth_offset + 40..stealth_offset + 72]
+                .try_into()
+                .unwrap();
 
-            // Emit stealth announcement (token_id = 0 for private transfers — token is hidden in ZK proof)
+            // Emit stealth announcement — token_id is encrypted (only recipient can decrypt)
             crate::utils::events::emit_stealth_announcement(
                 crate::utils::events::ANNOUNCEMENT_TYPE_TRANSFER,
                 ephemeral_pub,
                 encrypted_amount,
                 commitments_out[i],
                 leaf_index as u32,
-                &[0u8; 32], // token_id hidden in private transfer
+                encrypted_token_id,
             );
         }
     }

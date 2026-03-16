@@ -51,7 +51,8 @@ use crate::utils::token::transfer_zkbtc;
 const MAX_JOINSPLIT_SIZE: usize = crate::constants::MAX_SAFE_JOINSPLIT_SIZE;
 
 /// Stealth data per output: ephemeral_pub (32) + encrypted_amount (8)
-const STEALTH_DATA_PER_OUTPUT: usize = 40;
+/// Stealth data per output: ephemeral_pub (32) + encrypted_amount (8) + encrypted_token_id (32)
+const STEALTH_DATA_PER_OUTPUT: usize = 72;
 
 /// Number of fixed accounts before nullifiers
 const FIXED_ACCOUNTS: usize = 9;
@@ -308,16 +309,18 @@ pub fn process_unshield(
             let encrypted_amount: &[u8; 8] = data[stealth_offset + 32..stealth_offset + 40]
                 .try_into()
                 .unwrap();
+            let encrypted_token_id: &[u8; 32] = data[stealth_offset + 40..stealth_offset + 72]
+                .try_into()
+                .unwrap();
 
-            // Change outputs use zero token_id to avoid linking private notes to token type.
-            // The recipient knows the token from context (they initiated the unshield).
+            // token_id is encrypted — only recipient can decrypt with viewing key
             crate::utils::events::emit_stealth_announcement(
                 crate::utils::events::ANNOUNCEMENT_TYPE_TRANSFER,
                 ephemeral_pub,
                 encrypted_amount,
                 commitments_out[i],
                 leaf_index as u32,
-                &[0u8; 32],
+                encrypted_token_id,
             );
         }
     }

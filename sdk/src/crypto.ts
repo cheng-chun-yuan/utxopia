@@ -62,6 +62,8 @@ export {
   deriveAmountKey,
   encryptAmountEd25519,
   decryptAmountEd25519,
+  encryptNoteData,
+  decryptNoteData,
 } from "./crypto-ed25519";
 
 // =============================================================================

@@ -91,6 +91,9 @@ export function decryptAmount(encryptedAmount: Uint8Array, sharedSecret: Uint8Ar
   return decryptAmountEd25519(encryptedAmount, sharedSecret);
 }
 
+// Re-export combined note data encryption
+export { encryptNoteData, decryptNoteData } from "./crypto-ed25519";
+
 // ========== Type Guard ==========
 
 /**

@@ -71,6 +71,8 @@ export {
   deriveAmountKey,
   encryptAmountEd25519,
   decryptAmountEd25519,
+  encryptNoteData,
+  decryptNoteData,
   // Types
   type BabyJubPoint,
 } from "./crypto";

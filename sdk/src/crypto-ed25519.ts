@@ -145,3 +145,106 @@ export function decryptAmountEd25519(encryptedAmount: Uint8Array, sharedSecret: 
 
   return amount;
 }
+
+// ============================================================================
+// Combined Note Data Encryption (token_id + amount)
+// ============================================================================
+
+/**
+ * Derive a 40-byte keystream for encrypting token_id(32) + amount(8).
+ * Uses two SHA-256 hashes with domain separation to get enough key material.
+ *
+ * keystream[0..32]  = sha256(sharedSecret || 0x00)  — for token_id
+ * keystream[32..40] = sha256(sharedSecret || 0x01)[0..8] — for amount
+ */
+function deriveNoteDataKeystream(sharedSecret: Uint8Array): Uint8Array {
+  const buf0 = new Uint8Array(sharedSecret.length + 1);
+  buf0.set(sharedSecret);
+  buf0[sharedSecret.length] = 0x00;
+
+  const buf1 = new Uint8Array(sharedSecret.length + 1);
+  buf1.set(sharedSecret);
+  buf1[sharedSecret.length] = 0x01;
+
+  const key0 = sha256(buf0); // 32 bytes for token_id
+  const key1 = sha256(buf1); // 32 bytes, take first 8 for amount
+
+  const keystream = new Uint8Array(40);
+  keystream.set(key0, 0);
+  keystream.set(key1.slice(0, 8), 32);
+  return keystream;
+}
+
+/**
+ * Encrypt note data: token_id(32 bytes, big-endian) || amount(8 bytes, LE)
+ *
+ * @param tokenId - Token identifier as bigint
+ * @param amount - Amount in token's native units
+ * @param sharedSecret - 32-byte X25519 shared secret
+ * @returns 40-byte encrypted blob
+ */
+export function encryptNoteData(
+  tokenId: bigint,
+  amount: bigint,
+  sharedSecret: Uint8Array,
+): Uint8Array {
+  const keystream = deriveNoteDataKeystream(sharedSecret);
+  const plaintext = new Uint8Array(40);
+
+  // token_id: 32 bytes big-endian
+  let t = tokenId;
+  for (let i = 31; i >= 0; i--) {
+    plaintext[i] = Number(t & 0xffn);
+    t >>= 8n;
+  }
+
+  // amount: 8 bytes little-endian
+  let a = amount;
+  for (let i = 0; i < 8; i++) {
+    plaintext[32 + i] = Number(a & 0xffn);
+    a >>= 8n;
+  }
+
+  // XOR
+  const encrypted = new Uint8Array(40);
+  for (let i = 0; i < 40; i++) {
+    encrypted[i] = plaintext[i] ^ keystream[i];
+  }
+  return encrypted;
+}
+
+/**
+ * Decrypt note data: extracts token_id and amount from 40-byte encrypted blob.
+ *
+ * @param encryptedData - 40-byte encrypted blob
+ * @param sharedSecret - 32-byte X25519 shared secret
+ * @returns { tokenId, amount }
+ */
+export function decryptNoteData(
+  encryptedData: Uint8Array,
+  sharedSecret: Uint8Array,
+): { tokenId: bigint; amount: bigint } {
+  if (encryptedData.length < 40) {
+    throw new Error(`Expected 40-byte encrypted note data, got ${encryptedData.length}`);
+  }
+
+  const keystream = deriveNoteDataKeystream(sharedSecret);
+  const plaintext = new Uint8Array(40);
+  for (let i = 0; i < 40; i++) {
+    plaintext[i] = encryptedData[i] ^ keystream[i];
+  }
+
+  // token_id: 32 bytes big-endian → bigint
+  let tokenId = 0n;
+  for (let i = 0; i < 32; i++) {
+    tokenId = (tokenId << 8n) | BigInt(plaintext[i]);
+  }
+
+  // amount: 8 bytes little-endian → bigint
+  let amount = 0n;
+  for (let i = 7; i >= 0; i--) {
+    amount = (amount << 8n) | BigInt(plaintext[32 + i]);
+  }
+
+  return { tokenId, amount };
+}
