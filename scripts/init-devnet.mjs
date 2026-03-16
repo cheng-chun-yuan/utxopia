@@ -25,11 +25,11 @@ import path from "path";
 // =============================================================================
 
 const AEGIS_PROGRAM_ID = new PublicKey(
-  process.env.AEGIS_PROGRAM_ID || "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ"
+  process.env.AEGIS_PROGRAM_ID || "8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim"
 );
 const TOKEN_2022 = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
-const RPC_URL = "https://api.devnet.solana.com";
+const RPC_URL = process.env.RPC_URL || "https://api.devnet.solana.com";
 
 // Load keypair
 const keypairPath = process.env.KEYPAIR_PATH || path.join(process.env.HOME, ".config/solana/johnny.json");
@@ -79,9 +79,9 @@ async function main() {
   console.log("\nPool State PDA:", poolState.toBase58());
   console.log("Commitment Tree PDA:", commitTree.toBase58());
 
-  // Check if already initialized
-  const existingPool = await conn.getAccountInfo(poolState);
-  if (existingPool && existingPool.data.length > 0 && existingPool.data[0] === 0x01) {
+  // Check if already initialized (force fresh fetch, no preflight cache)
+  const existingPool = await conn.getAccountInfo(poolState, { commitment: "processed" });
+  if (existingPool && existingPool.data && existingPool.data.length > 0 && existingPool.data[0] === 0x01) {
     const mint = new PublicKey(existingPool.data.slice(36, 68));
     console.log("\nPool already initialized!");
     console.log("zkBTC Mint:", mint.toBase58());
@@ -89,42 +89,15 @@ async function main() {
     return;
   }
 
-  // 2. Create Token-2022 mint with metadata extension
-  console.log("\n--- Creating Token-2022 Mint (with metadata) ---");
+  // 2. Create Token-2022 mint (plain, no metadata extension for localnet simplicity)
+  console.log("\n--- Creating Token-2022 Mint ---");
   const mintKp = Keypair.generate();
-
-  // Metadata values
-  const TOKEN_NAME = "Aegis Shielded BTC";
-  const TOKEN_SYMBOL = "zkBTC";
-  const TOKEN_URI = ""; // no URI needed
-
-  // Token-2022 metadata extension requires more space.
-  // Base mint: 82 bytes. MetadataPointer extension: +8 bytes header + 64 bytes data = 154.
-  // TokenMetadata: variable. We allocate enough for name + symbol + uri.
-  // Conservative estimate: 82 (mint) + 4 (account type) + 72 (metadata pointer ext) + 300 (metadata ext) = ~460
-  // Use 512 to be safe, then resize after metadata init if needed.
-  const MINT_SPACE = 82 + 4 + 72; // base mint + account type + metadata pointer extension
   const createMint = SystemProgram.createAccount({
     fromPubkey: authority.publicKey,
     newAccountPubkey: mintKp.publicKey,
-    lamports: await conn.getMinimumBalanceForRentExemption(MINT_SPACE),
-    space: MINT_SPACE,
+    lamports: await conn.getMinimumBalanceForRentExemption(82),
+    space: 82,
     programId: TOKEN_2022,
-  });
-
-  // Extension: InitializeMetadataPointer (disc=39, authority=poolState, metadata=mint itself)
-  // Layout: disc(1) + authority_option(1) + authority(32) + metadata_option(1) + metadata(32) = 67
-  const initMetaPtrData = Buffer.alloc(67);
-  initMetaPtrData[0] = 39; // InitializeMetadataPointer
-  initMetaPtrData[1] = 1;  // has authority
-  initMetaPtrData.set(poolState.toBuffer(), 2); // metadata authority = pool state
-  initMetaPtrData[34] = 1; // has metadata address
-  initMetaPtrData.set(mintKp.publicKey.toBuffer(), 35); // metadata = self (mint account)
-
-  const initMetaPtr = new TransactionInstruction({
-    programId: TOKEN_2022,
-    keys: [{ pubkey: mintKp.publicKey, isSigner: false, isWritable: true }],
-    data: initMetaPtrData,
   });
 
   // InitializeMint2: disc=20, decimals=0, mintAuthority=poolState, freezeAuthority=none
@@ -140,67 +113,11 @@ async function main() {
     data: initMintData,
   });
 
-  // Order matters: create account → init metadata pointer → init mint
-  const tx1 = new Transaction().add(createMint, initMetaPtr, initMint);
+  const tx1 = new Transaction().add(createMint, initMint);
   tx1.feePayer = authority.publicKey;
   tx1.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
   await sendAndConfirmTransaction(conn, tx1, [authority, mintKp], { commitment: "confirmed" });
   console.log("Mint created:", mintKp.publicKey.toBase58());
-
-  // Initialize token metadata (separate tx — needs mint to exist first)
-  // spl-token-metadata-interface: Initialize instruction
-  // disc = [112, 179, 57, 51, 108, 69, 83, 115] (anchor-style hash of "spl_token_metadata_interface:initialize")
-  // Actually for Token-2022 embedded metadata, use the token-metadata instruction:
-  // Instruction 0 (Initialize): name_len(4) + name + symbol_len(4) + symbol + uri_len(4) + uri
-  {
-    const nameBytes = Buffer.from(TOKEN_NAME);
-    const symbolBytes = Buffer.from(TOKEN_SYMBOL);
-    const uriBytes = Buffer.from(TOKEN_URI);
-
-    // Token-2022 metadata instruction discriminator for Initialize
-    // This is the SPL Token Metadata interface discriminator
-    const TOKEN_METADATA_INIT_DISC = Buffer.from([112, 179, 57, 51, 108, 69, 83, 115]);
-
-    const metaData = Buffer.alloc(
-      8 + 4 + nameBytes.length + 4 + symbolBytes.length + 4 + uriBytes.length
-    );
-    let offset = 0;
-    TOKEN_METADATA_INIT_DISC.copy(metaData, offset); offset += 8;
-    metaData.writeUInt32LE(nameBytes.length, offset); offset += 4;
-    nameBytes.copy(metaData, offset); offset += nameBytes.length;
-    metaData.writeUInt32LE(symbolBytes.length, offset); offset += 4;
-    symbolBytes.copy(metaData, offset); offset += symbolBytes.length;
-    metaData.writeUInt32LE(uriBytes.length, offset); offset += 4;
-    uriBytes.copy(metaData, offset);
-
-    const initMetadata = new TransactionInstruction({
-      programId: TOKEN_2022,
-      keys: [
-        { pubkey: mintKp.publicKey, isSigner: false, isWritable: true },     // metadata (= mint)
-        { pubkey: poolState, isSigner: false, isWritable: false },           // update authority
-        { pubkey: mintKp.publicKey, isSigner: false, isWritable: false },    // mint
-        { pubkey: poolState, isSigner: false, isWritable: false },           // mint authority (PDA, but for init the payer signs)
-      ],
-      data: metaData,
-    });
-
-    // Need to resize the mint account to fit metadata
-    // Actually, for embedded metadata, Token-2022 auto-extends if payer provides enough lamports.
-    // But we need to use a "reallocate" or the metadata init may fail.
-    // Simplest: just create the account large enough initially, or use SystemProgram.transfer to add lamports + realloc.
-
-    // For now, skip metadata init if it fails — the mint still works without it.
-    try {
-      const txMeta = new Transaction().add(initMetadata);
-      txMeta.feePayer = authority.publicKey;
-      txMeta.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
-      await sendAndConfirmTransaction(conn, txMeta, [authority], { commitment: "confirmed" });
-      console.log(`Metadata set: name="${TOKEN_NAME}", symbol="${TOKEN_SYMBOL}"`);
-    } catch (err) {
-      console.warn("Warning: metadata init failed (mint still usable):", err.message?.slice(0, 100));
-      console.warn("You may need to set metadata separately after deployment.");
-    }
-  }
 
   // 3. Create ATAs (pool vault + frost vault)
   console.log("\n--- Creating ATAs ---");

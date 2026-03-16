@@ -5,8 +5,8 @@
  * Reconstructs deposit/transfer data from on-chain sol_log_data events.
  */
 
-const AEGIS_PROGRAM_ID = "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ";
-const COMMITMENT_TREE_PDA = "FQRHN9yQ97HmgVmhDGf3EdbhCek7QuuDv1C3hpAGPtjv";
+const AEGIS_PROGRAM_ID = "8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim";
+const COMMITMENT_TREE_PDA = "CbaDvGVVQqskcu4cz6Fsu3i2q8eWG8GjeqpZiKgPiCaW";
 
 // Rent-exempt minimum for a 1-byte account (NullifierRecord)
 const RENT_EXEMPT_1_BYTE = 897840;

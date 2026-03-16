@@ -180,18 +180,18 @@ export const LOCALNET_CHADBUFFER_PROGRAM_ID: Address = address(
 export const DEVNET_CONFIG: NetworkConfig = {
   network: "devnet",
 
-  // Program IDs (fresh deployment 2026-03-13)
-  aegisProgramId: address("7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ"),
+  // Program IDs (multi-token deployment 2026-03-16)
+  aegisProgramId: address("8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim"),
   btcLightClientProgramId: address("Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"),
   chadbufferProgramId: CHADBUFFER_PROGRAM_ID,
   token2022ProgramId: TOKEN_2022_PROGRAM_ID,
   ataProgramId: ATA_PROGRAM_ID,
 
-  // Deployed Accounts (fresh deployment 2026-03-13)
-  poolStatePda: address("5e5t7AgafazhjYA7Aa66Kbfh5nGjHJqzYdEy9jGNQ8Ny"),
-  commitmentTreePda: address("FQRHN9yQ97HmgVmhDGf3EdbhCek7QuuDv1C3hpAGPtjv"),
-  zkbtcMint: address("G5CHaLkWjdUxxmnrVqNLQ29K7PoNwJAzvVT11jjkdGKC"),
-  poolVault: address("D1UXjKfHeUe6kMKNEz2DrMDnRWKjJayMejZryATMMrGz"),
+  // Deployed Accounts (multi-token deployment 2026-03-16)
+  poolStatePda: address("9XASi9bFNFLgDgdVG13UNg4Q9vzWC8XydnEBbdsd4dVt"),
+  commitmentTreePda: address("CbaDvGVVQqskcu4cz6Fsu3i2q8eWG8GjeqpZiKgPiCaW"),
+  zkbtcMint: address("Ga8NYnpoZyNHJG85H8jiRxtcNYE337A25LWtzZ1FFFR1"),
+  poolVault: address("4ywyvYDUL1CEyaN3GxsnN4jwxk6BWvt9qvsU34TMcawe"),
 
   // RPC Endpoints
   solanaRpcUrl: "https://api.devnet.solana.com",
@@ -205,7 +205,7 @@ export const DEVNET_CONFIG: NetworkConfig = {
   circuitCdnUrl: "https://circuits.amidoggy.xyz",
 
   // Groth16 Verifier: verification is inline in the Aegis program (no separate verifier program)
-  groth16VerifierProgramId: address("7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ"),
+  groth16VerifierProgramId: address("8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim"),
 
   // VK Hashes (SHA256 of serialized VK bytes, generated from circom trusted setup)
   vkHashes: {
