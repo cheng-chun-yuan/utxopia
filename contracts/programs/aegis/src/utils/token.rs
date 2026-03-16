@@ -190,6 +190,35 @@ pub fn transfer_zkbtc(
     }
 }
 
+/// Transfer tokens from a user-signed account (no PDA signing needed)
+pub fn transfer_token_user(
+    _token_program: &AccountInfo,
+    source: &AccountInfo,
+    destination: &AccountInfo,
+    authority: &AccountInfo,
+    amount: u64,
+) -> ProgramResult {
+    let mut data = [0u8; 9];
+    data[0] = token_instruction::TRANSFER;
+    data[1..9].copy_from_slice(&amount.to_le_bytes());
+
+    let token_program_id = Pubkey::from(TOKEN_2022_PROGRAM_ID);
+
+    let accounts = [
+        AccountMeta::writable(source.key()),
+        AccountMeta::writable(destination.key()),
+        AccountMeta::readonly_signer(authority.key()),
+    ];
+
+    let instruction = Instruction {
+        program_id: &token_program_id,
+        accounts: &accounts,
+        data: &data,
+    };
+
+    invoke(&instruction, &[source, destination, authority])
+}
+
 /// Validate that an account is owned by Token-2022 program
 #[inline(always)]
 pub fn is_token_2022_account(account: &AccountInfo) -> bool {

@@ -95,6 +95,7 @@ pub mod instruction {
 
     // Multi-token instructions (fresh deploy: reuse freed slots)
     pub const REGISTER_TOKEN: u8 = 28;
+    pub const SHIELD: u8 = 29;
 }
 
 entrypoint!(process_instruction);
@@ -188,6 +189,10 @@ pub fn process_instruction(
         // Multi-token: register new token
         instruction::REGISTER_TOKEN => {
             instructions::process_register_token(program_id, accounts, data)
+        }
+        // Multi-token: shield SPL token
+        instruction::SHIELD => {
+            instructions::process_shield(program_id, accounts, data)
         }
         _ => Err(ProgramError::InvalidInstructionData),
     }
