@@ -96,6 +96,9 @@ pub mod instruction {
     // Multi-token instructions (fresh deploy: reuse freed slots)
     pub const REGISTER_TOKEN: u8 = 28;
     pub const SHIELD: u8 = 29;
+    pub const UNSHIELD_V2: u8 = 30;
+    pub const UPDATE_TOKEN_CONFIG: u8 = 31;
+    pub const CLAIM_FEES_V2: u8 = 32;
 }
 
 entrypoint!(process_instruction);
@@ -193,6 +196,18 @@ pub fn process_instruction(
         // Multi-token: shield SPL token
         instruction::SHIELD => {
             instructions::process_shield(program_id, accounts, data)
+        }
+        // Multi-token: unshield SPL token (ZK proof)
+        instruction::UNSHIELD_V2 => {
+            instructions::process_unshield_v2(program_id, accounts, data)
+        }
+        // Multi-token: update token config (admin)
+        instruction::UPDATE_TOKEN_CONFIG => {
+            instructions::process_update_token_config(program_id, accounts, data)
+        }
+        // Multi-token: claim per-token fees (admin)
+        instruction::CLAIM_FEES_V2 => {
+            instructions::process_claim_fees_v2(program_id, accounts, data)
         }
         _ => Err(ProgramError::InvalidInstructionData),
     }

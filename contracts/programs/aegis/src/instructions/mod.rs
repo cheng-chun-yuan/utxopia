@@ -49,6 +49,9 @@ pub mod set_pool_config; // set pool BTC scriptPubKey on-chain
 // Multi-token instructions
 pub mod register_token;
 pub mod shield;
+pub mod unshield_v2;
+pub mod update_token_config;
+pub mod claim_fees_v2;
 
 // VK registry (deployment)
 pub mod init_vk_registry;
@@ -72,4 +75,7 @@ pub use claim_fees::*;
 pub use set_pool_config::*;
 pub use register_token::*;
 pub use shield::*;
+pub use unshield_v2::*;
+pub use update_token_config::*;
+pub use claim_fees_v2::*;
 pub use init_vk_registry::*;
