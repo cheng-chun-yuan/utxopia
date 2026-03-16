@@ -176,3 +176,40 @@ export function computeJoinSplitNullifierSync(nullifyingKey: bigint, leafIndex: 
   return poseidonHashSync([nullifyingKey, leafIndex]);
 }
 
+// ============================================================================
+// Multi-Token Utilities
+// ============================================================================
+
+/**
+ * Reduce a 32-byte big-endian value to BN254 scalar field (mod p).
+ * Must match on-chain reduce_to_field_exact in crypto.rs.
+ */
+export function reduceToField(bytes: Uint8Array): bigint {
+  // Convert big-endian bytes to bigint
+  let value = 0n;
+  for (const b of bytes) {
+    value = (value << 8n) | BigInt(b);
+  }
+  return value % BN254_SCALAR_FIELD;
+}
+
+/**
+ * Compute token_id from mint address: Poseidon(reduce_to_field(mint), 0)
+ *
+ * Must match on-chain compute_token_id in crypto.rs which uses
+ * poseidon2_hash(reduce_to_field_exact(mint), [0u8; 32]).
+ */
+export function computeTokenId(mintBytes: Uint8Array): bigint {
+  const reduced = reduceToField(mintBytes);
+  return poseidonHashSync([reduced, 0n]);
+}
+
+/**
+ * Convenience: compute token_id from a Solana address string
+ */
+export function computeTokenIdFromAddress(mintAddress: string): bigint {
+  // Base58 decode — import from @solana/kit if available, otherwise use raw bytes
+  // For now, caller should pass raw bytes via computeTokenId
+  throw new Error("Use computeTokenId(mintBytes) with raw pubkey bytes");
+}
+

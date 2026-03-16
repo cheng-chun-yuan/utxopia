@@ -137,6 +137,9 @@ export {
   computeJoinSplitCommitmentSync,
   computeJoinSplitNullifier,
   computeJoinSplitNullifierSync,
+  // Multi-token
+  computeTokenId,
+  reduceToField,
 } from "./poseidon";
 
 // ==========================================================================
@@ -324,6 +327,7 @@ export {
   deriveHeightIndexPDA,
   deriveVkRegistryPDA,
   deriveRedemptionRequestPDA,
+  deriveTokenConfigPDA,
   commitmentToBytes,
 } from "./pda";
 
@@ -562,12 +566,6 @@ export {
   // Public unshield instruction
   buildUnshieldInstructionData,
   buildUnshieldInstruction,
-  // Redeem: JoinSplit → BTC withdrawal
-  buildRedeemInstructionData,
-  buildRedeemInstruction,
-  // Public redeem: burn SPL → BTC withdrawal
-  buildPublicRedeemInstructionData,
-  buildPublicRedeemInstruction,
   // Timelocked pool update instructions
   buildProposePoolUpdateInstructionData,
   buildProposePoolUpdateInstruction,
@@ -581,8 +579,6 @@ export {
   type RedemptionRequestInstructionOptions,
   type TransactInstructionOptions,
   type UnshieldInstructionOptions,
-  type RedeemInstructionOptions,
-  type PublicRedeemInstructionOptions,
   type ProposePoolUpdateOptions,
   type ExecutePoolUpdateOptions,
   type CancelPoolUpdateOptions,

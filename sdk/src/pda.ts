@@ -53,6 +53,7 @@ export const PDA_SEEDS = {
   DEPOSIT: "deposit",
   NULLIFIER: "nullifier",
   VK_REGISTRY: "vk_registry",
+  TOKEN_CONFIG: "token_config",
 } as const;
 
 // =============================================================================
@@ -81,6 +82,21 @@ export async function deriveCommitmentTreePDA(
   const result = await getProgramDerivedAddress({
     programAddress: programId,
     seeds: [new TextEncoder().encode(PDA_SEEDS.COMMITMENT_TREE)],
+  });
+  return [result[0], result[1]];
+}
+
+/**
+ * Derive TokenConfig PDA for a specific mint
+ * Seeds: ["token_config", mint_pubkey_bytes]
+ */
+export async function deriveTokenConfigPDA(
+  mintPubkey: Uint8Array,
+  programId: Address = AEGIS_PROGRAM_ID
+): Promise<[Address, number]> {
+  const result = await getProgramDerivedAddress({
+    programAddress: programId,
+    seeds: [new TextEncoder().encode(PDA_SEEDS.TOKEN_CONFIG), mintPubkey],
   });
   return [result[0], result[1]];
 }

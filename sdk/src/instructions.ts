@@ -35,21 +35,30 @@ export interface Instruction {
 
 /** Instruction discriminators (must match contracts/programs/aegis/src/lib.rs) */
 const INSTRUCTION = {
+  // Core operations
   INITIALIZE: 0,
   VERIFY_STEALTH_DEPOSIT: 1,
+  MARK_PROCESSING: 2,
+  CANCEL_REDEMPTION: 3,
   REQUEST_REDEMPTION: 5,
   COMPLETE_REDEMPTION: 6,
   SET_PAUSED: 7,
+  // VK Registry
   INIT_VK_REGISTRY: 11,
   UPDATE_VK_REGISTRY: 12,
   ADD_DEMO_STEALTH: 13,
+  // JoinSplit
   TRANSACT: 14,
-  UNSHIELD: 15,
-  REDEEM: 16,
-  PUBLIC_REDEEM: 17,
+  // Timelocked pool updates
   PROPOSE_POOL_UPDATE: 21,
   EXECUTE_POOL_UPDATE: 22,
   CANCEL_POOL_UPDATE: 23,
+  // Multi-token instructions
+  REGISTER_TOKEN: 28,
+  SHIELD: 29,
+  UNSHIELD: 30,
+  UPDATE_TOKEN_CONFIG: 31,
+  CLAIM_FEES: 32,
 } as const;
 
 /** Export instruction discriminators for consumers */
@@ -455,32 +464,30 @@ export function buildTransactInstruction(options: TransactInstructionOptions): I
 export interface UnshieldInstructionOptions {
   /** Number of input notes being spent */
   nInputs: number;
-  /** Number of output notes (includes unshield output as last) */
+  /** Number of output notes (includes burn output as last) */
   nOutputs: number;
   /** Groth16 proof bytes (256 bytes) */
   proofBytes: Uint8Array;
   /** Merkle root */
   merkleRoot: Uint8Array;
-  /** Bound parameters hash (computed with createUnshieldBoundParams) */
+  /** Bound parameters hash */
   boundParamsHash: Uint8Array;
   /** Nullifiers (32 bytes each) */
   nullifiers: Uint8Array[];
-  /** Output commitments (32 bytes each, last = unshield output) */
+  /** Output commitments (32 bytes each, last = burn commitment) */
   commitmentsOut: Uint8Array[];
   /** Per-output stealth data for tree outputs only (n_outputs - 1 entries) */
   stealthData: Uint8Array[];
-  /** Amount being unshielded in satoshis */
+  /** Amount being unshielded */
   unshieldAmount: bigint;
-  /** Recipient Solana address (32 bytes, the token account owner) */
-  unshieldAddress: Uint8Array;
   /** Account addresses */
   accounts: {
     poolState: Address;
     commitmentTree: Address;
     vkRegistry: Address;
     user: Address;
-    zkbtcMint: Address;
-    poolVault: Address;
+    tokenConfig: Address;
+    vault: Address;
     userTokenAccount: Address;
     /** Nullifier record PDAs (one per input) */
     nullifierRecords: Address[];
@@ -488,19 +495,13 @@ export interface UnshieldInstructionOptions {
 }
 
 /**
- * Build unshield instruction data
+ * Build unshield instruction data (multi-token version, disc 30).
  *
- * Layout:
- * - n_inputs: u8
- * - n_outputs: u8
- * - proof: [u8; 256]
- * - merkle_root: [u8; 32]
- * - bound_params_hash: [u8; 32]
- * - nullifiers: [[u8; 32]; n_inputs]
- * - commitments_out: [[u8; 32]; n_outputs]
- * - stealth_data: [ephemeral_pub(32) + encrypted_amount(8)] x (n_outputs - 1)
- * - unshield_amount: u64 LE
- * - unshield_address: [u8; 32]
+ * Layout: disc(1) + n_inputs(1) + n_outputs(1) + proof(256) + merkle_root(32)
+ *       + bound_params_hash(32) + nullifiers(N*32) + commitments_out(M*32)
+ *       + stealth_data((M-1)*40) + unshield_amount(8)
+ *
+ * No unshield_address — burn commitment uses Poseidon([0], token_id, amount).
  */
 export function buildUnshieldInstructionData(options: {
   nInputs: number;
@@ -512,9 +513,8 @@ export function buildUnshieldInstructionData(options: {
   commitmentsOut: Uint8Array[];
   stealthData: Uint8Array[];
   unshieldAmount: bigint;
-  unshieldAddress: Uint8Array;
 }): Uint8Array {
-  const { nInputs, nOutputs, proofBytes, merkleRoot, boundParamsHash, nullifiers, commitmentsOut, stealthData, unshieldAmount, unshieldAddress } = options;
+  const { nInputs, nOutputs, proofBytes, merkleRoot, boundParamsHash, nullifiers, commitmentsOut, stealthData, unshieldAmount } = options;
 
   if (proofBytes.length !== 256) {
     throw new Error(`Groth16 proof must be 256 bytes, got ${proofBytes.length}`);
@@ -529,12 +529,9 @@ export function buildUnshieldInstructionData(options: {
   if (stealthData.length !== nTreeOutputs) {
     throw new Error(`Expected ${nTreeOutputs} stealth data entries (tree outputs), got ${stealthData.length}`);
   }
-  if (unshieldAddress.length !== 32) {
-    throw new Error(`Unshield address must be 32 bytes, got ${unshieldAddress.length}`);
-  }
 
   const STEALTH_DATA_PER_OUTPUT = 40;
-  const totalSize = 1 + 2 + 256 + 32 + 32 + (nInputs * 32) + (nOutputs * 32) + (nTreeOutputs * STEALTH_DATA_PER_OUTPUT) + 8 + 32;
+  const totalSize = 1 + 2 + 256 + 32 + 32 + (nInputs * 32) + (nOutputs * 32) + (nTreeOutputs * STEALTH_DATA_PER_OUTPUT) + 8;
   const data = new Uint8Array(totalSize);
   const view = new DataView(data.buffer);
 
@@ -565,7 +562,7 @@ export function buildUnshieldInstructionData(options: {
     offset += 32;
   }
 
-  // Output commitments (all n_outputs, last = unshield)
+  // Output commitments (all n_outputs, last = burn)
   for (const commitment of commitmentsOut) {
     data.set(commitment, offset);
     offset += 32;
@@ -579,25 +576,21 @@ export function buildUnshieldInstructionData(options: {
 
   // Unshield amount (u64 LE)
   view.setBigUint64(offset, unshieldAmount, true);
-  offset += 8;
-
-  // Unshield address (32 bytes)
-  data.set(unshieldAddress, offset);
 
   return data;
 }
 
 /**
- * Build a complete public unshield instruction
+ * Build a complete unshield instruction (multi-token, disc 30)
  *
  * Accounts:
- * 0. pool_state (writable)
+ * 0. pool_state (read)
  * 1. commitment_tree (writable)
  * 2. vk_registry (read)
  * 3. user (signer)
  * 4. system_program (read)
- * 5. zkbtc_mint (writable)
- * 6. pool_vault (writable)
+ * 5. token_config (writable)
+ * 6. vault (writable)
  * 7. user_token_account (writable)
  * 8. token_program (read)
  * 9..9+N nullifier_records (writable)
@@ -615,17 +608,16 @@ export function buildUnshieldInstruction(options: UnshieldInstructionOptions): I
     commitmentsOut: options.commitmentsOut,
     stealthData: options.stealthData,
     unshieldAmount: options.unshieldAmount,
-    unshieldAddress: options.unshieldAddress,
   });
 
   const accounts: Instruction["accounts"] = [
-    { address: options.accounts.poolState, role: AccountRole.WRITABLE },
+    { address: options.accounts.poolState, role: AccountRole.READONLY },
     { address: options.accounts.commitmentTree, role: AccountRole.WRITABLE },
     { address: options.accounts.vkRegistry, role: AccountRole.READONLY },
     { address: options.accounts.user, role: AccountRole.WRITABLE_SIGNER },
     { address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY },
-    { address: options.accounts.zkbtcMint, role: AccountRole.WRITABLE },
-    { address: options.accounts.poolVault, role: AccountRole.WRITABLE },
+    { address: options.accounts.tokenConfig, role: AccountRole.WRITABLE },
+    { address: options.accounts.vault, role: AccountRole.WRITABLE },
     { address: options.accounts.userTokenAccount, role: AccountRole.WRITABLE },
     { address: TOKEN_2022_PROGRAM_ID, role: AccountRole.READONLY },
   ];
@@ -642,306 +634,7 @@ export function buildUnshieldInstruction(options: UnshieldInstructionOptions): I
   };
 }
 
-// =============================================================================
-// Redeem Instruction Builder (JoinSplit → BTC withdrawal)
-// =============================================================================
-
-/** Redeem instruction options */
-export interface RedeemInstructionOptions {
-  /** Number of input notes being spent */
-  nInputs: number;
-  /** Number of output notes (includes redeem output as last) */
-  nOutputs: number;
-  /** Groth16 proof bytes (256 bytes) */
-  proofBytes: Uint8Array;
-  /** Merkle root */
-  merkleRoot: Uint8Array;
-  /** Bound parameters hash (computed with createRedeemBoundParams) */
-  boundParamsHash: Uint8Array;
-  /** Nullifiers (32 bytes each) */
-  nullifiers: Uint8Array[];
-  /** Output commitments (32 bytes each, last = redeem output) */
-  commitmentsOut: Uint8Array[];
-  /** Per-output stealth data for tree outputs only (n_outputs - 1 entries) */
-  stealthData: Uint8Array[];
-  /** Amount being redeemed in satoshis */
-  redeemAmount: bigint;
-  /** Bitcoin scriptPubKey for withdrawal (raw bytes, variable length) */
-  btcScript: Uint8Array;
-  /** Unique nonce for this redemption request */
-  requestNonce: bigint;
-  /** Account addresses */
-  accounts: {
-    poolState: Address;
-    commitmentTree: Address;
-    vkRegistry: Address;
-    user: Address;
-    /** Nullifier record PDAs (one per input) */
-    nullifierRecords: Address[];
-    /** Redemption request PDA */
-    redemptionRequest: Address;
-  };
-}
-
-/**
- * Build redeem instruction data
- *
- * Layout:
- * - n_inputs: u8
- * - n_outputs: u8
- * - proof: [u8; 256]
- * - merkle_root: [u8; 32]
- * - bound_params_hash: [u8; 32]
- * - nullifiers: [[u8; 32]; n_inputs]
- * - commitments_out: [[u8; 32]; n_outputs]
- * - stealth_data: [ephemeral_pub(32) + encrypted_amount(8)] x (n_outputs - 1)
- * - redeem_amount: u64 LE
- * - btc_script_len: u8
- * - btc_script: [u8; btc_script_len] (variable)
- * - request_nonce: u64 LE
- */
-export function buildRedeemInstructionData(options: {
-  nInputs: number;
-  nOutputs: number;
-  proofBytes: Uint8Array;
-  merkleRoot: Uint8Array;
-  boundParamsHash: Uint8Array;
-  nullifiers: Uint8Array[];
-  commitmentsOut: Uint8Array[];
-  stealthData: Uint8Array[];
-  redeemAmount: bigint;
-  btcScript: Uint8Array;
-  requestNonce: bigint;
-}): Uint8Array {
-  const { nInputs, nOutputs, proofBytes, merkleRoot, boundParamsHash, nullifiers, commitmentsOut, stealthData, redeemAmount, btcScript, requestNonce } = options;
-
-  if (proofBytes.length !== 256) {
-    throw new Error(`Groth16 proof must be 256 bytes, got ${proofBytes.length}`);
-  }
-  if (btcScript.length === 0 || btcScript.length > 34) {
-    throw new Error(`BTC scriptPubKey must be 1-62 bytes, got ${btcScript.length}`);
-  }
-  const nTreeOutputs = nOutputs - 1;
-  if (stealthData.length !== nTreeOutputs) {
-    throw new Error(`Expected ${nTreeOutputs} stealth data entries, got ${stealthData.length}`);
-  }
-
-  const STEALTH_DATA_PER_OUTPUT = 40;
-  const totalSize = 1 + 2 + 256 + 32 + 32 + (nInputs * 32) + (nOutputs * 32) + (nTreeOutputs * STEALTH_DATA_PER_OUTPUT) + 8 + 1 + btcScript.length + 8;
-  const data = new Uint8Array(totalSize);
-  const view = new DataView(data.buffer);
-
-  let offset = 0;
-
-  // Discriminator
-  data[offset++] = INSTRUCTION.REDEEM;
-
-  // Header
-  data[offset++] = nInputs;
-  data[offset++] = nOutputs;
-
-  // Proof
-  data.set(proofBytes, offset);
-  offset += 256;
-
-  // Merkle root
-  data.set(merkleRoot, offset);
-  offset += 32;
-
-  // Bound params hash
-  data.set(boundParamsHash, offset);
-  offset += 32;
-
-  // Nullifiers
-  for (const nullifier of nullifiers) {
-    data.set(nullifier, offset);
-    offset += 32;
-  }
-
-  // Output commitments
-  for (const commitment of commitmentsOut) {
-    data.set(commitment, offset);
-    offset += 32;
-  }
-
-  // Stealth data for tree outputs only
-  for (const sd of stealthData) {
-    data.set(sd.slice(0, STEALTH_DATA_PER_OUTPUT), offset);
-    offset += STEALTH_DATA_PER_OUTPUT;
-  }
-
-  // Redeem amount (u64 LE)
-  view.setBigUint64(offset, redeemAmount, true);
-  offset += 8;
-
-  // BTC script (variable length)
-  data[offset++] = btcScript.length;
-  data.set(btcScript, offset);
-  offset += btcScript.length;
-
-  // Request nonce (u64 LE)
-  view.setBigUint64(offset, requestNonce, true);
-
-  return data;
-}
-
-/**
- * Build a complete redeem instruction
- *
- * Accounts:
- * 0. pool_state (writable)
- * 1. commitment_tree (writable)
- * 2. vk_registry (read)
- * 3. user (signer)
- * 4. system_program (read)
- * 5..5+N nullifier_records (writable)
- * 5+N redemption_request (writable)
- */
-export function buildRedeemInstruction(options: RedeemInstructionOptions): Instruction {
-  const config = getConfig();
-
-  const data = buildRedeemInstructionData({
-    nInputs: options.nInputs,
-    nOutputs: options.nOutputs,
-    proofBytes: options.proofBytes,
-    merkleRoot: options.merkleRoot,
-    boundParamsHash: options.boundParamsHash,
-    nullifiers: options.nullifiers,
-    commitmentsOut: options.commitmentsOut,
-    stealthData: options.stealthData,
-    redeemAmount: options.redeemAmount,
-    btcScript: options.btcScript,
-    requestNonce: options.requestNonce,
-  });
-
-  const accounts: Instruction["accounts"] = [
-    { address: options.accounts.poolState, role: AccountRole.WRITABLE },
-    { address: options.accounts.commitmentTree, role: AccountRole.WRITABLE },
-    { address: options.accounts.vkRegistry, role: AccountRole.READONLY },
-    { address: options.accounts.user, role: AccountRole.WRITABLE_SIGNER },
-    { address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY },
-  ];
-
-  // Nullifier records
-  for (const nr of options.accounts.nullifierRecords) {
-    accounts.push({ address: nr, role: AccountRole.WRITABLE });
-  }
-
-  // Redemption request PDA
-  accounts.push({ address: options.accounts.redemptionRequest, role: AccountRole.WRITABLE });
-
-  return {
-    programAddress: config.aegisProgramId,
-    accounts,
-    data,
-  };
-}
-
-// =============================================================================
-// Public Redeem Instruction Builder (burn SPL → BTC withdrawal)
-// =============================================================================
-
-/** Public redeem instruction options */
-export interface PublicRedeemInstructionOptions {
-  /** Amount to redeem in satoshis */
-  amountSats: bigint;
-  /** Bitcoin scriptPubKey for withdrawal (raw bytes, variable length) */
-  btcScript: Uint8Array;
-  /** Unique nonce for this redemption request */
-  requestNonce: bigint;
-  /** Account addresses */
-  accounts: {
-    poolState: Address;
-    zkbtcMint: Address;
-    userTokenAccount: Address;
-    user: Address;
-    /** Redemption request PDA */
-    redemptionRequest: Address;
-  };
-}
-
-/**
- * Build public redeem instruction data
- *
- * Layout:
- * - amount_sats: u64 LE (8)
- * - btc_script_len: u8 (1)
- * - btc_script: [u8; btc_script_len] (variable)
- * - request_nonce: u64 LE (8)
- */
-export function buildPublicRedeemInstructionData(options: {
-  amountSats: bigint;
-  btcScript: Uint8Array;
-  requestNonce: bigint;
-}): Uint8Array {
-  const { amountSats, btcScript, requestNonce } = options;
-
-  if (btcScript.length === 0 || btcScript.length > 34) {
-    throw new Error(`BTC scriptPubKey must be 1-62 bytes, got ${btcScript.length}`);
-  }
-
-  const totalSize = 1 + 8 + 1 + btcScript.length + 8;
-  const data = new Uint8Array(totalSize);
-  const view = new DataView(data.buffer);
-
-  let offset = 0;
-
-  // Discriminator
-  data[offset++] = INSTRUCTION.PUBLIC_REDEEM;
-
-  // Amount (u64 LE)
-  view.setBigUint64(offset, amountSats, true);
-  offset += 8;
-
-  // BTC script (variable length)
-  data[offset++] = btcScript.length;
-  data.set(btcScript, offset);
-  offset += btcScript.length;
-
-  // Request nonce (u64 LE)
-  view.setBigUint64(offset, requestNonce, true);
-
-  return data;
-}
-
-/**
- * Build a complete public redeem instruction
- *
- * Accounts:
- * 0. pool_state (writable)
- * 1. zkbtc_mint (writable)
- * 2. user_token_account (writable)
- * 3. user (signer)
- * 4. system_program (read)
- * 5. token_program (read, Token-2022)
- * 6. redemption_request (writable PDA)
- */
-export function buildPublicRedeemInstruction(options: PublicRedeemInstructionOptions): Instruction {
-  const config = getConfig();
-
-  const data = buildPublicRedeemInstructionData({
-    amountSats: options.amountSats,
-    btcScript: options.btcScript,
-    requestNonce: options.requestNonce,
-  });
-
-  const accounts: Instruction["accounts"] = [
-    { address: options.accounts.poolState, role: AccountRole.WRITABLE },
-    { address: options.accounts.zkbtcMint, role: AccountRole.WRITABLE },
-    { address: options.accounts.userTokenAccount, role: AccountRole.WRITABLE },
-    { address: options.accounts.user, role: AccountRole.WRITABLE_SIGNER },
-    { address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY },
-    { address: TOKEN_2022_PROGRAM_ID, role: AccountRole.READONLY },
-    { address: options.accounts.redemptionRequest, role: AccountRole.WRITABLE },
-  ];
-
-  return {
-    programAddress: config.aegisProgramId,
-    accounts,
-    data,
-  };
-}
-
+// Redeem and PublicRedeem instructions removed — use request_redemption for BTC withdrawals
 // =============================================================================
 // Timelocked Pool Update Instruction Builders
 // =============================================================================

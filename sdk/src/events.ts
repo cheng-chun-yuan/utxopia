@@ -26,7 +26,7 @@ export interface NullifierSpentEvent {
   operationType: number;
 }
 
-/** Parsed stealth announcement event */
+/** Parsed stealth announcement event (v2 with token_id) */
 export interface StealthAnnouncementEvent {
   type: "stealth_announcement";
   announcementType: number; // 0=deposit, 1=transfer
@@ -34,6 +34,7 @@ export interface StealthAnnouncementEvent {
   encryptedAmount: Uint8Array; // 8 bytes
   commitment: Uint8Array; // 32 bytes
   leafIndex: number;
+  tokenId?: Uint8Array; // 32 bytes (present in v2)
 }
 
 export type ProgramEvent =
@@ -63,7 +64,8 @@ export function parseNullifierSpentEvent(segments: Uint8Array[]): NullifierSpent
 
 /**
  * Parse a stealth announcement event from decoded sol_log_data segments.
- * Expected: disc(1) + type(1) + ephemeral_pub(32) + encrypted_amount(8) + commitment(32) + leaf_index(4)
+ * v1: disc(1) + type(1) + ephemeral_pub(32) + encrypted_amount(8) + commitment(32) + leaf_index(4) = 6 segments
+ * v2: + token_id(32) = 7 segments
  */
 export function parseStealthAnnouncementEvent(segments: Uint8Array[]): StealthAnnouncementEvent | null {
   if (segments.length < 6) return null;
@@ -86,6 +88,12 @@ export function parseStealthAnnouncementEvent(segments: Uint8Array[]): StealthAn
   const view = new DataView(liBytes.buffer, liBytes.byteOffset, 4);
   const leafIndex = view.getUint32(0, true);
 
+  // v2: token_id at segment 6
+  let tokenId: Uint8Array | undefined;
+  if (segments.length >= 7 && segments[6].length === 32) {
+    tokenId = segments[6];
+  }
+
   return {
     type: "stealth_announcement",
     announcementType: atype[0],
@@ -93,6 +101,7 @@ export function parseStealthAnnouncementEvent(segments: Uint8Array[]): StealthAn
     encryptedAmount,
     commitment,
     leafIndex,
+    tokenId,
   };
 }
 
@@ -121,12 +130,21 @@ function parseNullifiersBatch(data: Uint8Array): NullifierSpentEvent[] {
 
 /**
  * Parse batched announcements from a single flat segment.
- * Layout: disc(1) + count(1) + [type(1) + ephemeral(32) + amount(8) + commitment(32) + leaf_index(4)] x count
+ * v1: disc(1) + count(1) + [type(1) + ephemeral(32) + amount(8) + commitment(32) + leaf_index(4)] x count (77 per item)
+ * v2: disc(1) + count(1) + [type(1) + ephemeral(32) + amount(8) + commitment(32) + leaf_index(4) + token_id(32)] x count (109 per item)
  */
 function parseAnnouncementsBatch(data: Uint8Array): StealthAnnouncementEvent[] {
   if (data.length < 2) return [];
   const count = data[1];
-  const itemSize = 77; // 1 + 32 + 8 + 32 + 4
+  if (count === 0) return [];
+
+  // Detect v1 vs v2 by checking total size
+  const remainingBytes = data.length - 2;
+  const v2ItemSize = 109;
+  const v1ItemSize = 77;
+  const isV2 = remainingBytes >= count * v2ItemSize;
+  const itemSize = isV2 ? v2ItemSize : v1ItemSize;
+
   const expectedLen = 2 + count * itemSize;
   if (data.length < expectedLen) return [];
 
@@ -134,14 +152,18 @@ function parseAnnouncementsBatch(data: Uint8Array): StealthAnnouncementEvent[] {
   for (let i = 0; i < count; i++) {
     const offset = 2 + i * itemSize;
     const liView = new DataView(data.buffer, data.byteOffset + offset + 73, 4);
-    events.push({
+    const event: StealthAnnouncementEvent = {
       type: "stealth_announcement",
       announcementType: data[offset],
       ephemeralPub: data.slice(offset + 1, offset + 33),
       encryptedAmount: data.slice(offset + 33, offset + 41),
       commitment: data.slice(offset + 41, offset + 73),
       leafIndex: liView.getUint32(0, true),
-    });
+    };
+    if (isV2) {
+      event.tokenId = data.slice(offset + 77, offset + 109);
+    }
+    events.push(event);
   }
   return events;
 }

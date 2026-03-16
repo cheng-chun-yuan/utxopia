@@ -186,12 +186,7 @@ export interface OnChainStealthAnnouncement {
 /** Domain separator for stealth key derivation */
 const STEALTH_KEY_DOMAIN = new TextEncoder().encode("Aegis-stealth-v1");
 
-/**
- * ZKBTC token identifier for JoinSplit commitments.
- * This is a fixed constant — Poseidon(npk, ZKBTC_TOKEN_ID, amount).
- * Value: SHA256("zkbtc") mod BN254_SCALAR_FIELD, truncated to fit.
- */
-export const ZKBTC_TOKEN_ID = 0x7a627463n; // "zkbtc" as u32 (simple, deterministic)
+// tokenId removed — use computeTokenId(mintBytes) from poseidon.ts instead
 
 /**
  * Derive stealth scalar from X25519 shared secret
@@ -245,12 +240,13 @@ function deriveStealthPrivKey(
  * 4. stealthMPK = Poseidon(stealthPub.x, stealthPub.y, nullifyingKey)
  *    (sender uses recipientMPK from meta-address for stealth deposits)
  * 5. npk = Poseidon(recipientMPK, random)
- * 6. commitment = Poseidon(npk, ZKBTC_TOKEN_ID, amount)
+ * 6. commitment = Poseidon(npk, tokenId, amount)
  * 7. encryptedAmount = amount XOR sha256(sharedSecret)[0..8]
  */
 export async function createStealthDeposit(
   recipientMeta: StealthMetaAddress,
-  amountSats: bigint
+  amountSats: bigint,
+  tokenId: bigint,
 ): Promise<StealthDeposit> {
   // Only viewingPubKey + mpk needed (spendingPubKey not used by sender)
   const viewingPubKey = new Uint8Array(recipientMeta.viewingPubKey);
@@ -269,7 +265,7 @@ export async function createStealthDeposit(
   const npk = computeNPKSync(recipientMPK, stealthScalar);
 
   // Compute JoinSplit commitment = Poseidon(npk, token, amount)
-  const commitmentBigint = computeJoinSplitCommitmentSync(npk, ZKBTC_TOKEN_ID, amountSats);
+  const commitmentBigint = computeJoinSplitCommitmentSync(npk, tokenId, amountSats);
   const commitment = bigintToBytes(commitmentBigint);
 
   // Encrypt amount
@@ -295,7 +291,8 @@ export interface StealthOutputWithKeys extends StealthOutputData {
  */
 export async function createStealthDepositWithKeys(
   recipientMeta: StealthMetaAddress,
-  amountSats: bigint
+  amountSats: bigint,
+  tokenId: bigint,
 ): Promise<StealthOutputWithKeys> {
   // Only viewingPubKey + mpk needed (spendingPubKey not used by sender)
   const viewingPubKey = new Uint8Array(recipientMeta.viewingPubKey);
@@ -307,7 +304,7 @@ export async function createStealthDepositWithKeys(
   const recipientMPK = bytesToBigint(recipientMeta.mpk);
   const npk = computeNPKSync(recipientMPK, stealthScalar);
 
-  const commitmentBigint = computeJoinSplitCommitmentSync(npk, ZKBTC_TOKEN_ID, amountSats);
+  const commitmentBigint = computeJoinSplitCommitmentSync(npk, tokenId, amountSats);
   const commitment = bigintToBytes(commitmentBigint);
   const encryptedAmount = encryptAmount(amountSats, sharedSecret);
 
@@ -461,7 +458,8 @@ export async function scanAnnouncements(
     encryptedAmount: Uint8Array;
     commitment: Uint8Array;
     leafIndex: number;
-  }[]
+  }[],
+  tokenId: bigint,
 ): Promise<ScannedNote[]> {
   const keys = isWalletAdapter(source) ? await deriveKeysFromWallet(source) : source;
 
@@ -491,7 +489,7 @@ export async function scanAnnouncements(
 
       // Compute expected NPK and commitment (JoinSplit format)
       const npk = computeNPKSync(mpk, stealthScalar);
-      const expectedCommitment = computeJoinSplitCommitmentSync(npk, ZKBTC_TOKEN_ID, amount);
+      const expectedCommitment = computeJoinSplitCommitmentSync(npk, tokenId, amount);
       const actualCommitment = bytesToBigint(ann.commitment);
 
       if (expectedCommitment !== actualCommitment) {
@@ -556,7 +554,8 @@ export async function scanAnnouncementsViewOnly(
     commitment: Uint8Array;
     leafIndex: number;
     blockTime?: number;
-  }[]
+  }[],
+  tokenId: bigint,
 ): Promise<ViewOnlyScannedNote[]> {
   const found: ViewOnlyScannedNote[] = [];
   const MAX_SATS = 21_000_000n * 100_000_000n;
@@ -586,7 +585,7 @@ export async function scanAnnouncementsViewOnly(
 
       const stealthScalar = deriveStealthScalar(sharedSecret);
       const npk = computeNPKSync(mpk, stealthScalar);
-      const expectedCommitment = computeJoinSplitCommitmentSync(npk, ZKBTC_TOKEN_ID, amount);
+      const expectedCommitment = computeJoinSplitCommitmentSync(npk, tokenId, amount);
       const actualCommitment = bytesToBigint(ann.commitment);
 
       // For deposits, must verify commitment to filter non-matching
@@ -721,13 +720,14 @@ export async function prepareClaimInputs(
  * - type=0 (deposit): amount is plaintext u64 LE in amount_bytes
  * - type=1 (transfer): amount is XOR-encrypted in amount_bytes
  *
- * Commitment is computed locally: Poseidon(npk, ZKBTC_TOKEN_ID, amount).
+ * Commitment is computed locally: Poseidon(npk, tokenId, amount).
  * For deposits, we verify the derived NPK produces a valid commitment.
  * For transfers, we verify the decrypted amount is in a valid range.
  */
 export async function scanUnifiedNotes(
   source: WalletSignerAdapter | AegisKeys,
-  announcements: OnChainStealthAnnouncement[]
+  announcements: OnChainStealthAnnouncement[],
+  tokenId: bigint,
 ): Promise<ScannedNote[]> {
   const keys = isWalletAdapter(source) ? await deriveKeysFromWallet(source) : source;
 
@@ -759,7 +759,7 @@ export async function scanUnifiedNotes(
       // Derive stealth scalar and expected NPK + commitment (computed locally)
       const stealthScalar = deriveStealthScalar(sharedSecret);
       const npk = computeNPKSync(mpk, stealthScalar);
-      const commitmentBigint = computeJoinSplitCommitmentSync(npk, ZKBTC_TOKEN_ID, amount);
+      const commitmentBigint = computeJoinSplitCommitmentSync(npk, tokenId, amount);
 
       // For deposits (type=0), amount is plaintext so any key reads valid amount.
       // Must verify commitment to filter out deposits that don't belong to us.
@@ -889,7 +889,8 @@ export function unpackEncryptedAmountWithSign(packed: bigint): { encryptedAmount
  */
 export async function createStealthOutput(
   keys: AegisKeys,
-  amountSats: bigint
+  amountSats: bigint,
+  tokenId: bigint,
 ): Promise<StealthOutputData> {
   const ephemeral = ed25519GenerateKeyPair();
   const sharedSecret = x25519Ecdh(ephemeral.privKey, keys.viewingPubKey);
@@ -898,7 +899,7 @@ export async function createStealthOutput(
   const mpk = computeMPKSync(keys.spendingPubKey.x, keys.spendingPubKey.y, keys.nullifyingKey);
   const npk = computeNPKSync(mpk, stealthScalar);
 
-  const commitmentBigint = computeJoinSplitCommitmentSync(npk, ZKBTC_TOKEN_ID, amountSats);
+  const commitmentBigint = computeJoinSplitCommitmentSync(npk, tokenId, amountSats);
   const commitment = bigintToBytes(commitmentBigint);
   const encryptedAmount = encryptAmount(amountSats, sharedSecret);
 
@@ -914,7 +915,8 @@ export async function createStealthOutput(
  */
 export async function createStealthOutputWithKeys(
   keys: AegisKeys,
-  amountSats: bigint
+  amountSats: bigint,
+  tokenId: bigint,
 ): Promise<StealthOutputWithKeys> {
   const ephemeral = ed25519GenerateKeyPair();
   const sharedSecret = x25519Ecdh(ephemeral.privKey, keys.viewingPubKey);
@@ -923,7 +925,7 @@ export async function createStealthOutputWithKeys(
   const mpk = computeMPKSync(keys.spendingPubKey.x, keys.spendingPubKey.y, keys.nullifyingKey);
   const npk = computeNPKSync(mpk, stealthScalar);
 
-  const commitmentBigint = computeJoinSplitCommitmentSync(npk, ZKBTC_TOKEN_ID, amountSats);
+  const commitmentBigint = computeJoinSplitCommitmentSync(npk, tokenId, amountSats);
   const commitment = bigintToBytes(commitmentBigint);
   const encryptedAmount = encryptAmount(amountSats, sharedSecret);
 
