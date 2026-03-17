@@ -71,32 +71,89 @@ async function getPoolMint() {
 // ============================================================================
 
 function createBtcDeposit() {
-  console.log("\n=== Step 1: Create BTC deposit on regtest ===");
+  console.log("\n=== Step 1: User sends BTC with OP_RETURN ===");
 
-  // Generate random ephemeral pub + npk for OP_RETURN
+  // Generate random ephemeral pub + npk for OP_RETURN (64 bytes)
   const ephemeralPub = crypto.randomBytes(32);
   const npk = crypto.randomBytes(32);
   const opReturn = Buffer.concat([ephemeralPub, npk]);
 
-  // Create a deposit address
-  const depositAddr = btc('getnewaddress "" bech32m');
+  // Create a Taproot deposit address (simulates user's stealth-derived address)
+  const depositAddr = btc('getnewaddress "deposit" bech32m');
   console.log("Deposit addr:", depositAddr);
 
-  // Create, fund, sign, send raw tx with OP_RETURN
+  // User creates tx: BTC to deposit address + OP_RETURN(ephemeral_pub || npk)
   const txHex = btc(`-named createrawtransaction inputs='[]' outputs='[{"${depositAddr}":${AMOUNT_BTC}},{"data":"${opReturn.toString("hex")}"}]'`);
   const funded = JSON.parse(btc(`fundrawtransaction ${txHex}`));
   const signed = JSON.parse(btc(`signrawtransactionwithwallet ${funded.hex}`));
-  if (!signed.complete) throw new Error("Failed to sign BTC tx");
+  if (!signed.complete) throw new Error("Failed to sign deposit tx");
 
   const depositTxid = btc(`sendrawtransaction ${signed.hex}`);
   console.log("Deposit txid:", depositTxid);
 
-  // Mine 7 blocks (need 6 confirmations for SPV verification)
-  const minerAddr = btc('getnewaddress "" bech32m');
-  const blocks = JSON.parse(btc(`generatetoaddress 7 ${minerAddr}`));
-  console.log("Mined 7 blocks (6 confirmations), tip:", blocks[6].slice(0, 20) + "...");
+  // Mine 1 block — deposit is now confirmed
+  const minerAddr = btc('getnewaddress "miner" bech32m');
+  const depositBlocks = JSON.parse(btc(`generatetoaddress 1 ${minerAddr}`));
+  const depositBlockHash = depositBlocks[0];
+  console.log("Deposit confirmed in block:", depositBlockHash.slice(0, 20) + "...");
 
-  return { depositTxid, ephemeralPub, npk, rawSignedHex: signed.hex };
+  // === Step 2: Backend sweeps deposit UTXO to pool wallet ===
+  console.log("\n=== Step 2: Backend sweeps deposit to pool wallet ===");
+
+  // Pool wallet address (simulated — in production this is the FROST Taproot address)
+  const poolAddr = btc('getnewaddress "pool" bech32m');
+  console.log("Pool wallet:", poolAddr);
+
+  // Get the deposit output details (find the P2TR output, not OP_RETURN)
+  // Use gettransaction (wallet tx) instead of getrawtransaction (requires -txindex)
+  const depositTxInfo = JSON.parse(btc(`gettransaction ${depositTxid} true true`));
+  const depositTxDetails = depositTxInfo.decoded || JSON.parse(btc(`decoderawtransaction ${depositTxInfo.hex}`));
+  let depositVout = -1;
+  let depositAmount = 0;
+  for (const out of depositTxDetails.vout) {
+    if (out.scriptPubKey && out.scriptPubKey.type === "witness_v1_taproot" && out.value > 0) {
+      depositVout = out.n;
+      depositAmount = out.value;
+      break;
+    }
+  }
+  if (depositVout === -1) throw new Error("Could not find deposit output");
+  console.log("Deposit output: vout=" + depositVout + ", amount=" + depositAmount + " BTC");
+
+  // Create sweep tx: spend deposit UTXO → pool wallet (minus fee)
+  const sweepFee = 0.00001;
+  const sweepAmount = (depositAmount - sweepFee).toFixed(8);
+  const sweepRaw = btc(`-named createrawtransaction inputs='[{"txid":"${depositTxid}","vout":${depositVout}}]' outputs='[{"${poolAddr}":${sweepAmount}}]'`);
+  const sweepSigned = JSON.parse(btc(`signrawtransactionwithwallet ${sweepRaw}`));
+  if (!sweepSigned.complete) throw new Error("Failed to sign sweep tx");
+
+  const sweepTxid = btc(`sendrawtransaction ${sweepSigned.hex}`);
+  console.log("Sweep txid:", sweepTxid);
+
+  // Mine 1 block — sweep is now confirmed
+  const sweepBlocks = JSON.parse(btc(`generatetoaddress 1 ${minerAddr}`));
+  const sweepBlockHash = sweepBlocks[0];
+  console.log("Sweep confirmed in block:", sweepBlockHash.slice(0, 20) + "...");
+
+  // === Step 3: Mine 5 more blocks (total 6 confirmations on sweep) ===
+  console.log("\n=== Step 3: Mine 5 more blocks (6 total confirmations on sweep) ===");
+  const extraBlocks = JSON.parse(btc(`generatetoaddress 5 ${minerAddr}`));
+  console.log("Mined 5 more blocks, tip:", extraBlocks[4].slice(0, 20) + "...");
+
+  // Verify confirmation count (use gettransaction for wallet tx)
+  const sweepInfo = JSON.parse(btc(`gettransaction ${sweepTxid}`));
+  console.log("Sweep confirmations:", sweepInfo.confirmations);
+
+  return {
+    depositTxid,
+    sweepTxid,
+    ephemeralPub,
+    npk,
+    depositRawHex: signed.hex,
+    sweepRawHex: sweepSigned.hex,
+    sweepBlockHash,
+    depositBlockHash,
+  };
 }
 
 // ============================================================================
@@ -268,21 +325,30 @@ async function main() {
   console.log("\nWaiting for Esplora indexing...");
   await new Promise(r => setTimeout(r, 5000));
 
-  // Get deposit block height
-  const txInfo = JSON.parse(curl(`${ESPLORA}/tx/${deposit.depositTxid}`));
-  const depositBlockHeight = txInfo.status.block_height;
+  // Get sweep block height (this is the tx we SPV-verify, not the deposit)
+  const sweepTxInfo = JSON.parse(curl(`${ESPLORA}/tx/${deposit.sweepTxid}`));
+  const sweepBlockHeight = sweepTxInfo.status.block_height;
+  console.log("Sweep in block:", sweepBlockHeight);
+
+  const depositTxInfo = JSON.parse(curl(`${ESPLORA}/tx/${deposit.depositTxid}`));
+  const depositBlockHeight = depositTxInfo.status.block_height;
   console.log("Deposit in block:", depositBlockHeight);
 
-  // Step 2: Init light client at block before deposit
-  const initHeight = depositBlockHeight - 1;
+  // Step 4: Init light client at block before sweep
+  const initHeight = sweepBlockHeight - 1;
   await initLightClient(initHeight);
 
-  // Step 3: Submit headers up to deposit block + 6 (need 6 confirmations)
+  // Step 5: Submit all headers from init through tip (sweep block + 6 confirmations)
   const newTip = parseInt(curl(`${ESPLORA}/blocks/tip/height`));
-  await submitHeaders(initHeight, Math.min(newTip, depositBlockHeight + 6));
+  const targetHeight = Math.min(newTip, sweepBlockHeight + 6);
+  await submitHeaders(initHeight, targetHeight);
 
-  // Step 4: SPV verify
-  const spv = await verifyTransaction(deposit.depositTxid, depositBlockHeight);
+  console.log(`\nLight client synced: blocks ${initHeight}..${targetHeight}`);
+  console.log(`Sweep at ${sweepBlockHeight}, tip at ${targetHeight}`);
+  console.log(`Confirmations: ${targetHeight - sweepBlockHeight + 1} (need >= 6)`);
+
+  // Step 6: SPV verify the SWEEP tx (not the deposit tx)
+  const spv = await verifyTransaction(deposit.sweepTxid, sweepBlockHeight);
 
   // Step 5: Upload raw tx to ChadBuffer
   console.log("\n=== Step 5: Upload raw tx to ChadBuffer ===");
@@ -290,7 +356,7 @@ async function main() {
   const rawTxBytes = Buffer.from(rawTxHex, "hex");
 
   // ChadBuffer = regular account with 32-byte authority prefix + raw data
-  const CHADBUFFER_PROGRAM = new PublicKey("chad1111111111111111111111111111111111111111");
+  const CHADBUFFER_PROGRAM = new PublicKey("C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF");
   // For localnet, just create a plain account owned by system program with the right format
   const chadBufferKp = Keypair.generate();
   const bufferSize = 32 + rawTxBytes.length;
@@ -466,12 +532,16 @@ async function main() {
   console.log("\n========================================");
   console.log("DEPOSIT FLOW COMPLETE");
   console.log("========================================");
-  console.log("BTC Txid:", deposit.depositTxid);
-  console.log("Block:", depositBlockHeight);
+  console.log("Deposit Txid:", deposit.depositTxid);
+  console.log("Deposit Block:", depositBlockHeight);
+  console.log("Sweep Txid:", deposit.sweepTxid);
+  console.log("Sweep Block:", sweepBlockHeight);
   console.log("Amount:", AMOUNT_BTC, "BTC =", Math.floor(AMOUNT_BTC * 1e8), "sats");
+  console.log("Confirmations:", targetHeight - sweepBlockHeight + 1);
   console.log("Ephemeral pub:", deposit.ephemeralPub.toString("hex").slice(0, 32) + "...");
   console.log("NPK:", deposit.npk.toString("hex").slice(0, 32) + "...");
-  console.log("Light client synced, headers submitted, SPV verified");
+  console.log("Light client:", `blocks ${initHeight}..${targetHeight}`);
+  console.log("\nFlow: user deposit → mine 1 → sweep → mine 1 → mine 5 more → relay → verify");
 }
 
 main().catch(err => {
