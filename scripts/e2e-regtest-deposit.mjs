@@ -91,10 +91,10 @@ function createBtcDeposit() {
   const depositTxid = btc(`sendrawtransaction ${signed.hex}`);
   console.log("Deposit txid:", depositTxid);
 
-  // Mine block
+  // Mine 7 blocks (need 6 confirmations for SPV verification)
   const minerAddr = btc('getnewaddress "" bech32m');
-  const blocks = JSON.parse(btc(`generatetoaddress 2 ${minerAddr}`));
-  console.log("Mined 2 blocks, tip:", blocks[1].slice(0, 20) + "...");
+  const blocks = JSON.parse(btc(`generatetoaddress 7 ${minerAddr}`));
+  console.log("Mined 7 blocks (6 confirmations), tip:", blocks[6].slice(0, 20) + "...");
 
   return { depositTxid, ephemeralPub, npk, rawSignedHex: signed.hex };
 }
@@ -277,9 +277,9 @@ async function main() {
   const initHeight = depositBlockHeight - 1;
   await initLightClient(initHeight);
 
-  // Step 3: Submit headers up to deposit block + 1 (for confirmation)
+  // Step 3: Submit headers up to deposit block + 6 (need 6 confirmations)
   const newTip = parseInt(curl(`${ESPLORA}/blocks/tip/height`));
-  await submitHeaders(initHeight, Math.min(newTip, depositBlockHeight + 1));
+  await submitHeaders(initHeight, Math.min(newTip, depositBlockHeight + 6));
 
   // Step 4: SPV verify
   const spv = await verifyTransaction(deposit.depositTxid, depositBlockHeight);
