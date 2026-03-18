@@ -267,6 +267,40 @@ async function main() {
   await sendIx([regIx], [authority]);
   log("zkBTC TokenConfig registered");
 
+  // 9b. Register wSOL (NATIVE_MINT_2022) if available
+  try {
+    const NATIVE_MINT_2022 = new PublicKey("9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP");
+    const nativeMintInfo = await connection.getAccountInfo(NATIVE_MINT_2022);
+    if (nativeMintInfo) {
+      log("Registering wSOL (NATIVE_MINT_2022)...");
+      const wsolVault = await getOrCreateAssociatedTokenAccount(
+        connection, authority, NATIVE_MINT_2022, poolState, true, undefined, undefined, TOKEN_2022,
+      );
+      const [wsolTokenConfig] = deriveTokenConfigPDA(AEGIS, NATIVE_MINT_2022);
+      const wsolRegPayload = Buffer.alloc(32);
+      wsolRegPayload.writeBigUInt64LE(0n, 0);              // service_fee
+      wsolRegPayload.writeBigUInt64LE(10_000_000n, 8);      // min_deposit (0.01 SOL)
+      wsolRegPayload.writeBigUInt64LE(1_000_000_000_000n, 16); // max_deposit (1000 SOL)
+      wsolRegPayload.writeBigUInt64LE(100_000_000_000_000n, 24); // deposit_cap
+      const wsolRegIx = new TransactionInstruction({
+        keys: [
+          { pubkey: authority.publicKey, isSigner: true, isWritable: true },
+          { pubkey: poolState, isSigner: false, isWritable: false },
+          { pubkey: NATIVE_MINT_2022, isSigner: false, isWritable: false },
+          { pubkey: wsolTokenConfig, isSigner: false, isWritable: true },
+          { pubkey: wsolVault.address, isSigner: false, isWritable: false },
+          { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        ],
+        programId: AEGIS,
+        data: Buffer.concat([Buffer.from([Disc.REGISTER_TOKEN]), wsolRegPayload]),
+      });
+      await sendIx([wsolRegIx], [authority]);
+      log("wSOL TokenConfig registered");
+    }
+  } catch (err: any) {
+    log(`wSOL registration skipped: ${err.message?.slice(0, 60)}`);
+  }
+
   // 10. Register VK hashes for joinsplit_1x1 and joinsplit_1x2
   log("Registering VK hashes...");
   for (const [nIn, nOut] of [[1, 1], [1, 2]] as [number, number][]) {
