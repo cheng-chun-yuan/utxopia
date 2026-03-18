@@ -325,20 +325,9 @@ async function main() {
     AEGIS,
   );
 
-  // Get pool script from state (P2TR scriptPubKey)
-  // If pool address is set, encode as P2TR script: OP_1 (0x51) + PUSH32 (0x20) + 32-byte-key
-  let poolScriptBuf = Buffer.alloc(0);
-  if (state.poolBtcAddress) {
-    // Decode bech32m address to get the witness program
-    try {
-      const addrInfo = JSON.parse(btc(`getaddressinfo ${state.poolBtcAddress}`));
-      if (addrInfo.scriptPubKey) {
-        poolScriptBuf = Buffer.from(addrInfo.scriptPubKey, "hex");
-      }
-    } catch {
-      log("Warning: could not get pool scriptPubKey, using empty");
-    }
-  }
+  // Skip pool_script / change UTXO tracking in e2e (no PoolConfig PDA on localnet)
+  // Setting pool_script_len=0 tells the program to skip PoolConfig validation
+  const poolScriptBuf = Buffer.alloc(0);
 
   // Data: disc(1) + btc_txid(32) + tx_size(4) + pool_script_len(1) + pool_script(var) + consumed_utxo_count(1)
   const crDataLen = 1 + 32 + 4 + 1 + poolScriptBuf.length + 1;
@@ -357,6 +346,27 @@ async function main() {
   const changeUtxoAccount = poolScriptBuf.length > 0
     ? SystemProgram.programId // placeholder when there might be no change
     : SystemProgram.programId;
+
+  // Debug: log all accounts and their owners
+  const debugAccounts = [
+    { name: "poolState", pubkey: poolState },
+    { name: "redemptionPDA", pubkey: redemptionPDA },
+    { name: "authority", pubkey: authority.publicKey },
+    { name: "verifiedTxPda", pubkey: verifiedTxPda },
+    { name: "lightClient", pubkey: lightClient },
+    { name: "withdrawBuffer", pubkey: withdrawBuffer.publicKey },
+    { name: "zkbtcMint", pubkey: zkbtcMint },
+    { name: "poolVault", pubkey: poolVault },
+    { name: "completionReceipt", pubkey: completionReceipt },
+    { name: "poolConfig", pubkey: poolConfig },
+  ];
+  for (const { name, pubkey } of debugAccounts) {
+    const info = await connection.getAccountInfo(pubkey);
+    const owner = info ? new PublicKey(info.owner).toBase58().slice(0, 12) : "NULL";
+    log(`  ${name}: ${pubkey.toBase58().slice(0, 16)}... owner=${owner}...`);
+  }
+  log(`  pool_script_len: ${poolScriptBuf.length}`);
+  log(`  crData length: ${crData.length}, first bytes: ${crData.subarray(0, 8).toString("hex")}`);
 
   const crIx = new TransactionInstruction({
     programId: AEGIS,
