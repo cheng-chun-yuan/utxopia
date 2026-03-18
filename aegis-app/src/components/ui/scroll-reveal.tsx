@@ -4,12 +4,12 @@ import { motion, type Variants } from "framer-motion";
 import { type ReactNode } from "react";
 
 const fadeUp: Variants = {
-  hidden: { opacity: 0, y: 30, filter: "blur(6px)" },
+  hidden: { opacity: 0, y: 18, filter: "blur(4px)" },
   visible: { opacity: 1, y: 0, filter: "blur(0px)" },
 };
 
 const fadeIn: Variants = {
-  hidden: { opacity: 0, filter: "blur(6px)" },
+  hidden: { opacity: 0, filter: "blur(4px)" },
   visible: { opacity: 1, filter: "blur(0px)" },
 };
 
@@ -43,9 +43,9 @@ export function ScrollReveal({
     <motion.div
       initial="hidden"
       whileInView="visible"
-      viewport={{ once: true, margin: "-60px" }}
+      viewport={{ once: true, margin: "-30px" }}
       variants={variants[variant]}
-      transition={{ duration, delay, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: duration * 0.85, delay: delay * 0.7, ease: [0.22, 1, 0.36, 1] }}
       className={className}
     >
       {children}
@@ -69,8 +69,8 @@ export function StaggerContainer({
     <motion.div
       initial="hidden"
       whileInView="visible"
-      viewport={{ once: true, margin: "-60px" }}
-      transition={{ staggerChildren: stagger }}
+      viewport={{ once: true, margin: "-30px" }}
+      transition={{ staggerChildren: stagger * 0.7 }}
       className={className}
     >
       {children}
