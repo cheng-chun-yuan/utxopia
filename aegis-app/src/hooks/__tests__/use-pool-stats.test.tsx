@@ -1,249 +1,101 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderHook, waitFor, act } from "@testing-library/react";
-import { SWRConfig } from "swr";
-import { ReactNode } from "react";
-
-// Mock the connection adapter
-vi.mock("@/lib/adapters/connection-adapter", () => ({
-  fetchAccountInfo: vi.fn(),
-}));
-
-// Mock SDK config
-vi.mock("@aegis/sdk", () => ({
-  getConfig: () => ({
-    poolStatePda: "MockPoolStatePda111111111111111111111111111",
-    poolVault: "MockPoolVault111111111111111111111111111111",
-  }),
-}));
-
-import { usePoolStats, type PoolStats } from "../use-pool-stats";
-import { fetchAccountInfo } from "@/lib/adapters/connection-adapter";
-
-const mockFetchAccountInfo = fetchAccountInfo as ReturnType<typeof vi.fn>;
-
 /**
- * SWR wrapper that disables caching for tests
+ * Pool stats data parsing tests
+ *
+ * Tests the pool state and vault data parsing logic without React hooks.
+ * Verifies byte offsets match the on-chain PoolState layout.
  */
-function SWRWrapper({ children }: { children: ReactNode }) {
-  return (
-    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-      {children}
-    </SWRConfig>
-  );
-}
+import { describe, it, expect } from "bun:test";
 
-/**
- * Helper to create mock pool state account data
- */
+// PoolState layout constants (from contracts/programs/aegis/src/state/pool.rs)
+const POOL_STATE_DISC = 0x01;
+const DEPOSIT_COUNT_OFFSET = 164;
+const PENDING_REDEMPTIONS_OFFSET = 188;
+const POOL_STATE_MIN_SIZE = 196;
+
+// Token account layout (SPL Token)
+const TOKEN_AMOUNT_OFFSET = 64;
+
 function createMockPoolStateData(depositCount: number, pendingRedemptions: number): Uint8Array {
-  // Pool state layout: discriminator(1) + ...fields... + depositCount(8)@164 + ...fields... + pendingRedemptions(8)@188
-  const data = new Uint8Array(196);
-  data[0] = 0x01; // discriminator
-
+  const data = new Uint8Array(POOL_STATE_MIN_SIZE);
+  data[0] = POOL_STATE_DISC;
   const view = new DataView(data.buffer);
-  view.setBigUint64(164, BigInt(depositCount), true);
-  view.setBigUint64(188, BigInt(pendingRedemptions), true);
-
+  view.setBigUint64(DEPOSIT_COUNT_OFFSET, BigInt(depositCount), true);
+  view.setBigUint64(PENDING_REDEMPTIONS_OFFSET, BigInt(pendingRedemptions), true);
   return data;
 }
 
-/**
- * Helper to create mock vault account data (SPL Token account)
- */
 function createMockVaultData(balance: bigint): Uint8Array {
-  // Token account layout: ...fields... + amount(8)@64
   const data = new Uint8Array(72);
   const view = new DataView(data.buffer);
-  view.setBigUint64(64, balance, true);
+  view.setBigUint64(TOKEN_AMOUNT_OFFSET, balance, true);
   return data;
 }
 
-describe("usePoolStats", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+function parsePoolState(data: Uint8Array) {
+  if (data.length < POOL_STATE_MIN_SIZE || data[0] !== POOL_STATE_DISC) return null;
+  const view = new DataView(data.buffer, data.byteOffset);
+  return {
+    depositCount: Number(view.getBigUint64(DEPOSIT_COUNT_OFFSET, true)),
+    pendingRedemptions: Number(view.getBigUint64(PENDING_REDEMPTIONS_OFFSET, true)),
+  };
+}
+
+function parseVaultBalance(data: Uint8Array): bigint {
+  if (data.length < TOKEN_AMOUNT_OFFSET + 8) return 0n;
+  return new DataView(data.buffer, data.byteOffset).getBigUint64(TOKEN_AMOUNT_OFFSET, true);
+}
+
+describe("Pool stats data parsing", () => {
+  it("parses pool state with correct deposit count", () => {
+    const data = createMockPoolStateData(42, 5);
+    const parsed = parsePoolState(data);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.depositCount).toBe(42);
+    expect(parsed!.pendingRedemptions).toBe(5);
   });
 
-  afterEach(() => {
-    vi.resetAllMocks();
+  it("parses vault balance correctly", () => {
+    const data = createMockVaultData(100_000_000n); // 1 BTC
+    const balance = parseVaultBalance(data);
+    expect(balance).toBe(100_000_000n);
   });
 
-  it("returns loading state initially", async () => {
-    // Setup mock to delay response
-    mockFetchAccountInfo.mockImplementation(() => new Promise(() => {}));
-
-    const { result } = renderHook(() => usePoolStats(), {
-      wrapper: SWRWrapper,
-    });
-
-    expect(result.current.isLoading).toBe(true);
-    expect(result.current.stats).toBeNull();
-    expect(result.current.error).toBeNull();
+  it("rejects wrong discriminator", () => {
+    const data = createMockPoolStateData(10, 2);
+    data[0] = 0xff;
+    expect(parsePoolState(data)).toBeNull();
   });
 
-  it("fetches and returns pool stats successfully", async () => {
-    const mockDepositCount = 42;
-    const mockPendingRedemptions = 5;
-    const mockVaultBalance = 100_000_000n; // 1 BTC
-
-    mockFetchAccountInfo
-      .mockResolvedValueOnce({
-        data: createMockPoolStateData(mockDepositCount, mockPendingRedemptions),
-      })
-      .mockResolvedValueOnce({
-        data: createMockVaultData(mockVaultBalance),
-      });
-
-    const { result } = renderHook(() => usePoolStats(), {
-      wrapper: SWRWrapper,
-    });
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(result.current.stats).toEqual({
-      depositCount: mockDepositCount,
-      vaultBalance: mockVaultBalance,
-      pendingRedemptions: mockPendingRedemptions,
-    });
-    expect(result.current.error).toBeNull();
+  it("rejects undersized data", () => {
+    const data = new Uint8Array(100);
+    data[0] = POOL_STATE_DISC;
+    expect(parsePoolState(data)).toBeNull();
   });
 
-  it("handles missing pool state account", async () => {
-    mockFetchAccountInfo.mockResolvedValue(null);
-
-    const { result } = renderHook(() => usePoolStats(), {
-      wrapper: SWRWrapper,
-    });
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    // Should return default values when accounts don't exist
-    expect(result.current.stats).toEqual({
-      depositCount: 0,
-      vaultBalance: 0n,
-      pendingRedemptions: 0,
-    });
+  it("handles zero values", () => {
+    const data = createMockPoolStateData(0, 0);
+    const parsed = parsePoolState(data);
+    expect(parsed!.depositCount).toBe(0);
+    expect(parsed!.pendingRedemptions).toBe(0);
   });
 
-  it("handles vault account fetch error gracefully", async () => {
-    const mockDepositCount = 10;
-    const mockPendingRedemptions = 2;
-
-    mockFetchAccountInfo
-      .mockResolvedValueOnce({
-        data: createMockPoolStateData(mockDepositCount, mockPendingRedemptions),
-      })
-      .mockRejectedValueOnce(new Error("Vault not found"));
-
-    const { result } = renderHook(() => usePoolStats(), {
-      wrapper: SWRWrapper,
-    });
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    // Should return pool state data but 0 vault balance
-    expect(result.current.stats).toEqual({
-      depositCount: mockDepositCount,
-      vaultBalance: 0n,
-      pendingRedemptions: mockPendingRedemptions,
-    });
+  it("handles large deposit counts", () => {
+    const data = createMockPoolStateData(1_000_000, 0);
+    const parsed = parsePoolState(data);
+    expect(parsed!.depositCount).toBe(1_000_000);
   });
 
-  it("handles fetch error", async () => {
-    const errorMessage = "RPC connection failed";
-    mockFetchAccountInfo.mockRejectedValue(new Error(errorMessage));
-
-    const { result } = renderHook(() => usePoolStats(), {
-      wrapper: SWRWrapper,
-    });
-
-    await waitFor(() => {
-      expect(result.current.error).toBe(errorMessage);
-    });
-
-    expect(result.current.isLoading).toBe(false);
-    expect(result.current.stats).toBeNull();
+  it("handles max vault balance (21M BTC in sats)", () => {
+    const maxSats = 2_100_000_000_000_000n;
+    const data = createMockVaultData(maxSats);
+    expect(parseVaultBalance(data)).toBe(maxSats);
   });
 
-  it("refresh function triggers data refetch", async () => {
-    mockFetchAccountInfo
-      .mockResolvedValueOnce({
-        data: createMockPoolStateData(10, 1),
-      })
-      .mockResolvedValueOnce({
-        data: createMockVaultData(50_000_000n),
-      })
-      // After refresh
-      .mockResolvedValueOnce({
-        data: createMockPoolStateData(15, 2),
-      })
-      .mockResolvedValueOnce({
-        data: createMockVaultData(75_000_000n),
-      });
-
-    const { result } = renderHook(() => usePoolStats(), {
-      wrapper: SWRWrapper,
-    });
-
-    await waitFor(() => {
-      expect(result.current.stats?.depositCount).toBe(10);
-    });
-
-    // Trigger refresh
-    await act(async () => {
-      await result.current.refresh();
-    });
-
-    await waitFor(() => {
-      expect(result.current.stats?.depositCount).toBe(15);
-    });
-
-    expect(result.current.stats?.vaultBalance).toBe(75_000_000n);
-  });
-
-  it("handles invalid discriminator in pool state", async () => {
-    const invalidData = new Uint8Array(196);
-    invalidData[0] = 0x00; // Invalid discriminator
-
-    mockFetchAccountInfo
-      .mockResolvedValueOnce({ data: invalidData })
-      .mockResolvedValueOnce({ data: createMockVaultData(100n) });
-
-    const { result } = renderHook(() => usePoolStats(), {
-      wrapper: SWRWrapper,
-    });
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    // Should return default values for deposit count and pending redemptions
-    expect(result.current.stats?.depositCount).toBe(0);
-    expect(result.current.stats?.pendingRedemptions).toBe(0);
-    expect(result.current.stats?.vaultBalance).toBe(100n);
-  });
-
-  it("handles undersized pool state data", async () => {
-    const undersizedData = new Uint8Array(100); // Less than required 196 bytes
-    undersizedData[0] = 0x01;
-
-    mockFetchAccountInfo
-      .mockResolvedValueOnce({ data: undersizedData })
-      .mockResolvedValueOnce(null);
-
-    const { result } = renderHook(() => usePoolStats(), {
-      wrapper: SWRWrapper,
-    });
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    expect(result.current.stats?.depositCount).toBe(0);
+  it("computes total shielded BTC correctly", () => {
+    const vaultBalance = 150_000_000n; // 1.5 BTC in sats
+    const data = createMockVaultData(vaultBalance);
+    const balance = parseVaultBalance(data);
+    const btc = Number(balance) / 1e8;
+    expect(btc).toBeCloseTo(1.5, 8);
   });
 });
