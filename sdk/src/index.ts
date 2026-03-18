@@ -419,19 +419,6 @@ export {
 } from "./psbt";
 
 // ==========================================================================
-// Simplified API
-// ==========================================================================
-
-export {
-  depositToNote,
-} from "./api";
-
-export type {
-  DepositResult,
-  ApiClientConfig,
-} from "./api";
-
-// ==========================================================================
 // Core utilities
 // ==========================================================================
 
@@ -493,40 +480,6 @@ export {
   type KitRpc,
 } from "./solana/connection";
 
-// ==========================================================================
-// Deposit Watcher
-// ==========================================================================
-
-export {
-  type DepositStatus,
-  type PendingDeposit,
-  type WatcherCallbacks,
-  type WatcherConfig,
-  type StorageAdapter,
-  DEFAULT_WATCHER_CONFIG,
-  serializeDeposit,
-  deserializeDeposit,
-  generateDepositId,
-  BaseDepositWatcher,
-  WebDepositWatcher,
-  createWebWatcher,
-  NativeDepositWatcher,
-  createNativeWatcher,
-  setAsyncStorage,
-} from "./watcher";
-
-// ==========================================================================
-// React Hooks
-// ==========================================================================
-
-export {
-  useDepositWatcher,
-  useSingleDeposit,
-  type UseDepositWatcherState,
-  type UseDepositWatcherActions,
-  type UseDepositWatcherReturn,
-  type UseDepositWatcherOptions,
-} from "./react";
 
 // ==========================================================================
 // SNS Subdomain Resolver (*.btcpro.sol stealth addresses)
