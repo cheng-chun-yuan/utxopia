@@ -315,7 +315,7 @@ export default function Home() {
           <div className="max-w-5xl mx-auto relative z-10">
             <ScrollReveal>
               <div className="text-center mb-8">
-                <h2 className="section-title text-2xl md:text-3xl text-foreground mb-2">
+                <h2 className="section-title text-3xl md:text-4xl text-foreground mb-2">
                   Shield <span className="text-privacy">Any Token</span>
                 </h2>
                 <p className="text-sm text-gray font-light">
