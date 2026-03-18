@@ -123,6 +123,57 @@ async function main() {
   });
   trackCommitments(commitment.toString(16));
 
+  // =========================================================================
+  // Second deposit: external receiver (stealth meta-address)
+  // =========================================================================
+  const RECEIVER2_META = "aegis:9d2cb3fea6912aeb783760f47367c53f2fb2ed7240c98a99786172982950fe988f45b56ecd1d6d02f5007accc9fa430bc4dc91f1fabe1d37977cb773468ef3451b592c4e3881b34572c0d83baacfda725f04ac6810dbaf7227e7f69f784c1eb6";
+
+  log("\nDepositing to external receiver...");
+  const metaHex = RECEIVER2_META.slice(6); // strip "aegis:"
+  const metaBytes = Buffer.from(metaHex, "hex");
+  // Format: spendingPubKey(32) + viewingPubKey(32) + mpk(32)
+  const receiver2Mpk = BigInt("0x" + metaBytes.subarray(64, 96).toString("hex"));
+  log(`Receiver2 MPK: ${receiver2Mpk.toString(16).slice(0, 16)}...`);
+
+  const amount2 = 20_000n;
+  const random2 = randomFieldElement();
+  const npk2 = poseidonHash([receiver2Mpk, random2]);
+  const npk2Bytes = bigintToBytes32BE(npk2);
+  const commitment2 = poseidonHash([npk2, tokenId, amount2]);
+  const ephPub2 = crypto.randomBytes(32);
+
+  // Read tree for next index
+  const treeInfo2 = await connection.getAccountInfo(commitmentTree);
+  const treeData2 = parseCommitmentTree(Buffer.from(treeInfo2!.data));
+  const leafIndex2 = Number(treeData2!.nextIndex);
+
+  // Build add_demo_stealth for receiver2
+  const data2 = Buffer.alloc(1 + 72);
+  data2[0] = Disc.ADD_DEMO_STEALTH;
+  ephPub2.copy(data2, 1);
+  Buffer.from(npk2Bytes).copy(data2, 33);
+  data2.writeBigUInt64LE(amount2, 65);
+
+  const ix2 = new TransactionInstruction({
+    keys: [
+      { pubkey: poolState, isSigner: false, isWritable: true },
+      { pubkey: commitmentTree, isSigner: false, isWritable: true },
+      { pubkey: authority.publicKey, isSigner: true, isWritable: true },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: zkbtcMint, isSigner: false, isWritable: true },
+      { pubkey: poolVault, isSigner: false, isWritable: true },
+      { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: zkbtcTokenConfig, isSigner: false, isWritable: false },
+    ],
+    programId: AEGIS,
+    data: data2,
+  });
+
+  const sig2 = await sendIx([ix2], [authority]);
+  log(`Receiver2 deposit tx: ${sig2.slice(0, 20)}...`);
+  log(`Receiver2 commitment at leaf ${leafIndex2}: ${commitment2.toString(16).slice(0, 16)}...`);
+  trackCommitments(commitment2.toString(16));
+
   console.log("\nStep 4: Demo Deposit ............ PASS");
 }
 
