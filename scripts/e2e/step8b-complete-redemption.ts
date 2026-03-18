@@ -339,10 +339,11 @@ async function main() {
     }
   }
 
-  // Data: btc_txid(32) + tx_size(4) + pool_script_len(1) + pool_script(var) + consumed_utxo_count(1)
-  const crDataLen = 32 + 4 + 1 + poolScriptBuf.length + 1;
+  // Data: disc(1) + btc_txid(32) + tx_size(4) + pool_script_len(1) + pool_script(var) + consumed_utxo_count(1)
+  const crDataLen = 1 + 32 + 4 + 1 + poolScriptBuf.length + 1;
   const crData = Buffer.alloc(crDataLen);
   off = 0;
+  crData[off++] = 6; // COMPLETE_REDEMPTION discriminator
   Buffer.from(withdrawTxHash).copy(crData, off); off += 32;
   crData.writeUInt32LE(strippedWithdraw.length, off); off += 4;
   crData[off++] = poolScriptBuf.length;
