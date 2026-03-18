@@ -191,7 +191,7 @@ function ExplorerContent() {
         }
       }
     }
-    return parts.length > 0 ? parts.join(" · ") : "$0.00";
+    return parts.length > 0 ? parts.join(" · ") : "—";
   }, [perTokenShielded]);
 
   return (
