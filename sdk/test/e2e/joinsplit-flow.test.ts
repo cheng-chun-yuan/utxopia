@@ -77,7 +77,6 @@ import {
 } from "../../src/config";
 import {
   deriveNullifierRecordPDA,
-  deriveStealthAnnouncementPDA,
   deriveVkRegistryPDA,
 } from "../../src/pda";
 import {
@@ -451,8 +450,7 @@ describe("JoinSplit Full Flow — SDK-driven E2E", () => {
     stealthDataBuf.set(outputEphemeralPub, 0);
     stealthDataBuf.set(outputEncryptedAmount, 32);
 
-    const [stealthAnnPDA] = await deriveStealthAnnouncementPDA(outputEphemeralPub);
-    console.log(`   Stealth ann PDA: ${stealthAnnPDA.slice(0, 20)}...`);
+    // Stealth announcements are now emitted as events (sol_log_data), no PDA needed
 
     // VK registry PDA for joinsplit_1x1
     const [vkRegistryPDA] = await deriveVkRegistryPDA(1, 1);

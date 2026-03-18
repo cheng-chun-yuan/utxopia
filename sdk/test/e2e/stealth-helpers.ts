@@ -33,7 +33,7 @@ import { deriveKeysFromSeed, createStealthMetaAddress, type AegisKeys, type Stea
 import { createStealthDeposit, scanAnnouncements, prepareClaimInputs, type StealthDeposit, type ScannedNote, type ClaimInputs } from "../../src/stealth";
 import { buildAddDemoStealthData, DEMO_INSTRUCTION } from "../../src/demo";
 import { buildCommitmentTreeFromChain, getMerkleProofFromTree, type OnChainMerkleProof, type CommitmentTreeIndex } from "../../src/commitment-tree";
-import { deriveCommitmentTreePDA, deriveStealthAnnouncementPDA } from "../../src/pda";
+import { deriveCommitmentTreePDA } from "../../src/pda";
 import { bytesToBigint, bigintToBytes } from "../../src/crypto";
 import { hashNullifierSync, computeNullifierSync } from "../../src/poseidon";
 
@@ -146,12 +146,7 @@ export async function submitDemoStealthDeposit(
   const commitmentTreePda = new PublicKey(ctx.localnetConfig.accounts.commitmentTree);
   const poolStatePda = new PublicKey(ctx.localnetConfig.accounts.poolState);
 
-  // Derive stealth announcement PDA
-  // Ed25519 ephemeral pub is already 32 bytes, use directly
-  const [announcementPda] = await deriveStealthAnnouncementPDA(
-    testNote.deposit.ephemeralPub,
-    address(ctx.localnetConfig.programs.Aegis)
-  );
+  // Stealth announcements are now emitted as events (sol_log_data), no PDA needed
 
   // Build instruction data
   // Encrypted amount as 8 bytes (little-endian)

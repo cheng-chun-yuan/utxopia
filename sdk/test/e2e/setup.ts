@@ -304,7 +304,7 @@ export async function createTestContext(): Promise<E2ETestContext> {
     }
 
     // Set SDK config to localnet, overriding with actual deployed addresses from localnet config
-    if (localnetConfig) {
+    if (localnetConfig && localnetConfig.programs?.Aegis && localnetConfig.accounts?.poolState) {
       const customConfig = createConfig(LOCALNET_CONFIG, {
         // Override with actual deployed addresses
         aegisProgramId: kitAddress(localnetConfig.programs.Aegis),

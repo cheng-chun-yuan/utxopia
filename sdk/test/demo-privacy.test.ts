@@ -33,8 +33,10 @@ import {
   scanAnnouncementsViewOnly,
   exportViewOnlyKeys,
   prepareClaimInputs,
-  ZKBTC_TOKEN_ID,
 } from "../src/stealth";
+
+// ZKBTC_TOKEN_ID was removed — use a test constant matching old value
+const ZKBTC_TOKEN_ID = 0x7a627463n;
 
 // Taproot
 import {
@@ -120,7 +122,7 @@ describe("Demo: Full deposit flow walkthrough", () => {
 
     // 5. Create stealth deposit (simulates sender creating output for Alice)
     const depositAmount = 100_000n;
-    const deposit = await createStealthDeposit(aliceMeta, depositAmount);
+    const deposit = await createStealthDeposit(aliceMeta, depositAmount, ZKBTC_TOKEN_ID);
     log("Ephemeral pub", bytesToHex(deposit.ephemeralPub).slice(0, 32) + "...");
     log("Commitment", bytesToHex(deposit.commitment).slice(0, 32) + "...");
     expect(deposit.ephemeralPub.length).toBe(32);
@@ -134,7 +136,7 @@ describe("Demo: Full deposit flow walkthrough", () => {
       commitment: deposit.commitment,
       leafIndex: 0,
     }];
-    const found = await scanAnnouncements(aliceKeys, announcements);
+    const found = await scanAnnouncements(aliceKeys, announcements, ZKBTC_TOKEN_ID);
     expect(found).toHaveLength(1);
     expect(found[0].amount).toBe(depositAmount);
     log("Scanned amount", found[0].amount.toString() + " sats");
@@ -248,7 +250,7 @@ describe("OP_RETURN commitment embedding", () => {
     const depositAmount = 75_000n;
 
     // Create stealth deposit (generates commitment)
-    const deposit = await createStealthDeposit(aliceMeta, depositAmount);
+    const deposit = await createStealthDeposit(aliceMeta, depositAmount, ZKBTC_TOKEN_ID);
 
     // Derive taproot address from commitment
     const taproot = deriveTaprootAddress(deposit.commitment, "testnet");
@@ -288,21 +290,21 @@ describe("Railgun-style shielded transfer (2->2)", () => {
     const changeAmount = 40_000n;
 
     // Alice's initial deposit
-    const aliceDeposit = await createStealthDeposit(aliceMeta, initialAmount);
+    const aliceDeposit = await createStealthDeposit(aliceMeta, initialAmount, ZKBTC_TOKEN_ID);
     const aliceAnnouncements = [{
       ephemeralPub: aliceDeposit.ephemeralPub,
       encryptedAmount: aliceDeposit.encryptedAmount,
       commitment: aliceDeposit.commitment,
       leafIndex: 0,
     }];
-    const aliceNotes = await scanAnnouncements(aliceKeys, aliceAnnouncements);
+    const aliceNotes = await scanAnnouncements(aliceKeys, aliceAnnouncements, ZKBTC_TOKEN_ID);
     expect(aliceNotes).toHaveLength(1);
     expect(aliceNotes[0].amount).toBe(initialAmount);
 
     // Create output for Bob
-    const bobOutput = await createStealthDeposit(bobMeta, sendAmount);
+    const bobOutput = await createStealthDeposit(bobMeta, sendAmount, ZKBTC_TOKEN_ID);
     // Create change output for Alice
-    const aliceChange = await createStealthDeposit(aliceMeta, changeAmount);
+    const aliceChange = await createStealthDeposit(aliceMeta, changeAmount, ZKBTC_TOKEN_ID);
 
     // Both commitments valid and distinct
     expect(bobOutput.commitment.length).toBe(32);
@@ -316,7 +318,7 @@ describe("Railgun-style shielded transfer (2->2)", () => {
       commitment: bobOutput.commitment,
       leafIndex: 1,
     }];
-    const bobNotes = await scanAnnouncements(bobKeys, bobAnnouncements);
+    const bobNotes = await scanAnnouncements(bobKeys, bobAnnouncements, ZKBTC_TOKEN_ID);
     expect(bobNotes).toHaveLength(1);
     expect(bobNotes[0].amount).toBe(sendAmount);
 
@@ -327,7 +329,7 @@ describe("Railgun-style shielded transfer (2->2)", () => {
       commitment: aliceChange.commitment,
       leafIndex: 2,
     }];
-    const aliceChangeNotes = await scanAnnouncements(aliceKeys, changeAnnouncements);
+    const aliceChangeNotes = await scanAnnouncements(aliceKeys, changeAnnouncements, ZKBTC_TOKEN_ID);
     expect(aliceChangeNotes).toHaveLength(1);
     expect(aliceChangeNotes[0].amount).toBe(changeAmount);
 
@@ -356,7 +358,7 @@ describe("Railgun-style note splitting (1->3)", () => {
 
     // Create 3 outputs to self
     const outputs = await Promise.all(
-      amounts.map((amt) => createStealthDeposit(aliceMeta, amt)),
+      amounts.map((amt) => createStealthDeposit(aliceMeta, amt, ZKBTC_TOKEN_ID)),
     );
 
     // All 3 commitments distinct
@@ -372,7 +374,7 @@ describe("Railgun-style note splitting (1->3)", () => {
         commitment: outputs[i].commitment,
         leafIndex: i,
       }];
-      const notes = await scanAnnouncements(aliceKeys, ann);
+      const notes = await scanAnnouncements(aliceKeys, ann, ZKBTC_TOKEN_ID);
       expect(notes).toHaveLength(1);
       expect(notes[0].amount).toBe(amounts[i]);
     }
@@ -407,7 +409,7 @@ describe("Railgun-style view-only scanning", () => {
     const aliceMeta = createStealthMetaAddress(aliceKeys);
     const viewOnly = exportViewOnlyKeys(aliceKeys);
 
-    const deposit = await createStealthDeposit(aliceMeta, 42_000n);
+    const deposit = await createStealthDeposit(aliceMeta, 42_000n, ZKBTC_TOKEN_ID);
     const announcements = [{
       ephemeralPub: deposit.ephemeralPub,
       encryptedAmount: deposit.encryptedAmount,
@@ -415,7 +417,7 @@ describe("Railgun-style view-only scanning", () => {
       leafIndex: 0,
     }];
 
-    const found = await scanAnnouncementsViewOnly(viewOnly, announcements);
+    const found = await scanAnnouncementsViewOnly(viewOnly, announcements, ZKBTC_TOKEN_ID);
     expect(found).toHaveLength(1);
     expect(found[0].amount).toBe(42_000n);
     expect(found[0].leafIndex).toBe(0);
@@ -426,7 +428,7 @@ describe("Railgun-style view-only scanning", () => {
     const aliceMeta = createStealthMetaAddress(aliceKeys);
     const viewOnly = exportViewOnlyKeys(aliceKeys);
 
-    const deposit = await createStealthDeposit(aliceMeta, 10_000n);
+    const deposit = await createStealthDeposit(aliceMeta, 10_000n, ZKBTC_TOKEN_ID);
 
     // View-only scan works
     const voAnnouncements = [{
@@ -435,11 +437,11 @@ describe("Railgun-style view-only scanning", () => {
       commitment: deposit.commitment,
       leafIndex: 0,
     }];
-    const voNotes = await scanAnnouncementsViewOnly(viewOnly, voAnnouncements);
+    const voNotes = await scanAnnouncementsViewOnly(viewOnly, voAnnouncements, ZKBTC_TOKEN_ID);
     expect(voNotes).toHaveLength(1);
 
     // Full scan with spending keys works and can prepare claim
-    const fullNotes = await scanAnnouncements(aliceKeys, voAnnouncements);
+    const fullNotes = await scanAnnouncements(aliceKeys, voAnnouncements, ZKBTC_TOKEN_ID);
     expect(fullNotes).toHaveLength(1);
 
     // prepareClaimInputs requires full keys (spending key)
@@ -467,7 +469,7 @@ describe("Railgun-style view-only scanning", () => {
 
     const amounts = [10_000n, 25_000n, 50_000n];
     const deposits = await Promise.all(
-      amounts.map((amt) => createStealthDeposit(aliceMeta, amt)),
+      amounts.map((amt) => createStealthDeposit(aliceMeta, amt, ZKBTC_TOKEN_ID)),
     );
 
     const announcements = deposits.map((d, i) => ({
@@ -477,7 +479,7 @@ describe("Railgun-style view-only scanning", () => {
       leafIndex: i,
     }));
 
-    const found = await scanAnnouncementsViewOnly(viewOnly, announcements);
+    const found = await scanAnnouncementsViewOnly(viewOnly, announcements, ZKBTC_TOKEN_ID);
     expect(found).toHaveLength(3);
 
     const foundAmounts = found.map((n) => n.amount).sort();
@@ -553,19 +555,19 @@ describe("Demo: multi-party privacy scenario", () => {
     const carolMeta = createStealthMetaAddress(carolKeys);
 
     // Step 1: Alice deposits 100k sats
-    const aliceDeposit = await createStealthDeposit(aliceMeta, 100_000n);
+    const aliceDeposit = await createStealthDeposit(aliceMeta, 100_000n, ZKBTC_TOKEN_ID);
     const aliceAnn = [{
       ephemeralPub: aliceDeposit.ephemeralPub,
       encryptedAmount: aliceDeposit.encryptedAmount,
       commitment: aliceDeposit.commitment,
       leafIndex: 0,
     }];
-    const aliceNotes = await scanAnnouncements(aliceKeys, aliceAnn);
+    const aliceNotes = await scanAnnouncements(aliceKeys, aliceAnn, ZKBTC_TOKEN_ID);
     expect(aliceNotes).toHaveLength(1);
 
     // Step 2: Alice sends 70k to Bob, 30k change to self
-    const bobOutput = await createStealthDeposit(bobMeta, 70_000n);
-    const aliceChangeOutput = await createStealthDeposit(aliceMeta, 30_000n);
+    const bobOutput = await createStealthDeposit(bobMeta, 70_000n, ZKBTC_TOKEN_ID);
+    const aliceChangeOutput = await createStealthDeposit(aliceMeta, 30_000n, ZKBTC_TOKEN_ID);
 
     // Bob scans and finds his 70k
     const bobAnn = [{
@@ -574,7 +576,7 @@ describe("Demo: multi-party privacy scenario", () => {
       commitment: bobOutput.commitment,
       leafIndex: 1,
     }];
-    const bobNotes = await scanAnnouncements(bobKeys, bobAnn);
+    const bobNotes = await scanAnnouncements(bobKeys, bobAnn, ZKBTC_TOKEN_ID);
     expect(bobNotes).toHaveLength(1);
     expect(bobNotes[0].amount).toBe(70_000n);
 
@@ -585,14 +587,14 @@ describe("Demo: multi-party privacy scenario", () => {
       commitment: aliceChangeOutput.commitment,
       leafIndex: 2,
     }];
-    const aliceChangeNotes = await scanAnnouncements(aliceKeys, aliceChangeAnn);
+    const aliceChangeNotes = await scanAnnouncements(aliceKeys, aliceChangeAnn, ZKBTC_TOKEN_ID);
     expect(aliceChangeNotes).toHaveLength(1);
     expect(aliceChangeNotes[0].amount).toBe(30_000n);
 
     // Step 3: Bob splits his 70k into 3 outputs to self: 40k + 20k + 10k
     const bobSplitAmounts = [40_000n, 20_000n, 10_000n];
     const bobSplitOutputs = await Promise.all(
-      bobSplitAmounts.map((amt) => createStealthDeposit(bobMeta, amt)),
+      bobSplitAmounts.map((amt) => createStealthDeposit(bobMeta, amt, ZKBTC_TOKEN_ID)),
     );
 
     for (let i = 0; i < 3; i++) {
@@ -602,7 +604,7 @@ describe("Demo: multi-party privacy scenario", () => {
         commitment: bobSplitOutputs[i].commitment,
         leafIndex: 3 + i,
       }];
-      const notes = await scanAnnouncements(bobKeys, ann);
+      const notes = await scanAnnouncements(bobKeys, ann, ZKBTC_TOKEN_ID);
       expect(notes).toHaveLength(1);
       expect(notes[0].amount).toBe(bobSplitAmounts[i]);
     }
@@ -620,12 +622,12 @@ describe("Demo: multi-party privacy scenario", () => {
         leafIndex: 3 + i,
       })),
     ];
-    const carolFound = await scanAnnouncementsViewOnly(carolViewOnly, allAnnouncements);
+    const carolFound = await scanAnnouncementsViewOnly(carolViewOnly, allAnnouncements, ZKBTC_TOKEN_ID);
     expect(carolFound).toHaveLength(0);
 
     // Each party sees only their own notes
-    const aliceAll = await scanAnnouncements(aliceKeys, allAnnouncements);
-    const bobAll = await scanAnnouncements(bobKeys, allAnnouncements);
+    const aliceAll = await scanAnnouncements(aliceKeys, allAnnouncements, ZKBTC_TOKEN_ID);
+    const bobAll = await scanAnnouncements(bobKeys, allAnnouncements, ZKBTC_TOKEN_ID);
 
     // Alice sees her deposit + change = 2 notes
     expect(aliceAll).toHaveLength(2);

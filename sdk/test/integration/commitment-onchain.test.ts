@@ -105,16 +105,17 @@ function createMockRpc(
 
 describe("On-Chain Commitment Tree", () => {
   describe("buildCommitmentTreeFromChain", () => {
-    test("builds tree from mock announcements", async () => {
-      const mockRpc = createMockRpc([
-        { commitment: 111n, leafIndex: 0 },
-        { commitment: 222n, leafIndex: 1 },
-        { commitment: 333n, leafIndex: 2 },
+    test("builds tree from commitments map", async () => {
+      const commitments = new Map<number, bigint>([
+        [0, 111n],
+        [1, 222n],
+        [2, 333n],
       ]);
 
       const tree = await buildCommitmentTreeFromChain(
-        mockRpc,
-        "mock-program-id",
+        {} as any,
+        "",
+        { commitments },
       );
 
       expect(tree.size()).toBe(3);

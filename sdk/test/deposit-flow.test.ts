@@ -38,8 +38,9 @@ import {
   createStealthDeposit,
   scanAnnouncements,
   prepareClaimInputs,
-  ZKBTC_TOKEN_ID,
 } from "../src/stealth";
+
+const ZKBTC_TOKEN_ID = 0x7a627463n;
 
 // Commitment tree
 import {
@@ -345,7 +346,7 @@ describe("Stealth deposit → scan cycle", () => {
   });
 
   test("createStealthDeposit returns valid structure", async () => {
-    const deposit = await createStealthDeposit(meta, amountSats);
+    const deposit = await createStealthDeposit(meta, amountSats, ZKBTC_TOKEN_ID);
     expect(deposit.ephemeralPub.length).toBe(32);
     expect(deposit.encryptedAmount.length).toBe(8);
     expect(deposit.commitment.length).toBe(32);
@@ -353,7 +354,7 @@ describe("Stealth deposit → scan cycle", () => {
   });
 
   test("scan detects own deposit", async () => {
-    const deposit = await createStealthDeposit(meta, amountSats);
+    const deposit = await createStealthDeposit(meta, amountSats, ZKBTC_TOKEN_ID);
     const announcements = [
       {
         ephemeralPub: deposit.ephemeralPub,
@@ -362,7 +363,7 @@ describe("Stealth deposit → scan cycle", () => {
         leafIndex: 0,
       },
     ];
-    const found = await scanAnnouncements(keys, announcements);
+    const found = await scanAnnouncements(keys, announcements, ZKBTC_TOKEN_ID);
     expect(found.length).toBe(1);
     expect(found[0].amount).toBe(amountSats);
   });
@@ -370,7 +371,7 @@ describe("Stealth deposit → scan cycle", () => {
   test("wrong keys cannot detect deposit", async () => {
     const otherSeed = new Uint8Array(32).fill(0xbb);
     const otherKeys = deriveKeysFromSeed(otherSeed);
-    const deposit = await createStealthDeposit(meta, amountSats);
+    const deposit = await createStealthDeposit(meta, amountSats, ZKBTC_TOKEN_ID);
     const announcements = [
       {
         ephemeralPub: deposit.ephemeralPub,
@@ -379,7 +380,7 @@ describe("Stealth deposit → scan cycle", () => {
         leafIndex: 0,
       },
     ];
-    const found = await scanAnnouncements(otherKeys, announcements);
+    const found = await scanAnnouncements(otherKeys, announcements, ZKBTC_TOKEN_ID);
     expect(found.length).toBe(0);
   });
 
@@ -387,7 +388,7 @@ describe("Stealth deposit → scan cycle", () => {
     const amounts = [10_000n, 20_000n, 30_000n];
     const announcements = [];
     for (let i = 0; i < amounts.length; i++) {
-      const deposit = await createStealthDeposit(meta, amounts[i]);
+      const deposit = await createStealthDeposit(meta, amounts[i], ZKBTC_TOKEN_ID);
       announcements.push({
         ephemeralPub: deposit.ephemeralPub,
         encryptedAmount: deposit.encryptedAmount,
@@ -395,14 +396,14 @@ describe("Stealth deposit → scan cycle", () => {
         leafIndex: i,
       });
     }
-    const found = await scanAnnouncements(keys, announcements);
+    const found = await scanAnnouncements(keys, announcements, ZKBTC_TOKEN_ID);
     expect(found.length).toBe(3);
     const foundAmounts = found.map((n) => n.amount).sort();
     expect(foundAmounts).toEqual([10_000n, 20_000n, 30_000n]);
   });
 
   test("commitment matches JoinSplit formula", async () => {
-    const deposit = await createStealthDeposit(meta, amountSats);
+    const deposit = await createStealthDeposit(meta, amountSats, ZKBTC_TOKEN_ID);
     const announcements = [
       {
         ephemeralPub: deposit.ephemeralPub,
@@ -411,7 +412,7 @@ describe("Stealth deposit → scan cycle", () => {
         leafIndex: 0,
       },
     ];
-    const found = await scanAnnouncements(keys, announcements);
+    const found = await scanAnnouncements(keys, announcements, ZKBTC_TOKEN_ID);
     expect(found.length).toBe(1);
 
     // The commitment on-chain should equal what we get from the formula
@@ -438,7 +439,7 @@ describe("Stealth claim preparation", () => {
   });
 
   test("produces valid ClaimInputs", async () => {
-    const deposit = await createStealthDeposit(meta, amountSats);
+    const deposit = await createStealthDeposit(meta, amountSats, ZKBTC_TOKEN_ID);
     const tree = new CommitmentTreeIndex();
     const commitmentBigint = bytesToBigint(deposit.commitment);
     tree.addCommitment(commitmentBigint, amountSats);
@@ -452,7 +453,7 @@ describe("Stealth claim preparation", () => {
         leafIndex: 0,
       },
     ];
-    const [note] = await scanAnnouncements(keys, announcements);
+    const [note] = await scanAnnouncements(keys, announcements, ZKBTC_TOKEN_ID);
     const claim = await prepareClaimInputs(keys, note, {
       root: merkleProof.root,
       pathElements: merkleProof.siblings,
@@ -468,7 +469,7 @@ describe("Stealth claim preparation", () => {
   });
 
   test("nullifier matches manual computation", async () => {
-    const deposit = await createStealthDeposit(meta, amountSats);
+    const deposit = await createStealthDeposit(meta, amountSats, ZKBTC_TOKEN_ID);
     const tree = new CommitmentTreeIndex();
     const commitmentBigint = bytesToBigint(deposit.commitment);
     tree.addCommitment(commitmentBigint, amountSats);
@@ -482,7 +483,7 @@ describe("Stealth claim preparation", () => {
         leafIndex: 0,
       },
     ];
-    const [note] = await scanAnnouncements(keys, announcements);
+    const [note] = await scanAnnouncements(keys, announcements, ZKBTC_TOKEN_ID);
     const claim = await prepareClaimInputs(keys, note, {
       root: merkleProof.root,
       pathElements: merkleProof.siblings,
@@ -497,7 +498,7 @@ describe("Stealth claim preparation", () => {
   });
 
   test("npk matches manual computation", async () => {
-    const deposit = await createStealthDeposit(meta, amountSats);
+    const deposit = await createStealthDeposit(meta, amountSats, ZKBTC_TOKEN_ID);
     const tree = new CommitmentTreeIndex();
     const commitmentBigint = bytesToBigint(deposit.commitment);
     tree.addCommitment(commitmentBigint, amountSats);
@@ -511,7 +512,7 @@ describe("Stealth claim preparation", () => {
         leafIndex: 0,
       },
     ];
-    const [note] = await scanAnnouncements(keys, announcements);
+    const [note] = await scanAnnouncements(keys, announcements, ZKBTC_TOKEN_ID);
     const claim = await prepareClaimInputs(keys, note, {
       root: merkleProof.root,
       pathElements: merkleProof.siblings,
@@ -528,7 +529,7 @@ describe("Stealth claim preparation", () => {
   });
 
   test("commitment verifies against tree", async () => {
-    const deposit = await createStealthDeposit(meta, amountSats);
+    const deposit = await createStealthDeposit(meta, amountSats, ZKBTC_TOKEN_ID);
     const tree = new CommitmentTreeIndex();
     const commitmentBigint = bytesToBigint(deposit.commitment);
     tree.addCommitment(commitmentBigint, amountSats);
@@ -542,7 +543,7 @@ describe("Stealth claim preparation", () => {
         leafIndex: 0,
       },
     ];
-    const [note] = await scanAnnouncements(keys, announcements);
+    const [note] = await scanAnnouncements(keys, announcements, ZKBTC_TOKEN_ID);
     const claim = await prepareClaimInputs(keys, note, {
       root: merkleProof.root,
       pathElements: merkleProof.siblings,
@@ -554,7 +555,7 @@ describe("Stealth claim preparation", () => {
   });
 
   test("throws for wrong keys", async () => {
-    const deposit = await createStealthDeposit(meta, amountSats);
+    const deposit = await createStealthDeposit(meta, amountSats, ZKBTC_TOKEN_ID);
     const tree = new CommitmentTreeIndex();
     const commitmentBigint = bytesToBigint(deposit.commitment);
     tree.addCommitment(commitmentBigint, amountSats);
@@ -569,7 +570,7 @@ describe("Stealth claim preparation", () => {
         leafIndex: 0,
       },
     ];
-    const [note] = await scanAnnouncements(keys, announcements);
+    const [note] = await scanAnnouncements(keys, announcements, ZKBTC_TOKEN_ID);
 
     // Attempt claim with wrong keys
     const wrongKeys = deriveKeysFromSeed(new Uint8Array(32).fill(0xcc));
@@ -598,7 +599,7 @@ describe("Full deposit-to-claim integration", () => {
     expect(depositResult.note).toBeTruthy();
 
     // 2. Create stealth deposit
-    const deposit = await createStealthDeposit(meta, 10_000n);
+    const deposit = await createStealthDeposit(meta, 10_000n, ZKBTC_TOKEN_ID);
     expect(deposit.commitment.length).toBe(32);
 
     // 3. Add to tree
@@ -615,7 +616,7 @@ describe("Full deposit-to-claim integration", () => {
         leafIndex: 0,
       },
     ];
-    const found = await scanAnnouncements(keys, announcements);
+    const found = await scanAnnouncements(keys, announcements, ZKBTC_TOKEN_ID);
     expect(found.length).toBe(1);
 
     // 5. Prepare claim
@@ -641,7 +642,7 @@ describe("Full deposit-to-claim integration", () => {
     const allNullifiers = new Set<bigint>();
 
     for (let i = 0; i < amounts.length; i++) {
-      const deposit = await createStealthDeposit(meta, amounts[i]);
+      const deposit = await createStealthDeposit(meta, amounts[i], ZKBTC_TOKEN_ID);
       const commitmentBigint = bytesToBigint(deposit.commitment);
       tree.addCommitment(commitmentBigint, amounts[i]);
       allCommitments.add(commitmentBigint);
@@ -654,7 +655,7 @@ describe("Full deposit-to-claim integration", () => {
           leafIndex: i,
         },
       ];
-      const [note] = await scanAnnouncements(keys, announcements);
+      const [note] = await scanAnnouncements(keys, announcements, ZKBTC_TOKEN_ID);
       const merkleProof = tree.getMerkleProof(commitmentBigint)!;
       const claim = await prepareClaimInputs(keys, note, {
         root: merkleProof.root,

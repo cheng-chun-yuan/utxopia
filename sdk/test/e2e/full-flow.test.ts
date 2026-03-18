@@ -461,11 +461,8 @@ describe.skip("Full E2E Flow — Groth16 Verification (DEPRECATED - uses legacy 
     changeAmountView.setBigUint64(0, changeAmount, true);
     // y_sign bit at bit 64 (byte 8, bit 0) = 0 (even y)
 
-    // Derive stealth announcement PDA using ephemeral pub x (matching program)
-    const [stealthAnnouncementPda] = await deriveStealthAnnouncementPDA(
-      changeEphemeralPubX,
-      config.aegisProgramId
-    );
+    // Stealth announcements are now events (sol_log_data), no PDA needed
+    // const [stealthAnnouncementPda] = ... (removed)
 
     const rootBytes = bigintToBytes(claimData.merkleProof.root, 32);
     const changeCommitmentBytes = bigintToBytes(changeCommitment, 32);

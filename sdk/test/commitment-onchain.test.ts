@@ -22,32 +22,29 @@ beforeAll(async () => {
   await initPoseidon();
 });
 
-// Mock stealth announcement data builder
-// Layout must match parseAnnouncementData: disc(1) + bump(1) + ephemeralPub(32 Ed25519) + encryptedAmount(8) + commitment(32) + leafIndex(8) + createdAt(8) = 90
+// Build commitments map for buildCommitmentTreeFromChain (new API)
+function buildCommitmentsMap(
+  announcements: Array<{ commitment: bigint; leafIndex: number }>
+): Map<number, bigint> {
+  const map = new Map<number, bigint>();
+  for (const a of announcements) {
+    map.set(a.leafIndex, a.commitment);
+  }
+  return map;
+}
+
+// Legacy mock builder kept for reference
 function buildMockAnnouncementData(commitment: bigint, leafIndex: number): Uint8Array {
   const data = new Uint8Array(90);
-
-  // Discriminator (0x08 for StealthAnnouncement)
   data[0] = 0x08;
-  // Bump
   data[1] = 0xff;
-
-  // Ephemeral pub (32 bytes Ed25519)
   for (let i = 2; i < 34; i++) data[i] = i;
-
-  // Encrypted amount (8 bytes) at offset 34
   const amountView = new DataView(data.buffer, 34, 8);
   amountView.setBigUint64(0, 100000n, true);
-
-  // Commitment (32 bytes, big-endian) at offset 42
   const commitmentBytes = bigintToBytes(commitment);
   data.set(commitmentBytes, 42);
-
-  // Leaf index (8 bytes, little-endian) at offset 74
   const indexView = new DataView(data.buffer, 74, 8);
   indexView.setBigUint64(0, BigInt(leafIndex), true);
-
-  // Created at (8 bytes) at offset 82
   const timeView = new DataView(data.buffer, 82, 8);
   timeView.setBigInt64(0, BigInt(Date.now()), true);
 
@@ -105,14 +102,14 @@ function createMockRpc(
 
 describe("On-Chain Commitment Tree", () => {
   describe("buildCommitmentTreeFromChain", () => {
-    test("builds tree from mock announcements", async () => {
-      const mockRpc = createMockRpc([
+    test("builds tree from commitments map", async () => {
+      const commitments = buildCommitmentsMap([
         { commitment: 111n, leafIndex: 0 },
         { commitment: 222n, leafIndex: 1 },
         { commitment: 333n, leafIndex: 2 },
       ]);
 
-      const tree = await buildCommitmentTreeFromChain(mockRpc, "mock-program-id");
+      const tree = await buildCommitmentTreeFromChain({} as any, "", { commitments });
 
       expect(tree.size()).toBe(3);
       expect(tree.getRoot()).toBeGreaterThan(0n);
@@ -120,9 +117,7 @@ describe("On-Chain Commitment Tree", () => {
     });
 
     test("handles empty chain", async () => {
-      const mockRpc = createMockRpc([]);
-
-      const tree = await buildCommitmentTreeFromChain(mockRpc, "mock-program-id");
+      const tree = await buildCommitmentTreeFromChain({} as any, "", { commitments: new Map() });
 
       expect(tree.size()).toBe(0);
       // Empty tree has known root (ZERO_HASHES[16])
@@ -132,14 +127,14 @@ describe("On-Chain Commitment Tree", () => {
     });
 
     test("sorts by leaf index", async () => {
-      // Provide out-of-order announcements
-      const mockRpc = createMockRpc([
+      // Provide out-of-order commitments
+      const commitments = buildCommitmentsMap([
         { commitment: 333n, leafIndex: 2 },
         { commitment: 111n, leafIndex: 0 },
         { commitment: 222n, leafIndex: 1 },
       ]);
 
-      const tree = await buildCommitmentTreeFromChain(mockRpc, "mock-program-id");
+      const tree = await buildCommitmentTreeFromChain({} as any, "", { commitments });
 
       // Tree should be built in correct order
       expect(tree.size()).toBe(3);
@@ -157,13 +152,13 @@ describe("On-Chain Commitment Tree", () => {
 
   describe("getMerkleProofFromTree", () => {
     test("returns valid proof for existing commitment", async () => {
-      const mockRpc = createMockRpc([
+      const commitments = buildCommitmentsMap([
         { commitment: 111n, leafIndex: 0 },
         { commitment: 222n, leafIndex: 1 },
         { commitment: 333n, leafIndex: 2 },
       ]);
 
-      const tree = await buildCommitmentTreeFromChain(mockRpc, "mock-program-id");
+      const tree = await buildCommitmentTreeFromChain({} as any, "", { commitments });
       const proof = getMerkleProofFromTree(tree, 222n);
 
       expect(proof).not.toBeNull();
@@ -175,11 +170,11 @@ describe("On-Chain Commitment Tree", () => {
     });
 
     test("returns null for non-existent commitment", async () => {
-      const mockRpc = createMockRpc([
+      const commitments = buildCommitmentsMap([
         { commitment: 111n, leafIndex: 0 },
       ]);
 
-      const tree = await buildCommitmentTreeFromChain(mockRpc, "mock-program-id");
+      const tree = await buildCommitmentTreeFromChain({} as any, "", { commitments });
       const proof = getMerkleProofFromTree(tree, 999n);
 
       expect(proof).toBeNull();
@@ -237,11 +232,8 @@ describe("Integration: Full Flow Simulation", () => {
       { commitment: 11111n, leafIndex: 2 },
     ];
 
-    // Create mock RPC
-    const mockRpc = createMockRpc(deposits);
-
-    // Fetch tree from "chain"
-    const tree = await buildCommitmentTreeFromChain(mockRpc, "mock-program-id");
+    const commitments = buildCommitmentsMap(deposits);
+    const tree = await buildCommitmentTreeFromChain({} as any, "", { commitments });
     expect(tree.size()).toBe(3);
 
     // Get proof for middle deposit
