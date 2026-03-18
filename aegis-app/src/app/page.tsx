@@ -307,15 +307,17 @@ export default function Home() {
                     {(stats?.tokenTVL?.length ?? 0) > 0 && (
                       <>
                         <div className="w-px h-8 bg-gradient-to-b from-transparent via-gray/20 to-transparent" />
-                        <div className="text-center">
+                        <div className="text-center min-w-0">
                           <div className="flex items-center justify-center gap-1.5">
                             <Lock className="w-4 h-4 text-btc" />
                             <span className="text-2xl font-semibold tracking-tight text-btc">
-                              {stats!.tokenTVL.map((t) => {
-                                const val = Number(t.totalShielded) / (10 ** t.decimals);
-                                return `${val.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${t.shieldedSymbol}`;
-                              }).join(" + ")}
+                              {(() => {
+                                const primary = stats!.tokenTVL[0];
+                                const val = Number(primary.totalShielded) / (10 ** primary.decimals);
+                                return val.toLocaleString(undefined, { maximumFractionDigits: 4 });
+                              })()}
                             </span>
+                            <span className="text-sm text-btc/70">{stats!.tokenTVL[0].shieldedSymbol}</span>
                           </div>
                           <div className="text-xs text-gray">Total Value Locked</div>
                         </div>
