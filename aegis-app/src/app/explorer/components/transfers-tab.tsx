@@ -21,10 +21,106 @@ import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
 import { useTransfers } from "@/hooks/use-explorer";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { truncate, timeAgo } from "./helpers";
-import { Th, Td, SolanaLink, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
+import { Th, Td, SolanaLink, TypeBadge, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
 
 // =============================================================================
-// Transfers Tab — grouped by transaction
+// Transfer Row — single unified table row + expandable detail
+// =============================================================================
+
+export type TransferTxPublic = TransferTx;
+
+/** Determine the unified kind for a transfer row */
+export function getTransferKind(tx: TransferTx): "transfer" | "unshield" {
+  if (isRedeemType(tx) || tx.instructionDisc === 15) return "unshield";
+  return "transfer";
+}
+
+export function TransferRow({
+  tx,
+  expanded,
+  onToggle,
+}: {
+  tx: TransferTx;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const kind = getTransferKind(tx);
+  const isUnshield = kind === "unshield";
+
+  return (
+    <Fragment>
+      <tr
+        className="hover:bg-gray/5 transition-colors cursor-pointer"
+        onClick={onToggle}
+      >
+        <Td>
+          <TypeBadge kind={kind} />
+        </Td>
+        <Td>
+          {tx.status === "processing" ? (
+            <span className="inline-flex items-center gap-1 text-caption text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded-full animate-pulse">
+              Processing
+            </span>
+          ) : (
+            <span className="text-caption text-gray-light">Confirmed</span>
+          )}
+        </Td>
+        <Td>
+          <div className="flex items-center gap-1.5">
+            <code className="text-caption font-mono text-foreground">{truncate(tx.txSignature, 6, 4)}</code>
+            <CopyButton text={tx.txSignature} label="Tx" variant="default" iconSize="sm" />
+          </div>
+        </Td>
+        <Td>
+          {isUnshield ? (
+            <span className="text-caption text-gray">
+              {isRedeemType(tx) ? (
+                tx.unshieldRecipient ? (
+                  <span className="font-mono">→ {truncate(tx.unshieldRecipient, 6, 4)}</span>
+                ) : "→ BTC wallet"
+              ) : (
+                tx.unshieldRecipient ? (
+                  <span className="font-mono">→ {truncate(tx.unshieldRecipient, 6, 4)}</span>
+                ) : "→ SPL wallet"
+              )}
+            </span>
+          ) : (
+            <span className="text-caption text-gray font-mono">
+              {tx.inputCount} in → {tx.outputs.length} out
+            </span>
+          )}
+        </Td>
+        <Td>
+          {isUnshield && tx.unshieldAmount ? (
+            <span className="text-body2 text-foreground font-mono">
+              {tx.unshieldAmount.toLocaleString()} <span className="text-gray text-caption">sats</span>
+            </span>
+          ) : isUnshield ? (
+            <span className="text-caption text-gray/40">—</span>
+          ) : (
+            <span className="text-caption text-gray/40">— (private)</span>
+          )}
+        </Td>
+        <Td>
+          <span className="text-caption text-gray">{timeAgo(tx.timestamp)}</span>
+        </Td>
+        <Td>
+          <SolanaLink signature={tx.txSignature} />
+        </Td>
+      </tr>
+      {expanded && (
+        <tr>
+          <td colSpan={8} className="p-0">
+            <TransferDetails tx={tx} />
+          </td>
+        </tr>
+      )}
+    </Fragment>
+  );
+}
+
+// =============================================================================
+// Transfers Tab (standalone, kept for backward compat)
 // =============================================================================
 
 export function TransfersTab() {
@@ -55,63 +151,23 @@ export function TransfersTab() {
           <thead>
             <tr className="border-b border-gray/15 bg-muted/50">
               <Th>Type</Th>
+              <Th>Status</Th>
               <Th>Tx ID</Th>
-              <Th>Inputs</Th>
-              <Th>Outputs</Th>
+              <Th>Details</Th>
+              <Th>Amount</Th>
               <Th>Time</Th>
               <Th className="w-[40px]" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray/10">
-            {transfers.map((tx) => {
-              const isOpen = expanded.has(tx.txSignature);
-              return (
-                <Fragment key={tx.txSignature}>
-                  <tr
-                    className="hover:bg-gray/5 transition-colors cursor-pointer"
-                    onClick={() => toggle(tx.txSignature)}
-                  >
-                    <Td>
-                      <TransferTypeBadge tx={tx} />
-                    </Td>
-                    <Td>
-                      <div className="flex items-center gap-1.5">
-                        <code className="text-caption font-mono text-foreground">{truncate(tx.txSignature, 6, 4)}</code>
-                        <CopyButton text={tx.txSignature} label="Tx" variant="default" iconSize="sm" />
-                      </div>
-                    </Td>
-                    <Td>
-                      <span className="inline-flex items-center gap-1 text-caption text-green-400/70 bg-green-500/6 border border-green-500/12 px-2 py-0.5 rounded-full">
-                        <span className="font-mono">{tx.inputCount}</span>
-                        <span className="hidden sm:inline">input{tx.inputCount !== 1 ? "s" : ""}</span>
-                      </span>
-                    </Td>
-                    <Td>
-                      <TransferOutputCount tx={tx} />
-                    </Td>
-                    <Td>
-                      {tx.status === "processing" ? (
-                        <span className="inline-flex items-center gap-1 text-caption text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded-full animate-pulse">
-                          Processing
-                        </span>
-                      ) : (
-                        <span className="text-caption text-gray">{timeAgo(tx.timestamp)}</span>
-                      )}
-                    </Td>
-                    <Td>
-                      <SolanaLink signature={tx.txSignature} />
-                    </Td>
-                  </tr>
-                  {isOpen && (
-                    <tr>
-                      <td colSpan={6} className="p-0">
-                        <TransferDetails tx={tx} />
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              );
-            })}
+            {transfers.map((tx) => (
+              <TransferRow
+                key={tx.txSignature}
+                tx={tx}
+                expanded={expanded.has(tx.txSignature)}
+                onToggle={() => toggle(tx.txSignature)}
+              />
+            ))}
           </tbody>
         </table>
       </div>
@@ -171,6 +227,24 @@ function TransferTypeBadge({ tx }: { tx: TransferTx }) {
         <span className="text-[10px] text-gray leading-tight">Shielded transfer</span>
       </div>
     </div>
+  );
+}
+
+function TransferAssetBadge({ tx }: { tx: TransferTx }) {
+  // Redeem = zkBTC → BTC, everything else = zkBTC (shielded)
+  if (isRedeemType(tx)) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-caption text-btc/90 bg-btc/6 border border-btc/15 px-2 py-0.5 rounded-full font-medium">
+        <img src="/tokens/btc.png" alt="BTC" className="w-3.5 h-3.5 rounded-full" />
+        zkBTC
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 text-caption text-privacy/90 bg-privacy/6 border border-privacy/15 px-2 py-0.5 rounded-full font-medium">
+      <Image src="/zkbtc.png" alt="zkBTC" width={14} height={14} className="rounded-full" />
+      zkBTC
+    </span>
   );
 }
 

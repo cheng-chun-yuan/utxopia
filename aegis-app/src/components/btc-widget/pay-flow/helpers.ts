@@ -121,6 +121,23 @@ export function autoSelectNotes(notes: InboxNote[], targetSats: number): Set<str
   return selected;
 }
 
+// --- Supported Tokens ---
+
+export interface PayToken {
+  symbol: string;
+  name: string;
+  logo: string;
+  enabled: boolean;
+  unit: string; // display unit for amounts (e.g. "sats", "USDC")
+}
+
+export const PAY_TOKENS: PayToken[] = [
+  { symbol: "zkBTC", name: "Shielded Bitcoin", logo: "/zkbtc.png", enabled: true, unit: "sats" },
+  { symbol: "SOL", name: "Solana", logo: "/tokens/sol.png", enabled: true, unit: "SOL" },
+  { symbol: "USDC", name: "USD Coin", logo: "/tokens/usdc.png", enabled: true, unit: "USDC" },
+  { symbol: "USDT", name: "Tether USD", logo: "/tokens/usdt.png", enabled: true, unit: "USDT" },
+];
+
 // --- Types ---
 
 export type PayStep = "connect" | "compose" | "proving" | "success";
@@ -141,7 +158,7 @@ export interface OutputRow {
   btcAddressError: string | null;
 }
 
-export function createOutputRow(mode: OutputMode = "public", defaultAddress = ""): OutputRow {
+export function createOutputRow(mode: OutputMode = "stealth", defaultAddress = ""): OutputRow {
   return {
     id: crypto.randomUUID(),
     mode,

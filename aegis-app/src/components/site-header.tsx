@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { Shield, Menu, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
 
 export function SiteHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -21,15 +20,14 @@ export function SiteHeader() {
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 group shrink-0">
             <motion.div
-              className="relative w-7 h-7 flex items-center justify-center rounded-full border border-gray/10 bg-gradient-to-br from-btc/10 to-privacy/10 group-hover:border-privacy/30 transition-all duration-300"
+              className="relative w-7 h-7 flex items-center justify-center rounded-full border border-gray/10 bg-gradient-to-br from-privacy/10 to-privacy/20 group-hover:border-privacy/30 transition-all duration-300"
               whileHover={{ scale: 1.1 }}
               transition={{ type: "spring", stiffness: 400, damping: 20 }}
             >
-              <BitcoinIcon className="h-3.5 w-3.5 btc-glow" />
-              <Shield className="h-2 w-2 text-privacy absolute -bottom-0.5 -right-0.5" />
+              <Shield className="h-3.5 w-3.5 text-privacy privacy-glow" />
             </motion.div>
             <span className="text-sm font-semibold tracking-tight text-foreground group-hover:text-privacy transition-colors">
-              Private Bitcoin
+              Privacy Coin
             </span>
           </Link>
 
@@ -55,9 +53,9 @@ export function SiteHeader() {
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Link
                 href="/vault"
-                className="inline-flex items-center gap-1.5 text-xs font-semibold border border-btc/10 px-4 py-1.5 rounded-full transition-all text-btc bg-btc/10 hover:bg-btc/10 hover:border-btc/30 hover:shadow-[0_0_15px_rgba(247,147,26,0.15)]"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold border border-privacy/10 px-4 py-1.5 rounded-full transition-all text-privacy bg-privacy/10 hover:bg-privacy/10 hover:border-privacy/30 hover:shadow-[0_0_15px_rgba(20,241,149,0.15)]"
               >
-                <BitcoinIcon className="w-3 h-3" />
+                <Shield className="w-3 h-3" />
                 Launch App
               </Link>
             </motion.div>

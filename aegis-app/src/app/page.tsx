@@ -3,8 +3,7 @@
 import React, { memo } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Bitcoin, Shield, Zap, Lock, ArrowRight, EyeOff, Fingerprint, ShieldCheck, Loader2, ChevronRight } from "lucide-react";
-import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
+import { Bitcoin, Shield, Zap, Lock, ArrowRight, EyeOff, Fingerprint, ShieldCheck, Loader2, ChevronRight, Layers } from "lucide-react";
 import { usePoolStats } from "@/hooks/use-pool-stats";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
@@ -48,36 +47,36 @@ const PrivacyViz = () => (
 );
 
 const BackedViz = () => (
-  <div className="flex-1 w-full rounded-xl border border-btc/10 md:border-gray/10 bg-muted/20 flex flex-col items-center justify-center gap-4 p-6 group-hover:border-btc/15 transition-colors relative overflow-hidden">
-    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(247,147,26,0.04),transparent)] md:opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+  <div className="flex-1 w-full rounded-xl border border-privacy/10 md:border-gray/10 bg-muted/20 flex flex-col items-center justify-center gap-4 p-6 group-hover:border-privacy/15 transition-colors relative overflow-hidden">
+    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(20,241,149,0.04),transparent)] md:opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
     <div className="flex items-center gap-6 z-10">
       <div className="flex flex-col items-center gap-2">
-        <div className="w-14 h-14 rounded-2xl border border-btc/25 md:border-gray/10 bg-background/40 flex items-center justify-center group-hover:border-btc/25 transition-all duration-500">
-          <Bitcoin className="w-7 h-7 text-btc/70 md:text-gray/20 group-hover:text-btc/70 transition-all duration-500" />
+        <div className="w-14 h-14 rounded-2xl border border-privacy/25 md:border-gray/10 bg-background/40 flex items-center justify-center group-hover:border-privacy/25 transition-all duration-500">
+          <Layers className="w-7 h-7 text-privacy/70 md:text-gray/20 group-hover:text-privacy/70 transition-all duration-500" />
         </div>
-        <span className="text-[10px] font-mono text-btc/50 md:text-gray/25 group-hover:text-btc/50 transition-colors duration-500">1 BTC</span>
+        <span className="text-[10px] font-mono text-privacy/50 md:text-gray/25 group-hover:text-privacy/50 transition-colors duration-500">Any Token</span>
       </div>
       <div className="flex flex-col items-center gap-1">
         <div className="flex items-center gap-1">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="w-2 h-0.5 rounded-full bg-btc/40 md:bg-gray/10 group-hover:bg-btc/40 transition-all duration-500" style={{ transitionDelay: `${i * 80}ms` }} />
+            <div key={i} className="w-2 h-0.5 rounded-full bg-privacy/40 md:bg-gray/10 group-hover:bg-privacy/40 transition-all duration-500" style={{ transitionDelay: `${i * 80}ms` }} />
           ))}
-          <Lock className="w-3.5 h-3.5 text-btc/50 md:text-gray/15 group-hover:text-btc/50 transition-all duration-500" />
+          <Lock className="w-3.5 h-3.5 text-privacy/50 md:text-gray/15 group-hover:text-privacy/50 transition-all duration-500" />
           {[0, 1, 2].map((i) => (
-            <div key={i} className="w-2 h-0.5 rounded-full bg-btc/40 md:bg-gray/10 group-hover:bg-btc/40 transition-all duration-500" style={{ transitionDelay: `${(i + 3) * 80}ms` }} />
+            <div key={i} className="w-2 h-0.5 rounded-full bg-privacy/40 md:bg-gray/10 group-hover:bg-privacy/40 transition-all duration-500" style={{ transitionDelay: `${(i + 3) * 80}ms` }} />
           ))}
         </div>
-        <span className="text-[8px] text-btc/30 md:text-gray/15 group-hover:text-btc/30 transition-colors duration-500">escrow</span>
+        <span className="text-[8px] text-privacy/30 md:text-gray/15 group-hover:text-privacy/30 transition-colors duration-500">shield</span>
       </div>
       <div className="flex flex-col items-center gap-2">
-        <div className="w-14 h-14 rounded-2xl border border-btc/25 md:border-gray/10 bg-background/40 flex items-center justify-center group-hover:border-btc/25 transition-all duration-500">
-          <Shield className="w-7 h-7 text-btc/70 md:text-gray/20 group-hover:text-btc/70 transition-all duration-500" />
+        <div className="w-14 h-14 rounded-2xl border border-privacy/25 md:border-gray/10 bg-background/40 flex items-center justify-center group-hover:border-privacy/25 transition-all duration-500">
+          <Shield className="w-7 h-7 text-privacy/70 md:text-gray/20 group-hover:text-privacy/70 transition-all duration-500" />
         </div>
-        <span className="text-[10px] font-mono text-btc/50 md:text-gray/25 group-hover:text-btc/50 transition-colors duration-500">1 zkBTC</span>
+        <span className="text-[10px] font-mono text-privacy/50 md:text-gray/25 group-hover:text-privacy/50 transition-colors duration-500">Shielded</span>
       </div>
     </div>
     <div className="flex items-center gap-2 z-10">
-      <span className="text-[9px] font-mono text-btc/40 md:text-gray/20 group-hover:text-btc/40 transition-colors duration-500">fully collateralized 1:1</span>
+      <span className="text-[9px] font-mono text-privacy/40 md:text-gray/20 group-hover:text-privacy/40 transition-colors duration-500">any SPL token → private commitment</span>
     </div>
   </div>
 );
@@ -98,13 +97,16 @@ const SpeedViz = () => (
           </div>
           <div className="w-full h-1.5 rounded-full bg-background/40 overflow-hidden">
             <div
-              className="h-full rounded-full bg-sol/40 md:bg-gray/10 group-hover:bg-sol/40 transition-all duration-700 ease-out"
-              style={{ width: `0%`, transitionDelay: `${i * 120}ms` }}
+              className="h-full rounded-full bg-sol/40 md:bg-gray/10 group-hover:bg-sol/40"
+              style={{ width: `0%`, transition: `width 2.5s cubic-bezier(0.16, 1, 0.3, 1) ${i * 400 + 300}ms, background-color 0.5s ease ${i * 80}ms` }}
               ref={(el) => {
                 if (el) {
                   const obs = new IntersectionObserver(([e]) => {
-                    if (e.isIntersecting) { el.style.width = `${metric.pct}%`; obs.disconnect(); }
-                  }, { threshold: 0.3 });
+                    if (e.isIntersecting) {
+                      requestAnimationFrame(() => { el.style.width = `${metric.pct}%`; });
+                      obs.disconnect();
+                    }
+                  }, { threshold: 0.2 });
                   obs.observe(el);
                 }
               }}
@@ -227,20 +229,20 @@ export default function Home() {
 
             <ScrollReveal delay={0.1}>
               <h1 className="hero-title text-foreground">
-                Bitcoin. <span className="text-btc">Shielded.</span>
+                Your Tokens. <span className="text-privacy">Shielded.</span>
               </h1>
             </ScrollReveal>
 
             <ScrollReveal delay={0.15}>
               <p className="mt-6 text-base md:text-lg text-gray font-light max-w-md mx-auto leading-relaxed">
-                Shield BTC on Solana with ZK proofs. 1:1 backed. Fully private.
+                Shield any Solana token with ZK proofs. Fully private transfers, hidden balances, stealth addresses.
               </p>
             </ScrollReveal>
 
             <ScrollReveal delay={0.2}>
               <div className="mt-6 flex flex-wrap items-center justify-center gap-4 text-caption text-gray">
                 <div className="flex items-center gap-1.5">
-                  <EyeOff className="w-4 h-4 text-btc" />
+                  <EyeOff className="w-4 h-4 text-privacy" />
                   <span>Hidden Amounts</span>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -248,8 +250,8 @@ export default function Home() {
                   <span>Anonymous Transfers</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-privacy" />
-                  <span>1:1 BTC Backed</span>
+                  <Layers className="w-4 h-4 text-privacy" />
+                  <span>Multi-Token Support</span>
                 </div>
               </div>
             </ScrollReveal>
@@ -259,10 +261,10 @@ export default function Home() {
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}>
                   <Link
                     href="/vault"
-                    className="btn-bitcoin btn-pill btn-shimmer inline-flex items-center gap-2 px-7 py-2.5 text-base shadow-[0_0_20px_rgba(247,147,26,0.2)] hover:shadow-[0_0_35px_rgba(247,147,26,0.4)] transition-shadow"
+                    className="btn-privacy btn-pill btn-shimmer inline-flex items-center gap-2 px-7 py-2.5 text-base shadow-[0_0_20px_rgba(20,241,149,0.2)] hover:shadow-[0_0_35px_rgba(20,241,149,0.4)] transition-shadow"
                   >
-                    <BitcoinIcon className="w-5 h-5" />
-                    Launch Vault
+                    <Shield className="w-5 h-5" />
+                    Launch App
                     <ArrowRight className="w-5 h-5" />
                   </Link>
                 </motion.div>
@@ -287,9 +289,8 @@ export default function Home() {
                 ) : (
                   <div className="flex items-center justify-center gap-8">
                     {[
-                      { label: "Vault (BTC)", value: Number(stats?.totalShielded ?? 0n) / 1e8, decimals: 4, color: "text-privacy", icon: <Shield className="w-4 h-4 text-privacy privacy-glow" /> },
-                      { label: "Leaves", value: stats?.totalCommitments ?? 0, decimals: 0, color: "text-foreground", icon: null },
-                      { label: "Volume (BTC)", value: Number(stats?.volume ?? 0n) / 1e8, decimals: 4, color: "text-foreground", icon: null },
+                      { label: "Deposits", value: stats?.depositCount ?? 0, decimals: 0, color: "text-privacy", icon: <Shield className="w-4 h-4 text-privacy privacy-glow" /> },
+                      { label: "Commitments", value: stats?.totalCommitments ?? 0, decimals: 0, color: "text-foreground", icon: null },
                     ].map(({ label, value, decimals, color, icon }, i) => (
                       <React.Fragment key={label}>
                         {i > 0 && <div className="w-px h-8 bg-gradient-to-b from-transparent via-gray/20 to-transparent" />}
@@ -309,6 +310,48 @@ export default function Home() {
           </div>
         </section>
 
+        {/* ═══════════════ SUPPORTED TOKENS ═══════════════ */}
+        <section className="w-full py-12 px-4 sm:px-6 lg:px-8 relative">
+          <div className="max-w-5xl mx-auto relative z-10">
+            <ScrollReveal>
+              <div className="text-center mb-8">
+                <h2 className="section-title text-2xl md:text-3xl text-foreground mb-2">
+                  Shield <span className="text-privacy">Any Token</span>
+                </h2>
+                <p className="text-sm text-gray font-light">
+                  Deposit and shield tokens into private commitments.
+                </p>
+              </div>
+            </ScrollReveal>
+            <ScrollReveal delay={0.1}>
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+                {[
+                  { name: "BTC", status: "Live", logo: "/tokens/btc.png" },
+                  { name: "SOL", status: "Live", logo: "/tokens/sol.png" },
+                  { name: "USDC", status: "Live", logo: "/tokens/usdc.png" },
+                  { name: "USDT", status: "Live", logo: "/tokens/usdt.png" },
+                  { name: "ETH", status: "Soon", logo: "/tokens/eth.png" },
+                  { name: "ZEC", status: "Soon", logo: "/tokens/zec.png" },
+                ].map((token) => (
+                  <GradientBorderCard key={token.name} className="group">
+                    <div className="flex flex-col items-center gap-2 py-4 px-2">
+                      <img src={token.logo} alt={token.name} className="w-8 h-8 rounded-full" />
+                      <span className="text-sm font-semibold text-foreground">{token.name}</span>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                        token.status === "Live"
+                          ? "bg-privacy/10 text-privacy border border-privacy/20"
+                          : "bg-gray/10 text-gray border border-gray/20"
+                      }`}>
+                        {token.status}
+                      </span>
+                    </div>
+                  </GradientBorderCard>
+                ))}
+              </div>
+            </ScrollReveal>
+          </div>
+        </section>
+
         {/* ═══════════════ HOW IT WORKS — Original bento cards ═══════════════ */}
         <section className="w-full py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-b from-transparent via-muted/5 to-transparent pointer-events-none" />
@@ -319,17 +362,17 @@ export default function Home() {
             <ScrollReveal>
               <div className="text-center mb-12">
                 <h2 className="section-title text-3xl md:text-4xl text-foreground mb-3">
-                  How It <span className="text-btc">Works</span>
+                  How It <span className="text-privacy">Works</span>
                 </h2>
                 <p className="text-sm text-gray font-light">
-                  Four layers of protection for your Bitcoin on Solana.
+                  Four layers of protection for your tokens on Solana.
                 </p>
               </div>
             </ScrollReveal>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 lg:gap-6 auto-rows-fr">
               <FeatureCard icon={EyeOff} title="ZK Private" description="Amounts & addresses hidden by zero-knowledge proofs" iconColor="text-privacy" hoverGlow="rgba(20, 241, 149, 0.12)" step="01" visualization={PrivacyViz} />
-              <FeatureCard icon={Bitcoin} title="1:1 Backed" description="Every zkBTC backed by real Bitcoin in escrow" iconColor="text-btc" hoverGlow="rgba(247, 147, 26, 0.12)" step="02" visualization={BackedViz} />
+              <FeatureCard icon={Layers} title="Token Shielding" description="Any SPL token shielded as private commitments" iconColor="text-privacy" hoverGlow="rgba(20, 241, 149, 0.12)" step="02" visualization={BackedViz} />
               <FeatureCard icon={Zap} title="Instant" description="Auto-confirmed deposits, sub-second settlement" iconColor="text-sol" hoverGlow="rgba(153, 69, 255, 0.12)" step="03" visualization={SpeedViz} />
               <FeatureCard icon={ShieldCheck} title="Compliant" description="OFAC screening without compromising privacy" iconColor="text-cyan" hoverGlow="rgba(0, 255, 255, 0.08)" step="04" visualization={ComplianceViz} />
             </div>
@@ -346,19 +389,19 @@ export default function Home() {
           <div className="max-w-3xl mx-auto text-center relative z-10">
             <ScrollReveal variant="scaleIn">
               <h2 className="section-title text-3xl md:text-4xl text-foreground mb-4">
-                Start <span className="text-btc">Shielding</span>
+                Start <span className="text-privacy">Shielding</span>
               </h2>
               <p className="text-base text-gray font-light mb-8">
-                Deposit BTC. Get zkBTC. Stay private.
+                Shield any token. Transfer privately. Stay anonymous.
               </p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}>
                   <Link
                     href="/vault"
-                    className="btn-bitcoin btn-pill btn-shimmer inline-flex items-center gap-2 px-7 py-2.5 text-base shadow-[0_0_20px_rgba(247,147,26,0.2)] hover:shadow-[0_0_35px_rgba(247,147,26,0.4)] transition-shadow"
+                    className="btn-privacy btn-pill btn-shimmer inline-flex items-center gap-2 px-7 py-2.5 text-base shadow-[0_0_20px_rgba(20,241,149,0.2)] hover:shadow-[0_0_35px_rgba(20,241,149,0.4)] transition-shadow"
                   >
-                    <BitcoinIcon className="w-5 h-5" />
-                    Launch Vault
+                    <Shield className="w-5 h-5" />
+                    Launch App
                     <ArrowRight className="w-5 h-5" />
                   </Link>
                 </motion.div>

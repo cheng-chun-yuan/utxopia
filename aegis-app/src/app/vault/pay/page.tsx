@@ -59,8 +59,8 @@ export default function PayPage() {
         },
       ]}
       titleIcon={<Send className="w-full h-full" />}
-      title="Pay with zkBTC"
-      description="Send zkBTC publicly or privately"
+      title="Private Transfer"
+      description="Send shielded tokens privately"
     >
       <Suspense fallback={<div className="flex items-center justify-center py-8"><div className="w-8 h-8 border-2 border-purple border-t-transparent rounded-full animate-spin" /></div>}>
         <PayFlowWithParams />

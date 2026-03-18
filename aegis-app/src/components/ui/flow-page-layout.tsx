@@ -106,7 +106,7 @@ function Footer() {
           href="/docs"
           className="hover:text-gray-light transition-colors text-caption"
         >
-          Private Bitcoin
+          Privacy Coin
         </a>
       </div>
       <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption hover:text-gray-light transition-colors flex items-center gap-1.5">Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network</a>
@@ -135,7 +135,7 @@ export function FlowPageLayout({
   const titleConfig = colorConfig[titleColor];
 
   return (
-    <main className="min-h-screen bg-background hacker-bg noise-overlay flex flex-col items-center justify-center py-8 px-4 sm:py-12">
+    <main className="min-h-screen bg-background hacker-bg noise-overlay flex flex-col items-center py-8 px-4 sm:py-12">
       {/* Header */}
       <div
         className="w-full mb-4 flex items-center justify-between relative z-10"

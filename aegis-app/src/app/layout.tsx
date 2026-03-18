@@ -27,8 +27,8 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Private Bitcoin | Use Bitcoin Natively & Privately on Solana",
-  description: "Use Bitcoin natively and privately on Solana with zero-knowledge proofs. Powered by Zeus Network.",
+  title: "Privacy Coin | Privacy for Every Token on Solana",
+  description: "Shield any Solana token with zero-knowledge proofs. Private transfers, stealth addresses, and ZK commitments. Powered by Zeus Network.",
 };
 
 export default function RootLayout({

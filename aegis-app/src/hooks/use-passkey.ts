@@ -22,7 +22,7 @@ function getPrfSalt(credentialId?: string | null): Uint8Array {
   return sha256(new TextEncoder().encode(input));
 }
 
-const RP_NAME = "Private Bitcoin";
+const RP_NAME = "Privacy Coin";
 
 function getRpId(): string {
   if (typeof window === "undefined") return "localhost";
@@ -180,7 +180,7 @@ export function usePasskey(): UsePasskeyReturn {
         user: {
           id: randomBase64URL(32),
           name: "aegis-user",
-          displayName: "Private Bitcoin User",
+          displayName: "Privacy Coin User",
         },
         challenge: randomBase64URL(32),
         pubKeyCredParams: [

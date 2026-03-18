@@ -31,15 +31,15 @@ interface OnboardingStep {
 
 const steps: OnboardingStep[] = [
   {
-    title: "Welcome to Private Bitcoin",
+    title: "Welcome to Privacy Coin",
     description:
-      "Private Bitcoin is a privacy layer for Bitcoin on Solana, powered by Zeus Network. Deposit BTC to receive private zkBTC tokens that can be transferred without revealing your identity.",
+      "Privacy Coin is a privacy layer for Solana tokens. Shield any SPL token into private commitments that can be transferred without revealing your identity or amounts.",
     icon: <Shield className="w-8 h-8" />,
   },
   {
     title: "Privacy First",
     description:
-      "Using zero-knowledge proofs and stealth addresses, Private Bitcoin ensures your deposits and transfers cannot be linked. Your financial activity remains private.",
+      "Using zero-knowledge proofs and stealth addresses, Privacy Coin ensures your deposits and transfers cannot be linked. Shield BTC, USDC, SOL, or any token — your financial activity remains private.",
     icon: <Eye className="w-8 h-8" />,
   },
   {

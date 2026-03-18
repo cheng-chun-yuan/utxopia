@@ -1,62 +1,121 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import {
   PublicKey,
   Transaction,
   TransactionInstruction,
   SystemProgram,
+  LAMPORTS_PER_SOL,
 } from "@solana/web3.js";
+import {
+  getAssociatedTokenAddressSync,
+  createAssociatedTokenAccountIdempotentInstruction,
+  createSyncNativeInstruction,
+  createCloseAccountInstruction,
+  NATIVE_MINT_2022,
+  TOKEN_2022_PROGRAM_ID as SPL_TOKEN_2022_PROGRAM_ID,
+} from "@solana/spl-token";
 import { getConfig, computeTokenId, computeNPKSync, computeMPKSync } from "@aegis/sdk";
 import { useAegis } from "@/hooks/use-aegis";
-import { getActiveTokenId, getActiveTokenMint, getRegisteredTokens, type TokenInfo } from "@/lib/token-context";
-import { TokenSelector } from "./token-selector";
+import { getRegisteredTokens, type TokenInfo } from "@/lib/token-context";
 import { ed25519GenerateKeyPair, x25519Ecdh, ed25519PubToX25519 } from "@aegis/sdk";
+import { Shield, ChevronDown, Loader2, ExternalLink, CheckCircle2, AlertCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { DepositFlow } from "@/components/btc-widget/deposit-flow";
+import { StealthRecipientInput } from "@/components/ui/stealth-recipient-input";
+import type { StealthMetaAddress } from "@aegis/sdk";
 
 const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+
+/** Supported tokens for shielding */
+const SHIELD_TOKENS = [
+  { symbol: "BTC", name: "Bitcoin", decimals: 8, logo: "/tokens/btc.png", mint: "", native: true, isSOL: false },
+  { symbol: "zkBTC", name: "Shielded Bitcoin", decimals: 8, logo: "/zkbtc.png", mint: "", native: false, isSOL: false },
+  { symbol: "SOL", name: "Solana", decimals: 9, logo: "/tokens/sol.png", mint: NATIVE_MINT_2022.toBase58(), native: false, isSOL: true },
+  { symbol: "USDC", name: "USD Coin", decimals: 6, logo: "/tokens/usdc.png", mint: "", native: false, isSOL: false },
+  { symbol: "USDT", name: "Tether USD", decimals: 6, logo: "/tokens/usdt.png", mint: "", native: false, isSOL: false },
+];
 
 interface ShieldFlowProps {
   className?: string;
 }
 
-type ShieldStep = "select" | "amount" | "confirm" | "processing" | "done" | "error";
+type ShieldStatus = "idle" | "processing" | "done" | "error";
 
 export function ShieldFlow({ className }: ShieldFlowProps) {
   const { publicKey, sendTransaction } = useWallet();
   const { connection } = useConnection();
-  const { keys, stealthAddress } = useAegis();
+  const { keys, stealthAddress, stealthAddressEncoded } = useAegis();
 
-  const [step, setStep] = useState<ShieldStep>("select");
-  const [selectedToken, setSelectedToken] = useState<TokenInfo | null>(null);
+  const [selectedToken, setSelectedToken] = useState(SHIELD_TOKENS[0]);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [amount, setAmount] = useState("");
+  const [resolvedMeta, setResolvedMeta] = useState<StealthMetaAddress | null>(null);
+  const [resolvedName, setResolvedName] = useState<string | null>(null);
+  const [status, setStatus] = useState<ShieldStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [txSig, setTxSig] = useState<string | null>(null);
+  const [solBalance, setSolBalance] = useState<number | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const handleTokenSelect = useCallback((token: TokenInfo) => {
-    setSelectedToken(token);
-    setStep("amount");
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
+  // Auto-resolve self stealth address as default recipient
+  useEffect(() => {
+    if (stealthAddress && !resolvedMeta) {
+      setResolvedMeta(stealthAddress);
+    }
+  }, [stealthAddress, resolvedMeta]);
+
+  // Fetch SOL balance when SOL is selected
+  useEffect(() => {
+    if (!publicKey || !selectedToken.isSOL) {
+      setSolBalance(null);
+      return;
+    }
+    let cancelled = false;
+    connection.getBalance(publicKey).then((bal) => {
+      if (!cancelled) setSolBalance(bal);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [publicKey, selectedToken.isSOL, connection]);
+
+  const handleMax = useCallback(() => {
+    if (selectedToken.isSOL && solBalance !== null) {
+      // Reserve ~0.01 SOL for tx fees
+      const maxLamports = Math.max(0, solBalance - 0.01 * LAMPORTS_PER_SOL);
+      setAmount((maxLamports / LAMPORTS_PER_SOL).toFixed(9));
+    } else {
+      setAmount("0");
+    }
+  }, [selectedToken, solBalance]);
+
   const handleShield = useCallback(async () => {
-    if (!publicKey || !keys || !selectedToken || !amount) return;
+    if (!publicKey || !keys || !amount || !resolvedMeta) return;
 
     try {
-      setStep("processing");
+      setStatus("processing");
       setError(null);
 
       const config = getConfig();
       const amountRaw = BigInt(Math.floor(parseFloat(amount) * (10 ** selectedToken.decimals)));
 
-      // Generate ephemeral keypair for stealth announcement
       const ephemeral = ed25519GenerateKeyPair();
-
-      // Compute NPK from keys
       const mpk = computeMPKSync(keys.spendingPubKey.x, keys.spendingPubKey.y, keys.nullifyingKey);
       const viewingPubX25519 = ed25519PubToX25519(keys.viewingPubKey);
       const sharedSecret = x25519Ecdh(ephemeral.privKey, viewingPubX25519);
 
-      // Derive stealth scalar for NPK
       const { sha256 } = await import("@noble/hashes/sha2.js");
       const domain = new TextEncoder().encode("Aegis-stealth-v1");
       const secretBuf = new Uint8Array(sharedSecret.length + domain.length);
@@ -67,13 +126,11 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
       for (const b of hash) {
         stealthScalar = (stealthScalar << 8n) | BigInt(b);
       }
-      // Reduce to BN254 field
       const BN254_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
       stealthScalar = stealthScalar % BN254_FIELD;
 
       const npk = computeNPKSync(mpk, stealthScalar);
 
-      // Convert NPK to 32 bytes (big-endian)
       const npkBytes = new Uint8Array(32);
       let n = npk;
       for (let i = 31; i >= 0; i--) {
@@ -81,186 +138,321 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
         n >>= 8n;
       }
 
-      // Derive TokenConfig PDA
-      const mintPubkey = new PublicKey(selectedToken.mint);
+      // Determine mint: SOL uses NATIVE_MINT_2022, others use zkBTC mint for now
+      const mintPubkey = selectedToken.isSOL
+        ? NATIVE_MINT_2022
+        : selectedToken.mint
+          ? new PublicKey(selectedToken.mint)
+          : new PublicKey(config.zkbtcMint);
+
+      const programId = new PublicKey(config.aegisProgramId);
+
       const [tokenConfigPda] = PublicKey.findProgramAddressSync(
         [Buffer.from("token_config"), mintPubkey.toBuffer()],
-        new PublicKey(config.aegisProgramId),
+        programId,
       );
-
-      // Find user's token account for this mint
-      const tokenAccounts = await connection.getTokenAccountsByOwner(publicKey, {
-        mint: mintPubkey,
-        programId: TOKEN_2022_PROGRAM_ID,
-      });
-
-      if (tokenAccounts.value.length === 0) {
-        throw new Error(`No ${selectedToken.symbol} token account found. Create one first.`);
-      }
-      const userTokenAccount = tokenAccounts.value[0].pubkey;
-
-      // Find vault from TokenConfig (or derive)
-      // For now, use the pool vault from config for zkBTC, or derive for other tokens
-      const vaultPubkey = new PublicKey(config.poolVault); // TODO: read from TokenConfig
-
-      // Build shield instruction
-      // disc(1) + amount(8) + npk(32) + ephemeral_pub(32) = 73 bytes
-      const ixData = new Uint8Array(73);
-      ixData[0] = 29; // SHIELD discriminator
-
-      const dataView = new DataView(ixData.buffer);
-      dataView.setBigUint64(1, amountRaw, true); // amount LE
-      ixData.set(npkBytes, 9);
-      ixData.set(ephemeral.pubKey, 41);
-
       const [poolStatePda] = PublicKey.findProgramAddressSync(
         [Buffer.from("pool_state")],
-        new PublicKey(config.aegisProgramId),
+        programId,
       );
       const [commitmentTreePda] = PublicKey.findProgramAddressSync(
         [Buffer.from("commitment_tree")],
-        new PublicKey(config.aegisProgramId),
+        programId,
       );
 
-      const shieldIx = new TransactionInstruction({
-        programId: new PublicKey(config.aegisProgramId),
-        data: Buffer.from(ixData),
-        keys: [
-          { pubkey: publicKey, isSigner: true, isWritable: true },
-          { pubkey: userTokenAccount, isSigner: false, isWritable: true },
-          { pubkey: poolStatePda, isSigner: false, isWritable: false },
-          { pubkey: tokenConfigPda, isSigner: false, isWritable: true },
-          { pubkey: vaultPubkey, isSigner: false, isWritable: true },
-          { pubkey: commitmentTreePda, isSigner: false, isWritable: true },
-          { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
-        ],
-      });
+      const tx = new Transaction();
+      let userTokenAccount: PublicKey;
 
-      const tx = new Transaction().add(shieldIx);
+      if (selectedToken.isSOL) {
+        // SOL shielding: wrap SOL → wSOL (Token-2022) → shield → close wSOL account
+        const wsolAta = getAssociatedTokenAddressSync(
+          NATIVE_MINT_2022,
+          publicKey,
+          false,
+          SPL_TOKEN_2022_PROGRAM_ID,
+        );
+
+        // 1. Create wSOL ATA if needed (idempotent)
+        tx.add(
+          createAssociatedTokenAccountIdempotentInstruction(
+            publicKey,
+            wsolAta,
+            publicKey,
+            NATIVE_MINT_2022,
+            SPL_TOKEN_2022_PROGRAM_ID,
+          ),
+        );
+
+        // 2. Transfer SOL → wSOL ATA
+        tx.add(
+          SystemProgram.transfer({
+            fromPubkey: publicKey,
+            toPubkey: wsolAta,
+            lamports: Number(amountRaw),
+          }),
+        );
+
+        // 3. Sync native balance
+        tx.add(
+          createSyncNativeInstruction(wsolAta, SPL_TOKEN_2022_PROGRAM_ID),
+        );
+
+        userTokenAccount = wsolAta;
+
+        // Read vault from TokenConfig PDA on-chain
+        const tokenConfigAccount = await connection.getAccountInfo(tokenConfigPda);
+        if (!tokenConfigAccount) {
+          throw new Error("SOL token not registered on-chain. Admin must register wSOL (NATIVE_MINT_2022) first.");
+        }
+        // vault is at offset 66..98 in TokenConfig (disc:1 + bump:1 + mint:32 + tokenId:32 = 66)
+        const vaultBytes = tokenConfigAccount.data.slice(66, 98);
+        const vaultPubkey = new PublicKey(vaultBytes);
+
+        // 4. Shield instruction
+        const ixData = new Uint8Array(73);
+        ixData[0] = 29;
+        const dataView = new DataView(ixData.buffer);
+        dataView.setBigUint64(1, amountRaw, true);
+        ixData.set(npkBytes, 9);
+        ixData.set(ephemeral.pubKey, 41);
+
+        tx.add(new TransactionInstruction({
+          programId,
+          data: Buffer.from(ixData),
+          keys: [
+            { pubkey: publicKey, isSigner: true, isWritable: true },
+            { pubkey: userTokenAccount, isSigner: false, isWritable: true },
+            { pubkey: poolStatePda, isSigner: false, isWritable: false },
+            { pubkey: tokenConfigPda, isSigner: false, isWritable: true },
+            { pubkey: vaultPubkey, isSigner: false, isWritable: true },
+            { pubkey: commitmentTreePda, isSigner: false, isWritable: true },
+            { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
+          ],
+        }));
+
+        // 5. Close wSOL account to reclaim rent (returns leftover SOL to user)
+        tx.add(
+          createCloseAccountInstruction(wsolAta, publicKey, publicKey, [], SPL_TOKEN_2022_PROGRAM_ID),
+        );
+      } else {
+        // SPL token shielding (zkBTC, USDC, etc.)
+        const tokenAccounts = await connection.getTokenAccountsByOwner(publicKey, {
+          mint: mintPubkey,
+          programId: TOKEN_2022_PROGRAM_ID,
+        });
+
+        if (tokenAccounts.value.length === 0) {
+          throw new Error(`No ${selectedToken.symbol} token account found. Create one first.`);
+        }
+        userTokenAccount = tokenAccounts.value[0].pubkey;
+
+        const vaultPubkey = new PublicKey(config.poolVault);
+
+        const ixData = new Uint8Array(73);
+        ixData[0] = 29;
+        const dataView = new DataView(ixData.buffer);
+        dataView.setBigUint64(1, amountRaw, true);
+        ixData.set(npkBytes, 9);
+        ixData.set(ephemeral.pubKey, 41);
+
+        tx.add(new TransactionInstruction({
+          programId,
+          data: Buffer.from(ixData),
+          keys: [
+            { pubkey: publicKey, isSigner: true, isWritable: true },
+            { pubkey: userTokenAccount, isSigner: false, isWritable: true },
+            { pubkey: poolStatePda, isSigner: false, isWritable: false },
+            { pubkey: tokenConfigPda, isSigner: false, isWritable: true },
+            { pubkey: vaultPubkey, isSigner: false, isWritable: true },
+            { pubkey: commitmentTreePda, isSigner: false, isWritable: true },
+            { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
+          ],
+        }));
+      }
+
       const sig = await sendTransaction(tx, connection);
       await connection.confirmTransaction(sig, "confirmed");
 
       setTxSig(sig);
-      setStep("done");
+      setStatus("done");
     } catch (err: any) {
       setError(err.message || "Shield failed");
-      setStep("error");
+      setStatus("error");
     }
-  }, [publicKey, keys, selectedToken, amount, connection, sendTransaction]);
+  }, [publicKey, keys, selectedToken, amount, resolvedMeta, connection, sendTransaction]);
 
-  const tokens = getRegisteredTokens();
+  const canSubmit = !!amount && parseFloat(amount) > 0 && !!resolvedMeta && !!publicKey && !!keys;
 
-  return (
-    <div className={`space-y-4 ${className ?? ""}`}>
-      {step === "select" && (
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-zinc-100">Select Token to Shield</h3>
-          <p className="text-sm text-zinc-400">
-            Choose an SPL token to deposit into the privacy pool.
-          </p>
-          <div className="grid gap-3">
-            {tokens.map((token) => (
-              <button
-                key={token.mint}
-                onClick={() => handleTokenSelect(token)}
-                className="flex items-center justify-between p-4 bg-zinc-800/50 border border-zinc-700 rounded-xl hover:border-blue-500/50 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center text-xs font-bold">
-                    {token.symbol.slice(0, 2)}
-                  </div>
-                  <div className="text-left">
-                    <div className="text-sm font-medium text-zinc-200">{token.symbol}</div>
-                    <div className="text-xs text-zinc-500">{token.name}</div>
-                  </div>
-                </div>
-                <div className="text-xs text-zinc-500">{token.decimals} decimals</div>
-              </button>
-            ))}
-          </div>
+  // Success state
+  if (status === "done") {
+    return (
+      <div className={cn("space-y-4 text-center py-6", className)}>
+        <div className="inline-flex p-3 rounded-full bg-privacy/10 border border-privacy/20">
+          <CheckCircle2 className="w-8 h-8 text-privacy" />
+        </div>
+        <h3 className="text-lg font-semibold text-foreground">Tokens Shielded!</h3>
+        <p className="text-caption text-gray">
+          Your {selectedToken.symbol} tokens are now private commitments.
+        </p>
+        {txSig && (
+          <a
+            href={`https://explorer.solana.com/tx/${txSig}?cluster=devnet`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 text-caption text-sol hover:text-sol/80 transition-colors"
+          >
+            View transaction <ExternalLink className="w-3 h-3" />
+          </a>
+        )}
+        <button
+          onClick={() => { setStatus("idle"); setAmount(""); setTxSig(null); }}
+          className="px-5 py-2 rounded-[10px] bg-muted border border-gray/15 text-body2 text-gray-light hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
+        >
+          Shield more
+        </button>
+      </div>
+    );
+  }
+
+  // Token selector dropdown — shared across both flows
+  const tokenSelector = (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={() => setDropdownOpen(!dropdownOpen)}
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] bg-background/60 border border-gray/15 hover:border-gray/30 transition-colors cursor-pointer"
+      >
+        <img src={selectedToken.logo} alt={selectedToken.symbol} className="w-5 h-5 rounded-full" />
+        <span className="text-sm font-semibold text-foreground">{selectedToken.symbol}</span>
+        <ChevronDown className={cn("w-3.5 h-3.5 text-gray transition-transform", dropdownOpen && "rotate-180")} />
+      </button>
+      {dropdownOpen && (
+        <div className="absolute right-0 top-full mt-1 w-[200px] bg-card border border-gray/20 rounded-[12px] shadow-xl z-50 overflow-hidden">
+          {SHIELD_TOKENS.map((token) => (
+            <button
+              key={token.symbol}
+              onClick={() => { setSelectedToken(token); setDropdownOpen(false); }}
+              className={cn(
+                "w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted/50 transition-colors cursor-pointer",
+                selectedToken.symbol === token.symbol && "bg-privacy/5"
+              )}
+            >
+              <img src={token.logo} alt={token.symbol} className="w-5 h-5 rounded-full" />
+              <div className="flex-1 text-left">
+                <div className="text-sm font-medium text-foreground">{token.symbol}</div>
+                <div className="text-[10px] text-gray">{token.name}</div>
+              </div>
+              {token.native && (
+                <span className="px-1.5 py-0.5 rounded bg-btc/10 text-[8px] text-btc font-semibold uppercase">Native</span>
+              )}
+              {token.isSOL && (
+                <span className="px-1.5 py-0.5 rounded bg-sol/10 text-[8px] text-sol font-semibold uppercase">Native</span>
+              )}
+            </button>
+          ))}
         </div>
       )}
+    </div>
+  );
 
-      {step === "amount" && selectedToken && (
-        <div className="space-y-4">
+  // BTC native deposit flow
+  if (selectedToken.native) {
+    return (
+      <div className={cn("space-y-5", className)}>
+        {/* Token selector bar */}
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center text-xs font-bold">
-              {selectedToken.symbol.slice(0, 2)}
-            </div>
-            <h3 className="text-lg font-semibold text-zinc-100">
-              Shield {selectedToken.symbol}
-            </h3>
+            <span className="text-caption text-gray">Asset</span>
+            <span className="px-1.5 py-0.5 rounded bg-btc/10 text-[9px] text-btc font-semibold uppercase">Native Bitcoin</span>
           </div>
+          {tokenSelector}
+        </div>
+
+        {/* BTC Deposit Flow */}
+        <div className="rounded-[12px] border border-btc/15 bg-btc/5 p-4">
+          <DepositFlow />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("space-y-5", className)}>
+      {/* Amount + Token selector */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-caption text-gray">Amount</span>
+          <span className="text-caption text-gray/50">
+            {selectedToken.isSOL && solBalance !== null
+              ? `Available: ${(solBalance / LAMPORTS_PER_SOL).toFixed(4)} SOL`
+              : `Available: 0.000000 ${selectedToken.symbol}`
+            }
+          </span>
+        </div>
+        <div className="flex items-center gap-2 p-3 bg-muted border border-gray/15 rounded-[12px] focus-within:border-privacy/30 transition-colors">
           <input
             type="number"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            placeholder={`Amount in ${selectedToken.symbol}`}
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="0.00"
+            className="flex-1 bg-transparent text-lg font-mono text-foreground placeholder:text-gray/30 outline-none min-w-0"
           />
-          <div className="flex gap-3">
-            <button
-              onClick={() => setStep("select")}
-              className="flex-1 px-4 py-2 bg-zinc-700 text-zinc-300 rounded-lg hover:bg-zinc-600 transition-colors"
-            >
-              Back
-            </button>
-            <button
-              onClick={handleShield}
-              disabled={!amount || parseFloat(amount) <= 0}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Shield {selectedToken.symbol}
-            </button>
-          </div>
+          <button
+            onClick={handleMax}
+            className="px-2 py-1 rounded-[6px] bg-privacy/10 border border-privacy/20 text-[10px] font-semibold text-privacy hover:bg-privacy/20 transition-colors cursor-pointer uppercase tracking-wider"
+          >
+            Max
+          </button>
+          {tokenSelector}
         </div>
-      )}
-
-      {step === "processing" && (
-        <div className="text-center py-8">
-          <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4" />
-          <p className="text-zinc-300">Shielding tokens...</p>
-        </div>
-      )}
-
-      {step === "done" && (
-        <div className="text-center py-8 space-y-4">
-          <div className="text-4xl">🛡️</div>
-          <h3 className="text-lg font-semibold text-green-400">Tokens Shielded!</h3>
-          <p className="text-sm text-zinc-400">
-            Your {selectedToken?.symbol} tokens are now private commitments in the Merkle tree.
+        {selectedToken.isSOL && (
+          <p className="text-[10px] text-gray/50 pl-1">
+            SOL will be wrapped to wSOL (Token-2022) for shielding. The wrapper account is closed after shielding.
           </p>
-          {txSig && (
-            <a
-              href={`https://explorer.solana.com/tx/${txSig}?cluster=devnet`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs text-blue-400 hover:underline"
-            >
-              View transaction
-            </a>
-          )}
-          <button
-            onClick={() => { setStep("select"); setAmount(""); setTxSig(null); }}
-            className="px-4 py-2 bg-zinc-700 text-zinc-300 rounded-lg hover:bg-zinc-600 transition-colors"
-          >
-            Shield more
-          </button>
+        )}
+      </div>
+
+      {/* Recipient stealth address */}
+      <StealthRecipientInput
+        onResolved={(meta, name) => { setResolvedMeta(meta); setResolvedName(name); }}
+        resolvedMeta={resolvedMeta}
+        resolvedName={resolvedName}
+        error={error}
+        onError={setError}
+        selfMeta={stealthAddress ?? null}
+      />
+
+      {/* Error */}
+      {status === "error" && error && (
+        <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-[10px]">
+          <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+          <span className="text-caption text-red-400">{error}</span>
         </div>
       )}
 
-      {step === "error" && (
-        <div className="text-center py-8 space-y-4">
-          <div className="text-4xl">❌</div>
-          <p className="text-sm text-red-400">{error}</p>
-          <button
-            onClick={() => setStep("amount")}
-            className="px-4 py-2 bg-zinc-700 text-zinc-300 rounded-lg hover:bg-zinc-600 transition-colors"
-          >
-            Try again
-          </button>
-        </div>
-      )}
+      {/* Shield button */}
+      <button
+        onClick={handleShield}
+        disabled={!canSubmit || status === "processing"}
+        className={cn(
+          "w-full flex items-center justify-center gap-2 py-3.5 rounded-[12px]",
+          "text-body2 font-semibold transition-all cursor-pointer",
+          canSubmit && status !== "processing"
+            ? "btn-privacy shadow-[0_0_20px_rgba(20,241,149,0.15)] hover:shadow-[0_0_30px_rgba(20,241,149,0.25)]"
+            : "bg-gray/20 text-gray/50 cursor-not-allowed"
+        )}
+      >
+        {status === "processing" ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Shielding...
+          </>
+        ) : (
+          <>
+            <Shield className="w-4 h-4" />
+            Shield {selectedToken.symbol}
+          </>
+        )}
+      </button>
     </div>
   );
 }

@@ -10,6 +10,8 @@ interface BtcAddressInputProps {
   error: string | null;
   onError: (error: string | null) => void;
   className?: string;
+  /** Compact mode: no label, tighter padding */
+  compact?: boolean;
 }
 
 /**
@@ -140,6 +142,7 @@ export function BtcAddressInput({
   error,
   onError,
   className,
+  compact = false,
 }: BtcAddressInputProps) {
   const [address, setAddress] = useState("");
 
@@ -160,12 +163,14 @@ export function BtcAddressInput({
 
   return (
     <div className={className}>
-      <label className="text-body2 text-gray-light pl-2 mb-2 block">
-        Bitcoin Withdrawal Address
-      </label>
+      {!compact && (
+        <label className="text-body2 text-gray-light pl-2 mb-2 block">
+          Bitcoin Withdrawal Address
+        </label>
+      )}
       <div className="relative">
-        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-btc">
-          <Bitcoin className="w-4 h-4" />
+        <div className={cn("absolute top-1/2 -translate-y-1/2 text-btc", compact ? "left-3" : "left-4")}>
+          <Bitcoin className={compact ? "w-3.5 h-3.5" : "w-4 h-4"} />
         </div>
         <input
           type="text"
@@ -173,28 +178,33 @@ export function BtcAddressInput({
           onChange={(e) => handleChange(e.target.value)}
           placeholder="tb1q... or tb1p..."
           className={cn(
-            "w-full pl-10 pr-4 py-3 bg-muted border rounded-[10px]",
-            "text-body2 font-mono text-foreground placeholder:text-gray/40",
-            "outline-none transition-colors",
-            error
-              ? "border-error/50"
-              : validatedAddress
-                ? "border-btc/40"
-                : "border-gray/20 focus:border-btc/40"
+            "w-full bg-muted text-body2 font-mono text-foreground placeholder:text-gray/40 outline-none",
+            compact ? "pl-8 pr-3 py-2.5 rounded-[8px] transition-shadow" : "pl-10 pr-4 py-3 rounded-[10px] border transition-colors",
+            compact
+              ? error
+                ? "ring-1 ring-error/50"
+                : validatedAddress
+                  ? "ring-1 ring-btc/40"
+                  : "focus:ring-1 focus:ring-btc/30"
+              : error
+                ? "border-error/50"
+                : validatedAddress
+                  ? "border-btc/40"
+                  : "border-gray/20 focus:border-btc/40"
           )}
         />
       </div>
 
       {error && !validatedAddress && (
-        <div className="flex items-center gap-2 text-error pl-2 mt-1">
-          <AlertCircle className="w-3.5 h-3.5" />
-          <span className="text-caption">{error}</span>
+        <div className={cn("flex items-center gap-2 text-error pl-2", compact ? "mt-0.5" : "mt-1")}>
+          <AlertCircle className="w-3 h-3" />
+          <span className={compact ? "text-[10px]" : "text-caption"}>{error}</span>
         </div>
       )}
 
       {validatedAddress && (
-        <p className="text-caption text-btc pl-2 mt-1 flex items-center gap-1">
-          <Check className="w-3.5 h-3.5" />
+        <p className={cn("text-btc pl-2 flex items-center gap-1", compact ? "text-[10px] mt-0.5" : "text-caption mt-1")}>
+          <Check className="w-3 h-3" />
           Valid Bitcoin address
         </p>
       )}

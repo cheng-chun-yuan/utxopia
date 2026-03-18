@@ -37,7 +37,6 @@ import {
   ChevronRight,
   AlertTriangle,
 } from "lucide-react";
-import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { DocsSection } from "@/components/docs/docs-section";
@@ -186,7 +185,7 @@ function ComparisonTable() {
       <div className="hidden sm:grid grid-cols-3 gap-4 pb-3 mb-2 border-b border-gray/10">
         <span className="text-[11px] font-mono uppercase tracking-wider text-gray/40">Aspect</span>
         <span className="text-[11px] font-mono uppercase tracking-wider text-gray/40">Traditional Bridges</span>
-        <span className="text-[11px] font-mono uppercase tracking-wider text-gray/50">Private Bitcoin</span>
+        <span className="text-[11px] font-mono uppercase tracking-wider text-gray/50">Privacy Coin</span>
       </div>
       {/* Mobile header */}
       <div className="sm:hidden pb-3 mb-2 border-b border-gray/10">
@@ -338,7 +337,7 @@ export default function DocsPage() {
                 </h1>
                 <p className="text-sm sm:text-base text-gray font-light max-w-2xl leading-relaxed">
                   A deep dive into the cryptography, architecture, and security model
-                  that makes Private Bitcoin the most private way to use Bitcoin on Solana.
+                  that makes Privacy Coin the most private way to use tokens on Solana.
                 </p>
               </div>
             </section>
@@ -348,7 +347,7 @@ export default function DocsPage() {
               <SectionHeading
                 label="The Problem"
                 title="Why Bitcoin Needs Privacy"
-                subtitle="Every Bitcoin transaction is permanently public. Bridges make it worse by creating on-chain tokens that expose your exact balance to anyone watching."
+                subtitle="Every blockchain transaction is permanently public. Bridges make it worse by creating on-chain tokens that expose your exact balance to anyone watching."
               />
               <ComparisonTable />
             </DocsSection>
@@ -440,18 +439,18 @@ export default function DocsPage() {
             <section className="border-t border-gray/10 py-16 sm:py-20">
               <div className="max-w-3xl mx-auto text-center">
                 <h2 className="text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight text-foreground mb-4">
-                  Ready to Use Bitcoin Privately?
+                  Ready to Use Tokens Privately?
                 </h2>
                 <p className="text-gray text-xs sm:text-sm font-light mb-6 sm:mb-8 max-w-lg mx-auto leading-relaxed">
-                  Deposit BTC, get shielded zkBTC, and transact without anyone watching.
+                  Shield any token, transfer privately, and stay anonymous.
                 </p>
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
                   <Link
                     href="/vault"
-                    className="btn-bitcoin btn-pill inline-flex items-center gap-2 px-5 sm:px-7 py-2.5 text-sm sm:text-base transition-shadow"
+                    className="btn-privacy btn-pill inline-flex items-center gap-2 px-5 sm:px-7 py-2.5 text-sm sm:text-base transition-shadow"
                   >
-                    <BitcoinIcon className="w-4 h-4 sm:w-5 sm:h-5" />
-                    Launch Vault
+                    <Shield className="w-4 h-4 sm:w-5 sm:h-5" />
+                    Launch App
                     <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
                   </Link>
                   <Link

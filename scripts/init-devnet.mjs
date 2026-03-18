@@ -2,8 +2,8 @@
 /**
  * Initialize Aegis program on devnet (fresh deploy)
  *
- * Creates: Token-2022 mint, pool vault ATA, frost vault ATA, pool state PDA, commitment tree PDA
- * Then registers VK hashes.
+ * Creates: Token-2022 mint, pool vault ATA, frost vault ATA, pool state PDA, commitment tree PDA.
+ * Registers tokens: zkBTC, wSOL (NATIVE_MINT_2022), tUSDC, tUSDT.
  *
  * Usage: node scripts/init-devnet.mjs
  */
@@ -202,7 +202,214 @@ async function main() {
     console.log("TokenConfig PDA:", tokenConfigPda.toBase58());
   }
 
-  // 6. Summary
+  // 6. Register wSOL (NATIVE_MINT_2022) as a token for SOL shielding
+  console.log("\n--- Registering wSOL Token ---");
+  {
+    const NATIVE_MINT_2022 = new PublicKey("9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP");
+
+    // Create wSOL vault ATA (Token-2022 native mint, owned by pool state PDA)
+    const wsolVault = ata(NATIVE_MINT_2022, poolState);
+    const createWsolVault = new TransactionInstruction({
+      programId: ATA_PROGRAM,
+      data: Buffer.alloc(0),
+      keys: [
+        { pubkey: authority.publicKey, isSigner: true, isWritable: true },
+        { pubkey: wsolVault, isSigner: false, isWritable: true },
+        { pubkey: poolState, isSigner: false, isWritable: false },
+        { pubkey: NATIVE_MINT_2022, isSigner: false, isWritable: false },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        { pubkey: TOKEN_2022, isSigner: false, isWritable: false },
+      ],
+    });
+
+    const txWsolAta = new Transaction().add(createWsolVault);
+    txWsolAta.feePayer = authority.publicKey;
+    txWsolAta.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+    await sendAndConfirmTransaction(conn, txWsolAta, [authority], { commitment: "confirmed" });
+    console.log("wSOL Vault:", wsolVault.toBase58());
+
+    // Derive TokenConfig PDA for wSOL
+    const [wsolTokenConfigPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("token_config"), NATIVE_MINT_2022.toBuffer()],
+      AEGIS_PROGRAM_ID,
+    );
+
+    // register_token: service_fee(8) + min_deposit(8) + max_deposit(8) + deposit_cap(8) = 32 bytes
+    const regData = Buffer.alloc(1 + 32);
+    regData[0] = 28; // disc = REGISTER_TOKEN
+    // service_fee = 0 (no flat fee for SOL)
+    regData.writeBigUInt64LE(0n, 1);
+    // min_deposit = 10_000_000 lamports (0.01 SOL)
+    regData.writeBigUInt64LE(10_000_000n, 9);
+    // max_deposit = 1000 SOL in lamports
+    regData.writeBigUInt64LE(1_000_000_000_000n, 17);
+    // deposit_cap = 100_000 SOL in lamports
+    regData.writeBigUInt64LE(100_000_000_000_000n, 25);
+
+    await send(conn, authority, new TransactionInstruction({
+      programId: AEGIS_PROGRAM_ID,
+      data: regData,
+      keys: [
+        { pubkey: authority.publicKey, isSigner: true, isWritable: true },
+        { pubkey: poolState, isSigner: false, isWritable: false },
+        { pubkey: NATIVE_MINT_2022, isSigner: false, isWritable: false },
+        { pubkey: wsolTokenConfigPda, isSigner: false, isWritable: true },
+        { pubkey: wsolVault, isSigner: false, isWritable: false },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      ],
+    }));
+    console.log("wSOL TokenConfig PDA:", wsolTokenConfigPda.toBase58());
+    console.log("NATIVE_MINT_2022:", NATIVE_MINT_2022.toBase58());
+  }
+
+  // 7. Register tUSDC (6 decimals) for SPL USDC shielding
+  console.log("\n--- Registering tUSDC Token ---");
+  const usdcMintKp = Keypair.generate();
+  {
+    // Create Token-2022 mint with 6 decimals
+    const createMint = SystemProgram.createAccount({
+      fromPubkey: authority.publicKey,
+      newAccountPubkey: usdcMintKp.publicKey,
+      lamports: await conn.getMinimumBalanceForRentExemption(82),
+      space: 82,
+      programId: TOKEN_2022,
+    });
+    const initMintData = Buffer.alloc(67);
+    initMintData[0] = 20; // InitializeMint2
+    initMintData[1] = 6;  // decimals
+    initMintData.set(authority.publicKey.toBuffer(), 2); // mint authority = deployer (for test minting)
+    initMintData[34] = 0; // no freeze authority
+    const initMint = new TransactionInstruction({
+      programId: TOKEN_2022,
+      keys: [{ pubkey: usdcMintKp.publicKey, isSigner: false, isWritable: true }],
+      data: initMintData,
+    });
+    const txMint = new Transaction().add(createMint, initMint);
+    txMint.feePayer = authority.publicKey;
+    txMint.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+    await sendAndConfirmTransaction(conn, txMint, [authority, usdcMintKp], { commitment: "confirmed" });
+    console.log("tUSDC Mint:", usdcMintKp.publicKey.toBase58());
+
+    // Create vault ATA
+    const usdcVault = ata(usdcMintKp.publicKey, poolState);
+    const createUsdcVault = new TransactionInstruction({
+      programId: ATA_PROGRAM,
+      data: Buffer.alloc(0),
+      keys: [
+        { pubkey: authority.publicKey, isSigner: true, isWritable: true },
+        { pubkey: usdcVault, isSigner: false, isWritable: true },
+        { pubkey: poolState, isSigner: false, isWritable: false },
+        { pubkey: usdcMintKp.publicKey, isSigner: false, isWritable: false },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        { pubkey: TOKEN_2022, isSigner: false, isWritable: false },
+      ],
+    });
+    const txAta = new Transaction().add(createUsdcVault);
+    txAta.feePayer = authority.publicKey;
+    txAta.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+    await sendAndConfirmTransaction(conn, txAta, [authority], { commitment: "confirmed" });
+    console.log("tUSDC Vault:", usdcVault.toBase58());
+
+    // Register token
+    const [usdcTokenConfigPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("token_config"), usdcMintKp.publicKey.toBuffer()],
+      AEGIS_PROGRAM_ID,
+    );
+    const regData = Buffer.alloc(1 + 32);
+    regData[0] = 28;
+    regData.writeBigUInt64LE(0n, 1);              // service_fee = 0
+    regData.writeBigUInt64LE(100_000n, 9);         // min_deposit = 0.1 USDC
+    regData.writeBigUInt64LE(1_000_000_000_000n, 17);  // max_deposit = 1M USDC
+    regData.writeBigUInt64LE(10_000_000_000_000n, 25); // deposit_cap = 10M USDC
+    await send(conn, authority, new TransactionInstruction({
+      programId: AEGIS_PROGRAM_ID,
+      data: regData,
+      keys: [
+        { pubkey: authority.publicKey, isSigner: true, isWritable: true },
+        { pubkey: poolState, isSigner: false, isWritable: false },
+        { pubkey: usdcMintKp.publicKey, isSigner: false, isWritable: false },
+        { pubkey: usdcTokenConfigPda, isSigner: false, isWritable: true },
+        { pubkey: usdcVault, isSigner: false, isWritable: false },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      ],
+    }));
+    console.log("tUSDC TokenConfig PDA:", usdcTokenConfigPda.toBase58());
+  }
+
+  // 8. Register tUSDT (6 decimals) for SPL USDT shielding
+  console.log("\n--- Registering tUSDT Token ---");
+  const usdtMintKp = Keypair.generate();
+  {
+    const createMint = SystemProgram.createAccount({
+      fromPubkey: authority.publicKey,
+      newAccountPubkey: usdtMintKp.publicKey,
+      lamports: await conn.getMinimumBalanceForRentExemption(82),
+      space: 82,
+      programId: TOKEN_2022,
+    });
+    const initMintData = Buffer.alloc(67);
+    initMintData[0] = 20; // InitializeMint2
+    initMintData[1] = 6;  // decimals
+    initMintData.set(authority.publicKey.toBuffer(), 2); // mint authority = deployer
+    initMintData[34] = 0;
+    const initMint = new TransactionInstruction({
+      programId: TOKEN_2022,
+      keys: [{ pubkey: usdtMintKp.publicKey, isSigner: false, isWritable: true }],
+      data: initMintData,
+    });
+    const txMint = new Transaction().add(createMint, initMint);
+    txMint.feePayer = authority.publicKey;
+    txMint.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+    await sendAndConfirmTransaction(conn, txMint, [authority, usdtMintKp], { commitment: "confirmed" });
+    console.log("tUSDT Mint:", usdtMintKp.publicKey.toBase58());
+
+    // Create vault ATA
+    const usdtVault = ata(usdtMintKp.publicKey, poolState);
+    const createUsdtVault = new TransactionInstruction({
+      programId: ATA_PROGRAM,
+      data: Buffer.alloc(0),
+      keys: [
+        { pubkey: authority.publicKey, isSigner: true, isWritable: true },
+        { pubkey: usdtVault, isSigner: false, isWritable: true },
+        { pubkey: poolState, isSigner: false, isWritable: false },
+        { pubkey: usdtMintKp.publicKey, isSigner: false, isWritable: false },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        { pubkey: TOKEN_2022, isSigner: false, isWritable: false },
+      ],
+    });
+    const txAta = new Transaction().add(createUsdtVault);
+    txAta.feePayer = authority.publicKey;
+    txAta.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+    await sendAndConfirmTransaction(conn, txAta, [authority], { commitment: "confirmed" });
+    console.log("tUSDT Vault:", usdtVault.toBase58());
+
+    // Register token
+    const [usdtTokenConfigPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("token_config"), usdtMintKp.publicKey.toBuffer()],
+      AEGIS_PROGRAM_ID,
+    );
+    const regData = Buffer.alloc(1 + 32);
+    regData[0] = 28;
+    regData.writeBigUInt64LE(0n, 1);
+    regData.writeBigUInt64LE(100_000n, 9);
+    regData.writeBigUInt64LE(1_000_000_000_000n, 17);
+    regData.writeBigUInt64LE(10_000_000_000_000n, 25);
+    await send(conn, authority, new TransactionInstruction({
+      programId: AEGIS_PROGRAM_ID,
+      data: regData,
+      keys: [
+        { pubkey: authority.publicKey, isSigner: true, isWritable: true },
+        { pubkey: poolState, isSigner: false, isWritable: false },
+        { pubkey: usdtMintKp.publicKey, isSigner: false, isWritable: false },
+        { pubkey: usdtTokenConfigPda, isSigner: false, isWritable: true },
+        { pubkey: usdtVault, isSigner: false, isWritable: false },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      ],
+    }));
+    console.log("tUSDT TokenConfig PDA:", usdtTokenConfigPda.toBase58());
+  }
+
+  // 9. Summary
   console.log("\n========================================");
   console.log("DEPLOYMENT COMPLETE");
   console.log("========================================");
@@ -213,6 +420,9 @@ async function main() {
   console.log("Pool Vault:      ", poolVault.toBase58());
   console.log("Frost Vault:     ", frostVault.toBase58());
   console.log("Authority:       ", authority.publicKey.toBase58());
+  console.log("wSOL Mint:       ", "9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP");
+  console.log("tUSDC Mint:      ", usdcMintKp.publicKey.toBase58());
+  console.log("tUSDT Mint:      ", usdtMintKp.publicKey.toBase58());
   console.log("\nUpdate sdk/src/config.ts with:");
   console.log(`  zkbtcMint: "${mintKp.publicKey.toBase58()}",`);
   console.log(`  poolStatePda: "${poolState.toBase58()}",`);

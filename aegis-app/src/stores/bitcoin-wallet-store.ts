@@ -149,7 +149,7 @@ export const useBitcoinWalletStore = create<BitcoinWalletState>((set, get) => ({
         await getAddress({
           payload: {
             purposes: [AddressPurpose.Payment, AddressPurpose.Ordinals],
-            message: "Connect to Private Bitcoin for BTC deposits",
+            message: "Connect to Privacy Coin for BTC deposits",
             network: { type: getSatsConnectNetwork() },
           },
           onFinish: async (response: GetAddressResponse) => {
@@ -326,7 +326,7 @@ export const useBitcoinWalletStore = create<BitcoinWalletState>((set, get) => ({
           payload: {
             network: { type: getSatsConnectNetwork() },
             psbtBase64,
-            message: "Sign Private Bitcoin deposit transaction",
+            message: "Sign Privacy Coin deposit transaction",
             broadcast: true,
             inputsToSign: [
               {

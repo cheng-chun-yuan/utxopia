@@ -38,7 +38,7 @@ export function NoteLinkPreview({ phrase }: { phrase: string }) {
 }
 
 /** Full claim link card shown in the success step */
-export function NoteClaimLink({ phrase, amount }: { phrase: string; amount: number }) {
+export function NoteClaimLink({ phrase, amount, tokenSymbol = "zkBTC" }: { phrase: string; amount: number; tokenSymbol?: string }) {
   const [copied, setCopied] = useState(false);
   const claimUrl = typeof window !== "undefined"
     ? `${window.location.origin}/claim#note=${encodeURIComponent(phrase)}`
@@ -57,7 +57,7 @@ export function NoteClaimLink({ phrase, amount }: { phrase: string; amount: numb
         <div className="flex items-center gap-2">
           <FileText className="w-4 h-4 text-gray-light" />
           <span className="text-body2-semibold text-foreground">
-            Note: {formatBtc(amount)} zkBTC
+            Note: {formatBtc(amount)} {tokenSymbol}
           </span>
         </div>
         <button

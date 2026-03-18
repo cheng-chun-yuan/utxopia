@@ -22,6 +22,8 @@ interface StealthRecipientInputProps {
   icon?: React.ReactNode;
   /** If provided, shows a "Self" button to auto-fill with own stealth address */
   selfMeta?: StealthMetaAddress | null;
+  /** Compact mode: no label, tighter padding */
+  compact?: boolean;
 }
 
 export function StealthRecipientInput({
@@ -33,6 +35,7 @@ export function StealthRecipientInput({
   className,
   icon,
   selfMeta,
+  compact = false,
 }: StealthRecipientInputProps) {
   const [recipient, setRecipient] = useState("");
   const [resolving, setResolving] = useState(false);
@@ -131,13 +134,15 @@ export function StealthRecipientInput({
   return (
     <div className={className}>
       {/* Recipient Input */}
-      <div className="mb-2">
-        <label className="text-body2 text-gray-light pl-2 mb-2 block">
-          Recipient
-        </label>
+      <div className={compact ? "" : "mb-2"}>
+        {!compact && (
+          <label className="text-body2 text-gray-light pl-2 mb-2 block">
+            Recipient
+          </label>
+        )}
         <div className="relative">
           {icon && (
-            <div className="absolute left-4 top-1/2 -translate-y-1/2">
+            <div className={cn("absolute top-1/2 -translate-y-1/2", compact ? "left-3" : "left-4")}>
               {icon}
             </div>
           )}
@@ -147,16 +152,21 @@ export function StealthRecipientInput({
             onChange={(e) => handleInputChange(e.target.value)}
             placeholder={`alice.${parentDomain}.sol or aegis:...`}
             className={cn(
-              "w-full py-3 bg-muted border rounded-[10px]",
-              "text-body2 font-mono text-foreground placeholder:text-gray/40",
-              "outline-none transition-colors",
-              icon ? "pl-10" : "pl-4",
-              selfMeta ? "pr-16" : "pr-4",
-              error
-                ? "border-red-500/50"
-                : resolvedMeta
-                  ? "border-privacy/40"
-                  : "border-gray/20 focus:border-purple/40"
+              "w-full bg-muted text-body2 font-mono text-foreground placeholder:text-gray/40 outline-none transition-shadow",
+              compact ? "py-2.5 rounded-[8px]" : "py-3 rounded-[10px] border border-gray/20 focus:border-purple/40",
+              icon ? (compact ? "pl-8" : "pl-10") : (compact ? "pl-3" : "pl-4"),
+              selfMeta ? "pr-16" : (compact ? "pr-3" : "pr-4"),
+              compact
+                ? error
+                  ? "ring-1 ring-red-500/50"
+                  : resolvedMeta
+                    ? "ring-1 ring-privacy/40"
+                    : "focus:ring-1 focus:ring-purple/30"
+                : error
+                  ? "border-red-500/50"
+                  : resolvedMeta
+                    ? "border-privacy/40"
+                    : ""
             )}
             onBlur={() => {
               if (recipient.trim() && !resolvedMeta && !resolving) {

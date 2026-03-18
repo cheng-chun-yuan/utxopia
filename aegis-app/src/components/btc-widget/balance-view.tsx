@@ -545,7 +545,7 @@ export function BalanceView() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ArrowDownToLine className="w-5 h-5 text-btc" />
-          <p className="text-lg font-semibold text-white">Bitcoin Deposits</p>
+          <p className="text-lg font-semibold text-white">Shielded Deposits</p>
         </div>
       </div>
 
@@ -607,7 +607,7 @@ export function BalanceView() {
       {keys && !hasAnyDeposits && !isLoading && (
         <div className="text-center py-8">
           <div className="rounded-full bg-btc/10 p-4 w-fit mx-auto mb-4">
-            <BitcoinIcon className="h-8 w-8" />
+            <ArrowDownToLine className="h-8 w-8 text-btc" />
           </div>
           <p className="text-sm text-gray">No deposits found for your keys</p>
           <p className="text-xs text-gray/40 mt-1">Deposits addressed to you will appear here automatically</p>

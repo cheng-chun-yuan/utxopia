@@ -1,38 +1,134 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, useMemo, useCallback, Suspense, Fragment } from "react";
 import {
   ArrowDownToLine,
   ArrowUpDown,
   ArrowUpFromLine,
   Shield,
 } from "lucide-react";
-import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
 import { useDeposits, useTransfers, useRedemptions } from "@/hooks/use-explorer";
+import type { DepositRecord, GroupedTransfer, RedemptionRecord } from "@/hooks/use-explorer";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 
-import { TabBar, LoadingState, StatCard } from "./components/shared";
-import type { TabType } from "./components/shared";
-import { DepositsTab } from "./components/deposits-tab";
-import { TransfersTab } from "./components/transfers-tab";
-import { WithdrawalsTab } from "./components/withdrawals-tab";
+import { TypeFilterBar, LoadingState, StatCard, Th, RefreshButton, EmptyState } from "./components/shared";
+import type { FilterType, TokenFilter } from "./components/shared";
+import { DepositRow } from "./components/deposits-tab";
+import { TransferRow, getTransferKind } from "./components/transfers-tab";
+import { WithdrawalRow } from "./components/withdrawals-tab";
+
+// =============================================================================
+// Unified Transaction Type
+// =============================================================================
+
+type UnifiedTransaction =
+  | { kind: "shield"; data: DepositRecord; timestamp: number; key: string }
+  | { kind: "transfer"; data: GroupedTransfer; timestamp: number; key: string }
+  | { kind: "unshield"; data: GroupedTransfer | RedemptionRecord; timestamp: number; key: string; source: "transfer" | "redemption" };
+
+function isRedemption(tx: UnifiedTransaction): tx is UnifiedTransaction & { kind: "unshield"; data: RedemptionRecord; source: "redemption" } {
+  return tx.kind === "unshield" && (tx as any).source === "redemption";
+}
+
+function isTransferUnshield(tx: UnifiedTransaction): tx is UnifiedTransaction & { kind: "unshield"; data: GroupedTransfer; source: "transfer" } {
+  return tx.kind === "unshield" && (tx as any).source === "transfer";
+}
 
 // =============================================================================
 // Explorer Content
 // =============================================================================
 
 function ExplorerContent() {
-  const [activeTab, setActiveTab] = useState<TabType>("deposits");
-  const { deposits } = useDeposits();
-  const { transfers } = useTransfers();
-  const { redemptions } = useRedemptions();
+  const [activeFilter, setActiveFilter] = useState<FilterType>("all");
+  const [selectedTokens, setSelectedTokens] = useState<Set<TokenFilter>>(() => new Set(["btc", "sol", "usdc", "usdt"] as TokenFilter[]));
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  const counts: Record<TabType, number> = {
-    deposits: deposits.length,
-    transfers: transfers.length,
-    withdrawals: redemptions.length,
-  };
+  const { deposits, refresh: refreshDeposits } = useDeposits();
+  const { transfers, refresh: refreshTransfers } = useTransfers();
+  const { redemptions, refresh: refreshRedemptions } = useRedemptions();
+
+  const toggle = useCallback((key: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const refreshAll = useCallback(() => {
+    refreshDeposits();
+    refreshTransfers();
+    refreshRedemptions();
+  }, [refreshDeposits, refreshTransfers, refreshRedemptions]);
+
+  // Build unified list
+  const unified = useMemo(() => {
+    const items: UnifiedTransaction[] = [];
+
+    // Deposits → Shield
+    for (const d of deposits) {
+      items.push({
+        kind: "shield",
+        data: d,
+        timestamp: d.timestamp,
+        key: `shield-${d.btcTxid || d.txSignature || d.commitment}`,
+      });
+    }
+
+    // Transfers → Transfer or Unshield
+    for (const t of transfers) {
+      const kind = getTransferKind(t);
+      if (kind === "transfer") {
+        items.push({
+          kind: "transfer",
+          data: t,
+          timestamp: t.timestamp,
+          key: `transfer-${t.txSignature}`,
+        });
+      } else {
+        items.push({
+          kind: "unshield",
+          data: t,
+          timestamp: t.timestamp,
+          key: `unshield-t-${t.txSignature}`,
+          source: "transfer",
+        });
+      }
+    }
+
+    // Redemptions → Unshield
+    for (const r of redemptions) {
+      items.push({
+        kind: "unshield",
+        data: r,
+        timestamp: r.createdAt,
+        key: `unshield-r-${r.requestId || r.pubkey}`,
+        source: "redemption",
+      });
+    }
+
+    // Sort by timestamp desc
+    items.sort((a, b) => b.timestamp - a.timestamp);
+    return items;
+  }, [deposits, transfers, redemptions]);
+
+  // Counts
+  const counts = useMemo(() => {
+    const c: Record<FilterType, number> = { all: 0, shield: 0, transfer: 0, unshield: 0 };
+    for (const item of unified) {
+      c[item.kind]++;
+    }
+    c.all = unified.length;
+    return c;
+  }, [unified]);
+
+  // Filter
+  const filtered = useMemo(() => {
+    if (activeFilter === "all") return unified;
+    return unified.filter((t) => t.kind === activeFilter);
+  }, [unified, activeFilter]);
 
   const totalShielded = deposits.reduce((sum, d) => sum + (d.amountSats || 0), 0);
 
@@ -41,38 +137,121 @@ function ExplorerContent() {
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         <StatCard
-          label="Deposits"
-          value={counts.deposits}
+          label="Shield"
+          value={counts.shield}
           icon={<ArrowDownToLine className="w-4 h-4 text-green-400" />}
           color="bg-green-500/5 border-green-500/15"
         />
         <StatCard
-          label="Transfers"
-          value={counts.transfers}
+          label="Transfer"
+          value={counts.transfer}
           icon={<ArrowUpDown className="w-4 h-4 text-purple-400" />}
           color="bg-purple-500/5 border-purple-500/15"
         />
         <StatCard
-          label="Withdrawals"
-          value={counts.withdrawals}
+          label="Unshield"
+          value={counts.unshield}
           icon={<ArrowUpFromLine className="w-4 h-4 text-orange-400" />}
           color="bg-orange-500/5 border-orange-500/15"
         />
         <StatCard
           label="Total Shielded"
-          value={`${(totalShielded / 1e8).toFixed(4)}`}
-          icon={<BitcoinIcon className="w-4 h-4 text-btc" />}
-          color="bg-btc/5 border-btc/15"
+          value={`${(totalShielded / 1e8).toFixed(4)} BTC`}
+          icon={<Shield className="w-4 h-4 text-privacy" />}
+          color="bg-privacy/5 border-privacy/15"
         />
       </div>
 
-      <div className="mb-4">
-        <TabBar activeTab={activeTab} onTabChange={setActiveTab} counts={counts} />
+      {/* Filter Bar */}
+      <div className="flex items-center justify-between mb-4">
+        <TypeFilterBar
+          activeFilter={activeFilter}
+          onFilterChange={setActiveFilter}
+          selectedTokens={selectedTokens}
+          onToggleToken={(t) => {
+            setSelectedTokens((prev) => {
+              const next = new Set(prev);
+              if (next.has(t)) {
+                if (next.size > 1) next.delete(t);
+              } else {
+                next.add(t);
+              }
+              return next;
+            });
+          }}
+          counts={counts}
+        />
+        <RefreshButton onClick={refreshAll} />
       </div>
+
+      {/* Unified Table */}
       <div className="min-h-[40vh]">
-        {activeTab === "deposits" && <DepositsTab />}
-        {activeTab === "transfers" && <TransfersTab />}
-        {activeTab === "withdrawals" && <WithdrawalsTab />}
+        {filtered.length === 0 ? (
+          <EmptyState label="transactions" />
+        ) : (
+          <div className="overflow-x-auto rounded-[12px] border border-gray/15 backdrop-blur-sm bg-muted/30">
+            <table className="w-full min-w-[750px]">
+              <thead>
+                <tr className="border-b border-gray/15 bg-muted/50">
+                  <Th>Type</Th>
+                  <Th>Status</Th>
+                  <Th>Tx ID</Th>
+                  <Th>Details</Th>
+                  <Th>Amount</Th>
+                  <Th>Time</Th>
+                  <Th className="w-[40px]" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray/10">
+                {filtered.map((tx, i) => {
+                  if (tx.kind === "shield") {
+                    return (
+                      <DepositRow
+                        key={tx.key}
+                        deposit={tx.data}
+                        index={i}
+                        expanded={expanded.has(tx.key)}
+                        onToggle={() => toggle(tx.key)}
+                      />
+                    );
+                  }
+                  if (tx.kind === "transfer") {
+                    return (
+                      <TransferRow
+                        key={tx.key}
+                        tx={tx.data as GroupedTransfer}
+                        expanded={expanded.has(tx.key)}
+                        onToggle={() => toggle(tx.key)}
+                      />
+                    );
+                  }
+                  // Unshield — either from transfer or redemption
+                  if (isTransferUnshield(tx)) {
+                    return (
+                      <TransferRow
+                        key={tx.key}
+                        tx={tx.data}
+                        expanded={expanded.has(tx.key)}
+                        onToggle={() => toggle(tx.key)}
+                      />
+                    );
+                  }
+                  if (isRedemption(tx)) {
+                    return (
+                      <WithdrawalRow
+                        key={tx.key}
+                        redemption={tx.data}
+                        expanded={expanded.has(tx.key)}
+                        onToggle={() => toggle(tx.key)}
+                      />
+                    );
+                  }
+                  return null;
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </>
   );
@@ -96,7 +275,7 @@ export default function ExplorerPage() {
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
             <div>
               <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-foreground mb-1.5">Explorer</h1>
-              <p className="text-sm text-gray font-light">Browse all shielded pool activity — deposits, transfers &amp; withdrawals</p>
+              <p className="text-sm text-gray font-light">Browse all shielded pool activity</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-privacy/5 border border-privacy/15">

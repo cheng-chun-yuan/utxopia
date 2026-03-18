@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { Shield } from "lucide-react";
 import { motion } from "framer-motion";
-import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
 
 export function SiteFooter() {
   return (
@@ -19,17 +18,17 @@ export function SiteFooter() {
         transition={{ duration: 0.5 }}
       >
         <Link href="/" className="flex items-center gap-2 group">
-          <div className="w-6 h-6 flex items-center justify-center rounded-full bg-gradient-to-br from-btc/20 to-privacy/20 group-hover:scale-110 transition-transform">
-            <BitcoinIcon className="w-3 h-3" />
+          <div className="w-6 h-6 flex items-center justify-center rounded-full bg-gradient-to-br from-privacy/20 to-privacy/30 group-hover:scale-110 transition-transform">
+            <Shield className="w-3 h-3 text-privacy" />
           </div>
           <span className="text-sm font-medium tracking-tight text-foreground group-hover:text-privacy transition-colors">
-            Private Bitcoin
+            Privacy Coin
           </span>
         </Link>
 
         <div className="flex items-center gap-2 text-caption text-gray">
           <Shield className="w-3.5 h-3.5 text-privacy" />
-          <span>ZK-Proven Privacy for Bitcoin on Solana</span>
+          <span>ZK Privacy for Every Token on Solana</span>
         </div>
 
         <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption text-gray/60 hover:text-gray-light transition-all hover:-translate-y-0.5 flex items-center gap-1.5">

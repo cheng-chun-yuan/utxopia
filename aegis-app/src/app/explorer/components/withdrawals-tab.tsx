@@ -24,7 +24,7 @@ import type { RedemptionRecord } from "@/hooks/use-explorer";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { truncate, timeAgo, scriptToAddress } from "./helpers";
 import { getEsploraApiUrl } from "@/lib/btc-network";
-import { Th, Td, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
+import { Th, Td, TypeBadge, SolanaLink, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
 
 // =============================================================================
 // BTC Confirmation Status — fetches live confirmation count from mempool.space
@@ -410,7 +410,86 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
 }
 
 // =============================================================================
-// Withdrawals Tab
+// Withdrawal Row — single unified table row + expandable detail
+// =============================================================================
+
+export function WithdrawalRow({
+  redemption,
+  expanded,
+  onToggle,
+}: {
+  redemption: RedemptionRecord;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const r = redemption;
+  const btcAddr = r.btcScript ? scriptToAddress(r.btcScript) : null;
+
+  return (
+    <Fragment>
+      <tr
+        className="hover:bg-gray/5 transition-colors cursor-pointer"
+        onClick={onToggle}
+      >
+        <Td>
+          <TypeBadge kind="unshield" />
+        </Td>
+        <Td>
+          <WithdrawalStatusBadge status={getEffectiveStatus(r)} />
+        </Td>
+        <Td>
+          {r.requestTxSignature ? (
+            <div className="flex items-center gap-1.5">
+              <code className="text-caption font-mono text-foreground">{truncate(r.requestTxSignature, 6, 4)}</code>
+              <CopyButton text={r.requestTxSignature} label="Tx" variant="default" iconSize="sm" />
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <code className="text-caption font-mono text-foreground">{truncate(r.pubkey, 6, 4)}</code>
+              <CopyButton text={r.pubkey} label="PDA" variant="default" iconSize="sm" />
+            </div>
+          )}
+        </Td>
+        <Td>
+          <span className="text-caption text-gray font-mono">
+            → {btcAddr ? truncate(btcAddr, 6, 4) : "BTC wallet"}
+          </span>
+        </Td>
+        <Td>
+          <span className="text-body2 text-foreground font-mono">
+            {Number(r.amountSats).toLocaleString()} <span className="text-gray text-caption">sats</span>
+          </span>
+        </Td>
+        <Td>
+          <span className="text-caption text-gray">{timeAgo(r.createdAt)}</span>
+        </Td>
+        <Td>
+          <a
+            href={r.status === "Completed" && r.completeTxSignature
+              ? `https://explorer.solana.com/tx/${r.completeTxSignature}?cluster=devnet`
+              : `https://explorer.solana.com/address/${r.pubkey}?cluster=devnet`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sol hover:text-sol/80 transition-colors"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </Td>
+      </tr>
+      {expanded && (
+        <tr>
+          <td colSpan={8} className="p-0">
+            <WithdrawalDetails redemption={r} />
+          </td>
+        </tr>
+      )}
+    </Fragment>
+  );
+}
+
+// =============================================================================
+// Withdrawals Tab (standalone, kept for backward compat)
 // =============================================================================
 
 export function WithdrawalsTab() {
@@ -440,72 +519,25 @@ export function WithdrawalsTab() {
         <table className="w-full min-w-[600px]">
           <thead>
             <tr className="border-b border-gray/15 bg-muted/50">
+              <Th>Type</Th>
               <Th>Status</Th>
-              <Th>Destination</Th>
+              <Th>Tx ID</Th>
+              <Th>Details</Th>
               <Th>Amount</Th>
-              <Th>Fee</Th>
               <Th>Time</Th>
               <Th className="w-[40px]" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray/10">
             {redemptions.map((r) => {
-              const btcAddr = r.btcScript ? scriptToAddress(r.btcScript) : null;
-              const isBtcWithdraw = !!r.btcScript;
               const rowKey = r.requestId || r.pubkey;
-              const isOpen = expanded.has(rowKey);
               return (
-                <Fragment key={rowKey}>
-                  <tr
-                    className="hover:bg-gray/5 transition-colors cursor-pointer"
-                    onClick={() => toggle(rowKey)}
-                  >
-                    <Td>
-                      <WithdrawalStatusBadge status={getEffectiveStatus(r)} />
-                    </Td>
-                    <Td>
-                      <div className="flex items-center gap-1.5">
-                        {btcAddr ? (
-                          <>
-                            <code className="text-caption font-mono text-foreground">{truncate(btcAddr, 8, 6)}</code>
-                            <CopyButton text={btcAddr} label="BTC Address" variant="default" iconSize="sm" />
-                          </>
-                        ) : (
-                          <span className="text-caption text-gray">—</span>
-                        )}
-                      </div>
-                    </Td>
-                    <Td>
-                      <WithdrawalAmountCell r={r} />
-                    </Td>
-                    <Td>
-                      <WithdrawalFeeCell r={r} />
-                    </Td>
-                    <Td>
-                      <span className="text-caption text-gray">{timeAgo(r.createdAt)}</span>
-                    </Td>
-                    <Td>
-                      <a
-                        href={r.status === "Completed" && r.completeTxSignature
-                          ? `https://explorer.solana.com/tx/${r.completeTxSignature}?cluster=devnet`
-                          : `https://explorer.solana.com/address/${r.pubkey}?cluster=devnet`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sol hover:text-sol/80 transition-colors"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    </Td>
-                  </tr>
-                  {isOpen && (
-                    <tr>
-                      <td colSpan={7} className="p-0">
-                        <WithdrawalDetails redemption={r} />
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
+                <WithdrawalRow
+                  key={rowKey}
+                  redemption={r}
+                  expanded={expanded.has(rowKey)}
+                  onToggle={() => toggle(rowKey)}
+                />
               );
             })}
           </tbody>

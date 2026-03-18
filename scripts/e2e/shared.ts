@@ -1,0 +1,347 @@
+#!/usr/bin/env bun
+/**
+ * Shared module for E2E localnet tests
+ *
+ * Exports: connection, authority, program IDs, PDA derivations, helpers, constants.
+ * Reads/writes localnet-state.json for inter-step persistence.
+ */
+
+import {
+  Connection,
+  Keypair,
+  PublicKey,
+  SystemProgram,
+  Transaction,
+  TransactionInstruction,
+  LAMPORTS_PER_SOL,
+  sendAndConfirmTransaction,
+  ComputeBudgetProgram,
+} from "@solana/web3.js";
+import { TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
+import * as fs from "fs";
+import * as path from "path";
+import * as crypto from "crypto";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+export const RPC_URL = "http://127.0.0.1:8899";
+export const ESPLORA_URL = "http://localhost:3002/regtest/api";
+export const STATE_FILE = path.join(__dirname, "localnet-state.json");
+export const CONTRACTS_DIR = path.resolve(__dirname, "../../contracts");
+export const SDK_DIR = path.resolve(__dirname, "../../sdk");
+export const CIRCUITS_DIR = path.resolve(__dirname, "../../circuits");
+
+export const ZKBTC_TOKEN_ID = 0x7a627463n; // "zkbtc" as u32
+export const BN254_FIELD_PRIME =
+  21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+export const TREE_DEPTH = 16;
+
+export const TOKEN_2022 = TOKEN_2022_PROGRAM_ID;
+export const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+
+// Instruction discriminators
+export const Disc = {
+  INITIALIZE: 0,
+  VERIFY_STEALTH_DEPOSIT: 1,
+  REQUEST_REDEMPTION: 5,
+  INIT_VK_REGISTRY: 11,
+  ADD_DEMO_STEALTH: 13,
+  TRANSACT: 14,
+  REGISTER_TOKEN: 28,
+  SHIELD: 29,
+  UNSHIELD: 30,
+} as const;
+
+// PDA seeds
+export const Seeds = {
+  POOL_STATE: "pool_state",
+  COMMITMENT_TREE: "commitment_tree",
+  VK_REGISTRY: "vk_registry",
+  NULLIFIER: "nullifier",
+  STEALTH: "stealth",
+  REDEMPTION: "redemption",
+  DEPOSIT: "deposit",
+  TOKEN_CONFIG: "token_config",
+  BTC_LIGHT_CLIENT: "btc_light_client",
+  BLOCK: "block",
+  HEIGHT_INDEX: "height_index",
+};
+
+// =============================================================================
+// Connection + Authority
+// =============================================================================
+
+export const connection = new Connection(RPC_URL, "confirmed");
+
+export function loadAuthority(): Keypair {
+  const keyPath = process.env.KEYPAIR
+    || (process.env.HOME + "/.config/solana/id.json");
+  const secretKey = JSON.parse(fs.readFileSync(keyPath, "utf-8"));
+  return Keypair.fromSecretKey(Uint8Array.from(secretKey));
+}
+
+// =============================================================================
+// Localnet State Persistence
+// =============================================================================
+
+export interface NoteState {
+  npk: string;
+  random: string;
+  amount: number;
+  leafIndex: number;
+  commitment: string;
+  tokenId: string;
+}
+
+export interface LocalnetState {
+  aegisProgramId: string;
+  btcLightClientId: string;
+  chadbufferId: string;
+  zkbtcMint: string;
+  poolState: string;
+  commitmentTree: string;
+  poolVault: string;
+  frostVault: string;
+  authority: string;
+  tUsdcMint?: string;
+  tUsdcVault?: string;
+  tWsolMint?: string;
+  tWsolVault?: string;
+  btcNote?: NoteState;
+  demoNote?: NoteState;
+  usdcNote?: NoteState;
+  wsolNote?: NoteState;
+  transferNotes?: { send: NoteState; change: NoteState };
+  // Crypto keys (hex)
+  spendingSeed?: string;
+  pubKeyX?: string;
+  pubKeyY?: string;
+  nullifyingKey?: string;
+  mpk?: string;
+}
+
+export function loadState(): LocalnetState {
+  if (!fs.existsSync(STATE_FILE)) {
+    throw new Error(`State file not found: ${STATE_FILE}. Run step1-infra.ts first.`);
+  }
+  return JSON.parse(fs.readFileSync(STATE_FILE, "utf-8"));
+}
+
+export function saveState(state: LocalnetState): void {
+  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2) + "\n");
+}
+
+export function updateState(partial: Partial<LocalnetState>): void {
+  const state = loadState();
+  Object.assign(state, partial);
+  saveState(state);
+}
+
+// =============================================================================
+// PDA Derivation
+// =============================================================================
+
+export function derivePoolStatePDA(programId: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync([Buffer.from(Seeds.POOL_STATE)], programId);
+}
+
+export function deriveCommitmentTreePDA(programId: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync([Buffer.from(Seeds.COMMITMENT_TREE)], programId);
+}
+
+export function deriveVkRegistryPDA(programId: PublicKey, nIn: number, nOut: number): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(Seeds.VK_REGISTRY), Buffer.from([nIn]), Buffer.from([nOut])],
+    programId,
+  );
+}
+
+export function deriveNullifierPDA(programId: PublicKey, nullifierHash: Uint8Array): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(Seeds.NULLIFIER), Buffer.from(nullifierHash)],
+    programId,
+  );
+}
+
+export function deriveRedemptionPDA(programId: PublicKey, user: PublicKey, nonce: bigint): [PublicKey, number] {
+  const nonceBuf = Buffer.alloc(8);
+  nonceBuf.writeBigUInt64LE(nonce);
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(Seeds.REDEMPTION), user.toBuffer(), nonceBuf],
+    programId,
+  );
+}
+
+export function deriveDepositRecordPDA(programId: PublicKey, txid: Uint8Array): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(Seeds.DEPOSIT), Buffer.from(txid)],
+    programId,
+  );
+}
+
+export function deriveTokenConfigPDA(programId: PublicKey, mint: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(Seeds.TOKEN_CONFIG), mint.toBuffer()],
+    programId,
+  );
+}
+
+export function deriveLightClientPDA(btcLcId: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync([Buffer.from(Seeds.BTC_LIGHT_CLIENT)], btcLcId);
+}
+
+export function deriveBlockHeaderPDA(btcLcId: PublicKey, blockHash: Uint8Array): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(Seeds.BLOCK), Buffer.from(blockHash)],
+    btcLcId,
+  );
+}
+
+export function deriveHeightIndexPDA(btcLcId: PublicKey, height: bigint): [PublicKey, number] {
+  const buf = Buffer.alloc(8);
+  buf.writeBigUInt64LE(height);
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(Seeds.HEIGHT_INDEX), buf],
+    btcLcId,
+  );
+}
+
+export function deriveATA(mint: PublicKey, owner: PublicKey): PublicKey {
+  return PublicKey.findProgramAddressSync(
+    [owner.toBuffer(), TOKEN_2022.toBuffer(), mint.toBuffer()],
+    ATA_PROGRAM,
+  )[0];
+}
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+export function dsha256(buf: Buffer | Uint8Array): Buffer {
+  const h1 = crypto.createHash("sha256").update(buf).digest();
+  return crypto.createHash("sha256").update(h1).digest();
+}
+
+export function bigintToBytes32BE(value: bigint): Uint8Array {
+  const bytes = new Uint8Array(32);
+  let v = value;
+  for (let i = 31; i >= 0; i--) {
+    bytes[i] = Number(v & 0xffn);
+    v >>= 8n;
+  }
+  return bytes;
+}
+
+export function bytes32ToBigintBE(bytes: Uint8Array): bigint {
+  let result = 0n;
+  for (let i = 0; i < bytes.length; i++) {
+    result = (result << 8n) | BigInt(bytes[i]);
+  }
+  return result;
+}
+
+export function randomFieldElement(): bigint {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return bytes32ToBigintBE(bytes) % BN254_FIELD_PRIME;
+}
+
+export function amountToLE8(amount: bigint): Uint8Array {
+  const buf = new Uint8Array(8);
+  let v = amount;
+  for (let i = 0; i < 8; i++) {
+    buf[i] = Number(v & 0xffn);
+    v >>= 8n;
+  }
+  return buf;
+}
+
+export async function sendIx(
+  ixs: TransactionInstruction[],
+  signers: Keypair[],
+  cu = 400_000,
+): Promise<string> {
+  const budget = ComputeBudgetProgram.setComputeUnitLimit({ units: cu });
+  const tx = new Transaction().add(budget, ...ixs);
+  return sendAndConfirmTransaction(connection, tx, signers, { commitment: "confirmed" });
+}
+
+export async function ensureFunded(kp: Keypair, minLamports = 5 * LAMPORTS_PER_SOL): Promise<void> {
+  const balance = await connection.getBalance(kp.publicKey);
+  if (balance < minLamports) {
+    const sig = await connection.requestAirdrop(kp.publicKey, 10 * LAMPORTS_PER_SOL);
+    await connection.confirmTransaction(sig);
+  }
+}
+
+// =============================================================================
+// On-chain parsers
+// =============================================================================
+
+export function parseCommitmentTree(data: Buffer) {
+  if (data[0] !== 0x05) return null;
+  // Layout: disc(1) + bump(1) + padding(6) + root(32) + next_index(8) + frontier(16*32)
+  return {
+    discriminator: data[0],
+    bump: data[1],
+    currentRoot: data.subarray(8, 40),
+    nextIndex: data.readBigUInt64LE(40),
+    frontier: data.subarray(48, 48 + TREE_DEPTH * 32),
+  };
+}
+
+export function extractFrontier(treeData: NonNullable<ReturnType<typeof parseCommitmentTree>>): bigint[] {
+  const frontier: bigint[] = [];
+  for (let i = 0; i < TREE_DEPTH; i++) {
+    frontier.push(bytes32ToBigintBE(new Uint8Array(treeData.frontier.subarray(i * 32, (i + 1) * 32))));
+  }
+  return frontier;
+}
+
+export function parsePoolState(data: Buffer) {
+  if (data[0] !== 0x01) return null;
+  return {
+    totalMinted: data.readBigUInt64LE(140),
+    totalBurned: data.readBigUInt64LE(148),
+    pendingRedemptions: data.readBigUInt64LE(156),
+    totalShielded: data.readBigUInt64LE(188),
+  };
+}
+
+export function parseTokenConfig(data: Buffer) {
+  if (data[0] !== 0x0b) return null;
+  return {
+    bump: data[1],
+    mint: new PublicKey(data.subarray(2, 34)),
+    tokenId: data.subarray(34, 66),
+    vault: new PublicKey(data.subarray(66, 98)),
+    decimals: data[98],
+    enabled: data[99] !== 0,
+    serviceFee: data.readBigUInt64LE(100),
+    minDeposit: data.readBigUInt64LE(108),
+    maxDeposit: data.readBigUInt64LE(116),
+    depositCap: data.readBigUInt64LE(124),
+    totalShielded: data.readBigUInt64LE(132),
+    accumulatedFees: data.readBigUInt64LE(140),
+  };
+}
+
+// =============================================================================
+// Logging
+// =============================================================================
+
+export function log(msg: string): void {
+  console.log(`  ${msg}`);
+}
+
+export function stepHeader(step: number, title: string): void {
+  console.log(`\n${"=".repeat(60)}`);
+  console.log(`Step ${step}: ${title}`);
+  console.log("=".repeat(60));
+}

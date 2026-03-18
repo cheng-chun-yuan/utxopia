@@ -22,7 +22,7 @@ import type { DepositRecord } from "@/hooks/use-explorer";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import Image from "next/image";
 import { truncate, timeAgo } from "./helpers";
-import { Th, Td, SolanaLink, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
+import { Th, Td, SolanaLink, TypeBadge, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
 
 // =============================================================================
 // Deposit Status
@@ -194,7 +194,97 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
 }
 
 // =============================================================================
-// Deposits Tab
+// Deposit Row — single unified table row + expandable detail
+// =============================================================================
+
+export function DepositRow({
+  deposit,
+  index,
+  expanded,
+  onToggle,
+}: {
+  deposit: DepositRecord;
+  index: number;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const depositKey = `${deposit.btcTxid || deposit.txSignature || deposit.taprootAddress || deposit.commitment}-${index}`;
+  const canExpand = !deposit.isDemo;
+  const d = deposit;
+
+  return (
+    <Fragment>
+      <tr
+        className={cn("hover:bg-gray/5 transition-colors", canExpand && "cursor-pointer")}
+        onClick={() => canExpand && onToggle()}
+      >
+        <Td>
+          <TypeBadge kind="shield" />
+        </Td>
+        <Td>
+          <div className="flex items-center gap-1.5">
+            <DepositStatusBadge status={d.status} />
+            {d.isDemo && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 font-medium">
+                Demo
+              </span>
+            )}
+          </div>
+        </Td>
+        <Td>
+          {d.txSignature ? (
+            <div className="flex items-center gap-1.5">
+              <code className="text-caption font-mono text-foreground">{truncate(d.txSignature, 6, 4)}</code>
+              <CopyButton text={d.txSignature} label="Tx" variant="default" iconSize="sm" />
+            </div>
+          ) : d.btcTxid ? (
+            <div className="flex items-center gap-1.5">
+              <BitcoinIcon className="w-3 h-3 text-btc/60" />
+              <code className="text-caption font-mono text-foreground">{truncate(d.btcTxid, 6, 4)}</code>
+              <CopyButton text={d.btcTxid} label="BTC Tx" variant="default" iconSize="sm" />
+            </div>
+          ) : (
+            <span className="text-caption text-gray">Pending...</span>
+          )}
+        </Td>
+        <Td>
+          <div className="flex items-center gap-1.5 text-caption">
+            <span className="inline-flex items-center gap-1 text-btc/70 bg-btc/6 border border-btc/10 px-1.5 py-0.5 rounded font-mono text-[10px]">
+              <BitcoinIcon className="w-3 h-3" />
+              BTC
+            </span>
+            <span className="text-gray/30">→</span>
+            <span className="inline-flex items-center gap-1 text-privacy/80 bg-privacy/6 border border-privacy/10 px-1.5 py-0.5 rounded font-mono text-[10px]">
+              <Image src="/zkbtc.png" alt="zkBTC" width={12} height={12} className="rounded-full" />
+              zkBTC
+            </span>
+          </div>
+        </Td>
+        <Td>
+          <span className="text-body2 text-foreground font-mono">{d.amountSats.toLocaleString()} <span className="text-gray text-caption">sats</span></span>
+        </Td>
+        <Td>
+          <span className="text-caption text-gray">{timeAgo(d.timestamp)}</span>
+        </Td>
+        <Td>
+          <div className="flex items-center gap-1.5">
+            {d.txSignature && <SolanaLink signature={d.txSignature} />}
+          </div>
+        </Td>
+      </tr>
+      {expanded && !d.isDemo && (
+        <tr>
+          <td colSpan={8} className="p-0">
+            <DepositDetails deposit={d} />
+          </td>
+        </tr>
+      )}
+    </Fragment>
+  );
+}
+
+// =============================================================================
+// Deposits Tab (standalone, kept for backward compat)
 // =============================================================================
 
 export function DepositsTab() {
@@ -224,10 +314,10 @@ export function DepositsTab() {
         <table className="w-full min-w-[700px]">
           <thead>
             <tr className="border-b border-gray/15 bg-muted/50">
+              <Th>Type</Th>
               <Th>Status</Th>
               <Th>Tx ID</Th>
-              <Th>Source</Th>
-              <Th>Destination</Th>
+              <Th>Details</Th>
               <Th>Amount</Th>
               <Th>Time</Th>
               <Th className="w-[40px]" />
@@ -236,73 +326,14 @@ export function DepositsTab() {
           <tbody className="divide-y divide-gray/10">
             {deposits.map((d, i) => {
               const depositKey = `${d.btcTxid || d.txSignature || d.taprootAddress || d.commitment}-${i}`;
-              const isOpen = expanded.has(depositKey);
-              const canExpand = !d.isDemo;
-
               return (
-                <Fragment key={depositKey}>
-                  <tr
-                    className={cn("hover:bg-gray/5 transition-colors", canExpand && "cursor-pointer")}
-                    onClick={() => canExpand && toggle(depositKey)}
-                  >
-                    <Td>
-                      <div className="flex items-center gap-1.5">
-                        <DepositStatusBadge status={d.status} />
-                        {d.isDemo && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 font-medium">
-                            Demo
-                          </span>
-                        )}
-                      </div>
-                    </Td>
-                    <Td>
-                      {d.txSignature ? (
-                        <div className="flex items-center gap-1.5">
-                          <code className="text-caption font-mono text-foreground">{truncate(d.txSignature, 6, 4)}</code>
-                          <CopyButton text={d.txSignature} label="Tx" variant="default" iconSize="sm" />
-                        </div>
-                      ) : d.btcTxid ? (
-                        <div className="flex items-center gap-1.5">
-                          <BitcoinIcon className="w-3 h-3 text-btc/60" />
-                          <code className="text-caption font-mono text-foreground">{truncate(d.btcTxid, 6, 4)}</code>
-                          <CopyButton text={d.btcTxid} label="BTC Tx" variant="default" iconSize="sm" />
-                        </div>
-                      ) : (
-                        <span className="text-caption text-gray">Pending...</span>
-                      )}
-                    </Td>
-                    <Td>
-                      <span className="inline-flex items-center gap-1.5 text-caption text-btc/90 bg-btc/6 border border-btc/15 px-2 py-0.5 rounded-full font-medium">
-                        <BitcoinIcon className="w-3.5 h-3.5" />
-                        BTC
-                      </span>
-                    </Td>
-                    <Td>
-                      <span className="inline-flex items-center gap-1.5 text-caption text-purple-400/90 bg-purple-500/6 border border-purple-500/15 px-2 py-0.5 rounded-full font-medium">
-                        <Image src="/zkbtc.png" alt="zkBTC" width={14} height={14} className="rounded-full" />
-                        zkBTC
-                      </span>
-                    </Td>
-                    <Td>
-                      <span className="text-body2 text-foreground font-mono">{d.amountSats.toLocaleString()} <span className="text-gray text-caption">sats</span></span>
-                    </Td>
-                    <Td>
-                      <span className="text-caption text-gray">{timeAgo(d.timestamp)}</span>
-                    </Td>
-                    <Td>
-                      <div className="flex items-center gap-1.5">
-                        {d.txSignature && <SolanaLink signature={d.txSignature} />}
-                      </div>
-                    </Td>
-                  </tr>
-                  {isOpen && !d.isDemo && (
-                    <tr>
-                      <td colSpan={8} className="p-0">
-                        <DepositDetails deposit={d} />
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
+                <DepositRow
+                  key={depositKey}
+                  deposit={d}
+                  index={i}
+                  expanded={expanded.has(depositKey)}
+                  onToggle={() => toggle(depositKey)}
+                />
               );
             })}
           </tbody>
