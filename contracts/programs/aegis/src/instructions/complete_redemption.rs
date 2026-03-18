@@ -183,9 +183,9 @@ pub fn process_complete_redemption(
     };
 
     // --- Validate pool_script against on-chain PoolConfig ---
-    // If PoolConfig PDA exists and has a pool_script set, the ix data pool_script must match.
-    // This prevents the backend from providing a wrong script for change UTXO tracking.
-    {
+    // Only validate if pool_script_len > 0 (change UTXO tracking requested).
+    // When pool_script_len = 0, no change tracking is done and PoolConfig is not required.
+    if ix_data.pool_script_len > 0 {
         validate_program_owner(pool_config_info, program_id)?;
 
         let config_data = pool_config_info.try_borrow_data()?;
