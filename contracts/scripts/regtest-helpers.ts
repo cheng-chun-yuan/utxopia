@@ -85,7 +85,7 @@ function detectBitcoinCliPath(): void {
 
 export function bitcoinCli(args: string): string {
   const cmd = `docker exec ${CONTAINER_NAME} ${bitcoinCliPath} -regtest -datadir=/data/bitcoin -rpcwallet=test ${args}`;
-  const result = execSync(cmd, { encoding: "utf-8", timeout: 30_000 });
+  const result = execSync(cmd, { encoding: "utf-8", timeout: 30_000, maxBuffer: 50 * 1024 * 1024 });
   return result.trim();
 }
 
