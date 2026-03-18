@@ -202,24 +202,50 @@ export async function buildRedeemTransaction(
   connection: Connection,
   params: RedeemParams
 ): Promise<Transaction> {
-  const { userPubkey, userTokenAccount, amountSats, btcAddress } = params;
+  const { userPubkey, amountSats, btcAddress } = params;
 
   const [poolState] = derivePoolStatePDA();
 
   // TODO: Convert bech32 btcAddress to raw scriptPubKey bytes (max 34 bytes)
-  // For now, encode as UTF-8 (caller must pass raw scriptPubKey hex or short address)
   const btcAddressBytes = new TextEncoder().encode(btcAddress);
-  const instructionData = sdkBuildRedemptionRequestInstructionData(amountSats, btcAddressBytes);
+  const requestNonce = BigInt(Date.now());
+  const [commitmentTree] = deriveCommitmentTreePDA();
+  const nullifierHash = new Uint8Array(32); // demo mode
+  const [nullifierPDA] = PublicKey.findProgramAddressSync(
+    [Buffer.from(PDA_SEEDS.NULLIFIER), Buffer.from(nullifierHash)],
+    AEGIS_PROGRAM_ID,
+  );
+  const nonceBuf = Buffer.alloc(8);
+  nonceBuf.writeBigUInt64LE(requestNonce);
+  const [redemptionPDA] = PublicKey.findProgramAddressSync(
+    [Buffer.from("redemption"), userPubkey.toBuffer(), nonceBuf],
+    AEGIS_PROGRAM_ID,
+  );
+  const [tokenConfig] = PublicKey.findProgramAddressSync(
+    [Buffer.from("token_config"), ZKBTC_MINT_ADDRESS.toBuffer()],
+    AEGIS_PROGRAM_ID,
+  );
+
+  const instructionData = sdkBuildRedemptionRequestInstructionData({
+    proofHash: new Uint8Array(32),
+    merkleRoot: new Uint8Array(32),
+    nullifierHash,
+    amountSats,
+    vkHash: new Uint8Array(32),
+    btcScript: btcAddressBytes,
+    requestNonce,
+  });
 
   const instruction = new TransactionInstruction({
     programId: AEGIS_PROGRAM_ID,
     keys: [
       { pubkey: poolState, isSigner: false, isWritable: true },
-      { pubkey: ZKBTC_MINT_ADDRESS, isSigner: false, isWritable: true },
-      { pubkey: userTokenAccount, isSigner: false, isWritable: true },
+      { pubkey: commitmentTree, isSigner: false, isWritable: false },
+      { pubkey: nullifierPDA, isSigner: false, isWritable: true },
+      { pubkey: redemptionPDA, isSigner: false, isWritable: true },
       { pubkey: userPubkey, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: tokenConfig, isSigner: false, isWritable: true },
     ],
     data: Buffer.from(instructionData),
   });

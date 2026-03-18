@@ -51,6 +51,8 @@ import {
   TOKEN_2022_PROGRAM_ID,
   ZKBTC_MINT_ADDRESS,
   derivePoolStatePDA,
+  deriveCommitmentTreePDA,
+  deriveNullifierPDA,
   deriveRedemptionRequestPDA,
   getTokenAccountAddress,
 } from "@/lib/solana/instructions";
@@ -508,25 +510,36 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         // Public redeem removed in multi-token version — use request_redemption
         const { buildRedemptionRequestInstructionData } = await import("@aegis/sdk");
 
-        const ixData = buildRedemptionRequestInstructionData(
-          amountSats,
-          btcOut.btcScriptPubKey!,
+        const [poolState] = derivePoolStatePDA();
+        const [commitmentTree] = deriveCommitmentTreePDA();
+        const [redemptionRequest] = deriveRedemptionRequestPDA(publicKey!, requestNonce);
+        const nullifierHash = new Uint8Array(32); // demo mode
+        const [nullifierPDA] = deriveNullifierPDA(nullifierHash);
+        const [tokenConfig] = PublicKey.findProgramAddressSync(
+          [Buffer.from("token_config"), ZKBTC_MINT_ADDRESS.toBuffer()],
+          AEGIS_PROGRAM_ID,
         );
 
-        const [poolState] = derivePoolStatePDA();
-        const [redemptionRequest] = deriveRedemptionRequestPDA(publicKey!, requestNonce);
-        const userTokenAccount = getTokenAccountAddress(publicKey!);
+        const ixData = buildRedemptionRequestInstructionData({
+          proofHash: new Uint8Array(32),
+          merkleRoot: new Uint8Array(32),
+          nullifierHash,
+          amountSats,
+          vkHash: new Uint8Array(32),
+          btcScript: btcOut.btcScriptPubKey!,
+          requestNonce: BigInt(requestNonce.toString()),
+        });
 
         const publicRedeemIx = new TransactionInstruction({
           programId: AEGIS_PROGRAM_ID,
           keys: [
             { pubkey: poolState, isSigner: false, isWritable: true },
-            { pubkey: ZKBTC_MINT_ADDRESS, isSigner: false, isWritable: true },
-            { pubkey: userTokenAccount, isSigner: false, isWritable: true },
+            { pubkey: commitmentTree, isSigner: false, isWritable: false },
+            { pubkey: nullifierPDA, isSigner: false, isWritable: true },
+            { pubkey: redemptionRequest, isSigner: false, isWritable: true },
             { pubkey: publicKey!, isSigner: true, isWritable: true },
             { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-            { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
-            { pubkey: redemptionRequest, isSigner: false, isWritable: true },
+            { pubkey: tokenConfig, isSigner: false, isWritable: true },
           ],
           data: Buffer.from(ixData),
         });

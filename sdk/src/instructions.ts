@@ -129,79 +129,117 @@ function addressToBytes(addr: Address): Uint8Array {
 // =============================================================================
 
 /**
- * Build instruction data for REQUEST_REDEMPTION
+ * Build instruction data for REQUEST_REDEMPTION (disc 5)
  *
- * Creates a RedemptionRequest PDA with the scriptPubKey for BTC withdrawal.
+ * Escrow-based: locks zkBTC by decrementing total_shielded. Does NOT burn tokens.
  *
- * Layout:
- * - discriminator (1 byte) = 5
- * - amount_sats (8 bytes, LE)
- * - btc_script_len (1 byte)
- * - btc_script (variable, max 62 bytes - scriptPubKey)
- *
- * @param amountSats - Amount to redeem in satoshis
- * @param btcScript - Bitcoin scriptPubKey for withdrawal (raw bytes, max 62 bytes)
+ * Layout (after disc stripped):
+ * - proof_hash: [u8; 32] — SHA256 of ZK proof (all zeros = demo mode)
+ * - merkle_root: [u8; 32]
+ * - nullifier_hash: [u8; 32]
+ * - amount_sats: u64 LE
+ * - vk_hash: [u8; 32] — verification key hash (all zeros = demo mode)
+ * - btc_script_len: u8
+ * - btc_script: [u8; 0-34]
+ * - request_nonce: u64 LE
  */
-export function buildRedemptionRequestInstructionData(
-  amountSats: bigint,
-  btcScript: Uint8Array
-): Uint8Array {
+export function buildRedemptionRequestInstructionData(options: {
+  proofHash: Uint8Array;
+  merkleRoot: Uint8Array;
+  nullifierHash: Uint8Array;
+  amountSats: bigint;
+  vkHash: Uint8Array;
+  btcScript: Uint8Array;
+  requestNonce: bigint;
+}): Uint8Array {
+  const { proofHash, merkleRoot, nullifierHash, amountSats, vkHash, btcScript, requestNonce } = options;
+
   if (btcScript.length > 34) {
     throw new Error("BTC scriptPubKey too long (max 34 bytes)");
   }
 
-  // Layout: discriminator(1) + amount(8) + script_len(1) + script
-  const totalLen = 1 + 8 + 1 + btcScript.length;
+  // disc(1) + proof_hash(32) + merkle_root(32) + nullifier_hash(32) + amount(8) + vk_hash(32) + script_len(1) + script(var) + nonce(8)
+  const totalLen = 1 + 32 + 32 + 32 + 8 + 32 + 1 + btcScript.length + 8;
   const data = new Uint8Array(totalLen);
   const view = new DataView(data.buffer);
 
   let offset = 0;
   data[offset++] = INSTRUCTION.REQUEST_REDEMPTION;
 
-  view.setBigUint64(offset, amountSats, true);
-  offset += 8;
-
+  data.set(proofHash, offset); offset += 32;
+  data.set(merkleRoot, offset); offset += 32;
+  data.set(nullifierHash, offset); offset += 32;
+  view.setBigUint64(offset, amountSats, true); offset += 8;
+  data.set(vkHash, offset); offset += 32;
   data[offset++] = btcScript.length;
-  data.set(btcScript, offset);
+  data.set(btcScript, offset); offset += btcScript.length;
+  view.setBigUint64(offset, requestNonce, true);
 
   return data;
 }
 
 /** Redemption request instruction options */
 export interface RedemptionRequestInstructionOptions {
+  /** SHA256 of ZK proof (all zeros = demo mode) */
+  proofHash: Uint8Array;
+  /** Current merkle tree root */
+  merkleRoot: Uint8Array;
+  /** Nullifier hash */
+  nullifierHash: Uint8Array;
   /** Amount to redeem in satoshis */
   amountSats: bigint;
+  /** Verification key hash (all zeros = demo mode) */
+  vkHash: Uint8Array;
   /** Bitcoin scriptPubKey for withdrawal (raw bytes) */
   btcScript: Uint8Array;
+  /** Unique request nonce */
+  requestNonce: bigint;
   /** Account addresses */
   accounts: {
     poolState: Address;
-    zkbtcMint: Address;
-    userTokenAccount: Address;
+    commitmentTree: Address;
+    nullifierRecord: Address;
+    redemptionRequest: Address;
     user: Address;
+    tokenConfig: Address;
   };
 }
 
 /**
  * Build a complete redemption request instruction
+ *
+ * Accounts (7):
+ * 0. pool_state (writable)
+ * 1. commitment_tree (readonly)
+ * 2. nullifier_record (writable)
+ * 3. redemption_request (writable)
+ * 4. user (signer)
+ * 5. system_program (readonly)
+ * 6. token_config (writable)
  */
 export function buildRedemptionRequestInstruction(
   options: RedemptionRequestInstructionOptions
 ): Instruction {
   const config = getConfig();
 
-  const data = buildRedemptionRequestInstructionData(
-    options.amountSats,
-    options.btcScript
-  );
+  const data = buildRedemptionRequestInstructionData({
+    proofHash: options.proofHash,
+    merkleRoot: options.merkleRoot,
+    nullifierHash: options.nullifierHash,
+    amountSats: options.amountSats,
+    vkHash: options.vkHash,
+    btcScript: options.btcScript,
+    requestNonce: options.requestNonce,
+  });
 
   const accounts: Instruction["accounts"] = [
     { address: options.accounts.poolState, role: AccountRole.WRITABLE },
-    { address: options.accounts.zkbtcMint, role: AccountRole.WRITABLE },
-    { address: options.accounts.userTokenAccount, role: AccountRole.WRITABLE },
+    { address: options.accounts.commitmentTree, role: AccountRole.READONLY },
+    { address: options.accounts.nullifierRecord, role: AccountRole.WRITABLE },
+    { address: options.accounts.redemptionRequest, role: AccountRole.WRITABLE },
     { address: options.accounts.user, role: AccountRole.WRITABLE_SIGNER },
     { address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY },
-    { address: TOKEN_2022_PROGRAM_ID, role: AccountRole.READONLY },
+    { address: options.accounts.tokenConfig, role: AccountRole.WRITABLE },
   ];
 
   return {
@@ -221,6 +259,10 @@ export interface CompleteRedemptionInstructionOptions {
   btcTxid: Uint8Array;
   /** Raw tx size in ChadBuffer */
   txSize: number;
+  /** Pool scriptPubKey for change UTXO tracking (empty = no tracking) */
+  poolScript: Uint8Array;
+  /** Number of consumed UTXO PDAs in remaining accounts */
+  consumedUtxoCount: number;
   /** Account addresses */
   accounts: {
     poolState: Address;
@@ -232,47 +274,82 @@ export interface CompleteRedemptionInstructionOptions {
     txBuffer: Address;
     zkbtcMint: Address;
     poolVault: Address;
+    completionReceipt: Address;
+    poolConfig: Address;
+    /** Change UTXO PDA (system program if no change tracking) */
+    changeUtxo: Address;
+    /** Consumed UTXO PDAs to close */
+    consumedUtxos?: Address[];
   };
 }
 
 /**
- * Build instruction data for COMPLETE_REDEMPTION
+ * Build instruction data for COMPLETE_REDEMPTION (disc 6)
  *
- * Layout:
- * - discriminator (1 byte) = 6
- * - btc_txid (32 bytes)
- * - tx_size (4 bytes, LE)
+ * Layout (after disc stripped):
+ * - btc_txid: [u8; 32]
+ * - tx_size: u32 LE
+ * - pool_script_len: u8
+ * - pool_script: [u8; 0-34]
+ * - consumed_utxo_count: u8
  */
-export function buildCompleteRedemptionInstructionData(
-  btcTxid: Uint8Array,
-  txSize: number,
-): Uint8Array {
-  const data = new Uint8Array(1 + 32 + 4);
+export function buildCompleteRedemptionInstructionData(options: {
+  btcTxid: Uint8Array;
+  txSize: number;
+  poolScript: Uint8Array;
+  consumedUtxoCount: number;
+}): Uint8Array {
+  const { btcTxid, txSize, poolScript, consumedUtxoCount } = options;
+
+  const totalLen = 1 + 32 + 4 + 1 + poolScript.length + 1;
+  const data = new Uint8Array(totalLen);
   const view = new DataView(data.buffer);
 
   let offset = 0;
   data[offset++] = INSTRUCTION.COMPLETE_REDEMPTION;
 
-  data.set(btcTxid, offset);
-  offset += 32;
-
-  view.setUint32(offset, txSize, true);
+  data.set(btcTxid, offset); offset += 32;
+  view.setUint32(offset, txSize, true); offset += 4;
+  data[offset++] = poolScript.length;
+  if (poolScript.length > 0) {
+    data.set(poolScript, offset); offset += poolScript.length;
+  }
+  data[offset++] = consumedUtxoCount;
 
   return data;
 }
 
 /**
  * Build a complete redemption instruction
+ *
+ * Accounts (13+):
+ * 0.  pool_state (writable)
+ * 1.  redemption_request (writable)
+ * 2.  authority (signer)
+ * 3.  rent_recipient (readonly)
+ * 4.  verified_transaction (readonly)
+ * 5.  light_client (readonly)
+ * 6.  tx_buffer (readonly)
+ * 7.  zkbtc_mint (writable)
+ * 8.  pool_vault (writable)
+ * 9.  token_program (readonly)
+ * 10. completion_receipt (writable)
+ * 11. system_program (readonly)
+ * 12. pool_config (readonly)
+ * 13. change_utxo (writable)
+ * 14+ consumed_utxos (writable)
  */
 export function buildCompleteRedemptionInstruction(
   options: CompleteRedemptionInstructionOptions
 ): Instruction {
   const config = getConfig();
 
-  const data = buildCompleteRedemptionInstructionData(
-    options.btcTxid,
-    options.txSize,
-  );
+  const data = buildCompleteRedemptionInstructionData({
+    btcTxid: options.btcTxid,
+    txSize: options.txSize,
+    poolScript: options.poolScript,
+    consumedUtxoCount: options.consumedUtxoCount,
+  });
 
   const accounts: Instruction["accounts"] = [
     { address: options.accounts.poolState, role: AccountRole.WRITABLE },
@@ -285,7 +362,18 @@ export function buildCompleteRedemptionInstruction(
     { address: options.accounts.zkbtcMint, role: AccountRole.WRITABLE },
     { address: options.accounts.poolVault, role: AccountRole.WRITABLE },
     { address: TOKEN_2022_PROGRAM_ID, role: AccountRole.READONLY },
+    { address: options.accounts.completionReceipt, role: AccountRole.WRITABLE },
+    { address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY },
+    { address: options.accounts.poolConfig, role: AccountRole.READONLY },
+    { address: options.accounts.changeUtxo, role: AccountRole.WRITABLE },
   ];
+
+  // Append consumed UTXO PDAs
+  if (options.accounts.consumedUtxos) {
+    for (const utxo of options.accounts.consumedUtxos) {
+      accounts.push({ address: utxo, role: AccountRole.WRITABLE });
+    }
+  }
 
   return {
     programAddress: config.aegisProgramId,
@@ -330,15 +418,16 @@ export interface TransactInstructionOptions {
 /**
  * Build transact instruction data (JoinSplit)
  *
- * Layout:
+ * Layout (after disc stripped by entrypoint):
  * - n_inputs: u8
  * - n_outputs: u8
- * - proof: [u8; 256]
+ * - proof_source: u8 (0=inline, 1=buffer account)
+ * - proof: [u8; 256] (only if proof_source=0)
  * - merkle_root: [u8; 32]
  * - bound_params_hash: [u8; 32]
  * - nullifiers: [[u8; 32]; n_inputs]
  * - commitments_out: [[u8; 32]; n_outputs]
- * - stealth_data: [ephemeral_pub(32) + encrypted_amount(8)] x n_outputs
+ * - stealth_data: [ephemeral_pub(32) + encrypted_amount(8) + encrypted_token_id(32)] x n_outputs
  */
 export function buildTransactInstructionData(options: {
   nInputs: number;
@@ -366,7 +455,8 @@ export function buildTransactInstructionData(options: {
   }
 
   const STEALTH_DATA_PER_OUTPUT = 72; // ephemeral_pub(32) + encrypted_amount(8) + encrypted_token_id(32)
-  const totalSize = 1 + 2 + 256 + 32 + 32 + (nInputs * 32) + (nOutputs * 32) + (nOutputs * STEALTH_DATA_PER_OUTPUT);
+  // disc(1) + n_inputs(1) + n_outputs(1) + proof_source(1) + proof(256) + merkle_root(32) + bound_params_hash(32) + ...
+  const totalSize = 1 + 3 + 256 + 32 + 32 + (nInputs * 32) + (nOutputs * 32) + (nOutputs * STEALTH_DATA_PER_OUTPUT);
   const data = new Uint8Array(totalSize);
 
   let offset = 0;
@@ -377,6 +467,7 @@ export function buildTransactInstructionData(options: {
   // Header
   data[offset++] = nInputs;
   data[offset++] = nOutputs;
+  data[offset++] = 0; // proof_source = 0 (inline proof)
 
   // Proof (256 bytes)
   data.set(proofBytes, offset);
