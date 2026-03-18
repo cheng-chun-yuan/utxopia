@@ -5,6 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Bitcoin, Shield, Zap, Lock, ArrowRight, EyeOff, Fingerprint, ShieldCheck, Loader2, ChevronRight, Layers } from "lucide-react";
 import { usePoolStats } from "@/hooks/use-pool-stats";
+import { useTokenPrices, type TokenPrices } from "@/hooks/use-btc-price";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { ScrollReveal } from "@/components/ui/scroll-reveal";
@@ -194,8 +195,27 @@ const FeatureCard = memo(function FeatureCard({
 FeatureCard.displayName = "FeatureCard";
 
 /* ── Main Page ── */
+/** Map token symbol to price key */
+function tvlToUsd(tokenTVL: { symbol: string; totalShielded: bigint; decimals: number }[], prices: TokenPrices): number {
+  const priceMap: Record<string, number | null> = {
+    BTC: prices.btc, zkBTC: prices.btc,
+    SOL: prices.sol, zkSOL: prices.sol,
+    USDC: prices.usdc, zkUSDC: prices.usdc,
+    USDT: prices.usdt, zkUSDT: prices.usdt,
+  };
+  let total = 0;
+  for (const t of tokenTVL) {
+    const price = priceMap[t.symbol] ?? priceMap[t.symbol.replace("zk", "")];
+    if (price) {
+      total += (Number(t.totalShielded) / (10 ** t.decimals)) * price;
+    }
+  }
+  return total;
+}
+
 export default function Home() {
   const { stats, isLoading } = usePoolStats();
+  const prices = useTokenPrices();
 
   return (
     <main className="min-h-screen bg-background hacker-bg noise-overlay overflow-x-hidden">
@@ -309,15 +329,28 @@ export default function Home() {
                         <div className="w-px h-8 bg-gradient-to-b from-transparent via-gray/20 to-transparent" />
                         <div className="text-center min-w-0">
                           <div className="flex items-center justify-center gap-1.5">
-                            <Lock className="w-4 h-4 text-btc" />
-                            <span className="text-2xl font-semibold tracking-tight text-btc">
-                              {(() => {
-                                const primary = stats!.tokenTVL[0];
-                                const val = Number(primary.totalShielded) / (10 ** primary.decimals);
-                                return val.toLocaleString(undefined, { maximumFractionDigits: 4 });
-                              })()}
-                            </span>
-                            <span className="text-sm text-btc/70">{stats!.tokenTVL[0].shieldedSymbol}</span>
+                            <Lock className="w-4 h-4 text-privacy" />
+                            {(() => {
+                              const usd = tvlToUsd(stats!.tokenTVL, prices);
+                              if (usd > 0) {
+                                return (
+                                  <span className="text-2xl font-semibold tracking-tight text-foreground">
+                                    ${usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                );
+                              }
+                              // Fallback: show primary token amount if no prices
+                              const primary = stats!.tokenTVL[0];
+                              const val = Number(primary.totalShielded) / (10 ** primary.decimals);
+                              return (
+                                <>
+                                  <span className="text-2xl font-semibold tracking-tight text-btc">
+                                    {val.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                                  </span>
+                                  <span className="text-sm text-btc/70">{primary.shieldedSymbol}</span>
+                                </>
+                              );
+                            })()}
                           </div>
                           <div className="text-xs text-gray">Total Value Locked</div>
                         </div>
