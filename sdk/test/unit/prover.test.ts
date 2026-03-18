@@ -11,8 +11,8 @@
  */
 
 import { expect, test, describe, beforeAll } from "bun:test";
-import { initPoseidon } from "./poseidon";
-import { BN254_FIELD_PRIME } from "./crypto";
+import { initPoseidon } from "../../src/poseidon";
+import { BN254_FIELD_PRIME } from "../../src/crypto";
 
 // Set up Poseidon for tests
 beforeAll(async () => {

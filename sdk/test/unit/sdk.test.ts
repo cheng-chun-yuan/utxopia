@@ -11,14 +11,16 @@ import { expect, test, describe } from "bun:test";
 import { address, createSolanaRpc, getProgramDerivedAddress, type Address } from "@solana/kit";
 
 // Core SDK imports
-import { depositToNote } from "./api";
-import { generateNote, formatBtc, parseBtc } from "./note";
-import { encodeClaimLink, decodeClaimLink } from "./claim-link";
-import { deriveKeysFromSeed, createStealthMetaAddress, encodeStealthMetaAddress, decodeStealthMetaAddress } from "./keys";
-import { createStealthDeposit, scanAnnouncements } from "./stealth";
-import { createEmptyMerkleProof, TREE_DEPTH } from "./merkle";
-import { poseidonHashSync, initPoseidon } from "./poseidon";
-import { generateBabyJubKeyPair, babyJubMul, BABYJUB_BASE8, isOnBabyJubCurve } from "./crypto";
+import { depositToNote } from "../../src/api";
+import { generateNote, formatBtc, parseBtc } from "../../src/note";
+import { encodeClaimLink, decodeClaimLink } from "../../src/claim-link";
+import { deriveKeysFromSeed, createStealthMetaAddress, encodeStealthMetaAddress, decodeStealthMetaAddress } from "../../src/keys";
+import { createStealthDeposit, scanAnnouncements } from "../../src/stealth";
+
+const ZKBTC_TOKEN_ID = 0x7a627463n;
+import { createEmptyMerkleProof, TREE_DEPTH } from "../../src/merkle";
+import { poseidonHashSync, initPoseidon } from "../../src/poseidon";
+import { generateBabyJubKeyPair, babyJubMul, BABYJUB_BASE8, isOnBabyJubCurve } from "../../src/crypto";
 // Test constants
 const TEST_SEED = new Uint8Array(32).fill(0x42);
 // ============================================================================
@@ -105,7 +107,7 @@ describe("KEY & STEALTH", () => {
   test("createStealthDeposit() creates valid deposit", async () => {
     const keys = deriveKeysFromSeed(TEST_SEED);
     const meta = createStealthMetaAddress(keys);
-    const deposit = await createStealthDeposit(meta, 100_000n);
+    const deposit = await createStealthDeposit(meta, 100_000n, ZKBTC_TOKEN_ID);
 
     expect(deposit.commitment.length).toBe(32);
     expect(deposit.ephemeralPub.length).toBe(32);
@@ -114,7 +116,7 @@ describe("KEY & STEALTH", () => {
   test("scanAnnouncements() finds own deposits", async () => {
     const keys = deriveKeysFromSeed(TEST_SEED);
     const meta = createStealthMetaAddress(keys);
-    const deposit = await createStealthDeposit(meta, 50_000n);
+    const deposit = await createStealthDeposit(meta, 50_000n, ZKBTC_TOKEN_ID);
 
     const found = await scanAnnouncements(keys, [{
       ephemeralPub: deposit.ephemeralPub,
@@ -122,7 +124,7 @@ describe("KEY & STEALTH", () => {
       commitment: deposit.commitment,
       leafIndex: 0,
       createdAt: deposit.createdAt,
-    }]);
+    }], ZKBTC_TOKEN_ID);
 
     expect(found.length).toBe(1);
     expect(found[0].amount).toBe(50_000n);
@@ -132,7 +134,7 @@ describe("KEY & STEALTH", () => {
     const realKeys = deriveKeysFromSeed(new Uint8Array(32).fill(0x11));
     const wrongKeys = deriveKeysFromSeed(new Uint8Array(32).fill(0x22));
     const meta = createStealthMetaAddress(realKeys);
-    const deposit = await createStealthDeposit(meta, 50_000n);
+    const deposit = await createStealthDeposit(meta, 50_000n, ZKBTC_TOKEN_ID);
 
     const found = await scanAnnouncements(wrongKeys, [{
       ephemeralPub: deposit.ephemeralPub,
@@ -140,7 +142,7 @@ describe("KEY & STEALTH", () => {
       commitment: deposit.commitment,
       leafIndex: 0,
       createdAt: deposit.createdAt,
-    }]);
+    }], ZKBTC_TOKEN_ID);
 
     expect(found.length).toBe(0);
   });
