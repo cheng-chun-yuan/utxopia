@@ -215,7 +215,13 @@ export async function GET() {
       const txMetas = await fetchAnnouncementsFromRpc(0); // type=0 = deposits
       const deposits: ExplorerDeposit[] = [];
 
+      // disc=13 is add_demo_stealth, disc=1 is verify_stealth_deposit (real BTC)
+      const DEMO_DISC = 13;
+      const VERIFY_DISC = 1;
+
       for (const tx of txMetas) {
+        const isDemo = tx.instructionDisc === DEMO_DISC;
+        const isVerified = tx.instructionDisc === VERIFY_DISC;
         for (const ann of tx.announcements) {
           deposits.push({
             txSignature: tx.signature,
@@ -225,17 +231,17 @@ export async function GET() {
             timestamp: tx.blockTime,
             slot: tx.slot,
             ephemeralPub: ann.ephemeralPub,
-            status: null,
+            status: isVerified ? "claimed" : isDemo ? "claimed" : null,
             btcTxid: null,
             sweepTxid: null,
             solanaTx: tx.signature,
             confirmations: 0,
             sweepConfirmations: 0,
             sweepFeeSats: null,
-            mintedSats: null,
+            mintedSats: isVerified ? decodeLeU64(ann.encryptedAmount) : null,
             taprootAddress: null,
             trackerError: null,
-            isDemo: false,
+            isDemo,
             btcDepositAmountSats: null,
           });
         }

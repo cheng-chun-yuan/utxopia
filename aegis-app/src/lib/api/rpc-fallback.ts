@@ -33,6 +33,8 @@ export interface RpcTxMeta {
   blockTime: number;
   announcements: RpcAnnouncement[];
   nullifierPdas: string[];
+  /** Aegis instruction discriminator (1=verify_stealth_deposit, 13=demo, 14=transact, 29=shield) */
+  instructionDisc: number | null;
 }
 
 function getRpcUrl(): string {
@@ -130,6 +132,49 @@ function extractNullifierPdas(result: any): string[] {
   return pdas;
 }
 
+/** Extract the first Aegis instruction discriminator from a transaction */
+function extractInstructionDisc(result: any): number | null {
+  try {
+    const message = result.transaction?.message;
+    const accountKeys: string[] = (message?.accountKeys ?? []).map(
+      (k: string | { pubkey: string }) => (typeof k === "string" ? k : k.pubkey),
+    );
+    const instructions = message?.instructions ?? [];
+    for (const ix of instructions) {
+      const programIdx = ix.programIdIndex;
+      if (accountKeys[programIdx] === AEGIS_PROGRAM_ID && ix.data) {
+        // Decode base58 instruction data, first byte is discriminator
+        const decoded = decodeBase58(ix.data);
+        if (decoded.length > 0) return decoded[0];
+      }
+    }
+  } catch {}
+  return null;
+}
+
+function decodeBase58(str: string): Uint8Array {
+  const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  const bytes: number[] = [];
+  for (const c of str) {
+    let carry = ALPHABET.indexOf(c);
+    if (carry < 0) return new Uint8Array(0);
+    for (let j = 0; j < bytes.length; j++) {
+      carry += bytes[j] * 58;
+      bytes[j] = carry & 0xff;
+      carry >>= 8;
+    }
+    while (carry > 0) {
+      bytes.push(carry & 0xff);
+      carry >>= 8;
+    }
+  }
+  for (const c of str) {
+    if (c !== "1") break;
+    bytes.push(0);
+  }
+  return new Uint8Array(bytes.reverse());
+}
+
 /**
  * Fetch Aegis program transactions from RPC and parse events.
  * Returns transaction metadata with parsed stealth announcements.
@@ -202,6 +247,7 @@ export async function fetchAnnouncementsFromRpc(
       if (filtered.length === 0) continue;
 
       const nullifierPdas = extractNullifierPdas(txResult);
+      const instructionDisc = extractInstructionDisc(txResult);
 
       results.push({
         signature: sig.signature,
@@ -209,6 +255,7 @@ export async function fetchAnnouncementsFromRpc(
         blockTime: txResult.blockTime ?? sig.blockTime ?? 0,
         announcements: filtered,
         nullifierPdas,
+        instructionDisc,
       });
     }
   }
