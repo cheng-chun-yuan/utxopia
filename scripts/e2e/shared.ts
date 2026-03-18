@@ -120,6 +120,11 @@ export interface LocalnetState {
   transferNotes?: { send: NoteState; change: NoteState };
   /** All commitments in insertion order (hex strings) for full tree rebuild */
   commitments?: string[];
+  // BTC signing config
+  btcSigningKey?: string;     // hex, secp256k1 private key (single-key mode)
+  btcXOnlyPubKey?: string;    // hex, x-only public key
+  poolBtcAddress?: string;    // bech32m Taproot address (bcrt1p... for regtest)
+  signingMode?: "single" | "frost";
   // Crypto keys (hex)
   spendingSeed?: string;
   pubKeyX?: string;

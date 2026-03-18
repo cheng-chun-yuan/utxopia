@@ -326,7 +326,23 @@ async function main() {
   const mpk = poseidon.F.toObject(poseidon([pubKeyX, pubKeyY, nullifyingKey])) as bigint;
   log(`MPK: ${mpk.toString(16).slice(0, 16)}...`);
 
-  // 12. Write state
+  // 12. Generate BTC pool address (single-key mode for localnet)
+  // The regtest wallet controls the key — signing is done via signrawtransactionwithwallet
+  log("Generating BTC pool address (single-key mode)...");
+
+  const btcCliPath = "/srv/explorer/bitcoin-27.2/bin/bitcoin-cli";
+  const btcCmd = (cmd: string) =>
+    execSync(`docker exec aegis-esplora-regtest ${btcCliPath} -regtest -datadir=/data/bitcoin -rpcwallet=test ${cmd}`, { encoding: "utf8" }).trim();
+
+  const poolBtcAddress = btcCmd("getnewaddress pool_receive bech32m");
+  const poolAddrInfo = JSON.parse(btcCmd(`getaddressinfo ${poolBtcAddress}`));
+  const btcXOnlyPubKey = poolAddrInfo.pubkey || "";
+  // No need for raw private key — regtest wallet signs via RPC (signrawtransactionwithwallet)
+  const btcSigningKey = "wallet-managed"; // placeholder
+  log(`Pool BTC address: ${poolBtcAddress}`);
+  log(`Pool pubkey: ${btcXOnlyPubKey.slice(0, 32)}...`);
+
+  // 13. Write state
   const state: LocalnetState = {
     aegisProgramId: AEGIS.toBase58(),
     btcLightClientId: BTC_LC.toBase58(),
@@ -342,6 +358,11 @@ async function main() {
     pubKeyY: pubKeyY.toString(16),
     nullifyingKey: nullifyingKey.toString(16),
     mpk: mpk.toString(16),
+    // BTC signing config (single-key mode for localnet)
+    btcSigningKey,
+    btcXOnlyPubKey,
+    poolBtcAddress,
+    signingMode: "single",
   };
   saveState(state);
   log("State saved to localnet-state.json");

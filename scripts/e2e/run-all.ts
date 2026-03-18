@@ -23,8 +23,7 @@ const steps = [
   { file: "step5-shield.ts", label: "Shield SPL Tokens" },
   { file: "step6-transfer.ts", label: "JoinSplit Transfer" },
   { file: "step7-unshield.ts", label: "Unshield tUSDC" },
-  // step8 requires FROST signing infrastructure (not available in localnet)
-  // { file: "step8-btc-withdraw.ts", label: "BTC Withdrawal Request" },
+  { file: "step8-btc-withdraw.ts", label: "BTC Withdrawal Request" },
   { file: "step9-summary.ts", label: "Summary" },
 ];
 

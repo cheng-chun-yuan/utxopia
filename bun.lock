@@ -5,6 +5,7 @@
     "": {
       "name": "aegis",
       "dependencies": {
+        "@noble/curves": "^2.0.1",
         "@noble/hashes": "^2.0.1",
         "bech32": "^2.0.0",
         "next": "16.1.1",

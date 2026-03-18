@@ -309,12 +309,12 @@ async function main() {
 
   // Create 2 output notes: 6,000 + 4,000
   const random1 = randomFieldElement();
-  const amount1 = 6_000n;
+  const amount1 = 15_000n;
   const npk1 = poseidonHash([mpk, random1]);
   const commitment1 = poseidonHash([npk1, tokenId, amount1]);
 
   const random2 = randomFieldElement();
-  const amount2 = 4_000n;
+  const amount2 = 15_000n;
   const npk2 = poseidonHash([mpk, random2]);
   const commitment2 = poseidonHash([npk2, tokenId, amount2]);
 

@@ -222,7 +222,11 @@ async function main() {
   // 3. Create sweep TX (spend deposit → pool wallet)
   // =========================================================================
   log("Creating sweep TX...");
-  const poolAddr = getNewAddress("bech32m");
+  // Use the pool BTC address from state (single-key mode) or generate random
+  const poolAddr = state.poolBtcAddress || getNewAddress("bech32m");
+  if (state.poolBtcAddress) {
+    log(`Using pool address from state: ${poolAddr.slice(0, 20)}...`);
+  }
 
   // Get deposit output details
   const depositTxInfo = JSON.parse(btc(`gettransaction ${depositTxid} true true`));

@@ -59,7 +59,7 @@ async function main() {
 
   // Load keys from state
   const mpk = BigInt("0x" + state.mpk!);
-  const amount = 10_000n;
+  const amount = 30_000n; // enough for transfer (15k+15k) and withdrawal (>10k MIN_WITHDRAWAL_SATS)
 
   // Generate note
   const random = randomFieldElement();

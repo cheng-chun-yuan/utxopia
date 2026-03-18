@@ -53,8 +53,8 @@ async function main() {
 
   const nullifyingKey = BigInt("0x" + state.nullifyingKey!);
 
-  // Use the change note (4,000 sats)
-  const note = state.transferNotes.change;
+  // Use the transfer send note (15k sats, above MIN_WITHDRAWAL_SATS=10k)
+  const note = state.transferNotes.send;
   const amount = BigInt(note.amount);
   const leafIndex = note.leafIndex;
   log(`Redeeming: leaf ${leafIndex}, ${amount} sats`);
