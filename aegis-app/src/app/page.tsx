@@ -303,6 +303,24 @@ export default function Home() {
                         </div>
                       </React.Fragment>
                     ))}
+                    {/* TVL — total value locked across all tokens */}
+                    {(stats?.tokenTVL?.length ?? 0) > 0 && (
+                      <>
+                        <div className="w-px h-8 bg-gradient-to-b from-transparent via-gray/20 to-transparent" />
+                        <div className="text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <Lock className="w-4 h-4 text-btc" />
+                            <span className="text-2xl font-semibold tracking-tight text-btc">
+                              {stats!.tokenTVL.map((t) => {
+                                const val = Number(t.totalShielded) / (10 ** t.decimals);
+                                return `${val.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${t.shieldedSymbol}`;
+                              }).join(" + ")}
+                            </span>
+                          </div>
+                          <div className="text-xs text-gray">Total Value Locked</div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

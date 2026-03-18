@@ -9,7 +9,7 @@
 //! - 0x0B = NullifiersBatch (count + op_type + ix_disc + [hash] x N)
 //! - 0x0C = AnnouncementsBatch (count + [type + ephemeral + amount + commitment + leaf_index] x N)
 //! - 0x0D = DepositVerified (sweep_txid + deposit_txid + amount_sats + leaf_index)
-//! - 0x0E = UnshieldMeta (amount + recipient)
+//! - 0x0E = UnshieldMeta (amount + recipient + token_id)
 
 use base64::Engine;
 
@@ -47,6 +47,7 @@ pub struct DepositVerifiedEvent {
 pub struct UnshieldMetaEvent {
     pub amount: u64,
     pub recipient: [u8; 32],
+    pub token_id: [u8; 32],
 }
 
 /// Parsed redemption completed event
@@ -570,7 +571,7 @@ fn parse_deposit_verified_flat(data: &[u8]) -> Option<DepositVerifiedEvent> {
     })
 }
 
-/// Parse unshield meta (multi-segment): disc(1) + amount(8) + recipient(32)
+/// Parse unshield meta (multi-segment): disc(1) + amount(8) + recipient(32) + token_id(32)
 fn parse_unshield_meta(segments: &[Vec<u8>]) -> Option<UnshieldMetaEvent> {
     if segments.len() < 3 {
         return None;
@@ -579,21 +580,37 @@ fn parse_unshield_meta(segments: &[Vec<u8>]) -> Option<UnshieldMetaEvent> {
         return None;
     }
 
+    // token_id is optional for backward compat with old contract
+    let token_id = if segments.len() >= 4 && segments[3].len() == 32 {
+        read_bytes32(&segments[3])?
+    } else {
+        [0u8; 32]
+    };
+
     Some(UnshieldMetaEvent {
         amount: read_u64(&segments[1])?,
         recipient: read_bytes32(&segments[2])?,
+        token_id,
     })
 }
 
-/// Parse unshield meta (flat): disc(1) + amount(8) + recipient(32) = 41 bytes
+/// Parse unshield meta (flat): disc(1) + amount(8) + recipient(32) + token_id(32) = 73 bytes
+/// Backward compat: accepts 41 bytes (no token_id)
 fn parse_unshield_meta_flat(data: &[u8]) -> Option<UnshieldMetaEvent> {
     if data.len() < 41 {
         return None;
     }
 
+    let token_id = if data.len() >= 73 {
+        data[41..73].try_into().ok()?
+    } else {
+        [0u8; 32]
+    };
+
     Some(UnshieldMetaEvent {
         amount: u64::from_le_bytes(data[1..9].try_into().ok()?),
         recipient: data[9..41].try_into().ok()?,
+        token_id,
     })
 }
 
@@ -675,13 +692,16 @@ mod tests {
         let amount = 5000u64.to_le_bytes();
         let commitment = [0xBBu8; 32];
         let leaf_index = 42u32.to_le_bytes();
+        let token_id = [0xDDu8; 32];
 
+        // v2 batch with token_id (109 bytes per item)
         let mut payload = vec![EVENT_ANNOUNCEMENTS_BATCH, 1];
         payload.push(1u8);
         payload.extend_from_slice(&ephemeral);
         payload.extend_from_slice(&amount);
         payload.extend_from_slice(&commitment);
         payload.extend_from_slice(&leaf_index);
+        payload.extend_from_slice(&token_id);
 
         let b64 = base64::engine::general_purpose::STANDARD.encode(&payload);
         let log = format!("Program data: {}", b64);
@@ -693,6 +713,7 @@ mod tests {
                 assert_eq!(e.announcement_type, 1);
                 assert_eq!(e.ephemeral_pub, ephemeral);
                 assert_eq!(e.leaf_index, 42);
+                assert_eq!(e.token_id, token_id);
             }
             _ => panic!("wrong event type"),
         }
@@ -704,6 +725,7 @@ mod tests {
         let amount = 5000u64.to_le_bytes();
         let commitment = [0xBBu8; 32];
         let leaf_index = 42u32.to_le_bytes();
+        let token_id = [0xDDu8; 32];
 
         let log = encode_segments(&[
             &[EVENT_STEALTH_ANNOUNCEMENT],
@@ -712,6 +734,7 @@ mod tests {
             &amount,
             &commitment,
             &leaf_index,
+            &token_id,
         ]);
         let events = parse_program_events(&[log]);
         assert_eq!(events.len(), 1);
@@ -720,6 +743,7 @@ mod tests {
                 assert_eq!(e.announcement_type, 1);
                 assert_eq!(e.ephemeral_pub, ephemeral);
                 assert_eq!(e.leaf_index, 42);
+                assert_eq!(e.token_id, token_id);
             }
             _ => panic!("wrong event type"),
         }
@@ -794,11 +818,13 @@ mod tests {
     fn test_parse_unshield_meta() {
         let amount: u64 = 50_000;
         let recipient = [0xCCu8; 32];
+        let token_id = [0xAAu8; 32];
 
         let log = encode_segments(&[
             &[EVENT_UNSHIELD_META],
             &amount.to_le_bytes(),
             &recipient,
+            &token_id,
         ]);
         let events = parse_program_events(&[log]);
 
@@ -807,6 +833,7 @@ mod tests {
             ProgramEvent::UnshieldMeta(e) => {
                 assert_eq!(e.amount, 50_000);
                 assert_eq!(e.recipient, recipient);
+                assert_eq!(e.token_id, token_id);
             }
             _ => panic!("wrong event type"),
         }

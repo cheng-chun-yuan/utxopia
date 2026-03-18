@@ -46,7 +46,7 @@ import {
 // Configuration
 // =============================================================================
 
-const STEALTH_DATA_PER_OUTPUT = 40;
+const STEALTH_DATA_PER_OUTPUT = 72; // ephemeral_pub(32) + encrypted_amount(8) + encrypted_token_id(32)
 
 // =============================================================================
 // Types

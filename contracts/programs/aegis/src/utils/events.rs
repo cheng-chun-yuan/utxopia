@@ -13,7 +13,7 @@
 //! - 0x0B NullifiersBatch: disc(1) + count(1) + op_type(1) + ix_disc(1) + [hash(32)] x N
 //! - 0x0C AnnouncementsBatch: disc(1) + count(1) + [type(1) + ephemeral(32) + amount(8) + commitment(32) + leaf_index(4)] x N
 //! - 0x0D DepositVerified: disc(1) + sweep_txid(32) + deposit_txid(32) + amount_sats(8) + leaf_index(4) = 77 bytes
-//! - 0x0E UnshieldMeta: disc(1) + amount(8) + recipient(32) = 41 bytes
+//! - 0x0E UnshieldMeta: disc(1) + amount(8) + recipient(32) + token_id(32) = 73 bytes
 //! - 0x0F UtxoCreated: disc(1) + txid(32) + vout(4) + amount_sats(8) = 45 bytes
 //! - 0x10 UtxoConsumed: disc(1) + txid(32) + vout(4) + amount_sats(8) = 45 bytes
 
@@ -213,14 +213,15 @@ pub fn emit_deposit_verified(
 
 /// Emit unshield/redeem metadata so indexer doesn't need to parse instruction data.
 ///
-/// Layout: disc(1) + amount(8) + recipient(32) = 41 bytes
+/// Layout: disc(1) + amount(8) + recipient(32) + token_id(32) = 73 bytes
 pub fn emit_unshield_meta(
     amount: u64,
     recipient: &[u8; 32],
+    token_id: &[u8; 32],
 ) {
     let disc = [EVENT_UNSHIELD_META];
     let amt = amount.to_le_bytes();
-    sol_log_data(&[&disc, &amt, recipient]);
+    sol_log_data(&[&disc, &amt, recipient, token_id]);
 }
 
 /// Emit when a UTXO is created (deposit or change output).

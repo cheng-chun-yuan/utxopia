@@ -36,13 +36,13 @@ use pinocchio::{
 
 use crate::error::AegisError;
 use crate::state::{
-    CommitmentTree, DepositIntent, DepositReceipt, PoolConfig, PoolState,
+    CommitmentTree, DepositIntent, DepositReceipt, PoolConfig, PoolState, TokenConfig,
     VerifiedTransactionView, light_client_tip_height,
     deposit_receipt::DEPOSIT_RECEIPT_DISCRIMINATOR,
     pool_config::POOL_CONFIG_DISCRIMINATOR,
 };
 use crate::utils::events::ANNOUNCEMENT_TYPE_DEPOSIT;
-use crate::utils::crypto::compute_deposit_commitment;
+use crate::utils::crypto::compute_commitment;
 use crate::utils::bitcoin::{compute_tx_hash, ParsedTransaction};
 use crate::utils::chadbuffer::read_transaction_from_buffer;
 use crate::utils::secp256k1::{extract_p2tr_output_key, verify_taproot_output_key};
@@ -116,14 +116,15 @@ impl VerifyDepositV2Data {
 /// 9.  `[]` Token-2022 program
 /// 10. `[writable]` DepositIntent PDA
 /// 11. `[writable]` Deposit receipt PDA (prevents duplicate verification)
-/// 12. `[]`         PoolConfig PDA (optional, for Taproot npk verification)
-/// 13. `[]`         Deposit TX buffer (ChadBuffer, optional, for Taproot verification)
+/// 12. `[]`         TokenConfig PDA (for token_id)
+/// 13. `[]`         PoolConfig PDA (optional, for Taproot npk verification)
+/// 14. `[]`         Deposit TX buffer (ChadBuffer, optional, for Taproot verification)
 pub fn process_verify_deposit_v2(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     data: &[u8],
 ) -> ProgramResult {
-    if accounts.len() < 12 {
+    if accounts.len() < 13 {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
@@ -139,6 +140,7 @@ pub fn process_verify_deposit_v2(
     let token_program = &accounts[9];
     let deposit_intent_info = &accounts[10];
     let deposit_receipt_info = &accounts[11];
+    let token_config_info = &accounts[12];
 
     // Parse instruction data
     let ix_data = VerifyDepositV2Data::from_bytes(data)?;
@@ -152,6 +154,7 @@ pub fn process_verify_deposit_v2(
     validate_program_owner(light_client_info, btc_lc_id)?;
     validate_program_owner(commitment_tree_info, program_id)?;
     validate_program_owner(deposit_intent_info, program_id)?;
+    validate_program_owner(token_config_info, program_id)?;
     validate_token_2022_owner(zkbtc_mint)?;
     validate_token_2022_owner(pool_vault)?;
     validate_token_program_key(token_program)?;
@@ -184,6 +187,13 @@ pub fn process_verify_deposit_v2(
         }
 
         (pool.bump, pool.min_deposit(), pool.max_deposit())
+    };
+
+    // Read token config — get token_id for commitment
+    let token_id = {
+        let tc_data = token_config_info.try_borrow_data()?;
+        let tc = TokenConfig::from_bytes(&tc_data)?;
+        tc.token_id
     };
 
     // --- Deposit receipt dedup check ---
@@ -293,9 +303,9 @@ pub fn process_verify_deposit_v2(
     // --- Taproot npk ↔ deposit address verification ---
     // If deposit TX data is provided and PoolConfig has group_pub_key,
     // verify that npk from DepositIntent matches the actual BTC deposit address.
-    if ix_data.deposit_tx_size > 0 && accounts.len() >= 14 {
-        let pool_config_info = &accounts[12];
-        let deposit_tx_buffer_info = &accounts[13];
+    if ix_data.deposit_tx_size > 0 && accounts.len() >= 15 {
+        let pool_config_info = &accounts[13];
+        let deposit_tx_buffer_info = &accounts[14];
 
         validate_program_owner(pool_config_info, program_id)?;
 
@@ -359,8 +369,8 @@ pub fn process_verify_deposit_v2(
         return Err(AegisError::AmountTooLarge.into());
     }
 
-    // Compute commitment ON-CHAIN: Poseidon(npk, ZKBTC_TOKEN_ID, amount)
-    let commitment = compute_deposit_commitment(&npk, amount_sats)?;
+    // Compute commitment ON-CHAIN: Poseidon(npk, token_id, amount)
+    let commitment = compute_commitment(&npk, &token_id, amount_sats)?;
 
     // Insert commitment into Merkle tree
     let leaf_index = {
@@ -384,6 +394,7 @@ pub fn process_verify_deposit_v2(
         &amount_bytes,
         &commitment,
         leaf_index as u32,
+        &token_id,
     );
 
     // Emit deposit verified event (BTC txids + amount for indexer)

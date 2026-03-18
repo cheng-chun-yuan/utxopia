@@ -27,6 +27,7 @@ import {
 
 import {
   AEGIS_PROGRAM_ID,
+  ZKBTC_MINT_ADDRESS,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
   deriveNullifierPDA,
@@ -330,6 +331,11 @@ export async function POST(request: NextRequest) {
     const [poolState] = derivePoolStatePDA();
     const [commitmentTree] = deriveCommitmentTreePDA();
     const [redemptionRequestPDA] = deriveRedemptionRequestPDA(relayer.publicKey, requestNonceBigint);
+    // TokenConfig PDA for zkBTC (redeem is BTC-only)
+    const [tokenConfigPDA] = PublicKey.findProgramAddressSync(
+      [Buffer.from("token_config"), ZKBTC_MINT_ADDRESS.toBuffer()],
+      AEGIS_PROGRAM_ID
+    );
 
     // Step 1: Upload proof to ChadBuffer
     const { bufferPubkey } = await uploadProofToBuffer(connection, relayer, proofBytes);
@@ -393,13 +399,14 @@ export async function POST(request: NextRequest) {
     nonceBuf.writeBigUInt64LE(requestNonceBigint);
     nonceBuf.copy(ixData, offset);
 
-    // Build accounts: no stealth PDAs, buffer as last account
+    // Build accounts: pool, tree, vk, user, system, token_config, nullifiers..., redemption, buffer
     const keys = [
       { pubkey: poolState, isSigner: false, isWritable: true },
       { pubkey: commitmentTree, isSigner: false, isWritable: true },
       { pubkey: vkRegistryPDA, isSigner: false, isWritable: false },
       { pubkey: relayer.publicKey, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: tokenConfigPDA, isSigner: false, isWritable: false },
     ];
 
     for (const nullifierPDA of nullifierPDAs) {

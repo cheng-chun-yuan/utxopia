@@ -335,6 +335,7 @@ pub fn process_unshield(
     crate::utils::events::emit_unshield_meta(
         unshield_amount,
         user.key().as_ref().try_into().unwrap(),
+        &token_id,
     );
 
     // Transfer payout from vault to user's token account (signed by pool PDA)

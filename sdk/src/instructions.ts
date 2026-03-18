@@ -365,7 +365,7 @@ export function buildTransactInstructionData(options: {
     throw new Error(`Expected ${nOutputs} stealth data entries, got ${stealthData.length}`);
   }
 
-  const STEALTH_DATA_PER_OUTPUT = 40; // 32 + 8
+  const STEALTH_DATA_PER_OUTPUT = 72; // ephemeral_pub(32) + encrypted_amount(8) + encrypted_token_id(32)
   const totalSize = 1 + 2 + 256 + 32 + 32 + (nInputs * 32) + (nOutputs * 32) + (nOutputs * STEALTH_DATA_PER_OUTPUT);
   const data = new Uint8Array(totalSize);
 
@@ -530,7 +530,7 @@ export function buildUnshieldInstructionData(options: {
     throw new Error(`Expected ${nTreeOutputs} stealth data entries (tree outputs), got ${stealthData.length}`);
   }
 
-  const STEALTH_DATA_PER_OUTPUT = 40;
+  const STEALTH_DATA_PER_OUTPUT = 72; // ephemeral_pub(32) + encrypted_amount(8) + encrypted_token_id(32)
   const totalSize = 1 + 2 + 256 + 32 + 32 + (nInputs * 32) + (nOutputs * 32) + (nTreeOutputs * STEALTH_DATA_PER_OUTPUT) + 8;
   const data = new Uint8Array(totalSize);
   const view = new DataView(data.buffer);

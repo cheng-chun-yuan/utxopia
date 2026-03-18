@@ -38,8 +38,9 @@
 //! 2. vk_registry          (read)
 //! 3. user                 (signer, payer)
 //! 4. system_program       (read)
-//! 5..5+N                  nullifier_records (writable PDA)
-//! 5+N                     redemption_request (writable PDA)
+//! 5. token_config         (read) — for token_id + enabled check
+//! 6..6+N                  nullifier_records (writable PDA)
+//! 6+N                     redemption_request (writable PDA)
 //! [optional]              proof_buffer (read, only when proof_source=1, last account)
 
 use pinocchio::{
@@ -53,7 +54,7 @@ use pinocchio::{
 use crate::error::AegisError;
 use crate::state::{
     CommitmentTree, NullifierOperationType, NullifierRecord, PoolState,
-    RedemptionRequest, RedemptionStatus, VkRegistry,
+    RedemptionRequest, RedemptionStatus, TokenConfig, VkRegistry,
     NULLIFIER_RECORD_DISCRIMINATOR, REDEMPTION_REQUEST_DISCRIMINATOR,
 };
 use crate::utils::groth16::GROTH16_PROOF_SIZE;
@@ -68,8 +69,8 @@ const MAX_JOINSPLIT_SIZE: usize = crate::constants::MAX_SAFE_JOINSPLIT_SIZE;
 /// Stealth data per output: ephemeral_pub (32) + encrypted_amount (8)
 const STEALTH_DATA_PER_OUTPUT: usize = 40;
 
-/// Number of fixed accounts before nullifiers
-const FIXED_ACCOUNTS: usize = 5;
+/// Number of fixed accounts before nullifiers (pool_state, tree, vk, user, system, token_config)
+const FIXED_ACCOUNTS: usize = 6;
 
 /// Authority prefix size in ChadBuffer accounts
 const CHADBUFFER_AUTHORITY_SIZE: usize = 32;
@@ -202,11 +203,13 @@ pub fn process_redeem(
     let vk_registry_info = &accounts[2];
     let user = &accounts[3];
     let system_program = &accounts[4];
+    let token_config_info = &accounts[5];
 
     // Validate core accounts
     validate_program_owner(pool_state_info, program_id)?;
     validate_program_owner(commitment_tree_info, program_id)?;
     validate_program_owner(vk_registry_info, program_id)?;
+    validate_program_owner(token_config_info, program_id)?;
     validate_system_program(system_program)?;
     validate_account_writable(pool_state_info)?;
     validate_account_writable(commitment_tree_info)?;
@@ -214,6 +217,16 @@ pub fn process_redeem(
     if !user.is_signer() {
         return Err(ProgramError::MissingRequiredSignature);
     }
+
+    // Read token config — get token_id for commitment verification
+    let token_id = {
+        let tc_data = token_config_info.try_borrow_data()?;
+        let tc = TokenConfig::from_bytes(&tc_data)?;
+        if !tc.is_enabled() {
+            return Err(AegisError::TokenDisabled.into());
+        }
+        tc.token_id
+    };
 
     // Validate pool is not paused
     let (pending_redemptions, total_shielded) = {
@@ -274,12 +287,12 @@ pub fn process_redeem(
         proof_bytes, &public_inputs[..pi_len], delta_g2, ic,
     )?;
 
-    // Verify redeem commitment: last output = Poseidon(0, ZKBTC_TOKEN_ID, redeem_amount)
+    // Verify redeem commitment: last output = Poseidon(0, token_id, redeem_amount)
     // This binds the instruction data amount to the ZK proof — relayer cannot inflate.
     {
         let zero_npk = [0u8; 32];
-        let expected_commitment = crate::utils::crypto::compute_deposit_commitment(
-            &zero_npk, redeem_amount,
+        let expected_commitment = crate::utils::crypto::compute_commitment(
+            &zero_npk, &token_id, redeem_amount,
         )?;
         if *commitments_out[n_outputs - 1] != expected_commitment {
             return Err(AegisError::InvalidCommitment.into());
@@ -359,6 +372,7 @@ pub fn process_redeem(
                 encrypted_amount,
                 commitments_out[i],
                 leaf_index as u32,
+                &token_id, // Plaintext token_id for BTC-only redeem change notes
             );
         }
     }
@@ -367,6 +381,7 @@ pub fn process_redeem(
     crate::utils::events::emit_unshield_meta(
         redeem_amount,
         user.key().as_ref().try_into().unwrap(),
+        &token_id,
     );
 
     // Create RedemptionRequest PDA — same pattern as request_redemption.rs
