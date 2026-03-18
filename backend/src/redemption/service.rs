@@ -1358,7 +1358,7 @@ pub enum ServiceError {
 mod tests {
     use super::*;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_submit_withdrawal() {
         let service = RedemptionService::new_testnet();
 
@@ -1381,7 +1381,7 @@ mod tests {
         assert_eq!(request.status, WithdrawalStatus::Pending);
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_amount_validation() {
         let service = RedemptionService::new_testnet();
 

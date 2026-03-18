@@ -573,44 +573,30 @@ fn parse_deposit_verified_flat(data: &[u8]) -> Option<DepositVerifiedEvent> {
 
 /// Parse unshield meta (multi-segment): disc(1) + amount(8) + recipient(32) + token_id(32)
 fn parse_unshield_meta(segments: &[Vec<u8>]) -> Option<UnshieldMetaEvent> {
-    if segments.len() < 3 {
+    if segments.len() < 4 {
         return None;
     }
-    if segments[1].len() != 8 || segments[2].len() != 32 {
+    if segments[1].len() != 8 || segments[2].len() != 32 || segments[3].len() != 32 {
         return None;
     }
-
-    // token_id is optional for backward compat with old contract
-    let token_id = if segments.len() >= 4 && segments[3].len() == 32 {
-        read_bytes32(&segments[3])?
-    } else {
-        [0u8; 32]
-    };
 
     Some(UnshieldMetaEvent {
         amount: read_u64(&segments[1])?,
         recipient: read_bytes32(&segments[2])?,
-        token_id,
+        token_id: read_bytes32(&segments[3])?,
     })
 }
 
 /// Parse unshield meta (flat): disc(1) + amount(8) + recipient(32) + token_id(32) = 73 bytes
-/// Backward compat: accepts 41 bytes (no token_id)
 fn parse_unshield_meta_flat(data: &[u8]) -> Option<UnshieldMetaEvent> {
-    if data.len() < 41 {
+    if data.len() < 73 {
         return None;
     }
-
-    let token_id = if data.len() >= 73 {
-        data[41..73].try_into().ok()?
-    } else {
-        [0u8; 32]
-    };
 
     Some(UnshieldMetaEvent {
         amount: u64::from_le_bytes(data[1..9].try_into().ok()?),
         recipient: data[9..41].try_into().ok()?,
-        token_id,
+        token_id: data[41..73].try_into().ok()?,
     })
 }
 

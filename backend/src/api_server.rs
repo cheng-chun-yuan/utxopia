@@ -472,7 +472,7 @@ mod tests {
     };
     use tower::ServiceExt;
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_health_endpoint() {
         let service = RedemptionService::new_testnet();
         let app = create_router(service);
