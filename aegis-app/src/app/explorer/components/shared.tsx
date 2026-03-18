@@ -16,6 +16,7 @@ import {
   ExternalLink,
   Loader2,
   Search,
+  Shield,
   RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -264,9 +265,14 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry: () 
 
 export function EmptyState({ label }: { label: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      <Search className="w-8 h-8 text-gray/50 mb-3" />
-      <p className="text-body2 text-gray">No {label} found</p>
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="p-4 rounded-full bg-privacy/5 border border-privacy/10 mb-4">
+        <Shield className="w-8 h-8 text-privacy/40" />
+      </div>
+      <p className="text-body2 text-gray-light mb-1">No {label} yet</p>
+      <p className="text-caption text-gray/50 max-w-[280px]">
+        The shielded pool is quiet. Shield some tokens to see activity here.
+      </p>
     </div>
   );
 }
