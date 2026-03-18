@@ -12,6 +12,15 @@ import { NextResponse } from "next/server";
 import { fetchAnnouncementsFromRpc } from "@/lib/api/rpc-fallback";
 
 const BACKEND_URL = process.env.TRACKER_API_URL || "http://localhost:3001";
+
+function decodeLeU64(hex: string): number {
+  try {
+    const bytes = Uint8Array.from(hex.match(/.{1,2}/g)?.map((b) => parseInt(b, 16)) ?? []);
+    if (bytes.length < 8) return 0;
+    const view = new DataView(bytes.buffer);
+    return Number(view.getBigUint64(0, true));
+  } catch { return 0; }
+}
 const RPC_URL =
   process.env.NEXT_PUBLIC_SOLANA_RPC_URL ||
   process.env.SOLANA_RPC_URL ||
@@ -162,6 +171,66 @@ export async function GET() {
     if (resp.ok) {
       const data = await resp.json();
       if (data.success && data.transfers?.length > 0) {
+        // Enrich: for unshield txs without token_id, look up from announcements
+        const missingTokenIds = data.transfers.some((t: any) => !t.token_id && t.instruction_disc === 15);
+        if (missingTokenIds) {
+          try {
+            const annResp = await fetch(`${BACKEND_URL}/api/announcements`, { cache: "no-store" });
+            if (annResp.ok) {
+              const annData = await annResp.json();
+              // Build a map of all known token_ids from deposit announcements
+              const tokenIdByAmount: Map<number, string> = new Map();
+              for (const a of annData.announcements ?? []) {
+                if (a.token_id && a.announcement_type === 0) {
+                  const amount = decodeLeU64(a.encrypted_amount);
+                  tokenIdByAmount.set(amount, a.token_id);
+                }
+              }
+              // Match unshield amount to deposit amount's token_id
+              for (const t of data.transfers) {
+                if (!t.token_id && t.unshield_amount) {
+                  t.token_id = tokenIdByAmount.get(t.unshield_amount) ?? null;
+                }
+              }
+            }
+          } catch { /* ignore enrichment failure */ }
+        }
+        // Resolve token_id → tokenSymbol server-side (handles localnet test mints)
+        try {
+          const { computeTokenId, initPoseidon } = await import("@aegis/sdk");
+          const { PublicKey } = await import("@solana/web3.js");
+          await initPoseidon();
+
+          const tokenIdToSymbol = new Map<string, string>();
+          const mints: { symbol: string; mint: string }[] = [];
+          const zkbtcMint = process.env.NEXT_PUBLIC_ZKBTC_MINT || process.env.AEGIS_ZKBTC_MINT;
+          if (zkbtcMint) mints.push({ symbol: "BTC", mint: zkbtcMint });
+          mints.push({ symbol: "SOL", mint: "9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP" });
+          try {
+            const fs = await import("fs");
+            const path = await import("path");
+            const statePath = path.join(process.cwd(), "..", "scripts", "e2e", "localnet-state.json");
+            if (fs.existsSync(statePath)) {
+              const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
+              if (state.tUsdcMint) mints.push({ symbol: "USDC", mint: state.tUsdcMint });
+              if (state.tWsolMint) mints.push({ symbol: "SOL", mint: state.tWsolMint });
+            }
+          } catch { /* ignore */ }
+          for (const { symbol, mint } of mints) {
+            try {
+              const mintBytes = new PublicKey(mint).toBytes();
+              const tokenId = computeTokenId(mintBytes);
+              tokenIdToSymbol.set(tokenId.toString(16).padStart(64, "0"), symbol);
+            } catch { /* skip */ }
+          }
+
+          for (const t of data.transfers) {
+            if (t.token_id && !t.token_symbol) {
+              t.token_symbol = tokenIdToSymbol.get(t.token_id) ?? null;
+            }
+          }
+        } catch { /* ignore */ }
+
         return NextResponse.json(data);
       }
     }

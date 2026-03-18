@@ -20,19 +20,22 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { EXPLORER_FILTER_TOKENS, type TokenFilterId } from "@/lib/supported-tokens";
 
 // --- Types ---
 
 export type FilterType = "all" | "shield" | "transfer" | "unshield";
 
-export type TokenFilter = "btc" | "sol" | "usdc" | "usdt";
+export type TokenFilter = TokenFilterId;
 
-const TOKEN_LIST: { id: TokenFilter; label: string; subtitle: string; logo: string; secondLogo?: string; live: boolean }[] = [
-  { id: "btc", label: "BTC / zkBTC", subtitle: "Shielded Bitcoin", logo: "/tokens/btc.png", secondLogo: "/zkbtc.png", live: true },
-  { id: "sol", label: "SOL", subtitle: "Solana (native)", logo: "/tokens/sol.png", live: true },
-  { id: "usdc", label: "USDC", subtitle: "SPL Token", logo: "/tokens/usdc.png", live: true },
-  { id: "usdt", label: "USDT", subtitle: "SPL Token", logo: "/tokens/usdt.png", live: true },
-];
+const TOKEN_LIST = EXPLORER_FILTER_TOKENS.map((t) => ({
+  id: t.explorerFilter,
+  label: t.explorerLabel,
+  subtitle: t.explorerSubtitle,
+  logo: t.logo,
+  secondLogo: t.explorerSecondLogo,
+  live: t.enabled,
+}));
 
 // --- Type Filter Bar ---
 

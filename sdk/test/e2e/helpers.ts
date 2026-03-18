@@ -4,10 +4,7 @@
  * Common test utilities for E2E tests.
  * Provides mock data generation, note creation, and assertion helpers.
  *
- * NOTE: For full stealth flow with real proofs, use stealth-helpers.ts:
- * - generateTestKeys() - Deterministic key generation
- * - createAndSubmitStealthDeposit() - Full stealth deposit flow
- * - scanAndPrepareClaim() - Scan + prepare claim inputs
+ * NOTE: For full e2e flow, use scripts/e2e-mock-spv.ts or the localnet setup.sh.
  * - checkNullifierExists() - Verify nullifier spent
  */
 

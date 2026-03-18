@@ -31,6 +31,10 @@ export interface DepositRecord {
   btcDepositAmountSats: number | null;
   /** 1=BTC SPV deposit, 13=demo, 29=SPL shield */
   instructionDisc: number | null;
+  /** Token ID hex from on-chain event */
+  tokenId: string | null;
+  /** Resolved token symbol (BTC, SOL, USDC, USDT) */
+  tokenSymbol: string | null;
 }
 
 export interface TransferOutput {
@@ -54,6 +58,10 @@ export interface GroupedTransfer {
   unshieldAmount?: number;
   /** Token transfer recipient wallet (unshield txs only) */
   unshieldRecipient?: string;
+  /** Token ID hex from on-chain event (identifies which token) */
+  tokenId?: string;
+  /** Resolved token symbol (BTC, SOL, USDC, USDT) from backend */
+  tokenSymbol?: string;
 }
 
 export interface RedemptionRecord {
@@ -103,6 +111,8 @@ interface BackendTransferRow {
   instruction_disc?: number;
   unshield_amount?: number;
   unshield_recipient?: string;
+  token_id?: string;
+  token_symbol?: string;
 }
 
 // Backend announcement row from /api/announcements
@@ -237,6 +247,8 @@ export function useTransfers() {
         instructionDisc: t.instruction_disc,
         unshieldAmount: t.unshield_amount,
         unshieldRecipient: t.unshield_recipient,
+        tokenId: t.token_id,
+        tokenSymbol: t.token_symbol,
       }));
     },
     {

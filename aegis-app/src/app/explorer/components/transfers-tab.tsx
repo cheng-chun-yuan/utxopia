@@ -14,6 +14,8 @@ import {
   Shield,
   Unlock,
   Wallet,
+  CheckCircle2,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "@/components/ui/copy-button";
@@ -22,6 +24,7 @@ import { useTransfers } from "@/hooks/use-explorer";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { truncate, timeAgo } from "./helpers";
 import { Th, Td, SolanaLink, TypeBadge, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
+import { SUPPORTED_TOKENS, formatTokenAmount, getTokenBySymbol, type SupportedToken } from "@/lib/supported-tokens";
 
 // =============================================================================
 // Transfer Row — single unified table row + expandable detail
@@ -46,6 +49,7 @@ export function TransferRow({
 }) {
   const kind = getTransferKind(tx);
   const isUnshield = kind === "unshield";
+  const token = tx.tokenSymbol ? getTokenBySymbol(tx.tokenSymbol) ?? SUPPORTED_TOKENS[0] : SUPPORTED_TOKENS[0];
 
   return (
     <Fragment>
@@ -58,11 +62,25 @@ export function TransferRow({
         </Td>
         <Td>
           {tx.status === "processing" ? (
-            <span className="inline-flex items-center gap-1 text-caption text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded-full animate-pulse">
-              Processing
-            </span>
+            <div className="flex items-center gap-1.5">
+              <div className="p-1 rounded-[6px] border bg-yellow-500/10 border-yellow-500/20">
+                <Loader2 className="w-3 h-3 text-yellow-400 animate-spin" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[12px] font-semibold leading-tight text-yellow-400">Processing</span>
+                <span className="text-[10px] text-gray leading-tight">In progress</span>
+              </div>
+            </div>
           ) : (
-            <span className="text-caption text-gray-light">Confirmed</span>
+            <div className="flex items-center gap-1.5">
+              <div className="p-1 rounded-[6px] border bg-green-500/10 border-green-500/20">
+                <CheckCircle2 className="w-3 h-3 text-green-400" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[12px] font-semibold leading-tight text-green-400">{isUnshield ? "Withdrawn" : "Sent"}</span>
+                <span className="text-[10px] text-gray leading-tight">Complete</span>
+              </div>
+            </div>
           )}
         </Td>
         <Td>
@@ -72,28 +90,20 @@ export function TransferRow({
           </div>
         </Td>
         <Td>
-          {isUnshield ? (
-            <span className="text-caption text-gray">
-              {isRedeemType(tx) ? (
-                tx.unshieldRecipient ? (
-                  <span className="font-mono">→ {truncate(tx.unshieldRecipient, 6, 4)}</span>
-                ) : "→ BTC wallet"
-              ) : (
-                tx.unshieldRecipient ? (
-                  <span className="font-mono">→ {truncate(tx.unshieldRecipient, 6, 4)}</span>
-                ) : "→ SPL wallet"
-              )}
+          <div className="flex items-center gap-1.5 text-caption">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono text-[10px] border text-green-400/70 bg-green-500/6 border-green-500/10">
+              {tx.inputCount} in
             </span>
-          ) : (
-            <span className="text-caption text-gray font-mono">
-              {tx.inputCount} in → {tx.outputs.length} out
+            <span className="text-gray/30">→</span>
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono text-[10px] border text-purple-400/70 bg-purple-500/6 border-purple-500/10">
+              {isUnshield ? (tx.outputs.length + 1) : tx.outputs.length} out
             </span>
-          )}
+          </div>
         </Td>
         <Td>
           {isUnshield && tx.unshieldAmount ? (
             <span className="text-body2 text-foreground font-mono">
-              {tx.unshieldAmount.toLocaleString()} <span className="text-gray text-caption">sats</span>
+              {formatTokenAmount(tx.unshieldAmount, token)}
             </span>
           ) : isUnshield ? (
             <span className="text-caption text-gray/40">—</span>
@@ -231,19 +241,20 @@ function TransferTypeBadge({ tx }: { tx: TransferTx }) {
 }
 
 function TransferAssetBadge({ tx }: { tx: TransferTx }) {
-  // Redeem = zkBTC → BTC, everything else = zkBTC (shielded)
+  const token = tx.tokenSymbol ? getTokenBySymbol(tx.tokenSymbol) ?? SUPPORTED_TOKENS[0] : SUPPORTED_TOKENS[0];
+  // Redeem = zkBTC → BTC, everything else = shielded token
   if (isRedeemType(tx)) {
     return (
       <span className="inline-flex items-center gap-1.5 text-caption text-btc/90 bg-btc/6 border border-btc/15 px-2 py-0.5 rounded-full font-medium">
-        <img src="/tokens/btc.png" alt="BTC" className="w-3.5 h-3.5 rounded-full" />
-        zkBTC
+        <img src={token.logo} alt={token.shieldedSymbol} className="w-3.5 h-3.5 rounded-full" />
+        {token.shieldedSymbol}
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1.5 text-caption text-privacy/90 bg-privacy/6 border border-privacy/15 px-2 py-0.5 rounded-full font-medium">
-      <Image src="/zkbtc.png" alt="zkBTC" width={14} height={14} className="rounded-full" />
-      zkBTC
+      <img src={token.shieldedLogo} alt={token.shieldedSymbol} className="w-3.5 h-3.5 rounded-full" />
+      {token.shieldedSymbol}
     </span>
   );
 }
@@ -338,6 +349,7 @@ function TransferDetails({ tx }: { tx: TransferTx }) {
 }
 
 function RedeemDetails({ tx }: { tx: TransferTx }) {
+  const token = tx.tokenSymbol ? getTokenBySymbol(tx.tokenSymbol) ?? SUPPORTED_TOKENS[0] : SUPPORTED_TOKENS[0];
   return (
     <div className="mx-4 my-3 rounded-[10px] bg-linear-to-b from-gray/6 to-transparent border border-gray/10 overflow-hidden">
       <div className="grid grid-cols-2 divide-x divide-gray/10">
@@ -353,8 +365,7 @@ function RedeemDetails({ tx }: { tx: TransferTx }) {
               <BitcoinIcon className="w-3.5 h-3.5 text-btc shrink-0" />
               {tx.unshieldAmount ? (
                 <span className="text-body2 text-foreground font-mono font-semibold">
-                  {tx.unshieldAmount.toLocaleString()} <span className="text-gray text-caption">sats</span>
-                  <span className="text-[10px] text-gray/60 ml-1.5">({(tx.unshieldAmount / 1e8).toFixed(8)} BTC)</span>
+                  {formatTokenAmount(tx.unshieldAmount, token)}
                 </span>
               ) : (
                 <span className="text-caption text-gray/40">Amount pending re-index</span>
@@ -393,6 +404,7 @@ function RedeemDetails({ tx }: { tx: TransferTx }) {
 }
 
 function UnshieldDetails({ tx }: { tx: TransferTx }) {
+  const token = tx.tokenSymbol ? getTokenBySymbol(tx.tokenSymbol) ?? SUPPORTED_TOKENS[0] : SUPPORTED_TOKENS[0];
   return (
     <div className="mx-4 my-3 rounded-[10px] bg-linear-to-b from-gray/6 to-transparent border border-gray/10 overflow-hidden">
       <div className="grid grid-cols-2 divide-x divide-gray/10">
@@ -405,11 +417,10 @@ function UnshieldDetails({ tx }: { tx: TransferTx }) {
           </div>
           <div className="px-3 py-2.5 rounded-[8px] bg-purple-500/4 border border-purple-500/10 space-y-2">
             <div className="flex items-center gap-2">
-              <Image src="/zkbtc.png" alt="zkBTC" width={14} height={14} className="rounded-full shrink-0" />
+              <img src={token.shieldedLogo} alt={token.shieldedSymbol} className="w-3.5 h-3.5 rounded-full shrink-0" />
               {tx.unshieldAmount ? (
                 <span className="text-body2 text-foreground font-mono font-semibold">
-                  {tx.unshieldAmount.toLocaleString()} <span className="text-gray text-caption">sats</span>
-                  <span className="text-[10px] text-gray/60 ml-1.5">({(tx.unshieldAmount / 1e8).toFixed(8)} BTC)</span>
+                  {formatTokenAmount(tx.unshieldAmount, token)}
                 </span>
               ) : (
                 <span className="text-caption text-gray/40">Amount pending re-index</span>

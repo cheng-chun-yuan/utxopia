@@ -2,7 +2,7 @@
 //!
 //! Matches discriminators from contracts/programs/aegis/src/utils/events.rs:
 //! - 0x02 = NullifierSpent (nullifier_hash + op_type + ix_disc)
-//! - 0x03 = StealthAnnouncement (type + ephemeral + amount + commitment + leaf_index)
+//! - 0x03 = StealthAnnouncement (type + ephemeral + amount + commitment + leaf_index + token_id)
 //! - 0x07 = RedemptionCompleted
 //! - 0x08 = RedemptionRequested
 //! - 0x0A = RedemptionProcessing
@@ -95,6 +95,8 @@ pub struct StealthAnnouncementEvent {
     pub encrypted_amount: [u8; 8],
     pub commitment: [u8; 32],
     pub leaf_index: u32,
+    /// Token ID from on-chain event (32 bytes)
+    pub token_id: [u8; 32],
 }
 
 /// Union of all program events
@@ -318,14 +320,14 @@ fn parse_nullifiers_batch(data: &[u8]) -> Vec<NullifierSpentEvent> {
     events
 }
 
-/// Parse batched announcements: disc(1) + count(1) + [type(1) + ephemeral(32) + amount(8) + commitment(32) + leaf_index(4)] x N
+/// Parse batched announcements (v2): disc(1) + count(1) + [type(1) + ephemeral(32) + amount(8) + commitment(32) + leaf_index(4) + token_id(32)] x N
 fn parse_announcements_batch(data: &[u8]) -> Vec<StealthAnnouncementEvent> {
     if data.len() < 2 {
         return Vec::new();
     }
 
     let count = data[1] as usize;
-    let item_size = 1 + 32 + 8 + 32 + 4; // 77 bytes per item
+    let item_size = 1 + 32 + 8 + 32 + 4 + 32; // 109 bytes per item (v2 with token_id)
     let expected_len = 2 + count * item_size;
     if data.len() < expected_len {
         return Vec::new();
@@ -347,12 +349,16 @@ fn parse_announcements_batch(data: &[u8]) -> Vec<StealthAnnouncementEvent> {
 
         let leaf_index = u32::from_le_bytes(data[offset + 73..offset + 77].try_into().unwrap());
 
+        let mut token_id = [0u8; 32];
+        token_id.copy_from_slice(&data[offset + 77..offset + 109]);
+
         events.push(StealthAnnouncementEvent {
             announcement_type,
             ephemeral_pub,
             encrypted_amount,
             commitment,
             leaf_index,
+            token_id,
         });
     }
 
@@ -360,7 +366,8 @@ fn parse_announcements_batch(data: &[u8]) -> Vec<StealthAnnouncementEvent> {
 }
 
 fn parse_stealth_announcement(segments: &[Vec<u8>]) -> Option<StealthAnnouncementEvent> {
-    // disc(1) + type(1) + ephemeral_pub(32) + encrypted_amount(8) + commitment(32) + leaf_index(4)
+    // v1: disc(1) + type(1) + ephemeral_pub(32) + encrypted_amount(8) + commitment(32) + leaf_index(4) = 6 segments
+    // v2: + token_id(32) = 7 segments
     if segments.len() < 6 {
         return None;
     }
@@ -378,12 +385,20 @@ fn parse_stealth_announcement(segments: &[Vec<u8>]) -> Option<StealthAnnouncemen
     commitment.copy_from_slice(&segments[4]);
     let leaf_index = u32::from_le_bytes(segments[5][..4].try_into().ok()?);
 
+    // token_id at segment 6 (required)
+    if segments.len() < 7 || segments[6].len() != 32 {
+        return None;
+    }
+    let mut token_id = [0u8; 32];
+    token_id.copy_from_slice(&segments[6]);
+
     Some(StealthAnnouncementEvent {
         announcement_type: segments[1][0],
         ephemeral_pub,
         encrypted_amount,
         commitment,
         leaf_index,
+        token_id,
     })
 }
 

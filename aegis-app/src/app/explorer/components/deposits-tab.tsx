@@ -23,6 +23,8 @@ import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import Image from "next/image";
 import { truncate, timeAgo } from "./helpers";
 import { Th, Td, SolanaLink, TypeBadge, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
+import { SUPPORTED_TOKENS, formatTokenAmount, type SupportedToken } from "@/lib/supported-tokens";
+import { getTokenBySymbol } from "@/lib/supported-tokens";
 
 // =============================================================================
 // Deposit Status
@@ -197,59 +199,56 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
 // Deposit Row — single unified table row + expandable detail
 // =============================================================================
 
-/** Determine shield type from instruction discriminator */
-function getShieldType(d: DepositRecord): "btc" | "sol" | "usdc" | "usdt" | "demo" | "spl" {
+/**
+ * Determine shield type from instruction discriminator.
+ * TODO: Once on-chain events include tokenMint (Issue 1B), replace heuristic with mint lookup.
+ */
+export function getShieldType(d: DepositRecord): "btc" | "sol" | "usdc" | "usdt" | "demo" | "spl" {
   if (d.isDemo) return "demo";
   if (d.instructionDisc === 1) return "btc"; // verify_stealth_deposit
   if (d.instructionDisc === 29) {
-    // SPL shield — detect token by amount heuristic
+    // SPL shield — detect token by amount heuristic (workaround until Issue 1B lands)
     // SOL: 9 decimals (amounts like 100_000_000 = 0.1 SOL)
-    // USDC/USDT: 6 decimals (amounts like 1_000_000_000 = 1000 USDC)
+    // USDC/USDT: 6 decimals (amounts like 1_000_000 = 1 USDC)
     if (d.amountSats >= 1_000_000 && d.amountSats < 1_000_000_000) return "sol";
-    if (d.amountSats >= 1_000_000_000) return "usdc"; // could be USDC or USDT
+    if (d.amountSats >= 1_000_000_000) return "usdc"; // could be USDC or USDT — ambiguous until Issue 1B
     return "spl";
   }
   return "btc"; // fallback
 }
 
-const SHIELD_TYPE_CONFIG = {
-  btc: {
-    from: { label: "BTC", logo: "/tokens/btc.png", color: "text-btc/70 bg-btc/6 border-btc/10" },
-    to: { label: "zkBTC", logo: "/zkbtc.png", color: "text-privacy/80 bg-privacy/6 border-privacy/10" },
-    decimals: 8, unit: "sats", showRaw: true,
-  },
-  sol: {
-    from: { label: "SOL", logo: "/tokens/sol.png", color: "text-sol/70 bg-sol/6 border-sol/10" },
-    to: { label: "zkSOL", logo: "/tokens/sol.png", color: "text-privacy/80 bg-privacy/6 border-privacy/10" },
-    decimals: 9, unit: "SOL", showRaw: false,
-  },
-  usdc: {
-    from: { label: "USDC", logo: "/tokens/usdc.png", color: "text-green-400/70 bg-green-500/6 border-green-500/10" },
-    to: { label: "zkUSDC", logo: "/tokens/usdc.png", color: "text-privacy/80 bg-privacy/6 border-privacy/10" },
-    decimals: 6, unit: "USDC", showRaw: false,
-  },
-  usdt: {
-    from: { label: "USDT", logo: "/tokens/usdt.png", color: "text-green-400/70 bg-green-500/6 border-green-500/10" },
-    to: { label: "zkUSDT", logo: "/tokens/usdt.png", color: "text-privacy/80 bg-privacy/6 border-privacy/10" },
-    decimals: 6, unit: "USDT", showRaw: false,
-  },
-  demo: {
-    from: { label: "BTC", logo: "/tokens/btc.png", color: "text-btc/70 bg-btc/6 border-btc/10" },
-    to: { label: "zkBTC", logo: "/zkbtc.png", color: "text-privacy/80 bg-privacy/6 border-privacy/10" },
-    decimals: 8, unit: "sats", showRaw: true,
-  },
+// Build shield type config from consolidated SUPPORTED_TOKENS
+type ShieldTypeConfig = {
+  from: { label: string; logo: string; color: string };
+  to: { label: string; logo: string; color: string };
+  decimals: number; unit: string; showRaw: boolean;
+};
+
+function buildShieldConfig(token: SupportedToken): ShieldTypeConfig {
+  return {
+    from: { label: token.symbol, logo: token.logo, color: token.explorerColors.from },
+    to: { label: token.shieldedSymbol, logo: token.shieldedLogo, color: token.explorerColors.to },
+    decimals: token.decimals, unit: token.unit, showRaw: token.showRawAmount,
+  };
+}
+
+const btcToken = SUPPORTED_TOKENS.find(t => t.symbol === "BTC")!;
+const solToken = SUPPORTED_TOKENS.find(t => t.symbol === "SOL")!;
+const usdcToken = SUPPORTED_TOKENS.find(t => t.symbol === "USDC")!;
+const usdtToken = SUPPORTED_TOKENS.find(t => t.symbol === "USDT")!;
+
+const SHIELD_TYPE_CONFIG: Record<string, ShieldTypeConfig> = {
+  btc: buildShieldConfig(btcToken),
+  sol: buildShieldConfig(solToken),
+  usdc: buildShieldConfig(usdcToken),
+  usdt: buildShieldConfig(usdtToken),
+  demo: buildShieldConfig(btcToken),
   spl: {
     from: { label: "SPL", logo: "/tokens/sol.png", color: "text-gray/70 bg-gray/6 border-gray/10" },
     to: { label: "Shielded", logo: "/tokens/sol.png", color: "text-privacy/80 bg-privacy/6 border-privacy/10" },
     decimals: 0, unit: "", showRaw: true,
   },
 };
-
-function formatShieldAmount(amount: number, decimals: number, unit: string, showRaw: boolean): string {
-  if (showRaw) return `${amount.toLocaleString()} ${unit}`;
-  const value = amount / (10 ** decimals);
-  return `${value.toLocaleString(undefined, { maximumFractionDigits: decimals })} ${unit}`;
-}
 
 export function DepositRow({
   deposit,
@@ -263,8 +262,14 @@ export function DepositRow({
   onToggle: () => void;
 }) {
   const d = deposit;
-  const shieldType = getShieldType(d);
-  const config = SHIELD_TYPE_CONFIG[shieldType];
+  // Use tokenSymbol from backend if available, fall back to heuristic
+  const resolvedToken = d.tokenSymbol ? getTokenBySymbol(d.tokenSymbol) : null;
+  const shieldType = resolvedToken
+    ? (resolvedToken.explorerFilter as "btc" | "sol" | "usdc" | "usdt")
+    : getShieldType(d);
+  const config = resolvedToken
+    ? buildShieldConfig(resolvedToken)
+    : SHIELD_TYPE_CONFIG[shieldType];
   // Only BTC SPV deposits (disc=1) are expandable
   const isBtcDeposit = shieldType === "btc";
   const canExpand = isBtcDeposit;
@@ -319,7 +324,7 @@ export function DepositRow({
         </Td>
         <Td>
           <span className="text-body2 text-foreground font-mono">
-            {formatShieldAmount(d.amountSats, config.decimals, config.unit, config.showRaw)}
+            {formatTokenAmount(d.amountSats, { decimals: config.decimals, unit: config.unit, showRawAmount: config.showRaw })}
           </span>
         </Td>
         <Td>

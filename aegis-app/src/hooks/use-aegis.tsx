@@ -69,6 +69,7 @@ export function useAegis() {
     // Inbox
     inboxNotes: store.inboxNotes,
     inboxTotalSats: store.inboxTotalSats,
+    inboxBalancesByToken: store.inboxBalancesByToken,
     inboxDepositCount: store.inboxDepositCount,
     inboxLoading: store.inboxLoading,
     inboxError: store.inboxError,
@@ -107,6 +108,7 @@ export function useStealthInbox() {
   return {
     notes: ctx.inboxNotes,
     totalAmountSats: ctx.inboxTotalSats,
+    balancesByToken: ctx.inboxBalancesByToken,
     depositCount: ctx.inboxDepositCount,
     isLoading: ctx.inboxLoading,
     error: ctx.inboxError,

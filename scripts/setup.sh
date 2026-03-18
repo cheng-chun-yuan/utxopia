@@ -169,9 +169,11 @@ setup_localnet() {
   # --- Step 5: Generate .env.local ---
   step "Step 5: Write .env.local"
 
-  # Read mint from e2e state (set by seed_mock_data)
-  if [ -z "$ZKBTC_MINT" ] && [ -f scripts/e2e/localnet-state.json ]; then
-    ZKBTC_MINT=$(node -e "console.log(require('./scripts/e2e/localnet-state.json').zkbtcMint)" 2>/dev/null)
+  # Read mints from e2e state (set by seed_mock_data)
+  if [ -f scripts/e2e/localnet-state.json ]; then
+    [ -z "$ZKBTC_MINT" ] && ZKBTC_MINT=$(node -e "console.log(require('./scripts/e2e/localnet-state.json').zkbtcMint)" 2>/dev/null)
+    USDC_MINT=$(node -e "console.log(require('./scripts/e2e/localnet-state.json').tUsdcMint || '')" 2>/dev/null)
+    WSOL_MINT=$(node -e "console.log(require('./scripts/e2e/localnet-state.json').tWsolMint || '')" 2>/dev/null)
   fi
 
   cat > aegis-app/.env.local << EOF
@@ -181,13 +183,15 @@ NEXT_PUBLIC_SOLANA_RPC_URL=http://localhost:8899
 NEXT_PUBLIC_BTC_NETWORK=regtest
 NEXT_PUBLIC_AEGIS_PROGRAM_ID=8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim
 NEXT_PUBLIC_ZKBTC_MINT=${ZKBTC_MINT:-}
+NEXT_PUBLIC_USDC_MINT=${USDC_MINT:-}
+NEXT_PUBLIC_WSOL_MINT=${WSOL_MINT:-}
 TRACKER_API_URL=http://localhost:3001
 BACKEND_URL=http://localhost:3001
 BACKEND_API_KEY=localnet-dev-key
 ADMIN_KEYPAIR=$(cat ~/.config/solana/id.json 2>/dev/null || echo "[]")
 RELAYER_KEYPAIR=$(cat ~/.config/solana/id.json 2>/dev/null || echo "[]")
 EOF
-  log "Written: aegis-app/.env.local (mint: ${ZKBTC_MINT:-unknown})"
+  log "Written: aegis-app/.env.local (zkBTC: ${ZKBTC_MINT:-?}, USDC: ${USDC_MINT:-?}, wSOL: ${WSOL_MINT:-?})"
 
   # --- Step 7: Start Frontend ---
   if [ "$NO_FRONTEND" = false ]; then

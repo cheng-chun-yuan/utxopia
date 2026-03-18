@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
+import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import {
   PublicKey,
   Transaction,
@@ -21,22 +22,14 @@ import { getConfig, computeTokenId, computeNPKSync, computeMPKSync } from "@aegi
 import { useAegis } from "@/hooks/use-aegis";
 import { getRegisteredTokens, type TokenInfo } from "@/lib/token-context";
 import { ed25519GenerateKeyPair, x25519Ecdh, ed25519PubToX25519 } from "@aegis/sdk";
-import { Shield, ChevronDown, Loader2, ExternalLink, CheckCircle2, AlertCircle } from "lucide-react";
+import { Shield, ChevronDown, Loader2, ExternalLink, CheckCircle2, AlertCircle, LogOut, Wallet, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DepositFlow } from "@/components/btc-widget/deposit-flow";
 import { StealthRecipientInput } from "@/components/ui/stealth-recipient-input";
 import type { StealthMetaAddress } from "@aegis/sdk";
+import { SHIELD_TOKENS } from "@/lib/supported-tokens";
 
 const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
-
-/** Supported tokens for shielding */
-const SHIELD_TOKENS = [
-  { symbol: "BTC", name: "Bitcoin", decimals: 8, logo: "/tokens/btc.png", mint: "", native: true, isSOL: false },
-  { symbol: "zkBTC", name: "Shielded Bitcoin", decimals: 8, logo: "/zkbtc.png", mint: "", native: false, isSOL: false },
-  { symbol: "SOL", name: "Solana", decimals: 9, logo: "/tokens/sol.png", mint: NATIVE_MINT_2022.toBase58(), native: false, isSOL: true },
-  { symbol: "USDC", name: "USD Coin", decimals: 6, logo: "/tokens/usdc.png", mint: "", native: false, isSOL: false },
-  { symbol: "USDT", name: "Tether USD", decimals: 6, logo: "/tokens/usdt.png", mint: "", native: false, isSOL: false },
-];
 
 interface ShieldFlowProps {
   className?: string;
@@ -45,11 +38,18 @@ interface ShieldFlowProps {
 type ShieldStatus = "idle" | "processing" | "done" | "error";
 
 export function ShieldFlow({ className }: ShieldFlowProps) {
-  const { publicKey, sendTransaction } = useWallet();
+  const wallet = useWallet();
+  const { publicKey, sendTransaction } = wallet;
   const { connection } = useConnection();
+  const { setVisible: openWalletModal } = useWalletModal();
   const { keys, stealthAddress, stealthAddressEncoded } = useAegis();
 
-  const [selectedToken, setSelectedToken] = useState(SHIELD_TOKENS[0]);
+  // Passkey users have keys but no Solana wallet — need to connect wallet for SPL shielding
+  const isPasskeyOnly = !!keys && !publicKey;
+  // Show all tokens for everyone — prompt wallet connection if needed for SPL
+  const availableTokens = SHIELD_TOKENS;
+
+  const [selectedToken, setSelectedToken] = useState(availableTokens[0]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [resolvedMeta, setResolvedMeta] = useState<StealthMetaAddress | null>(null);
@@ -58,6 +58,8 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
   const [error, setError] = useState<string | null>(null);
   const [txSig, setTxSig] = useState<string | null>(null);
   const [solBalance, setSolBalance] = useState<number | null>(null);
+  const [splBalance, setSplBalance] = useState<number | null>(null);
+  const [copiedAddr, setCopiedAddr] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
@@ -91,15 +93,40 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
     return () => { cancelled = true; };
   }, [publicKey, selectedToken.isSOL, connection]);
 
+  // Fetch SPL token balance for non-SOL, non-BTC tokens (USDC, USDT, zkBTC)
+  useEffect(() => {
+    if (!publicKey || selectedToken.isSOL || selectedToken.isBtcNative || !selectedToken.mint) {
+      setSplBalance(null);
+      return;
+    }
+    let cancelled = false;
+    const mintPubkey = new PublicKey(selectedToken.mint || getConfig().zkbtcMint);
+    connection.getTokenAccountsByOwner(publicKey, {
+      mint: mintPubkey,
+      programId: TOKEN_2022_PROGRAM_ID,
+    }).then((accounts) => {
+      if (cancelled) return;
+      if (accounts.value.length === 0) { setSplBalance(0); return; }
+      // Parse token amount from account data (offset 64, 8 bytes LE u64)
+      const data = accounts.value[0].account.data;
+      const view = new DataView(data.buffer, data.byteOffset + 64, 8);
+      setSplBalance(Number(view.getBigUint64(0, true)));
+    }).catch(() => { if (!cancelled) setSplBalance(0); });
+    return () => { cancelled = true; };
+  }, [publicKey, selectedToken, connection]);
+
   const handleMax = useCallback(() => {
     if (selectedToken.isSOL && solBalance !== null) {
       // Reserve ~0.01 SOL for tx fees
       const maxLamports = Math.max(0, solBalance - 0.01 * LAMPORTS_PER_SOL);
       setAmount((maxLamports / LAMPORTS_PER_SOL).toFixed(9));
+    } else if (!selectedToken.isSOL && !selectedToken.isBtcNative && splBalance !== null) {
+      const value = splBalance / (10 ** selectedToken.decimals);
+      setAmount(value.toFixed(selectedToken.decimals));
     } else {
       setAmount("0");
     }
-  }, [selectedToken, solBalance]);
+  }, [selectedToken, solBalance, splBalance]);
 
   const handleShield = useCallback(async () => {
     if (!publicKey || !keys || !amount || !resolvedMeta) return;
@@ -246,7 +273,14 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
         }
         userTokenAccount = tokenAccounts.value[0].pubkey;
 
-        const vaultPubkey = new PublicKey(config.poolVault);
+        // Read vault from TokenConfig PDA (same approach as SOL path)
+        const tokenConfigAccount = await connection.getAccountInfo(tokenConfigPda);
+        if (!tokenConfigAccount) {
+          throw new Error(`${selectedToken.symbol} token not registered on-chain. Admin must register it first.`);
+        }
+        // vault is at offset 66..98 in TokenConfig (disc:1 + bump:1 + mint:32 + tokenId:32 = 66)
+        const vaultBytes = tokenConfigAccount.data.slice(66, 98);
+        const vaultPubkey = new PublicKey(vaultBytes);
 
         const ixData = new Uint8Array(73);
         ixData[0] = 29;
@@ -327,7 +361,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
       </button>
       {dropdownOpen && (
         <div className="absolute right-0 top-full mt-1 w-[200px] bg-card border border-gray/20 rounded-[12px] shadow-xl z-50 overflow-hidden">
-          {SHIELD_TOKENS.map((token) => (
+          {availableTokens.map((token) => (
             <button
               key={token.symbol}
               onClick={() => { setSelectedToken(token); setDropdownOpen(false); }}
@@ -341,7 +375,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
                 <div className="text-sm font-medium text-foreground">{token.symbol}</div>
                 <div className="text-[10px] text-gray">{token.name}</div>
               </div>
-              {token.native && (
+              {token.isBtcNative && (
                 <span className="px-1.5 py-0.5 rounded bg-btc/10 text-[8px] text-btc font-semibold uppercase">Native</span>
               )}
               {token.isSOL && (
@@ -355,7 +389,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
   );
 
   // BTC native deposit flow
-  if (selectedToken.native) {
+  if (selectedToken.isBtcNative) {
     return (
       <div className={cn("space-y-5", className)}>
         {/* Token selector bar */}
@@ -375,16 +409,87 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
     );
   }
 
+  // Passkey user selected SPL token but no wallet connected — prompt to connect
+  if (isPasskeyOnly && !selectedToken.isBtcNative) {
+    return (
+      <div className={cn("space-y-5", className)}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-caption text-gray">Asset</span>
+          </div>
+          {tokenSelector}
+        </div>
+        <div className="flex flex-col items-center py-8 space-y-4">
+          <div className="w-14 h-14 rounded-full bg-sol/10 border border-sol/20 flex items-center justify-center">
+            <img src={selectedToken.logo} alt={selectedToken.symbol} className="w-7 h-7 rounded-full" />
+          </div>
+          <div className="text-center space-y-1">
+            <p className="text-body2-semibold text-foreground">Connect Wallet to Shield {selectedToken.symbol}</p>
+            <p className="text-caption text-gray max-w-[280px]">
+              Shielding {selectedToken.symbol} requires a Solana wallet to sign the deposit transaction. After shielding, all private operations use your passkey.
+            </p>
+          </div>
+          <button
+            onClick={() => openWalletModal(true)}
+            className={cn(
+              "inline-flex items-center gap-2 px-6 py-3 rounded-full",
+              "bg-sol hover:bg-sol/80 text-background font-semibold",
+              "transition-all cursor-pointer hover:shadow-[0_0_20px_rgba(153,69,255,0.2)]"
+            )}
+          >
+            <Shield className="w-4 h-4" />
+            Connect Wallet
+          </button>
+          <p className="text-[10px] text-gray/40">
+            Or select BTC for passkey-only deposits
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={cn("space-y-5", className)}>
+      {/* Connected wallet bar */}
+      {publicKey && (
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-1.5">
+            <Wallet className="w-3 h-3 text-sol" />
+            <code className="text-[11px] font-mono text-gray">{publicKey.toBase58().slice(0, 4)}...{publicKey.toBase58().slice(-4)}</code>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(publicKey.toBase58());
+                setCopiedAddr(true);
+                setTimeout(() => setCopiedAddr(false), 1500);
+              }}
+              className="p-0.5 text-gray/30 hover:text-gray transition-colors cursor-pointer"
+              title="Copy address"
+            >
+              {copiedAddr ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+            </button>
+          </div>
+          <button
+            onClick={() => wallet.disconnect()}
+            className="flex items-center gap-1 text-[11px] text-gray/50 hover:text-red-400 transition-colors cursor-pointer"
+          >
+            <LogOut className="w-3 h-3" />
+            Disconnect
+          </button>
+        </div>
+      )}
+
       {/* Amount + Token selector */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-caption text-gray">Amount</span>
           <span className="text-caption text-gray/50">
             {selectedToken.isSOL && solBalance !== null
-              ? `Available: ${(solBalance / LAMPORTS_PER_SOL).toFixed(4)} SOL`
-              : `Available: 0.000000 ${selectedToken.symbol}`
+              ? `Balance: ${(solBalance / LAMPORTS_PER_SOL).toFixed(4)} SOL`
+              : splBalance !== null
+                ? `Balance: ${(splBalance / (10 ** selectedToken.decimals)).toLocaleString(undefined, { maximumFractionDigits: selectedToken.decimals })} ${selectedToken.symbol}`
+                : publicKey
+                  ? `Balance: loading...`
+                  : ""
             }
           </span>
         </div>

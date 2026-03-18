@@ -122,21 +122,11 @@ export function autoSelectNotes(notes: InboxNote[], targetSats: number): Set<str
 }
 
 // --- Supported Tokens ---
+// Re-export from centralized token registry
+import { PAY_TOKENS as PAY_TOKENS_LIST, type SupportedToken } from "@/lib/supported-tokens";
 
-export interface PayToken {
-  symbol: string;
-  name: string;
-  logo: string;
-  enabled: boolean;
-  unit: string; // display unit for amounts (e.g. "sats", "USDC")
-}
-
-export const PAY_TOKENS: PayToken[] = [
-  { symbol: "zkBTC", name: "Shielded Bitcoin", logo: "/zkbtc.png", enabled: true, unit: "sats" },
-  { symbol: "SOL", name: "Solana", logo: "/tokens/sol.png", enabled: true, unit: "SOL" },
-  { symbol: "USDC", name: "USD Coin", logo: "/tokens/usdc.png", enabled: true, unit: "USDC" },
-  { symbol: "USDT", name: "Tether USD", logo: "/tokens/usdt.png", enabled: true, unit: "USDT" },
-];
+export type PayToken = SupportedToken;
+export const PAY_TOKENS = PAY_TOKENS_LIST;
 
 // --- Types ---
 

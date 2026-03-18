@@ -82,11 +82,7 @@
     "test:e2e:nullifier": "bun test test/e2e/nullifier.test.ts",
     "test:e2e:tree": "bun test test/e2e/tree-consistency.test.ts",
     "copy-circuits": "mkdir -p circuits && cp -r ../circuits/build/* circuits/",
-    "e2e": "bun run scripts/e2e-instructions.ts",
-    "e2e:spv": "bun run scripts/e2e-full-spv-flow.ts",
-    "e2e:mock-spv": "bun run scripts/e2e-mock-spv.ts",
-    "e2e:localnet": "NETWORK=localnet bun run scripts/e2e-instructions.ts",
-    "e2e:devnet": "NETWORK=devnet bun run scripts/e2e-instructions.ts"
+    "e2e": "bun run scripts/e2e-mock-spv.ts"
   },
   "dependencies": {
     "@noble/curves": "^2.0.1",

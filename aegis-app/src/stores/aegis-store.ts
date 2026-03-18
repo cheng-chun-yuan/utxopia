@@ -15,6 +15,7 @@ import {
   scanAnnouncementsViewOnly,
   computeJoinSplitNullifierSync,
   bigintToBytes,
+  computeTokenId,
   EventClient,
   getConfig,
   type AegisKeys,
@@ -23,6 +24,7 @@ import {
 } from "@aegis/sdk";
 import { fetchSpentNullifierPDAs, nullifierHashToPDA } from "@/lib/nullifier-utils";
 import { getActiveTokenId } from "@/lib/token-context";
+import { VAULT_TOKENS, NATIVE_MINT_2022_ADDRESS } from "@/lib/supported-tokens";
 
 // ============================================================================
 // localStorage Key Persistence (AES-256-GCM encrypted)
@@ -181,6 +183,8 @@ export interface InboxNote {
   commitmentHex: string;
   /** True if nullifier exists on-chain (note has been spent) */
   isSpent?: boolean;
+  /** Token symbol this note belongs to (e.g. "zkBTC", "SOL") */
+  tokenSymbol: string;
 }
 
 export type WithdrawalStatus = "pending" | "processing" | "broadcasting" | "confirmed" | "failed";
@@ -213,6 +217,8 @@ interface AegisState {
   // Inbox
   inboxNotes: InboxNote[];
   inboxTotalSats: bigint;
+  /** Per-token unspent balances (keyed by token symbol, e.g. "zkBTC", "SOL") */
+  inboxBalancesByToken: Record<string, bigint>;
   inboxDepositCount: number;
   inboxLoading: boolean;
   inboxError: string | null;
@@ -258,6 +264,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
   hasKeys: false,
   inboxNotes: [],
   inboxTotalSats: 0n,
+  inboxBalancesByToken: {},
   inboxDepositCount: 0,
   inboxLoading: false,
   inboxError: null,
@@ -420,6 +427,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
       hasKeys: false,
       inboxNotes: [],
       inboxTotalSats: 0n,
+      inboxBalancesByToken: {},
       inboxDepositCount: 0,
       inboxError: null,
       publicZkbtcBalance: 0n,
@@ -429,7 +437,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
   refreshInbox: async (_connection, force) => {
     const { keys, viewOnlyKeys, isViewOnly } = get();
     if (!keys && !viewOnlyKeys) {
-      set({ inboxNotes: [], inboxTotalSats: 0n, inboxDepositCount: 0 });
+      set({ inboxNotes: [], inboxTotalSats: 0n, inboxBalancesByToken: {}, inboxDepositCount: 0 });
       return;
     }
 
@@ -458,11 +466,27 @@ export const useAegisStore = create<AegisState>((set, get) => ({
           announcements.length === lastAnnouncementCount && currentNotes.length > 0;
         lastAnnouncementCount = announcements.length;
 
+        // Build token list with computed tokenIds for multi-token scanning
+        const config = getConfig();
+        const tokensToScan: { symbol: string; tokenId: bigint }[] = [];
+        for (const token of VAULT_TOKENS) {
+          try {
+            let mintAddr = token.mint;
+            if (!mintAddr && token.symbol === "zkBTC") mintAddr = config.zkbtcMint;
+            if (!mintAddr) continue; // skip tokens without mint addresses
+            const mintBytes = new PublicKey(mintAddr).toBytes();
+            tokensToScan.push({ symbol: token.shieldedSymbol, tokenId: computeTokenId(mintBytes) });
+          } catch { /* skip invalid mints */ }
+        }
+
         // Scan locally for privacy (server doesn't know which are ours)
         // Re-use previous scan results if announcements unchanged (skip expensive decrypt),
         // but always re-check nullifier spent status below
-        const scanned = announcementsUnchanged
-          ? currentNotes.map(n => ({
+        type ScannedWithToken = { commitment: Uint8Array; amount: bigint; leafIndex: number; ephemeralPub: Uint8Array; stealthPub?: any; npk?: any; blockTime?: number; tokenSymbol: string };
+        let scanned: ScannedWithToken[];
+
+        if (announcementsUnchanged) {
+          scanned = currentNotes.map(n => ({
               commitment: hexToBytesLocal(n.commitmentHex),
               amount: n.amount,
               leafIndex: n.leafIndex,
@@ -470,12 +494,26 @@ export const useAegisStore = create<AegisState>((set, get) => ({
               stealthPub: (n as any).stealthPub,
               npk: (n as any).npk,
               blockTime: n.createdAt > 1_000_000_000_000
-                ? Math.floor(n.createdAt / 1000) // ms → seconds
+                ? Math.floor(n.createdAt / 1000)
                 : (n.createdAt > 0 ? n.createdAt : 0),
-            }))
-          : isViewOnly && viewOnlyKeys
-            ? await scanAnnouncementsViewOnly(viewOnlyKeys, announcements, getActiveTokenId())
-            : await scanUnifiedNotes(keys!, announcements, getActiveTokenId());
+              tokenSymbol: n.tokenSymbol,
+            }));
+        } else {
+          // Scan for each token in parallel — each announcement is tried against all token IDs
+          scanned = [];
+          const seenLeaves = new Set<number>(); // Deduplicate across tokens
+          for (const { symbol, tokenId } of tokensToScan) {
+            const results = isViewOnly && viewOnlyKeys
+              ? await scanAnnouncementsViewOnly(viewOnlyKeys, announcements, tokenId)
+              : await scanUnifiedNotes(keys!, announcements, tokenId);
+            for (const note of results) {
+              if (!seenLeaves.has(note.leafIndex)) {
+                seenLeaves.add(note.leafIndex);
+                scanned.push({ ...note, tokenSymbol: symbol } as ScannedWithToken);
+              }
+            }
+          }
+        }
 
         // Check which notes are spent via backend batch nullifier API (use proxy)
         const backendUrl = "";
@@ -507,9 +545,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
 
         const notes: InboxNote[] = notesWithSpentStatus.map((note, index) => {
           // Convert commitment bytes to hex (big-endian bytes to hex string)
-          // This should match bigint.toString(16).padStart(64, "0")
           const rawHex = Buffer.from(note.commitment).toString("hex");
-          // Ensure proper padding and lowercase
           const commitmentHex = rawHex.toLowerCase().padStart(64, "0");
 
           return {
@@ -519,6 +555,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
               ? (note as any).blockTime * 1000  // Convert seconds → ms
               : Date.now(),
             commitmentHex,
+            tokenSymbol: (note as any).tokenSymbol ?? "zkBTC",
           };
         });
 
@@ -531,10 +568,18 @@ export const useAegisStore = create<AegisState>((set, get) => ({
           0n
         );
 
+        // Per-token balances
+        const balancesByToken: Record<string, bigint> = {};
+        for (const note of unspentNotes) {
+          const sym = note.tokenSymbol;
+          balancesByToken[sym] = (balancesByToken[sym] ?? 0n) + BigInt(note.amount ?? 0);
+        }
+
         set({
-          inboxNotes: notes, // Keep all notes for display (show spent as disabled)
+          inboxNotes: notes,
           inboxTotalSats: totalSats,
-          inboxDepositCount: unspentNotes.length, // Only count unspent
+          inboxBalancesByToken: balancesByToken,
+          inboxDepositCount: unspentNotes.length,
           inboxLoading: false,
         });
       } catch (err) {
@@ -657,6 +702,7 @@ export function useStealthInbox() {
   return {
     notes: store.inboxNotes,
     totalAmountSats: store.inboxTotalSats,
+    balancesByToken: store.inboxBalancesByToken,
     depositCount: store.inboxDepositCount,
     isLoading: store.inboxLoading,
     error: store.inboxError,

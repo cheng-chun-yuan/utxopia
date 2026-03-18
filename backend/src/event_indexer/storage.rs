@@ -67,6 +67,8 @@ pub struct TransferRow {
     pub unshield_amount: Option<i64>,
     /// Token transfer recipient wallet (unshield txs only)
     pub unshield_recipient: Option<String>,
+    /// Token ID hex (from announcement event)
+    pub token_id: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -91,6 +93,8 @@ pub struct AnnouncementRow {
     /// Original BTC deposit amount in sats (from mempool, before sweep fee)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub btc_deposit_amount_sats: Option<i64>,
+    /// Token ID hex (32 bytes, from on-chain event)
+    pub token_id: String,
 }
 
 /// A completed redemption row (from on-chain event 0x07)
@@ -202,7 +206,8 @@ impl EventStore {
                 commitment BLOB NOT NULL,
                 tx_signature TEXT NOT NULL,
                 slot INTEGER NOT NULL,
-                block_time INTEGER NOT NULL DEFAULT 0
+                block_time INTEGER NOT NULL DEFAULT 0,
+                token_id BLOB NOT NULL
             );
 
             CREATE TABLE IF NOT EXISTS indexer_state (
@@ -737,14 +742,15 @@ impl EventStore {
         // Also update BTC txids and deposit amount if provided (non-null wins over null).
         let result = conn.execute(
             "INSERT INTO stealth_announcements
-             (leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot, block_time, is_verified, btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+             (leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot, block_time, is_verified, btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats, token_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
              ON CONFLICT(leaf_index) DO UPDATE SET
                 is_verified = MAX(stealth_announcements.is_verified, excluded.is_verified),
                 block_time = CASE WHEN excluded.block_time > 0 THEN excluded.block_time ELSE stealth_announcements.block_time END,
                 btc_deposit_txid = COALESCE(excluded.btc_deposit_txid, stealth_announcements.btc_deposit_txid),
                 btc_sweep_txid = COALESCE(excluded.btc_sweep_txid, stealth_announcements.btc_sweep_txid),
-                btc_deposit_amount_sats = COALESCE(excluded.btc_deposit_amount_sats, stealth_announcements.btc_deposit_amount_sats)",
+                btc_deposit_amount_sats = COALESCE(excluded.btc_deposit_amount_sats, stealth_announcements.btc_deposit_amount_sats),
+                token_id = COALESCE(excluded.token_id, stealth_announcements.token_id)",
             params![
                 event.leaf_index as i64,
                 event.announcement_type as i64,
@@ -758,6 +764,7 @@ impl EventStore {
                 btc_deposit_txid,
                 btc_sweep_txid,
                 btc_deposit_amount_sats,
+                event.token_id.as_slice(),
             ],
         );
         match result {
@@ -771,7 +778,7 @@ impl EventStore {
         if let Some(since) = since_leaf_index {
             let mut stmt = conn
                 .prepare(
-                    "SELECT leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot, COALESCE(block_time, 0), COALESCE(is_verified, 0), btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats
+                    "SELECT leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot, COALESCE(block_time, 0), COALESCE(is_verified, 0), btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats, token_id
                      FROM stealth_announcements WHERE leaf_index > ?1 ORDER BY leaf_index",
                 )
                 .map_err(|e| format!("query error: {}", e))?;
@@ -782,7 +789,7 @@ impl EventStore {
         } else {
             let mut stmt = conn
                 .prepare(
-                    "SELECT leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot, COALESCE(block_time, 0), COALESCE(is_verified, 0), btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats
+                    "SELECT leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot, COALESCE(block_time, 0), COALESCE(is_verified, 0), btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats, token_id
                      FROM stealth_announcements ORDER BY leaf_index",
                 )
                 .map_err(|e| format!("query error: {}", e))?;
@@ -893,13 +900,14 @@ impl EventStore {
     pub fn get_transfers(&self) -> Result<Vec<TransferRow>, String> {
         let conn = self.conn()?;
 
-        // Step 1: Get grouped outputs
+        // Step 1: Get grouped outputs (with first token_id for display)
         let mut stmt = conn.prepare(
             "SELECT
                 a.tx_signature,
                 GROUP_CONCAT(HEX(a.commitment), ',') AS commitments,
                 GROUP_CONCAT(a.leaf_index, ',') AS leaf_indices,
-                COUNT(a.leaf_index) AS output_count
+                COUNT(a.leaf_index) AS output_count,
+                HEX(MIN(a.token_id)) AS token_id
              FROM stealth_announcements a
              WHERE a.announcement_type = 1
              GROUP BY a.tx_signature
@@ -911,6 +919,7 @@ impl EventStore {
             commitments: Vec<String>,
             leaf_indices: Vec<i64>,
             output_count: i64,
+            token_id: Option<String>,
         }
 
         let partials: Vec<PartialTransfer> = stmt.query_map([], |row| {
@@ -921,6 +930,7 @@ impl EventStore {
                 commitments: commitments_str.split(',').map(|s| s.to_lowercase()).collect(),
                 leaf_indices: leaf_indices_str.split(',').filter_map(|s| s.parse().ok()).collect(),
                 output_count: row.get(3)?,
+                token_id: row.get::<_, Option<String>>(4).unwrap_or(None).map(|s| s.to_lowercase()),
             })
         }).map_err(|e| format!("query error: {}", e))?
           .collect::<Result<Vec<_>, _>>().map_err(|e| format!("row error: {}", e))?;
@@ -984,6 +994,7 @@ impl EventStore {
                 instruction_disc,
                 unshield_amount,
                 unshield_recipient,
+                token_id: p.token_id,
             });
         }
 
@@ -1032,6 +1043,7 @@ impl EventStore {
                 instruction_disc: Some(15), // unshield
                 unshield_amount,
                 unshield_recipient,
+                token_id: None, // unshield nullifier events don't carry token_id yet
             })
         }).map_err(|e| format!("query error: {}", e))?
           .collect::<Result<Vec<_>, _>>().map_err(|e| format!("row error: {}", e))?;
@@ -1047,6 +1059,7 @@ impl EventStore {
         let ephemeral_blob: Vec<u8> = row.get(2)?;
         let amount_blob: Vec<u8> = row.get(3)?;
         let commitment_blob: Vec<u8> = row.get(4)?;
+        let token_id_blob: Vec<u8> = row.get(12)?;
         Ok(AnnouncementRow {
             leaf_index: row.get(0)?,
             announcement_type: row.get(1)?,
@@ -1060,6 +1073,7 @@ impl EventStore {
             btc_deposit_txid: row.get::<_, Option<String>>(9).unwrap_or(None),
             btc_sweep_txid: row.get::<_, Option<String>>(10).unwrap_or(None),
             btc_deposit_amount_sats: row.get::<_, Option<i64>>(11).unwrap_or(None),
+            token_id: hex::encode(&token_id_blob),
         })
     }
 }
@@ -1104,6 +1118,7 @@ mod tests {
             encrypted_amount: [0x01; 8],
             commitment: [0xBB; 32],
             leaf_index: 5,
+            token_id: [0xCC; 32],
         };
         assert!(store.insert_announcement(&event, "sig1", 100, 1700000000, false, None, None, None).unwrap());
         // Second insert with same leaf_index uses ON CONFLICT DO UPDATE (returns rows_affected > 0)

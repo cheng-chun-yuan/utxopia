@@ -49,6 +49,7 @@ import { useStealthInbox } from "@/hooks/use-aegis";
 import { getConfig, exportViewOnlyKeys, encodeViewOnlyKeys } from "@aegis/sdk";
 import { notifyCopied } from "@/lib/notifications";
 import { useTokenPrices } from "@/hooks/use-btc-price";
+import { VAULT_TOKENS } from "@/lib/supported-tokens";
 import { OnboardingModal } from "@/components/onboarding-modal";
 import { AuthModal } from "@/components/auth-modal";
 import { HoldButton } from "@/components/ui/hold-button";
@@ -84,6 +85,7 @@ export default function VaultPage() {
   } = useSnsName();
   const {
     totalAmountSats,
+    balancesByToken,
     depositCount,
     isLoading: isLoadingInbox,
     refresh: refreshInbox,
@@ -386,11 +388,20 @@ export default function VaultPage() {
                   <Loader2 className="w-6 h-6 animate-spin text-privacy mx-auto mb-2" />
                 ) : (
                   <>
-                    <p className="text-[36px] sm:text-[42px] font-bold text-foreground tracking-tight leading-none mb-1">
-                      {btcPrice
-                        ? `$${((Number(totalAmountSats) / 100_000_000) * btcPrice).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                        : "$—"}
-                    </p>
+                    {(() => {
+                      // Calculate total USD from all token balances
+                      let totalUsd = 0;
+                      for (const token of VAULT_TOKENS) {
+                        const rawBal = Number(balancesByToken?.[token.shieldedSymbol] ?? 0n);
+                        const price = tokenPrices[token.priceKey];
+                        if (price) totalUsd += (rawBal / 10 ** token.decimals) * price;
+                      }
+                      return (
+                        <p className="text-[36px] sm:text-[42px] font-bold text-foreground tracking-tight leading-none mb-1">
+                          ${totalUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                      );
+                    })()}
                     <p className="text-body2 text-gray/60 font-mono">
                       {(Number(totalAmountSats) / 100_000_000).toFixed(8)} zkBTC
                     </p>
@@ -459,15 +470,13 @@ export default function VaultPage() {
                 </div>
 
                 <div className="rounded-[14px] border border-gray/10 overflow-hidden divide-y divide-gray/8">
-                  {[
-                    { symbol: "zkBTC", name: "Shielded Bitcoin", logo: "/zkbtc.png", decimals: 8, priceKey: "btc" as const },
-                    { symbol: "SOL", name: "Solana", logo: "/tokens/sol.png", decimals: 9, priceKey: "sol" as const },
-                    { symbol: "USDC", name: "USD Coin", logo: "/tokens/usdc.png", decimals: 6, priceKey: "usdc" as const },
-                    { symbol: "USDT", name: "Tether USD", logo: "/tokens/usdt.png", decimals: 6, priceKey: "usdt" as const },
-                  ].map((token) => {
-                    const isZkBtc = token.symbol === "zkBTC";
-                    const rawBalance = isZkBtc ? Number(totalAmountSats) : 0;
-                    const balance = (rawBalance / 10 ** token.decimals).toFixed(token.decimals);
+                  {VAULT_TOKENS.map((token) => {
+                    const rawBalance = Number(balancesByToken?.[token.shieldedSymbol] ?? 0n);
+                    const balanceNum = rawBalance / 10 ** token.decimals;
+                    // Show up to 2 decimals for clean display, more only if needed for precision
+                    const balance = balanceNum < 0.01 && balanceNum > 0
+                      ? balanceNum.toFixed(token.decimals) // tiny amounts: show full precision
+                      : balanceNum.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                     const price = tokenPrices[token.priceKey];
                     const usdValue = price
                       ? (rawBalance / 10 ** token.decimals) * price
@@ -475,21 +484,23 @@ export default function VaultPage() {
 
                     return (
                       <div key={token.symbol} className="flex items-center gap-3 px-4 py-3.5 hover:bg-muted/40 transition-colors">
-                        <img src={token.logo} alt={token.symbol} className="w-9 h-9 rounded-full" />
+                        <img src={token.shieldedLogo} alt={token.shieldedSymbol} className="w-9 h-9 rounded-full" />
                         <div className="flex-1 min-w-0">
-                          <p className="text-body2-semibold text-foreground">{token.symbol}</p>
+                          <p className="text-body2-semibold text-foreground">{token.shieldedSymbol}</p>
                           <p className="text-[11px] text-gray/50">{token.name}</p>
                         </div>
                         <div className="text-right">
-                          {isZkBtc && isLoadingInbox ? (
+                          {isLoadingInbox ? (
                             <Loader2 className="w-4 h-4 animate-spin text-privacy ml-auto" />
-                          ) : (
+                          ) : rawBalance > 0 ? (
                             <>
                               <p className="text-body2-semibold text-foreground font-mono">{balance}</p>
                               <p className="text-[11px] text-gray/45 font-mono">
                                 ${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                               </p>
                             </>
+                          ) : (
+                            <p className="text-body2-semibold text-gray/25 font-mono">—</p>
                           )}
                         </div>
                       </div>

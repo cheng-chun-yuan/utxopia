@@ -149,6 +149,9 @@ pub struct TransferItem {
     /// Token transfer recipient wallet (unshield txs only)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub unshield_recipient: Option<String>,
+    /// Token ID hex (from on-chain event, identifies which token)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token_id: Option<String>,
 }
 
 /// Response for GET /api/transfers
@@ -412,6 +415,7 @@ async fn get_transfers(
                     instruction_disc: t.instruction_disc,
                     unshield_amount: t.unshield_amount,
                     unshield_recipient: t.unshield_recipient,
+                    token_id: t.token_id,
                 }
             }).collect();
             Json(TransfersResponse {

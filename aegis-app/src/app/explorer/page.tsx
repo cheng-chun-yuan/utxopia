@@ -14,9 +14,10 @@ import { SiteFooter } from "@/components/site-footer";
 
 import { TypeFilterBar, LoadingState, StatCard, Th, RefreshButton, EmptyState } from "./components/shared";
 import type { FilterType, TokenFilter } from "./components/shared";
-import { DepositRow } from "./components/deposits-tab";
+import { DepositRow, getShieldType } from "./components/deposits-tab";
 import { TransferRow, getTransferKind } from "./components/transfers-tab";
 import { WithdrawalRow } from "./components/withdrawals-tab";
+import { getTokenByFilter, formatTokenAmount, type TokenFilterId } from "@/lib/supported-tokens";
 
 // =============================================================================
 // Unified Transaction Type
@@ -124,13 +125,74 @@ function ExplorerContent() {
     return c;
   }, [unified]);
 
-  // Filter
-  const filtered = useMemo(() => {
-    if (activeFilter === "all") return unified;
-    return unified.filter((t) => t.kind === activeFilter);
-  }, [unified, activeFilter]);
+  // Helper: get token filter for a deposit (use tokenSymbol from backend when available)
+  const getDepositTokenFilter = useCallback((d: DepositRecord): TokenFilterId => {
+    if (d.tokenSymbol) {
+      const sym = d.tokenSymbol.toUpperCase();
+      if (sym === "SOL") return "sol";
+      if (sym === "USDC") return "usdc";
+      if (sym === "USDT") return "usdt";
+      return "btc";
+    }
+    const shieldType = getShieldType(d);
+    if (shieldType === "btc" || shieldType === "demo") return "btc";
+    if (shieldType === "sol") return "sol";
+    if (shieldType === "usdc") return "usdc";
+    if (shieldType === "usdt") return "usdt";
+    return "btc";
+  }, []);
 
-  const totalShielded = deposits.reduce((sum, d) => sum + (d.amountSats || 0), 0);
+  // Filter by type AND token
+  const filtered = useMemo(() => {
+    let items = unified;
+
+    // Type filter
+    if (activeFilter !== "all") {
+      items = items.filter((t) => t.kind === activeFilter);
+    }
+
+    // Token filter (only applies to shield and unshield — transfers are token-agnostic)
+    if (selectedTokens.size < 4) {
+      items = items.filter((t) => {
+        if (t.kind === "shield") {
+          const tokenFilter = getDepositTokenFilter(t.data as DepositRecord);
+          return selectedTokens.has(tokenFilter);
+        }
+        if (t.kind === "transfer") return true; // transfers are encrypted, can't filter by token
+        if (t.kind === "unshield") return selectedTokens.has("btc"); // unshields are currently BTC-only
+        return true;
+      });
+    }
+
+    return items;
+  }, [unified, activeFilter, selectedTokens, getDepositTokenFilter]);
+
+  // Per-token shielded totals
+  const perTokenShielded = useMemo(() => {
+    const totals: Record<TokenFilterId, number> = { btc: 0, sol: 0, usdc: 0, usdt: 0 };
+    for (const d of deposits) {
+      const tokenFilter = getDepositTokenFilter(d);
+      totals[tokenFilter] += d.amountSats || 0;
+    }
+    return totals;
+  }, [deposits, getDepositTokenFilter]);
+
+  // Build total shielded display string (BTC shown in BTC not sats)
+  const totalShieldedDisplay = useMemo(() => {
+    const parts: string[] = [];
+    for (const filterId of ["btc", "sol", "usdc", "usdt"] as const) {
+      if (perTokenShielded[filterId] > 0) {
+        const token = getTokenByFilter(filterId);
+        if (token) {
+          // Always show in human-readable units (BTC not sats, SOL not lamports)
+          const value = perTokenShielded[filterId] / (10 ** token.decimals);
+          const symbol = filterId === "btc" ? "BTC" : token.unit;
+          parts.push(`${value.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${symbol}`);
+        }
+      }
+    }
+    return parts.length > 0 ? parts.join(" · ") : "$0.00";
+  }, [perTokenShielded]);
 
   return (
     <>
@@ -156,7 +218,7 @@ function ExplorerContent() {
         />
         <StatCard
           label="Total Shielded"
-          value={`${(totalShielded / 1e8).toFixed(4)} BTC`}
+          value={totalShieldedDisplay}
           icon={<Shield className="w-4 h-4 text-privacy" />}
           color="bg-privacy/5 border-privacy/15"
         />
