@@ -271,12 +271,23 @@ async function main() {
   const initHeight = sweepBlockHeight - 1;
   await initLightClient(authority, BTC_LC, initHeight);
 
-  const tipHeight = parseInt(
+  // Read on-chain tip to know where to extend from
+  const [lightClientPda] = deriveLightClientPDA(BTC_LC);
+  const lcInfo = await connection.getAccountInfo(lightClientPda);
+  // tip_height at offset 136: disc(1)+bump(1)+paused(1)+network(1)+pad(4)+auth(32)+genesis(32)+tip_hash(32)+chainwork(32)
+  const onChainTip = lcInfo ? Number(Buffer.from(lcInfo.data).readBigUInt64LE(136)) : initHeight;
+  log(`On-chain LC tip: ${onChainTip}`);
+
+  const btcTipHeight = parseInt(
     execSync(`curl -sf ${ESPLORA_URL}/blocks/tip/height`, { encoding: "utf8" }).trim()
   );
-  const targetHeight = Math.min(tipHeight, sweepBlockHeight + 6);
-  await submitHeaders(authority, BTC_LC, initHeight, targetHeight);
-  log(`Headers synced: ${initHeight}..${targetHeight}`);
+  const targetHeight = Math.min(btcTipHeight, sweepBlockHeight + 6);
+  if (onChainTip < targetHeight) {
+    await submitHeaders(authority, BTC_LC, onChainTip, targetHeight);
+    log(`Headers synced: ${onChainTip}..${targetHeight}`);
+  } else {
+    log(`Headers already synced to ${onChainTip} (target: ${targetHeight})`);
+  }
 
   // =========================================================================
   // 6. Upload sweep TX → verify_transaction (creates VerifiedTransaction PDA)
