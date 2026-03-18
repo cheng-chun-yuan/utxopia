@@ -24,6 +24,7 @@ import {
   loadAuthority,
   loadState,
   updateState,
+  trackCommitments,
   stepHeader,
   log,
   Disc,
@@ -444,6 +445,7 @@ async function main() {
   };
 
   updateState({ transferNotes: { send: sendNote, change: changeNote } });
+  trackCommitments(sendNote.commitment, changeNote.commitment);
 
   console.log("\nStep 6: JoinSplit Transfer ...... PASS");
 }

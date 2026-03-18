@@ -18,6 +18,7 @@ import {
   loadAuthority,
   loadState,
   updateState,
+  trackCommitments,
   stepHeader,
   log,
   Disc,
@@ -140,6 +141,7 @@ async function main() {
   );
 
   updateState({ usdcNote, wsolNote });
+  trackCommitments(usdcNote.commitment, wsolNote.commitment);
 
   console.log("\nStep 5: Shield SPL Tokens ....... PASS");
 }

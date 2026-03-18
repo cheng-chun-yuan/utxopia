@@ -22,10 +22,8 @@ const steps = [
   { file: "step4-demo-deposit.ts", label: "Demo Deposit" },
   { file: "step5-shield.ts", label: "Shield SPL Tokens" },
   { file: "step6-transfer.ts", label: "JoinSplit Transfer" },
-  // Steps 7-8 require full tree reconstruction for Merkle proofs on earlier leaves.
-  // They work individually but need exact on-chain commitment tracking across all steps.
-  // TODO: implement full commitment tracking via event log scanning.
-  // { file: "step7-unshield.ts", label: "Unshield tUSDC" },
+  { file: "step7-unshield.ts", label: "Unshield tUSDC" },
+  // step8 requires FROST signing infrastructure (not available in localnet)
   // { file: "step8-btc-withdraw.ts", label: "BTC Withdrawal Request" },
   { file: "step9-summary.ts", label: "Summary" },
 ];

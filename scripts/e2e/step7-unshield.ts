@@ -200,14 +200,62 @@ async function main() {
   const tUsdcVault = new PublicKey(state.tUsdcVault!);
   const userAta = deriveATA(tUsdcMint, authority.publicKey);
 
-  // Read tree
+  // Rebuild full tree from tracked commitments
+  if (!state.commitments || state.commitments.length === 0) {
+    throw new Error("No tracked commitments. Run steps 3-6 first.");
+  }
+  log(`Rebuilding tree from ${state.commitments.length} tracked commitments...`);
+
+  // Build tree from all commitments
+  const allCommitments = state.commitments.map((h: string) => BigInt("0x" + h));
+  const treeLeaves: bigint[] = [];
+  for (const c of allCommitments) {
+    treeLeaves.push(c);
+  }
+
+  // Build Merkle tree
+  function buildTree(leaves: bigint[]): { root: bigint; getProof: (idx: number) => { siblings: bigint[]; indices: number[] } } {
+    const layers: bigint[][] = [new Array(1 << TREE_DEPTH).fill(0n)];
+    for (let i = 0; i < leaves.length; i++) layers[0][i] = leaves[i];
+
+    for (let level = 0; level < TREE_DEPTH; level++) {
+      const prev = layers[level];
+      const next: bigint[] = [];
+      for (let i = 0; i < prev.length; i += 2) {
+        next.push(poseidonHash([prev[i], prev[i + 1] ?? ZERO_HASHES[level]]));
+      }
+      layers.push(next);
+    }
+
+    return {
+      root: layers[TREE_DEPTH][0],
+      getProof(idx: number) {
+        const siblings: bigint[] = [];
+        const indices: number[] = [];
+        let i = idx;
+        for (let level = 0; level < TREE_DEPTH; level++) {
+          const bit = i & 1;
+          indices.push(bit);
+          siblings.push(bit === 0 ? layers[level][i + 1] ?? ZERO_HASHES[level] : layers[level][i - 1]);
+          i >>= 1;
+        }
+        return { siblings, indices };
+      },
+    };
+  }
+
+  const fullTree = buildTree(treeLeaves);
+  const merkleRoot = fullTree.root;
+  const proof = fullTree.getProof(leafIndex0);
+
+  // Verify root matches on-chain
   const treeInfo = await connection.getAccountInfo(commitmentTree);
   const treeData = parseCommitmentTree(Buffer.from(treeInfo!.data))!;
-  const frontier = extractFrontier(treeData);
-  const merkleRoot = bytes32ToBigintBE(new Uint8Array(treeData.currentRoot));
-
-  // Merkle proof
-  const proof = getMerkleProofFromFrontier(leafIndex0, frontier);
+  const onChainRoot = bytes32ToBigintBE(new Uint8Array(treeData.currentRoot));
+  if (merkleRoot !== onChainRoot) {
+    throw new Error(`Root mismatch: local ${merkleRoot.toString(16).slice(0, 16)} vs on-chain ${onChainRoot.toString(16).slice(0, 16)}`);
+  }
+  log(`Merkle root verified: ${merkleRoot.toString(16).slice(0, 16)}...`);
 
   // Unshield: 1 input → 1 output (burn commitment)
   // Burn commitment = Poseidon([0;32], token_id, amount)

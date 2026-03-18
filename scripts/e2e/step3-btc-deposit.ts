@@ -29,6 +29,7 @@ import {
   loadAuthority,
   loadState,
   updateState,
+  trackCommitments,
   stepHeader,
   log,
   Disc,
@@ -443,6 +444,7 @@ async function main() {
       tokenId: tokenId.toString(16),
     },
   });
+  trackCommitments(onChainCommitment.toString(16));
 
   console.log("\nStep 3: BTC Deposit (real) ...... PASS");
 }

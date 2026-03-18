@@ -19,6 +19,7 @@ import {
   loadAuthority,
   loadState,
   updateState,
+  trackCommitments,
   stepHeader,
   log,
   Disc,
@@ -120,6 +121,7 @@ async function main() {
       tokenId: tokenId.toString(16),
     },
   });
+  trackCommitments(commitment.toString(16));
 
   console.log("\nStep 4: Demo Deposit ............ PASS");
 }

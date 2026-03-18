@@ -118,6 +118,8 @@ export interface LocalnetState {
   usdcNote?: NoteState;
   wsolNote?: NoteState;
   transferNotes?: { send: NoteState; change: NoteState };
+  /** All commitments in insertion order (hex strings) for full tree rebuild */
+  commitments?: string[];
   // Crypto keys (hex)
   spendingSeed?: string;
   pubKeyX?: string;
@@ -140,6 +142,14 @@ export function saveState(state: LocalnetState): void {
 export function updateState(partial: Partial<LocalnetState>): void {
   const state = loadState();
   Object.assign(state, partial);
+  saveState(state);
+}
+
+/** Append commitments to the state (preserves insertion order for tree rebuild) */
+export function trackCommitments(...commitmentHexes: string[]): void {
+  const state = loadState();
+  if (!state.commitments) state.commitments = [];
+  state.commitments.push(...commitmentHexes);
   saveState(state);
 }
 
