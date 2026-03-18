@@ -184,9 +184,10 @@ async function main() {
   const btcScript = redeemData.subarray(72, 72 + btcScriptLen);
   log(`Redeem amount: ${redeemAmount} sats, script: ${Buffer.from(btcScript).toString("hex")}`);
 
-  // Get a funded UTXO from the wallet (limit to 20 results to avoid buffer overflow)
-  const utxos = JSON.parse(btc('listunspent 1 9999999 "[]" true \'{"maximumCount":20}\''));
+  // Get a funded UTXO from the wallet (maxBuffer increased in regtest-helpers)
+  const utxos = JSON.parse(btc("listunspent 1 9999999"));
   if (utxos.length === 0) throw new Error("No UTXOs in wallet");
+  log(`Found ${utxos.length} UTXOs`);
   const utxo = utxos.find((u: any) => u.amount * 1e8 >= Number(redeemAmount) + 5000);
   if (!utxo) throw new Error("No UTXO large enough for withdrawal");
   log(`Using UTXO: ${utxo.txid}:${utxo.vout} (${utxo.amount} BTC)`);
