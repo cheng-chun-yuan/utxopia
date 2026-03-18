@@ -40,7 +40,7 @@ export function SiteHeader() {
               <motion.div key={href} whileHover={{ y: -1 }}>
                 <Link
                   href={href}
-                  className="text-xs font-medium text-gray hover:text-foreground transition-all"
+                  className="text-xs font-medium text-gray hover:text-foreground transition-all py-3 px-2"
                 >
                   {label}
                 </Link>
@@ -53,7 +53,7 @@ export function SiteHeader() {
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Link
                 href="/vault"
-                className="inline-flex items-center gap-1.5 text-xs font-semibold border border-privacy/10 px-4 py-1.5 rounded-full transition-all text-privacy bg-privacy/10 hover:bg-privacy/10 hover:border-privacy/30 hover:shadow-[0_0_15px_rgba(20,241,149,0.15)]"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold border border-privacy/10 px-4 py-2.5 rounded-full transition-all text-privacy bg-privacy/10 hover:bg-privacy/10 hover:border-privacy/30 hover:shadow-[0_0_15px_rgba(20,241,149,0.15)]"
               >
                 <Shield className="w-3 h-3" />
                 Launch App
