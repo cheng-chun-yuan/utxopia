@@ -204,7 +204,7 @@ export default function Home() {
 
       <div className="relative z-10">
         {/* ═══════════════ HERO ═══════════════ */}
-        <section className="min-h-[85vh] flex flex-col items-center justify-center px-4 pt-28 pb-16 relative">
+        <section className="min-h-[70vh] flex flex-col items-center justify-center px-4 pt-28 pb-12 relative">
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute top-[10%] left-[15%] w-[500px] h-[500px] rounded-full bg-btc/4 blur-[150px]" />
             <div className="absolute bottom-[5%] right-[10%] w-[400px] h-[400px] rounded-full bg-sol/3 blur-[150px]" />
@@ -311,41 +311,50 @@ export default function Home() {
         </section>
 
         {/* ═══════════════ SUPPORTED TOKENS ═══════════════ */}
-        <section className="w-full py-12 px-4 sm:px-6 lg:px-8 relative">
+        <section className="w-full py-16 px-4 sm:px-6 lg:px-8 relative">
           <div className="max-w-5xl mx-auto relative z-10">
             <ScrollReveal>
-              <div className="text-center mb-8">
-                <h2 className="section-title text-3xl md:text-4xl text-foreground mb-2">
-                  Shield <span className="text-privacy">Any Token</span>
-                </h2>
-                <p className="text-sm text-gray font-light">
-                  Deposit and shield tokens into private commitments.
-                </p>
+              <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between mb-8 gap-4">
+                <div>
+                  <h2 className="section-title text-3xl md:text-4xl text-foreground mb-2">
+                    Shield <span className="text-privacy">Any Token</span>
+                  </h2>
+                  <p className="text-sm text-gray font-light">
+                    Deposit and shield tokens into private commitments.
+                  </p>
+                </div>
+                <Link href="/vault" className="text-sm text-privacy/70 hover:text-privacy transition-colors flex items-center gap-1 shrink-0">
+                  Start shielding <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
               </div>
             </ScrollReveal>
             <ScrollReveal delay={0.1}>
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+              <div className="flex gap-3 overflow-x-auto pb-2">
                 {[
-                  { name: "BTC", status: "Live", logo: "/tokens/btc.png" },
-                  { name: "SOL", status: "Live", logo: "/tokens/sol.png" },
-                  { name: "USDC", status: "Live", logo: "/tokens/usdc.png" },
-                  { name: "USDT", status: "Live", logo: "/tokens/usdt.png" },
-                  { name: "ETH", status: "Soon", logo: "/tokens/eth.png" },
-                  { name: "ZEC", status: "Soon", logo: "/tokens/zec.png" },
+                  { name: "BTC", label: "Bitcoin", status: "Live", logo: "/tokens/btc.png" },
+                  { name: "SOL", label: "Solana", status: "Live", logo: "/tokens/sol.png" },
+                  { name: "USDC", label: "USD Coin", status: "Live", logo: "/tokens/usdc.png" },
+                  { name: "USDT", label: "Tether", status: "Live", logo: "/tokens/usdt.png" },
+                  { name: "ETH", label: "Ethereum", status: "Soon", logo: "/tokens/eth.png" },
+                  { name: "ZEC", label: "Zcash", status: "Soon", logo: "/tokens/zec.png" },
                 ].map((token) => (
-                  <GradientBorderCard key={token.name} className="group">
-                    <div className="flex flex-col items-center gap-2 py-4 px-2">
-                      <img src={token.logo} alt={token.name} className="w-8 h-8 rounded-full" />
-                      <span className="text-sm font-semibold text-foreground">{token.name}</span>
-                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
-                        token.status === "Live"
-                          ? "bg-privacy/10 text-privacy border border-privacy/20"
-                          : "bg-gray/10 text-gray border border-gray/20"
-                      }`}>
-                        {token.status}
-                      </span>
+                  <div
+                    key={token.name}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-[12px] border backdrop-blur-sm shrink-0 transition-all ${
+                      token.status === "Live"
+                        ? "bg-muted/30 border-gray/10 hover:border-privacy/20 hover:bg-privacy/5"
+                        : "bg-muted/15 border-gray/5 opacity-50"
+                    }`}
+                  >
+                    <img src={token.logo} alt={token.name} className="w-8 h-8 rounded-full" />
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">{token.name}</p>
+                      <p className="text-[10px] text-gray/50">{token.label}</p>
                     </div>
-                  </GradientBorderCard>
+                    {token.status === "Live" && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-privacy ml-1 animate-pulse" />
+                    )}
+                  </div>
                 ))}
               </div>
             </ScrollReveal>
@@ -381,39 +390,42 @@ export default function Home() {
 
         {/* ═══════════════ CTA ═══════════════ */}
         <section className="w-full py-20 px-4 sm:px-6 relative overflow-hidden">
-          <div className="absolute inset-0 pointer-events-none opacity-20">
-            <div className="absolute top-[30%] left-[30%] w-[500px] h-[500px] rounded-full blur-[120px] rotate-glow origin-center bg-privacy/5 mix-blend-screen" />
-            <div className="absolute bottom-[30%] right-[30%] w-[500px] h-[500px] rounded-full blur-[120px] rotate-glow-reverse origin-center bg-btc/5 mix-blend-screen" />
-          </div>
-
-          <div className="max-w-3xl mx-auto text-center relative z-10">
+          <div className="max-w-4xl mx-auto relative z-10">
             <ScrollReveal variant="scaleIn">
-              <h2 className="section-title text-3xl md:text-4xl text-foreground mb-4">
-                Start <span className="text-privacy">Shielding</span>
-              </h2>
-              <p className="text-base text-gray font-light mb-8">
-                Shield any token. Transfer privately. Stay anonymous.
-              </p>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}>
-                  <Link
-                    href="/vault"
-                    className="btn-privacy btn-pill btn-shimmer inline-flex items-center gap-2 px-7 py-2.5 text-base shadow-[0_0_20px_rgba(20,241,149,0.2)] hover:shadow-[0_0_35px_rgba(20,241,149,0.4)] transition-shadow"
-                  >
-                    <Shield className="w-5 h-5" />
-                    Launch App
-                    <ArrowRight className="w-5 h-5" />
-                  </Link>
-                </motion.div>
-                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}>
-                  <Link
-                    href="/explorer"
-                    className="btn-tertiary btn-pill inline-flex items-center gap-2 px-5 py-2.5 border border-gray/10 backdrop-blur-md hover:bg-muted/50 hover:border-gray/20 transition-all"
-                  >
-                    View Explorer
-                    <ChevronRight className="w-4 h-4" />
-                  </Link>
-                </motion.div>
+              <div className="rounded-[20px] border border-privacy/15 bg-gradient-to-br from-privacy/5 via-transparent to-purple/5 p-8 md:p-12 text-center relative overflow-hidden">
+                <div className="absolute inset-0 pointer-events-none opacity-30">
+                  <div className="absolute top-[-20%] left-[20%] w-[400px] h-[400px] rounded-full blur-[120px] bg-privacy/10" />
+                  <div className="absolute bottom-[-20%] right-[20%] w-[300px] h-[300px] rounded-full blur-[100px] bg-purple/10" />
+                </div>
+                <div className="relative z-10">
+                  <h2 className="section-title text-3xl md:text-4xl text-foreground mb-3">
+                    Start <span className="text-privacy">Shielding</span>
+                  </h2>
+                  <p className="text-base text-gray font-light mb-8 max-w-md mx-auto">
+                    Shield any token. Transfer privately. Stay anonymous.
+                  </p>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}>
+                      <Link
+                        href="/vault"
+                        className="btn-privacy btn-pill btn-shimmer inline-flex items-center gap-2 px-7 py-3 text-base shadow-[0_0_20px_rgba(20,241,149,0.2)] hover:shadow-[0_0_35px_rgba(20,241,149,0.4)] transition-shadow"
+                      >
+                        <Shield className="w-5 h-5" />
+                        Launch App
+                        <ArrowRight className="w-5 h-5" />
+                      </Link>
+                    </motion.div>
+                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}>
+                      <Link
+                        href="/explorer"
+                        className="btn-tertiary btn-pill inline-flex items-center gap-2 px-5 py-3 border border-gray/10 backdrop-blur-md hover:bg-muted/50 hover:border-gray/20 transition-all"
+                      >
+                        View Explorer
+                        <ChevronRight className="w-4 h-4" />
+                      </Link>
+                    </motion.div>
+                  </div>
+                </div>
               </div>
             </ScrollReveal>
           </div>
