@@ -227,23 +227,16 @@ async function main() {
   // Frontier-based proofs only work for the last leaf; for earlier leaves we need all siblings
   log(`Building Merkle proof for leaf ${leafIndex0}...`);
 
-  // Collect all commitments from state (leaves 0..nextIndex)
+  // Collect all commitments from state.commitments (tracked in insertion order)
   const nextIndex = Number(treeData.nextIndex);
   const leaves: bigint[] = new Array(nextIndex).fill(0n);
 
-  // We know our demoNote commitment. For other leaves we need their on-chain values.
-  // Since we have the frontier, we can reconstruct:
-  // The simplest approach: read commitments from the stealth announcement events
-  // But for localnet, we have all note data in state.
-  // Reconstruct from state: btcNote=leaf0, demoNote=leaf1, usdcNote=leaf2, wsolNote=leaf3
-  if (state.btcNote) leaves[state.btcNote.leafIndex] = BigInt("0x" + state.btcNote.commitment);
-  if (state.demoNote) leaves[state.demoNote.leafIndex] = BigInt("0x" + state.demoNote.commitment);
-  if (state.usdcNote) leaves[state.usdcNote.leafIndex] = BigInt("0x" + state.usdcNote.commitment);
-  if (state.wsolNote) leaves[state.wsolNote.leafIndex] = BigInt("0x" + state.wsolNote.commitment);
-
-  // But wait — the BTC deposit commitment stored in state uses our local computation,
-  // which might differ from on-chain (fees, different amount). Read from frontier instead.
-  // Actually, we need to compute the proof properly. Let me rebuild the tree from leaves.
+  // Use the commitments array tracked across all steps (insertion order = leaf order)
+  if (state.commitments) {
+    for (let i = 0; i < Math.min(state.commitments.length, nextIndex); i++) {
+      leaves[i] = BigInt("0x" + state.commitments[i]);
+    }
+  }
 
   // Build the full tree bottom-up
   const treeNodes: bigint[][] = [];
