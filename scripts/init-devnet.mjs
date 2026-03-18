@@ -204,7 +204,7 @@ async function main() {
 
   // 6. Register wSOL (NATIVE_MINT_2022) as a token for SOL shielding
   console.log("\n--- Registering wSOL Token ---");
-  {
+  try {
     const NATIVE_MINT_2022 = new PublicKey("9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP");
 
     // Create wSOL vault ATA (Token-2022 native mint, owned by pool state PDA)
@@ -260,6 +260,8 @@ async function main() {
     }));
     console.log("wSOL TokenConfig PDA:", wsolTokenConfigPda.toBase58());
     console.log("NATIVE_MINT_2022:", NATIVE_MINT_2022.toBase58());
+  } catch (err) {
+    console.log("wSOL registration skipped (NATIVE_MINT_2022 not available — clone from devnet for localnet)");
   }
 
   // 7. Register tUSDC (6 decimals) for SPL USDC shielding

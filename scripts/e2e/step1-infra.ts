@@ -149,12 +149,16 @@ async function main() {
     log(`ChadBuffer not found locally, cloning from devnet: ${CHADBUFFER_DEVNET}`);
   }
 
+  // Clone NATIVE_MINT_2022 from devnet for wSOL support
+  const NATIVE_MINT_2022 = "9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP";
+
   const validatorCmd = [
     "solana-test-validator",
     "--clone-feature-set",
     "--url devnet",
     bpfArgs,
     cloneArgs,
+    `--clone ${NATIVE_MINT_2022}`,
     "--reset",
     "--quiet",
   ].filter(Boolean).join(" ");

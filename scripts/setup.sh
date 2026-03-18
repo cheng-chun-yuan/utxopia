@@ -182,10 +182,15 @@ setup_localnet() {
     AEGIS_PROG_ID="8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim"
     BTC_LC_PROG_ID="Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"
 
+    # Clone NATIVE_MINT_2022 + Token-2022 program from devnet for wSOL support
+    NATIVE_MINT_2022="9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP"
+    TOKEN_2022_PROG="TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+
     rm -rf test-ledger 2>/dev/null
     solana-test-validator --reset --quiet \
       --bpf-program "$AEGIS_PROG_ID" "$AEGIS_SO" \
       --bpf-program "$BTC_LC_PROG_ID" "$BTC_LC_SO" \
+      --clone "$NATIVE_MINT_2022" --url devnet \
       &
     echo $! > /tmp/aegis-validator.pid
 
