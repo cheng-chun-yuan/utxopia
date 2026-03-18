@@ -72,7 +72,9 @@ export interface ExplorerDeposit {
   taprootAddress: string | null;
   trackerError: string | null;
   isDemo: boolean;
-  btcDepositAmountSats: number | null; // Original BTC deposit amount (before sweep fee)
+  btcDepositAmountSats: number | null;
+  /** Instruction discriminator: 1=BTC SPV deposit, 13=demo, 29=SPL shield */
+  instructionDisc: number | null;
 }
 
 interface LeafRow {
@@ -166,6 +168,7 @@ export async function GET() {
           trackerError: tracker?.error ?? null,
           isDemo,
           btcDepositAmountSats: tracker?.amount_sats ?? a.btc_deposit_amount_sats ?? null,
+          instructionDisc: a.is_verified ? 1 : isDemo ? 13 : 29,
         };
       });
 
@@ -201,6 +204,7 @@ export async function GET() {
         trackerError: tracker.error ?? null,
         isDemo: false,
         btcDepositAmountSats: tracker.amount_sats ?? null,
+        instructionDisc: 1, // tracker deposits are always real BTC
       });
     }
 
@@ -243,6 +247,7 @@ export async function GET() {
             trackerError: null,
             isDemo,
             btcDepositAmountSats: null,
+            instructionDisc: tx.instructionDisc,
           });
         }
       }

@@ -197,6 +197,60 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
 // Deposit Row — single unified table row + expandable detail
 // =============================================================================
 
+/** Determine shield type from instruction discriminator */
+function getShieldType(d: DepositRecord): "btc" | "sol" | "usdc" | "usdt" | "demo" | "spl" {
+  if (d.isDemo) return "demo";
+  if (d.instructionDisc === 1) return "btc"; // verify_stealth_deposit
+  if (d.instructionDisc === 29) {
+    // SPL shield — detect token by amount heuristic
+    // SOL: 9 decimals (amounts like 100_000_000 = 0.1 SOL)
+    // USDC/USDT: 6 decimals (amounts like 1_000_000_000 = 1000 USDC)
+    if (d.amountSats >= 1_000_000 && d.amountSats < 1_000_000_000) return "sol";
+    if (d.amountSats >= 1_000_000_000) return "usdc"; // could be USDC or USDT
+    return "spl";
+  }
+  return "btc"; // fallback
+}
+
+const SHIELD_TYPE_CONFIG = {
+  btc: {
+    from: { label: "BTC", logo: "/tokens/btc.png", color: "text-btc/70 bg-btc/6 border-btc/10" },
+    to: { label: "zkBTC", logo: "/zkbtc.png", color: "text-privacy/80 bg-privacy/6 border-privacy/10" },
+    decimals: 8, unit: "sats", showRaw: true,
+  },
+  sol: {
+    from: { label: "SOL", logo: "/tokens/sol.png", color: "text-sol/70 bg-sol/6 border-sol/10" },
+    to: { label: "zkSOL", logo: "/tokens/sol.png", color: "text-privacy/80 bg-privacy/6 border-privacy/10" },
+    decimals: 9, unit: "SOL", showRaw: false,
+  },
+  usdc: {
+    from: { label: "USDC", logo: "/tokens/usdc.png", color: "text-green-400/70 bg-green-500/6 border-green-500/10" },
+    to: { label: "zkUSDC", logo: "/tokens/usdc.png", color: "text-privacy/80 bg-privacy/6 border-privacy/10" },
+    decimals: 6, unit: "USDC", showRaw: false,
+  },
+  usdt: {
+    from: { label: "USDT", logo: "/tokens/usdt.png", color: "text-green-400/70 bg-green-500/6 border-green-500/10" },
+    to: { label: "zkUSDT", logo: "/tokens/usdt.png", color: "text-privacy/80 bg-privacy/6 border-privacy/10" },
+    decimals: 6, unit: "USDT", showRaw: false,
+  },
+  demo: {
+    from: { label: "BTC", logo: "/tokens/btc.png", color: "text-btc/70 bg-btc/6 border-btc/10" },
+    to: { label: "zkBTC", logo: "/zkbtc.png", color: "text-privacy/80 bg-privacy/6 border-privacy/10" },
+    decimals: 8, unit: "sats", showRaw: true,
+  },
+  spl: {
+    from: { label: "SPL", logo: "/tokens/sol.png", color: "text-gray/70 bg-gray/6 border-gray/10" },
+    to: { label: "Shielded", logo: "/tokens/sol.png", color: "text-privacy/80 bg-privacy/6 border-privacy/10" },
+    decimals: 0, unit: "", showRaw: true,
+  },
+};
+
+function formatShieldAmount(amount: number, decimals: number, unit: string, showRaw: boolean): string {
+  if (showRaw) return `${amount.toLocaleString()} ${unit}`;
+  const value = amount / (10 ** decimals);
+  return `${value.toLocaleString(undefined, { maximumFractionDigits: decimals })} ${unit}`;
+}
+
 export function DepositRow({
   deposit,
   index,
@@ -208,9 +262,12 @@ export function DepositRow({
   expanded: boolean;
   onToggle: () => void;
 }) {
-  const depositKey = `${deposit.btcTxid || deposit.txSignature || deposit.taprootAddress || deposit.commitment}-${index}`;
-  const canExpand = !deposit.isDemo;
   const d = deposit;
+  const shieldType = getShieldType(d);
+  const config = SHIELD_TYPE_CONFIG[shieldType];
+  // Only BTC SPV deposits (disc=1) are expandable
+  const isBtcDeposit = shieldType === "btc";
+  const canExpand = isBtcDeposit;
 
   return (
     <Fragment>
@@ -249,19 +306,21 @@ export function DepositRow({
         </Td>
         <Td>
           <div className="flex items-center gap-1.5 text-caption">
-            <span className="inline-flex items-center gap-1 text-btc/70 bg-btc/6 border border-btc/10 px-1.5 py-0.5 rounded font-mono text-[10px]">
-              <BitcoinIcon className="w-3 h-3" />
-              BTC
+            <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono text-[10px] border", config.from.color)}>
+              <img src={config.from.logo} alt={config.from.label} className="w-3 h-3 rounded-full" />
+              {config.from.label}
             </span>
             <span className="text-gray/30">→</span>
-            <span className="inline-flex items-center gap-1 text-privacy/80 bg-privacy/6 border border-privacy/10 px-1.5 py-0.5 rounded font-mono text-[10px]">
-              <Image src="/zkbtc.png" alt="zkBTC" width={12} height={12} className="rounded-full" />
-              zkBTC
+            <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono text-[10px] border", config.to.color)}>
+              <img src={config.to.logo} alt={config.to.label} className="w-3 h-3 rounded-full" />
+              {config.to.label}
             </span>
           </div>
         </Td>
         <Td>
-          <span className="text-body2 text-foreground font-mono">{d.amountSats.toLocaleString()} <span className="text-gray text-caption">sats</span></span>
+          <span className="text-body2 text-foreground font-mono">
+            {formatShieldAmount(d.amountSats, config.decimals, config.unit, config.showRaw)}
+          </span>
         </Td>
         <Td>
           <span className="text-caption text-gray">{timeAgo(d.timestamp)}</span>
@@ -272,7 +331,7 @@ export function DepositRow({
           </div>
         </Td>
       </tr>
-      {expanded && !d.isDemo && (
+      {expanded && isBtcDeposit && (
         <tr>
           <td colSpan={8} className="p-0">
             <DepositDetails deposit={d} />
