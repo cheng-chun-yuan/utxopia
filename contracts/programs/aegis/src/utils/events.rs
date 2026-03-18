@@ -6,7 +6,7 @@
 //! ## Events
 //!
 //! - 0x02 NullifierSpent: disc(1) + nullifier_hash(32) + op_type(1) + ix_disc(1) = 35 bytes
-//! - 0x03 StealthAnnouncement: disc(1) + type(1) + ephemeral(32) + amount(8) + commitment(32) + leaf_index(4) = 78 bytes
+//! - 0x03 StealthAnnouncement: disc(1) + type(1) + ephemeral(32) + amount(8) + commitment(32) + leaf_index(4) + token_id(32) = 110 bytes
 //! - 0x07 RedemptionCompleted: variable
 //! - 0x08 RedemptionRequested: variable
 //! - 0x0A RedemptionProcessing: disc(1) + requester(32) + amount(8) + request_id(8) + slot(4) = 53 bytes
