@@ -135,7 +135,19 @@ async function main() {
   const aegisSo = path.join(targetDir, "aegis_pinocchio.so");
   const btclcSo = path.join(targetDir, "btc_light_client.so");
 
-  let bpfArgs = `--bpf-program ${AEGIS.toBase58()} ${aegisSo} --bpf-program ${BTC_LC.toBase58()} ${btclcSo}`;
+  // BTC LC: prefer cloning from devnet to match the hardcoded program ID constant in Aegis
+  // (cargo clean may regenerate the keypair with a different address)
+  const BTC_LC_DEVNET = "Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq";
+  const useBtcLcFromDevnet = BTC_LC.toBase58() !== BTC_LC_DEVNET;
+  let bpfArgs = `--bpf-program ${AEGIS.toBase58()} ${aegisSo}`;
+  if (useBtcLcFromDevnet) {
+    bpfArgs += ` --clone-upgradeable-program ${BTC_LC_DEVNET}`;
+    log(`BTC LC keypair mismatch — cloning from devnet: ${BTC_LC_DEVNET}`);
+  } else {
+    bpfArgs += ` --bpf-program ${BTC_LC.toBase58()} ${btclcSo}`;
+  }
+  // Override BTC_LC reference for the rest of the script
+  const BTC_LC_EFFECTIVE = new PublicKey(useBtcLcFromDevnet ? BTC_LC_DEVNET : BTC_LC.toBase58());
   if (fs.existsSync(chadbufferSoPath)) {
     bpfArgs += ` --bpf-program ${chadbufferId.toBase58()} ${chadbufferSoPath}`;
   }
@@ -383,7 +395,7 @@ async function main() {
   // 13. Write state
   const state: LocalnetState = {
     aegisProgramId: AEGIS.toBase58(),
-    btcLightClientId: BTC_LC.toBase58(),
+    btcLightClientId: BTC_LC_EFFECTIVE.toBase58(),
     chadbufferId: chadbufferId.toBase58(),
     zkbtcMint: zkbtcMint.toBase58(),
     poolState: poolState.toBase58(),
