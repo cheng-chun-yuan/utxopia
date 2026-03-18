@@ -59,7 +59,7 @@ export function TypeFilterBar({
   const [openDropdown, setOpenDropdown] = useState<FilterType | null>(null);
 
   return (
-    <div className="flex items-center gap-2 overflow-x-auto">
+    <div className="flex items-center gap-2 flex-wrap">
       {FILTER_PILLS.map((pill) => {
         const isActive = activeFilter === pill.id;
         const isDropdownOpen = openDropdown === pill.id;
