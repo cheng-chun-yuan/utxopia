@@ -197,10 +197,12 @@ async function main() {
   const fee = 0.00001;
   const changeAmount = (utxo.amount - Number(redeemAmount) / 1e8 - fee).toFixed(8);
 
-  // Decode btcScript to get user address
-  // P2WPKH: OP_0 PUSH20 <20-byte-hash> → bcrt1q...
-  // We'll use createrawtransaction with the address directly
-  const userAddr = getNewAddress("bech32"); // stand-in for the real user address
+  // Decode btcScript (P2WPKH) to bech32 address using bitcoin-cli
+  // btcScript = OP_0 (0x00) + PUSH20 (0x14) + 20-byte hash
+  const scriptHex = Buffer.from(btcScript).toString("hex");
+  const decodedScript = JSON.parse(btc(`decodescript ${scriptHex}`));
+  const userAddr = decodedScript.address || decodedScript.addresses?.[0];
+  if (!userAddr) throw new Error(`Could not decode btc_script to address: ${scriptHex}`);
   const poolAddr = state.poolBtcAddress || getNewAddress("bech32m");
 
   let outputs: any;
