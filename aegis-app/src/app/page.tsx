@@ -331,7 +331,7 @@ export default function Home() {
         </section>
 
         {/* ═══════════════ SUPPORTED TOKENS ═══════════════ */}
-        <section className="w-full py-16 px-4 sm:px-6 lg:px-8 relative">
+        <section className="w-full py-10 px-4 sm:px-6 lg:px-8 relative">
           <div className="max-w-5xl mx-auto relative z-10">
             <ScrollReveal>
               <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between mb-8 gap-4">
@@ -382,7 +382,7 @@ export default function Home() {
         </section>
 
         {/* ═══════════════ HOW IT WORKS — Original bento cards ═══════════════ */}
-        <section className="w-full py-20 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+        <section className="w-full py-14 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-b from-transparent via-muted/5 to-transparent pointer-events-none" />
           <div className="absolute top-[10%] right-[-5%] w-[40%] h-[40%] rounded-full bg-privacy/3 blur-[100px] pointer-events-none" />
           <div className="absolute bottom-[10%] left-[-5%] w-[35%] h-[35%] rounded-full bg-btc/3 blur-[100px] pointer-events-none" />
@@ -409,7 +409,7 @@ export default function Home() {
         </section>
 
         {/* ═══════════════ CTA ═══════════════ */}
-        <section className="w-full py-20 px-4 sm:px-6 relative overflow-hidden">
+        <section className="w-full py-14 px-4 sm:px-6 relative overflow-hidden">
           <div className="max-w-4xl mx-auto relative z-10">
             <ScrollReveal variant="scaleIn">
               <div className="rounded-[20px] border border-privacy/15 bg-gradient-to-br from-privacy/5 via-transparent to-purple/5 p-8 md:p-12 text-center relative overflow-hidden">
