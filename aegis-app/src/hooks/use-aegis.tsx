@@ -31,7 +31,8 @@ export function useAegis() {
   }, [wallet.connected, wallet.signMessage, wallet.publicKey, store.deriveKeys]);
 
   // Wrap refreshInbox to automatically use connection
-  const refreshInbox = useCallback(async (conn?: unknown, force?: boolean) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const refreshInbox = useCallback(async (_conn?: unknown, force?: boolean) => {
     await store.refreshInbox(connection, force);
   }, [connection, store.refreshInbox]);
 

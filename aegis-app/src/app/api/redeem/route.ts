@@ -70,16 +70,16 @@ interface RedeemRelayRequest {
 // Helpers
 // =============================================================================
 
-function getRelayerKeypair(): Keypair {
+function getRelayerKeypair(): Keypair | null {
   const keypairJson = process.env.RELAYER_KEYPAIR;
   if (!keypairJson) {
-    throw new Error("RELAYER_KEYPAIR not configured");
+    return null;
   }
   try {
     const secretKey = JSON.parse(keypairJson);
     return Keypair.fromSecretKey(Uint8Array.from(secretKey));
   } catch {
-    throw new Error("Failed to parse RELAYER_KEYPAIR");
+    return null;
   }
 }
 
@@ -293,11 +293,18 @@ export async function POST(request: NextRequest) {
 
     console.log(`[Redeem] Processing JoinSplit(${nInputs}x${nOutputs}) redeem request...`);
 
+    const relayer = getRelayerKeypair();
+    if (!relayer) {
+      return NextResponse.json(
+        { success: false, error: "Relayer not configured — RELAYER_KEYPAIR env var is missing" },
+        { status: 503 }
+      );
+    }
+
     const connection = new Connection(
       process.env.NEXT_PUBLIC_SOLANA_RPC || "https://api.devnet.solana.com",
       "confirmed"
     );
-    const relayer = getRelayerKeypair();
 
     // Parse fields
     const proofBytes = validateHexField(proof, "proof", 256);
@@ -475,7 +482,10 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("[Redeem] Error:", error);
     // Extract logs from SendTransactionError if available
-    const logs = (error as any)?.logs ?? (error as any)?.transactionError?.logs ?? null;
+    const errObj = error as Record<string, unknown> | null;
+    const logs = (errObj && 'logs' in errObj ? errObj.logs : null)
+      ?? (errObj && 'transactionError' in errObj ? (errObj.transactionError as Record<string, unknown>)?.logs : null)
+      ?? null;
     return NextResponse.json(
       {
         success: false,

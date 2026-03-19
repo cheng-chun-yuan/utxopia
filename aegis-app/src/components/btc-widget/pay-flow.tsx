@@ -1071,7 +1071,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       }
 
       if (!relayResult.success) {
-        const logs = (relayResult as any).logs;
+        const logs = 'logs' in relayResult ? relayResult.logs : undefined;
         if (logs) console.error("[Pay] Program logs:", logs);
         throw new Error(relayResult.error || "Transaction failed");
       }

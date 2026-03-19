@@ -99,10 +99,10 @@ const FIRST_CHUNK_SIZE = 800;
 // Helpers
 // =============================================================================
 
-function getRelayerKeypair(): Keypair {
+function getRelayerKeypair(): Keypair | null {
   const keypairJson = process.env.RELAYER_KEYPAIR;
   if (!keypairJson) {
-    throw new Error("RELAYER_KEYPAIR not configured");
+    return null;
   }
   return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(keypairJson)));
 }
@@ -346,11 +346,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
 
     console.log(`[Verify] Processing deposit verification for sweep: ${sweepTxid}, deposit: ${depositTxid}`);
 
+    const relayer = getRelayerKeypair();
+    if (!relayer) {
+      return NextResponse.json(
+        { success: false, error: "Relayer not configured — RELAYER_KEYPAIR env var is missing" },
+        { status: 503 }
+      );
+    }
+
     const connection = new Connection(
       process.env.NEXT_PUBLIC_SOLANA_RPC || "https://api.devnet.solana.com",
       "confirmed"
     );
-    const relayer = getRelayerKeypair();
     const network = (process.env.NEXT_PUBLIC_BTC_NETWORK || "testnet") as "mainnet" | "testnet" | "testnet4" | "signet" | "regtest";
 
     // 1. Fetch raw tx hex from mempool.space and strip SegWit witness data

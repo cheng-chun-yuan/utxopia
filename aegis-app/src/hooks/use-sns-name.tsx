@@ -68,7 +68,7 @@ export function useSnsName(): UseSnsNameReturn {
   // Resolve an SNS name to stealth keys
   const lookupSnsName = useCallback(async (name: string): Promise<SnsStealthAddress | null> => {
     const connectionAdapter = getConnectionAdapter();
-    return resolveSnsName(connectionAdapter as any, name);
+    return resolveSnsName(connectionAdapter as Parameters<typeof resolveSnsName>[0], name);
   }, []);
 
   // Check if connected wallet owns a *.btcpro.sol subdomain

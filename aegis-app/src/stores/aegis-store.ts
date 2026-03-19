@@ -482,7 +482,9 @@ export const useAegisStore = create<AegisState>((set, get) => ({
         // Scan locally for privacy (server doesn't know which are ours)
         // Re-use previous scan results if announcements unchanged (skip expensive decrypt),
         // but always re-check nullifier spent status below
-        type ScannedWithToken = { commitment: Uint8Array; amount: bigint; leafIndex: number; ephemeralPub: Uint8Array; stealthPub?: any; npk?: any; blockTime?: number; tokenSymbol: string };
+        // ScannedNote from SDK has stealthPub as BabyJubPoint, but we only need the raw fields
+        // Use Record<string, unknown> intersection to allow flexible field access
+        type ScannedWithToken = { commitment: Uint8Array; amount: bigint; leafIndex: number; ephemeralPub: Uint8Array; blockTime?: number; tokenSymbol: string; isSpent?: boolean } & Record<string, unknown>;
         let scanned: ScannedWithToken[];
 
         if (announcementsUnchanged) {
@@ -490,9 +492,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
               commitment: hexToBytesLocal(n.commitmentHex),
               amount: n.amount,
               leafIndex: n.leafIndex,
-              ephemeralPub: (n as any).ephemeralPub,
-              stealthPub: (n as any).stealthPub,
-              npk: (n as any).npk,
+              ephemeralPub: n.ephemeralPub ?? new Uint8Array(32),
               blockTime: n.createdAt > 1_000_000_000_000
                 ? Math.floor(n.createdAt / 1000)
                 : (n.createdAt > 0 ? n.createdAt : 0),
@@ -526,7 +526,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
         const nullifierData = scanned.map((note) => {
           const hashBytes = isViewOnly
             ? bigintToBytes(computeJoinSplitNullifierSync(nullifyingKey, BigInt(note.leafIndex)))
-            : computeNullifierHashForNote(keys!, note as any);
+            : computeNullifierHashForNote(keys!, note as unknown as Parameters<typeof computeNullifierHashForNote>[1]);
           const hashHex = Buffer.from(hashBytes).toString("hex");
           return { note, hashHex };
         });
@@ -551,11 +551,11 @@ export const useAegisStore = create<AegisState>((set, get) => ({
           return {
             ...note,
             id: `${commitmentHex.slice(0, 16)}-${index}`,
-            createdAt: (note as any).blockTime
-              ? (note as any).blockTime * 1000  // Convert seconds → ms
+            createdAt: note.blockTime
+              ? note.blockTime * 1000  // Convert seconds → ms
               : Date.now(),
             commitmentHex,
-            tokenSymbol: (note as any).tokenSymbol ?? "zkBTC",
+            tokenSymbol: note.tokenSymbol ?? "zkBTC",
           };
         });
 

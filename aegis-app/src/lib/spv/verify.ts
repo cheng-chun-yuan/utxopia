@@ -99,8 +99,6 @@ export async function prepareSPVVerification(
   network: "mainnet" | "testnet" = "testnet"
 ): Promise<SPVVerifyResult> {
   try {
-    console.log("[SPV] Fetching SPV proof data for:", txid);
-
     const { txInfo, blockHeader, merkleProof, confirmations } =
       await getSPVProofData(txid, network);
 
@@ -116,13 +114,6 @@ export async function prepareSPVVerification(
         error: `Need at least ${MIN_CONFIRMATIONS_FOR_SPV} confirmations, have ${confirmations}`,
       };
     }
-
-    console.log("[SPV] Data fetched:", {
-      blockHeight: blockHeader.height,
-      blockHash: blockHeader.hash,
-      confirmations,
-      merkleProofLength: merkleProof.merkleProof.length,
-    });
 
     return {
       success: true,
@@ -265,10 +256,6 @@ export async function submitSPVVerification(
   }
 
   try {
-    console.log("[SPV] Submitting verification via /api/verify...");
-    console.log("[SPV] Block height:", spvData.blockHeight);
-    console.log("[SPV] Confirmations:", spvData.confirmations);
-
     const response = await fetch("/api/verify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -287,7 +274,6 @@ export async function submitSPVVerification(
       return { success: false, error: result.error || "Verification failed" };
     }
 
-    console.log("[SPV] Verification confirmed:", result.signature);
     return {
       success: true,
       signature: result.signature,

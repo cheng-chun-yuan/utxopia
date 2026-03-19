@@ -8,11 +8,6 @@ import { Toaster } from "sonner";
 import { StoreHydration } from "@/stores";
 import { HELIUS_RPC_DEVNET } from "@/lib/helius";
 
-// Debug: Log RPC endpoint being used
-if (typeof window !== "undefined") {
-  console.log("[RPC] Endpoint:", HELIUS_RPC_DEVNET);
-}
-
 // Import wallet adapter CSS
 import "@solana/wallet-adapter-react-ui/styles.css";
 
