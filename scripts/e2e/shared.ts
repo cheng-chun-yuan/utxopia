@@ -41,6 +41,7 @@ import {
   BN254_FIELD_PRIME as _BN254_FIELD_PRIME,
   TREE_DEPTH as _TREE_DEPTH,
   eddsaPoseidonSignWithScalar as _eddsaPoseidonSignWithScalar,
+  eddsaPoseidonSign as _eddsaPoseidonSign,
   eddsaGetPrivScalar as _eddsaGetPrivScalar,
   eddsaGetPubKey as _eddsaGetPubKey,
   computeBoundParamsHash as _computeBoundParamsHash,
@@ -65,6 +66,7 @@ export const randomFieldElement = _randomFieldElement;
 export const BN254_FIELD_PRIME = _BN254_FIELD_PRIME;
 export const TREE_DEPTH = _TREE_DEPTH;
 export const eddsaPoseidonSignWithScalar = _eddsaPoseidonSignWithScalar;
+export const eddsaPoseidonSign = _eddsaPoseidonSign;
 export const eddsaGetPrivScalar = _eddsaGetPrivScalar;
 export const eddsaGetPubKey = _eddsaGetPubKey;
 export const computeBoundParamsHash = _computeBoundParamsHash;

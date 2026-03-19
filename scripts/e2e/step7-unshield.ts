@@ -17,7 +17,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
-import { buildPoseidon } from "circomlibjs"; // needed for circomlibjs EdDSA signing
+// circomlibjs removed — SDK's eddsaPoseidonSign wraps it internally
 
 import {
   connection,
@@ -37,6 +37,8 @@ import {
   computeJoinSplitCommitmentSync,
   computeJoinSplitNullifierSync,
   computeBoundParamsHash as sdkComputeBoundParamsHash,
+  eddsaPoseidonSign,
+  eddsaGetPubKey,
   parseCommitmentTree,
   extractFrontier,
   derivePoolStatePDA,
@@ -145,16 +147,11 @@ async function main() {
   await initPoseidon();
   computeZeroHashes();
 
-  // circomlibjs EdDSA needed for circuit-compatible signatures
-  const { buildEddsa } = await import("circomlibjs");
-  const eddsa = await buildEddsa();
-  const F = eddsa.babyJub.F;
-
+  // Load keys using SDK
   const spendingSeed = Buffer.from(state.spendingSeed!, "hex");
-  const privKeyBuf = Buffer.from(spendingSeed);
-  const pubKey = eddsa.prv2pub(privKeyBuf);
-  const pubKeyX = F.toObject(pubKey[0]) as bigint;
-  const pubKeyY = F.toObject(pubKey[1]) as bigint;
+  const pubKey = await eddsaGetPubKey(spendingSeed);
+  const pubKeyX = pubKey.x;
+  const pubKeyY = pubKey.y;
   const nullifyingKey = BigInt("0x" + state.nullifyingKey!);
 
   // Load USDC note
@@ -244,11 +241,11 @@ async function main() {
   // Bound params using SDK (unshield mode)
   const boundParamsHash = sdkComputeBoundParamsHash({ treeNumber: 0, unshieldAddress: null, chainId: 103n, mode: 'unshield' });
   const msgHash = poseidonHashSync([merkleRoot, boundParamsHash, nullifier0, burnCommitment]);
-  const msgF = F.e(msgHash);
-  const signature = eddsa.signPoseidon(privKeyBuf, msgF);
-  const sigR8x = F.toObject(signature.R8[0]) as bigint;
-  const sigR8y = F.toObject(signature.R8[1]) as bigint;
-  const sigS = signature.S as bigint;
+  // EdDSA sign using SDK (circuit-compatible — wraps circomlibjs internally)
+  const signature = await eddsaPoseidonSign(spendingSeed, msgHash);
+  const sigR8x = signature[0];
+  const sigR8y = signature[1];
+  const sigS = signature[2];
 
   // Generate Groth16 proof (joinsplit_1x1)
   const circuitInputs = {
