@@ -23,6 +23,58 @@ import * as path from "path";
 import * as crypto from "crypto";
 import { fileURLToPath } from "url";
 
+// =============================================================================
+// SDK Re-exports — use these instead of reimplementing crypto/merkle/instructions
+// =============================================================================
+
+// Import SDK functions for local use + re-export
+import {
+  initPoseidon as _initPoseidon,
+  poseidonHashSync as _poseidonHashSync,
+  computeNPKSync as _computeNPKSync,
+  computeMPKSync as _computeMPKSync,
+  computeJoinSplitCommitmentSync as _computeJoinSplitCommitmentSync,
+  computeJoinSplitNullifierSync as _computeJoinSplitNullifierSync,
+  bigintToBytes as _bigintToBytes,
+  bytesToBigint as _bytesToBigint,
+  randomFieldElement as _randomFieldElement,
+  BN254_FIELD_PRIME as _BN254_FIELD_PRIME,
+  TREE_DEPTH as _TREE_DEPTH,
+  eddsaPoseidonSignWithScalar as _eddsaPoseidonSignWithScalar,
+  eddsaGetPrivScalar as _eddsaGetPrivScalar,
+  eddsaGetPubKey as _eddsaGetPubKey,
+  computeBoundParamsHash as _computeBoundParamsHash,
+  createUnshieldBoundParams as _createUnshieldBoundParams,
+  createRedeemBoundParams as _createRedeemBoundParams,
+  deriveKeysFromSeedCircuit as _deriveKeysFromSeedCircuit,
+  buildTransactInstructionData as _buildTransactInstructionData,
+  buildUnshieldInstructionData as _buildUnshieldInstructionData,
+  buildRedemptionRequestInstructionData as _buildRedemptionRequestInstructionData,
+} from "../../sdk/dist/index.js";
+
+// Re-export with e2e-friendly names
+export const initPoseidon = _initPoseidon;
+export const poseidonHashSync = _poseidonHashSync;
+export const computeNPKSync = _computeNPKSync;
+export const computeMPKSync = _computeMPKSync;
+export const computeJoinSplitCommitmentSync = _computeJoinSplitCommitmentSync;
+export const computeJoinSplitNullifierSync = _computeJoinSplitNullifierSync;
+export const bigintToBytes32BE = _bigintToBytes;
+export const bytes32ToBigintBE = _bytesToBigint;
+export const randomFieldElement = _randomFieldElement;
+export const BN254_FIELD_PRIME = _BN254_FIELD_PRIME;
+export const TREE_DEPTH = _TREE_DEPTH;
+export const eddsaPoseidonSignWithScalar = _eddsaPoseidonSignWithScalar;
+export const eddsaGetPrivScalar = _eddsaGetPrivScalar;
+export const eddsaGetPubKey = _eddsaGetPubKey;
+export const computeBoundParamsHash = _computeBoundParamsHash;
+export const createUnshieldBoundParams = _createUnshieldBoundParams;
+export const createRedeemBoundParams = _createRedeemBoundParams;
+export const deriveKeysFromSeedCircuit = _deriveKeysFromSeedCircuit;
+export const buildTransactInstructionData = _buildTransactInstructionData;
+export const buildUnshieldInstructionData = _buildUnshieldInstructionData;
+export const buildRedemptionRequestInstructionData = _buildRedemptionRequestInstructionData;
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -38,9 +90,8 @@ export const SDK_DIR = path.resolve(__dirname, "../../sdk");
 export const CIRCUITS_DIR = path.resolve(__dirname, "../../circuits");
 
 export const ZKBTC_TOKEN_ID = 0x7a627463n; // "zkbtc" as u32
-export const BN254_FIELD_PRIME =
-  21888242871839275222246405745257275088548364400416034343698204186575808495617n;
-export const TREE_DEPTH = 16;
+// BN254_FIELD_PRIME, TREE_DEPTH, randomFieldElement, bigintToBytes32BE, bytes32ToBigintBE
+// are re-exported from SDK above
 
 export const TOKEN_2022 = TOKEN_2022_PROGRAM_ID;
 export const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
@@ -245,29 +296,7 @@ export function dsha256(buf: Buffer | Uint8Array): Buffer {
   return crypto.createHash("sha256").update(h1).digest();
 }
 
-export function bigintToBytes32BE(value: bigint): Uint8Array {
-  const bytes = new Uint8Array(32);
-  let v = value;
-  for (let i = 31; i >= 0; i--) {
-    bytes[i] = Number(v & 0xffn);
-    v >>= 8n;
-  }
-  return bytes;
-}
-
-export function bytes32ToBigintBE(bytes: Uint8Array): bigint {
-  let result = 0n;
-  for (let i = 0; i < bytes.length; i++) {
-    result = (result << 8n) | BigInt(bytes[i]);
-  }
-  return result;
-}
-
-export function randomFieldElement(): bigint {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return bytes32ToBigintBE(bytes) % BN254_FIELD_PRIME;
-}
+// bigintToBytes32BE, bytes32ToBigintBE, randomFieldElement — re-exported from SDK above
 
 export function amountToLE8(amount: bigint): Uint8Array {
   const buf = new Uint8Array(8);
