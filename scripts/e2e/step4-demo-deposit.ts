@@ -12,7 +12,7 @@ import {
 } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 import * as crypto from "crypto";
-import { buildPoseidon } from "circomlibjs";
+// SDK Poseidon used instead of circomlibjs
 
 import {
   connection,
@@ -32,6 +32,9 @@ import {
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
   deriveTokenConfigPDA,
+  initPoseidon,
+  computeNPKSync,
+  computeJoinSplitCommitmentSync,
 } from "./shared.js";
 
 stepHeader(4, "Demo Deposit");
@@ -46,10 +49,8 @@ async function main() {
   const [commitmentTree] = deriveCommitmentTreePDA(AEGIS);
   const [zkbtcTokenConfig] = deriveTokenConfigPDA(AEGIS, zkbtcMint);
 
-  // Initialize Poseidon
-  const poseidon = await buildPoseidon();
-  const F = poseidon.F;
-  const poseidonHash = (inputs: bigint[]) => F.toObject(poseidon(inputs)) as bigint;
+  // Initialize SDK Poseidon
+  await initPoseidon();
 
   // Read actual token_id from on-chain TokenConfig
   const tcInfo = await connection.getAccountInfo(zkbtcTokenConfig);
@@ -63,9 +64,9 @@ async function main() {
 
   // Generate note
   const random = randomFieldElement();
-  const npk = poseidonHash([mpk, random]);
+  const npk = computeNPKSync(mpk, random);
   const npkBytes = bigintToBytes32BE(npk);
-  const commitment = poseidonHash([npk, tokenId, amount]);
+  const commitment = computeJoinSplitCommitmentSync(npk, tokenId, amount);
   const ephPub = crypto.randomBytes(32);
 
   // Read tree
@@ -137,9 +138,9 @@ async function main() {
 
   const amount2 = 20_000n;
   const random2 = randomFieldElement();
-  const npk2 = poseidonHash([receiver2Mpk, random2]);
+  const npk2 = computeNPKSync(receiver2Mpk, random2);
   const npk2Bytes = bigintToBytes32BE(npk2);
-  const commitment2 = poseidonHash([npk2, tokenId, amount2]);
+  const commitment2 = computeJoinSplitCommitmentSync(npk2, tokenId, amount2);
   const ephPub2 = crypto.randomBytes(32);
 
   // Read tree for next index

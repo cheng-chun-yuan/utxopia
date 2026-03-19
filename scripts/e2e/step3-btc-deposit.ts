@@ -22,7 +22,7 @@ import {
 import { TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 import * as crypto from "crypto";
 import { execSync } from "child_process";
-import { buildPoseidon } from "circomlibjs";
+// SDK Poseidon used instead of circomlibjs
 
 import {
   connection,
@@ -183,18 +183,17 @@ async function main() {
   const [commitmentTree] = deriveCommitmentTreePDA(AEGIS);
   const [zkbtcTokenConfig] = deriveTokenConfigPDA(AEGIS, zkbtcMint);
 
-  // Initialize Poseidon
-  const poseidon = await buildPoseidon();
-  const F = poseidon.F;
-  const poseidonHash = (inputs: bigint[]) => F.toObject(poseidon(inputs)) as bigint;
+  // Initialize SDK Poseidon
+  const { initPoseidon, computeNPKSync } = await import("../../sdk/dist/index.js");
+  await initPoseidon();
 
   // Load keys from state
   const mpk = BigInt("0x" + state.mpk!);
   const amount = 25_000n;
 
-  // Generate note keys
+  // Generate note keys using SDK
   const random0 = randomFieldElement();
-  const npk0 = poseidonHash([mpk, random0]);
+  const npk0 = computeNPKSync(mpk, random0);
   const npk0Bytes = bigintToBytes32BE(npk0);
   const ephPub = crypto.randomBytes(32);
 

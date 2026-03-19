@@ -17,8 +17,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
-import { sha256 } from "@noble/hashes/sha2.js";
-import { buildPoseidon } from "circomlibjs";
+import { buildPoseidon } from "circomlibjs"; // needed for circomlibjs EdDSA signing
 
 import {
   connection,
@@ -28,13 +27,16 @@ import {
   stepHeader,
   log,
   Disc,
-  BN254_FIELD_PRIME,
   TREE_DEPTH,
-  SDK_DIR,
   bigintToBytes32BE,
   bytes32ToBigintBE,
   amountToLE8,
   sendIx,
+  initPoseidon,
+  poseidonHashSync,
+  computeJoinSplitCommitmentSync,
+  computeJoinSplitNullifierSync,
+  computeBoundParamsHash as sdkComputeBoundParamsHash,
   parseCommitmentTree,
   extractFrontier,
   derivePoolStatePDA,
@@ -52,42 +54,13 @@ const __dirname = path.dirname(__filename);
 
 stepHeader(7, "Unshield tUSDC");
 
-// Merkle tree helpers (same as step6)
-let poseidon: any;
-let poseidonHash: (inputs: bigint[]) => bigint;
+// Merkle tree helpers (uses SDK Poseidon)
 const ZERO_HASHES: bigint[] = [0n];
 
 function computeZeroHashes() {
   for (let i = 1; i <= TREE_DEPTH; i++) {
-    ZERO_HASHES[i] = poseidonHash([ZERO_HASHES[i - 1], ZERO_HASHES[i - 1]]);
+    ZERO_HASHES[i] = poseidonHashSync([ZERO_HASHES[i - 1], ZERO_HASHES[i - 1]]);
   }
-}
-
-function getMerkleProofFromFrontier(
-  leafIndex: number, frontier: bigint[],
-): { siblings: bigint[]; indices: number[] } {
-  const siblings: bigint[] = [];
-  const indices: number[] = [];
-  let idx = leafIndex;
-  for (let level = 0; level < TREE_DEPTH; level++) {
-    const bit = idx & 1;
-    indices.push(bit);
-    siblings.push(bit === 0 ? ZERO_HASHES[level] : frontier[level]);
-    idx >>= 1;
-  }
-  return { siblings, indices };
-}
-
-function computeBoundParamsHash(hasUnshield: boolean): bigint {
-  const buf = new Uint8Array(45);
-  const view = new DataView(buf.buffer);
-  view.setUint32(0, 0, true);
-  buf[4] = hasUnshield ? 1 : 0;
-  const chainIdBuf = new Uint8Array(8);
-  chainIdBuf[0] = 103;
-  buf.set(chainIdBuf, 37);
-  const hash = sha256(buf);
-  return bytes32ToBigintBE(hash) % BN254_FIELD_PRIME;
 }
 
 function generateProofViaNode(
@@ -168,11 +141,11 @@ async function main() {
     throw new Error("USDC note not found. Run step5 first.");
   }
 
-  // Init crypto
-  poseidon = await buildPoseidon();
-  poseidonHash = (inputs: bigint[]) => poseidon.F.toObject(poseidon(inputs)) as bigint;
+  // Init SDK Poseidon
+  await initPoseidon();
   computeZeroHashes();
 
+  // circomlibjs EdDSA needed for circuit-compatible signatures
   const { buildEddsa } = await import("circomlibjs");
   const eddsa = await buildEddsa();
   const F = eddsa.babyJub.F;
@@ -222,7 +195,7 @@ async function main() {
       const prev = layers[level];
       const next: bigint[] = [];
       for (let i = 0; i < prev.length; i += 2) {
-        next.push(poseidonHash([prev[i], prev[i + 1] ?? ZERO_HASHES[level]]));
+        next.push(poseidonHashSync([prev[i], prev[i + 1] ?? ZERO_HASHES[level]]));
       }
       layers.push(next);
     }
@@ -261,16 +234,16 @@ async function main() {
   // Burn commitment = Poseidon([0;32], token_id, amount)
   // The [0;32] is treated as a bigint (0)
   const zeroNpk = 0n;
-  const burnCommitment = poseidonHash([zeroNpk, tokenId, amount0]);
+  const burnCommitment = computeJoinSplitCommitmentSync(zeroNpk, tokenId, amount0);
 
-  // Nullifier
-  const nullifier0 = poseidonHash([nullifyingKey, BigInt(leafIndex0)]);
+  // Nullifier using SDK
+  const nullifier0 = computeJoinSplitNullifierSync(nullifyingKey, BigInt(leafIndex0));
   log(`Nullifier: ${nullifier0.toString(16).slice(0, 16)}...`);
   log(`Burn commitment: ${burnCommitment.toString(16).slice(0, 16)}...`);
 
-  // Bound params (hasUnshield = true for unshield)
-  const boundParamsHash = computeBoundParamsHash(true);
-  const msgHash = poseidonHash([merkleRoot, boundParamsHash, nullifier0, burnCommitment]);
+  // Bound params using SDK (unshield mode)
+  const boundParamsHash = sdkComputeBoundParamsHash({ treeNumber: 0, unshieldAddress: null, chainId: 103n, mode: 'unshield' });
+  const msgHash = poseidonHashSync([merkleRoot, boundParamsHash, nullifier0, burnCommitment]);
   const msgF = F.e(msgHash);
   const signature = eddsa.signPoseidon(privKeyBuf, msgF);
   const sigR8x = F.toObject(signature.R8[0]) as bigint;

@@ -24,7 +24,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 import { sha256 } from "@noble/hashes/sha2.js";
-import { buildPoseidon } from "circomlibjs";
+// circomlibjs used for VK hash computation only (not available in SDK)
 
 import {
   connection,
@@ -357,14 +357,14 @@ async function main() {
   const spendingSeed = new Uint8Array(32);
   crypto.getRandomValues(spendingSeed);
 
-  const { buildEddsa } = await import("circomlibjs");
-  const eddsa = await buildEddsa();
-  const poseidon = await buildPoseidon();
-  const F = eddsa.babyJub.F;
-  const privKeyBuf = Buffer.from(spendingSeed);
-  const pubKey = eddsa.prv2pub(privKeyBuf);
-  const pubKeyX = F.toObject(pubKey[0]) as bigint;
-  const pubKeyY = F.toObject(pubKey[1]) as bigint;
+  // Use SDK for key derivation
+  const { eddsaGetPubKey } = await import("../../sdk/dist/index.js");
+  const { initPoseidon, poseidonHashSync, computeMPKSync } = await import("../../sdk/dist/index.js");
+  await initPoseidon();
+
+  const pubKey = await eddsaGetPubKey(spendingSeed);
+  const pubKeyX = pubKey.x;
+  const pubKeyY = pubKey.y;
 
   // Nullifying key
   const nkInput = new Uint8Array(39);
@@ -372,8 +372,8 @@ async function main() {
   nkInput.set(spendingSeed, 7);
   const nullifyingKey = bytes32ToBigintBE(sha256(nkInput)) % BN254_FIELD_PRIME;
 
-  // MPK = Poseidon(pkX, pkY, nullifyingKey)
-  const mpk = poseidon.F.toObject(poseidon([pubKeyX, pubKeyY, nullifyingKey])) as bigint;
+  // MPK using SDK
+  const mpk = computeMPKSync(pubKeyX, pubKeyY, nullifyingKey);
   log(`MPK: ${mpk.toString(16).slice(0, 16)}...`);
 
   // 12. Generate BTC pool address (single-key mode for localnet)

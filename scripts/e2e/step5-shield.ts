@@ -24,7 +24,7 @@ import {
   NATIVE_MINT_2022,
 } from "@solana/spl-token";
 import * as crypto from "crypto";
-import { buildPoseidon } from "circomlibjs";
+// SDK Poseidon used instead of circomlibjs
 
 import {
   connection,
@@ -47,6 +47,9 @@ import {
   deriveATA,
   TOKEN_2022,
   NoteState,
+  initPoseidon,
+  computeNPKSync,
+  computeJoinSplitCommitmentSync,
 } from "./shared.js";
 
 stepHeader(5, "Shield SPL Tokens");
@@ -59,7 +62,7 @@ async function shieldToken(
   mint: PublicKey,
   vault: PublicKey,
   amount: bigint,
-  poseidonHash: (inputs: bigint[]) => bigint,
+  _poseidonHash: unknown, // unused — SDK Poseidon used instead
   mpk: bigint,
   label: string,
 ): Promise<NoteState> {
@@ -68,7 +71,7 @@ async function shieldToken(
 
   // Generate note
   const random = randomFieldElement();
-  const npk = poseidonHash([mpk, random]);
+  const npk = computeNPKSync(mpk, random);
   const npkBytes = bigintToBytes32BE(npk);
   const ephPub = crypto.randomBytes(32);
 
@@ -76,7 +79,7 @@ async function shieldToken(
   const tcInfo = await connection.getAccountInfo(tokenConfig);
   const tc = parseTokenConfig(Buffer.from(tcInfo!.data))!;
   const tokenIdBigint = BigInt("0x" + Buffer.from(tc.tokenId).toString("hex"));
-  const commitment = poseidonHash([npk, tokenIdBigint, amount]);
+  const commitment = computeJoinSplitCommitmentSync(npk, tokenIdBigint, amount);
 
   // Read tree
   const treeInfo = await connection.getAccountInfo(commitmentTree);
@@ -136,7 +139,7 @@ async function shieldSOL(
   poolState: PublicKey,
   commitmentTree: PublicKey,
   lamports: bigint,
-  poseidonHash: (inputs: bigint[]) => bigint,
+  _poseidonHash: unknown, // unused — SDK Poseidon used instead
   mpk: bigint,
 ): Promise<NoteState> {
   const wsolMint = NATIVE_MINT_2022;
@@ -155,10 +158,10 @@ async function shieldSOL(
 
   // Generate note
   const random = randomFieldElement();
-  const npk = poseidonHash([mpk, random]);
+  const npk = computeNPKSync(mpk, random);
   const npkBytes = bigintToBytes32BE(npk);
   const ephPub = crypto.randomBytes(32);
-  const commitment = poseidonHash([npk, tokenIdBigint, lamports]);
+  const commitment = computeJoinSplitCommitmentSync(npk, tokenIdBigint, lamports);
 
   // Read tree for leaf index
   const treeInfo = await connection.getAccountInfo(commitmentTree);
@@ -244,9 +247,8 @@ async function main() {
   const [poolState] = derivePoolStatePDA(AEGIS);
   const [commitmentTree] = deriveCommitmentTreePDA(AEGIS);
 
-  const poseidon = await buildPoseidon();
-  const F = poseidon.F;
-  const poseidonHash = (inputs: bigint[]) => F.toObject(poseidon(inputs)) as bigint;
+  await initPoseidon();
+  const poseidonHash = null; // passed to functions for backward compat, but SDK used internally
   const mpk = BigInt("0x" + state.mpk!);
 
   if (!state.tUsdcMint) {

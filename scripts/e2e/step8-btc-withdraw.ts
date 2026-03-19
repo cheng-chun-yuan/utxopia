@@ -29,9 +29,9 @@ import {
   deriveRedemptionPDA,
   deriveTokenConfigPDA,
   parsePoolState,
+  initPoseidon,
+  computeJoinSplitNullifierSync,
 } from "./shared.js";
-
-import { buildPoseidon } from "circomlibjs";
 
 stepHeader(8, "BTC Withdrawal Request");
 
@@ -46,10 +46,8 @@ async function main() {
 
   if (!state.transferNotes) throw new Error("Transfer notes not found. Run step6 first.");
 
-  // Init Poseidon
-  const poseidon = await buildPoseidon();
-  const poseidonHash = (inputs: bigint[]) =>
-    poseidon.F.toObject(poseidon(inputs)) as bigint;
+  // Init SDK Poseidon
+  await initPoseidon();
 
   const nullifyingKey = BigInt("0x" + state.nullifyingKey!);
 
@@ -64,8 +62,8 @@ async function main() {
   const poolBefore = parsePoolState(Buffer.from(poolInfo!.data))!;
   log(`Pool before: shielded=${poolBefore.totalShielded}, pending=${poolBefore.pendingRedemptions}`);
 
-  // Compute nullifier
-  const nullifier = poseidonHash([nullifyingKey, BigInt(leafIndex)]);
+  // Compute nullifier using SDK
+  const nullifier = computeJoinSplitNullifierSync(nullifyingKey, BigInt(leafIndex));
   const nullifierBytes = bigintToBytes32BE(nullifier);
   log(`Nullifier: ${nullifier.toString(16).slice(0, 16)}...`);
 
