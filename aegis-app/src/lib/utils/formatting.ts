@@ -13,6 +13,16 @@ export function formatBtc(sats: number): string {
 }
 
 /**
+ * Format a raw amount using the token's decimals.
+ * E.g. formatAmount(50000, 8) => "0.00050000" (BTC)
+ *      formatAmount(1000000, 6) => "1.000000" (USDC)
+ */
+export function formatAmount(raw: number, decimals: number): string {
+  const value = raw / (10 ** decimals);
+  return value.toFixed(decimals);
+}
+
+/**
  * Format satoshis with locale-aware number formatting
  */
 export function formatSats(sats: number): string {
