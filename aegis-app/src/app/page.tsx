@@ -1,6 +1,6 @@
 "use client";
 
-import React, { memo } from "react";
+import React, { memo, useState, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Bitcoin, Shield, Zap, Lock, ArrowRight, EyeOff, Fingerprint, ShieldCheck, Loader2, ChevronRight, Layers } from "lucide-react";
@@ -193,6 +193,62 @@ const FeatureCard = memo(function FeatureCard({
   );
 });
 FeatureCard.displayName = "FeatureCard";
+
+const FEATURE_CARDS = [
+  { icon: EyeOff, title: "ZK Private", description: "Amounts & addresses hidden by zero-knowledge proofs", iconColor: "text-privacy", hoverGlow: "rgba(20, 241, 149, 0.12)", step: "01", visualization: PrivacyViz },
+  { icon: Layers, title: "Token Shielding", description: "Any SPL token shielded as private commitments", iconColor: "text-privacy", hoverGlow: "rgba(20, 241, 149, 0.12)", step: "02", visualization: BackedViz },
+  { icon: Zap, title: "Instant", description: "Auto-confirmed deposits, sub-second settlement", iconColor: "text-sol", hoverGlow: "rgba(153, 69, 255, 0.12)", step: "03", visualization: SpeedViz },
+  { icon: ShieldCheck, title: "Compliant", description: "OFAC screening without compromising privacy", iconColor: "text-cyan", hoverGlow: "rgba(0, 255, 255, 0.08)", step: "04", visualization: ComplianceViz },
+];
+
+function FeatureCarousel() {
+  const [active, setActive] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  // Auto-rotate every 4s
+  useEffect(() => {
+    if (paused) return;
+    const timer = setInterval(() => setActive((i) => (i + 1) % FEATURE_CARDS.length), 4000);
+    return () => clearInterval(timer);
+  }, [paused]);
+
+  return (
+    <div
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
+      {/* Cards — show active card full-width */}
+      <div className="relative min-h-[320px] md:min-h-[280px]">
+        {FEATURE_CARDS.map((card, i) => (
+          <div
+            key={card.step}
+            className={`absolute inset-0 transition-all duration-500 ${
+              i === active ? "opacity-100 translate-x-0 pointer-events-auto" : "opacity-0 translate-x-8 pointer-events-none"
+            }`}
+          >
+            <FeatureCard {...card} />
+          </div>
+        ))}
+      </div>
+
+      {/* Dot indicators */}
+      <div className="flex items-center justify-center gap-2 mt-4">
+        {FEATURE_CARDS.map((card, i) => (
+          <button
+            key={card.step}
+            onClick={() => setActive(i)}
+            className={`transition-all duration-300 rounded-full ${
+              i === active
+                ? "w-6 h-2 bg-privacy"
+                : "w-2 h-2 bg-gray/30 hover:bg-gray/50"
+            }`}
+            aria-label={`Show ${card.title}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /* ── Main Page ── */
 /** Map token symbol to price key */
@@ -432,12 +488,7 @@ export default function Home() {
               </div>
             </ScrollReveal>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 lg:gap-6 auto-rows-fr">
-              <FeatureCard icon={EyeOff} title="ZK Private" description="Amounts & addresses hidden by zero-knowledge proofs" iconColor="text-privacy" hoverGlow="rgba(20, 241, 149, 0.12)" step="01" visualization={PrivacyViz} />
-              <FeatureCard icon={Layers} title="Token Shielding" description="Any SPL token shielded as private commitments" iconColor="text-privacy" hoverGlow="rgba(20, 241, 149, 0.12)" step="02" visualization={BackedViz} />
-              <FeatureCard icon={Zap} title="Instant" description="Auto-confirmed deposits, sub-second settlement" iconColor="text-sol" hoverGlow="rgba(153, 69, 255, 0.12)" step="03" visualization={SpeedViz} />
-              <FeatureCard icon={ShieldCheck} title="Compliant" description="OFAC screening without compromising privacy" iconColor="text-cyan" hoverGlow="rgba(0, 255, 255, 0.08)" step="04" visualization={ComplianceViz} />
-            </div>
+            <FeatureCarousel />
           </div>
         </section>
 
