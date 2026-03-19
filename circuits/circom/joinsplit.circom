@@ -90,6 +90,7 @@ template JoinSplit(nInputs, nOutputs, treeDepth) {
     component inputCommitments[nInputs];
     component inputMerkle[nInputs];
     component inputNullifiers[nInputs];
+    component inputRangeChecks[nInputs];
 
     signal sumIn[nInputs + 1];
     sumIn[0] <== 0;
@@ -120,6 +121,14 @@ template JoinSplit(nInputs, nOutputs, treeDepth) {
         inputNullifiers[i].nullifyingKey <== nullifyingKey;
         inputNullifiers[i].leafIndex <== leavesIndices[i];
         inputNullifiers[i].nullifier === nullifiers[i];
+
+        // Range check: valueIn fits in 120 bits (defense-in-depth)
+        // Note: Merkle proof membership already constrains valueIn indirectly,
+        // since Poseidon(npk, token, valueIn) must match a committed leaf.
+        // This explicit check prevents field-overflow attacks where an attacker
+        // crafts valueIn close to the BN254 field modulus.
+        inputRangeChecks[i] = Num2Bits(120);
+        inputRangeChecks[i].in <== valueIn[i];
 
         // Accumulate input sum
         sumIn[i + 1] <== sumIn[i] + valueIn[i];

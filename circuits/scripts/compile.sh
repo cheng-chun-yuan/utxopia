@@ -10,6 +10,9 @@
 
 set -e
 
+# Pre-flight checks
+command -v circom >/dev/null 2>&1 || { echo "Error: circom not installed. See https://docs.circom.io/getting-started/installation/"; exit 1; }
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$ROOT_DIR/build"
@@ -17,9 +20,8 @@ GENERATED_DIR="$ROOT_DIR/circom/generated"
 
 TIER="${1:---tier1}"
 
-# Define tier variants
-TIER1_CIRCUITS=("joinsplit_1x1" "joinsplit_1x2" "joinsplit_2x1" "joinsplit_2x2")
-TIER2_CIRCUITS=("${TIER1_CIRCUITS[@]}" "joinsplit_1x3" "joinsplit_3x1" "joinsplit_2x3" "joinsplit_3x2" "joinsplit_1x4" "joinsplit_4x1" "joinsplit_1x5" "joinsplit_5x1" "joinsplit_3x3" "joinsplit_2x4" "joinsplit_4x2" "joinsplit_1x6" "joinsplit_6x1" "joinsplit_2x5" "joinsplit_5x2")
+# Shared tier definitions
+source "$SCRIPT_DIR/tiers.sh"
 
 case "$TIER" in
   --tier1)
