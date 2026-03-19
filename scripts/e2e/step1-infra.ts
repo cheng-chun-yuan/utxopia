@@ -230,11 +230,15 @@ async function main() {
   log(`Frost Vault: ${frostVaultAccount.address.toBase58()}`);
 
   // 8. Initialize pool (disc=0)
-  log("Initializing Aegis pool...");
-  const initData = Buffer.alloc(3);
+  // Fees: deposit_fee_bps=0, withdrawal_fee_bps=30 (0.3%)
+  // On-chain also hardcodes service_fee_base=2000 sats
+  log("Initializing Aegis pool (withdrawal fee: 2000 sats + 0.3%)...");
+  const initData = Buffer.alloc(7); // disc(1) + pool_bump(1) + tree_bump(1) + deposit_bps(2) + withdrawal_bps(2)
   initData[0] = Disc.INITIALIZE;
   initData[1] = poolBump;
   initData[2] = treeBump;
+  initData.writeUInt16LE(0, 3);    // deposit_fee_bps = 0
+  initData.writeUInt16LE(30, 5);   // withdrawal_fee_bps = 30 (0.3%)
 
   const initIx = new TransactionInstruction({
     keys: [
@@ -257,9 +261,9 @@ async function main() {
   const [zkbtcTokenConfig] = deriveTokenConfigPDA(AEGIS, zkbtcMint);
   const regData = Buffer.alloc(1 + 32); // disc + service_fee(8) + min(8) + max(8) + cap(8)
   regData[0] = Disc.REGISTER_TOKEN;
-  // service_fee = 0, min_deposit = 1000, max_deposit = 100 BTC, deposit_cap = 1000 BTC
+  // service_fee = 2000 sats (~$2 at $100k BTC), min_deposit = 1000, max_deposit = 100 BTC, deposit_cap = 1000 BTC
   const regPayload = Buffer.alloc(32);
-  regPayload.writeBigUInt64LE(0n, 0);           // service_fee
+  regPayload.writeBigUInt64LE(2000n, 0);         // service_fee (2000 sats)
   regPayload.writeBigUInt64LE(1000n, 8);         // min_deposit
   regPayload.writeBigUInt64LE(10_000_000_000n, 16); // max_deposit
   regPayload.writeBigUInt64LE(100_000_000_000n, 24); // deposit_cap
@@ -290,7 +294,7 @@ async function main() {
       );
       const [wsolTokenConfig] = deriveTokenConfigPDA(AEGIS, NATIVE_MINT_2022);
       const wsolRegPayload = Buffer.alloc(32);
-      wsolRegPayload.writeBigUInt64LE(0n, 0);              // service_fee
+      wsolRegPayload.writeBigUInt64LE(10_000_000n, 0);      // service_fee (~0.01 SOL ≈ $2)
       wsolRegPayload.writeBigUInt64LE(10_000_000n, 8);      // min_deposit (0.01 SOL)
       wsolRegPayload.writeBigUInt64LE(1_000_000_000_000n, 16); // max_deposit (1000 SOL)
       wsolRegPayload.writeBigUInt64LE(100_000_000_000_000n, 24); // deposit_cap

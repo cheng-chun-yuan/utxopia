@@ -83,10 +83,11 @@ async function registerTokenConfig(
   vault: PublicKey,
   aegis: PublicKey,
   label: string,
+  serviceFee: bigint = 0n,
 ) {
   const [tokenConfig] = deriveTokenConfigPDA(aegis, mint);
   const regPayload = Buffer.alloc(32);
-  regPayload.writeBigUInt64LE(0n, 0);                 // service_fee
+  regPayload.writeBigUInt64LE(serviceFee, 0);          // service_fee
   regPayload.writeBigUInt64LE(1000n, 8);               // min_deposit
   regPayload.writeBigUInt64LE(1_000_000_000_000n, 16);  // max_deposit (1M in native)
   regPayload.writeBigUInt64LE(10_000_000_000_000n, 24); // deposit_cap (10M in native)
@@ -116,7 +117,8 @@ async function main() {
   // tUSDC (6 decimals)
   log("Creating tUSDC...");
   const usdc = await createToken(authority, 6, "tUSDC", poolState, AEGIS);
-  await registerTokenConfig(authority, poolState, usdc.mint, usdc.vault, AEGIS, "tUSDC");
+  // USDC: service_fee = 2_000_000 (= $2.00 at 6 decimals)
+  await registerTokenConfig(authority, poolState, usdc.mint, usdc.vault, AEGIS, "tUSDC", 2_000_000n);
 
   // Mint 1M tUSDC to user
   const mintUsdcIx = createMintToInstruction(
@@ -128,7 +130,8 @@ async function main() {
   // tWSOL (9 decimals)
   log("Creating tWSOL...");
   const wsol = await createToken(authority, 9, "tWSOL", poolState, AEGIS);
-  await registerTokenConfig(authority, poolState, wsol.mint, wsol.vault, AEGIS, "tWSOL");
+  // SOL: service_fee = 10_000_000 (= 0.01 SOL ≈ $2 at 9 decimals)
+  await registerTokenConfig(authority, poolState, wsol.mint, wsol.vault, AEGIS, "tWSOL", 10_000_000n);
 
   // Mint 100 tWSOL to user
   const mintWsolIx = createMintToInstruction(
