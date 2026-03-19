@@ -16,6 +16,7 @@ import {
   type StealthAnnouncementEvent,
 } from "@aegis/sdk";
 import { getHeliusConnection } from "@/lib/helius-server";
+import { getBackendUrl } from "@/lib/api/constants";
 
 // =============================================================================
 // Types
@@ -191,7 +192,7 @@ export async function GET(request: Request) {
     // Try backend indexer first (faster, has full history from SQLite)
     if (!forceRefresh) {
       try {
-        const backendUrl = process.env.BACKEND_URL || "http://localhost:8080";
+        const backendUrl = getBackendUrl();
         const backendResp = await fetch(`${backendUrl}/api/announcements`, {
           signal: AbortSignal.timeout(3000),
         });

@@ -20,7 +20,7 @@ import type {
   HeaderStatusResponse,
 } from "./types";
 import { ApiError } from "./errors";
-import { API_ENDPOINTS, DEFAULT_API_URL } from "./constants";
+import { API_ENDPOINTS, getBackendUrl } from "./constants";
 import { getConfig } from "@aegis/sdk";
 
 /**
@@ -35,7 +35,7 @@ class zkBTCApiClient {
   private baseUrl: string;
 
   constructor(baseUrl?: string) {
-    this.baseUrl = baseUrl || process.env.NEXT_PUBLIC_ZKBTC_API_URL || DEFAULT_API_URL;
+    this.baseUrl = baseUrl || getBackendUrl();
   }
 
   private async request<T>(

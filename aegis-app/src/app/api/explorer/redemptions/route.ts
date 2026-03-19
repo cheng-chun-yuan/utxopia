@@ -21,7 +21,9 @@ const RPC_URL =
   process.env.SOLANA_RPC_URL ||
   "https://api.devnet.solana.com";
 
-const BACKEND_URL = process.env.TRACKER_API_URL || "http://localhost:3001";
+import { getBackendUrl } from "@/lib/api/constants";
+
+const BACKEND_URL = getBackendUrl();
 
 interface TrackingEntry {
   pda_address: string;

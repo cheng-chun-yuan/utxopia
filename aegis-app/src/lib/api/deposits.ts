@@ -8,13 +8,11 @@
  */
 
 import { ApiError } from "./errors";
+import { getBackendUrl } from "./constants";
 
 // WebSocket needs the public backend URL (can't proxy through Next.js)
 const getTrackerWsUrl = () => {
-  const base =
-    (typeof window !== "undefined" ? process.env.NEXT_PUBLIC_TRACKER_API_URL : undefined) ||
-    process.env.NEXT_PUBLIC_ZKBTC_API_URL ||
-    `${typeof window !== "undefined" ? window.location.origin : "http://localhost:3001"}`;
+  const base = getBackendUrl();
   return base.replace("http://", "ws://").replace("https://", "wss://");
 };
 

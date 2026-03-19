@@ -8,9 +8,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { useSWRConfig } from "swr";
 import { getEventClient } from "@/stores/aegis-store";
+import { getBackendUrl } from "@/lib/api/constants";
 
-const TRACKER_API_URL =
-  process.env.NEXT_PUBLIC_ZKBTC_API_URL || "http://localhost:3001";
+const TRACKER_API_URL = getBackendUrl();
 
 export function useEventStream() {
   const { mutate } = useSWRConfig();

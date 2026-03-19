@@ -33,6 +33,8 @@ import {
   deriveNullifierPDA,
 } from "@/lib/solana/instructions";
 
+import { getRelayerKeypair } from "@/lib/server/relayer";
+
 // =============================================================================
 // Configuration
 // =============================================================================
@@ -69,19 +71,6 @@ interface RedeemRelayRequest {
 // =============================================================================
 // Helpers
 // =============================================================================
-
-function getRelayerKeypair(): Keypair | null {
-  const keypairJson = process.env.RELAYER_KEYPAIR;
-  if (!keypairJson) {
-    return null;
-  }
-  try {
-    const secretKey = JSON.parse(keypairJson);
-    return Keypair.fromSecretKey(Uint8Array.from(secretKey));
-  } catch {
-    return null;
-  }
-}
 
 function validateHexField(value: string | undefined, name: string, expectedBytes: number): Uint8Array {
   if (!value) {

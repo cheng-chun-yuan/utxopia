@@ -48,6 +48,8 @@ import {
   deriveDepositReceiptPDA,
 } from "@/lib/solana/instructions";
 
+import { getRelayerKeypair } from "@/lib/server/relayer";
+
 import {
   getBlockHeaderByHeight,
   getMerkleProof,
@@ -98,14 +100,6 @@ const FIRST_CHUNK_SIZE = 800;
 // =============================================================================
 // Helpers
 // =============================================================================
-
-function getRelayerKeypair(): Keypair | null {
-  const keypairJson = process.env.RELAYER_KEYPAIR;
-  if (!keypairJson) {
-    return null;
-  }
-  return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(keypairJson)));
-}
 
 /**
  * Strip SegWit witness data from a raw transaction.

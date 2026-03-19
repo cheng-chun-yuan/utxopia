@@ -10,8 +10,9 @@
 
 import { NextResponse } from "next/server";
 import { fetchAnnouncementsFromRpc } from "@/lib/api/rpc-fallback";
+import { getBackendUrl } from "@/lib/api/constants";
 
-const BACKEND_URL = process.env.TRACKER_API_URL || "http://localhost:3001";
+const BACKEND_URL = getBackendUrl();
 
 function decodeLeU64(hex: string): number {
   try {

@@ -9,6 +9,7 @@ import {
   type AegisKeys,
 } from "@aegis/sdk";
 import { fetchSpentNullifierPDAs, nullifierHashToPDA } from "@/lib/nullifier-utils";
+import { getBackendUrl } from "@/lib/api/constants";
 
 export interface ScannedSecretNote {
   amount: number;
@@ -70,7 +71,7 @@ export async function scanSecretPhrase(
   }
 
   // Fetch spent nullifier PDAs, match client-side (privacy: backend never learns which notes we own)
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
+  const backendUrl = getBackendUrl();
   const spentPdas = await fetchSpentNullifierPDAs(backendUrl);
 
   const results: ScannedSecretNote[] = [];
@@ -111,7 +112,7 @@ export async function scanSecretPhrase(
 export async function refreshNullifierStatus(
   notes: ScannedSecretNote[],
 ): Promise<ScannedSecretNote[]> {
-  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
+  const backendUrl = getBackendUrl();
   const spentPdas = await fetchSpentNullifierPDAs(backendUrl);
 
   return notes.map((n) => ({

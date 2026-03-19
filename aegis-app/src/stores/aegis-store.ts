@@ -21,10 +21,13 @@ import {
   type AegisKeys,
   type StealthMetaAddress,
   type ViewOnlyKeys,
+  type ScannedNote,
+  type ViewOnlyScannedNote,
 } from "@aegis/sdk";
 import { fetchSpentNullifierPDAs, nullifierHashToPDA } from "@/lib/nullifier-utils";
 import { getActiveTokenId } from "@/lib/token-context";
 import { VAULT_TOKENS, NATIVE_MINT_2022_ADDRESS } from "@/lib/supported-tokens";
+import { getBackendUrl } from "@/lib/api/constants";
 
 // ============================================================================
 // localStorage Key Persistence (AES-256-GCM encrypted)
@@ -155,7 +158,7 @@ let eventClient: EventClient | null = null;
 export function getEventClient(): EventClient {
   if (!eventClient) {
     const backendUrl = "";
-    const wsBackendUrl = process.env.NEXT_PUBLIC_ZKBTC_API_URL || "http://localhost:3001";
+    const wsBackendUrl = getBackendUrl();
     const wsUrl = wsBackendUrl.replace("http://", "ws://").replace("https://", "wss://");
     eventClient = new EventClient({
       backendUrl,
@@ -482,9 +485,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
         // Scan locally for privacy (server doesn't know which are ours)
         // Re-use previous scan results if announcements unchanged (skip expensive decrypt),
         // but always re-check nullifier spent status below
-        // ScannedNote from SDK has stealthPub as BabyJubPoint, but we only need the raw fields
-        // Use Record<string, unknown> intersection to allow flexible field access
-        type ScannedWithToken = { commitment: Uint8Array; amount: bigint; leafIndex: number; ephemeralPub: Uint8Array; blockTime?: number; tokenSymbol: string; isSpent?: boolean } & Record<string, unknown>;
+        type ScannedWithToken = (ScannedNote | ViewOnlyScannedNote) & { tokenSymbol: string; isSpent?: boolean };
         let scanned: ScannedWithToken[];
 
         if (announcementsUnchanged) {
@@ -526,7 +527,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
         const nullifierData = scanned.map((note) => {
           const hashBytes = isViewOnly
             ? bigintToBytes(computeJoinSplitNullifierSync(nullifyingKey, BigInt(note.leafIndex)))
-            : computeNullifierHashForNote(keys!, note as unknown as Parameters<typeof computeNullifierHashForNote>[1]);
+            : computeNullifierHashForNote(keys!, note as ScannedNote);
           const hashHex = Buffer.from(hashBytes).toString("hex");
           return { note, hashHex };
         });

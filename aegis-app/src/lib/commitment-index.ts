@@ -15,6 +15,7 @@ import {
   type StealthAnnouncementEvent,
   initPoseidon,
 } from "@aegis/sdk";
+import { getBackendUrl } from "@/lib/api/constants";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { PublicKey } from "@solana/web3.js";
 import { getHeliusConnection } from "./helius-server";
@@ -236,7 +237,7 @@ export async function syncFromOnChain(): Promise<{
   let fromBackend = false;
 
   try {
-    const backendUrl = process.env.BACKEND_URL || "http://localhost:8080";
+    const backendUrl = getBackendUrl();
     const resp = await fetch(`${backendUrl}/api/announcements`, {
       signal: AbortSignal.timeout(5000),
     });

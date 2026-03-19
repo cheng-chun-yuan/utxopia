@@ -34,6 +34,7 @@ import {
   proofToBytes,
 } from "@aegis/sdk/prover/web";
 import { fetchSpentNullifierPDAs, nullifierHashToPDA } from "@/lib/nullifier-utils";
+import { getBackendUrl } from "@/lib/api/constants";
 import {
   ZKBTC_MINT_ADDRESS,
   TOKEN_2022_PROGRAM_ID,
@@ -218,7 +219,7 @@ export function useClaimFlow(initialNote?: string) {
 
       // Check if nullifier already spent — fetch all PDAs, match client-side (privacy)
       // Uses backend primary with on-chain getProgramAccounts fallback
-      const backendUrl = process.env.NEXT_PUBLIC_ZKBTC_API_URL || "http://localhost:3001";
+      const backendUrl = getBackendUrl();
       const spentPdas = await fetchSpentNullifierPDAs(backendUrl);
       if (spentPdas.has(nullifierHashToPDA(nullifierHex))) {
         throw new Error("This note has already been claimed.");

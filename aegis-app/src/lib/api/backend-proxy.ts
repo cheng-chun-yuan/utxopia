@@ -5,8 +5,9 @@
  * avoiding CORS/PNA issues (browser never talks to backend directly).
  */
 
-const BACKEND_URL =
-  process.env.TRACKER_API_URL || "http://localhost:3001";
+import { getBackendUrl } from "@/lib/api/constants";
+
+const BACKEND_URL = getBackendUrl();
 const BACKEND_API_KEY =
   process.env.BACKEND_API_KEY || "";
 

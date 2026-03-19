@@ -5,10 +5,9 @@
  * Falls back to on-chain rebuild if backend is unavailable.
  */
 
-const TRACKER_API_URL =
-  process.env.TRACKER_API_URL ||
-  process.env.NEXT_PUBLIC_TRACKER_API_URL ||
-  "http://localhost:3001";
+import { getBackendUrl } from "@/lib/api/constants";
+
+const TRACKER_API_URL = getBackendUrl();
 
 export interface TreeProofResponse {
   success: boolean;
