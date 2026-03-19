@@ -201,141 +201,139 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
   const actualReceived = redemption.actualReceived ? Number(redemption.actualReceived) : null;
   const minerFee = actualReceived !== null ? expectedSend - actualReceived : null;
 
-  const solLink = "text-[11px] text-purple-400/70 hover:text-purple-400 flex items-center gap-1 transition-colors";
-  const btcLink = "text-[11px] text-btc/70 hover:text-btc flex items-center gap-1 transition-colors";
-
-  // Helper for tx links
-  const TxLink = ({ sig, label, href, linkClass }: { sig: string; label: string; href: string; linkClass: string }) => (
-    <div className="flex items-center gap-1.5">
-      <a href={href} target="_blank" rel="noopener noreferrer" className={linkClass}>
-        {label} <ExternalLink className="w-2.5 h-2.5" />
-      </a>
-      <code className="font-mono text-[10px] text-gray/50">{truncate(sig, 6, 4)}</code>
-      <CopyButton text={sig} label={label} variant="default" iconSize="sm" />
-    </div>
-  );
-
   return (
-    <div className="mx-4 my-3 px-4 py-4 rounded-[12px] bg-gradient-to-b from-gray/6 to-transparent border border-gray/10 space-y-4">
+    <div className="mx-4 my-3 rounded-[10px] bg-gradient-to-b from-gray/6 to-transparent border border-gray/10 overflow-hidden">
       {/* Error banner */}
       {isFailed && (
-        <div className="px-3 py-2 rounded-[8px] bg-red-500/10 border border-red-500/20">
+        <div className="mx-4 mt-3 px-3 py-2 rounded-[8px] bg-red-500/10 border border-red-500/20">
           <div className="flex items-center gap-1.5">
             <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
             <span className="text-[11px] text-red-400 font-medium">
               {redemption.trackerError ?? "Withdrawal failed"}
             </span>
           </div>
-          {redemption.retryCount > 0 && (
-            <span className="text-[10px] text-red-400/60 ml-5">Retry count: {redemption.retryCount}</span>
-          )}
         </div>
       )}
 
-      {/* ── Input → Output Flow ── */}
-      <div className="flex items-stretch gap-3">
+      {/* ── Input / Output 2-column (matches transfer detail layout) ── */}
+      <div className="grid grid-cols-2 divide-x divide-gray/10">
         {/* INPUT side */}
-        <div className="flex-1 rounded-[10px] border border-purple-500/15 bg-purple-500/5 p-3">
-          <div className="text-[10px] uppercase tracking-wider text-purple-400/60 font-medium mb-2">Input (Burn)</div>
-          <div className="flex items-center gap-2">
-            <Image src="/zkbtc.png" alt="zkBTC" width={20} height={20} className="rounded-full shrink-0" />
-            <div>
-              <div className="text-sm font-semibold text-foreground font-mono">{fmtBtc(amount)} <span className="text-gray text-[11px]">zkBTC</span></div>
-              <div className="text-[10px] text-gray/50">Shielded note</div>
+        <div className="p-4 space-y-2.5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+            <span className="text-caption text-green-400/90 font-semibold uppercase tracking-wider">Input</span>
+            <span className="text-caption text-green-400/60 font-medium">1</span>
+          </div>
+          <div className="group flex items-center gap-2 px-3 py-2.5 rounded-[8px] bg-green-500/4 border border-green-500/10">
+            <Image src="/zkbtc.png" alt="zkBTC" width={16} height={16} className="rounded-full shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="text-body2 text-foreground font-mono font-semibold">{fmtBtc(amount)} <span className="text-[10px] text-gray font-normal">zkBTC</span></div>
+              <div className="text-[10px] text-gray/50">Shielded note (burned)</div>
             </div>
           </div>
-        </div>
-
-        {/* Arrow */}
-        <div className="flex items-center text-gray/30">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10h12m0 0l-4-4m4 4l-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          {/* Nullifier */}
+          {redemption.requestTxSignature && (
+            <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8">
+              <span className="text-[10px] text-gray/40 shrink-0">Nullifier</span>
+              <code className="text-caption font-mono text-foreground/70 truncate">{truncate(redemption.requestTxSignature, 6, 4)}</code>
+              <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                <CopyButton text={redemption.requestTxSignature} label="Tx" variant="default" iconSize="sm" />
+                <a href={`https://explorer.solana.com/tx/${redemption.requestTxSignature}?cluster=devnet`} target="_blank" rel="noopener noreferrer" className="text-sol hover:text-sol/80 transition-colors p-0.5">
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* OUTPUT side */}
-        <div className="flex-1 rounded-[10px] border border-btc/15 bg-btc/5 p-3">
-          <div className="text-[10px] uppercase tracking-wider text-btc/60 font-medium mb-2">Output (BTC)</div>
-          <div className="flex items-center gap-2">
-            <BitcoinIcon className="w-5 h-5 text-btc shrink-0" />
-            <div>
-              <div className="text-sm font-semibold text-foreground font-mono">
-                {fmtBtc(actualReceived ?? expectedSend)} <span className="text-gray text-[11px]">BTC</span>
+        <div className="p-4 space-y-2.5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-1.5 h-1.5 rounded-full bg-btc" />
+            <span className="text-caption text-btc/90 font-semibold uppercase tracking-wider">Output</span>
+            <span className="text-caption text-btc/60 font-medium">1</span>
+          </div>
+          <div className="px-3 py-2.5 rounded-[8px] bg-btc/4 border border-btc/10 space-y-2">
+            <div className="flex items-center gap-2">
+              <BitcoinIcon className="w-4 h-4 text-btc shrink-0" />
+              <span className="text-body2 text-foreground font-mono font-semibold">
+                {fmtBtc(actualReceived ?? expectedSend)} <span className="text-[10px] text-gray font-normal">BTC</span>
+              </span>
+            </div>
+            {btcAddr && (
+              <div className="group flex items-center gap-2">
+                <span className="text-[10px] text-gray/40">→</span>
+                <code className="text-caption font-mono text-foreground/80 truncate">{truncate(btcAddr, 10, 6)}</code>
+                <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                  <CopyButton text={btcAddr} label="BTC Address" variant="default" iconSize="sm" />
+                  <a href={`${getMempoolExplorerUrl()}/address/${btcAddr}`} target="_blank" rel="noopener noreferrer" className="text-btc hover:text-btc/80 transition-colors p-0.5">
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
               </div>
-              <div className="text-[10px] text-gray/50 flex items-center gap-1">
-                {btcAddr ? (
-                  <>→ {truncate(btcAddr, 8, 4)} <CopyButton text={btcAddr} label="Address" variant="default" iconSize="sm" /></>
-                ) : "BTC wallet"}
+            )}
+          </div>
+          {/* BTC tx link */}
+          {redemption.btcTxid && !redemption.simulated && (
+            <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8">
+              <span className="text-[10px] text-gray/40 shrink-0">BTC tx</span>
+              <code className="text-caption font-mono text-foreground/70 truncate">{truncate(redemption.btcTxid, 6, 4)}</code>
+              <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                <CopyButton text={redemption.btcTxid} label="BTC TX" variant="default" iconSize="sm" />
+                <a href={`${getMempoolExplorerUrl()}/tx/${redemption.btcTxid}`} target="_blank" rel="noopener noreferrer" className="text-btc hover:text-btc/80 transition-colors p-0.5">
+                  <ExternalLink className="w-3 h-3" />
+                </a>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* ── Fee Summary ── */}
-      <div className="grid grid-cols-3 gap-2 text-center">
-        <div className="rounded-[8px] bg-muted/50 border border-gray/10 px-2 py-1.5">
-          <div className="text-[10px] text-gray/50">Service Fee</div>
-          <div className="text-[11px] font-mono text-foreground/80">{serviceFee > 0 ? fmtBtc(serviceFee) : "—"}</div>
+      {/* ── Fee Breakdown + Progress ── */}
+      <div className="border-t border-gray/10 px-4 py-3 space-y-3">
+        {/* Fees */}
+        <div className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-[11px]">
+          {serviceFee > 0 && <>
+            <span className="text-gray/50">Service fee</span>
+            <span className="font-mono text-gray">{fmtBtc(serviceFee)} BTC</span>
+          </>}
+          {minerFee !== null && minerFee > 0 && <>
+            <span className="text-gray/50">Miner fee</span>
+            <span className="font-mono text-gray">{fmtBtc(minerFee)} BTC</span>
+          </>}
         </div>
-        <div className="rounded-[8px] bg-muted/50 border border-gray/10 px-2 py-1.5">
-          <div className="text-[10px] text-gray/50">Miner Fee</div>
-          <div className="text-[11px] font-mono text-foreground/80">{minerFee !== null && minerFee > 0 ? fmtBtc(minerFee) : "—"}</div>
-        </div>
-        <div className="rounded-[8px] bg-muted/50 border border-gray/10 px-2 py-1.5">
-          <div className="text-[10px] text-gray/50">You Receive</div>
-          <div className="text-[11px] font-mono text-foreground font-semibold">{fmtBtc(actualReceived ?? expectedSend)}</div>
-        </div>
-      </div>
 
-      {/* ── Step Timeline ── */}
-      <div className="border-t border-gray/8 pt-3">
-        <div className="text-[10px] uppercase tracking-wider text-gray/40 font-medium mb-2">Progress</div>
-        <div className="flex items-center gap-1">
+        {/* Progress steps (horizontal) */}
+        <div className="flex items-center gap-2 text-[10px]">
           {[
-            { label: "Request", done: !isFailed && stepOrder >= 0, sig: redemption.requestTxSignature, href: (s: string) => `https://explorer.solana.com/tx/${s}?cluster=devnet`, linkClass: solLink },
-            { label: "Processing", done: !isFailed && stepOrder >= 1, sig: redemption.processingTxSignature, href: (s: string) => `https://explorer.solana.com/tx/${s}?cluster=devnet`, linkClass: solLink },
-            { label: "BTC Sent", done: !isFailed && stepOrder >= 3, sig: redemption.btcTxid, href: (s: string) => `${getMempoolExplorerUrl()}/tx/${s}`, linkClass: btcLink },
-            { label: "Complete", done: !isFailed && stepOrder >= 4, sig: redemption.completeTxSignature, href: (s: string) => `https://explorer.solana.com/tx/${s}?cluster=devnet`, linkClass: solLink },
+            { label: "Request", done: !isFailed && stepOrder >= 0, sig: redemption.requestTxSignature },
+            { label: "Processing", done: !isFailed && stepOrder >= 1, sig: redemption.processingTxSignature },
+            { label: "BTC Sent", done: !isFailed && stepOrder >= 3, sig: redemption.btcTxid },
+            { label: "Complete", done: !isFailed && stepOrder >= 4, sig: redemption.completeTxSignature },
           ].map((step, i, arr) => (
             <Fragment key={step.label}>
-              <div className="flex flex-col items-center gap-1 flex-1">
-                <div className={cn(
-                  "w-6 h-6 rounded-full flex items-center justify-center",
-                  step.done ? "bg-green-500/15" : "bg-gray/8"
-                )}>
-                  {step.done ? (
-                    <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
-                  ) : i === arr.findIndex(s => !s.done) && !isFailed ? (
-                    <Loader2 className="w-3 h-3 text-gray-light animate-spin" />
-                  ) : (
-                    <Clock className="w-2.5 h-2.5 text-gray/30" />
-                  )}
-                </div>
-                <span className={cn("text-[9px] font-medium text-center leading-tight", step.done ? "text-foreground/70" : "text-gray/30")}>
-                  {step.label}
-                </span>
-                {step.done && step.sig && (
-                  <div className="flex items-center gap-0.5">
-                    <a href={step.href(step.sig)} target="_blank" rel="noopener noreferrer" className="text-[9px] text-purple-400/60 hover:text-purple-400">
-                      {truncate(step.sig, 4, 3)}
-                    </a>
-                    <CopyButton text={step.sig} label={step.label} variant="default" iconSize="sm" />
-                  </div>
+              <div className="flex items-center gap-1">
+                {step.done ? (
+                  <CheckCircle2 className="w-3 h-3 text-green-400 shrink-0" />
+                ) : i === arr.findIndex(s => !s.done) && !isFailed ? (
+                  <Loader2 className="w-3 h-3 text-gray-light animate-spin shrink-0" />
+                ) : (
+                  <Clock className="w-3 h-3 text-gray/20 shrink-0" />
                 )}
+                <span className={step.done ? "text-foreground/70" : "text-gray/30"}>{step.label}</span>
               </div>
               {i < arr.length - 1 && (
-                <div className={cn("h-px w-4 mt-[-16px]", step.done ? "bg-green-500/30" : "bg-gray/10")} />
+                <div className={cn("h-px w-3", step.done ? "bg-green-500/30" : "bg-gray/10")} />
               )}
             </Fragment>
           ))}
         </div>
-      </div>
 
-      {/* BTC confirmation status (if not yet complete) */}
-      {!redemption.simulated && redemption.btcTxid && stepOrder < 4 && (
-        <div className="border-t border-gray/8 pt-3">
+        {/* BTC confirmation status */}
+        {!redemption.simulated && redemption.btcTxid && stepOrder < 4 && (
           <BtcConfirmationStatus txid={redemption.btcTxid} />
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
