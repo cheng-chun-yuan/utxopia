@@ -1193,65 +1193,75 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       <div className="flex flex-col text-start">
         {/* === SEND SECTION === */}
         <div className="mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <p className="text-body2-semibold text-gray-light uppercase tracking-wider text-xs">
-                Send
-              </p>
-              {/* Token selector chip */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowTokenPicker(!showTokenPicker)}
-                  className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-muted hover:bg-muted/80 transition-colors"
-                >
-                  <img src={selectedToken.logo} alt={selectedToken.symbol} className="w-4 h-4 rounded-full" />
-                  <span className="text-[11px] font-medium text-foreground">{selectedToken.symbol}</span>
-                  <ChevronRight className={cn("w-3 h-3 text-gray transition-transform", showTokenPicker && "rotate-90")} />
-                </button>
-                {showTokenPicker && (
-                  <div className="absolute top-full left-0 mt-1 z-[100] w-[160px] py-1 bg-card border border-gray/20 rounded-[10px] shadow-xl">
-                    {PAY_TOKENS.map((token) => (
-                      <button
-                        key={token.symbol}
-                        disabled={!token.enabled}
-                        onClick={() => {
-                          if (token.enabled) {
-                            setSelectedToken(token);
-                            setShowTokenPicker(false);
-                          }
-                        }}
-                        className={cn(
-                          "w-full flex items-center gap-2 px-3 py-2 text-[12px] transition-colors text-left",
-                          token.symbol === selectedToken.symbol
-                            ? "bg-purple/10 text-foreground"
-                            : token.enabled
-                              ? "text-gray-light hover:bg-muted hover:text-foreground"
-                              : "text-gray/30 cursor-not-allowed"
-                        )}
-                      >
-                        <img src={token.logo} alt={token.symbol} className={cn("w-4 h-4 rounded-full", !token.enabled && "opacity-30")} />
-                        <span className="font-medium flex-1">{token.symbol}</span>
-                        {!token.enabled && (
-                          <span className="text-[9px] text-gray/40 uppercase">Soon</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {availableNotes.length > 0 && (
-                <span className="text-caption text-gray">
-                  Balance: {formatBtc(availableNotes.reduce((sum, n) => sum + Number(n.amount), 0))} {selectedToken.symbol}
-                </span>
+          <p className="text-body2-semibold text-gray-light uppercase tracking-wider text-xs mb-2">
+            Send
+          </p>
+
+          {/* Amount display + Token selector (like reference) */}
+          <div className="flex items-center gap-3 p-3 rounded-[10px] bg-muted border border-gray/15 mb-2">
+            <span className="flex-1 text-xl font-semibold text-foreground tabular-nums">
+              {totalOutputSats > 0 ? formatBtc(totalOutputSats) : "0"}
+            </span>
+            <div className="relative">
+              <button
+                onClick={() => setShowTokenPicker(!showTokenPicker)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-background/60 hover:bg-background/80 border border-gray/15 transition-colors"
+              >
+                <img src={selectedToken.logo} alt={selectedToken.symbol} className="w-4 h-4 rounded-full" />
+                <span className="text-sm font-medium text-foreground">{selectedToken.symbol}</span>
+                <ChevronRight className={cn("w-3 h-3 text-gray transition-transform", showTokenPicker && "rotate-90")} />
+              </button>
+              {showTokenPicker && (
+                <div className="absolute top-full right-0 mt-1 z-[100] w-[160px] py-1 bg-card border border-gray/20 rounded-[10px] shadow-xl">
+                  {PAY_TOKENS.map((token) => (
+                    <button
+                      key={token.symbol}
+                      disabled={!token.enabled}
+                      onClick={() => {
+                        if (token.enabled) {
+                          setSelectedToken(token);
+                          setShowTokenPicker(false);
+                        }
+                      }}
+                      className={cn(
+                        "w-full flex items-center gap-2 px-3 py-2 text-[12px] transition-colors text-left",
+                        token.symbol === selectedToken.symbol
+                          ? "bg-purple/10 text-foreground"
+                          : token.enabled
+                            ? "text-gray-light hover:bg-muted hover:text-foreground"
+                            : "text-gray/30 cursor-not-allowed"
+                      )}
+                    >
+                      <img src={token.logo} alt={token.symbol} className={cn("w-4 h-4 rounded-full", !token.enabled && "opacity-30")} />
+                      <span className="font-medium flex-1">{token.symbol}</span>
+                      {!token.enabled && (
+                        <span className="text-[9px] text-gray/40 uppercase">Soon</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
               )}
+            </div>
+          </div>
+
+          {/* Private balance + Top Up */}
+          <div className="flex items-center justify-between px-1 mb-3">
+            <span className="text-[12px] text-gray">
+              Private balance: {formatBtc(availableNotes.reduce((sum, n) => sum + Number(n.amount), 0))} {selectedToken.symbol}
+            </span>
+            <div className="flex items-center gap-2">
+              <a
+                href="/vault/deposit"
+                className="text-[12px] text-gray hover:text-purple border border-gray/20 hover:border-purple/30 rounded-full px-2.5 py-0.5 transition-colors"
+              >
+                + Top Up
+              </a>
               {!hasImportedNotes && !(initialSecretPhrase && (importLoading || importError)) && (
                 <button
                   onClick={() => setShowNoteSelector(!showNoteSelector)}
-                  className="text-caption text-purple hover:text-purple/80 transition-colors"
+                  className="text-[12px] text-gray hover:text-purple transition-colors"
                 >
-                  {showNoteSelector ? "Done" : "Select"}
+                  {showNoteSelector ? "Done" : "Select notes"}
                 </button>
               )}
             </div>
@@ -1459,14 +1469,12 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
             </p>
           )}
 
-          {/* Input total — show only when expanded or public redeem (collapsed card already shows total) */}
-          {(showNoteSelector || isPublicRedeem) && (
-            <div className="flex justify-between items-center px-2 text-body2">
-              <span className="text-gray">
-                {isPublicRedeem ? `Public ${selectedToken.symbol} Balance` : "Total Input"}
-              </span>
+          {/* Public redeem balance note */}
+          {isPublicRedeem && (
+            <div className="flex justify-between items-center px-2 text-body2 mb-1">
+              <span className="text-gray">Public {selectedToken.symbol} Balance</span>
               <span className="text-foreground font-semibold">
-                {isPublicRedeem ? formatBtc(Number(publicZkbtcBalance)) : formatBtc(totalInputSats)} {selectedToken.symbol}
+                {formatBtc(Number(publicZkbtcBalance))} {selectedToken.symbol}
               </span>
             </div>
           )}
