@@ -22,20 +22,14 @@ export const DEFAULT_API_URL = "http://localhost:3001";
 
 /**
  * Get the backend API URL from environment.
- * Standardizes 4 different env var names into one function.
  *
- * Server-side: TRACKER_API_URL > BACKEND_URL > default
- * Client-side: NEXT_PUBLIC_ZKBTC_API_URL > NEXT_PUBLIC_BACKEND_URL > default
+ * Server-side: BACKEND_API_URL (not exposed to client)
+ * Client-side: NEXT_PUBLIC_BACKEND_API_URL (available in browser)
+ * Both fall back to DEFAULT_API_URL (localhost:3001).
  */
 export function getBackendUrl(): string {
   if (typeof window === "undefined") {
-    // Server-side
-    return process.env.TRACKER_API_URL
-      || process.env.BACKEND_URL
-      || DEFAULT_API_URL;
+    return process.env.BACKEND_API_URL || DEFAULT_API_URL;
   }
-  // Client-side
-  return process.env.NEXT_PUBLIC_ZKBTC_API_URL
-    || process.env.NEXT_PUBLIC_BACKEND_URL
-    || DEFAULT_API_URL;
+  return process.env.NEXT_PUBLIC_BACKEND_API_URL || DEFAULT_API_URL;
 }
