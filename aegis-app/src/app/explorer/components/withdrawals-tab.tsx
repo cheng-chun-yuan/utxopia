@@ -26,6 +26,9 @@ import { truncate, timeAgo, scriptToAddress } from "./helpers";
 import { getEsploraApiUrl } from "@/lib/btc-network";
 import { Th, Td, TypeBadge, SolanaLink, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
 
+/** Format raw sats as BTC string (8 decimals) */
+const fmtBtc = (sats: number) => (sats / 1e8).toFixed(8);
+
 // =============================================================================
 // BTC Confirmation Status — fetches live confirmation count from mempool.space
 // =============================================================================
@@ -233,11 +236,11 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
               </div>
             </>}
             <span className="text-gray/50">Amount</span>
-            <span className="font-mono text-foreground/80">{amount.toLocaleString()} sats</span>
+            <span className="font-mono text-foreground/80">{fmtBtc(amount)} BTC</span>
             <span className="text-gray/50">Service fee</span>
-            <span className="font-mono text-gray">{serviceFee.toLocaleString()} sats</span>
+            <span className="font-mono text-gray">{fmtBtc(serviceFee)} BTC</span>
             <span className="text-gray/50">Est. receive</span>
-            <span className="font-mono text-foreground/80">{expectedSend.toLocaleString()} sats</span>
+            <span className="font-mono text-foreground/80">{fmtBtc(expectedSend)} BTC</span>
           </div>
         </div>
       ),
@@ -299,21 +302,21 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
           <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[11px]">
             {actualReceived !== null ? (<>
               <span className="text-gray/50">Received</span>
-              <span className="font-mono text-foreground/80">{actualReceived.toLocaleString()} sats</span>
+              <span className="font-mono text-foreground/80">{fmtBtc(actualReceived)} BTC</span>
               {minerFee !== null && <>
                 <span className="text-gray/50">Miner fee</span>
-                <span className="font-mono text-gray">{minerFee.toLocaleString()} sats</span>
+                <span className="font-mono text-gray">{fmtBtc(minerFee)} BTC</span>
               </>}
               <span className="text-gray/50">Service fee</span>
-              <span className="font-mono text-gray">{serviceFee.toLocaleString()} sats</span>
+              <span className="font-mono text-gray">{fmtBtc(serviceFee)} BTC</span>
               {protocolRevenue !== null && <>
                 <span className="text-gray/50">Protocol gets</span>
-                <span className="font-mono text-gray">{protocolRevenue.toLocaleString()} sats</span>
+                <span className="font-mono text-gray">{fmtBtc(protocolRevenue)} BTC</span>
               </>}
             </>) : (
               <>
                 <span className="text-gray/50">{redemption.btcTxid ? "Receive" : "Est. receive"}</span>
-                <span className="font-mono text-foreground/80">{expectedSend.toLocaleString()} sats</span>
+                <span className="font-mono text-foreground/80">{fmtBtc(expectedSend)} BTC</span>
               </>
             )}
           </div>
@@ -340,18 +343,18 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
           <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[11px]">
             <span className="text-gray/50">Burned</span>
             <span className="font-mono text-foreground/80">
-              {redemption.burnAmount
-                ? Number(redemption.burnAmount).toLocaleString()
+              {fmtBtc(redemption.burnAmount
+                ? Number(redemption.burnAmount)
                 : actualReceived !== null
-                  ? ((actualReceived) + (minerFee ?? 0)).toLocaleString()
-                  : amount.toLocaleString()
-              } sats
+                  ? (actualReceived) + (minerFee ?? 0)
+                  : amount
+              )} BTC
             </span>
             {(() => {
               const rev = redemption.protocolRevenue ? Number(redemption.protocolRevenue) : protocolRevenue;
               return rev !== null && rev > 0 ? <>
                 <span className="text-gray/50">Fee retained</span>
-                <span className="font-mono text-gray">{rev.toLocaleString()} sats</span>
+                <span className="font-mono text-gray">{fmtBtc(rev)} BTC</span>
               </> : null;
             })()}
           </div>
@@ -438,17 +441,30 @@ export function WithdrawalRow({
           <WithdrawalStatusBadge status={getEffectiveStatus(r)} />
         </Td>
         <Td>
-          {r.requestTxSignature ? (
-            <div className="flex items-center gap-1.5">
-              <code className="text-caption font-mono text-foreground">{truncate(r.requestTxSignature, 6, 4)}</code>
-              <CopyButton text={r.requestTxSignature} label="Tx" variant="default" iconSize="sm" />
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <code className="text-caption font-mono text-foreground">{truncate(r.pubkey, 6, 4)}</code>
-              <CopyButton text={r.pubkey} label="PDA" variant="default" iconSize="sm" />
-            </div>
-          )}
+          {(() => {
+            const status = getEffectiveStatus(r);
+            const order = WITHDRAWAL_STATUS_ORDER[status] ?? 0;
+            // Show most relevant tx: complete > processing > request
+            const tx = order >= 4 && r.completeTxSignature
+              ? { sig: r.completeTxSignature, label: "Complete" }
+              : order >= 1 && r.processingTxSignature
+                ? { sig: r.processingTxSignature, label: "Processing" }
+                : r.requestTxSignature
+                  ? { sig: r.requestTxSignature, label: "Request" }
+                  : null;
+            return tx ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] text-gray/50 w-[50px]">{tx.label}</span>
+                <code className="text-caption font-mono text-foreground">{truncate(tx.sig, 6, 4)}</code>
+                <CopyButton text={tx.sig} label="Tx" variant="default" iconSize="sm" />
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <code className="text-caption font-mono text-foreground">{truncate(r.pubkey, 6, 4)}</code>
+                <CopyButton text={r.pubkey} label="PDA" variant="default" iconSize="sm" />
+              </div>
+            );
+          })()}
         </Td>
         <Td>
           <span className="text-caption text-gray font-mono">
@@ -457,7 +473,7 @@ export function WithdrawalRow({
         </Td>
         <Td>
           <span className="text-body2 text-foreground font-mono">
-            {Number(r.amountSats).toLocaleString()} <span className="text-gray text-caption">sats</span>
+            {fmtBtc(Number(r.amountSats))} <span className="text-gray text-caption">BTC</span>
           </span>
         </Td>
         <Td>
@@ -465,9 +481,16 @@ export function WithdrawalRow({
         </Td>
         <Td>
           <a
-            href={r.status === "Completed" && r.completeTxSignature
-              ? `https://explorer.solana.com/tx/${r.completeTxSignature}?cluster=devnet`
-              : `https://explorer.solana.com/address/${r.pubkey}?cluster=devnet`}
+            href={(() => {
+              const s = getEffectiveStatus(r);
+              const o = WITHDRAWAL_STATUS_ORDER[s] ?? 0;
+              const sig = o >= 4 && r.completeTxSignature ? r.completeTxSignature
+                : o >= 1 && r.processingTxSignature ? r.processingTxSignature
+                : r.requestTxSignature;
+              return sig
+                ? `https://explorer.solana.com/tx/${sig}?cluster=devnet`
+                : `https://explorer.solana.com/address/${r.pubkey}?cluster=devnet`;
+            })()}
             target="_blank"
             rel="noopener noreferrer"
             className="text-sol hover:text-sol/80 transition-colors"
@@ -551,19 +574,19 @@ export function WithdrawalsTab() {
 
 function WithdrawalAmountCell({ r }: { r: RedemptionRecord }) {
   const received = r.actualReceived && r.status === "Completed"
-    ? Number(r.actualReceived).toLocaleString()
+    ? fmtBtc(Number(r.actualReceived))
     : r.serviceFee
-      ? (Number(r.amountSats) - Number(r.serviceFee)).toLocaleString()
+      ? fmtBtc(Number(r.amountSats) - Number(r.serviceFee))
       : "...";
 
   return (
     <div className="flex items-center gap-1.5 font-mono text-body2">
       <Image src="/zkbtc.png" alt="zkBTC" width={14} height={14} className="rounded-full shrink-0" />
-      <span className="text-foreground">{Number(r.amountSats).toLocaleString()}</span>
+      <span className="text-foreground">{fmtBtc(Number(r.amountSats))}</span>
       <span className="text-gray/40">→</span>
       <BitcoinIcon className="w-3.5 h-3.5 text-btc shrink-0" />
       <span className="text-foreground">{received}</span>
-      <span className="text-[10px] text-gray">sats</span>
+      <span className="text-[10px] text-gray">BTC</span>
     </div>
   );
 }
@@ -579,7 +602,7 @@ function WithdrawalFeeCell({ r }: { r: RedemptionRecord }) {
 
   return (
     <span className="text-caption font-mono text-gray">
-      {fee.toLocaleString()} sats
+      {fmtBtc(fee)} BTC
     </span>
   );
 }
