@@ -16,13 +16,13 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "@/components/ui/copy-button";
-import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
 import { useDeposits } from "@/hooks/use-explorer";
 import type { DepositRecord } from "@/hooks/use-explorer";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import Image from "next/image";
 import { truncate, timeAgo } from "./helpers";
-import { Th, Td, SolanaLink, TypeBadge, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
+import { Th, Td, SolanaLink, TypeBadge, StatusDot, FlowCell, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
+import type { StatusDotVariant } from "./shared";
 import { SUPPORTED_TOKENS, formatTokenAmount, type SupportedToken } from "@/lib/supported-tokens";
 import { getTokenBySymbol } from "@/lib/supported-tokens";
 
@@ -43,29 +43,12 @@ const DEPOSIT_STATUS_CONFIG: Record<string, { label: string; color: string; bg: 
   failed: { label: "Failed", color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" },
 };
 
-function DepositStatusBadge({ status }: { status: string | null }) {
-  // TODO(backward-compat): remove fallback once all deposits have status field populated
-  const resolvedStatus = status ?? "claimed";
-  const cfg = DEPOSIT_STATUS_CONFIG[resolvedStatus] ?? DEPOSIT_STATUS_CONFIG.pending;
-  const Icon = cfg.spinning ? Loader2 : (resolvedStatus === "failed" ? XCircle : resolvedStatus === "claimed" || resolvedStatus === "ready" ? CheckCircle2 : Clock);
-
-  const subtitle = resolvedStatus === "claimed" || resolvedStatus === "ready"
-    ? "Complete"
-    : resolvedStatus === "failed"
-    ? "Error"
-    : "In progress";
-
-  return (
-    <div className="flex items-center gap-1.5">
-      <div className={cn("p-1 rounded-[6px] border", cfg.bg)}>
-        <Icon className={cn("w-3 h-3", cfg.color, cfg.spinning && "animate-spin")} />
-      </div>
-      <div className="flex flex-col">
-        <span className={cn("text-[12px] font-semibold leading-tight", cfg.color)}>{cfg.label}</span>
-        <span className="text-[10px] text-gray leading-tight">{subtitle}</span>
-      </div>
-    </div>
-  );
+function getDepositStatusDot(status: string | null): { variant: StatusDotVariant; label: string } {
+  const resolved = status ?? "claimed";
+  if (resolved === "ready" || resolved === "claimed") return { variant: "confirmed", label: "Confirmed" };
+  if (resolved === "failed") return { variant: "failed", label: "Failed" };
+  if (resolved === "pending") return { variant: "pending", label: "Pending" };
+  return { variant: "processing", label: DEPOSIT_STATUS_CONFIG[resolved]?.label ?? "Processing" };
 }
 
 // =============================================================================
@@ -250,6 +233,16 @@ const SHIELD_TYPE_CONFIG: Record<string, ShieldTypeConfig> = {
   },
 };
 
+const SHIELDED = { icon: "shield", label: "Shielded" };
+const FLOW_ICONS: Record<string, { from: { icon: string; label: string }; to: { icon: string; label: string } }> = {
+  btc: { from: { icon: "/tokens/btc.png", label: "BTC" }, to: SHIELDED },
+  sol: { from: { icon: "/tokens/sol.png", label: "SOL" }, to: SHIELDED },
+  usdc: { from: { icon: "/tokens/usdc.png", label: "USDC" }, to: SHIELDED },
+  usdt: { from: { icon: "/tokens/usdt.png", label: "USDT" }, to: SHIELDED },
+  demo: { from: { icon: "/tokens/btc.png", label: "BTC" }, to: SHIELDED },
+  spl: { from: { icon: "/tokens/sol.png", label: "SPL" }, to: SHIELDED },
+};
+
 export function DepositRow({
   deposit,
   index,
@@ -281,13 +274,10 @@ export function DepositRow({
         onClick={() => canExpand && onToggle()}
       >
         <Td>
-          <TypeBadge kind="shield" />
-        </Td>
-        <Td>
           <div className="flex items-center gap-1.5">
-            <DepositStatusBadge status={d.status} />
+            <StatusDot {...getDepositStatusDot(d.status)} />
             {d.isDemo && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 font-medium">
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray/10 text-gray border border-gray/20 font-medium">
                 Demo
               </span>
             )}
@@ -301,7 +291,6 @@ export function DepositRow({
             </div>
           ) : d.btcTxid ? (
             <div className="flex items-center gap-1.5">
-              <BitcoinIcon className="w-3 h-3 text-btc/60" />
               <code className="text-caption font-mono text-foreground">{truncate(d.btcTxid, 6, 4)}</code>
               <CopyButton text={d.btcTxid} label="BTC Tx" variant="default" iconSize="sm" />
             </div>
@@ -310,21 +299,17 @@ export function DepositRow({
           )}
         </Td>
         <Td>
-          <div className="flex items-center gap-1.5 text-caption">
-            <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono text-[10px] border", config.from.color)}>
-              <img src={config.from.logo} alt={config.from.label} className="w-3 h-3 rounded-full" />
-              {config.from.label}
-            </span>
-            <span className="text-gray/30">→</span>
-            <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono text-[10px] border", config.to.color)}>
-              <img src={config.to.logo} alt={config.to.label} className="w-3 h-3 rounded-full" />
-              {config.to.label}
-            </span>
-          </div>
+          <TypeBadge kind="shield" />
+        </Td>
+        <Td>
+          <FlowCell {...(FLOW_ICONS[shieldType] ?? FLOW_ICONS.btc)} />
         </Td>
         <Td>
           <span className="text-body2 text-foreground font-mono">
-            {formatTokenAmount(d.amountSats, { decimals: config.decimals, unit: config.unit, showRawAmount: config.showRaw })}
+            {config.showRaw
+              ? d.amountSats.toLocaleString()
+              : (d.amountSats / (10 ** config.decimals)).toLocaleString(undefined, { maximumFractionDigits: config.decimals })
+            } <span className="text-gray text-caption">{config.unit}</span>
           </span>
         </Td>
         <Td>
@@ -378,10 +363,10 @@ export function DepositsTab() {
         <table className="w-full min-w-[700px]">
           <thead>
             <tr className="border-b border-gray/15 bg-muted/50">
-              <Th>Type</Th>
               <Th>Status</Th>
               <Th>Tx ID</Th>
-              <Th>Details</Th>
+              <Th>Type</Th>
+              <Th>Flow</Th>
               <Th>Amount</Th>
               <Th>Time</Th>
               <Th className="w-[40px]" />

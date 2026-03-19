@@ -24,7 +24,8 @@ import type { RedemptionRecord } from "@/hooks/use-explorer";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { truncate, timeAgo, scriptToAddress } from "./helpers";
 import { getEsploraApiUrl } from "@/lib/btc-network";
-import { Th, Td, TypeBadge, SolanaLink, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
+import { Th, Td, TypeBadge, StatusDot, FlowCell, SolanaLink, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
+import type { StatusDotVariant } from "./shared";
 
 /** Format raw sats as BTC string, trimming trailing zeros (keep at least 1 decimal) */
 const fmtBtc = (sats: number) => {
@@ -135,22 +136,11 @@ const WITHDRAWAL_STATUS_CONFIG: Record<string, { label: string; color: string; b
   Failed: { label: "Failed", color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" },
 };
 
-function WithdrawalStatusBadge({ status }: { status: string }) {
-  const cfg = WITHDRAWAL_STATUS_CONFIG[status] ?? WITHDRAWAL_STATUS_CONFIG.Pending;
-  const Icon = cfg.spinning ? Loader2 : (status === "Failed" ? XCircle : status === "Completed" ? CheckCircle2 : status === "Pending" ? Clock : CheckCircle2);
-  const subtitle = status === "Failed" ? "Error" : status === "Completed" ? "Done" : status === "Pending" ? "Awaiting" : "In progress";
-
-  return (
-    <div className="flex items-center gap-1.5">
-      <div className={cn("p-1 rounded-[6px] border", cfg.bg)}>
-        <Icon className={cn("w-3 h-3", cfg.color, cfg.spinning && "animate-spin")} />
-      </div>
-      <div className="flex flex-col">
-        <span className={cn("text-[12px] font-semibold leading-tight", cfg.color)}>{cfg.label}</span>
-        <span className="text-[10px] text-gray leading-tight">{subtitle}</span>
-      </div>
-    </div>
-  );
+function getWithdrawalStatusDot(status: string): { variant: StatusDotVariant; label: string } {
+  if (status === "Completed") return { variant: "confirmed", label: "Confirmed" };
+  if (status === "Failed" || status === "Cancelled") return { variant: "failed", label: status };
+  if (status === "Pending") return { variant: "pending", label: "Pending" };
+  return { variant: "processing", label: WITHDRAWAL_STATUS_CONFIG[status]?.label ?? "Processing" };
 }
 
 // =============================================================================
@@ -225,7 +215,7 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
             <span className="text-caption text-green-400/60 font-medium">1</span>
           </div>
           <div className="group flex items-center gap-2 px-3 py-2.5 rounded-[8px] bg-green-500/4 border border-green-500/10">
-            <Image src="/zkbtc.png" alt="zkBTC" width={16} height={16} className="rounded-full shrink-0" />
+            <Image src="shield" alt="zkBTC" width={16} height={16} className="rounded-full shrink-0" />
             <div className="flex-1 min-w-0">
               <div className="text-body2 text-foreground font-mono font-semibold">{fmtBtc(amount)} <span className="text-[10px] text-gray font-normal">zkBTC</span></div>
               <div className="text-[10px] text-gray/50">Shielded note (burned)</div>
@@ -361,16 +351,12 @@ export function WithdrawalRow({
         onClick={onToggle}
       >
         <Td>
-          <TypeBadge kind="withdraw" />
-        </Td>
-        <Td>
-          <WithdrawalStatusBadge status={getEffectiveStatus(r)} />
+          <StatusDot {...getWithdrawalStatusDot(getEffectiveStatus(r))} />
         </Td>
         <Td>
           {(() => {
             const status = getEffectiveStatus(r);
             const order = WITHDRAWAL_STATUS_ORDER[status] ?? 0;
-            // Show most relevant tx: complete > processing > request
             const sig = order >= 4 && r.completeTxSignature
               ? r.completeTxSignature
               : order >= 1 && r.processingTxSignature
@@ -390,15 +376,14 @@ export function WithdrawalRow({
           })()}
         </Td>
         <Td>
-          <div className="flex items-center gap-1.5">
-            <span className="inline-flex items-center gap-1 text-caption text-green-400/70 bg-green-500/6 border border-green-500/12 px-2 py-0.5 rounded-full">
-              <span className="font-mono">{r.inputCount}</span> in
-            </span>
-            <span className="text-gray/30">→</span>
-            <span className="inline-flex items-center gap-1 text-caption text-btc/70 bg-btc/6 border border-btc/12 px-2 py-0.5 rounded-full">
-              <span className="font-mono">{r.outputCount}</span> out
-            </span>
-          </div>
+          <TypeBadge kind="withdraw" />
+        </Td>
+        <Td>
+          <FlowCell
+            from={{ icon: "shield", label: "Shielded" }}
+            to={{ icon: "/zkbtc.png", label: "zkBTC" }}
+            meta={`${r.inputCount} in, ${r.outputCount} out`}
+          />
         </Td>
         <Td>
           <span className="text-body2 text-foreground font-mono">
@@ -422,7 +407,7 @@ export function WithdrawalRow({
             })()}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sol hover:text-sol/80 transition-colors"
+            className="text-gray hover:text-gray-light transition-colors"
             onClick={(e) => e.stopPropagation()}
           >
             <ExternalLink className="w-3.5 h-3.5" />
@@ -471,10 +456,10 @@ export function WithdrawalsTab() {
         <table className="w-full min-w-[600px]">
           <thead>
             <tr className="border-b border-gray/15 bg-muted/50">
-              <Th>Type</Th>
               <Th>Status</Th>
               <Th>Tx ID</Th>
-              <Th>Details</Th>
+              <Th>Type</Th>
+              <Th>Flow</Th>
               <Th>Amount</Th>
               <Th>Time</Th>
               <Th className="w-[40px]" />
@@ -510,7 +495,7 @@ function WithdrawalAmountCell({ r }: { r: RedemptionRecord }) {
 
   return (
     <div className="flex items-center gap-1.5 font-mono text-body2">
-      <Image src="/zkbtc.png" alt="zkBTC" width={14} height={14} className="rounded-full shrink-0" />
+      <Image src="shield" alt="zkBTC" width={14} height={14} className="rounded-full shrink-0" />
       <span className="text-foreground">{fmtBtc(Number(r.amountSats))}</span>
       <span className="text-gray/40">→</span>
       <BitcoinIcon className="w-3.5 h-3.5 text-btc shrink-0" />

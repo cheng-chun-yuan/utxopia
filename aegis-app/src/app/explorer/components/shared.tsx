@@ -40,10 +40,10 @@ const TOKEN_LIST = EXPLORER_FILTER_TOKENS.map((t) => ({
 // --- Type Filter Bar ---
 
 const FILTER_PILLS: { id: FilterType; label: string; icon: React.ReactNode; color: string; hasTokens: boolean }[] = [
-  { id: "all", label: "All", icon: null, color: "bg-gray/15 text-gray-light border-gray/20", hasTokens: false },
-  { id: "shield", label: "Shield", icon: <ArrowDownToLine className="w-3.5 h-3.5" />, color: "bg-green-500/10 text-green-400 border-green-500/20", hasTokens: true },
-  { id: "transfer", label: "Transfer", icon: <ArrowUpDown className="w-3.5 h-3.5" />, color: "bg-purple-500/10 text-purple-400 border-purple-500/20", hasTokens: false },
-  { id: "unshield", label: "Unshield", icon: <ArrowUpFromLine className="w-3.5 h-3.5" />, color: "bg-orange-500/10 text-orange-400 border-orange-500/20", hasTokens: true },
+  { id: "all", label: "All", icon: null, color: "bg-gray/15 text-foreground border-gray/20", hasTokens: false },
+  { id: "shield", label: "Shield", icon: <ArrowDownToLine className="w-3.5 h-3.5" />, color: "bg-gray/15 text-foreground border-gray/20", hasTokens: true },
+  { id: "transfer", label: "Transfer", icon: <ArrowUpDown className="w-3.5 h-3.5" />, color: "bg-gray/15 text-foreground border-gray/20", hasTokens: false },
+  { id: "unshield", label: "Unshield", icon: <ArrowUpFromLine className="w-3.5 h-3.5" />, color: "bg-gray/15 text-foreground border-gray/20", hasTokens: true },
 ];
 
 export function TypeFilterBar({
@@ -196,18 +196,61 @@ function TokenCheckboxDropdown({
 // --- Type Badge (unified row first column) ---
 
 export function TypeBadge({ kind }: { kind: "shield" | "transfer" | "unshield" | "withdraw" }) {
+  const label = { shield: "Shield", transfer: "Transfer", unshield: "Unshield", withdraw: "Withdraw" }[kind];
+  return <span className="text-[13px] text-gray-light font-medium">{label}</span>;
+}
+
+// --- Status Dot ---
+
+export type StatusDotVariant = "confirmed" | "processing" | "pending" | "failed";
+
+export function StatusDot({ variant, label }: { variant: StatusDotVariant; label?: string }) {
   const config = {
-    shield: { label: "Shield", color: "text-green-400", bg: "bg-green-500/10 border-green-500/20", icon: <ArrowDownToLine className="w-3 h-3" /> },
-    transfer: { label: "Transfer", color: "text-purple-400", bg: "bg-purple-500/10 border-purple-500/20", icon: <ArrowUpDown className="w-3 h-3" /> },
-    unshield: { label: "Unshield", color: "text-orange-400", bg: "bg-orange-500/10 border-orange-500/20", icon: <ArrowUpFromLine className="w-3 h-3" /> },
-    withdraw: { label: "Withdraw", color: "text-btc", bg: "bg-btc/10 border-btc/20", icon: <ArrowUpFromLine className="w-3 h-3" /> },
-  }[kind];
+    confirmed: { dot: "bg-green-400", text: "text-green-400", defaultLabel: "Confirmed" },
+    processing: { dot: "bg-gray/50 animate-pulse", text: "text-gray-light", defaultLabel: "Processing" },
+    pending: { dot: "bg-gray/40", text: "text-gray", defaultLabel: "Pending" },
+    failed: { dot: "bg-red-400", text: "text-red-400", defaultLabel: "Failed" },
+  }[variant];
 
   return (
-    <span className={cn("inline-flex items-center gap-1.5 px-2 py-1 rounded-[6px] border text-[11px] font-semibold", config.bg, config.color)}>
-      {config.icon}
-      {config.label}
-    </span>
+    <div className="flex items-center gap-1.5">
+      <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", config.dot)} />
+      <span className={cn("text-[13px] font-medium", config.text)}>{label ?? config.defaultLabel}</span>
+    </div>
+  );
+}
+
+// --- Flow Cell ---
+
+function FlowIcon({ icon, label }: { icon: string | "shield"; label: string }) {
+  if (icon === "shield") {
+    return <Shield className="w-4 h-4 text-green-400/70" />;
+  }
+  return <img src={icon} alt={label} className="w-4 h-4 rounded-full" />;
+}
+
+export function FlowCell({
+  from,
+  to,
+  meta,
+}: {
+  from: { icon: string; label: string };
+  to: { icon: string; label: string };
+  meta?: string;
+}) {
+  return (
+    <div className="flex items-center gap-2 text-gray-light">
+      <span className="inline-flex items-center gap-1.5 text-[13px] font-medium">
+        <FlowIcon icon={from.icon} label={from.label} />
+        {from.label}
+      </span>
+      <span className="text-gray/40 text-[12px]">&rarr;</span>
+      <span className="inline-flex items-center gap-1.5 text-[13px] font-medium">
+        <FlowIcon icon={to.icon} label={to.label} />
+        {to.label}
+      </span>
+      {meta && <span className="text-[11px] text-gray/50 font-normal">({meta})</span>}
+    </div>
   );
 }
 
@@ -237,7 +280,7 @@ export function SolanaLink({ signature }: { signature: string }) {
       href={`https://explorer.solana.com/tx/${signature}?cluster=devnet`}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-sol hover:text-sol/80 transition-colors"
+      className="text-gray hover:text-gray-light transition-colors"
       aria-label="View transaction"
     >
       <ExternalLink className="w-3.5 h-3.5" />

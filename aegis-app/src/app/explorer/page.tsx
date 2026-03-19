@@ -201,26 +201,26 @@ function ExplorerContent() {
         <StatCard
           label="Shield"
           value={counts.shield}
-          icon={<ArrowDownToLine className="w-4 h-4 text-green-400" />}
-          color="bg-green-500/5 border-green-500/15"
+          icon={<ArrowDownToLine className="w-4 h-4 text-gray" />}
+          color="bg-muted/30 border-gray/15"
         />
         <StatCard
           label="Transfer"
           value={counts.transfer}
-          icon={<ArrowUpDown className="w-4 h-4 text-purple-400" />}
-          color="bg-purple-500/5 border-purple-500/15"
+          icon={<ArrowUpDown className="w-4 h-4 text-gray" />}
+          color="bg-muted/30 border-gray/15"
         />
         <StatCard
           label="Unshield"
           value={counts.unshield}
-          icon={<ArrowUpFromLine className="w-4 h-4 text-orange-400" />}
-          color="bg-orange-500/5 border-orange-500/15"
+          icon={<ArrowUpFromLine className="w-4 h-4 text-gray" />}
+          color="bg-muted/30 border-gray/15"
         />
         <StatCard
           label="Total Shielded"
           value={totalShieldedDisplay}
-          icon={<Shield className="w-4 h-4 text-privacy" />}
-          color="bg-privacy/5 border-privacy/15"
+          icon={<Shield className="w-4 h-4 text-gray" />}
+          color="bg-muted/30 border-gray/15"
         />
       </div>
 
@@ -255,10 +255,10 @@ function ExplorerContent() {
             <table className="w-full min-w-[750px]">
               <thead>
                 <tr className="border-b border-gray/15 bg-muted/50">
-                  <Th>Type</Th>
                   <Th>Status</Th>
                   <Th>Tx ID</Th>
-                  <Th>Details</Th>
+                  <Th>Type</Th>
+                  <Th>Flow</Th>
                   <Th>Amount</Th>
                   <Th>Time</Th>
                   <Th className="w-[40px]" />

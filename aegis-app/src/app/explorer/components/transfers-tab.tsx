@@ -23,7 +23,7 @@ import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
 import { useTransfers } from "@/hooks/use-explorer";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { truncate, timeAgo } from "./helpers";
-import { Th, Td, SolanaLink, TypeBadge, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
+import { Th, Td, SolanaLink, TypeBadge, StatusDot, FlowCell, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
 import { SUPPORTED_TOKENS, formatTokenAmount, getTokenBySymbol, type SupportedToken } from "@/lib/supported-tokens";
 
 // =============================================================================
@@ -58,30 +58,10 @@ export function TransferRow({
         onClick={onToggle}
       >
         <Td>
-          <TypeBadge kind={kind} />
-        </Td>
-        <Td>
-          {tx.status === "processing" ? (
-            <div className="flex items-center gap-1.5">
-              <div className="p-1 rounded-[6px] border bg-yellow-500/10 border-yellow-500/20">
-                <Loader2 className="w-3 h-3 text-yellow-400 animate-spin" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[12px] font-semibold leading-tight text-yellow-400">Processing</span>
-                <span className="text-[10px] text-gray leading-tight">In progress</span>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <div className="p-1 rounded-[6px] border bg-green-500/10 border-green-500/20">
-                <CheckCircle2 className="w-3 h-3 text-green-400" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[12px] font-semibold leading-tight text-green-400">{isUnshield ? "Withdrawn" : "Sent"}</span>
-                <span className="text-[10px] text-gray leading-tight">Complete</span>
-              </div>
-            </div>
-          )}
+          <StatusDot
+            variant={tx.status === "processing" ? "processing" : "confirmed"}
+            label={tx.status === "processing" ? "Processing" : "Confirmed"}
+          />
         </Td>
         <Td>
           <div className="flex items-center gap-1.5">
@@ -90,25 +70,35 @@ export function TransferRow({
           </div>
         </Td>
         <Td>
-          <div className="flex items-center gap-1.5 text-caption">
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono text-[10px] border text-green-400/70 bg-green-500/6 border-green-500/10">
-              {tx.inputCount} in
-            </span>
-            <span className="text-gray/30">→</span>
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono text-[10px] border text-purple-400/70 bg-purple-500/6 border-purple-500/10">
-              {isUnshield ? (tx.outputs.length + 1) : tx.outputs.length} out
-            </span>
-          </div>
+          <TypeBadge kind={kind} />
+        </Td>
+        <Td>
+          {isUnshield ? (
+            <FlowCell
+              from={{ icon: "shield", label: "Shielded" }}
+              to={{ icon: isRedeemType(tx) ? "/zkbtc.png" : (token.logo || "/tokens/sol.png"), label: isRedeemType(tx) ? "zkBTC" : token.symbol }}
+              meta={`${tx.inputCount} in, ${isUnshield ? tx.outputs.length + 1 : tx.outputs.length} out`}
+            />
+          ) : (
+            <FlowCell
+              from={{ icon: "shield", label: "Shielded" }}
+              to={{ icon: "shield", label: "Shielded" }}
+              meta={`${tx.inputCount} in, ${tx.outputs.length} out`}
+            />
+          )}
         </Td>
         <Td>
           {isUnshield && tx.unshieldAmount ? (
             <span className="text-body2 text-foreground font-mono">
-              {formatTokenAmount(tx.unshieldAmount, token)}
+              {token.showRawAmount
+                ? tx.unshieldAmount.toLocaleString()
+                : (tx.unshieldAmount / (10 ** token.decimals)).toLocaleString(undefined, { maximumFractionDigits: token.decimals })
+              } <span className="text-gray text-caption">{token.unit}</span>
             </span>
           ) : isUnshield ? (
-            <span className="text-caption text-gray/40">—</span>
+            <span className="text-caption text-gray/40">&mdash;</span>
           ) : (
-            <span className="text-caption text-gray/40">— (private)</span>
+            <span className="text-caption text-gray/40">&mdash; (private)</span>
           )}
         </Td>
         <Td>
@@ -160,10 +150,10 @@ export function TransfersTab() {
         <table className="w-full min-w-[600px]">
           <thead>
             <tr className="border-b border-gray/15 bg-muted/50">
-              <Th>Type</Th>
               <Th>Status</Th>
               <Th>Tx ID</Th>
-              <Th>Details</Th>
+              <Th>Type</Th>
+              <Th>Flow</Th>
               <Th>Amount</Th>
               <Th>Time</Th>
               <Th className="w-[40px]" />
