@@ -26,8 +26,13 @@ import { truncate, timeAgo, scriptToAddress } from "./helpers";
 import { getEsploraApiUrl } from "@/lib/btc-network";
 import { Th, Td, TypeBadge, SolanaLink, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
 
-/** Format raw sats as BTC string (8 decimals) */
-const fmtBtc = (sats: number) => (sats / 1e8).toFixed(8);
+/** Format raw sats as BTC string, trimming trailing zeros (keep at least 1 decimal) */
+const fmtBtc = (sats: number) => {
+  const full = (sats / 1e8).toFixed(8);
+  // Trim trailing zeros but keep at least "0.0"
+  const trimmed = full.replace(/\.?0+$/, "");
+  return trimmed.includes(".") ? trimmed : trimmed + ".0";
+};
 
 // =============================================================================
 // BTC Confirmation Status — fetches live confirmation count from mempool.space
