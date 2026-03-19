@@ -391,7 +391,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
     // For public redeem, no shielded notes needed
     const hasBtcOut = outputs.some(o => o.mode === "btc");
     const canPublicRedeem = hasBtcOut && selectedNotes.length === 0 && !hasImportedNotes && publicZkbtcBalance > 0n;
-    if (!canPublicRedeem && !hasImportedNotes && selectedNotes.length === 0) errors.push("Select at least one input note");
+    if (!canPublicRedeem && !hasImportedNotes && selectedNotes.length === 0) errors.push("Select at least one note to send");
     if (outputs.length === 0) errors.push("Add at least one recipient");
 
     for (const o of outputs) {
@@ -1191,12 +1191,12 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   if (step === "compose") {
     return (
       <div className="flex flex-col text-start">
-        {/* === INPUTS SECTION === */}
+        {/* === SEND SECTION === */}
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <p className="text-body2-semibold text-gray-light uppercase tracking-wider text-xs">
-                Inputs
+                Send
               </p>
               {/* Token selector chip */}
               <div className="relative">
@@ -1474,18 +1474,18 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 
         <div className="border-t border-gray/10 my-2" />
 
-        {/* === OUTPUTS SECTION === */}
+        {/* === RECIPIENTS SECTION === */}
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
             <p className="text-body2-semibold text-gray-light uppercase tracking-wider text-xs">
-              Outputs
+              Recipients
             </p>
             {outputs.length < MAX_OUTPUTS && (
               <button
                 onClick={addOutput}
                 className="flex items-center gap-1 text-caption text-purple hover:text-purple/80 transition-colors"
               >
-                <Plus className="w-3.5 h-3.5" /> Add Output
+                <Plus className="w-3.5 h-3.5" /> Add Recipient
               </button>
             )}
           </div>
