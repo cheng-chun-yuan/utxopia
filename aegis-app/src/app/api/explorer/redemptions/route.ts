@@ -113,8 +113,8 @@ function createServerRpc(): RpcClient {
 
 export async function GET() {
   try {
-    // Fetch all sources in parallel (including pool state for fee config)
-    const [redemptions, trackingResp, completedResp, requestedResp, processingResp, poolStateResp] = await Promise.all([
+    // Fetch all sources in parallel (including pool state for fee config + transfers for in/out counts)
+    const [redemptions, trackingResp, completedResp, requestedResp, processingResp, poolStateResp, transfersResp] = await Promise.all([
       fetchExplorerRedemptions(
         createServerRpc(),
         getConfig().aegisProgramId,
@@ -124,6 +124,7 @@ export async function GET() {
       fetch(`${BACKEND_URL}/api/redemption/requested`).catch(() => null),
       fetch(`${BACKEND_URL}/api/redemption/processing`).catch(() => null),
       fetch(`${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/solana/pool-state`).catch(() => null),
+      fetch(`${BACKEND_URL}/api/transfers`).catch(() => null),
     ]);
 
     // Parse pool state for fee config
@@ -185,6 +186,22 @@ export async function GET() {
       } catch {
         // Ignore parse errors
       }
+    }
+
+    // Parse transfer data for input/output counts (keyed by tx_signature)
+    const transferCountMap = new Map<string, { inputCount: number; outputCount: number }>();
+    if (transfersResp?.ok) {
+      try {
+        const transfersData = await transfersResp.json();
+        for (const t of transfersData.transfers ?? []) {
+          if (t.tx_signature) {
+            transferCountMap.set(t.tx_signature, {
+              inputCount: t.input_count ?? 1,
+              outputCount: t.output_count ?? 1,
+            });
+          }
+        }
+      } catch { /* ignore */ }
     }
 
     // Fetch blockTime for PDAs with a processingSlot but no tracking timestamp
@@ -253,6 +270,8 @@ export async function GET() {
       serviceFeeBase: number;
       burnAmount: string | null;
       protocolRevenue: string | null;
+      inputCount: number;
+      outputCount: number;
     }> = redemptions.map((r) => {
       const tracking = trackingMap.get(r.pubkey);
       const trackingTime = tracking?.created_at ?? 0;
@@ -281,6 +300,7 @@ export async function GET() {
         serviceFeeBase: feeConfig.base,
         burnAmount: completedByReqId.get(reqId)?.burn_amount?.toString() ?? null,
         protocolRevenue: completedByReqId.get(reqId)?.protocol_revenue?.toString() ?? null,
+        ...(transferCountMap.get(requestedByReqId.get(reqId)?.tx_signature ?? "") ?? { inputCount: 1, outputCount: 1 }),
       };
     });
 
@@ -312,6 +332,7 @@ export async function GET() {
         serviceFeeBase: feeConfig.base,
         burnAmount: c.burn_amount?.toString() ?? null,
         protocolRevenue: c.protocol_revenue?.toString() ?? null,
+        ...(transferCountMap.get(requestedByReqId.get(rid)?.tx_signature ?? "") ?? { inputCount: 1, outputCount: 1 }),
       });
     }
 
@@ -407,6 +428,7 @@ export async function GET() {
         serviceFeeBase: req.service_fee_base || feeConfig.base,
         burnAmount: null,
         protocolRevenue: null,
+        ...(transferCountMap.get(req.tx_signature) ?? { inputCount: 1, outputCount: 1 }),
       });
     }
 

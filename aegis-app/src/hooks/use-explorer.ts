@@ -94,6 +94,10 @@ export interface RedemptionRecord {
   burnAmount: string | null;
   /** Protocol revenue retained in vault (from completion event) */
   protocolRevenue: string | null;
+  /** JoinSplit input count (nullifiers spent) */
+  inputCount: number;
+  /** JoinSplit output count (commitments created + redeem) */
+  outputCount: number;
 }
 
 // Backend transfer row from /api/transfers

@@ -392,11 +392,11 @@ export function WithdrawalRow({
         <Td>
           <div className="flex items-center gap-1.5">
             <span className="inline-flex items-center gap-1 text-caption text-green-400/70 bg-green-500/6 border border-green-500/12 px-2 py-0.5 rounded-full">
-              <span className="font-mono">1</span> in
+              <span className="font-mono">{r.inputCount}</span> in
             </span>
             <span className="text-gray/30">→</span>
             <span className="inline-flex items-center gap-1 text-caption text-btc/70 bg-btc/6 border border-btc/12 px-2 py-0.5 rounded-full">
-              <span className="font-mono">1</span> out
+              <span className="font-mono">{r.outputCount}</span> out
             </span>
           </div>
         </Td>
