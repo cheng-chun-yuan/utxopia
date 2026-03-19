@@ -1261,112 +1261,63 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                   onClick={() => setShowNoteSelector(!showNoteSelector)}
                   className="text-[12px] text-gray hover:text-purple transition-colors"
                 >
-                  {showNoteSelector ? "Done" : "Select notes"}
+                  {showNoteSelector ? "Done" : selectedNotes.length > 0
+                    ? `${selectedNotes.length} note${selectedNotes.length !== 1 ? "s" : ""} ›`
+                    : "Select notes"}
                 </button>
               )}
             </div>
           </div>
 
           {hasImportedNotes ? null : initialSecretPhrase && !hasImportedNotes && (importLoading || importError) ? (
-            /* When coming from ?note= link and scan failed or loading, don't show inbox notes */
+            /* When coming from ?note= link and scan failed or loading */
             importLoading ? (
-              <div className="p-4 rounded-[10px] bg-muted border border-gray/15 text-center mb-2">
-                <Loader2 className="w-5 h-5 animate-spin text-btc mx-auto mb-2" />
+              <div className="p-3 rounded-[10px] bg-muted border border-gray/15 text-center mb-2">
+                <Loader2 className="w-4 h-4 animate-spin text-btc mx-auto mb-1" />
                 <p className="text-caption text-gray">Scanning secret phrase...</p>
               </div>
             ) : (
-              <div className="p-4 rounded-[10px] bg-error/5 border border-error/20 text-center mb-2">
-                <AlertCircle className="w-5 h-5 text-error mx-auto mb-2" />
+              <div className="p-3 rounded-[10px] bg-error/5 border border-error/20 text-center mb-2">
                 <p className="text-body2 text-error mb-1">No notes found</p>
                 <p className="text-caption text-gray">{importError}</p>
                 <button
                   onClick={clearImportedNote}
-                  className="mt-3 text-caption text-purple hover:text-purple/80 underline transition-colors"
+                  className="mt-2 text-caption text-purple hover:text-purple/80 underline transition-colors"
                 >
                   Use wallet notes instead
                 </button>
               </div>
             )
           ) : showNoteSelector ? (
-            /* Full note selector with checkboxes */
+            /* Expanded note selector (pro user) */
             <div className="space-y-1.5 mb-2">
               {availableNotes.map((note) => (
                 <button
                   key={note.id}
                   onClick={() => toggleNoteSelection(note.id)}
                   className={cn(
-                    "w-full flex items-center gap-3 p-3 rounded-[10px] text-left transition-all",
-                    "border",
+                    "w-full flex items-center gap-3 p-2.5 rounded-[10px] text-left transition-all border",
                     selectedNoteIds.has(note.id)
                       ? "bg-purple/10 border-purple/30"
                       : "bg-muted border-gray/15 hover:border-gray/30"
                   )}
                 >
-                  <div
-                    className={cn(
-                      "w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors",
-                      selectedNoteIds.has(note.id)
-                        ? "bg-purple border-purple"
-                        : "border-gray/30"
-                    )}
-                  >
-                    {selectedNoteIds.has(note.id) && (
-                      <Check className="w-3 h-3 text-white" />
-                    )}
+                  <div className={cn(
+                    "w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors",
+                    selectedNoteIds.has(note.id) ? "bg-purple border-purple" : "border-gray/30"
+                  )}>
+                    {selectedNoteIds.has(note.id) && <Check className="w-2.5 h-2.5 text-white" />}
                   </div>
                   <div className="flex-1 flex justify-between items-center">
                     <span className="text-body2-semibold text-foreground">
                       {formatBtc(Number(note.amount))} {selectedToken.symbol}
                     </span>
-                    <span className="text-caption text-gray font-mono">
-                      leaf #{note.leafIndex}
-                    </span>
+                    <span className="text-caption text-gray font-mono">leaf #{note.leafIndex}</span>
                   </div>
                 </button>
               ))}
             </div>
-          ) : (
-            /* Collapsed summary — just total + note count */
-            <div className="mb-2">
-              {selectedNotes.length === 0 ? (
-                <div className="p-3 rounded-[10px] bg-muted border border-gray/15 text-center">
-                  <p className="text-caption text-gray">
-                    No notes selected — enter amounts below to auto-select
-                  </p>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setShowNoteSelector(true)}
-                  className="w-full p-3 rounded-[10px] bg-purple/5 border border-purple/20 hover:border-purple/40 transition-colors text-left"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-body2-semibold text-foreground">
-                          {formatBtc(totalInputSats)} {selectedToken.symbol}
-                        </span>
-                        {changeSats > 0 && totalOutputSats > 0 && (
-                          <span className="text-[11px] text-gray">
-                            {changeSats.toLocaleString()} change
-                          </span>
-                        )}
-                        {changeSats < 0 && (
-                          <span className="text-[11px] text-error">
-                            {(-changeSats).toLocaleString()} short
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-gray mt-0.5">Selected</p>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-caption text-gray">
-                      <span>{selectedNotes.length} note{selectedNotes.length !== 1 ? "s" : ""}</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </div>
-                  </div>
-                </button>
-              )}
-            </div>
-          )}
+          ) : null /* Notes auto-selected — no UI needed in default mode */}
 
           {/* Imported notes display — only show unspent */}
           {activeImportedNotes.length > 0 && (
