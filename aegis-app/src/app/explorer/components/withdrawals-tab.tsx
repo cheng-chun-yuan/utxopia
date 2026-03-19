@@ -390,9 +390,15 @@ export function WithdrawalRow({
           })()}
         </Td>
         <Td>
-          <span className="text-caption text-gray font-mono">
-            → {btcAddr ? truncate(btcAddr, 6, 4) : "BTC wallet"}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 text-caption text-green-400/70 bg-green-500/6 border border-green-500/12 px-2 py-0.5 rounded-full">
+              <span className="font-mono">1</span> in
+            </span>
+            <span className="text-gray/30">→</span>
+            <span className="inline-flex items-center gap-1 text-caption text-btc/70 bg-btc/6 border border-btc/12 px-2 py-0.5 rounded-full">
+              <span className="font-mono">1</span> out
+            </span>
+          </div>
         </Td>
         <Td>
           <span className="text-body2 text-foreground font-mono">
