@@ -192,7 +192,6 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
   const btcAddr = redemption.btcScript ? scriptToAddress(redemption.btcScript) : null;
 
   const amount = Number(redemption.amountSats);
-  // TODO(backward-compat): remove bps/base fallback once all redemptions have serviceFee populated
   const bps = redemption.serviceFeeBps ?? 0;
   const base = redemption.serviceFeeBase ?? 0;
   const serviceFee = redemption.serviceFee
@@ -201,177 +200,26 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
   const expectedSend = amount - serviceFee;
   const actualReceived = redemption.actualReceived ? Number(redemption.actualReceived) : null;
   const minerFee = actualReceived !== null ? expectedSend - actualReceived : null;
-  const protocolRevenue = minerFee !== null ? serviceFee - minerFee : null;
 
-  const btcLink = "text-[11px] text-btc/70 hover:text-btc flex items-center gap-1 transition-colors";
   const solLink = "text-[11px] text-purple-400/70 hover:text-purple-400 flex items-center gap-1 transition-colors";
+  const btcLink = "text-[11px] text-btc/70 hover:text-btc flex items-center gap-1 transition-colors";
 
-  const steps = [
-    {
-      title: "Request Redemption",
-      done: !isFailed && stepOrder >= 0,
-      active: stepOrder === 0 && !isFailed,
-      detail: (
-        <div className="space-y-2 text-xs">
-          {/* Tx link */}
-          {redemption.requestTxSignature ? (
-            <div className="flex items-center gap-1.5">
-              <a href={`https://explorer.solana.com/tx/${redemption.requestTxSignature}?cluster=devnet`} target="_blank" rel="noopener noreferrer" className={solLink}>
-                Request tx <ExternalLink className="w-2.5 h-2.5" />
-              </a>
-              <code className="font-mono text-[10px] text-gray/50">{truncate(redemption.requestTxSignature, 6, 4)}</code>
-              <CopyButton text={redemption.requestTxSignature} label="Request TX" variant="default" iconSize="sm" />
-            </div>
-          ) : redemption.pubkey ? (
-            <div className="flex items-center gap-1.5">
-              <a href={`https://explorer.solana.com/address/${redemption.pubkey}?cluster=devnet`} target="_blank" rel="noopener noreferrer" className={solLink}>
-                Request PDA <ExternalLink className="w-2.5 h-2.5" />
-              </a>
-              <code className="font-mono text-[10px] text-gray/50">{truncate(redemption.pubkey, 6, 4)}</code>
-              <CopyButton text={redemption.pubkey} label="PDA" variant="default" iconSize="sm" />
-            </div>
-          ) : null}
-          {/* Key-value rows */}
-          <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[11px]">
-            {btcAddr && <>
-              <span className="text-gray/50">Destination</span>
-              <div className="flex items-center gap-1.5">
-                <code className="font-mono text-foreground/80">{truncate(btcAddr, 10, 6)}</code>
-                <CopyButton text={btcAddr} label="BTC Address" variant="default" iconSize="sm" />
-              </div>
-            </>}
-            <span className="text-gray/50">Amount</span>
-            <span className="font-mono text-foreground/80">{fmtBtc(amount)} BTC</span>
-            <span className="text-gray/50">Service fee</span>
-            <span className="font-mono text-gray">{fmtBtc(serviceFee)} BTC</span>
-            <span className="text-gray/50">Est. receive</span>
-            <span className="font-mono text-foreground/80">{fmtBtc(expectedSend)} BTC</span>
-          </div>
-        </div>
-      ),
-    },
-    {
-      title: "Mark Processing",
-      done: !isFailed && stepOrder >= 1,
-      active: stepOrder === 1 && !isFailed,
-      detail: !isFailed && stepOrder >= 1 ? (
-        <div className="space-y-2 text-xs">
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gray/10 text-gray-light text-[10px]">
-            <CheckCircle2 className="w-2.5 h-2.5" /> Backend picked up
-          </span>
-          {redemption.processingTxSignature && (
-            <div className="flex items-center gap-1.5">
-              <a href={`https://explorer.solana.com/tx/${redemption.processingTxSignature}?cluster=devnet`} target="_blank" rel="noopener noreferrer" className={solLink}>
-                Processing tx <ExternalLink className="w-2.5 h-2.5" />
-              </a>
-              <code className="font-mono text-[10px] text-gray/50">{truncate(redemption.processingTxSignature, 6, 4)}</code>
-              <CopyButton text={redemption.processingTxSignature} label="Processing TX" variant="default" iconSize="sm" />
-            </div>
-          )}
-        </div>
-      ) : null,
-    },
-    {
-      title: "BTC Send (FROST Sign)",
-      done: !isFailed && stepOrder >= 3,
-      active: stepOrder === 2 && !isFailed,
-      detail: redemption.btcTxid ? (
-        <div className="space-y-2 text-xs">
-          {/* Tx link */}
-          {redemption.simulated ? (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gray/10 text-gray-light text-[10px]">
-              Simulated
-            </span>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <a href={`${getMempoolExplorerUrl()}/tx/${redemption.btcTxid}`} target="_blank" rel="noopener noreferrer" className={btcLink}>
-                BTC tx <ExternalLink className="w-2.5 h-2.5" />
-              </a>
-              <code className="font-mono text-[10px] text-gray/50">{truncate(redemption.btcTxid, 6, 4)}</code>
-              <CopyButton text={redemption.btcTxid} label="BTC TX" variant="default" iconSize="sm" />
-            </div>
-          )}
-          {/* Destination */}
-          {btcAddr && (
-            <div className="flex items-center gap-1.5 text-[11px]">
-              <span className="text-gray/50">→</span>
-              <code className="font-mono text-foreground/80">{truncate(btcAddr, 10, 6)}</code>
-              <CopyButton text={btcAddr} label="BTC Address" variant="default" iconSize="sm" />
-            </div>
-          )}
-          {/* BTC confirmation progress — only show when not yet completed on-chain */}
-          {!redemption.simulated && redemption.btcTxid && stepOrder < 4 && (
-            <BtcConfirmationStatus txid={redemption.btcTxid} />
-          )}
-          {/* Fee breakdown */}
-          <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[11px]">
-            {actualReceived !== null ? (<>
-              <span className="text-gray/50">Received</span>
-              <span className="font-mono text-foreground/80">{fmtBtc(actualReceived)} BTC</span>
-              {minerFee !== null && <>
-                <span className="text-gray/50">Miner fee</span>
-                <span className="font-mono text-gray">{fmtBtc(minerFee)} BTC</span>
-              </>}
-              <span className="text-gray/50">Service fee</span>
-              <span className="font-mono text-gray">{fmtBtc(serviceFee)} BTC</span>
-              {protocolRevenue !== null && <>
-                <span className="text-gray/50">Protocol gets</span>
-                <span className="font-mono text-gray">{fmtBtc(protocolRevenue)} BTC</span>
-              </>}
-            </>) : (
-              <>
-                <span className="text-gray/50">{redemption.btcTxid ? "Receive" : "Est. receive"}</span>
-                <span className="font-mono text-foreground/80">{fmtBtc(expectedSend)} BTC</span>
-              </>
-            )}
-          </div>
-        </div>
-      ) : null,
-    },
-    {
-      title: "Complete & Burn",
-      done: !isFailed && stepOrder >= 4,
-      active: false,
-      detail: !isFailed && stepOrder >= 4 ? (
-        <div className="space-y-2 text-xs">
-          {/* Tx link */}
-          {redemption.completeTxSignature && (
-            <div className="flex items-center gap-1.5">
-              <a href={`https://explorer.solana.com/tx/${redemption.completeTxSignature}?cluster=devnet`} target="_blank" rel="noopener noreferrer" className={solLink}>
-                Complete tx <ExternalLink className="w-2.5 h-2.5" />
-              </a>
-              <code className="font-mono text-[10px] text-gray/50">{truncate(redemption.completeTxSignature, 6, 4)}</code>
-              <CopyButton text={redemption.completeTxSignature} label="Complete TX" variant="default" iconSize="sm" />
-            </div>
-          )}
-          {/* Summary — use event-sourced burn/revenue if available, else compute */}
-          <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[11px]">
-            <span className="text-gray/50">Burned</span>
-            <span className="font-mono text-foreground/80">
-              {fmtBtc(redemption.burnAmount
-                ? Number(redemption.burnAmount)
-                : actualReceived !== null
-                  ? (actualReceived) + (minerFee ?? 0)
-                  : amount
-              )} BTC
-            </span>
-            {(() => {
-              const rev = redemption.protocolRevenue ? Number(redemption.protocolRevenue) : protocolRevenue;
-              return rev !== null && rev > 0 ? <>
-                <span className="text-gray/50">Fee retained</span>
-                <span className="font-mono text-gray">{fmtBtc(rev)} BTC</span>
-              </> : null;
-            })()}
-          </div>
-        </div>
-      ) : null,
-    },
-  ];
+  // Helper for tx links
+  const TxLink = ({ sig, label, href, linkClass }: { sig: string; label: string; href: string; linkClass: string }) => (
+    <div className="flex items-center gap-1.5">
+      <a href={href} target="_blank" rel="noopener noreferrer" className={linkClass}>
+        {label} <ExternalLink className="w-2.5 h-2.5" />
+      </a>
+      <code className="font-mono text-[10px] text-gray/50">{truncate(sig, 6, 4)}</code>
+      <CopyButton text={sig} label={label} variant="default" iconSize="sm" />
+    </div>
+  );
 
   return (
-    <div className="mx-4 my-3 px-4 py-3 rounded-[10px] bg-linear-to-b from-gray/6 to-transparent border border-gray/10 space-y-1">
+    <div className="mx-4 my-3 px-4 py-4 rounded-[12px] bg-gradient-to-b from-gray/6 to-transparent border border-gray/10 space-y-4">
+      {/* Error banner */}
       {isFailed && (
-        <div className="mb-2 px-3 py-1.5 rounded-[8px] bg-red-500/10 border border-red-500/20">
+        <div className="px-3 py-2 rounded-[8px] bg-red-500/10 border border-red-500/20">
           <div className="flex items-center gap-1.5">
             <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
             <span className="text-[11px] text-red-400 font-medium">
@@ -383,36 +231,111 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
           )}
         </div>
       )}
-      {steps.map((step, i) => (
-        <div key={step.title} className="flex gap-2.5">
-          <div className="flex flex-col items-center">
-            <div className={cn(
-              "w-5 h-5 rounded-full flex items-center justify-center shrink-0",
-              step.done ? "bg-green-500/15" : step.active ? "bg-gray/15" : "bg-gray/8"
-            )}>
-              {step.done ? (
-                <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
-              ) : step.active ? (
-                <Loader2 className="w-3 h-3 text-gray-light animate-spin" />
-              ) : (
-                <Clock className="w-2.5 h-2.5 text-gray/30" />
-              )}
+
+      {/* ── Input → Output Flow ── */}
+      <div className="flex items-stretch gap-3">
+        {/* INPUT side */}
+        <div className="flex-1 rounded-[10px] border border-purple-500/15 bg-purple-500/5 p-3">
+          <div className="text-[10px] uppercase tracking-wider text-purple-400/60 font-medium mb-2">Input (Burn)</div>
+          <div className="flex items-center gap-2">
+            <Image src="/zkbtc.png" alt="zkBTC" width={20} height={20} className="rounded-full shrink-0" />
+            <div>
+              <div className="text-sm font-semibold text-foreground font-mono">{fmtBtc(amount)} <span className="text-gray text-[11px]">zkBTC</span></div>
+              <div className="text-[10px] text-gray/50">Shielded note</div>
             </div>
-            {i < steps.length - 1 && (
-              <div className={cn("w-px flex-1 min-h-[12px]", step.done ? "bg-green-500/20" : "bg-gray/8")} />
-            )}
-          </div>
-          <div className={cn("pb-2 flex-1", i === steps.length - 1 && "pb-0")}>
-            <p className={cn(
-              "text-[11px] font-medium",
-              step.done ? "text-foreground" : step.active ? "text-foreground" : "text-gray/40"
-            )}>{step.title}</p>
-            {step.detail && (step.done || step.active) && (
-              <div className="mt-1">{step.detail}</div>
-            )}
           </div>
         </div>
-      ))}
+
+        {/* Arrow */}
+        <div className="flex items-center text-gray/30">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10h12m0 0l-4-4m4 4l-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </div>
+
+        {/* OUTPUT side */}
+        <div className="flex-1 rounded-[10px] border border-btc/15 bg-btc/5 p-3">
+          <div className="text-[10px] uppercase tracking-wider text-btc/60 font-medium mb-2">Output (BTC)</div>
+          <div className="flex items-center gap-2">
+            <BitcoinIcon className="w-5 h-5 text-btc shrink-0" />
+            <div>
+              <div className="text-sm font-semibold text-foreground font-mono">
+                {fmtBtc(actualReceived ?? expectedSend)} <span className="text-gray text-[11px]">BTC</span>
+              </div>
+              <div className="text-[10px] text-gray/50 flex items-center gap-1">
+                {btcAddr ? (
+                  <>→ {truncate(btcAddr, 8, 4)} <CopyButton text={btcAddr} label="Address" variant="default" iconSize="sm" /></>
+                ) : "BTC wallet"}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Fee Summary ── */}
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="rounded-[8px] bg-muted/50 border border-gray/10 px-2 py-1.5">
+          <div className="text-[10px] text-gray/50">Service Fee</div>
+          <div className="text-[11px] font-mono text-foreground/80">{serviceFee > 0 ? fmtBtc(serviceFee) : "—"}</div>
+        </div>
+        <div className="rounded-[8px] bg-muted/50 border border-gray/10 px-2 py-1.5">
+          <div className="text-[10px] text-gray/50">Miner Fee</div>
+          <div className="text-[11px] font-mono text-foreground/80">{minerFee !== null && minerFee > 0 ? fmtBtc(minerFee) : "—"}</div>
+        </div>
+        <div className="rounded-[8px] bg-muted/50 border border-gray/10 px-2 py-1.5">
+          <div className="text-[10px] text-gray/50">You Receive</div>
+          <div className="text-[11px] font-mono text-foreground font-semibold">{fmtBtc(actualReceived ?? expectedSend)}</div>
+        </div>
+      </div>
+
+      {/* ── Step Timeline ── */}
+      <div className="border-t border-gray/8 pt-3">
+        <div className="text-[10px] uppercase tracking-wider text-gray/40 font-medium mb-2">Progress</div>
+        <div className="flex items-center gap-1">
+          {[
+            { label: "Request", done: !isFailed && stepOrder >= 0, sig: redemption.requestTxSignature, href: (s: string) => `https://explorer.solana.com/tx/${s}?cluster=devnet`, linkClass: solLink },
+            { label: "Processing", done: !isFailed && stepOrder >= 1, sig: redemption.processingTxSignature, href: (s: string) => `https://explorer.solana.com/tx/${s}?cluster=devnet`, linkClass: solLink },
+            { label: "BTC Sent", done: !isFailed && stepOrder >= 3, sig: redemption.btcTxid, href: (s: string) => `${getMempoolExplorerUrl()}/tx/${s}`, linkClass: btcLink },
+            { label: "Complete", done: !isFailed && stepOrder >= 4, sig: redemption.completeTxSignature, href: (s: string) => `https://explorer.solana.com/tx/${s}?cluster=devnet`, linkClass: solLink },
+          ].map((step, i, arr) => (
+            <Fragment key={step.label}>
+              <div className="flex flex-col items-center gap-1 flex-1">
+                <div className={cn(
+                  "w-6 h-6 rounded-full flex items-center justify-center",
+                  step.done ? "bg-green-500/15" : "bg-gray/8"
+                )}>
+                  {step.done ? (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
+                  ) : i === arr.findIndex(s => !s.done) && !isFailed ? (
+                    <Loader2 className="w-3 h-3 text-gray-light animate-spin" />
+                  ) : (
+                    <Clock className="w-2.5 h-2.5 text-gray/30" />
+                  )}
+                </div>
+                <span className={cn("text-[9px] font-medium text-center leading-tight", step.done ? "text-foreground/70" : "text-gray/30")}>
+                  {step.label}
+                </span>
+                {step.done && step.sig && (
+                  <div className="flex items-center gap-0.5">
+                    <a href={step.href(step.sig)} target="_blank" rel="noopener noreferrer" className="text-[9px] text-purple-400/60 hover:text-purple-400">
+                      {truncate(step.sig, 4, 3)}
+                    </a>
+                    <CopyButton text={step.sig} label={step.label} variant="default" iconSize="sm" />
+                  </div>
+                )}
+              </div>
+              {i < arr.length - 1 && (
+                <div className={cn("h-px w-4 mt-[-16px]", step.done ? "bg-green-500/30" : "bg-gray/10")} />
+              )}
+            </Fragment>
+          ))}
+        </div>
+      </div>
+
+      {/* BTC confirmation status (if not yet complete) */}
+      {!redemption.simulated && redemption.btcTxid && stepOrder < 4 && (
+        <div className="border-t border-gray/8 pt-3">
+          <BtcConfirmationStatus txid={redemption.btcTxid} />
+        </div>
+      )}
     </div>
   );
 }
