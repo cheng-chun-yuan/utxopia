@@ -427,11 +427,10 @@ export default function VaultPage() {
               {/* ═══ Action Buttons — circular Phantom-style ═══ */}
               <div className="flex items-center justify-center gap-5 sm:gap-8 mb-6">
                 {[
-                  { icon: <ArrowDownToLine className="w-5 h-5" />, label: "Deposit", href: "/vault/deposit", color: "text-btc" },
+                  { icon: <ArrowDownToLine className="w-5 h-5" />, label: "Deposit", href: "/vault/deposit", color: "text-green-400" },
                   { icon: <Send className="w-5 h-5" />, label: "Send", href: "/vault/pay", color: "text-privacy" },
                   { icon: <Wallet className="w-5 h-5" />, label: "Notes", href: "/vault/activity", color: "text-privacy" },
-                  { icon: <Search className="w-5 h-5" />, label: "Explorer", href: "/explorer", color: "text-purple-400" },
-                ].filter((a) => !isViewOnly || a.label === "Notes" || a.label === "Explorer")
+                ].filter((a) => !isViewOnly || a.label === "Notes")
                   .map((action) => (
                   <Link
                     key={action.label}
