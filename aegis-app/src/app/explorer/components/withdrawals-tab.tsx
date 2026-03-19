@@ -440,7 +440,7 @@ export function WithdrawalRow({
         onClick={onToggle}
       >
         <Td>
-          <TypeBadge kind="unshield" />
+          <TypeBadge kind="withdraw" />
         </Td>
         <Td>
           <WithdrawalStatusBadge status={getEffectiveStatus(r)} />

@@ -195,11 +195,12 @@ function TokenCheckboxDropdown({
 
 // --- Type Badge (unified row first column) ---
 
-export function TypeBadge({ kind }: { kind: "shield" | "transfer" | "unshield" }) {
+export function TypeBadge({ kind }: { kind: "shield" | "transfer" | "unshield" | "withdraw" }) {
   const config = {
     shield: { label: "Shield", color: "text-green-400", bg: "bg-green-500/10 border-green-500/20", icon: <ArrowDownToLine className="w-3 h-3" /> },
     transfer: { label: "Transfer", color: "text-purple-400", bg: "bg-purple-500/10 border-purple-500/20", icon: <ArrowUpDown className="w-3 h-3" /> },
     unshield: { label: "Unshield", color: "text-orange-400", bg: "bg-orange-500/10 border-orange-500/20", icon: <ArrowUpFromLine className="w-3 h-3" /> },
+    withdraw: { label: "Withdraw", color: "text-btc", bg: "bg-btc/10 border-btc/20", icon: <ArrowUpFromLine className="w-3 h-3" /> },
   }[kind];
 
   return (
