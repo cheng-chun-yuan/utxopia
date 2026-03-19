@@ -450,18 +450,15 @@ export function WithdrawalRow({
             const status = getEffectiveStatus(r);
             const order = WITHDRAWAL_STATUS_ORDER[status] ?? 0;
             // Show most relevant tx: complete > processing > request
-            const tx = order >= 4 && r.completeTxSignature
-              ? { sig: r.completeTxSignature, label: "Complete" }
+            const sig = order >= 4 && r.completeTxSignature
+              ? r.completeTxSignature
               : order >= 1 && r.processingTxSignature
-                ? { sig: r.processingTxSignature, label: "Processing" }
-                : r.requestTxSignature
-                  ? { sig: r.requestTxSignature, label: "Request" }
-                  : null;
-            return tx ? (
+                ? r.processingTxSignature
+                : r.requestTxSignature ?? null;
+            return sig ? (
               <div className="flex items-center gap-1.5">
-                <span className="text-[9px] text-gray/50 w-[50px]">{tx.label}</span>
-                <code className="text-caption font-mono text-foreground">{truncate(tx.sig, 6, 4)}</code>
-                <CopyButton text={tx.sig} label="Tx" variant="default" iconSize="sm" />
+                <code className="text-caption font-mono text-foreground">{truncate(sig, 6, 4)}</code>
+                <CopyButton text={sig} label="Tx" variant="default" iconSize="sm" />
               </div>
             ) : (
               <div className="flex items-center gap-1.5">
