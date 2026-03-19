@@ -47,7 +47,7 @@ pub struct AppState {
     /// Duplicate tracker for preventing double-signing
     pub duplicate_tracker: Option<Arc<DuplicateTracker>>,
     /// Session-level verification data (session_id -> (requester, nonce)), for recording after round2
-    pub session_verifications: RwLock<HashMap<uuid::Uuid, (String, u64)>>,
+    pub session_verifications: RwLock<HashMap<uuid::Uuid, (String, u64, Instant)>>,
 }
 
 impl AppState {
@@ -304,7 +304,7 @@ async fn round1_handler(
                 if let Some(ref verification) = request.solana_verification {
                     if let SolanaVerification::Withdrawal { ref requester, nonce, .. } = verification {
                         state.session_verifications.write().await
-                            .insert(request.session_id, (requester.clone(), *nonce));
+                            .insert(request.session_id, (requester.clone(), *nonce, Instant::now()));
                     }
                 }
             }
@@ -369,7 +369,7 @@ async fn round2_handler(
     if result.is_ok() {
         if let Some(ref tracker) = state.duplicate_tracker {
             let verifications = state.session_verifications.read().await;
-            if let Some((requester, nonce)) = verifications.get(&session_id) {
+            if let Some((requester, nonce, _created_at)) = verifications.get(&session_id) {
                 tracker.record(requester, *nonce);
                 state.audit.log_signing_complete(
                     &session_id.to_string(),

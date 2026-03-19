@@ -32,6 +32,7 @@ pub mod server;
 pub mod signing;
 pub mod solana_verifier;
 pub mod types;
+pub mod utils;
 
 pub use audit::AuditLog;
 pub use dkg::{DkgError, DkgParticipant};

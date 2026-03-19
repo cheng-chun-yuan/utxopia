@@ -18,6 +18,8 @@ use bitcoin::{
 };
 use std::collections::HashSet;
 use std::sync::Mutex;
+
+use crate::utils::recover_mutex;
 use thiserror::Error;
 
 use crate::solana_verifier::SolanaVerifier;
@@ -144,10 +146,7 @@ impl DuplicateTracker {
         let key = format!("{}:{}", requester, nonce);
         self.signed
             .lock()
-            .unwrap_or_else(|poisoned| {
-                tracing::warn!("DuplicateTracker mutex was poisoned, recovering");
-                poisoned.into_inner()
-            })
+            .unwrap_or_else(recover_mutex)
             .contains(&key)
     }
 
@@ -156,10 +155,7 @@ impl DuplicateTracker {
         let key = format!("{}:{}", requester, nonce);
         self.signed
             .lock()
-            .unwrap_or_else(|poisoned| {
-                tracing::warn!("DuplicateTracker mutex was poisoned, recovering");
-                poisoned.into_inner()
-            })
+            .unwrap_or_else(recover_mutex)
             .insert(key);
     }
 }
@@ -327,9 +323,9 @@ impl SigningPolicy {
                     );
                 }
                 Err(e) => {
-                    return Err(PolicyError::SolanaRpcError(format!(
-                        "failed to fetch PoolState for fee validation: {:?}", e
-                    )));
+                    tracing::warn!("failed to fetch PoolState for fee validation: {:?} — proceeding with PDA fee (authoritative)", e);
+                    // Non-fatal: PDA service_fee is the user's committed fee at redemption time,
+                    // PoolState is just a sanity cross-check. RPC flakiness shouldn't block signing.
                 }
             }
         }
@@ -984,5 +980,137 @@ mod tests {
 
         let result = policy.verify(&request).await;
         assert!(matches!(result, Err(PolicyError::DestinationNotAllowed { .. })));
+    }
+
+    #[tokio::test]
+    async fn test_verification_required_when_verifier_configured() {
+        // When SolanaVerifier is configured but request has no solana_verification,
+        // policy should reject with VerificationRequired
+        let (tx, prevout_txouts, sighash_hex) = build_test_tx();
+        let raw_tx_hex = hex::encode(bitcoin::consensus::encode::serialize(&tx));
+
+        let dest_address = Address::from_script(
+            &tx.output[0].script_pubkey,
+            Network::Testnet,
+        )
+        .unwrap()
+        .to_string();
+
+        let verifier = crate::solana_verifier::SolanaVerifier::new(
+            "http://127.0.0.1:1".to_string(), // unreachable — won't be called
+            "11111111111111111111111111111111",
+        ).unwrap();
+
+        let policy = SigningPolicy::new(
+            None,
+            vec![dest_address],
+            1_000_000_000,
+            100_000,
+            false,
+            Network::Testnet,
+        ).with_solana_verifier(verifier);
+
+        let request = Round1Request {
+            session_id: uuid::Uuid::new_v4(),
+            sighash: sighash_hex,
+            tweak: None,
+            signing_context: Some(SigningContext {
+                raw_tx_hex,
+                prevouts: vec![PrevoutInfo {
+                    txid: "0".repeat(64),
+                    vout: 0,
+                    amount_sats: prevout_txouts[0].value.to_sat(),
+                    script_pubkey_hex: hex::encode(prevout_txouts[0].script_pubkey.as_bytes()),
+                }],
+                input_index: 0,
+            }),
+            merkle_root: None,
+            solana_verification: None, // <-- missing verification data
+        };
+
+        let result = policy.verify(&request).await;
+        assert!(
+            matches!(result, Err(PolicyError::VerificationRequired)),
+            "should reject when verifier configured but no verification data: {:?}",
+            result
+        );
+    }
+
+    #[tokio::test]
+    async fn test_no_verifier_allows_no_verification_data() {
+        // When SolanaVerifier is NOT configured, missing solana_verification is fine
+        let (tx, prevout_txouts, sighash_hex) = build_test_tx();
+        let raw_tx_hex = hex::encode(bitcoin::consensus::encode::serialize(&tx));
+
+        let dest_address = Address::from_script(
+            &tx.output[0].script_pubkey,
+            Network::Testnet,
+        )
+        .unwrap()
+        .to_string();
+
+        let policy = SigningPolicy::new(
+            None,
+            vec![dest_address],
+            1_000_000_000,
+            100_000,
+            false,
+            Network::Testnet,
+        );
+        // No .with_solana_verifier()
+
+        let request = Round1Request {
+            session_id: uuid::Uuid::new_v4(),
+            sighash: sighash_hex,
+            tweak: None,
+            signing_context: Some(SigningContext {
+                raw_tx_hex,
+                prevouts: vec![PrevoutInfo {
+                    txid: "0".repeat(64),
+                    vout: 0,
+                    amount_sats: prevout_txouts[0].value.to_sat(),
+                    script_pubkey_hex: hex::encode(prevout_txouts[0].script_pubkey.as_bytes()),
+                }],
+                input_index: 0,
+            }),
+            merkle_root: None,
+            solana_verification: None,
+        };
+
+        let result = policy.verify(&request).await;
+        assert!(result.is_ok(), "should pass without verifier: {:?}", result.err());
+    }
+
+    #[test]
+    fn test_duplicate_tracker_records_and_detects() {
+        let tracker = DuplicateTracker::new(HashSet::new());
+        assert!(!tracker.is_signed("requester-1", 42));
+
+        tracker.record("requester-1", 42);
+        assert!(tracker.is_signed("requester-1", 42));
+
+        // Different requester or nonce should not match
+        assert!(!tracker.is_signed("requester-2", 42));
+        assert!(!tracker.is_signed("requester-1", 43));
+    }
+
+    #[test]
+    fn test_duplicate_tracker_with_initial_signed() {
+        let mut initial = HashSet::new();
+        initial.insert("req-a:1".to_string());
+        initial.insert("req-b:2".to_string());
+        let tracker = DuplicateTracker::new(initial);
+        assert!(tracker.is_signed("req-a", 1));
+        assert!(tracker.is_signed("req-b", 2));
+        assert!(!tracker.is_signed("req-a", 2));
+    }
+
+    #[test]
+    fn test_policy_error_display() {
+        let err = PolicyError::VerificationRequired;
+        assert!(err.to_string().contains("POLICY_VERIFICATION_REQUIRED"));
+
+        let err = PolicyError::ContextRequired;
+        assert!(err.to_string().contains("POLICY_CONTEXT_REQUIRED"));
     }
 }

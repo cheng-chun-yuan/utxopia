@@ -3,6 +3,7 @@
 //! Implements the two-round FROST signing protocol for threshold Schnorr signatures.
 
 use crate::crypto::compute_commitment_digest;
+use crate::utils::{recover_read, recover_write};
 use crate::types::{
     Round1Request, Round1Response, Round2Request, Round2Response,
     VerifyCommitmentsRequest, VerifyCommitmentsResponse,
@@ -168,10 +169,7 @@ impl FrostSigner {
         };
 
         {
-            let mut sessions = self.sessions.write().unwrap_or_else(|p| {
-                tracing::warn!("signing sessions RwLock poisoned, recovering");
-                p.into_inner()
-            });
+            let mut sessions = self.sessions.write().unwrap_or_else(recover_write);
             sessions.insert(request.session_id, session);
         }
 
@@ -204,10 +202,7 @@ impl FrostSigner {
 
         // Get and validate session
         let session = {
-            let mut sessions = self.sessions.write().unwrap_or_else(|p| {
-                tracing::warn!("signing sessions RwLock poisoned, recovering");
-                p.into_inner()
-            });
+            let mut sessions = self.sessions.write().unwrap_or_else(recover_write);
             let session = sessions
                 .get_mut(&request.session_id)
                 .ok_or(SigningError::SessionNotFound(request.session_id))?;
@@ -291,10 +286,7 @@ impl FrostSigner {
     ) -> Result<VerifyCommitmentsResponse, SigningError> {
         // Verify session exists (ensures this signer participated in round 1)
         {
-            let sessions = self.sessions.read().unwrap_or_else(|p| {
-                tracing::warn!("signing sessions RwLock poisoned, recovering");
-                p.into_inner()
-            });
+            let sessions = self.sessions.read().unwrap_or_else(recover_read);
             if !sessions.contains_key(&request.session_id) {
                 return Err(SigningError::SessionNotFound(request.session_id));
             }
@@ -318,19 +310,13 @@ impl FrostSigner {
     /// Cleanup old sessions (older than 5 minutes)
     pub fn cleanup_sessions(&self) {
         let timeout = std::time::Duration::from_secs(300);
-        let mut sessions = self.sessions.write().unwrap_or_else(|p| {
-                tracing::warn!("signing sessions RwLock poisoned, recovering");
-                p.into_inner()
-            });
+        let mut sessions = self.sessions.write().unwrap_or_else(recover_write);
         sessions.retain(|_, session| session.created_at.elapsed() < timeout);
     }
 
     /// Get number of active sessions
     pub fn active_sessions(&self) -> usize {
-        self.sessions.read().unwrap_or_else(|p| {
-                tracing::warn!("signing sessions RwLock poisoned, recovering");
-                p.into_inner()
-            }).len()
+        self.sessions.read().unwrap_or_else(recover_read).len()
     }
 }
 
