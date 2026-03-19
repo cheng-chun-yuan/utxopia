@@ -463,7 +463,13 @@ impl SqliteDepositStore {
     /// Convert a database row to DepositRecord
     fn row_to_record(row: &rusqlite::Row) -> rusqlite::Result<DepositRecord> {
         let status_str: String = row.get("status")?;
-        let status = status_str.parse().unwrap_or(DepositStatus::Pending);
+        let status = match status_str.parse() {
+            Ok(s) => s,
+            Err(_) => {
+                tracing::warn!(raw = %status_str, "unknown deposit status in DB, defaulting to Pending");
+                DepositStatus::Pending
+            }
+        };
 
         Ok(DepositRecord {
             id: row.get("id")?,

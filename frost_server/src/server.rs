@@ -609,6 +609,7 @@ fn policy_error(err: crate::policy::PolicyError) -> (StatusCode, Json<ErrorRespo
         PolicyError::CrossValidationFailed(_) => ("POLICY_CROSS_VALIDATION_FAILED", StatusCode::FORBIDDEN),
         PolicyError::AlreadyPaid { .. } => ("POLICY_ALREADY_PAID", StatusCode::FORBIDDEN),
         PolicyError::InvalidAddress { .. } => ("POLICY_INVALID_ADDRESS", StatusCode::FORBIDDEN),
+        PolicyError::VerificationRequired => ("POLICY_VERIFICATION_REQUIRED", StatusCode::FORBIDDEN),
     };
     (status, Json(ErrorResponse::new(code, err.to_string())))
 }

@@ -68,7 +68,10 @@ impl DkgParticipant {
         }
 
         {
-            let ceremonies = self.ceremonies.read().unwrap();
+            let ceremonies = self.ceremonies.read().unwrap_or_else(|p| {
+                tracing::warn!("DKG ceremonies RwLock poisoned, recovering");
+                p.into_inner()
+            });
             if ceremonies.contains_key(&request.ceremony_id) {
                 return Err(DkgError::CeremonyAlreadyExists(request.ceremony_id));
             }
@@ -100,7 +103,10 @@ impl DkgParticipant {
             created_at: std::time::Instant::now(),
         };
 
-        self.ceremonies.write().unwrap().insert(request.ceremony_id, ceremony);
+        self.ceremonies.write().unwrap_or_else(|p| {
+                tracing::warn!("DKG ceremonies RwLock poisoned, recovering");
+                p.into_inner()
+            }).insert(request.ceremony_id, ceremony);
 
         tracing::info!(
             signer_id = self.signer_id,
@@ -118,7 +124,10 @@ impl DkgParticipant {
     /// Round 2: Generate secret shares, encrypt each for its target signer
     pub fn round2(&self, request: &DkgRound2Request) -> Result<DkgRound2Response, DkgError> {
         let (round1_secret, x25519_private) = {
-            let ceremonies = self.ceremonies.read().unwrap();
+            let ceremonies = self.ceremonies.read().unwrap_or_else(|p| {
+                tracing::warn!("DKG ceremonies RwLock poisoned, recovering");
+                p.into_inner()
+            });
             let ceremony = ceremonies
                 .get(&request.ceremony_id)
                 .ok_or(DkgError::CeremonyNotFound(request.ceremony_id))?;
@@ -206,7 +215,10 @@ impl DkgParticipant {
         password: &str,
     ) -> Result<DkgFinalizeResponse, DkgError> {
         let (round2_secret, x25519_private) = {
-            let ceremonies = self.ceremonies.read().unwrap();
+            let ceremonies = self.ceremonies.read().unwrap_or_else(|p| {
+                tracing::warn!("DKG ceremonies RwLock poisoned, recovering");
+                p.into_inner()
+            });
             let ceremony = ceremonies
                 .get(&request.ceremony_id)
                 .ok_or(DkgError::CeremonyNotFound(request.ceremony_id))?;
@@ -270,7 +282,10 @@ impl DkgParticipant {
             .map_err(|e| DkgError::FrostError(e.to_string()))?;
         let x_only = hex::encode(&group_pubkey_bytes[1..33]);
 
-        self.ceremonies.write().unwrap().remove(&request.ceremony_id);
+        self.ceremonies.write().unwrap_or_else(|p| {
+                tracing::warn!("DKG ceremonies RwLock poisoned, recovering");
+                p.into_inner()
+            }).remove(&request.ceremony_id);
 
         tracing::info!(
             signer_id = self.signer_id,
@@ -288,7 +303,10 @@ impl DkgParticipant {
 
     pub fn cleanup_ceremonies(&self) {
         let timeout = std::time::Duration::from_secs(600); // 10 minutes
-        let mut ceremonies = self.ceremonies.write().unwrap();
+        let mut ceremonies = self.ceremonies.write().unwrap_or_else(|p| {
+                tracing::warn!("DKG ceremonies RwLock poisoned, recovering");
+                p.into_inner()
+            });
         ceremonies.retain(|_, ceremony| ceremony.created_at.elapsed() < timeout);
     }
 }

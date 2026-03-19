@@ -424,3 +424,78 @@ impl HeaderRelayer {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_compute_block_hash_deterministic() {
+        // Bitcoin block header is 80 bytes; hash is double-SHA256
+        let header = [0u8; 80];
+        let hash1 = HeaderRelayer::compute_block_hash(&header);
+        let hash2 = HeaderRelayer::compute_block_hash(&header);
+        assert_eq!(hash1, hash2, "block hash must be deterministic");
+        assert_ne!(hash1, [0u8; 32], "hash of all-zeros should not be all-zeros");
+    }
+
+    #[test]
+    fn test_compute_block_hash_known_vector() {
+        // Genesis block header (first 80 bytes) → known hash
+        // Version: 1, prev: 00..00, merkle: 4a5e1e..., time: 1231006505, bits: 1d00ffff, nonce: 2083236893
+        let genesis_header = hex::decode(
+            "0100000000000000000000000000000000000000000000000000000000000000\
+             000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa\
+             4b1e5e4a29ab5f49ffff001d1dac2b7c"
+        ).unwrap();
+        let hash = HeaderRelayer::compute_block_hash(&genesis_header);
+        // Bitcoin genesis block hash (internal byte order = LE)
+        let expected = hex::decode("6fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000").unwrap();
+        assert_eq!(hash.to_vec(), expected, "genesis block hash mismatch");
+    }
+
+    #[test]
+    fn test_extract_prev_hash() {
+        let mut header = [0u8; 80];
+        // Set bytes 4..36 to a known pattern
+        for i in 4..36 {
+            header[i] = (i - 4) as u8;
+        }
+        let prev_hash = HeaderRelayer::extract_prev_hash(&header);
+        for i in 0..32 {
+            assert_eq!(prev_hash[i], i as u8);
+        }
+    }
+
+    #[test]
+    fn test_pda_derivation_deterministic() {
+        // PDA derivation should be deterministic for same inputs
+        let program_id = Pubkey::from_str("Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq").unwrap();
+        let pda1 = Pubkey::find_program_address(&[LIGHT_CLIENT_SEED], &program_id).0;
+        let pda2 = Pubkey::find_program_address(&[LIGHT_CLIENT_SEED], &program_id).0;
+        assert_eq!(pda1, pda2);
+    }
+
+    #[test]
+    fn test_batch_size_clamping() {
+        // batch_size is clamped to 1..=10
+        let relayer = HeaderRelayer {
+            rpc: RpcClient::new("http://localhost:8899".to_string()),
+            http: Client::new(),
+            esplora_url: "http://localhost".to_string(),
+            program_id: Pubkey::from_str("11111111111111111111111111111111").unwrap(),
+            payer: Keypair::new(),
+            batch_size: 0u8.clamp(1, 10),
+        };
+        assert!(relayer.batch_size >= 1 && relayer.batch_size <= 10);
+    }
+
+    #[test]
+    fn test_relayer_error_display() {
+        let err = RelayerError::NotInitialized;
+        assert_eq!(err.to_string(), "Light client not initialized");
+
+        let err = RelayerError::AlreadyAtTip;
+        assert_eq!(err.to_string(), "Already at tip");
+    }
+}

@@ -308,6 +308,41 @@ impl FrostClient {
             .await
     }
 
+    /// Build a Round1Request from shared parameters
+    fn build_round1_request(
+        session_id: &str,
+        sighash_hex: &str,
+        tweak_hex: &Option<String>,
+        signing_context: &Option<SigningContext>,
+        merkle_root_hex: &Option<String>,
+        solana_verification: &Option<SolanaVerification>,
+    ) -> Round1Request {
+        Round1Request {
+            session_id: session_id.to_string(),
+            sighash: sighash_hex.to_string(),
+            tweak: tweak_hex.clone(),
+            signing_context: signing_context.clone(),
+            merkle_root: merkle_root_hex.clone(),
+            solana_verification: solana_verification.clone(),
+        }
+    }
+
+    /// Send round1 request to a signer URL, collecting results into accumulators
+    async fn try_round1_signer(
+        &self,
+        url: &str,
+        request: &Round1Request,
+        commitments: &mut BTreeMap<u16, String>,
+        identifier_map: &mut BTreeMap<u16, String>,
+        participating_urls: &mut Vec<String>,
+    ) -> Result<(), FrostError> {
+        let response: Round1Response = self.post(url, "/round1", request).await?;
+        commitments.insert(response.signer_id, response.commitment);
+        identifier_map.insert(response.signer_id, response.frost_identifier);
+        participating_urls.push(url.to_string());
+        Ok(())
+    }
+
     /// Round 1 with retry: try all N signers, retry failures once with 1s backoff
     async fn round1_with_retry(
         &self,
@@ -323,23 +358,15 @@ impl FrostClient {
         let mut participating_urls: Vec<String> = Vec::new();
         let mut failed_urls: Vec<String> = Vec::new();
 
+        let request = Self::build_round1_request(
+            session_id, sighash_hex, tweak_hex, signing_context, merkle_root_hex, solana_verification,
+        );
+
         // First pass: try all signers
         for url in &self.signer_urls {
-            let request = Round1Request {
-                session_id: session_id.to_string(),
-                sighash: sighash_hex.to_string(),
-                tweak: tweak_hex.clone(),
-                signing_context: signing_context.clone(),
-                merkle_root: merkle_root_hex.clone(),
-                solana_verification: solana_verification.clone(),
-            };
-
-            match self.post::<_, Round1Response>(url, "/round1", &request).await {
-                Ok(response) => {
-                    tracing::debug!(signer_id = response.signer_id, url, "round 1 OK");
-                    commitments.insert(response.signer_id, response.commitment);
-                    identifier_map.insert(response.signer_id, response.frost_identifier);
-                    participating_urls.push(url.clone());
+            match self.try_round1_signer(url, &request, &mut commitments, &mut identifier_map, &mut participating_urls).await {
+                Ok(()) => {
+                    tracing::debug!(url, "round 1 OK");
                 }
                 Err(e) => {
                     tracing::warn!(url, error = %e, "round 1 failed, will retry");
@@ -362,21 +389,9 @@ impl FrostClient {
                     break;
                 }
 
-                let request = Round1Request {
-                    session_id: session_id.to_string(),
-                    sighash: sighash_hex.to_string(),
-                    tweak: tweak_hex.clone(),
-                    signing_context: signing_context.clone(),
-                    merkle_root: merkle_root_hex.clone(),
-                    solana_verification: solana_verification.clone(),
-                };
-
-                match self.post::<_, Round1Response>(url, "/round1", &request).await {
-                    Ok(response) => {
-                        tracing::info!(signer_id = response.signer_id, url, "round 1 retry OK");
-                        commitments.insert(response.signer_id, response.commitment);
-                        identifier_map.insert(response.signer_id, response.frost_identifier);
-                        participating_urls.push(url.clone());
+                match self.try_round1_signer(url, &request, &mut commitments, &mut identifier_map, &mut participating_urls).await {
+                    Ok(()) => {
+                        tracing::info!(url, "round 1 retry OK");
                     }
                     Err(e) => {
                         tracing::warn!(url, error = %e, "round 1 retry also failed");
@@ -619,5 +634,71 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let result = rt.block_on(client.sign_sighash(&[0u8; 32], None, None, None));
         assert!(matches!(result, Err(FrostError::InsufficientSigners { .. })));
+    }
+
+    #[test]
+    fn test_build_round1_request() {
+        let session_id = "test-session";
+        let sighash = "aa".repeat(32);
+        let tweak = Some("bb".repeat(32));
+        let request = FrostClient::build_round1_request(
+            session_id, &sighash, &tweak, &None, &None, &None,
+        );
+        assert_eq!(request.session_id, "test-session");
+        assert_eq!(request.sighash, sighash);
+        assert_eq!(request.tweak, tweak);
+        assert!(request.signing_context.is_none());
+        assert!(request.merkle_root.is_none());
+        assert!(request.solana_verification.is_none());
+    }
+
+    #[test]
+    fn test_build_round1_request_with_context() {
+        let ctx = SigningContext {
+            raw_tx_hex: "0200000001".to_string(),
+            prevouts: vec![],
+            input_index: 0,
+        };
+        let request = FrostClient::build_round1_request(
+            "s1", "ab".repeat(32).as_str(), &None, &Some(ctx.clone()), &None, &None,
+        );
+        assert!(request.signing_context.is_some());
+        assert_eq!(request.signing_context.unwrap().raw_tx_hex, "0200000001");
+    }
+
+    #[tokio::test]
+    async fn test_round1_with_retry_no_signers() {
+        let client = FrostClient::new(vec![], 2, None);
+        let result = client.round1_with_retry(
+            "session-1", &"aa".repeat(32), &None, &None, &None, &None,
+        ).await;
+        assert!(matches!(result, Err(FrostError::InsufficientSigners { got: 0, need: 2 })));
+    }
+
+    #[tokio::test]
+    async fn test_round1_with_retry_unreachable_signers() {
+        // Signers at invalid URLs should fail gracefully and return InsufficientSigners
+        let client = FrostClient::new(
+            vec![
+                "http://127.0.0.1:59999".to_string(),
+                "http://127.0.0.1:59998".to_string(),
+            ],
+            2,
+            None,
+        );
+        let result = client.round1_with_retry(
+            "session-2", &"bb".repeat(32), &None, &None, &None, &None,
+        ).await;
+        assert!(matches!(result, Err(FrostError::InsufficientSigners { .. })));
+    }
+
+    #[test]
+    fn test_frost_error_display() {
+        let err = FrostError::InsufficientSigners { got: 1, need: 2 };
+        assert!(err.to_string().contains("got 1"));
+        assert!(err.to_string().contains("need 2"));
+
+        let err = FrostError::InvalidSignatureLength(32);
+        assert!(err.to_string().contains("32"));
     }
 }

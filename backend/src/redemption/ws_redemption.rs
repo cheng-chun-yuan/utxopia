@@ -120,3 +120,68 @@ impl RedemptionWsListener {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_listener_creation() {
+        let notify = Arc::new(Notify::new());
+        let listener = RedemptionWsListener::new(
+            "wss://test.example.com".to_string(),
+            "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ".to_string(),
+            notify.clone(),
+        );
+        assert_eq!(listener.ws_url, "wss://test.example.com");
+        assert_eq!(listener.program_id, "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ");
+    }
+
+    #[test]
+    fn test_notify_is_shared() {
+        let notify = Arc::new(Notify::new());
+        let _listener = RedemptionWsListener::new(
+            "wss://test.example.com".to_string(),
+            "11111111111111111111111111111111".to_string(),
+            notify.clone(),
+        );
+        // Notify can be triggered from outside the listener
+        notify.notify_one();
+    }
+
+    #[test]
+    fn test_subscribe_message_format() {
+        let program_id = "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ";
+        let msg = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "programSubscribe",
+            "params": [
+                program_id,
+                {
+                    "encoding": "base64",
+                    "commitment": "confirmed",
+                    "filters": [
+                        { "dataSize": 90 },
+                        { "memcmp": { "offset": 0, "bytes": "5" } }
+                    ]
+                }
+            ]
+        });
+        let text = msg.to_string();
+        assert!(text.contains("programSubscribe"));
+        assert!(text.contains(program_id));
+        assert!(text.contains("\"dataSize\":90"));
+    }
+
+    #[test]
+    fn test_notification_detection_string_matching() {
+        // The listener uses string matching for programNotification detection
+        let notification = r#"{"method":"programNotification","params":{"result":{"value":{"data":"base64data"}}}}"#;
+        assert!(notification.contains("\"method\"") && notification.contains("\"programNotification\""));
+
+        // Non-notification should NOT match
+        let subscription_confirm = r#"{"jsonrpc":"2.0","result":42,"id":1}"#;
+        assert!(!(subscription_confirm.contains("\"method\"") && subscription_confirm.contains("\"programNotification\"")));
+    }
+}

@@ -213,3 +213,88 @@ impl SolanaWsSubscriber {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn create_test_subscriber() -> SolanaWsSubscriber {
+        let db_path = format!("/tmp/test_solana_ws_{}.db", std::process::id());
+        let store = Arc::new(EventStore::new(&db_path).unwrap());
+        let tree_cache = Arc::new(TreeCache::new(store.clone()).unwrap());
+        SolanaWsSubscriber::new(
+            SolanaWsConfig {
+                ws_url: "wss://test.example.com".to_string(),
+                program_id: "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ".to_string(),
+            },
+            store,
+            tree_cache,
+        )
+    }
+
+    #[test]
+    fn test_handle_subscription_confirmation() {
+        let sub = create_test_subscriber();
+        // Subscription confirmations should be silently handled
+        let msg = r#"{"jsonrpc":"2.0","result":42,"id":1}"#;
+        sub.handle_message(msg); // should not panic
+    }
+
+    #[test]
+    fn test_handle_invalid_json() {
+        let sub = create_test_subscriber();
+        sub.handle_message("not json"); // should not panic
+    }
+
+    #[test]
+    fn test_handle_non_logs_notification() {
+        let sub = create_test_subscriber();
+        let msg = r#"{"method":"accountNotification","params":{}}"#;
+        sub.handle_message(msg); // should not panic — wrong method
+    }
+
+    #[test]
+    fn test_handle_empty_logs() {
+        let sub = create_test_subscriber();
+        let msg = r#"{
+            "method": "logsNotification",
+            "params": {
+                "result": {
+                    "context": {"slot": 100},
+                    "value": {
+                        "signature": "abc123",
+                        "logs": []
+                    }
+                }
+            }
+        }"#;
+        sub.handle_message(msg); // should not panic — empty logs
+    }
+
+    #[test]
+    fn test_handle_logs_with_no_program_events() {
+        let sub = create_test_subscriber();
+        let msg = r#"{
+            "method": "logsNotification",
+            "params": {
+                "result": {
+                    "context": {"slot": 100},
+                    "value": {
+                        "signature": "xyz789",
+                        "logs": ["Program log: something unrelated"]
+                    }
+                }
+            }
+        }"#;
+        sub.handle_message(msg); // should not panic — no matching events
+    }
+
+    #[test]
+    fn test_config_creation() {
+        let config = SolanaWsConfig {
+            ws_url: "wss://api.devnet.solana.com".to_string(),
+            program_id: "11111111111111111111111111111111".to_string(),
+        };
+        assert_eq!(config.ws_url, "wss://api.devnet.solana.com");
+        assert_eq!(config.program_id, "11111111111111111111111111111111");
+    }
+}

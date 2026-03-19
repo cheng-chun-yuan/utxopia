@@ -421,21 +421,37 @@ async fn run_tracker_service(args: &[String]) {
         .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
     let aegis_program_id = env_string("AEGIS_PROGRAM_ID", "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ");
 
-    let event_store = Arc::new(
-        EventStore::new(&indexer_db_path).expect("Failed to create event store")
-    );
-    let tree_cache = Arc::new(
-        TreeCache::new(event_store.clone()).expect("Failed to create tree cache")
-    );
+    let event_store = match EventStore::new(&indexer_db_path) {
+        Ok(store) => Arc::new(store),
+        Err(e) => {
+            eprintln!("Failed to create event store at '{}': {}", indexer_db_path, e);
+            return;
+        }
+    };
+    let tree_cache = match TreeCache::new(event_store.clone()) {
+        Ok(cache) => Arc::new(cache),
+        Err(e) => {
+            eprintln!("Failed to create tree cache: {}", e);
+            return;
+        }
+    };
 
     // Build the indexer router (proof, status, sync, ws, leaves, nullifiers)
-    let program_pubkey: solana_sdk::pubkey::Pubkey = aegis_program_id
-        .parse()
-        .expect("Invalid AEGIS_PROGRAM_ID");
+    let program_pubkey: solana_sdk::pubkey::Pubkey = match aegis_program_id.parse() {
+        Ok(pk) => pk,
+        Err(e) => {
+            eprintln!("Invalid AEGIS_PROGRAM_ID '{}': {}", aegis_program_id, e);
+            return;
+        }
+    };
     // Create a deposit store handle so reset endpoints can clear stale tracker data
-    let deposit_store = Arc::new(
-        SqliteDepositStore::new(&config.db_path).expect("Failed to open deposit store for indexer")
-    );
+    let deposit_store = match SqliteDepositStore::new(&config.db_path) {
+        Ok(store) => Arc::new(store),
+        Err(e) => {
+            eprintln!("Failed to open deposit store at '{}': {}", config.db_path, e);
+            return;
+        }
+    };
 
     // Reconciler: compare on-chain state with local SQLite periodically
     let reconcile_interval: u64 = env_or("RECONCILE_INTERVAL_SECS", 60);
@@ -482,9 +498,13 @@ async fn run_tracker_service(args: &[String]) {
         program_id: aegis_program_id,
         poll_interval_secs: indexer_poll_secs,
     };
-    let indexer_service = EventIndexerService::new(indexer_config, event_store.clone())
-        .expect("Failed to create event indexer service")
-        .with_tree_cache(tree_cache.clone());
+    let indexer_service = match EventIndexerService::new(indexer_config, event_store.clone()) {
+        Ok(svc) => svc.with_tree_cache(tree_cache.clone()),
+        Err(e) => {
+            eprintln!("Failed to create event indexer service: {}", e);
+            return;
+        }
+    };
 
     tokio::spawn(async move {
         let mut svc = indexer_service;
@@ -544,7 +564,13 @@ async fn run_tracker_service(args: &[String]) {
         println!("  WS   /ws/tree                          - Live tree updates");
         println!();
 
-        let listener = tokio::net::TcpListener::bind(addr).await.expect("bind failed");
+        let listener = match tokio::net::TcpListener::bind(addr).await {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("Failed to bind to {}: {}", addr, e);
+                return;
+            }
+        };
         if let Err(e) = axum::serve(listener, merged).await {
             eprintln!("API server error: {}", e);
         }

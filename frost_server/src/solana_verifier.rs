@@ -201,7 +201,9 @@ impl SolanaVerifier {
         let on_chain_amount = u64::from_le_bytes(
             data[REDEMPTION_AMOUNT_OFFSET..REDEMPTION_AMOUNT_OFFSET + 8]
                 .try_into()
-                .unwrap(),
+                .map_err(|_| SolanaVerifyError::InvalidAccountData(
+                    "failed to parse amount_sats bytes".to_string()
+                ))?,
         );
         if on_chain_amount != expected_amount_sats {
             return Err(SolanaVerifyError::AmountMismatch {
@@ -214,7 +216,9 @@ impl SolanaVerifier {
         let on_chain_service_fee = u64::from_le_bytes(
             data[REDEMPTION_SERVICE_FEE_OFFSET..REDEMPTION_SERVICE_FEE_OFFSET + 8]
                 .try_into()
-                .unwrap(),
+                .map_err(|_| SolanaVerifyError::InvalidAccountData(
+                    "failed to parse service_fee bytes".to_string()
+                ))?,
         );
 
         // Check BTC scriptPubKey (stored as raw bytes at offset 64, not bech32 string)
@@ -277,11 +281,17 @@ impl SolanaVerifier {
 
         let base = u64::from_le_bytes(
             data[POOL_STATE_SERVICE_FEE_BASE_OFFSET..POOL_STATE_SERVICE_FEE_BASE_OFFSET + 8]
-                .try_into().unwrap(),
+                .try_into()
+                .map_err(|_| SolanaVerifyError::InvalidAccountData(
+                    "failed to parse service_fee_base bytes".to_string()
+                ))?,
         );
         let bps = u16::from_le_bytes(
             data[POOL_STATE_SERVICE_FEE_BPS_OFFSET..POOL_STATE_SERVICE_FEE_BPS_OFFSET + 2]
-                .try_into().unwrap(),
+                .try_into()
+                .map_err(|_| SolanaVerifyError::InvalidAccountData(
+                    "failed to parse service_fee_bps bytes".to_string()
+                ))?,
         );
 
         Ok(PoolFeeConfig { service_fee_bps: bps, service_fee_base: base })

@@ -109,6 +109,9 @@ pub enum PolicyError {
     #[error("POLICY_CROSS_VALIDATION_FAILED: {0}")]
     CrossValidationFailed(String),
 
+    #[error("POLICY_VERIFICATION_REQUIRED: Solana verifier is configured but verification data is missing from request")]
+    VerificationRequired,
+
     #[error("POLICY_ALREADY_PAID: BTC destination {address} already has {tx_count} transaction(s)")]
     AlreadyPaid {
         address: String,
@@ -139,13 +142,25 @@ impl DuplicateTracker {
     /// Check if this (requester, nonce) has already been signed
     pub fn is_signed(&self, requester: &str, nonce: u64) -> bool {
         let key = format!("{}:{}", requester, nonce);
-        self.signed.lock().unwrap().contains(&key)
+        self.signed
+            .lock()
+            .unwrap_or_else(|poisoned| {
+                tracing::warn!("DuplicateTracker mutex was poisoned, recovering");
+                poisoned.into_inner()
+            })
+            .contains(&key)
     }
 
     /// Record a successful signing
     pub fn record(&self, requester: &str, nonce: u64) {
         let key = format!("{}:{}", requester, nonce);
-        self.signed.lock().unwrap().insert(key);
+        self.signed
+            .lock()
+            .unwrap_or_else(|poisoned| {
+                tracing::warn!("DuplicateTracker mutex was poisoned, recovering");
+                poisoned.into_inner()
+            })
+            .insert(key);
     }
 }
 
@@ -277,14 +292,17 @@ impl SigningPolicy {
             });
         }
 
-        // 6. Solana on-chain verification (if both verifier and verification data present)
+        // 6. Solana on-chain verification (required when verifier is configured)
         // Returns verified on-chain redemption data (amount, service_fee, btc_script)
-        let verified_redemption = if let (Some(ref verifier), Some(ref verification)) =
-            (&self.solana_verifier, &request.solana_verification)
-        {
-            self.verify_solana(verifier, verification).await?
-        } else {
-            None
+        let verified_redemption = match (&self.solana_verifier, &request.solana_verification) {
+            (Some(ref verifier), Some(ref verification)) => {
+                self.verify_solana(verifier, verification).await?
+            }
+            (Some(_), None) => {
+                // Verifier configured but no verification data — hard reject
+                return Err(PolicyError::VerificationRequired);
+            }
+            _ => None,
         };
 
         // 6b. Validate PDA service_fee against on-chain PoolState fee config
@@ -309,8 +327,9 @@ impl SigningPolicy {
                     );
                 }
                 Err(e) => {
-                    tracing::warn!("failed to fetch PoolState for fee validation: {:?}", e);
-                    // Non-fatal: PDA service_fee is still used for net amount calc
+                    return Err(PolicyError::SolanaRpcError(format!(
+                        "failed to fetch PoolState for fee validation: {:?}", e
+                    )));
                 }
             }
         }
@@ -374,7 +393,6 @@ impl SigningPolicy {
                     match self.check_destination_not_already_paid(
                         base_url,
                         expected_btc_address,
-                        &tx,
                     ).await {
                         Ok(()) => {}
                         Err(PolicyError::AlreadyPaid { ref address, tx_count }) => {
@@ -620,7 +638,6 @@ impl SigningPolicy {
         &self,
         base_url: &str,
         script_hex: &str,
-        _tx: &Transaction,
     ) -> Result<(), PolicyError> {
         // Convert hex scriptPubKey to a bitcoin address string for Esplora lookup
         let script_bytes = hex::decode(script_hex).map_err(|e| {

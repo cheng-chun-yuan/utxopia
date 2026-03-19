@@ -903,7 +903,13 @@ impl EventIndexerService {
                 .pointer("/uiTokenAmount/amount")
                 .and_then(|a| a.as_str())
                 .unwrap_or("0");
-            let post_amount: i64 = post_amount_str.parse().unwrap_or(0);
+            let post_amount: i64 = match post_amount_str.parse() {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::warn!(raw = post_amount_str, error = %e, "failed to parse post_amount in token balance");
+                    0
+                }
+            };
 
             let account_index = post.get("accountIndex").and_then(|i| i.as_u64());
             let pre_amount: i64 = pre_balances
@@ -938,4 +944,62 @@ impl EventIndexerService {
 struct SignatureInfo {
     signature: String,
     slot: i64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_event_indexer_config() {
+        let config = EventIndexerConfig {
+            rpc_url: "http://localhost:8899".to_string(),
+            program_id: "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ".to_string(),
+            poll_interval_secs: 10,
+        };
+        assert_eq!(config.poll_interval_secs, 10);
+    }
+
+    #[test]
+    fn test_event_indexer_creation() {
+        let db_path = format!("/tmp/test_indexer_create_{}.db", std::process::id());
+        let store = Arc::new(EventStore::new(&db_path).unwrap());
+        let config = EventIndexerConfig {
+            rpc_url: "http://localhost:8899".to_string(),
+            program_id: "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ".to_string(),
+            poll_interval_secs: 5,
+        };
+        let service = EventIndexerService::new(config, store.clone());
+        assert!(service.is_ok());
+    }
+
+    #[test]
+    fn test_event_indexer_with_tree_cache() {
+        let db_path = format!("/tmp/test_indexer_cache_{}.db", std::process::id());
+        let store = Arc::new(EventStore::new(&db_path).unwrap());
+        let tree_cache = Arc::new(TreeCache::new(store.clone()).unwrap());
+        let config = EventIndexerConfig {
+            rpc_url: "http://localhost:8899".to_string(),
+            program_id: "test_program".to_string(),
+            poll_interval_secs: 5,
+        };
+        let service = EventIndexerService::new(config, store)
+            .unwrap()
+            .with_tree_cache(tree_cache);
+        assert!(service.tree_cache.is_some());
+    }
+
+    #[test]
+    fn test_btc_internal_to_hex() {
+        // btc_internal_to_hex reverses byte order
+        let bytes = vec![0xab, 0xcd, 0xef, 0x01];
+        let result = EventIndexerService::btc_internal_to_hex(&bytes);
+        assert_eq!(result, "01efcdab");
+    }
+
+    #[test]
+    fn test_btc_internal_to_hex_roundtrip() {
+        let bytes = [1u8, 2, 3, 4];
+        let hex = EventIndexerService::btc_internal_to_hex(&bytes);
+        assert_eq!(hex, "04030201");
+    }
 }

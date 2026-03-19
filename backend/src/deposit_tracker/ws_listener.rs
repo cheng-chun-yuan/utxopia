@@ -136,3 +136,70 @@ impl MempoolWsListener {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::sync::mpsc;
+
+    fn create_test_listener() -> (MempoolWsListener, mpsc::UnboundedReceiver<WsEvent>) {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let config = TrackerConfig {
+            ws_url: "wss://test.example.com".to_string(),
+            ..Default::default()
+        };
+        let listener = MempoolWsListener::new(&config, tx, None);
+        (listener, rx)
+    }
+
+    #[tokio::test]
+    async fn test_handle_new_block_message() {
+        let (listener, mut rx) = create_test_listener();
+        let msg = r#"{"block":{"height":12345,"id":"00000000000000000002a7c4c1e48d76c5a37902165a270156b7a8d72f7bef4b"}}"#;
+        listener.handle_message(msg).await;
+        let event = rx.try_recv().expect("should receive NewBlock event");
+        match event {
+            WsEvent::NewBlock { height, hash } => {
+                assert_eq!(height, 12345);
+                assert!(hash.starts_with("00000000"));
+            }
+            _ => panic!("expected NewBlock, got {:?}", event),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_non_block_message_ignored() {
+        let (listener, mut rx) = create_test_listener();
+        // mempool welcome message — no "block" field
+        let msg = r#"{"mempoolInfo":{"loaded":true}}"#;
+        listener.handle_message(msg).await;
+        assert!(rx.try_recv().is_err(), "no event should be emitted for non-block messages");
+    }
+
+    #[tokio::test]
+    async fn test_handle_invalid_json_ignored() {
+        let (listener, mut rx) = create_test_listener();
+        listener.handle_message("not valid json").await;
+        assert!(rx.try_recv().is_err(), "invalid JSON should be silently ignored");
+    }
+
+    #[tokio::test]
+    async fn test_handle_empty_block_field_ignored() {
+        let (listener, mut rx) = create_test_listener();
+        let msg = r#"{"block":null}"#;
+        listener.handle_message(msg).await;
+        assert!(rx.try_recv().is_err(), "null block should be ignored");
+    }
+
+    #[tokio::test]
+    async fn test_ws_event_variants() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        tx.send(WsEvent::Connected).unwrap();
+        tx.send(WsEvent::Disconnected).unwrap();
+        tx.send(WsEvent::NewBlock { height: 1, hash: "abc".to_string() }).unwrap();
+
+        assert!(matches!(rx.recv().await.unwrap(), WsEvent::Connected));
+        assert!(matches!(rx.recv().await.unwrap(), WsEvent::Disconnected));
+        assert!(matches!(rx.recv().await.unwrap(), WsEvent::NewBlock { .. }));
+    }
+}

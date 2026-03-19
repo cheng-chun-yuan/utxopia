@@ -16,37 +16,13 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tower_http::cors::{AllowOrigin, Any, CorsLayer};
-
-fn configured_cors() -> CorsLayer {
-    match std::env::var("ALLOWED_ORIGIN") {
-        Ok(origin) if !origin.is_empty() => {
-            let origins: Vec<_> = origin
-                .split(',')
-                .filter_map(|o| o.trim().parse().ok())
-                .collect();
-            CorsLayer::new()
-                .allow_origin(AllowOrigin::list(origins))
-                .allow_methods(Any)
-                .allow_headers(Any)
-        }
-        _ => {
-            tracing::warn!("ALLOWED_ORIGIN not set — defaulting to localhost:3000 (set ALLOWED_ORIGIN for production)");
-            CorsLayer::new()
-                .allow_origin(AllowOrigin::list(
-                    vec!["http://localhost:3000".parse().unwrap()]
-                ))
-                .allow_methods(Any)
-                .allow_headers(Any)
-        }
-    }
-}
+use crate::common::cors::cors_from_env;
 
 use crate::api::middleware::{api_key_auth_middleware, create_rate_limiter, rate_limit_middleware, security_headers_middleware};
 use crate::redemption::{RedemptionService, WithdrawalStatus};
 use crate::stealth::{
     ManualAnnounceRequest, ManualAnnounceResponse, PrepareStealthRelayResponse,
-    PrepareStealthSelfCustodyResponse, PrepareStealthRequest, StealthData,
+    PrepareStealthSelfCustodyResponse, PrepareStealthRequest,
     StealthDepositService, StealthMode, StealthStatusResponse,
 };
 
@@ -288,32 +264,15 @@ async fn handle_stealth_status(
 
 async fn handle_stealth_announce(
     State(_state): State<SharedCombinedState>,
-    Json(req): Json<ManualAnnounceRequest>,
+    Json(_req): Json<ManualAnnounceRequest>,
 ) -> impl IntoResponse {
-    let stealth_data = match StealthData::decode(&req.stealth_data) {
-        Ok(data) => data,
-        Err(e) => {
-            let response = ManualAnnounceResponse {
-                success: false,
-                solana_tx: None,
-                leaf_index: None,
-                message: Some(format!("Invalid stealth data: {}", e)),
-            };
-            return (StatusCode::BAD_REQUEST, Json(response));
-        }
-    };
-
     let response = ManualAnnounceResponse {
-        success: true,
-        solana_tx: Some("simulated_tx_signature".to_string()),
-        leaf_index: Some(0),
-        message: Some(format!(
-            "Announcement simulated for commitment {}",
-            &stealth_data.commitment[..16]
-        )),
+        success: false,
+        solana_tx: None,
+        leaf_index: None,
+        message: Some("Endpoint removed — stealth announcements are emitted as on-chain events via transact flow".to_string()),
     };
-
-    (StatusCode::OK, Json(response))
+    (StatusCode::GONE, Json(response))
 }
 
 pub fn create_router(service: RedemptionService) -> Router {
@@ -337,7 +296,7 @@ pub fn create_router(service: RedemptionService) -> Router {
             rate_limit_middleware,
         ))
         .layer(axum::middleware::from_fn(security_headers_middleware))
-        .layer(configured_cors())
+        .layer(cors_from_env())
 }
 
 /// GET /api/relayer/meta — returns relayer config and fee structure
@@ -417,7 +376,7 @@ pub fn create_combined_router(
             rate_limit_middleware,
         ))
         .layer(axum::middleware::from_fn(security_headers_middleware))
-        .layer(configured_cors())
+        .layer(cors_from_env())
 }
 
 pub async fn start_server(service: RedemptionService, port: u16) -> Result<(), std::io::Error> {

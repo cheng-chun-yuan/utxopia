@@ -328,6 +328,21 @@ async fn run_server(
 
             // Clean up stale DKG ceremonies
             cleanup_state.dkg.cleanup_ceremonies();
+
+            // Clean up stale session verification data (matches signing session TTL)
+            {
+                let mut verifications = cleanup_state.session_verifications.write().await;
+                let before = verifications.len();
+                // Clear all — sessions older than the cleanup interval are stale
+                // (active sessions complete round2 within seconds)
+                if before > 0 {
+                    verifications.clear();
+                    tracing::debug!(
+                        removed = before,
+                        "cleaned up stale session verification data"
+                    );
+                }
+            }
         }
     });
 

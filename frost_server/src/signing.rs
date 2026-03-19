@@ -168,7 +168,10 @@ impl FrostSigner {
         };
 
         {
-            let mut sessions = self.sessions.write().unwrap();
+            let mut sessions = self.sessions.write().unwrap_or_else(|p| {
+                tracing::warn!("signing sessions RwLock poisoned, recovering");
+                p.into_inner()
+            });
             sessions.insert(request.session_id, session);
         }
 
@@ -201,7 +204,10 @@ impl FrostSigner {
 
         // Get and validate session
         let session = {
-            let mut sessions = self.sessions.write().unwrap();
+            let mut sessions = self.sessions.write().unwrap_or_else(|p| {
+                tracing::warn!("signing sessions RwLock poisoned, recovering");
+                p.into_inner()
+            });
             let session = sessions
                 .get_mut(&request.session_id)
                 .ok_or(SigningError::SessionNotFound(request.session_id))?;
@@ -285,7 +291,10 @@ impl FrostSigner {
     ) -> Result<VerifyCommitmentsResponse, SigningError> {
         // Verify session exists (ensures this signer participated in round 1)
         {
-            let sessions = self.sessions.read().unwrap();
+            let sessions = self.sessions.read().unwrap_or_else(|p| {
+                tracing::warn!("signing sessions RwLock poisoned, recovering");
+                p.into_inner()
+            });
             if !sessions.contains_key(&request.session_id) {
                 return Err(SigningError::SessionNotFound(request.session_id));
             }
@@ -309,13 +318,19 @@ impl FrostSigner {
     /// Cleanup old sessions (older than 5 minutes)
     pub fn cleanup_sessions(&self) {
         let timeout = std::time::Duration::from_secs(300);
-        let mut sessions = self.sessions.write().unwrap();
+        let mut sessions = self.sessions.write().unwrap_or_else(|p| {
+                tracing::warn!("signing sessions RwLock poisoned, recovering");
+                p.into_inner()
+            });
         sessions.retain(|_, session| session.created_at.elapsed() < timeout);
     }
 
     /// Get number of active sessions
     pub fn active_sessions(&self) -> usize {
-        self.sessions.read().unwrap().len()
+        self.sessions.read().unwrap_or_else(|p| {
+                tracing::warn!("signing sessions RwLock poisoned, recovering");
+                p.into_inner()
+            }).len()
     }
 }
 
