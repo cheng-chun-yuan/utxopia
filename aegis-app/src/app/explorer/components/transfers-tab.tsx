@@ -22,6 +22,7 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
 import { useTransfers } from "@/hooks/use-explorer";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
+import { getSolanaExplorerTxUrl, getSolanaExplorerAddressUrl } from "@/lib/solana-network";
 import { truncate, timeAgo } from "./helpers";
 import { Th, Td, SolanaLink, TypeBadge, StatusDot, FlowCell, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
 import { SUPPORTED_TOKENS, formatTokenAmount, getTokenBySymbol, type SupportedToken } from "@/lib/supported-tokens";
@@ -76,7 +77,7 @@ export function TransferRow({
           {isUnshield ? (
             <FlowCell
               from={{ icon: "shield", label: "Shielded" }}
-              to={{ icon: isRedeemType(tx) ? "/zkbtc.png" : (token.logo || "/tokens/sol.png"), label: isRedeemType(tx) ? "zkBTC" : token.symbol }}
+              to={{ icon: isRedeemType(tx) ? "/tokens/btc.png" : token.logo, label: isRedeemType(tx) ? "BTC" : token.symbol }}
               meta={`${tx.inputCount} in, ${isUnshield ? tx.outputs.length + 1 : tx.outputs.length} out`}
             />
           ) : (
@@ -296,7 +297,7 @@ function NullifierRow({ pda, index }: { pda: string; index: number }) {
       <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
         <CopyButton text={pda} label="Nullifier" variant="default" iconSize="sm" />
         <a
-          href={`https://explorer.solana.com/address/${pda}?cluster=devnet`}
+          href={getSolanaExplorerAddressUrl(pda)}
           target="_blank"
           rel="noopener noreferrer"
           className="text-sol hover:text-sol/80 transition-colors p-0.5"
@@ -317,7 +318,7 @@ function CommitmentRow({ commitment, leafIndex, txSignature, index }: { commitme
       <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
         <CopyButton text={commitment} label="Commitment" variant="default" iconSize="sm" />
         <a
-          href={`https://explorer.solana.com/tx/${txSignature}?cluster=devnet`}
+          href={getSolanaExplorerTxUrl(txSignature)}
           target="_blank"
           rel="noopener noreferrer"
           className="text-sol hover:text-sol/80 transition-colors p-0.5"
@@ -407,7 +408,7 @@ function UnshieldDetails({ tx }: { tx: TransferTx }) {
           </div>
           <div className="px-3 py-2.5 rounded-[8px] bg-purple-500/4 border border-purple-500/10 space-y-2">
             <div className="flex items-center gap-2">
-              <img src={token.shieldedLogo} alt={token.shieldedSymbol} className="w-3.5 h-3.5 rounded-full shrink-0" />
+              <img src={token.logo} alt={token.symbol} className="w-3.5 h-3.5 rounded-full shrink-0" />
               {tx.unshieldAmount ? (
                 <span className="text-body2 text-foreground font-mono font-semibold">
                   {formatTokenAmount(tx.unshieldAmount, token)}
@@ -423,7 +424,7 @@ function UnshieldDetails({ tx }: { tx: TransferTx }) {
                 <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
                   <CopyButton text={tx.unshieldRecipient} label="Address" variant="default" iconSize="sm" />
                   <a
-                    href={`https://explorer.solana.com/address/${tx.unshieldRecipient}?cluster=devnet`}
+                    href={getSolanaExplorerAddressUrl(tx.unshieldRecipient)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sol hover:text-sol/80 transition-colors p-0.5"

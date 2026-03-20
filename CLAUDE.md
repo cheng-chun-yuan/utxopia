@@ -68,13 +68,13 @@ bun run start        # Start header relay service
 ## Architecture
 
 ```
-BTC Deposit → Taproot Address (npk-tweaked) → Backend Sweep → SPV Verification
-       ↓                                                            ↓
-  OP_RETURN: ephemeralPub(32) + npk(32) = 64 bytes     On-chain: Poseidon(npk, token, amount) → Merkle Tree
-                                                                                    ↓
-                                        JoinSplit Transact (N inputs → M outputs, ZK proof)
-                                                                                    ↓
-                                    Withdraw → ZK Proof → Burn from Pool → BTC via FROST
+BTC Deposit → Taproot → SPV Verify ──┐
+SOL/USDC/USDT → Shield (disc=29) ───┤──► Poseidon(npk, token_id, amount) → Shared Merkle Tree
+                                      │                                              ↓
+                                      │              JoinSplit Transact (N in → M out, ZK proof)
+                                      │                                              ↓
+                                      ├──► Unshield → SPL token back to wallet (disc=15)
+                                      └──► Withdraw → BTC via FROST threshold signing (disc=16)
 ```
 
 ### Main Components
@@ -210,6 +210,39 @@ Key constants:
 - `ZKBTC_TOKEN_ID = 0x7a627463` ("zkbtc" as u32)
 - `DEPOSIT_OP_RETURN_SIZE = 64`
 
+## Environment Management
+
+### Env sync (single source of truth)
+```bash
+# Generate .env files for all services from localnet-state.json:
+./scripts/sync-env.sh                           # defaults to localnet
+AEGIS_NETWORK=devnet ./scripts/sync-env.sh       # switch to devnet
+```
+
+This reads `scripts/e2e/localnet-state.json` and generates:
+- `backend/.env.localnet` + symlink `backend/.env`
+- `aegis-app/.env.localnet` + symlink `aegis-app/.env.local`
+
+**After validator reset**: run `bun run scripts/e2e/run-all.ts` to create fresh on-chain state, then `./scripts/sync-env.sh` to update env files.
+
+### Localnet full reset
+```bash
+# 1. Run E2E init (starts validator, deploys, creates test state)
+bun run scripts/e2e/run-all.ts
+
+# 2. Sync env files
+./scripts/sync-env.sh
+
+# 3. Start backend (reads from localnet-state.json on mismatch)
+cd backend && cargo run --bin zkbtc-api -- tracker
+```
+
+### Top up stealth address (all tokens)
+```bash
+# From aegis-app/ dir (needs SDK):
+bun run scripts/topup-all.ts aegis:<stealth_address>
+```
+
 ## Development Notes
 
 - **Package Manager**: Always use `bun` instead of `npm`
@@ -220,3 +253,6 @@ Key constants:
 - **Solana SDK**: Uses `@solana/kit` (new framework-kit)
 - **Tree Depth**: 16 (65,536 leaves max)
 - **snarkjs + bun**: Use Node.js subprocess fallback for proof generation
+- **ECDH stealth**: Use `@noble/curves` (SDK) for Ed25519→X25519 conversion, NOT Node.js `crypto.convertKey` (produces different scalars)
+- **AEGIS_PROGRAM_ID**: Required env var — backend fails fast if missing (no hardcoded fallback)
+- **Reconciler**: Seeds leaves from `localnet-state.json` when on localnet with empty DB (handles validator `--reset`)

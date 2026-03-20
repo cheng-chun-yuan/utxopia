@@ -57,6 +57,8 @@ import {
   getTokenAccountAddress,
 } from "@/lib/solana/instructions";
 import { scanSecretPhrase, type ScannedSecretNote } from "@/lib/claim-utils";
+import { setActiveToken } from "@/lib/token-context";
+import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 
 // Extracted sub-components
 import {
@@ -152,6 +154,13 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   const [selectedToken, setSelectedToken] = useState<PayToken>(PAY_TOKENS[0]);
   const [showTokenPicker, setShowTokenPicker] = useState(false);
 
+  // Sync active token context when selectedToken changes (for ZKBTC_TOKEN_ID())
+  useEffect(() => {
+    if (selectedToken.mint) {
+      setActiveToken(selectedToken.mint);
+    }
+  }, [selectedToken.mint]);
+
   // Imported note from secret phrase
   const [showImportInput, setShowImportInput] = useState(!!initialSecretPhrase);
   const [importPhrase, setImportPhrase] = useState(initialSecretPhrase || "");
@@ -201,10 +210,10 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   // Token-aware amount formatter (replaces hardcoded BTC formatting)
   const fmt = (raw: number): string => formatAmount(raw, selectedToken.decimals);
 
-  // Available unspent notes
+  // Available unspent notes — filtered by selected token
   const availableNotes = useMemo(() => {
-    return inboxNotes.filter((n) => n.amount > 0n && !n.isSpent);
-  }, [inboxNotes]);
+    return inboxNotes.filter((n) => n.amount > 0n && !n.isSpent && n.tokenSymbol === selectedToken.shieldedSymbol);
+  }, [inboxNotes, selectedToken.shieldedSymbol]);
 
   // Selected notes
   const selectedNotes = useMemo(() => {
@@ -400,12 +409,12 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
     for (const o of outputs) {
       const sats = parseSats(o.amount);
       if (!sats || sats < MIN_PAY_SATS) {
-        errors.push(`Each output must be at least ${fmt(MIN_PAY_SATS)} ${selectedToken.symbol}`);
+        errors.push(`Each output must be at least ${fmt(MIN_PAY_SATS)} ${selectedToken.shieldedSymbol}`);
         break;
       }
       // BTC withdrawal must cover service fee + dust + estimated miner fee
       if (o.mode === "btc" && sats <= effectiveServiceFee + 546 + 1000) {
-        errors.push(`BTC withdrawal must be at least ${fmt(effectiveServiceFee + 546 + 1000)} ${selectedToken.symbol} (fee + dust + miner fee)`);
+        errors.push(`BTC withdrawal must be at least ${fmt(effectiveServiceFee + 546 + 1000)} ${selectedToken.shieldedSymbol} (fee + dust + miner fee)`);
         break;
       }
     }
@@ -1210,8 +1219,8 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                 onClick={() => setShowTokenPicker(!showTokenPicker)}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-background/60 hover:bg-background/80 border border-gray/15 transition-colors"
               >
-                <img src={selectedToken.logo} alt={selectedToken.symbol} className="w-4 h-4 rounded-full" />
-                <span className="text-sm font-medium text-foreground">{selectedToken.symbol}</span>
+                <img src={selectedToken.shieldedLogo} alt={selectedToken.shieldedSymbol} className="w-4 h-4 rounded-full" />
+                <span className="text-sm font-medium text-foreground">{selectedToken.shieldedSymbol}</span>
                 <ChevronRight className={cn("w-3 h-3 text-gray transition-transform", showTokenPicker && "rotate-90")} />
               </button>
               {showTokenPicker && (
@@ -1227,7 +1236,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                         }
                       }}
                       className={cn(
-                        "w-full flex items-center gap-2 px-3 py-2 text-[12px] transition-colors text-left",
+                        "w-full flex items-center gap-2 px-3 py-2 text-[12px] transition-colors text-left cursor-pointer",
                         token.symbol === selectedToken.symbol
                           ? "bg-purple/10 text-foreground"
                           : token.enabled
@@ -1235,8 +1244,8 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                             : "text-gray/30 cursor-not-allowed"
                       )}
                     >
-                      <img src={token.logo} alt={token.symbol} className={cn("w-4 h-4 rounded-full", !token.enabled && "opacity-30")} />
-                      <span className="font-medium flex-1">{token.symbol}</span>
+                      <img src={token.shieldedLogo} alt={token.shieldedSymbol} className={cn("w-4 h-4 rounded-full", !token.enabled && "opacity-30")} />
+                      <span className="font-medium flex-1">{token.shieldedSymbol}</span>
                       {!token.enabled && (
                         <span className="text-[9px] text-gray/40 uppercase">Soon</span>
                       )}
@@ -1250,7 +1259,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
           {/* Private balance + Top Up */}
           <div className="flex items-center justify-between px-1 mb-3">
             <span className="text-[12px] text-gray">
-              Private balance: {fmt(availableNotes.reduce((sum, n) => sum + Number(n.amount), 0))} {selectedToken.symbol}
+              Private balance: {fmt(availableNotes.reduce((sum, n) => sum + Number(n.amount), 0))} {selectedToken.shieldedSymbol}
             </span>
             <div className="flex items-center gap-2">
               <a
@@ -1313,7 +1322,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                   </div>
                   <div className="flex-1 flex justify-between items-center">
                     <span className="text-body2-semibold text-foreground">
-                      {fmt(Number(note.amount))} {selectedToken.symbol}
+                      {fmt(Number(note.amount))} {selectedToken.shieldedSymbol}
                     </span>
                     <span className="text-caption text-gray font-mono">leaf #{note.leafIndex}</span>
                   </div>
@@ -1333,7 +1342,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                   <div className="flex items-center gap-2">
                     <Download className="w-4 h-4 text-btc shrink-0" />
                     <span className="text-body2-semibold text-foreground">
-                      {fmt(impNote.amount)} {selectedToken.symbol}
+                      {fmt(impNote.amount)} {selectedToken.shieldedSymbol}
                     </span>
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-btc/15 text-btc font-medium">
                       imported
@@ -1426,9 +1435,9 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
           {/* Public redeem balance note */}
           {isPublicRedeem && (
             <div className="flex justify-between items-center px-2 text-body2 mb-1">
-              <span className="text-gray">Public {selectedToken.symbol} Balance</span>
+              <span className="text-gray">Public {selectedToken.shieldedSymbol} Balance</span>
               <span className="text-foreground font-semibold">
-                {fmt(Number(publicZkbtcBalance))} {selectedToken.symbol}
+                {fmt(Number(publicZkbtcBalance))} {selectedToken.shieldedSymbol}
               </span>
             </div>
           )}
@@ -1469,7 +1478,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                 serviceFeeSats={effectiveServiceFee}
                 serviceFeeBps={effectiveServiceFeeBps}
                 tokenUnit={selectedToken.unit}
-                tokenSymbol={selectedToken.symbol}
+                tokenSymbol={selectedToken.shieldedSymbol}
               />
             ))}
           </div>
@@ -1499,7 +1508,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                   <Shield className="w-3.5 h-3.5 text-purple" /> Stealth
                 </span>
                 <span className="text-gray-light font-semibold">
-                  {fmt(outputs.filter(o => o.mode === "stealth" || o.mode === "note").reduce((s, o) => s + (parseSats(o.amount) ?? 0), 0))} {selectedToken.symbol}
+                  {fmt(outputs.filter(o => o.mode === "stealth" || o.mode === "note").reduce((s, o) => s + (parseSats(o.amount) ?? 0), 0))} {selectedToken.shieldedSymbol}
                 </span>
               </div>
               {hasPublicOutput && (
@@ -1508,7 +1517,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                     <Wallet className="w-3.5 h-3.5 text-privacy" /> Unshield
                   </span>
                   <span className="text-gray-light font-semibold">
-                    {fmt(outputs.filter(o => o.mode === "public").reduce((s, o) => s + (parseSats(o.amount) ?? 0), 0))} {selectedToken.symbol}
+                    {fmt(outputs.filter(o => o.mode === "public").reduce((s, o) => s + (parseSats(o.amount) ?? 0), 0))} {selectedToken.shieldedSymbol}
                   </span>
                 </div>
               )}
@@ -1524,12 +1533,12 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                         <Bitcoin className="w-3.5 h-3.5 text-btc" /> BTC Withdrawal
                       </span>
                       <span className="text-gray-light font-semibold">
-                        {fmt(btcTotalSats)} {selectedToken.symbol}
+                        {fmt(btcTotalSats)} {selectedToken.shieldedSymbol}
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-caption mb-1 ml-5">
                       <span className="text-gray/80">You receive (after fees)</span>
-                      <span className="text-gray/80 font-medium">{fmt(userReceives)} {selectedToken.symbol}</span>
+                      <span className="text-gray/80 font-medium">{fmt(userReceives)} {selectedToken.shieldedSymbol}</span>
                     </div>
                   </>
                 );
@@ -1542,7 +1551,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
               {hasPublicOutput || hasBtcOutput ? "Total" : "Send Total"}
             </span>
             <span className="text-foreground font-semibold">
-              {fmt(totalOutputSats)} {selectedToken.symbol}
+              {fmt(totalOutputSats)} {selectedToken.shieldedSymbol}
             </span>
           </div>
           {/* Relayer fee — paid as a shielded note to relayer */}
@@ -1552,7 +1561,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                 Relayer fee (shielded note → relayer)
               </span>
               <span className="text-gray/60">
-                {relayerMetaLoaded ? fmt(effectiveRelayerFee) : "..."} {selectedToken.symbol}
+                {relayerMetaLoaded ? fmt(effectiveRelayerFee) : "..."} {selectedToken.shieldedSymbol}
               </span>
             </div>
           )}
@@ -1563,7 +1572,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                 "font-semibold",
                 changeSats >= 0 ? "text-gray-light" : "text-error"
               )}>
-                {changeSats >= 0 ? fmt(changeSats) : "-" + fmt(-changeSats)} {selectedToken.symbol}
+                {changeSats >= 0 ? fmt(changeSats) : "-" + fmt(-changeSats)} {selectedToken.shieldedSymbol}
               </span>
             </div>
           )}
@@ -1653,7 +1662,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
           {isPublicRedeem ? (
             <>
               <Bitcoin className="w-5 h-5" />
-              Redeem Public {selectedToken.symbol} to BTC
+              Redeem Public {selectedToken.shieldedSymbol} to BTC
             </>
           ) : hasBtcOutput ? (
             <>
@@ -1750,14 +1759,14 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
             ? "Redemption request created on-chain. BTC will be sent to your address."
             : hasStealth
               ? "Stealth payment submitted on-chain"
-              : `Your ${selectedToken.symbol} has been sent successfully`}
+              : `Your ${selectedToken.shieldedSymbol} has been sent successfully`}
         </p>
 
         <div className="w-full gradient-bg-card p-4 rounded-[12px] mb-4 space-y-3">
           <div className="flex justify-between items-center text-body2">
             <span className="text-gray">Transaction</span>
             <a
-              href={`https://orbmarkets.io/tx/${requestId}?cluster=devnet`}
+              href={getSolanaExplorerTxUrl(requestId)}
               target="_blank"
               rel="noopener noreferrer"
               className="font-mono text-gray-light text-xs hover:text-foreground transition-colors flex items-center gap-1"
@@ -1770,12 +1779,12 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
           </div>
           <div className="flex justify-between items-center text-body2">
             <span className="text-gray">Sent</span>
-            <span className="text-foreground">{fmt(totalOutputSats)} {selectedToken.symbol}</span>
+            <span className="text-foreground">{fmt(totalOutputSats)} {selectedToken.shieldedSymbol}</span>
           </div>
           {changeAmountSats > 0 && (
             <div className="flex justify-between items-center text-body2">
               <span className="text-gray">Change</span>
-              <span className="text-foreground">{fmt(changeAmountSats)} {selectedToken.symbol}</span>
+              <span className="text-foreground">{fmt(changeAmountSats)} {selectedToken.shieldedSymbol}</span>
             </div>
           )}
           {successBtcOutput && (
@@ -1802,7 +1811,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
               </p>
             </div>
             {noteOutputPhrases.map((np, i) => (
-              <NoteClaimLink key={i} phrase={np.phrase} amount={np.amount} tokenSymbol={selectedToken.symbol} />
+              <NoteClaimLink key={i} phrase={np.phrase} amount={np.amount} tokenSymbol={selectedToken.shieldedSymbol} />
             ))}
           </div>
         )}

@@ -28,18 +28,24 @@ import path from "path";
 // Config — reads from env or defaults to localnet config
 // =============================================================================
 
+// Try loading from localnet-state.json first, fall back to env vars
+let _stateIds = {};
+try {
+  const _statePath = path.join(path.dirname(new URL(import.meta.url).pathname), "e2e", "localnet-state.json");
+  _stateIds = JSON.parse(fs.readFileSync(_statePath, "utf-8"));
+} catch {}
 const AEGIS_PROGRAM_ID = new PublicKey(
-  process.env.AEGIS_PROGRAM_ID || "8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim"
+  process.env.AEGIS_PROGRAM_ID || _stateIds.aegisProgramId || "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ"
 );
 const ZKBTC_MINT = new PublicKey(
-  process.env.ZKBTC_MINT || "AYJpCnAPbLbcfiCJLwRSpvNgH2yt9UktMPMYSTRA9fLL"
+  process.env.ZKBTC_MINT || _stateIds.zkbtcMint || "G5CHaLkWjdUxxmnrVqNLQ29K7PoNwJAzvVT11jjkdGKC"
 );
 const TOKEN_2022 = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
 const RPC_URL = process.env.RPC_URL || "http://localhost:8899";
 
 // Load authority keypair
-const keypairPath = process.env.KEYPAIR_PATH || path.join(process.env.HOME, ".config/solana/johnny.json");
+const keypairPath = process.env.KEYPAIR_PATH || path.join(process.env.HOME, ".config/solana/id.json");
 const keypairData = JSON.parse(fs.readFileSync(keypairPath, "utf-8"));
 const authority = Keypair.fromSecretKey(Uint8Array.from(keypairData));
 

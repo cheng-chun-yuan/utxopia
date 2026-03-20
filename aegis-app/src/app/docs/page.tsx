@@ -170,6 +170,7 @@ function KeyCard({ icon: Icon, title, desc, features }: { icon: LucideIcon; titl
 /* ── Comparison table ── */
 
 const COMPARISON_ROWS = [
+  { label: "Tokens", traditional: "Single asset (wBTC)", privateBtc: "Multi-token (BTC, SOL, USDC, USDT)" },
   { label: "Balances", traditional: "Visible on-chain", privateBtc: "Hidden as commitments" },
   { label: "Transfers", traditional: "Traceable amounts", privateBtc: "ZK-proven, zero knowledge" },
   { label: "Addresses", traditional: "Linkable & reusable", privateBtc: "One-time stealth addresses" },
@@ -219,42 +220,42 @@ function ComparisonTable() {
 
 const PROTOCOL_STEPS = [
   {
-    id: "deposit-btc", num: "01", icon: Bitcoin, title: "Deposit BTC",
-    desc: "Send any amount of Bitcoin to a unique Taproot address derived from your stealth keys. The OP_RETURN output embeds your ephemeral public key (32 bytes) and note public key (32 bytes) — everything the system needs to create your private commitment.",
-    detail: "Taproot P2TR · OP_RETURN 64 bytes",
+    id: "shield-tokens", num: "01", icon: Shield, title: "Shield Any Token",
+    desc: "Deposit BTC via Taproot, or shield SOL/USDC/USDT directly from your Solana wallet. Every token enters the same privacy pool — a shared Merkle tree where all commitments look identical regardless of token type or amount.",
+    detail: "BTC: Taproot + SPV · SPL: Shield (disc=29)",
   },
   {
-    id: "spv-verification", num: "02", icon: GitBranch, title: "SPV Verification",
-    desc: "The backend submits an SPV Merkle inclusion proof to the on-chain BTC light client. The Solana program independently validates the Bitcoin transaction was confirmed in a real block — no trusted relayer needed.",
-    detail: "On-chain header chain · Merkle proof",
+    id: "spv-verification", num: "02", icon: GitBranch, title: "BTC SPV Verification",
+    desc: "Bitcoin deposits require a special step: the backend submits an SPV Merkle inclusion proof to the on-chain BTC light client. The Solana program independently validates the Bitcoin transaction was confirmed in a real block — trustless cross-chain verification without any oracle.",
+    detail: "On-chain header chain · 6+ confirmations",
   },
   {
-    id: "shielded-commitment", num: "03", icon: TreePine, title: "Shielded Commitment",
-    desc: "Your deposit becomes Poseidon(npk, tokenId, amount) — a cryptographic commitment inserted into a depth-16 Merkle tree. The amount and owner are invisible. Only your spending key can create the matching nullifier to spend it.",
-    detail: "Poseidon hash · 65,536 leaf tree",
+    id: "shielded-commitment", num: "03", icon: TreePine, title: "Commitment Creation",
+    desc: "Your deposit becomes Poseidon(npk, tokenId, amount) — a cryptographic commitment. The token_id is derived from the SPL mint address: Poseidon(reduce(mint), 0). All tokens share the same depth-16 Merkle tree, making deposits indistinguishable.",
+    detail: "Poseidon hash · Token-agnostic · 65,536 leaves",
   },
   {
-    id: "joinsplit-transfer", num: "04", icon: Layers, title: "JoinSplit Transfer",
-    desc: "Every transfer uses a Groth16 zero-knowledge proof that consumes N input notes and produces M output notes. The proof verifies balance conservation, nullifier uniqueness, and Merkle membership — without revealing any values.",
-    detail: "Groth16 · 256 bytes · N→M inputs/outputs",
+    id: "joinsplit-transfer", num: "04", icon: Layers, title: "Private Transfer",
+    desc: "Every transfer uses a Groth16 zero-knowledge proof that consumes N input notes and produces M output notes. The proof verifies balance conservation, token consistency, nullifier uniqueness, and Merkle membership — all without revealing any values. The same circuit works for BTC, SOL, USDC, or any shielded token.",
+    detail: "Groth16 · 256 bytes · Token-agnostic circuit",
   },
   {
     id: "stealth-receive", num: "05", icon: Eye, title: "Stealth Receive",
-    desc: "Recipients are identified by one-time stealth addresses generated via Diffie-Hellman key agreement. Each deposit/transfer creates a fresh address — even repeat payments to the same person are unlinkable on-chain.",
-    detail: "Baby Jubjub ECDH · Ed25519 scan",
+    desc: "Recipients use one-time stealth addresses generated via X25519 Diffie-Hellman key agreement. Each deposit or transfer creates a fresh address. The recipient scans announcements with their viewing key to find their notes — even repeat payments are unlinkable.",
+    detail: "X25519 ECDH · Ed25519 viewing keys",
   },
   {
-    id: "frost-withdrawal", num: "06", icon: Network, title: "FROST Withdrawal",
-    desc: "To withdraw BTC, you burn a private note and the FROST threshold signers (2-of-3) co-sign the Bitcoin transaction. The policy engine checks OFAC compliance, amount limits, and destination before approving each signature round.",
-    detail: "secp256k1-tr Schnorr · Policy engine",
+    id: "unshield-withdraw", num: "06", icon: Network, title: "Unshield or Withdraw",
+    desc: "Exit the privacy pool in two ways: unshield SPL tokens back to your Solana wallet instantly, or withdraw BTC via FROST threshold signing (2-of-3). Both operations use a JoinSplit proof — the nullifier prevents double-spending without revealing which note you're spending.",
+    detail: "SPL: instant · BTC: FROST 2-of-3 threshold",
   },
 ];
 
 const CRYPTO_ITEMS = [
   {
     id: "commitment-scheme", title: "Commitment Scheme",
-    formula: "Poseidon(npk, token, amount)",
-    desc: "Each note is represented by a Poseidon hash of the note public key, token identifier, and amount. The preimage is known only to the owner. Poseidon is an arithmetic-friendly hash optimized for ZK circuits on the BN254 curve.",
+    formula: "Poseidon(npk, token_id, amount)",
+    desc: "Each note is a Poseidon hash of the note public key, token ID, and amount. The token_id = Poseidon(reduce(mint), 0) makes commitments token-specific — the same circuit verifies BTC, SOL, USDC, or any token. Only the owner knows the preimage.",
   },
   {
     id: "nullifier-generation", title: "Nullifier Generation",
@@ -337,7 +338,7 @@ export default function DocsPage() {
                 </h1>
                 <p className="text-sm sm:text-base text-gray font-light max-w-2xl leading-relaxed">
                   A deep dive into the cryptography, architecture, and security model
-                  that makes Privacy Coin the most private way to use tokens on Solana.
+                  that makes Privacy Coin a universal shielded pool for BTC, SOL, USDC, and any token on Solana.
                 </p>
               </div>
             </section>
@@ -346,8 +347,8 @@ export default function DocsPage() {
             <DocsSection id="overview" className="pb-12 sm:pb-16">
               <SectionHeading
                 label="The Problem"
-                title="Why Bitcoin Needs Privacy"
-                subtitle="Every blockchain transaction is permanently public. Bridges make it worse by creating on-chain tokens that expose your exact balance to anyone watching."
+                title="Why Tokens Need Privacy"
+                subtitle="Every blockchain transaction is permanently public. Whether you're using BTC, SOL, or USDC — your balances, transfers, and trading patterns are visible to anyone. Privacy Coin shields all your tokens in a single privacy pool."
               />
               <ComparisonTable />
             </DocsSection>
@@ -357,7 +358,7 @@ export default function DocsPage() {
               <SectionHeading
                 label="Protocol Flow"
                 title="End-to-End Journey"
-                subtitle="From Bitcoin deposit to private transaction to withdrawal — every step preserves your privacy."
+                subtitle="From shielding any token to private transfers to withdrawal — every step preserves your privacy across BTC, SOL, USDC, and more."
               />
 
               <FlowDiagram />
@@ -439,10 +440,10 @@ export default function DocsPage() {
             <section className="border-t border-gray/10 py-16 sm:py-20">
               <div className="max-w-3xl mx-auto text-center">
                 <h2 className="text-xl sm:text-2xl md:text-3xl font-semibold tracking-tight text-foreground mb-4">
-                  Ready to Use Tokens Privately?
+                  Ready to Go Private?
                 </h2>
                 <p className="text-gray text-xs sm:text-sm font-light mb-6 sm:mb-8 max-w-lg mx-auto leading-relaxed">
-                  Shield any token, transfer privately, and stay anonymous.
+                  Shield BTC, SOL, USDC, or USDT. Transfer privately. Withdraw anonymously.
                 </p>
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
                   <Link

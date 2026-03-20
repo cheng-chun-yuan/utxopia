@@ -365,6 +365,26 @@ impl EventStore {
         }
     }
 
+    /// Insert a leaf from a seed file (localnet recovery).
+    /// Minimal: only leaf_index + commitment, no tx signature or slot.
+    pub fn insert_leaf_from_seed(
+        &self,
+        leaf_index: i64,
+        commitment: &[u8; 32],
+        source: &str,
+    ) -> Result<bool, String> {
+        let conn = self.conn()?;
+        let result = conn.execute(
+            "INSERT OR IGNORE INTO leaf_events (leaf_index, commitment, created_at, tx_signature, slot, block_time)
+             VALUES (?1, ?2, 0, ?3, 0, 0)",
+            params![leaf_index, commitment.as_slice(), source],
+        );
+        match result {
+            Ok(n) => Ok(n > 0),
+            Err(e) => Err(format!("insert seed leaf error: {}", e)),
+        }
+    }
+
     /// Insert a nullifier event. Returns true if inserted, false if duplicate.
     pub fn insert_nullifier(
         &self,

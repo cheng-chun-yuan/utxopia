@@ -19,6 +19,7 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { useDeposits } from "@/hooks/use-explorer";
 import type { DepositRecord } from "@/hooks/use-explorer";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
+import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 import Image from "next/image";
 import { truncate, timeAgo } from "./helpers";
 import { Th, Td, SolanaLink, TypeBadge, StatusDot, FlowCell, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
@@ -118,7 +119,7 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gray/10 text-gray-light">
               <CheckCircle2 className="w-2.5 h-2.5" /> SPV Confirmed
             </span>
-            <a href={`https://explorer.solana.com/tx/${deposit.solanaTx}?cluster=devnet`} target="_blank" rel="noopener noreferrer" className={solLink}>
+            <a href={getSolanaExplorerTxUrl(deposit.solanaTx)} target="_blank" rel="noopener noreferrer" className={solLink}>
               Solana tx <ExternalLink className="w-2.5 h-2.5" />
             </a>
           </div>

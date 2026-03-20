@@ -16,12 +16,12 @@ export const NAV_ITEMS: NavItem[] = [
     id: "protocol-flow",
     label: "Protocol Flow",
     children: [
-      { id: "deposit-btc", label: "Deposit BTC" },
-      { id: "spv-verification", label: "SPV Verification" },
-      { id: "shielded-commitment", label: "Shielded Commitment" },
-      { id: "joinsplit-transfer", label: "JoinSplit Transfer" },
+      { id: "shield-tokens", label: "Shield Any Token" },
+      { id: "spv-verification", label: "BTC SPV Verification" },
+      { id: "shielded-commitment", label: "Commitment Creation" },
+      { id: "joinsplit-transfer", label: "Private Transfer" },
       { id: "stealth-receive", label: "Stealth Receive" },
-      { id: "frost-withdrawal", label: "FROST Withdrawal" },
+      { id: "unshield-withdraw", label: "Unshield / Withdraw" },
     ],
   },
   {

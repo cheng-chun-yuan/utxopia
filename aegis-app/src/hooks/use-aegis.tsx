@@ -117,3 +117,26 @@ export function useStealthInbox() {
     hasKeys: ctx.hasKeys,
   };
 }
+
+/**
+ * Get available (unspent, non-zero) notes filtered by token symbol.
+ * Reusable across pay-flow, vault activity, and any component that needs
+ * token-specific note balances.
+ *
+ * @param tokenSymbol - The shielded token symbol (e.g. "zkBTC", "zkSOL", "zkUSDC")
+ */
+export function useTokenNotes(tokenSymbol: string) {
+  const { inboxNotes, inboxLoading } = useAegis();
+
+  const availableNotes = useMemo(() => {
+    return inboxNotes.filter(
+      (n) => n.amount > 0n && !n.isSpent && n.tokenSymbol === tokenSymbol
+    );
+  }, [inboxNotes, tokenSymbol]);
+
+  const totalBalance = useMemo(() => {
+    return availableNotes.reduce((sum, n) => sum + Number(n.amount), 0);
+  }, [availableNotes]);
+
+  return { availableNotes, totalBalance, isLoading: inboxLoading };
+}

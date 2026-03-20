@@ -35,6 +35,7 @@ import {
 import { formatBlockHeaderForChain, formatMerkleProofForChain } from "@/lib/spv/verify";
 import { zkBTCApi } from "@/lib/api/client";
 import { getEsploraApiUrl, getMempoolExplorerUrl } from "@/lib/btc-network";
+import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 import { getConfig } from "@aegis/sdk";
 
 interface VerificationData {
@@ -398,7 +399,7 @@ export function ManualVerify() {
                   <span className="text-caption text-success">Header on Solana</span>
                   {headerTxSig && (
                     <a
-                      href={`https://orbmarkets.io/tx/${headerTxSig}?cluster=devnet`}
+                      href={getSolanaExplorerTxUrl(headerTxSig)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-[10px] font-mono text-privacy ml-auto hover:underline"

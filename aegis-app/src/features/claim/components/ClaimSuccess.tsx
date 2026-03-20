@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBtc } from "@/lib/utils/formatting";
+import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 import { useClipboard, useMultiClipboard } from "@/features/shared/hooks";
 import type { ClaimResult, SplitResult } from "../types";
 
@@ -64,7 +65,7 @@ export function ClaimSuccess({
         <div className="p-3 bg-muted border border-gray/15 rounded-[12px]">
           <p className="text-caption text-gray mb-1">Transaction</p>
           <a
-            href={`https://orbmarkets.io/tx/${result.txSignature}?cluster=devnet`}
+            href={getSolanaExplorerTxUrl(result.txSignature)}
             target="_blank"
             rel="noopener noreferrer"
             className="text-caption font-mono text-privacy hover:underline break-all flex items-center gap-1"

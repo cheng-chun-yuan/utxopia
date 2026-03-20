@@ -1,9 +1,9 @@
 "use client";
 
-import React, { memo, useState, useEffect } from "react";
+import React, { memo } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Bitcoin, Shield, Zap, Lock, ArrowRight, EyeOff, Fingerprint, ShieldCheck, Loader2, ChevronRight, Layers } from "lucide-react";
+import { Bitcoin, Shield, Zap, Lock, ArrowRight, EyeOff, Fingerprint, ShieldCheck, Loader2, ChevronRight, Layers, Rocket } from "lucide-react";
 import { usePoolStats } from "@/hooks/use-pool-stats";
 import { useTokenPrices, type TokenPrices } from "@/hooks/use-btc-price";
 import { SiteHeader } from "@/components/site-header";
@@ -16,8 +16,8 @@ import { MouseSpotlight } from "@/components/ui/mouse-spotlight";
 /* ── Feature visualizations ── */
 
 const PrivacyViz = () => (
-  <div className="flex-1 w-full rounded-xl border border-privacy/10 md:border-gray/10 bg-muted/20 flex flex-col items-center justify-center gap-3 p-6 group-hover:border-privacy/15 transition-colors overflow-hidden relative">
-    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(20,241,149,0.04),transparent)] md:opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+  <div className="flex-1 w-full rounded-xl border border-privacy/10 bg-muted/20 flex flex-col items-center justify-center gap-3 p-6 overflow-hidden relative">
+    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(20,241,149,0.04),transparent)]" />
     <div className="w-full space-y-2.5 z-10">
       {[
         { fromStart: "0xa3", fromMid: "f7e2", fromEnd: "c21b", toStart: "0x91", toMid: "d2b8", toEnd: "e8f4", amt: "0.0042", delay: 0 },
@@ -26,65 +26,64 @@ const PrivacyViz = () => (
       ].map((row, i) => (
         <div
           key={i}
-          className="flex items-center justify-between px-3 py-2 rounded-lg bg-background/40 border border-privacy/10 md:border-gray/5 group-hover:border-privacy/10 transition-all duration-500"
-          style={{ transitionDelay: `${row.delay}ms` }}
+          className="flex items-center justify-between px-3 py-2 rounded-lg bg-background/40 border border-privacy/10"
         >
-          <span className="text-[10px] font-mono text-privacy/40 md:text-gray/30 group-hover:text-privacy/40 transition-colors duration-500">
-            {row.fromStart}<span className="inline-block blur-[4px] text-privacy/80 md:blur-0 md:text-inherit group-hover:blur-[4px] group-hover:text-privacy/80 transition-all duration-700" style={{ transitionDelay: `${row.delay + 50}ms` }}>{row.fromMid}</span>{row.fromEnd}
+          <span className="text-[10px] font-mono text-privacy/40">
+            {row.fromStart}<span className="inline-block blur-[4px] text-privacy/80">{row.fromMid}</span>{row.fromEnd}
           </span>
-          <span className="text-[8px] text-privacy/25 md:text-gray/15 group-hover:text-privacy/25 transition-colors">→</span>
-          <span className="text-[10px] font-mono text-privacy/40 md:text-gray/30 group-hover:text-privacy/40 transition-colors duration-500">
-            {row.toStart}<span className="inline-block blur-[4px] text-privacy/80 md:blur-0 md:text-inherit group-hover:blur-[4px] group-hover:text-privacy/80 transition-all duration-700" style={{ transitionDelay: `${row.delay + 80}ms` }}>{row.toMid}</span>{row.toEnd}
+          <span className="text-[8px] text-privacy/25">→</span>
+          <span className="text-[10px] font-mono text-privacy/40">
+            {row.toStart}<span className="inline-block blur-[4px] text-privacy/80">{row.toMid}</span>{row.toEnd}
           </span>
-          <span className="text-[10px] font-mono text-privacy/80 blur-[4px] md:blur-0 md:text-gray/30 group-hover:text-privacy/80 group-hover:blur-[4px] transition-all duration-700" style={{ transitionDelay: `${row.delay + 100}ms` }}>{row.amt}</span>
+          <span className="text-[10px] font-mono text-privacy/80 blur-[4px]">{row.amt}</span>
         </div>
       ))}
     </div>
     <div className="flex items-center gap-2 z-10 mt-1">
-      <div className="w-1.5 h-1.5 rounded-full bg-privacy/60 md:bg-privacy/30 group-hover:bg-privacy/60 group-hover:animate-pulse transition-all duration-500" />
-      <span className="text-[9px] font-mono text-privacy/40 md:text-gray/20 group-hover:text-privacy/40 transition-colors duration-500">addresses & amounts hidden by ZK proof</span>
+      <div className="w-1.5 h-1.5 rounded-full bg-privacy/60 animate-pulse" />
+      <span className="text-[9px] font-mono text-privacy/40">addresses & amounts hidden by ZK proof</span>
     </div>
   </div>
 );
 
 const BackedViz = () => (
-  <div className="flex-1 w-full rounded-xl border border-privacy/10 md:border-gray/10 bg-muted/20 flex flex-col items-center justify-center gap-4 p-6 group-hover:border-privacy/15 transition-colors relative overflow-hidden">
-    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(20,241,149,0.04),transparent)] md:opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+  <div className="flex-1 w-full rounded-xl border border-privacy/10 bg-muted/20 flex flex-col items-center justify-center gap-4 p-6 relative overflow-hidden">
+    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(20,241,149,0.04),transparent)]" />
     <div className="flex items-center gap-6 z-10">
       <div className="flex flex-col items-center gap-2">
-        <div className="w-14 h-14 rounded-2xl border border-privacy/25 md:border-gray/10 bg-background/40 flex items-center justify-center group-hover:border-privacy/25 transition-all duration-500">
-          <Layers className="w-7 h-7 text-privacy/70 md:text-gray/20 group-hover:text-privacy/70 transition-all duration-500" />
+        <div className="w-14 h-14 rounded-2xl border border-privacy/25 bg-background/40 flex items-center justify-center">
+          <Layers className="w-7 h-7 text-privacy/70" />
         </div>
-        <span className="text-[10px] font-mono text-privacy/50 md:text-gray/25 group-hover:text-privacy/50 transition-colors duration-500">Any Token</span>
+        <span className="text-[10px] font-mono text-privacy/50">Any Token</span>
       </div>
       <div className="flex flex-col items-center gap-1">
         <div className="flex items-center gap-1">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="w-2 h-0.5 rounded-full bg-privacy/40 md:bg-gray/10 group-hover:bg-privacy/40 transition-all duration-500" style={{ transitionDelay: `${i * 80}ms` }} />
+            <div key={i} className="w-2 h-0.5 rounded-full bg-privacy/40" />
           ))}
-          <Lock className="w-3.5 h-3.5 text-privacy/50 md:text-gray/15 group-hover:text-privacy/50 transition-all duration-500" />
+          <Lock className="w-3.5 h-3.5 text-privacy/50" />
           {[0, 1, 2].map((i) => (
-            <div key={i} className="w-2 h-0.5 rounded-full bg-privacy/40 md:bg-gray/10 group-hover:bg-privacy/40 transition-all duration-500" style={{ transitionDelay: `${(i + 3) * 80}ms` }} />
+            <div key={i} className="w-2 h-0.5 rounded-full bg-privacy/40" />
           ))}
         </div>
-        <span className="text-[8px] text-privacy/30 md:text-gray/15 group-hover:text-privacy/30 transition-colors duration-500">shield</span>
+        <span className="text-[8px] text-privacy/30">shield</span>
       </div>
       <div className="flex flex-col items-center gap-2">
-        <div className="w-14 h-14 rounded-2xl border border-privacy/25 md:border-gray/10 bg-background/40 flex items-center justify-center group-hover:border-privacy/25 transition-all duration-500">
-          <Shield className="w-7 h-7 text-privacy/70 md:text-gray/20 group-hover:text-privacy/70 transition-all duration-500" />
+        <div className="w-14 h-14 rounded-2xl border border-privacy/25 bg-background/40 flex items-center justify-center">
+          <Shield className="w-7 h-7 text-privacy/70" />
         </div>
-        <span className="text-[10px] font-mono text-privacy/50 md:text-gray/25 group-hover:text-privacy/50 transition-colors duration-500">Shielded</span>
+        <span className="text-[10px] font-mono text-privacy/50">Shielded</span>
       </div>
     </div>
     <div className="flex items-center gap-2 z-10">
-      <span className="text-[9px] font-mono text-privacy/40 md:text-gray/20 group-hover:text-privacy/40 transition-colors duration-500">any SPL token → private commitment</span>
+      <span className="text-[9px] font-mono text-privacy/40">any SPL token → private commitment</span>
     </div>
   </div>
 );
 
 const SpeedViz = () => (
-  <div className="flex-1 w-full rounded-xl border border-sol/10 md:border-gray/10 bg-muted/20 flex flex-col items-center justify-center gap-4 p-6 group-hover:border-sol/15 transition-colors relative overflow-hidden">
-    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(153,69,255,0.04),transparent)] md:opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+  <div className="flex-1 w-full rounded-xl border border-sol/10 bg-muted/20 flex flex-col items-center justify-center gap-4 p-6 relative overflow-hidden">
+    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(153,69,255,0.04),transparent)]" />
     <div className="w-full space-y-3 z-10">
       {[
         { label: "Confirmation", value: "~400ms", pct: 95 },
@@ -93,13 +92,13 @@ const SpeedViz = () => (
       ].map((metric, i) => (
         <div key={metric.label} className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-mono text-sol/40 md:text-gray/25 group-hover:text-sol/40 transition-colors duration-500" style={{ transitionDelay: `${i * 80}ms` }}>{metric.label}</span>
-            <span className="text-[10px] font-mono text-sol/50 md:text-gray/20 group-hover:text-sol/50 transition-colors duration-500" style={{ transitionDelay: `${i * 80}ms` }}>{metric.value}</span>
+            <span className="text-[10px] font-mono text-sol/40">{metric.label}</span>
+            <span className="text-[10px] font-mono text-sol/50">{metric.value}</span>
           </div>
           <div className="w-full h-1.5 rounded-full bg-background/40 overflow-hidden">
             <div
-              className="h-full rounded-full bg-sol/40 md:bg-gray/10 group-hover:bg-sol/40"
-              style={{ width: `0%`, transition: `width 2.5s cubic-bezier(0.16, 1, 0.3, 1) ${i * 400 + 300}ms, background-color 0.5s ease ${i * 80}ms` }}
+              className="h-full rounded-full bg-sol/40"
+              style={{ width: `0%`, transition: `width 2.5s cubic-bezier(0.16, 1, 0.3, 1) ${i * 400 + 300}ms` }}
               ref={(el) => {
                 if (el) {
                   const obs = new IntersectionObserver(([e]) => {
@@ -117,16 +116,16 @@ const SpeedViz = () => (
       ))}
     </div>
     <div className="flex items-center gap-2 z-10 mt-1">
-      <Zap className="w-3 h-3 text-sol/50 md:text-gray/20 group-hover:text-sol/50 transition-colors duration-500" />
-      <span className="text-[9px] font-mono text-sol/40 md:text-gray/20 group-hover:text-sol/40 transition-colors duration-500">Solana 65k TPS</span>
+      <Zap className="w-3 h-3 text-sol/50" />
+      <span className="text-[9px] font-mono text-sol/40">Solana 65k TPS</span>
     </div>
   </div>
 );
 
 const ComplianceViz = () => (
-  <div className="flex-1 w-full rounded-xl border border-cyan/10 md:border-gray/10 bg-muted/20 flex flex-col items-center justify-center gap-3 p-6 group-hover:border-cyan/15 transition-colors relative overflow-hidden">
-    <div className="absolute inset-0 md:opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-      <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-cyan/5 to-transparent animate-[sweep_2s_ease-in-out_infinite] md:animate-none group-hover:animate-[sweep_2s_ease-in-out_infinite]" />
+  <div className="flex-1 w-full rounded-xl border border-cyan/10 bg-muted/20 flex flex-col items-center justify-center gap-3 p-6 relative overflow-hidden">
+    <div className="absolute inset-0">
+      <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-cyan/5 to-transparent animate-[sweep_2s_ease-in-out_infinite]" />
     </div>
     <div className="w-full space-y-2.5 z-10">
       {[
@@ -136,32 +135,29 @@ const ComplianceViz = () => (
       ].map((item, i) => (
         <div
           key={item.label}
-          className="flex items-center justify-between px-3 py-2 rounded-lg bg-background/40 border border-cyan/10 md:border-gray/5 group-hover:border-cyan/10 transition-all duration-500"
-          style={{ transitionDelay: `${i * 100}ms` }}
+          className="flex items-center justify-between px-3 py-2 rounded-lg bg-background/40 border border-cyan/10"
         >
           <div className="flex items-center gap-2">
-            <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-all duration-500 ${
+            <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center ${
               item.checked
-                ? "border-cyan/40 bg-cyan/15 md:border-gray/15 md:bg-transparent group-hover:border-cyan/40 group-hover:bg-cyan/15"
-                : "border-gray/20 md:border-gray/10 group-hover:border-gray/20"
+                ? "border-cyan/40 bg-cyan/15"
+                : "border-gray/20"
             }`}>
               {item.checked && (
-                <span className="text-[8px] text-cyan/70 md:text-transparent group-hover:text-cyan/70 transition-colors duration-500" style={{ transitionDelay: `${i * 150 + 200}ms` }}>✓</span>
+                <span className="text-[8px] text-cyan/70">✓</span>
               )}
             </div>
-            <span className="text-[10px] font-mono text-gray/45 md:text-gray/25 group-hover:text-gray/45 transition-colors duration-500">{item.label}</span>
+            <span className="text-[10px] font-mono text-gray/45">{item.label}</span>
           </div>
-          <span className={`text-[8px] font-mono transition-colors duration-500 ${
-            item.checked
-              ? "text-cyan/40 md:text-gray/15 group-hover:text-cyan/40"
-              : "text-gray/25 md:text-gray/10 group-hover:text-gray/25"
+          <span className={`text-[8px] font-mono ${
+            item.checked ? "text-cyan/40" : "text-gray/25"
           }`}>{item.status}</span>
         </div>
       ))}
     </div>
     <div className="flex items-center gap-2 z-10 mt-1">
-      <ShieldCheck className="w-3 h-3 text-cyan/50 md:text-gray/20 group-hover:text-cyan/50 transition-colors duration-500" />
-      <span className="text-[9px] font-mono text-cyan/40 md:text-gray/20 group-hover:text-cyan/40 transition-colors duration-500">regulatory compliance layer</span>
+      <ShieldCheck className="w-3 h-3 text-cyan/50" />
+      <span className="text-[9px] font-mono text-cyan/40">regulatory compliance layer</span>
     </div>
   </div>
 );
@@ -178,15 +174,15 @@ const FeatureCard = memo(function FeatureCard({
   visualization: React.ComponentType;
 }) {
   return (
-    <GradientBorderCard hoverGlow={hoverGlow} step={step} className="group h-full">
+    <GradientBorderCard hoverGlow={hoverGlow} step={step} className="h-full">
       <div className="flex flex-col h-full">
         <div className="flex items-center gap-3 mb-1.5">
-          <div className="p-2 rounded-lg border border-gray/10 bg-muted/30 group-hover:border-privacy/20 transition-colors shrink-0">
-            <Icon className={`w-4 h-4 ${iconColor} md:text-gray group-hover:${iconColor} transition-colors`} />
+          <div className="p-2 rounded-lg border border-gray/10 bg-muted/30 shrink-0">
+            <Icon className={`w-4 h-4 ${iconColor}`} />
           </div>
           <h3 className="text-lg font-semibold text-foreground">{title}</h3>
         </div>
-        <p className="text-sm text-gray-light md:text-gray font-light mb-4 group-hover:text-gray-light transition-colors leading-relaxed">{description}</p>
+        <p className="text-sm text-gray-light font-light mb-4 leading-relaxed">{description}</p>
         <Viz />
       </div>
     </GradientBorderCard>
@@ -202,50 +198,11 @@ const FEATURE_CARDS = [
 ];
 
 function FeatureCarousel() {
-  const [active, setActive] = useState(0);
-  const [paused, setPaused] = useState(false);
-
-  // Auto-rotate every 4s
-  useEffect(() => {
-    if (paused) return;
-    const timer = setInterval(() => setActive((i) => (i + 1) % FEATURE_CARDS.length), 4000);
-    return () => clearInterval(timer);
-  }, [paused]);
-
   return (
-    <div
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-    >
-      {/* Cards — show active card full-width */}
-      <div className="relative min-h-[320px] md:min-h-[280px]">
-        {FEATURE_CARDS.map((card, i) => (
-          <div
-            key={card.step}
-            className={`absolute inset-0 transition-all duration-500 ${
-              i === active ? "opacity-100 translate-x-0 pointer-events-auto" : "opacity-0 translate-x-8 pointer-events-none"
-            }`}
-          >
-            <FeatureCard {...card} />
-          </div>
-        ))}
-      </div>
-
-      {/* Dot indicators */}
-      <div className="flex items-center justify-center gap-2 mt-4">
-        {FEATURE_CARDS.map((card, i) => (
-          <button
-            key={card.step}
-            onClick={() => setActive(i)}
-            className={`transition-all duration-300 rounded-full ${
-              i === active
-                ? "w-6 h-2 bg-privacy"
-                : "w-2 h-2 bg-gray/30 hover:bg-gray/50"
-            }`}
-            aria-label={`Show ${card.title}`}
-          />
-        ))}
-      </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {FEATURE_CARDS.map((card) => (
+        <FeatureCard key={card.step} {...card} />
+      ))}
     </div>
   );
 }
@@ -339,7 +296,7 @@ export default function Home() {
                     href="/vault"
                     className="btn-privacy btn-pill btn-shimmer inline-flex items-center gap-2 px-7 py-2.5 text-base shadow-[0_0_20px_rgba(20,241,149,0.2)] hover:shadow-[0_0_35px_rgba(20,241,149,0.4)] transition-shadow"
                   >
-                    <Shield className="w-5 h-5" />
+                    <Rocket className="w-5 h-5" />
                     Launch App
                     <ArrowRight className="w-5 h-5" />
                   </Link>
@@ -514,7 +471,7 @@ export default function Home() {
                         href="/vault"
                         className="btn-privacy btn-pill btn-shimmer inline-flex items-center gap-2 px-7 py-3 text-base shadow-[0_0_20px_rgba(20,241,149,0.2)] hover:shadow-[0_0_35px_rgba(20,241,149,0.4)] transition-shadow"
                       >
-                        <Shield className="w-5 h-5" />
+                        <Rocket className="w-5 h-5" />
                         Launch App
                         <ArrowRight className="w-5 h-5" />
                       </Link>

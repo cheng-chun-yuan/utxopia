@@ -1,18 +1,18 @@
 import {
-  Bitcoin,
+  Shield,
   GitBranch,
   TreePine,
   Layers,
-  Network,
+  Unlock,
   ChevronRight,
 } from "lucide-react";
 
 const STEPS = [
-  { icon: Bitcoin, label: "BTC Deposit", sub: "Taproot Address", color: "text-btc", border: "border-btc/20" },
-  { icon: GitBranch, label: "SPV Verify", sub: "On-chain Proof", color: "text-sol", border: "border-sol/20" },
-  { icon: TreePine, label: "Shielded Pool", sub: "Poseidon Commitment", color: "text-privacy", border: "border-privacy/20" },
-  { icon: Layers, label: "JoinSplit", sub: "ZK Transfer", color: "text-sol", border: "border-sol/20" },
-  { icon: Network, label: "FROST Withdraw", sub: "Threshold Sign", color: "text-btc", border: "border-btc/20" },
+  { icon: Shield, label: "Shield", sub: "BTC / SOL / USDC", color: "text-privacy", border: "border-privacy/20" },
+  { icon: GitBranch, label: "Verify", sub: "SPV (BTC only)", color: "text-sol", border: "border-sol/20" },
+  { icon: TreePine, label: "Commit", sub: "Merkle Tree", color: "text-privacy", border: "border-privacy/20" },
+  { icon: Layers, label: "Transfer", sub: "ZK Proof", color: "text-sol", border: "border-sol/20" },
+  { icon: Unlock, label: "Unshield", sub: "SPL / BTC", color: "text-btc", border: "border-btc/20" },
 ];
 
 function StepNode({ step }: { step: typeof STEPS[number] }) {

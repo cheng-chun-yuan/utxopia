@@ -20,6 +20,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 import { EXPLORER_FILTER_TOKENS, type TokenFilterId } from "@/lib/supported-tokens";
 
 // --- Types ---
@@ -277,7 +278,7 @@ export function Td({ children, className, colSpan }: { children?: React.ReactNod
 export function SolanaLink({ signature }: { signature: string }) {
   return (
     <a
-      href={`https://explorer.solana.com/tx/${signature}?cluster=devnet`}
+      href={getSolanaExplorerTxUrl(signature)}
       target="_blank"
       rel="noopener noreferrer"
       className="text-gray hover:text-gray-light transition-colors"

@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { formatBtc, truncateMiddle } from "@/lib/utils/formatting";
 import { useAegisStore, type ActiveWithdrawal, type WithdrawalStatus } from "@/stores/aegis-store";
 import { getConfig } from "@aegis/sdk";
+import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 
 const STATUS_CONFIG: Record<WithdrawalStatus, {
   label: string;
@@ -102,7 +103,7 @@ function WithdrawalCard({ withdrawal }: { withdrawal: ActiveWithdrawal }) {
           <div className="flex justify-between items-center text-body2">
             <span className="text-gray">Solana TX</span>
             <a
-              href={`https://orbmarkets.io/tx/${withdrawal.solanaSignature}?cluster=devnet`}
+              href={getSolanaExplorerTxUrl(withdrawal.solanaSignature)}
               target="_blank"
               rel="noopener noreferrer"
               className="font-mono text-purple text-xs hover:underline flex items-center gap-1"

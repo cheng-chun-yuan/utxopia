@@ -45,7 +45,8 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { useBitcoinWalletStore } from "@/stores/bitcoin-wallet-store";
 import { useNotesStore } from "@/stores/notes-store";
 import { registerDeposit } from "@/lib/api/deposits";
-import { getBtcSignerNetwork } from "@/lib/btc-network";
+import { getBtcSignerNetwork, getMempoolExplorerUrl } from "@/lib/btc-network";
+import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 
 import { MobileWalletGuidance } from "@/components/bitcoin-wallet-selector";
 import { useIsMobileWithoutWallet } from "@/hooks/use-mobile-wallet-detect";
@@ -418,7 +419,7 @@ export function DepositFlow() {
                   )}
 
                   <a
-                    href={`https://orbmarkets.io/tx/${demoResult.signature}?cluster=devnet`}
+                    href={getSolanaExplorerTxUrl(demoResult.signature)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-2 text-caption text-sol hover:text-sol-light transition-colors"
@@ -821,7 +822,7 @@ export function DepositFlow() {
                 <div className="mb-2">
                   <p className="text-caption text-gray mb-1">TxID:</p>
                   <a
-                    href={`https://mempool.space/testnet4/tx/${walletDepositResult.txid}`}
+                    href={`${getMempoolExplorerUrl()}/tx/${walletDepositResult.txid}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="block text-[10px] font-mono text-btc bg-muted p-2 rounded-[8px] break-all hover:underline"

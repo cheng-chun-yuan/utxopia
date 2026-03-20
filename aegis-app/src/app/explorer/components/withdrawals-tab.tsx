@@ -24,6 +24,7 @@ import type { RedemptionRecord } from "@/hooks/use-explorer";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { truncate, timeAgo, scriptToAddress } from "./helpers";
 import { getEsploraApiUrl } from "@/lib/btc-network";
+import { getSolanaExplorerTxUrl, getSolanaExplorerAddressUrl } from "@/lib/solana-network";
 import { Th, Td, TypeBadge, StatusDot, FlowCell, SolanaLink, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
 import type { StatusDotVariant } from "./shared";
 
@@ -215,7 +216,7 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
             <span className="text-caption text-green-400/60 font-medium">1</span>
           </div>
           <div className="group flex items-center gap-2 px-3 py-2.5 rounded-[8px] bg-green-500/4 border border-green-500/10">
-            <Image src="shield" alt="zkBTC" width={16} height={16} className="rounded-full shrink-0" />
+            <Image src="/zkbtc.png" alt="zkBTC" width={16} height={16} className="rounded-full shrink-0" />
             <div className="flex-1 min-w-0">
               <div className="text-body2 text-foreground font-mono font-semibold">{fmtBtc(amount)} <span className="text-[10px] text-gray font-normal">zkBTC</span></div>
               <div className="text-[10px] text-gray/50">Shielded note (burned)</div>
@@ -228,7 +229,7 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
               <code className="text-caption font-mono text-foreground/70 truncate">{truncate(redemption.requestTxSignature, 6, 4)}</code>
               <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
                 <CopyButton text={redemption.requestTxSignature} label="Tx" variant="default" iconSize="sm" />
-                <a href={`https://explorer.solana.com/tx/${redemption.requestTxSignature}?cluster=devnet`} target="_blank" rel="noopener noreferrer" className="text-sol hover:text-sol/80 transition-colors p-0.5">
+                <a href={getSolanaExplorerTxUrl(redemption.requestTxSignature)} target="_blank" rel="noopener noreferrer" className="text-sol hover:text-sol/80 transition-colors p-0.5">
                   <ExternalLink className="w-3 h-3" />
                 </a>
               </div>
@@ -381,7 +382,7 @@ export function WithdrawalRow({
         <Td>
           <FlowCell
             from={{ icon: "shield", label: "Shielded" }}
-            to={{ icon: "/zkbtc.png", label: "zkBTC" }}
+            to={{ icon: "/tokens/btc.png", label: "BTC" }}
             meta={`${r.inputCount} in, ${r.outputCount} out`}
           />
         </Td>
@@ -402,8 +403,8 @@ export function WithdrawalRow({
                 : o >= 1 && r.processingTxSignature ? r.processingTxSignature
                 : r.requestTxSignature;
               return sig
-                ? `https://explorer.solana.com/tx/${sig}?cluster=devnet`
-                : `https://explorer.solana.com/address/${r.pubkey}?cluster=devnet`;
+                ? getSolanaExplorerTxUrl(sig)
+                : getSolanaExplorerAddressUrl(r.pubkey);
             })()}
             target="_blank"
             rel="noopener noreferrer"
@@ -495,7 +496,7 @@ function WithdrawalAmountCell({ r }: { r: RedemptionRecord }) {
 
   return (
     <div className="flex items-center gap-1.5 font-mono text-body2">
-      <Image src="shield" alt="zkBTC" width={14} height={14} className="rounded-full shrink-0" />
+      <Image src="/zkbtc.png" alt="zkBTC" width={14} height={14} className="rounded-full shrink-0" />
       <span className="text-foreground">{fmtBtc(Number(r.amountSats))}</span>
       <span className="text-gray/40">→</span>
       <BitcoinIcon className="w-3.5 h-3.5 text-btc shrink-0" />

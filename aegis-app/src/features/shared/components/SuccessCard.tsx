@@ -1,12 +1,12 @@
 "use client";
 
 import { CheckCircle2, ExternalLink } from "lucide-react";
+import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 
 interface SuccessCardProps {
   title?: string;
   message?: string;
   txSignature?: string;
-  network?: "devnet" | "mainnet";
 }
 
 /**
@@ -16,11 +16,8 @@ export function SuccessCard({
   title = "Success",
   message,
   txSignature,
-  network = "devnet",
 }: SuccessCardProps) {
-  const explorerUrl = txSignature
-    ? `https://orbmarkets.io/tx/${txSignature}?cluster=${network}`
-    : null;
+  const explorerUrl = txSignature ? getSolanaExplorerTxUrl(txSignature) : null;
 
   return (
     <div className="space-y-3">

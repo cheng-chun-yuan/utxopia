@@ -396,32 +396,29 @@ export default function VaultPage() {
                         const price = tokenPrices[token.priceKey];
                         if (price) totalUsd += (rawBal / 10 ** token.decimals) * price;
                       }
+                      const btcPrice = tokenPrices["btc"] || 0;
+                      const btcEquivalent = btcPrice > 0 ? totalUsd / btcPrice : 0;
                       return (
-                        <p className="text-[36px] sm:text-[42px] font-bold text-foreground tracking-tight leading-none mb-1">
-                          ${totalUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </p>
+                        <>
+                          <p className="text-[36px] sm:text-[42px] font-bold text-foreground tracking-tight leading-none mb-1">
+                            ${totalUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </p>
+                          <p className="text-body2 text-gray/60 font-mono flex items-center justify-center gap-1.5">
+                            {btcEquivalent.toFixed(8)} BTC
+                            <button
+                              onClick={refreshInbox}
+                              disabled={isLoadingInbox}
+                              className="p-0.5 rounded text-gray/30 hover:text-privacy transition-colors disabled:opacity-50 cursor-pointer"
+                              title="Refresh"
+                            >
+                              <RefreshCw className={cn("w-3 h-3", isLoadingInbox && "animate-spin")} />
+                            </button>
+                          </p>
+                        </>
                       );
                     })()}
-                    <p className="text-body2 text-gray/60 font-mono">
-                      {(Number(totalAmountSats) / 100_000_000).toFixed(8)} zkBTC
-                    </p>
                   </>
                 )}
-                <div className="flex items-center justify-center gap-2 mt-1">
-                  {depositCount > 0 && (
-                    <span className="text-caption text-gray/40">
-                      {depositCount} note{depositCount !== 1 ? "s" : ""}
-                    </span>
-                  )}
-                  <button
-                    onClick={refreshInbox}
-                    disabled={isLoadingInbox}
-                    className="p-0.5 rounded text-gray/30 hover:text-privacy transition-colors disabled:opacity-50 cursor-pointer"
-                    title="Refresh"
-                  >
-                    <RefreshCw className={cn("w-3 h-3", isLoadingInbox && "animate-spin")} />
-                  </button>
-                </div>
               </div>
 
               {/* ═══ Action Buttons — circular Phantom-style ═══ */}
@@ -469,42 +466,78 @@ export default function VaultPage() {
                 </div>
 
                 <div className="rounded-[14px] border border-gray/10 overflow-hidden divide-y divide-gray/8">
-                  {VAULT_TOKENS.map((token) => {
-                    const rawBalance = Number(balancesByToken?.[token.shieldedSymbol] ?? 0n);
-                    const balanceNum = rawBalance / 10 ** token.decimals;
-                    // Show up to 2 decimals for clean display, more only if needed for precision
-                    const balance = balanceNum < 0.01 && balanceNum > 0
-                      ? balanceNum.toFixed(token.decimals) // tiny amounts: show full precision
-                      : balanceNum.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                    const price = tokenPrices[token.priceKey];
-                    const usdValue = price
-                      ? (rawBalance / 10 ** token.decimals) * price
-                      : 0;
-
-                    return (
-                      <div key={token.symbol} className="flex items-center gap-3 px-4 py-3.5 hover:bg-muted/40 transition-colors">
-                        <img src={token.shieldedLogo} alt={token.shieldedSymbol} className="w-9 h-9 rounded-full" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-body2-semibold text-foreground">{token.shieldedSymbol}</p>
-                          <p className="text-[11px] text-gray/50">{token.name}</p>
-                        </div>
-                        <div className="text-right">
-                          {isLoadingInbox ? (
-                            <Loader2 className="w-4 h-4 animate-spin text-privacy ml-auto" />
-                          ) : rawBalance > 0 ? (
-                            <>
-                              <p className="text-body2-semibold text-foreground font-mono">{balance}</p>
-                              <p className="text-[11px] text-gray/45 font-mono">
-                                ${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </p>
-                            </>
-                          ) : (
-                            <p className="text-body2-semibold text-gray/25 font-mono">—</p>
-                          )}
-                        </div>
-                      </div>
+                  {(() => {
+                    const hasAnyBalance = VAULT_TOKENS.some(
+                      (token) => Number(balancesByToken?.[token.shieldedSymbol] ?? 0n) > 0
                     );
-                  })}
+
+                    // When all balances are empty, show only zkBTC with a top-up prompt
+                    if (!hasAnyBalance && !isLoadingInbox) {
+                      const zkbtc = VAULT_TOKENS.find((t) => t.shieldedSymbol === "zkBTC");
+                      return (
+                        <div className="flex items-center gap-3 px-4 h-[60px]">
+                          <img src={zkbtc?.shieldedLogo || "/zkbtc.png"} alt="zkBTC" className="w-9 h-9 rounded-full" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-body2-semibold text-foreground">zkBTC</p>
+                            <p className="text-[11px] text-gray/50">Shielded Bitcoin</p>
+                          </div>
+                          <Link
+                            href="/vault/deposit"
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-privacy/10 hover:bg-privacy/20 border border-privacy/20 text-[11px] font-semibold text-privacy transition-colors cursor-pointer"
+                          >
+                            <ArrowDownToLine className="w-3 h-3" />
+                            Top Up
+                          </Link>
+                        </div>
+                      );
+                    }
+
+                    // Sort tokens: those with balance first (by USD value desc), then zero-balance
+                    const sorted = [...VAULT_TOKENS].sort((a, b) => {
+                      const aRaw = Number(balancesByToken?.[a.shieldedSymbol] ?? 0n);
+                      const bRaw = Number(balancesByToken?.[b.shieldedSymbol] ?? 0n);
+                      if (aRaw > 0 && bRaw === 0) return -1;
+                      if (aRaw === 0 && bRaw > 0) return 1;
+                      const aUsd = (aRaw / 10 ** a.decimals) * (tokenPrices[a.priceKey] || 0);
+                      const bUsd = (bRaw / 10 ** b.decimals) * (tokenPrices[b.priceKey] || 0);
+                      return bUsd - aUsd;
+                    });
+
+                    return sorted.map((token) => {
+                      const rawBalance = Number(balancesByToken?.[token.shieldedSymbol] ?? 0n);
+                      const balanceNum = rawBalance / 10 ** token.decimals;
+                      const hasBalance = rawBalance > 0;
+                      const balanceRaw = balanceNum < 0.01 && balanceNum > 0
+                        ? balanceNum.toFixed(token.decimals)
+                        : balanceNum.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: token.decimals > 2 ? token.decimals : 2 });
+                      const balance = balanceRaw.replace(/(\.\d{2,}?)0+$/, "$1");
+                      const price = tokenPrices[token.priceKey];
+                      const usdValue = price ? (rawBalance / 10 ** token.decimals) * price : 0;
+                      return (
+                        <div key={token.symbol} className={cn("flex items-center gap-3 px-4 h-[60px] transition-colors", hasBalance ? "hover:bg-muted/40" : "opacity-40")}>
+                          <img src={token.shieldedLogo} alt={token.shieldedSymbol} className="w-9 h-9 rounded-full" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-body2-semibold text-foreground">{token.shieldedSymbol}</p>
+                            <p className="text-[11px] text-gray/50">{token.name}</p>
+                          </div>
+                          <div className="text-right">
+                            {isLoadingInbox ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-privacy ml-auto" />
+                            ) : hasBalance ? (
+                              <>
+                                <p className="text-body2-semibold text-foreground font-mono">{balance}</p>
+                                <p className="text-[11px] text-gray/45 font-mono">
+                                  ${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </p>
+                              </>
+                            ) : (
+                              <p className="text-body2 text-gray/30 font-mono">0.00</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
             </>

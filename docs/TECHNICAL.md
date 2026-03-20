@@ -1,33 +1,45 @@
 # Aegis Technical Documentation
 
-**Privacy-Preserving BTC on Solana with Zero-Knowledge Proofs**
+**Multi-Token Privacy Pool on Solana with Zero-Knowledge Proofs**
 
 ---
 
 ## Overview
 
-Aegis is a trustless bridge enabling Bitcoin holders to access Solana with full transaction privacy.
+Aegis is a universal shielded pool on Solana that enables private transactions for **any token** — BTC (via SPV bridge), SOL, USDC, USDT, and any SPL token. All tokens exist only as cryptographic commitments inside a shared Merkle tree. No public balances, no transaction graphs.
 
 ```
-BTC Deposit ─► Taproot Address ─► SPV Verify ─► Shielded Pool ─► ZK Transfers ─► Withdraw BTC
-                                                      │
-                   ┌──────────────────────────────────┴──────────────────────────────────┐
-                   │                                                                      │
-         Amounts hidden in commitments                            Unlinkable stealth addresses
-         Nullifier-based double-spend prevention                  .zkey.sol human-readable names
+                          ┌─────────────────────────────────┐
+  BTC ──► Taproot ──► SPV │                                 │
+  SOL ──► Shield (disc=29)│    Shielded Commitment Pool     │──► ZK Transfer ──► Unshield/Withdraw
+ USDC ──► Shield (disc=29)│  Poseidon(npk, token_id, amount)│
+ USDT ──► Shield (disc=29)│     Merkle Tree (depth 16)      │
+                          └─────────────────────────────────┘
+                                        │
+              ┌─────────────────────────┴──────────────────────────┐
+              │                                                     │
+    Amounts hidden in commitments                    Unlinkable stealth addresses
+    Token-agnostic: same ZK circuit for all          .btcpro.sol human-readable names
+    Nullifier-based double-spend prevention          Multi-token in a single tree
 ```
+
+### How It Works (For Newcomers)
+
+1. **Shield** — Deposit any supported token (BTC, SOL, USDC) into the privacy pool. Your balance becomes a cryptographic "commitment" — a hash that hides your identity, token, and amount.
+2. **Prove** — When you want to transfer or withdraw, you generate a zero-knowledge proof (ZK proof) that proves you own funds without revealing which commitment is yours.
+3. **Use** — Send to anyone privately, unshield back to a public token, or withdraw BTC directly. The recipient gets a new commitment; the sender's old commitment is "nullified" to prevent double-spending.
 
 ### Key Innovations
 
 | Innovation | What It Does | Why It Matters |
 |------------|--------------|----------------|
+| **Multi-Token Shielded Pool** | Single Merkle tree for BTC, SOL, USDC, USDT | Privacy for any token, not just BTC |
 | **JoinSplit(N,M) Proofs** | Unified N-input M-output transfers (Groth16) | One circuit for all operations |
-| **3-Key Model** | Spending (BJJ) + Nullifying + Viewing (Ed25519) | Railgun-aligned key hierarchy |
-| **EdDSA-Poseidon Signatures** | In-circuit signature verification | Authorization without revealing keys |
-| **Full SPV Bridge** | Bitcoin light client on Solana | Trustless BTC verification |
+| **3-Key Model** | Spending (BJJ) + Nullifying + Viewing (Ed25519) | Share viewing access without spending risk |
+| **Full SPV Bridge** | Bitcoin light client on Solana | Trustless BTC deposit verification |
 | **Stealth Addresses** | EIP-5564/DKSAP protocol | Unlinkable one-time addresses |
-| **ChadBuffer** | On-chain large data storage | BTC SPV data exceeding Solana limits |
-| **.zkey Names** | SNS-style name registry | Human-readable stealth addresses |
+| **Token-Agnostic Commitments** | `Poseidon(npk, token_id, amount)` | Same ZK circuit works for all tokens |
+| **On-Chain TokenConfig** | Per-token PDA with fees, limits, vault | Permissioned token whitelisting |
 
 ---
 
@@ -86,10 +98,67 @@ BTC Deposit ─► Taproot Address ─► SPV Verify ─► Shielded Pool ─►
 | Component | Responsibility |
 |-----------|---------------|
 | **BTC Light Client** | Maintains Bitcoin header chain, validates SPV proofs |
-| **Aegis Program** | Manages commitments, nullifiers, stealth announcements (npk-based), names |
+| **Aegis Program** | Manages commitments, nullifiers, stealth announcements, token configs |
 | **Header Relayer** | Syncs Bitcoin headers to Solana (permissionless) |
-| **SDK** | Client-side proof generation, key derivation, transaction building |
+| **SDK** | Client-side proof generation, key derivation, stealth ECDH, transaction building |
 | **FROST Server** | BTC redemption signing (2-of-3 threshold) |
+
+### Multi-Token Architecture
+
+Every supported token has a **TokenConfig PDA** on-chain that stores its configuration:
+
+```
+TokenConfig PDA (per token):
+├── mint: PublicKey           ← SPL mint address
+├── token_id: [u8; 32]       ← Poseidon(reduce_to_field(mint), 0)
+├── vault: PublicKey          ← Pool's token account (PDA-owned)
+├── decimals: u8              ← Token decimals
+├── enabled: bool             ← Whether shielding is active
+├── service_fee: u64          ← Flat fee per operation
+├── min_deposit / max_deposit ← Amount limits
+├── deposit_cap: u64          ← Maximum total shielded
+├── total_shielded: u64       ← Current shielded balance
+└── accumulated_fees: u64     ← Protocol revenue
+```
+
+The `token_id` is a deterministic hash of the mint address, computed identically on-chain and in the SDK:
+```
+token_id = Poseidon(reduce_to_field(mint_pubkey), 0)
+```
+
+This ensures commitments are **token-specific**: `Poseidon(npk, token_id, amount)`. You cannot spend a USDC commitment as BTC — the ZK circuit enforces token consistency.
+
+### Token Entry Points
+
+| Token | Entry Method | Instruction |
+|-------|-------------|-------------|
+| **BTC** | Taproot deposit → SPV verification → on-chain commitment | `verify_stealth_deposit` (disc=1) |
+| **SOL** | Wrap to wSOL → shield into pool | `shield` (disc=29) |
+| **USDC** | Transfer SPL to pool vault → shield | `shield` (disc=29) |
+| **USDT** | Transfer SPL to pool vault → shield | `shield` (disc=29) |
+
+**BTC is special**: it requires a full SPV proof (Bitcoin light client verification) because BTC exists on a different chain. SPL tokens can be shielded directly since they already live on Solana.
+
+### Shield Instruction (disc=29)
+
+For SPL tokens (SOL, USDC, USDT), the shield instruction:
+1. Transfers tokens from user's ATA to the pool vault
+2. Computes commitment on-chain: `Poseidon(npk, token_id, amount)`
+3. Inserts commitment into the shared Merkle tree
+4. Emits stealth announcement event (for recipient scanning)
+
+```
+User ATA ──► Pool Vault (token transfer)
+                 │
+                 ▼
+         Commitment = Poseidon(npk, token_id, amount)
+                 │
+                 ▼
+         Insert into Merkle Tree (shared across all tokens)
+                 │
+                 ▼
+         Emit Stealth Announcement (sol_log_data)
+```
 
 ---
 
@@ -275,7 +344,7 @@ RECIPIENT (Viewing Key)
 6. Verify: Poseidon(npk, ZKBTC_TOKEN_ID, amount) == stored commitment → mine
 ```
 
-**Key constant**: `ZKBTC_TOKEN_ID = 0x7a627463` ("zkbtc" as u32, used in commitment computation)
+**Token ID**: Each token has a unique `token_id = Poseidon(reduce_to_field(mint_pubkey), 0)`. This is computed identically on-chain (Rust) and client-side (SDK). The commitment formula `Poseidon(npk, token_id, amount)` makes commitments token-specific — you cannot spend a USDC commitment as BTC.
 
 ### Stealth Announcement Events (sol_log_data)
 
@@ -288,8 +357,18 @@ Segment  Field              Size    Description
 1        announcement_type   1      0 = deposit (plaintext amount), 1 = transfer (XOR-encrypted)
 2        ephemeral_pub      32      Ed25519 ephemeral public key (for ECDH scanning)
 3        amount_bytes        8      Plaintext u64 LE (type=0) or XOR-encrypted (type=1)
-4        commitment         32      Poseidon(npk, token, amount)
+4        commitment         32      Poseidon(npk, token_id, amount)
 5        leaf_index          4      Position in commitment Merkle tree (u32 LE)
+6        token_id           32      Poseidon(reduce_to_field(mint), 0) — identifies which token
+```
+
+Additionally, the `UnshieldMeta` event (disc=0x0E) is emitted for unshield/redeem operations:
+```
+Field         Size    Description
+──────        ────    ────────────
+amount         8      Unshielded amount (u64 LE)
+recipient     32      Solana wallet receiving the SPL tokens
+token_id      32      Which token was unshielded
 ```
 
 Events are indexed by the backend event indexer (SQLite) and served via REST/WebSocket.
@@ -311,20 +390,21 @@ Frontend falls back to RPC log scanning when indexer is unavailable.
 | Disc | Name | Purpose |
 |------|------|---------|
 | 0 | `INITIALIZE` | Initialize pool state and commitment tree |
-| 1 | `VERIFY_STEALTH_DEPOSIT` | Verify BTC via SPV, compute commitment on-chain, emit stealth announcement event |
+| 1 | `VERIFY_STEALTH_DEPOSIT` | Verify BTC via SPV, compute commitment on-chain |
 | 5 | `REQUEST_REDEMPTION` | Burn zkBTC, request BTC withdrawal |
 | 6 | `COMPLETE_REDEMPTION` | Relayer marks redemption complete |
 | 7 | `SET_PAUSED` | Admin pause/unpause |
-| 8 | `REGISTER_NAME` | Register .zkey name |
-| 9 | `UPDATE_NAME` | Update .zkey name data |
-| 10 | `TRANSFER_NAME` | Transfer .zkey name ownership |
 | 11 | `INIT_VK_REGISTRY` | Initialize VK hash registry for JoinSplit(N,M) |
 | 12 | `UPDATE_VK_REGISTRY` | Update VK hash (circuit upgrades) |
 | 13 | `ADD_DEMO_STEALTH` | Demo deposit (devnet only, disabled on mainnet) |
 | 14 | `TRANSACT` | JoinSplit N-to-M private transfer (Groth16) |
+| 15 | `UNSHIELD` | JoinSplit transfer with SPL token output (privacy → public) |
+| 16 | `REDEEM` | JoinSplit transfer with BTC withdrawal request |
 | 21 | `PROPOSE_POOL_UPDATE` | Authority proposes new pool params (48h timelock) |
 | 22 | `EXECUTE_POOL_UPDATE` | Permissionless execute after timelock expires |
 | 23 | `CANCEL_POOL_UPDATE` | Authority cancels pending proposal |
+| 27 | `REGISTER_TOKEN` | Register new SPL token in the pool (creates TokenConfig PDA) |
+| 29 | `SHIELD` | Shield SPL tokens into the privacy pool |
 
 ---
 
@@ -334,7 +414,8 @@ Frontend falls back to RPC log scanning when indexer is unavailable.
 |-----------|------------|---------|
 | **Proof System** | Groth16 (BN254) via circom/snarkjs | ZK proof generation/verification |
 | **Hash Function** | Poseidon | ZK-friendly hashing |
-| **Commitment** | `Poseidon(npk, token, amount)` | Binding amounts to keys |
+| **Commitment** | `Poseidon(npk, token_id, amount)` | Binding amounts + token type to keys |
+| **Token ID** | `Poseidon(reduce_to_field(mint), 0)` | Deterministic per-mint identifier |
 | **Nullifier** | `Poseidon(nullifyingKey, leafIndex)` | Double-spend prevention |
 | **Signature** | EdDSA-Poseidon | In-circuit authorization |
 | **Spending Keys** | Baby Jubjub (BN254 embedded curve) | In-circuit key derivation |
@@ -343,7 +424,7 @@ Frontend falls back to RPC log scanning when indexer is unavailable.
 | **BTC Deposits** | Taproot (BIP-341) | Commitment-bound addresses |
 | **BTC Redemption** | FROST (secp256k1-tr) | 2-of-3 threshold signing |
 | **Merkle Tree** | Depth 16 (65,536 leaves) | Commitment storage |
-| **Token** | zkBTC (Token-2022) | Shielded token standard |
+| **Tokens** | Any SPL Token-2022 (BTC, SOL, USDC, USDT) | Multi-token privacy pool |
 | **Viewing Key Encryption** | AES-GCM + PBKDF2 (150k iterations) | Delegated viewing keys |
 
 ---

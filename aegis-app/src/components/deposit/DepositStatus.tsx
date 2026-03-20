@@ -5,6 +5,7 @@ import { useDepositStatus } from "@/hooks/use-deposit-status";
 import { DepositProgress } from "./DepositProgress";
 import { type DepositStatus as DepositStatusType } from "@/lib/api/deposits";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
+import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 
 interface DepositStatusProps {
   depositId: string;
@@ -163,7 +164,7 @@ function TransactionLink({
   const explorerUrl =
     type === "bitcoin"
       ? `${getMempoolExplorerUrl()}/tx/${txid}`
-      : `https://orbmarkets.io/tx/${txid}?cluster=devnet`;
+      : getSolanaExplorerTxUrl(txid);
 
   return (
     <div className="flex items-center justify-between text-zinc-400">

@@ -180,10 +180,29 @@ export const useBitcoinWalletStore = create<BitcoinWalletState>((set, get) => ({
         });
       }
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Failed to connect wallet";
+      let message: string;
+      if (err instanceof Error) {
+        message = err.message;
+      } else if (typeof err === "string") {
+        message = err;
+      } else if (typeof err === "object" && err !== null) {
+        const obj = err as Record<string, unknown>;
+        if (Object.keys(obj).length === 0) {
+          // sats-connect throws empty {} when no wallet provider is found
+          message = type === "sats-connect"
+            ? "No compatible Bitcoin wallet found. Install Xverse or Leather extension."
+            : "No compatible Bitcoin wallet found. Install UniSat extension.";
+        } else {
+          // Some wallets throw { message: "..." } or { error: "..." } objects
+          message = (typeof obj.message === "string" && obj.message)
+            || (typeof obj.error === "string" && obj.error)
+            || JSON.stringify(err);
+        }
+      } else {
+        message = "Failed to connect wallet";
+      }
       set({ error: message, connecting: false });
-      console.error("Bitcoin wallet connection error:", err);
+      console.error("Bitcoin wallet connection error:", message);
     }
   },
 

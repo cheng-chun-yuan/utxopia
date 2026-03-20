@@ -41,8 +41,28 @@ import {
 } from "@/lib/api/deposits";
 import { formatBtc, formatSats, truncateMiddle } from "@/lib/utils/formatting";
 import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
+import { SUPPORTED_TOKENS, type SupportedToken } from "@/lib/supported-tokens";
+
+/** Resolve token config from deposit data */
+function getDepositToken(deposit: { token_symbol?: string; instruction_disc?: number }): SupportedToken {
+  const sym = deposit.token_symbol;
+  if (sym) {
+    const found = SUPPORTED_TOKENS.find((t) => t.symbol === sym || t.shieldedSymbol === sym);
+    if (found) return found;
+  }
+  return SUPPORTED_TOKENS[0]; // default: BTC
+}
+
+/** Format amount using token decimals, trim trailing zeros */
+function formatTokenAmt(rawAmount: number, token: SupportedToken): string {
+  const num = rawAmount / 10 ** token.decimals;
+  if (num < 0.01 && num > 0) return num.toFixed(token.decimals).replace(/(\.\d{2,}?)0+$/, "$1");
+  const s = num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: token.decimals > 2 ? token.decimals : 2 });
+  return s.replace(/(\.\d{2,}?)0+$/, "$1");
+}
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
+import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 import { useBackendDeposits } from "@/hooks/use-backend-deposits";
 import { useDeposits } from "@/hooks/use-explorer";
 import { useAegisStore, type InboxNote } from "@/stores";
@@ -215,39 +235,36 @@ const TxLink = memo(({ href, label, color = "text-btc/70 hover:text-btc" }: { hr
 });
 TxLink.displayName = "TxLink";
 
-// Simple card for demo deposits — no expandable timeline
-const DemoDepositCard = memo(({ deposit }: { deposit: TrackerDepositStatus }) => {
+// Compact deposit card for demo/shield deposits
+const DemoDepositCard = memo(({ deposit }: { deposit: TrackerDepositStatus & { token_symbol?: string; instruction_disc?: number } }) => {
+  const token = getDepositToken(deposit);
+  const amount = deposit.minted_sats ?? deposit.amount_sats;
   return (
-    <div className="p-4 rounded-xl bg-linear-to-br from-muted to-muted/50 border border-gray/15">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-1.5">
-          <StatusBadge status={deposit.status || "claimed"} />
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 font-medium">Demo</span>
-        </div>
-        {deposit.leaf_index != null && (
-          <span className="text-[10px] text-gray font-mono">Leaf #{deposit.leaf_index}</span>
-        )}
+    <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-muted/50 border border-gray/10 hover:border-gray/20 transition-colors">
+      <img src={token.shieldedLogo} alt={token.shieldedSymbol} className="w-8 h-8 rounded-full shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-foreground">{token.shieldedSymbol}</p>
+        <p className="text-[11px] text-gray/50">{token.name}</p>
       </div>
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-gray">Amount</span>
-          <span className="flex items-center gap-1.5">
-            <Image src="/zkbtc.png" alt="zkBTC" width={16} height={16} className="rounded-full" />
-            <span className="text-base font-semibold text-white">{formatBtc(deposit.minted_sats ?? deposit.amount_sats)}</span>
-            <span className="text-xs text-purple">zkBTC</span>
-          </span>
-        </div>
+      <div className="text-right">
+        <p className="text-sm font-semibold text-foreground font-mono">{formatTokenAmt(amount, token)}</p>
+        <p className="text-[10px] text-success/70 flex items-center justify-end gap-1">
+          <CheckCircle2 className="w-2.5 h-2.5" />
+          Received
+        </p>
       </div>
     </div>
   );
 });
 DemoDepositCard.displayName = "DemoDepositCard";
 
-const DepositCard = memo(({ deposit }: { deposit: TrackerDepositStatus }) => {
+const DepositCard = memo(({ deposit }: { deposit: TrackerDepositStatus & { token_symbol?: string; instruction_disc?: number } }) => {
   const { copied, copy } = useCopyToClipboard();
   const status = deposit.status;
   const stepOrder = STATUS_ORDER[status] ?? 0;
   const [expanded, setExpanded] = useState(false);
+  const token = getDepositToken(deposit);
+  const isBtcNative = token.isBtcNative;
 
   return (
     <div className="space-y-4">
@@ -258,39 +275,49 @@ const DepositCard = memo(({ deposit }: { deposit: TrackerDepositStatus }) => {
       >
         <div className="flex items-center justify-between mb-3">
           <StatusBadge status={status} />
-          <div className="flex items-center gap-2">
-            {deposit.leaf_index != null && (
-              <span className="text-[10px] text-gray font-mono">Leaf #{deposit.leaf_index}</span>
-            )}
-            <ChevronDown className={cn("w-3.5 h-3.5 text-gray transition-transform", expanded && "rotate-180")} />
-          </div>
+          <ChevronDown className={cn("w-3.5 h-3.5 text-gray transition-transform", expanded && "rotate-180")} />
         </div>
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-gray">Deposit</span>
-            <span className="flex items-center gap-1.5">
-              <BitcoinIcon className="w-4 h-4" />
-              <span className="text-base font-semibold text-white">{formatBtc(deposit.btc_deposit_amount_sats ?? deposit.amount_sats)}</span>
-              <span className="text-xs text-btc">BTC</span>
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-gray">Receive</span>
-            <span className="flex items-center gap-1.5">
-              <Image src="/zkbtc.png" alt="zkBTC" width={16} height={16} className="rounded-full" />
-              {deposit.minted_sats != null ? (
-                <span className="text-base font-semibold text-white">{formatBtc(deposit.minted_sats)}</span>
-              ) : (
-                <span className="text-base font-semibold text-gray">~</span>
+          {isBtcNative ? (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray">Deposit</span>
+                <span className="flex items-center gap-1.5">
+                  <BitcoinIcon className="w-4 h-4" />
+                  <span className="text-base font-semibold text-white">{formatBtc(deposit.btc_deposit_amount_sats ?? deposit.amount_sats)}</span>
+                  <span className="text-xs text-btc">BTC</span>
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray">Receive</span>
+                <span className="flex items-center gap-1.5">
+                  <Image src="/zkbtc.png" alt="zkBTC" width={16} height={16} className="rounded-full" />
+                  {deposit.minted_sats != null ? (
+                    <span className="text-base font-semibold text-white">{formatBtc(deposit.minted_sats)}</span>
+                  ) : (
+                    <span className="text-base font-semibold text-gray">~</span>
+                  )}
+                  <span className="text-xs text-purple">zkBTC</span>
+                </span>
+              </div>
+              {(deposit.btc_deposit_amount_sats || deposit.sweep_fee_sats != null) && (
+                <div className="flex items-center justify-between pt-1 border-t border-gray/10">
+                  <span className="text-[10px] text-gray">Network Fee</span>
+                  <span className="text-[10px] text-gray">
+                    -{formatSats(deposit.sweep_fee_sats ?? ((deposit.btc_deposit_amount_sats ?? deposit.amount_sats) - (deposit.minted_sats ?? deposit.amount_sats)))} sats
+                  </span>
+                </div>
               )}
-              <span className="text-xs text-purple">zkBTC</span>
-            </span>
-          </div>
-          {(deposit.btc_deposit_amount_sats || deposit.sweep_fee_sats != null) && (
-            <div className="flex items-center justify-between pt-1 border-t border-gray/10">
-              <span className="text-[10px] text-gray">Network Fee</span>
-              <span className="text-[10px] text-gray">
-                -{formatSats(deposit.sweep_fee_sats ?? ((deposit.btc_deposit_amount_sats ?? deposit.amount_sats) - (deposit.minted_sats ?? deposit.amount_sats)))} sats
+            </>
+          ) : (
+            <div className="flex items-center gap-3">
+              <img src={token.shieldedLogo} alt={token.shieldedSymbol} className="w-6 h-6 rounded-full shrink-0" />
+              <div className="flex-1 min-w-0">
+                <span className="text-xs text-gray">{token.symbol} shielded</span>
+              </div>
+              <span className="flex items-center gap-1.5">
+                <span className="text-base font-semibold text-white font-mono">{formatTokenAmt(deposit.amount_sats, token)}</span>
+                <span className="text-xs text-purple">{token.shieldedSymbol}</span>
               </span>
             </div>
           )}
@@ -359,7 +386,7 @@ const DepositCard = memo(({ deposit }: { deposit: TrackerDepositStatus }) => {
                 <CheckCircle2 className="w-2.5 h-2.5" /> SPV Confirmed
               </span>
               <TxLink
-                href={`https://explorer.solana.com/tx/${deposit.solana_tx}?cluster=devnet`}
+                href={getSolanaExplorerTxUrl(deposit.solana_tx)}
                 label="Solana tx"
                 color="text-sol/70 hover:text-sol"
               />
@@ -504,19 +531,26 @@ export function BalanceView() {
         updated_at: d.timestamp,
         is_demo: d.isDemo,
         btc_deposit_amount_sats: d.btcDepositAmountSats ?? undefined,
+        token_symbol: d.tokenSymbol ?? undefined,
+        instruction_disc: d.instructionDisc ?? undefined,
       }));
 
     return fromExplorer;
   }, [backendDeposits, explorerDeposits, inboxNotes, keys]);
 
-  // Split into ongoing vs minted vs demo
+  // Split into ongoing vs minted vs demo/shield
   const { ongoing, minted, demo } = useMemo(() => {
     const sorted = [...myDeposits].sort((a, b) => b.updated_at - a.updated_at);
     const ongoing: TrackerDepositStatus[] = [];
     const minted: TrackerDepositStatus[] = [];
     const demo: TrackerDepositStatus[] = [];
     for (const d of sorted) {
-      if ((d as TrackerDepositStatus & { is_demo?: boolean }).is_demo) {
+      const ext = d as TrackerDepositStatus & { is_demo?: boolean; instruction_disc?: number };
+      const isShield = ext.instruction_disc === 29;
+      if (isShield) {
+        // SPL shield — show in minted section
+        minted.push(d);
+      } else if (ext.is_demo) {
         demo.push(d);
       } else if (d.status === "ready" || d.status === "claimed") {
         minted.push(d);
@@ -574,7 +608,7 @@ export function BalanceView() {
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-3.5 h-3.5 text-success" />
-            <span className="text-xs font-medium text-success">Minted ({minted.length})</span>
+            <span className="text-xs font-medium text-success">Completed ({minted.length})</span>
           </div>
           {minted.map((dep) => (
             <DepositCard key={dep.id} deposit={dep} />
@@ -587,7 +621,7 @@ export function BalanceView() {
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-3.5 h-3.5 text-yellow-500" />
-            <span className="text-xs font-medium text-yellow-500">Demo ({demo.length})</span>
+            <span className="text-xs font-medium text-yellow-500">Test ({demo.length})</span>
           </div>
           {demo.map((dep) => (
             <DemoDepositCard key={dep.id} deposit={dep} />

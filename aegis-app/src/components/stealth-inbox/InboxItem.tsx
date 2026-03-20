@@ -3,8 +3,29 @@
 import { useRouter } from "next/navigation";
 import { Clock, Shield, Send, Bitcoin } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatBtc } from "@/lib/utils/formatting";
 import type { InboxNote } from "@/hooks/use-aegis";
+import { SUPPORTED_TOKENS, type SupportedToken } from "@/lib/supported-tokens";
+import { useTokenPrices } from "@/hooks/use-btc-price";
+
+function getTokenForNote(note: InboxNote): SupportedToken {
+  const sym = note.tokenSymbol;
+  if (sym) {
+    const found = SUPPORTED_TOKENS.find(
+      (t) => t.shieldedSymbol === sym || t.symbol === sym
+    );
+    if (found) return found;
+  }
+  return SUPPORTED_TOKENS[0]; // default: BTC
+}
+
+function formatNoteAmount(amount: bigint | number, token: SupportedToken): string {
+  const num = Number(amount) / 10 ** token.decimals;
+  // Use enough precision to show the value, but trim trailing zeros
+  const maxDecimals = token.decimals > 2 ? token.decimals : 2;
+  const formatted = num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: maxDecimals });
+  // Trim trailing zeros after decimal, keep at least 2 decimals
+  return formatted.replace(/(\.\d{2,}?)0+$/, "$1");
+}
 
 interface InboxItemProps {
   note: InboxNote;
@@ -29,6 +50,10 @@ function formatRelativeTime(timestamp: number): string {
 
 export function InboxItem({ note }: InboxItemProps) {
   const router = useRouter();
+  const token = getTokenForNote(note);
+  const tokenPrices = useTokenPrices();
+  const price = tokenPrices[token.priceKey];
+  const usdValue = price ? (Number(note.amount) / 10 ** token.decimals) * price : 0;
 
   // Navigate to pay page with note data
   const handleSend = () => {
@@ -80,11 +105,13 @@ export function InboxItem({ note }: InboxItemProps) {
             "text-heading5",
             note.isSpent ? "text-gray" : "text-privacy"
           )}>
-            {formatBtc(Number(note.amount))} zkBTC
+            {formatNoteAmount(note.amount, token)} {token.shieldedSymbol}
           </p>
-          <p className="text-caption text-gray">
-            {Number(note.amount).toLocaleString()} sats
-          </p>
+          {usdValue > 0 && (
+            <p className="text-caption text-gray">
+              ${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+          )}
         </div>
         {note.isSpent ? (
           <div className="px-2 py-1 rounded-full bg-gray/10 border border-gray/20">
@@ -115,13 +142,15 @@ export function InboxItem({ note }: InboxItemProps) {
             <Send className="w-4 h-4" />
             Send
           </button>
-          <button
-            onClick={handleWithdrawBtc}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px] bg-btc/10 hover:bg-btc/20 text-btc transition-colors text-body2"
-          >
-            <Bitcoin className="w-4 h-4" />
-            Withdraw BTC
-          </button>
+          {token.isBtcNative && (
+            <button
+              onClick={handleWithdrawBtc}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px] bg-btc/10 hover:bg-btc/20 text-btc transition-colors text-body2"
+            >
+              <Bitcoin className="w-4 h-4" />
+              Withdraw BTC
+            </button>
+          )}
         </div>
       )}
     </div>

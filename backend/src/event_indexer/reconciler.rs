@@ -19,6 +19,8 @@ pub struct OnChainState {
     pub total_shielded: u64,
     pub pending_redemptions: u64,
     pub tree_next_index: u64,
+    /// Current on-chain Merkle root (hex)
+    pub tree_root: String,
 }
 
 /// Result of comparing on-chain vs local state
@@ -56,6 +58,7 @@ const POOL_TOTAL_SHIELDED_OFFSET: usize = 188;
 
 // CommitmentTree byte offsets (repr(C), disc=0x05)
 const TREE_DISC: u8 = 0x05;
+const TREE_ROOT_OFFSET: usize = 8; // 1+1+6 padding
 const TREE_NEXT_INDEX_OFFSET: usize = 40; // 1+1+6 padding + 32 root
 
 /// Recovery cooldown to prevent loops during active backfill
@@ -138,19 +141,38 @@ impl Reconciler {
         if !leaves_match {
             let since_last = now - *last_recovery_at;
             if since_last >= RECOVERY_COOLDOWN_SECS {
-                tracing::warn!(
-                    on_chain = on_chain.tree_next_index,
-                    local = local_leaf_count,
-                    "[reconciler] leaf count mismatch — clearing checkpoint to trigger backfill"
-                );
-                if let Err(e) = self.store.set_last_signature("") {
-                    tracing::error!(error = %e, "[reconciler] failed to clear checkpoint");
-                } else {
-                    recovery_triggered = true;
-                    *last_recovery_at = now;
-                    // Force tree cache rebuild after backfill catches up
-                    if let Err(e) = self.tree_cache.force_rebuild().await {
-                        tracing::warn!(error = %e, "[reconciler] tree cache rebuild failed (will retry)");
+                // If local is completely empty but on-chain has leaves, try seeding from localnet-state.json
+                if local_leaf_count == 0 && on_chain.tree_next_index > 0 {
+                    if let Some(count) = self.try_seed_from_state_file().await {
+                        tracing::info!(
+                            seeded = count,
+                            "[reconciler] seeded {} leaves from localnet-state.json",
+                            count
+                        );
+                        recovery_triggered = true;
+                        *last_recovery_at = now;
+                        if let Err(e) = self.tree_cache.force_rebuild().await {
+                            tracing::warn!(error = %e, "[reconciler] tree cache rebuild after seed failed");
+                        }
+                    }
+                }
+
+                // If still mismatched (seed didn't help or wasn't applicable), clear checkpoint
+                let new_local = self.store.get_next_leaf_index().unwrap_or(0);
+                if new_local as u64 != on_chain.tree_next_index {
+                    tracing::warn!(
+                        on_chain = on_chain.tree_next_index,
+                        local = new_local,
+                        "[reconciler] leaf count mismatch — clearing checkpoint to trigger backfill"
+                    );
+                    if let Err(e) = self.store.set_last_signature("") {
+                        tracing::error!(error = %e, "[reconciler] failed to clear checkpoint");
+                    } else {
+                        recovery_triggered = true;
+                        *last_recovery_at = now;
+                        if let Err(e) = self.tree_cache.force_rebuild().await {
+                            tracing::warn!(error = %e, "[reconciler] tree cache rebuild failed (will retry)");
+                        }
                     }
                 }
             } else {
@@ -171,6 +193,78 @@ impl Reconciler {
             recovery_triggered,
             checked_at: now,
         })
+    }
+
+    /// Try to seed leaves from localnet-state.json (localnet recovery)
+    ///
+    /// When the validator is reset with --reset, account state is cloned but tx history
+    /// is wiped. The indexer can't backfill via getSignaturesForAddress because there are
+    /// no transactions. But localnet-state.json (written by the init script) contains
+    /// all commitment hashes. We seed the local DB from that file.
+    async fn try_seed_from_state_file(&self) -> Option<usize> {
+        // Only attempt on localnet
+        let network = std::env::var("AEGIS_NETWORK").unwrap_or_default();
+        if network != "localnet" {
+            return None;
+        }
+
+        // Try to find localnet-state.json relative to the binary or working directory
+        let paths = [
+            "../scripts/e2e/localnet-state.json".to_string(),
+            "scripts/e2e/localnet-state.json".to_string(),
+        ];
+
+        let mut state_path = None;
+        for p in &paths {
+            if std::path::Path::new(p).exists() {
+                state_path = Some(p.clone());
+                break;
+            }
+        }
+
+        let path = state_path?;
+        tracing::info!(path = %path, "[reconciler] found localnet-state.json, seeding leaves");
+
+        let content = std::fs::read_to_string(&path).ok()?;
+        let json: serde_json::Value = serde_json::from_str(&content).ok()?;
+
+        let commitments = json["commitments"].as_array()?;
+        if commitments.is_empty() {
+            return None;
+        }
+
+        let mut count = 0;
+        for (i, c) in commitments.iter().enumerate() {
+            let hex_str = c.as_str()?;
+            // Pad odd-length hex (e.g. "194b7..." → "0194b7...")
+            let padded = if hex_str.len() % 2 != 0 {
+                format!("0{}", hex_str)
+            } else {
+                hex_str.to_string()
+            };
+            let commitment_bytes = match hex::decode(&padded) {
+                Ok(b) => b,
+                Err(_) => continue,
+            };
+            if commitment_bytes.len() != 32 {
+                continue;
+            }
+            let mut arr = [0u8; 32];
+            arr.copy_from_slice(&commitment_bytes);
+
+            // Insert into SQLite as a leaf (minimal — no announcement data)
+            let inserted = self.store.insert_leaf_from_seed(
+                i as i64,
+                &arr,
+                "localnet-seed",
+            ).unwrap_or(false);
+
+            if inserted {
+                count += 1;
+            }
+        }
+
+        if count > 0 { Some(count) } else { None }
     }
 
     /// Fetch PoolState + CommitmentTree via a single `getMultipleAccounts` RPC call
@@ -248,6 +342,7 @@ impl Reconciler {
             tree_data[TREE_NEXT_INDEX_OFFSET..TREE_NEXT_INDEX_OFFSET + 8]
                 .try_into().unwrap()
         );
+        let tree_root = hex::encode(&tree_data[TREE_ROOT_OFFSET..TREE_ROOT_OFFSET + 32]);
 
         Ok(OnChainState {
             deposit_count,
@@ -256,6 +351,7 @@ impl Reconciler {
             total_shielded,
             pending_redemptions,
             tree_next_index,
+            tree_root,
         })
     }
 

@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import { useDeposits, useTransfers, useRedemptions } from "@/hooks/use-explorer";
 import type { DepositRecord, GroupedTransfer, RedemptionRecord } from "@/hooks/use-explorer";
+import { usePoolStats } from "@/hooks/use-pool-stats";
+import { useTokenPrices, type TokenPrices } from "@/hooks/use-btc-price";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 
@@ -167,32 +169,28 @@ function ExplorerContent() {
     return items;
   }, [unified, activeFilter, selectedTokens, getDepositTokenFilter]);
 
-  // Per-token shielded totals
-  const perTokenShielded = useMemo(() => {
-    const totals: Record<TokenFilterId, number> = { btc: 0, sol: 0, usdc: 0, usdt: 0 };
-    for (const d of deposits) {
-      const tokenFilter = getDepositTokenFilter(d);
-      totals[tokenFilter] += d.amountSats || 0;
-    }
-    return totals;
-  }, [deposits, getDepositTokenFilter]);
+  // TVL from on-chain pool state (same as main page)
+  const { stats } = usePoolStats();
+  const prices = useTokenPrices();
 
-  // Build total shielded display string (BTC shown in BTC not sats)
   const totalShieldedDisplay = useMemo(() => {
-    const parts: string[] = [];
-    for (const filterId of ["btc", "sol", "usdc", "usdt"] as const) {
-      if (perTokenShielded[filterId] > 0) {
-        const token = getTokenByFilter(filterId);
-        if (token) {
-          // Always show in human-readable units (BTC not sats, SOL not lamports)
-          const value = perTokenShielded[filterId] / (10 ** token.decimals);
-          const symbol = filterId === "btc" ? "BTC" : token.unit;
-          parts.push(`${value.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${symbol}`);
-        }
+    if (!stats?.tokenTVL?.length) return "—";
+    const priceMap: Record<string, number | null> = {
+      BTC: prices.btc, zkBTC: prices.btc,
+      SOL: prices.sol, zkSOL: prices.sol,
+      USDC: prices.usdc, zkUSDC: prices.usdc,
+      USDT: prices.usdt, zkUSDT: prices.usdt,
+    };
+    let total = 0;
+    for (const t of stats.tokenTVL) {
+      const price = priceMap[t.symbol] ?? priceMap[t.symbol.replace("zk", "")];
+      if (price) {
+        total += (Number(t.totalShielded) / (10 ** t.decimals)) * price;
       }
     }
-    return parts.length > 0 ? parts.join(" · ") : "—";
-  }, [perTokenShielded]);
+    if (total === 0) return "—";
+    return `$${total.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+  }, [stats, prices]);
 
   return (
     <>

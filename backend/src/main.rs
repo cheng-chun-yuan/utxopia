@@ -419,7 +419,14 @@ async fn run_tracker_service(args: &[String]) {
     let solana_rpc = std::env::var("AEGIS_SOLANA_RPC")
         .or_else(|_| std::env::var("SOLANA_RPC_URL"))
         .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
-    let aegis_program_id = env_string("AEGIS_PROGRAM_ID", "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ");
+    let aegis_program_id = match std::env::var("AEGIS_PROGRAM_ID") {
+        Ok(id) => id,
+        Err(_) => {
+            eprintln!("ERROR: AEGIS_PROGRAM_ID env var is required.");
+            eprintln!("Run: ./scripts/sync-env.sh to generate .env files from localnet-state.json");
+            return;
+        }
+    };
 
     let event_store = match EventStore::new(&indexer_db_path) {
         Ok(store) => Arc::new(store),
