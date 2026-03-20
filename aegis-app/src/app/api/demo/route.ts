@@ -38,11 +38,7 @@ function getAdminKeypair(): Keypair | null {
 }
 
 export async function POST(request: NextRequest) {
-  // Auth check
-  const { validateApiKey } = await import("@/lib/server/api-auth");
-  const authError = validateApiKey(request);
-  if (authError) return authError;
-
+  // Origin check is enforced by middleware.ts
   try {
     const config = getConfig();
     if (config.network === "mainnet") {

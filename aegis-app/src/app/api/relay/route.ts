@@ -352,11 +352,7 @@ function buildTransactIx(
 // =============================================================================
 
 export async function POST(request: NextRequest): Promise<NextResponse<RelayResponse>> {
-  // Auth check — prevent unauthorized relay requests that drain relayer SOL
-  const { validateApiKey } = await import("@/lib/server/api-auth");
-  const authError = validateApiKey(request);
-  if (authError) return authError as NextResponse<RelayResponse>;
-
+  // Origin check is enforced by middleware.ts — blocks cross-origin requests
   const startTime = Date.now();
 
   try {
