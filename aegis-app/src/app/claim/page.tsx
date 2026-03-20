@@ -1,16 +1,14 @@
 "use client";
 
 import { Suspense, useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Key, Shield } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 function ClaimRedirect() {
-  const searchParams = useSearchParams();
   const router = useRouter();
-  // Read from hash fragment (#note=) — never sent to server
-  // Fall back to query param (?note=) for backward compatibility
+  // Read from hash fragment (#note=) only — never sent to server
   const [noteParam, setNoteParam] = useState<string | null>(null);
 
   useEffect(() => {
@@ -19,13 +17,11 @@ function ClaimRedirect() {
       const match = hash.match(/note=([^&#]+)/);
       if (match) {
         setNoteParam(decodeURIComponent(match[1]));
-        return;
+        // Clear hash from URL to prevent leaking via browser history
+        window.history.replaceState(null, "", window.location.pathname);
       }
     }
-    // Legacy fallback: ?note= query param
-    const qp = searchParams.get("note");
-    if (qp) setNoteParam(qp);
-  }, [searchParams]);
+  }, []);
 
   // If note param present, redirect to Pay with the phrase in hash
   useEffect(() => {

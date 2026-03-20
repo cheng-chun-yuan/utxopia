@@ -370,6 +370,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<RelayResp
       );
     }
 
+    if (!Number.isInteger(nInputs) || !Number.isInteger(nOutputs) || nInputs < 1 || nOutputs < 1 || nInputs > 14 || nOutputs > 14) {
+      return NextResponse.json({ success: false, error: "Invalid circuit dimensions" }, { status: 400 });
+    }
+
     if (nullifiers.length !== nInputs) {
       return NextResponse.json(
         { success: false, error: `Expected ${nInputs} nullifiers, got ${nullifiers.length}` },
@@ -505,7 +509,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<RelayResp
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: process.env.NODE_ENV === "development" ? (error instanceof Error ? error.message : "Unknown error") : "Transaction failed",
       },
       { status: 500 }
     );

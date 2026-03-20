@@ -4,7 +4,7 @@ import {
   PublicKey,
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
-import { hexToBytes } from "@aegis/sdk";
+import { getConfig, hexToBytes } from "@aegis/sdk";
 import { buildAddDemoStealthTransaction } from "@/lib/solana/demo-instructions";
 import {
   AEGIS_PROGRAM_ID,
@@ -39,8 +39,19 @@ function getAdminKeypair(): Keypair | null {
 
 export async function POST(request: NextRequest) {
   try {
+    const config = getConfig();
+    if (config.network === "mainnet") {
+      return NextResponse.json({ error: "Demo endpoint disabled on mainnet" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { ephemeralPub, npk, amount } = body;
+
+    // Amount cap: max 100,000 sats (0.001 BTC)
+    const MAX_DEMO_SATS = 100_000;
+    if (Number(amount) > MAX_DEMO_SATS) {
+      return NextResponse.json({ error: `Demo amount exceeds maximum (${MAX_DEMO_SATS} sats)` }, { status: 400 });
+    }
 
     // Validate params
     if (!isValidHex(ephemeralPub, 64)) {

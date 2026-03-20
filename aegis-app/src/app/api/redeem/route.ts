@@ -250,6 +250,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!Number.isInteger(nInputs) || !Number.isInteger(nOutputs) || nInputs < 1 || nOutputs < 1 || nInputs > 14 || nOutputs > 14) {
+      return NextResponse.json({ success: false, error: "Invalid circuit dimensions" }, { status: 400 });
+    }
+
     if (nOutputs < 1) {
       return NextResponse.json(
         { success: false, error: "nOutputs must be at least 1 (the redeem output)" },
@@ -442,9 +446,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: `Simulation failed: ${JSON.stringify(simResult.value.err)}`,
-          logs: simResult.value.logs,
-          unitsConsumed: simResult.value.unitsConsumed,
+          error: process.env.NODE_ENV === "development" ? `Simulation failed: ${JSON.stringify(simResult.value.err)}` : "Transaction failed",
+          logs: process.env.NODE_ENV === "development" ? simResult.value.logs : undefined,
+          unitsConsumed: process.env.NODE_ENV === "development" ? simResult.value.unitsConsumed : undefined,
         },
         { status: 400 }
       );
@@ -478,8 +482,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-        logs,
+        error: process.env.NODE_ENV === "development" ? (error instanceof Error ? error.message : "Unknown error") : "Transaction failed",
+        logs: process.env.NODE_ENV === "development" ? logs : undefined,
       },
       { status: 500 }
     );

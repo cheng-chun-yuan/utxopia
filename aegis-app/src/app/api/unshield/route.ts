@@ -129,6 +129,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!Number.isInteger(nInputs) || !Number.isInteger(nOutputs) || nInputs < 1 || nOutputs < 1 || nInputs > 14 || nOutputs > 14) {
+      return NextResponse.json({ success: false, error: "Invalid circuit dimensions" }, { status: 400 });
+    }
+
     if (nOutputs < 1) {
       return NextResponse.json(
         { success: false, error: "nOutputs must be at least 1 (the unshield output)" },
@@ -325,7 +329,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: process.env.NODE_ENV === "development" ? (error instanceof Error ? error.message : "Unknown error") : "Transaction failed",
       },
       { status: 500 }
     );
