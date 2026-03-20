@@ -41,6 +41,7 @@ import { useNotesStore } from "@/stores/notes-store";
 import { registerDeposit } from "@/lib/api/deposits";
 import { getBtcSignerNetwork, getMempoolExplorerUrl } from "@/lib/btc-network";
 import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
+import { relayFetch } from "@/lib/api/relay-fetch";
 import { Tooltip } from "@/components/ui/tooltip";
 import { notifySuccess, notifyError } from "@/lib/notifications";
 import { MobileWalletGuidance } from "@/components/bitcoin-wallet-selector";
@@ -204,9 +205,8 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
       const stealthData = await createStealthDepositWithKeys(resolvedMeta, BigInt(sats), getActiveTokenId());
       const npkBytes = bigintToBytes(stealthData.stealthPubKeyX);
 
-      const response = await fetch("/api/demo", {
+      const response = await relayFetch("/api/demo", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ephemeralPub: bytesToHex(stealthData.ephemeralPub),
           npk: bytesToHex(npkBytes),

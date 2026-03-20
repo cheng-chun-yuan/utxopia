@@ -59,6 +59,7 @@ import {
 import { scanSecretPhrase, type ScannedSecretNote } from "@/lib/claim-utils";
 import { setActiveToken } from "@/lib/token-context";
 import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
+import { relayFetch } from "@/lib/api/relay-fetch";
 
 // Extracted sub-components
 import {
@@ -1006,9 +1007,8 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         // Tree stealth data = all except the last (redeem output)
         const treeStealthData = stealthDataArrays.slice(0, -1);
 
-        const redeemResponse = await fetch("/api/redeem", {
+        const redeemResponse = await relayFetch("/api/redeem", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             nInputs: effectiveNInputs,
             nOutputs: actualNOutputs,
@@ -1042,9 +1042,8 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         // Tree outputs = all except the last (unshield output)
         const treeStealthData = stealthDataArrays.slice(0, -1);
 
-        const relayResponse = await fetch("/api/unshield", {
+        const relayResponse = await relayFetch("/api/unshield", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             nInputs: effectiveNInputs,
             nOutputs: actualNOutputs,
@@ -1063,9 +1062,8 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         relayResult = await relayResponse.json();
       } else {
         // Private transfer: call /api/relay
-        const relayResponse = await fetch("/api/relay", {
+        const relayResponse = await relayFetch("/api/relay", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             nInputs: effectiveNInputs,
             nOutputs: actualNOutputs,

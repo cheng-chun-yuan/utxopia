@@ -43,6 +43,7 @@ import {
 } from "@aegis/sdk";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useBitcoinWalletStore } from "@/stores/bitcoin-wallet-store";
+import { relayFetch } from "@/lib/api/relay-fetch";
 import { useNotesStore } from "@/stores/notes-store";
 import { registerDeposit } from "@/lib/api/deposits";
 import { getBtcSignerNetwork, getMempoolExplorerUrl } from "@/lib/btc-network";
@@ -135,9 +136,8 @@ export function DepositFlow() {
 
       // Call API - relayer submits transaction (keeps user anonymous)
       // Send ephemeralPub + npk + amount (commitment computed on-chain)
-      const response = await fetch("/api/demo", {
+      const response = await relayFetch("/api/demo", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ephemeralPub: bytesToHex(stealthData.ephemeralPub),
           npk: bytesToHex(npkBytes),

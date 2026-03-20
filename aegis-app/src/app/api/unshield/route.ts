@@ -107,6 +107,11 @@ function deriveVkRegistryPDA(
 // =============================================================================
 
 export async function POST(request: NextRequest) {
+  // Auth check
+  const { validateApiKey } = await import("@/lib/server/api-auth");
+  const authError = validateApiKey(request);
+  if (authError) return authError;
+
   const startTime = Date.now();
 
   try {
