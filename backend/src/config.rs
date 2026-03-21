@@ -72,7 +72,7 @@ impl FromStr for Network {
             "mainnet" | "main" => Ok(Network::Mainnet),
             "testnet" | "test" => Ok(Network::Testnet),
             "devnet" | "dev" | "testnet4" => Ok(Network::Devnet),
-            "regtest" => Ok(Network::Regtest),
+            "regtest" | "localnet" | "local" => Ok(Network::Regtest),
             _ => Err(ConfigError::InvalidValue(
                 "AEGIS_NETWORK".to_string(),
                 format!("unknown network: {}", s),

@@ -88,6 +88,10 @@ enum Commands {
         /// Key password to use for saving
         #[arg(short, long, env = "FROST_KEY_PASSWORD")]
         password: String,
+
+        /// API key for authenticating with signers
+        #[arg(short, long, env = "FROST_API_KEY")]
+        api_key: Option<String>,
     },
 
     /// Generate test keys using trusted dealer (for development only)
@@ -149,8 +153,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             signers,
             threshold,
             password,
+            api_key,
         } => {
-            run_dkg_coordinator(signers, threshold, password).await?;
+            run_dkg_coordinator(signers, threshold, password, api_key).await?;
         }
         Commands::GenerateTestKeys {
             output_dir,
@@ -362,6 +367,7 @@ async fn run_dkg_coordinator(
     signers_str: String,
     threshold: u16,
     _password: String,
+    api_key: Option<String>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use frost_server::types::*;
     use std::collections::BTreeMap;
@@ -380,6 +386,7 @@ async fn run_dkg_coordinator(
     );
 
     let client = reqwest::Client::new();
+    let api_key_header = api_key.as_deref().unwrap_or("");
     let ceremony_id = uuid::Uuid::new_v4();
 
     // Round 1: Collect packages and X25519 public keys from all signers
@@ -396,6 +403,7 @@ async fn run_dkg_coordinator(
 
         let response: DkgRound1Response = client
             .post(format!("{}/dkg/round1", signer_url))
+            .header("X-API-Key", api_key_header)
             .json(&request)
             .send()
             .await?
@@ -422,6 +430,7 @@ async fn run_dkg_coordinator(
 
         let response: DkgRound2Response = client
             .post(format!("{}/dkg/round2", signer_url))
+            .header("X-API-Key", api_key_header)
             .json(&request)
             .send()
             .await?
@@ -456,6 +465,7 @@ async fn run_dkg_coordinator(
 
         let response: DkgFinalizeResponse = client
             .post(format!("{}/dkg/finalize", signer_url))
+            .header("X-API-Key", api_key_header)
             .json(&request)
             .send()
             .await?
