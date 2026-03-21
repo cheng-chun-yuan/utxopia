@@ -91,3 +91,236 @@ The goal is to keep each test file focused, small, and clearly scoped (unit, int
   - Add/extend a **unit test** close to the logic.
   - Add/extend an **integration/E2E test** only if the behavior crosses boundaries (Solana, backend, Bitcoin).
 
+---
+
+## Environment Testing Guide
+
+How to run the full Aegis stack on **localnet** (regtest) and **devnet** (testnet4), including FROST threshold signing.
+
+### Localnet (Regtest) — One-Command Setup
+
+Localnet uses a local Solana validator + Bitcoin regtest in Docker. All transactions are instant — no waiting for real block times.
+
+**Prerequisites:** Docker running, Solana CLI 2.0+, Bun 1.0+, Node.js 18+, contracts built (`cargo build-sbf --features devnet`), circuits compiled (`cd circuits && bash scripts/compile.sh && bash scripts/setup.sh`).
+
+```bash
+# 1. Start Bitcoin regtest (Docker must be running)
+docker compose -f docker-compose.regtest.yml up -d
+
+# 2. Wait for Esplora API (~10 seconds)
+curl -s http://localhost:3002/regtest/api/blocks/tip/height
+
+# 3. Run full setup: validator + deploy + E2E tests + env sync + frontend
+./scripts/setup.sh localnet
+
+# 4. Start backend (separate terminal)
+cd backend && cargo run --bin zkbtc-api -- tracker --interval 30 --confirmations 1
+```
+
+**E2E steps run automatically (total ~80 seconds):**
+
+| Step | What | Time |
+|------|------|------|
+| 1 | Start validator, deploy programs, init pool | ~18s |
+| 2 | Create tUSDC, tWSOL test tokens | ~5s |
+| 3 | Real BTC deposit: OP_RETURN → sweep → SPV verify → mint | ~11s |
+| 4 | Demo stealth deposit (admin, devnet feature) | ~2s |
+| 5 | Shield SPL tokens (tUSDC + wSOL) into commitments | ~2s |
+| 6 | JoinSplit transfer: Groth16 proof splits 30k → 15k + 15k | ~15s |
+| 7 | Unshield: ZK proof burns commitment → returns tUSDC | ~15s |
+| 8 | BTC withdrawal request (redemption PDA) | ~1s |
+| 8b | Complete redemption: BTC tx → SPV verify → close PDA | ~9s |
+| 9 | Summary: pool state, tree, token configs | ~0.2s |
+
+**Services after setup:**
+
+| Service | URL | Port |
+|---------|-----|------|
+| Solana Validator | http://localhost:8899 | 8899 |
+| Bitcoin Esplora | http://localhost:3002 | 3002 |
+| Backend API | http://localhost:3001 | 3001 |
+| Frontend | http://localhost:3000 | 3000 |
+
+**FROST on localnet: Not required.** The backend auto-detects localnet and falls back to **single-key signing** for BTC withdrawals. No FROST signers needed.
+
+**Stop everything:**
+
+```bash
+./scripts/setup.sh localnet --stop
+docker compose -f docker-compose.regtest.yml down
+```
+
+### Localnet — Manual Step-by-Step
+
+For debugging or running services individually:
+
+```bash
+# Terminal 1: Solana validator (MUST clone devnet feature set for BN254)
+solana-test-validator --clone-feature-set --url devnet --reset
+
+# Terminal 2: Bitcoin regtest
+docker compose -f docker-compose.regtest.yml up -d
+
+# Terminal 3: Deploy & init
+cd contracts && cargo build-sbf --features devnet
+bun run scripts/e2e/run-all.ts
+
+# Terminal 4: Sync env + backend
+./scripts/sync-env.sh
+cd backend && cargo run --bin zkbtc-api -- tracker --interval 30 --confirmations 1
+
+# Terminal 5: Frontend
+cd aegis-app && bun run dev
+```
+
+### Devnet (Testnet4)
+
+Devnet uses Solana devnet + Bitcoin testnet4. Real BTC deposits take ~10 min per block (6 confirmations ≈ 1 hour).
+
+| Aspect | Localnet | Devnet |
+|--------|----------|--------|
+| Bitcoin network | regtest (instant blocks) | testnet4 (~10 min/block) |
+| Solana network | local validator | devnet RPC |
+| BTC deposit time | ~10 seconds | ~60 minutes |
+| FROST signing | Single-key (auto) | Single-key or FROST |
+| Demo deposit | Available (admin) | Available (admin) |
+| Programs | Fresh deploy each run | Persistent program IDs |
+
+**Setup:**
+
+```bash
+# 1. Configure Solana for devnet
+solana config set --url devnet
+solana airdrop 5
+
+# 2. Build with devnet features
+cd contracts && cargo build-sbf --features devnet
+
+# 3. Deploy (first time) or use existing program IDs
+bun run scripts/init-devnet.mjs
+
+# 4. Sync env files for devnet
+AEGIS_NETWORK=devnet ./scripts/sync-env.sh
+
+# 5. Start backend
+cd backend && cargo run --bin zkbtc-api -- tracker
+
+# 6. Start frontend
+cd aegis-app && bun run dev
+```
+
+**Quick testing on devnet (without waiting for real BTC blocks):**
+
+1. **Demo deposit** — admin instruction, instant, creates shielded notes:
+   ```bash
+   bun run scripts/topup-all.ts aegis:<stealth_meta_address>
+   ```
+
+2. **Shield SPL tokens** — disc=29, instant, creates commitments from tUSDC/wSOL/etc.
+
+3. **Full BTC deposit** — send testnet4 BTC to pool's Taproot address with OP_RETURN. Wait ~1 hour for 6 confirmations. Backend auto-detects, sweeps, and verifies via SPV.
+
+### FROST Threshold Signing
+
+FROST provides 2-of-3 threshold Schnorr signing for BTC withdrawals. Each signer runs as a separate process.
+
+**When to use FROST:**
+
+| Environment | FROST? | Reason |
+|-------------|--------|--------|
+| Localnet | **No** | Single-key fallback is faster |
+| Devnet | Optional | Test threshold signing flow |
+| Production | **Required** | Single-key = single point of failure |
+
+**Architecture:**
+
+```
+Backend (coordinator)
+    │
+    ├── round1 ──► Signer 1 (:9001) ──► nonce commitment
+    ├── round1 ──► Signer 2 (:9002) ──► nonce commitment
+    └── round1 ──► Signer 3 (:9003) ──► nonce commitment
+    │
+    │   (collect 2-of-3 commitments)
+    │
+    ├── round2 ──► Signer 1 ──► partial signature
+    └── round2 ──► Signer 2 ──► partial signature
+    │
+    │   (aggregate → valid Schnorr signature)
+    └── Broadcast BTC transaction
+```
+
+**Start local FROST signers:**
+
+```bash
+# Start 3 signers via Docker
+docker compose -f docker-compose.local.yml up --build -d
+
+# Verify health
+curl -s http://localhost:9001/health
+curl -s http://localhost:9002/health
+curl -s http://localhost:9003/health
+```
+
+**Configure backend for FROST** (in `backend/.env`):
+
+```bash
+AEGIS_SIGNING_MODE=frost
+AEGIS_FROST_THRESHOLD=2
+AEGIS_FROST_PARTICIPANTS=3
+AEGIS_FROST_SIGNER_URLS=http://localhost:9001,http://localhost:9002,http://localhost:9003
+```
+
+**Test FROST keys:** Password `test`, threshold 2-of-3, stored in `frost_server/config/`.
+
+**Railway deployment (devnet):** FROST signers run as separate Railway services with internal networking (`frost-signer-N.railway.internal:900N`). Key shares injected via `FROST_KEY_BASE64` env var.
+
+**Stop FROST signers:**
+
+```bash
+docker compose -f docker-compose.local.yml down
+```
+
+### Environment Sync
+
+All services read from `.env` files generated by `sync-env.sh`:
+
+```bash
+# Localnet (default) — reads scripts/e2e/localnet-state.json
+./scripts/sync-env.sh
+
+# Devnet
+AEGIS_NETWORK=devnet ./scripts/sync-env.sh
+```
+
+Generated files:
+
+| File | Symlink |
+|------|---------|
+| `backend/.env.localnet` | `backend/.env` |
+| `aegis-app/.env.localnet` | `aegis-app/.env.local` |
+
+### Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| `cargo build-sbf` fails on `edition2024` | `cargo update -p blake3 --precise 1.5.5` |
+| BN254 pairing syscall error on localnet | Use `--clone-feature-set --url devnet` flag |
+| snarkjs hangs in Bun | Ensure `node` is in PATH (auto-fallback to Node subprocess) |
+| Backend says `AEGIS_PROGRAM_ID required` | Run `./scripts/sync-env.sh` then start from `backend/` directory |
+| FROST signer connection refused | Check `docker compose -f docker-compose.local.yml ps` |
+| Esplora 502 Bad Gateway | Wait ~10s after Docker start, then retry |
+| Validator already running | `pkill -f solana-test-validator` then restart |
+
+### Ports Reference
+
+| Service | Port |
+|---------|------|
+| Solana Validator | 8899 |
+| Bitcoin Esplora | 3002 |
+| Backend API | 3001 |
+| Frontend | 3000 |
+| FROST Signer 1 | 9001 |
+| FROST Signer 2 | 9002 |
+| FROST Signer 3 | 9003 |
+

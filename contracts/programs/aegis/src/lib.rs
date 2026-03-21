@@ -74,6 +74,9 @@ pub mod instruction {
     pub const EXECUTE_POOL_UPDATE: u8 = 22;
     pub const CANCEL_POOL_UPDATE: u8 = 23;
 
+    // Admin config
+    pub const SET_POOL_CONFIG: u8 = 27;
+
     // Multi-token instructions
     pub const REGISTER_TOKEN: u8 = 28;
     pub const SHIELD: u8 = 29;
@@ -137,6 +140,9 @@ pub fn process_instruction(
         }
         instruction::CANCEL_POOL_UPDATE => {
             instructions::process_cancel_pool_update(program_id, accounts, data)
+        }
+        instruction::SET_POOL_CONFIG => {
+            instructions::process_set_pool_config(program_id, accounts, data)
         }
         instruction::REGISTER_TOKEN => {
             instructions::process_register_token(program_id, accounts, data)
