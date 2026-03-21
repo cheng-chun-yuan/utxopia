@@ -4,6 +4,12 @@
 #   docker compose -f docker-compose.local.yml up --build -d
 #   docker compose -f docker-compose.local.yml logs -f
 #   docker compose -f docker-compose.local.yml down
+#
+# Network (default: regtest for local dev):
+#   FROST_NETWORK=testnet4 docker compose -f docker-compose.local.yml up --build -d
+#
+# DKG (run after signers are up):
+#   ./scripts/frost-dkg.sh
 
 x-frost-common: &frost-common
   build:
@@ -15,7 +21,7 @@ x-frost-common: &frost-common
   environment: &frost-env
     RUST_LOG: info,frost_server=debug
     FROST_KEY_PASSWORD: "${FROST_KEY_PASSWORD:-test}"
-    FROST_API_KEY: "${FROST_API_KEY}"
+    FROST_API_KEY: "${FROST_API_KEY:-localnet-frost-key}"
   restart: unless-stopped
 
 services:
@@ -26,7 +32,8 @@ services:
       - "9001:9001"
     command: >
       run --bind 0.0.0.0:9001 --id 1
-      --password "${FROST_KEY_PASSWORD:-test}" --network testnet4
+      --password "${FROST_KEY_PASSWORD:-test}" --network "${FROST_NETWORK:-regtest}"
+      --esplora-url "${FROST_ESPLORA_URL:-http://host.docker.internal:3002/regtest/api}"
 
   frost-signer-2:
     <<: *frost-common
@@ -35,7 +42,8 @@ services:
       - "9002:9002"
     command: >
       run --bind 0.0.0.0:9002 --id 2
-      --password "${FROST_KEY_PASSWORD:-test}" --network testnet4
+      --password "${FROST_KEY_PASSWORD:-test}" --network "${FROST_NETWORK:-regtest}"
+      --esplora-url "${FROST_ESPLORA_URL:-http://host.docker.internal:3002/regtest/api}"
 
   frost-signer-3:
     <<: *frost-common
@@ -44,4 +52,5 @@ services:
       - "9003:9003"
     command: >
       run --bind 0.0.0.0:9003 --id 3
-      --password "${FROST_KEY_PASSWORD:-test}" --network testnet4
+      --password "${FROST_KEY_PASSWORD:-test}" --network "${FROST_NETWORK:-regtest}"
+      --esplora-url "${FROST_ESPLORA_URL:-http://host.docker.internal:3002/regtest/api}"

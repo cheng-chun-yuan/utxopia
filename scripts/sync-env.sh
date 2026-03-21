@@ -44,8 +44,8 @@ case "$NETWORK" in
 
     SOLANA_RPC="http://localhost:8899"
     BTC_NETWORK="regtest"
-    BTC_RPC="http://localhost:18443"
-    ESPLORA_URL=""
+    BTC_RPC="http://localhost:3002/regtest/api"
+    ESPLORA_URL="http://localhost:3002/regtest/api"
     BACKEND_URL="http://localhost:3001"
     MEMPOOL_WS="false"
     ;;

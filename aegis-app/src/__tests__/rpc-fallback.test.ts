@@ -1,11 +1,10 @@
 /**
- * RPC fallback tests — verifies demo deposit detection
+ * RPC fallback tests — verifies instruction discriminator extraction
  *
  * The RPC fallback scans on-chain transaction logs when the
  * backend is unavailable. It must correctly detect:
- * - disc=13 → demo deposit (isDemo=true)
- * - disc=1  → real BTC deposit (isDemo=false)
- * - disc=29 → shield (not a deposit type)
+ * - disc=1  → real BTC deposit
+ * - disc=29 → SPL shield
  */
 
 import { describe, it, expect } from "bun:test";
@@ -67,8 +66,7 @@ function encodeBase58(bytes: Uint8Array): string {
 // Tests
 // =============================================================================
 
-describe("RPC fallback: demo detection via instruction discriminator", () => {
-  const DEMO_DISC = 13;
+describe("RPC fallback: instruction discriminator extraction", () => {
   const VERIFY_DISC = 1;
   const SHIELD_DISC = 29;
   const AEGIS_PROGRAM_ID = "8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim";
@@ -117,11 +115,6 @@ describe("RPC fallback: demo detection via instruction discriminator", () => {
     };
   }
 
-  it("detects demo deposit (disc=13)", () => {
-    const result = buildMockTxResult(DEMO_DISC);
-    expect(extractInstructionDisc(result)).toBe(13);
-  });
-
   it("detects real BTC deposit (disc=1)", () => {
     const result = buildMockTxResult(VERIFY_DISC);
     expect(extractInstructionDisc(result)).toBe(1);
@@ -158,14 +151,6 @@ describe("RPC fallback: demo detection via instruction discriminator", () => {
       },
     };
     expect(extractInstructionDisc(result)).toBeNull();
-  });
-
-  it("demo detection: disc=13 → isDemo=true, disc=1 → isDemo=false", () => {
-    const demoDisc = extractInstructionDisc(buildMockTxResult(DEMO_DISC));
-    const realDisc = extractInstructionDisc(buildMockTxResult(VERIFY_DISC));
-
-    expect(demoDisc === DEMO_DISC).toBe(true);  // isDemo = true
-    expect(realDisc === DEMO_DISC).toBe(false);  // isDemo = false
   });
 });
 

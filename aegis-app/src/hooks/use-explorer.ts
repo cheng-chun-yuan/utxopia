@@ -29,7 +29,7 @@ export interface DepositRecord {
   trackerError: string | null;
   isDemo: boolean;
   btcDepositAmountSats: number | null;
-  /** 1=BTC SPV deposit, 13=demo, 29=SPL shield */
+  /** 1=BTC SPV deposit, 29=SPL shield */
   instructionDisc: number | null;
   /** Token ID hex from on-chain event */
   tokenId: string | null;

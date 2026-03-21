@@ -137,7 +137,7 @@ function ExplorerContent() {
       return "btc";
     }
     const shieldType = getShieldType(d);
-    if (shieldType === "btc" || shieldType === "demo") return "btc";
+    if (shieldType === "btc") return "btc";
     if (shieldType === "sol") return "sol";
     if (shieldType === "usdc") return "usdc";
     if (shieldType === "usdt") return "usdt";

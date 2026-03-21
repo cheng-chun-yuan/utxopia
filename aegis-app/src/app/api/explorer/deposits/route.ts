@@ -62,7 +62,6 @@ export interface ExplorerDeposit {
   timestamp: number;
   slot: number;
   ephemeralPub?: string;
-  // Tracker data (null for demo deposits)
   status: string | null;
   btcTxid: string | null;
   sweepTxid: string | null;
@@ -75,7 +74,7 @@ export interface ExplorerDeposit {
   trackerError: string | null;
   isDemo: boolean;
   btcDepositAmountSats: number | null;
-  /** Instruction discriminator: 1=BTC SPV deposit, 13=demo, 29=SPL shield */
+  /** Instruction discriminator: 1=BTC SPV deposit, 29=SPL shield */
   instructionDisc: number | null;
   /** Token ID hex (from on-chain event, identifies which token) */
   tokenId: string | null;
@@ -197,14 +196,8 @@ export async function GET() {
         if (tracker) matchedTrackerSolTxs.add(a.tx_signature);
         // Detect deposit type from backend data:
         // - BTC SPV: is_verified=true, has btc_deposit_txid
-        // - Demo: is_verified=false, no btc_txid, same token_id as BTC (zkBTC)
-        // - SPL shield: is_verified=false, no btc_txid, DIFFERENT token_id (tUSDC, wSOL, etc.)
+        // - SPL shield: is_verified=false, no btc_txid, has token_id
         const isBtc = a.is_verified && !!a.btc_deposit_txid;
-        // Demo and BTC deposits share the same zkBTC token_id; SPL shields have unique token_ids
-        // If we see a non-BTC deposit with a non-zkBTC token_id, it's an SPL shield
-        const zkbtcTokenIdPrefix = announcements.find(x => x.is_verified)?.token_id?.slice(0, 8);
-        const hasDifferentToken = a.token_id && zkbtcTokenIdPrefix && !a.token_id.startsWith(zkbtcTokenIdPrefix);
-        const isDemo = !isBtc && !hasDifferentToken;
         const leafTime = leafTimestamps.get(a.leaf_index) ?? 0;
         const timestamp = a.block_time || leafTime || (tracker?.created_at ?? 0);
 
@@ -213,11 +206,10 @@ export async function GET() {
 
         // Detect instruction type:
         // - is_verified + has btc_deposit_txid = real BTC SPV (disc=1)
-        // - !is_verified + no btc data + small amounts = demo (disc=13)
-        // - !is_verified + large amounts or has token_id ≠ zkBTC = SPL shield (disc=29)
+        // - otherwise with token_id = SPL shield (disc=29)
         const isBtcDeposit = a.is_verified && !!a.btc_deposit_txid;
-        const isSplShield = !isBtcDeposit && !isDemo && a.token_id;
-        const disc = isBtcDeposit ? 1 : isSplShield ? 29 : 13;
+        const isSplShield = !isBtcDeposit && !!a.token_id;
+        const disc = isBtcDeposit ? 1 : isSplShield ? 29 : 1;
 
         return {
           txSignature: a.tx_signature,
@@ -237,7 +229,7 @@ export async function GET() {
           mintedSats: isVerifiedNoTracker ? decodeLeU64(a.encrypted_amount) : (tracker?.minted_sats ?? null),
           taprootAddress: tracker?.taproot_address ?? null,
           trackerError: tracker?.error ?? null,
-          isDemo,
+          isDemo: false,
           btcDepositAmountSats: tracker?.amount_sats ?? a.btc_deposit_amount_sats ?? null,
           instructionDisc: disc,
           tokenId: a.token_id ?? null,
@@ -294,12 +286,10 @@ export async function GET() {
       const txMetas = await fetchAnnouncementsFromRpc(0); // type=0 = deposits
       const deposits: ExplorerDeposit[] = [];
 
-      // disc=13 is add_demo_stealth, disc=1 is verify_stealth_deposit (real BTC)
-      const DEMO_DISC = 13;
+      // disc=1 is verify_stealth_deposit (real BTC)
       const VERIFY_DISC = 1;
 
       for (const tx of txMetas) {
-        const isDemo = tx.instructionDisc === DEMO_DISC;
         const isVerified = tx.instructionDisc === VERIFY_DISC;
         for (const ann of tx.announcements) {
           deposits.push({
@@ -310,7 +300,7 @@ export async function GET() {
             timestamp: tx.blockTime,
             slot: tx.slot,
             ephemeralPub: ann.ephemeralPub,
-            status: isVerified ? "claimed" : isDemo ? "claimed" : null,
+            status: isVerified ? "claimed" : null,
             btcTxid: null,
             sweepTxid: null,
             solanaTx: tx.signature,
@@ -320,7 +310,7 @@ export async function GET() {
             mintedSats: isVerified ? decodeLeU64(ann.encryptedAmount) : null,
             taprootAddress: null,
             trackerError: null,
-            isDemo,
+            isDemo: false,
             btcDepositAmountSats: null,
             instructionDisc: tx.instructionDisc,
             tokenId: null,

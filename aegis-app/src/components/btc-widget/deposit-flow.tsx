@@ -22,9 +22,9 @@
 import { useState } from "react";
 import {
   Check, AlertCircle, Wallet,
-  RefreshCw, ExternalLink, Info,
-  Zap, Loader2, CheckCircle2, ArrowRight,
-  Hash, FileText, ArrowLeftRight, ChevronDown, Shield,
+  RefreshCw, ExternalLink,
+  Loader2, CheckCircle2, ArrowRight,
+  FileText, ChevronDown, Shield,
   Copy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -32,22 +32,17 @@ import { notifySuccess, notifyError } from "@/lib/notifications";
 import {
   bytesToHex,
   hexToBytes,
-  createStealthDepositWithKeys,
   createNonInteractiveDeposit,
-  bigintToBytes,
   buildDepositPsbt,
   selectUtxos,
   getConfig,
   type StealthMetaAddress,
-  type BuildDepositPsbtResult,
 } from "@aegis/sdk";
-import { Tooltip } from "@/components/ui/tooltip";
 import { useBitcoinWalletStore } from "@/stores/bitcoin-wallet-store";
 
 import { useNotesStore } from "@/stores/notes-store";
 import { registerDeposit } from "@/lib/api/deposits";
 import { getBtcSignerNetwork, getMempoolExplorerUrl } from "@/lib/btc-network";
-import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 
 import { MobileWalletGuidance } from "@/components/bitcoin-wallet-selector";
 import { useIsMobileWithoutWallet } from "@/hooks/use-mobile-wallet-detect";
@@ -56,15 +51,6 @@ import { StealthRecipientInput } from "@/components/ui/stealth-recipient-input";
 
 export function DepositFlow() {
   const { stealthAddress } = useAegis();
-  const isDevnet = getConfig().network === "devnet";
-  // Demo mode state (only available on devnet)
-  const [demoMode, setDemoMode] = useState(false);
-  const [demoAmount, setDemoAmount] = useState("10000");
-  const [demoSubmitting, setDemoSubmitting] = useState(false);
-  const [demoResult, setDemoResult] = useState<{
-    signature: string;
-    ephemeralPubKey?: string;
-  } | null>(null);
 
   // Stealth mode state
   const [error, setError] = useState<string | null>(null);
@@ -98,8 +84,6 @@ export function DepositFlow() {
   const resetFlow = () => {
     setError(null);
     setResolvedMeta(null);
-    setDemoAmount("10000");
-    setDemoResult(null);
     setWalletDepositAmount("10000");
     setWalletDepositResult(null);
     setDepositPreview(null);
@@ -108,61 +92,6 @@ export function DepositFlow() {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => notifySuccess("Copied!"));
   };
-
-  // Demo mode: Submit mock stealth deposit via backend relayer (keeps user anonymous)
-  const submitDemoDeposit = async () => {
-    if (!resolvedMeta) {
-      notifyError("Please resolve recipient first");
-      return;
-    }
-
-    const amount = BigInt(demoAmount || "10000");
-    if (amount <= 0n) {
-      notifyError("Amount must be positive");
-      return;
-    }
-
-    setDemoSubmitting(true);
-    setDemoResult(null);
-    setError(null);
-
-    try {
-      // Create stealth deposit with keys to get npk (note public key)
-      const { getActiveTokenId } = await import("@/lib/token-context");
-      const stealthData = await createStealthDepositWithKeys(resolvedMeta, amount, getActiveTokenId());
-
-      // Convert npk (bigint) to 32-byte big-endian
-      const npkBytes = bigintToBytes(stealthData.stealthPubKeyX);
-
-      // Call API - relayer submits transaction (keeps user anonymous)
-      // Send ephemeralPub + npk + amount (commitment computed on-chain)
-      const response = await fetch("/api/demo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ephemeralPub: bytesToHex(stealthData.ephemeralPub),
-          npk: bytesToHex(npkBytes),
-          amount: amount.toString(),
-        }),
-      });
-
-      const result = await response.json();
-      if (!result.success) {
-        throw new Error(result.error || "Failed to submit demo deposit");
-      }
-
-      setDemoResult({
-        signature: result.signature,
-        ephemeralPubKey: bytesToHex(stealthData.ephemeralPub),
-      });
-    } catch (err) {
-      console.error("Demo deposit error:", err);
-      setError(err instanceof Error ? err.message : "Failed to submit demo deposit");
-    } finally {
-      setDemoSubmitting(false);
-    }
-  };
-
 
   // Step 1: Generate deposit info + fetch UTXOs in parallel
   const buildTxPreview = async () => {
@@ -305,35 +234,6 @@ export function DepositFlow() {
 
   return (
     <div className="flex flex-col">
-      {/* Demo Mode Toggle (devnet only) */}
-      {isDevnet && (
-        <div className="flex items-center justify-between mb-4 p-3 bg-warning/5 border border-warning/20 rounded-[12px]">
-          <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-warning" />
-            <span className="text-body2 text-warning">Demo Mode</span>
-            <Tooltip content="Skip BTC deposit - add mock commitment directly to Solana for testing">
-              <Info className="w-3.5 h-3.5 text-warning/60" />
-            </Tooltip>
-          </div>
-          <button
-            onClick={() => { setDemoMode(!demoMode); setDemoResult(null); }}
-            className={cn(
-              "relative w-11 h-6 rounded-full transition-colors",
-              demoMode ? "bg-warning" : "bg-gray/30"
-            )}
-            role="switch"
-            aria-checked={demoMode}
-          >
-            <span
-              className={cn(
-                "absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform",
-                demoMode && "translate-x-5"
-              )}
-            />
-          </button>
-        </div>
-      )}
-
       {/* ========== STEALTH MODE (Send by Stealth) ========== */}
       <>
           {/* Recipient Input — shared component with auto-resolve on blur/Enter */}
@@ -357,102 +257,8 @@ export function DepositFlow() {
             </div>
           )}
 
-          {/* ========== DEMO MODE: Stealth Deposit ========== */}
-          {demoMode && resolvedMeta && (
-            <>
-              {/* Amount Input */}
-              <div className="mb-4">
-                <label className="text-body2 text-gray-light pl-2 mb-2 block">Amount (satoshis)</label>
-                <input
-                  type="number"
-                  value={demoAmount}
-                  onChange={(e) => setDemoAmount(e.target.value)}
-                  placeholder="10000"
-                  className={cn(
-                    "w-full p-3 bg-muted border border-gray/15 rounded-[12px]",
-                    "text-body2 font-mono text-foreground placeholder:text-gray",
-                    "outline-none focus:border-warning/40 transition-colors"
-                  )}
-                />
-                <p className="text-caption text-gray mt-1 pl-2">
-                  {demoAmount ? `${(parseInt(demoAmount) / 100_000_000).toFixed(8)} BTC` : ""}
-                </p>
-              </div>
-
-              {/* Demo Submit Button */}
-              <button
-                onClick={submitDemoDeposit}
-                disabled={demoSubmitting}
-                className={cn(
-                  "w-full py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2 mb-4",
-                  "bg-warning hover:bg-warning/90 text-background",
-                  "disabled:bg-gray/20 disabled:text-gray disabled:cursor-not-allowed"
-                )}
-              >
-                {demoSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Publishing via relayer...
-                  </>
-                ) : (
-                  <>
-                    <Zap className="w-4 h-4" />
-                    Add Mock Stealth Deposit
-                  </>
-                )}
-              </button>
-
-              {/* Demo Result */}
-              {demoResult && (
-                <div className="p-4 bg-success/10 border border-success/30 rounded-[12px] mb-4">
-                  <div className="flex items-center gap-2 text-success mb-2">
-                    <CheckCircle2 className="w-5 h-5" />
-                    <span className="text-body2-semibold">Mock Stealth Deposit Published!</span>
-                  </div>
-
-                  {demoResult.ephemeralPubKey && (
-                    <div className="mb-3">
-                      <p className="text-caption text-gray mb-1">Ephemeral Public Key:</p>
-                      <code className="block text-[10px] font-mono text-sol bg-muted p-2 rounded-[8px] break-all">
-                        {demoResult.ephemeralPubKey}
-                      </code>
-                    </div>
-                  )}
-
-                  <a
-                    href={getSolanaExplorerTxUrl(demoResult.signature)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-caption text-sol hover:text-sol-light transition-colors"
-                  >
-                    View transaction
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                </div>
-              )}
-
-              {/* Info about stealth deposit */}
-              <div className="p-3 bg-sol/10 border border-sol/20 rounded-[12px] mb-4">
-                <div className="flex items-start gap-2">
-                  <Info className="w-4 h-4 text-sol shrink-0 mt-0.5" />
-                  <p className="text-caption text-gray">
-                    The recipient can scan for this deposit using their stealth keys. Only they can see and claim it.
-                  </p>
-                </div>
-              </div>
-
-              {/* Reset button */}
-              {demoResult && (
-                <button onClick={resetFlow} className="btn-secondary w-full">
-                  <RefreshCw className="w-4 h-4" />
-                  Start New Deposit
-                </button>
-              )}
-            </>
-          )}
-
-          {/* ========== NORMAL MODE: Wallet Deposit ========== */}
-          {!demoMode && resolvedMeta && !walletDepositResult && (
+          {/* ========== WALLET DEPOSIT ========== */}
+          {resolvedMeta && !walletDepositResult && (
             <>
               {/* ========== WALLET (PSBT) MODE ========== */}
               {btcWallet.connected ? (
@@ -809,7 +615,7 @@ export function DepositFlow() {
           )}
 
           {/* Wallet Deposit Result */}
-          {!demoMode && walletDepositResult && (
+          {walletDepositResult && (
             <div className="mb-4">
               <div className="p-4 bg-success/10 border border-success/30 rounded-[12px] mb-3">
                 <div className="flex items-center gap-2 text-success mb-3">

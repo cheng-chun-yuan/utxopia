@@ -22,16 +22,14 @@ import { getConfig, computeTokenId, computeNPKSync, computeMPKSync } from "@aegi
 import { useAegis } from "@/hooks/use-aegis";
 import { getRegisteredTokens, type TokenInfo } from "@/lib/token-context";
 import { ed25519GenerateKeyPair, x25519Ecdh, ed25519PubToX25519 } from "@aegis/sdk";
-import { Shield, ChevronDown, Loader2, ExternalLink, CheckCircle2, AlertCircle, LogOut, Wallet, Copy, Check, Zap, Info, RefreshCw, FileText, ArrowRight } from "lucide-react";
+import { Shield, ChevronDown, Loader2, ExternalLink, CheckCircle2, AlertCircle, LogOut, Wallet, Copy, Check, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StealthRecipientInput } from "@/components/ui/stealth-recipient-input";
 import type { StealthMetaAddress } from "@aegis/sdk";
 import {
   bytesToHex,
   hexToBytes,
-  createStealthDepositWithKeys,
   createNonInteractiveDeposit,
-  bigintToBytes,
   buildDepositPsbt,
   selectUtxos,
 } from "@aegis/sdk";
@@ -42,8 +40,7 @@ import { registerDeposit } from "@/lib/api/deposits";
 import { getBtcSignerNetwork, getMempoolExplorerUrl } from "@/lib/btc-network";
 import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 
-import { Tooltip } from "@/components/ui/tooltip";
-import { notifySuccess, notifyError } from "@/lib/notifications";
+import { notifyError } from "@/lib/notifications";
 import { MobileWalletGuidance } from "@/components/bitcoin-wallet-selector";
 import { useIsMobileWithoutWallet } from "@/hooks/use-mobile-wallet-detect";
 
@@ -83,11 +80,6 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
   // ── BTC-specific state ──
   const btcWallet = useBitcoinWalletStore();
   const isMobileNoWallet = useIsMobileWithoutWallet();
-  const isDevnet = getConfig().network === "devnet" || getConfig().network === "localnet";
-  const [demoMode, setDemoMode] = useState(false);
-  const [demoAmount, setDemoAmount] = useState("");
-  const [demoSubmitting, setDemoSubmitting] = useState(false);
-  const [demoResult, setDemoResult] = useState<{ signature: string; ephemeralPubKey?: string } | null>(null);
   const [btcAmount, setBtcAmount] = useState("");
   const [walletDepositing, setWalletDepositing] = useState(false);
   const [walletDepositResult, setWalletDepositResult] = useState<{ txid: string; depositAddress: string; opReturnHex: string } | null>(null);
@@ -185,50 +177,11 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
     setError(null);
     setResolvedMeta(stealthAddress ?? null);
     setBtcAmount("");
-    setDemoResult(null);
     setWalletDepositResult(null);
     setDepositPreview(null);
   }, [stealthAddress]);
 
-  // ── BTC Demo: Submit mock stealth deposit ──
-  const submitDemoDeposit = useCallback(async () => {
-    if (!resolvedMeta) { notifyError("Please resolve recipient first"); return; }
-    const sats = Math.floor(parseFloat(btcAmount || "0") * 1e8);
-    if (sats <= 0) { notifyError("Amount must be positive"); return; }
-
-    setDemoSubmitting(true);
-    setDemoResult(null);
-    setError(null);
-
-    try {
-      const { getActiveTokenId } = await import("@/lib/token-context");
-      const stealthData = await createStealthDepositWithKeys(resolvedMeta, BigInt(sats), getActiveTokenId());
-      const npkBytes = bigintToBytes(stealthData.stealthPubKeyX);
-
-      const response = await fetch("/api/demo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ephemeralPub: bytesToHex(stealthData.ephemeralPub),
-          npk: bytesToHex(npkBytes),
-          amount: sats.toString(),
-        }),
-      });
-
-      const result = await response.json();
-      if (!result.success) throw new Error(result.error || "Failed to submit demo deposit");
-
-      setDemoResult({ signature: result.signature, ephemeralPubKey: bytesToHex(stealthData.ephemeralPub) });
-      setStatus("done");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to submit demo deposit");
-      setStatus("error");
-    } finally {
-      setDemoSubmitting(false);
-    }
-  }, [resolvedMeta, btcAmount]);
-
-  // ── BTC Real: Build PSBT preview ──
+  // ── BTC: Build PSBT preview ──
   const buildTxPreview = useCallback(async () => {
     if (!resolvedMeta || !btcWallet.connected) return;
     const amountSats = Math.floor(parseFloat(btcAmount || "0") * 1e8);
@@ -272,7 +225,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
     }
   }, [resolvedMeta, btcAmount, btcWallet]);
 
-  // ── BTC Real: Confirm & sign PSBT ──
+  // ── BTC: Confirm & sign PSBT ──
   const confirmAndSign = useCallback(async () => {
     if (!depositPreview) return;
     setWalletDepositing(true);
@@ -534,7 +487,6 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
       setAmount("");
       setBtcAmount("");
       setTxSig(null);
-      setDemoResult(null);
       setWalletDepositResult(null);
     };
 
@@ -547,11 +499,9 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
           {isBtc ? "BTC Shielded!" : "Tokens Shielded!"}
         </h3>
         <p className="text-caption text-gray">
-          {isBtc && demoResult
-            ? "Demo deposit committed on-chain. Scan your wallet to see it."
-            : isBtc && walletDepositResult
-              ? "Your BTC deposit has been broadcast. The backend will automatically detect, sweep, and verify it."
-              : `Your ${selectedToken.symbol} tokens are now private commitments.`}
+          {isBtc && walletDepositResult
+            ? "Your BTC deposit has been broadcast. The backend will automatically detect, sweep, and verify it."
+            : `Your ${selectedToken.symbol} tokens are now private commitments.`}
         </p>
         {/* SPL tx link */}
         {txSig && (
@@ -564,18 +514,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
             View transaction <ExternalLink className="w-3 h-3" />
           </a>
         )}
-        {/* BTC demo tx link */}
-        {demoResult?.signature && (
-          <a
-            href={getSolanaExplorerTxUrl(demoResult.signature)}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 text-caption text-sol hover:text-sol/80 transition-colors"
-          >
-            View on Solana <ExternalLink className="w-3 h-3" />
-          </a>
-        )}
-        {/* BTC real tx link */}
+        {/* BTC tx link */}
         {walletDepositResult?.txid && (
           <a
             href={`${getMempoolExplorerUrl()}/tx/${walletDepositResult.txid}`}
@@ -801,7 +740,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
     // Main BTC form — unified layout
     return (
       <div className={cn("space-y-5", className)}>
-        {/* BTC Wallet bar + Demo toggle */}
+        {/* BTC Wallet bar */}
         <div className="flex items-center justify-between gap-2">
           {btcWallet.connected ? (
             <div className="flex items-center gap-1.5 min-w-0">
@@ -866,23 +805,6 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
               )}
             </div>
           )}
-          {/* Demo toggle inline */}
-          {isDevnet && (
-            <div className="flex items-center gap-1.5 shrink-0">
-              <Zap className="w-3 h-3 text-warning" />
-              <span className="text-[11px] text-warning/80">Demo</span>
-              <Tooltip content="Skip BTC deposit — mock commitment on Solana">
-                <Info className="w-3 h-3 text-warning/40" />
-              </Tooltip>
-              <button
-                onClick={() => { setDemoMode(!demoMode); setDemoResult(null); }}
-                className={cn("relative w-8 h-[18px] rounded-full transition-colors cursor-pointer ml-1", demoMode ? "bg-warning" : "bg-gray/30")}
-                role="switch" aria-checked={demoMode}
-              >
-                <span className={cn("absolute top-[3px] left-[3px] w-3 h-3 rounded-full bg-white transition-transform", demoMode && "translate-x-3.5")} />
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Amount + Token selector */}
@@ -936,21 +858,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
         )}
 
         {/* Shield / Preview button */}
-        {demoMode ? (
-          <button
-            onClick={submitDemoDeposit}
-            disabled={!canSubmitBtc || demoSubmitting}
-            className={cn(
-              "w-full flex items-center justify-center gap-2 py-3.5 rounded-[12px]",
-              "text-body2 font-semibold transition-all cursor-pointer",
-              canSubmitBtc && !demoSubmitting
-                ? "bg-warning hover:bg-warning/90 text-background shadow-[0_0_20px_rgba(255,170,0,0.15)]"
-                : "bg-gray/20 text-gray/50 cursor-not-allowed"
-            )}
-          >
-            {demoSubmitting ? (<><Loader2 className="w-4 h-4 animate-spin" />Shielding (Demo)...</>) : (<><Zap className="w-4 h-4" />Shield BTC (Demo)</>)}
-          </button>
-        ) : btcWallet.connected ? (
+        {btcWallet.connected ? (
           <button
             onClick={buildTxPreview}
             disabled={!canSubmitBtc || buildingPreview || btcAmountSats < 546 || (btcWallet.balance !== null && btcAmountSats > btcWallet.balance)}
