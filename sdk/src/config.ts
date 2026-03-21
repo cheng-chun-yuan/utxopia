@@ -557,7 +557,6 @@ export const DEPLOYMENT_INFO = {
   deployedAt: "2026-03-03",
   network: "devnet" as NetworkType,
   features: [
-    "demo-stealth",
     "stealth-addresses",
     "groth16-browser-proving",
   ],

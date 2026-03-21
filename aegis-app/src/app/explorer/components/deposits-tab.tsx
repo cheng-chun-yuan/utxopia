@@ -187,8 +187,7 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
  * Determine shield type from instruction discriminator.
  * TODO: Once on-chain events include tokenMint (Issue 1B), replace heuristic with mint lookup.
  */
-export function getShieldType(d: DepositRecord): "btc" | "sol" | "usdc" | "usdt" | "demo" | "spl" {
-  if (d.isDemo) return "demo";
+export function getShieldType(d: DepositRecord): "btc" | "sol" | "usdc" | "usdt" | "spl" {
   if (d.instructionDisc === 1) return "btc"; // verify_stealth_deposit
   if (d.instructionDisc === 29) {
     // SPL shield — detect token by amount heuristic (workaround until Issue 1B lands)
@@ -226,7 +225,6 @@ const SHIELD_TYPE_CONFIG: Record<string, ShieldTypeConfig> = {
   sol: buildShieldConfig(solToken),
   usdc: buildShieldConfig(usdcToken),
   usdt: buildShieldConfig(usdtToken),
-  demo: buildShieldConfig(btcToken),
   spl: {
     from: { label: "SPL", logo: "/tokens/sol.png", color: "text-gray/70 bg-gray/6 border-gray/10" },
     to: { label: "Shielded", logo: "/tokens/sol.png", color: "text-privacy/80 bg-privacy/6 border-privacy/10" },
@@ -240,7 +238,6 @@ const FLOW_ICONS: Record<string, { from: { icon: string; label: string }; to: { 
   sol: { from: { icon: "/tokens/sol.png", label: "SOL" }, to: SHIELDED },
   usdc: { from: { icon: "/tokens/usdc.png", label: "USDC" }, to: SHIELDED },
   usdt: { from: { icon: "/tokens/usdt.png", label: "USDT" }, to: SHIELDED },
-  demo: { from: { icon: "/tokens/btc.png", label: "BTC" }, to: SHIELDED },
   spl: { from: { icon: "/tokens/sol.png", label: "SPL" }, to: SHIELDED },
 };
 
@@ -277,11 +274,6 @@ export function DepositRow({
         <Td>
           <div className="flex items-center gap-1.5">
             <StatusDot {...getDepositStatusDot(d.status)} />
-            {d.isDemo && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray/10 text-gray border border-gray/20 font-medium">
-                Demo
-              </span>
-            )}
           </div>
         </Td>
         <Td>

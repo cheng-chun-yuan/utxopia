@@ -3,10 +3,9 @@
 /**
  * BalanceView — displays user's shielded BTC deposits and their lifecycle status.
  *
- * Shows three deposit categories:
+ * Shows two deposit categories:
  * - Ongoing: deposits in progress (detecting → confirming → sweeping → verifying)
  * - Minted: successfully verified and minted as zkBTC commitments
- * - Demo: test deposits created via the demo API
  *
  * Also includes an address lookup tool to check deposit status by Taproot address.
  *
@@ -17,7 +16,6 @@
  * - TimelineStep: expandable timeline step with icon + content
  * - TxLink: transaction link with copy button
  * - DepositCard: full deposit card with expandable timeline
- * - DemoDepositCard: simplified card for demo deposits
  * - RetryButton: retry failed deposits
  *
  * TODO(backward-compat): Method 2 fallback (explorer + inbox notes join by commitment)
@@ -234,29 +232,6 @@ const TxLink = memo(({ href, label, color = "text-btc/70 hover:text-btc" }: { hr
   );
 });
 TxLink.displayName = "TxLink";
-
-// Compact deposit card for demo/shield deposits
-const DemoDepositCard = memo(({ deposit }: { deposit: TrackerDepositStatus & { token_symbol?: string; instruction_disc?: number } }) => {
-  const token = getDepositToken(deposit);
-  const amount = deposit.minted_sats ?? deposit.amount_sats;
-  return (
-    <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-muted/50 border border-gray/10 hover:border-gray/20 transition-colors">
-      <img src={token.shieldedLogo} alt={token.shieldedSymbol} className="w-8 h-8 rounded-full shrink-0" />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-foreground">{token.shieldedSymbol}</p>
-        <p className="text-[11px] text-gray/50">{token.name}</p>
-      </div>
-      <div className="text-right">
-        <p className="text-sm font-semibold text-foreground font-mono">{formatTokenAmt(amount, token)}</p>
-        <p className="text-[10px] text-success/70 flex items-center justify-end gap-1">
-          <CheckCircle2 className="w-2.5 h-2.5" />
-          Received
-        </p>
-      </div>
-    </div>
-  );
-});
-DemoDepositCard.displayName = "DemoDepositCard";
 
 const DepositCard = memo(({ deposit }: { deposit: TrackerDepositStatus & { token_symbol?: string; instruction_disc?: number } }) => {
   const { copied, copy } = useCopyToClipboard();
@@ -509,7 +484,7 @@ export function BalanceView() {
     // Method 2: join explorer deposits with inbox notes by commitment
     // The inbox notes are already filtered to the user's keys (via scanUnifiedNotes)
     const myCommitments = new Set(inboxNotes.map((n) => n.commitmentHex));
-    const fromExplorer: (TrackerDepositStatus & { is_demo?: boolean })[] = explorerDeposits
+    const fromExplorer: TrackerDepositStatus[] = explorerDeposits
       .filter((d) => myCommitments.has(d.commitment))
       .map((d) => ({
         id: d.commitment,
@@ -529,7 +504,6 @@ export function BalanceView() {
         error: d.trackerError ?? undefined,
         created_at: d.timestamp,
         updated_at: d.timestamp,
-        is_demo: d.isDemo,
         btc_deposit_amount_sats: d.btcDepositAmountSats ?? undefined,
         token_symbol: d.tokenSymbol ?? undefined,
         instruction_disc: d.instructionDisc ?? undefined,
@@ -538,27 +512,24 @@ export function BalanceView() {
     return fromExplorer;
   }, [backendDeposits, explorerDeposits, inboxNotes, keys]);
 
-  // Split into ongoing vs minted vs demo/shield
-  const { ongoing, minted, demo } = useMemo(() => {
+  // Split into ongoing vs minted
+  const { ongoing, minted } = useMemo(() => {
     const sorted = [...myDeposits].sort((a, b) => b.updated_at - a.updated_at);
     const ongoing: TrackerDepositStatus[] = [];
     const minted: TrackerDepositStatus[] = [];
-    const demo: TrackerDepositStatus[] = [];
     for (const d of sorted) {
-      const ext = d as TrackerDepositStatus & { is_demo?: boolean; instruction_disc?: number };
+      const ext = d as TrackerDepositStatus & { instruction_disc?: number };
       const isShield = ext.instruction_disc === 29;
       if (isShield) {
         // SPL shield — show in minted section
         minted.push(d);
-      } else if (ext.is_demo) {
-        demo.push(d);
       } else if (d.status === "ready" || d.status === "claimed") {
         minted.push(d);
       } else {
         ongoing.push(d);
       }
     }
-    return { ongoing, minted, demo };
+    return { ongoing, minted };
   }, [myDeposits]);
 
   const isLoading = backendLoading || explorerLoading;
@@ -612,19 +583,6 @@ export function BalanceView() {
           </div>
           {minted.map((dep) => (
             <DepositCard key={dep.id} deposit={dep} />
-          ))}
-        </div>
-      )}
-
-      {/* Demo deposits */}
-      {demo.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-3.5 h-3.5 text-yellow-500" />
-            <span className="text-xs font-medium text-yellow-500">Test ({demo.length})</span>
-          </div>
-          {demo.map((dep) => (
-            <DemoDepositCard key={dep.id} deposit={dep} />
           ))}
         </div>
       )}
