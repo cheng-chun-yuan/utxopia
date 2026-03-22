@@ -74,14 +74,18 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
     ? buildShieldConfig(resolvedToken)
     : SHIELD_TYPE_CONFIG[shieldType];
   const isBtc = shieldType === "btc";
-  const displayAmount = config.showRaw
-    ? d.amountSats.toLocaleString()
-    : (d.amountSats / (10 ** config.decimals)).toLocaleString(undefined, { maximumFractionDigits: config.decimals });
+  // Gross = original deposit amount, shielded = after fees
+  const grossAmount = d.btcDepositAmountSats ?? d.amountSats;
+  const shieldedAmount = d.amountSats;
+  const fee = grossAmount - shieldedAmount;
+  const fmtAmount = (sats: number) => config.showRaw
+    ? sats.toLocaleString()
+    : (sats / (10 ** config.decimals)).toLocaleString(undefined, { maximumFractionDigits: config.decimals });
 
   return (
     <div className="mx-4 my-3 rounded-[10px] bg-linear-to-b from-gray/6 to-transparent border border-gray/10 overflow-hidden">
       <div className="grid grid-cols-2 divide-x divide-gray/10">
-        {/* INPUT — deposit amount + address + BTC txids */}
+        {/* INPUT — gross deposit amount */}
         <div className="p-4 space-y-2.5">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
@@ -93,7 +97,7 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
             <div className="flex items-center gap-2">
               <img src={config.from.logo} alt={config.from.label} className="w-3.5 h-3.5 rounded-full shrink-0" />
               <span className="text-body2 text-foreground font-mono font-semibold">
-                {displayAmount} <span className="text-gray text-caption">{config.unit}</span>
+                {fmtAmount(grossAmount)} <span className="text-gray text-caption">{config.unit}</span>
               </span>
             </div>
             {d.taprootAddress && (
@@ -111,13 +115,24 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
           </div>
         </div>
 
-        {/* OUTPUT — commitment */}
+        {/* OUTPUT — shielded amount + commitment */}
         <div className="p-4 space-y-2.5">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
             <span className="text-caption text-purple-400/90 font-semibold uppercase tracking-wider">Outputs</span>
             <span className="text-caption text-purple-400/60 font-medium">1</span>
           </div>
+          {/* Shielded amount */}
+          <div className="px-3 py-2.5 rounded-[8px] bg-privacy/4 border border-privacy/10 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <img src={config.to.logo} alt={config.to.label} className="w-3.5 h-3.5 rounded-full shrink-0" />
+              <span className="text-body2 text-foreground font-mono font-semibold">
+                {fmtAmount(shieldedAmount)} <span className="text-gray text-caption">{config.to.label}</span>
+              </span>
+            </div>
+            <div className="text-[10px] text-gray/50">Shielded note</div>
+          </div>
+          {/* Commitment */}
           {d.commitment && (
             <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-gray/15 transition-colors">
               <span className="text-[10px] text-gray/50 shrink-0">Commitment</span>
@@ -136,12 +151,15 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
         </div>
       </div>
 
-      {/* Vertical timeline */}
-      {isBtc && (
-        <div className="px-5 pb-4 pt-2 border-t border-gray/10">
-          <DepositTimeline deposit={d} />
-        </div>
-      )}
+      {/* Fee + timeline */}
+      <div className="px-5 pb-4 pt-2 border-t border-gray/10 space-y-2">
+        {fee > 0 && (
+          <span className="text-[10px] text-gray/60 font-mono">
+            Deposit fee: {fmtAmount(fee)} {config.unit}
+          </span>
+        )}
+        {isBtc && <DepositTimeline deposit={d} />}
+      </div>
     </div>
   );
 }
