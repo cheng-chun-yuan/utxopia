@@ -20,7 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { CopyButton } from "@/components/ui/copy-button";
 import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
-import { useTransfers } from "@/hooks/use-explorer";
+import { useTransfers, useRedemptions, type RedemptionRecord } from "@/hooks/use-explorer";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { getSolanaExplorerTxUrl, getSolanaExplorerAddressUrl } from "@/lib/solana-network";
 import { truncate, timeAgo } from "./helpers";
@@ -44,10 +44,12 @@ export function TransferRow({
   tx,
   expanded,
   onToggle,
+  redemption,
 }: {
   tx: TransferTx;
   expanded: boolean;
   onToggle: () => void;
+  redemption?: RedemptionRecord;
 }) {
   const kind = getTransferKind(tx);
   const isUnshieldOrWithdraw = kind === "unshield" || kind === "withdraw";
@@ -113,7 +115,7 @@ export function TransferRow({
       {expanded && (
         <tr>
           <td colSpan={8} className="p-0">
-            <TransferDetails tx={tx} />
+            <TransferDetails tx={tx} redemption={redemption} />
           </td>
         </tr>
       )}
@@ -127,7 +129,14 @@ export function TransferRow({
 
 export function TransfersTab() {
   const { transfers, isLoading, error, refresh } = useTransfers();
+  const { redemptions } = useRedemptions();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  // Build lookup: requestTxSignature → RedemptionRecord (for withdraw detail enrichment)
+  const redemptionByRequestTx = new Map<string, RedemptionRecord>();
+  for (const r of redemptions) {
+    if (r.requestTxSignature) redemptionByRequestTx.set(r.requestTxSignature, r);
+  }
 
   const toggle = useCallback((sig: string) => {
     setExpanded((prev) => {
@@ -168,6 +177,7 @@ export function TransfersTab() {
                 tx={tx}
                 expanded={expanded.has(tx.txSignature)}
                 onToggle={() => toggle(tx.txSignature)}
+                redemption={redemptionByRequestTx.get(tx.txSignature)}
               />
             ))}
           </tbody>
@@ -343,48 +353,70 @@ function CommitmentRow({ commitment, leafIndex, txSignature, index }: { commitme
 
 // --- Transfer Details ---
 
-function TransferDetails({ tx }: { tx: TransferTx }) {
+function TransferDetails({ tx, redemption }: { tx: TransferTx; redemption?: RedemptionRecord }) {
   const kind = getTransferKind(tx);
-  if (kind === "withdraw") return <RedeemDetails tx={tx} />;
+  if (kind === "withdraw") return <RedeemDetails tx={tx} redemption={redemption} />;
   if (kind === "unshield") return <UnshieldDetails tx={tx} />;
   return <StandardTransferDetails tx={tx} />;
 }
 
-function RedeemDetails({ tx }: { tx: TransferTx }) {
+function RedeemDetails({ tx, redemption }: { tx: TransferTx; redemption?: RedemptionRecord }) {
   const token = tx.tokenSymbol ? getTokenBySymbol(tx.tokenSymbol) ?? SUPPORTED_TOKENS[0] : SUPPORTED_TOKENS[0];
+  const r = redemption;
+  const grossAmount = r ? Number(r.amountSats) : tx.unshieldAmount;
+  const netReceived = r?.actualReceived ? Number(r.actualReceived) : tx.unshieldAmount;
+  const serviceFee = r?.serviceFee ? Number(r.serviceFee) : 0;
+
   return (
     <div className="mx-4 my-3 rounded-[10px] bg-linear-to-b from-gray/6 to-transparent border border-gray/10 overflow-hidden">
       <div className="grid grid-cols-2 divide-x divide-gray/10">
-        <NullifierInputsList tx={tx} />
+        {/* INPUT — Shielded note burned */}
+        <div className="p-4 space-y-2.5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+            <span className="text-caption text-green-400/90 font-semibold uppercase tracking-wider">Input</span>
+            <span className="text-caption text-green-400/60 font-medium">{tx.inputCount}</span>
+          </div>
+          <div className="px-3 py-2.5 rounded-[8px] bg-green-500/4 border border-green-500/10 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <img src={token.shieldedLogo} alt={token.shieldedSymbol} className="w-3.5 h-3.5 rounded-full shrink-0" />
+              <span className="text-body2 text-foreground font-mono font-semibold">
+                {grossAmount ? formatTokenAmount(grossAmount, token) : "—"}
+              </span>
+            </div>
+            <span className="text-[10px] text-gray/50">Shielded note (burned)</span>
+          </div>
+          {/* Nullifier */}
+          {tx.nullifierPdas.length > 0 && tx.nullifierPdas.map((pda, i) => (
+            <NullifierRow key={pda} pda={pda} index={i} />
+          ))}
+          {/* mark_processing Solana tx */}
+          {r?.processingTxSignature && (
+            <TxLinkRow label="mark_processing" txSignature={r.processingTxSignature} type="solana" />
+          )}
+        </div>
+
+        {/* OUTPUT — BTC sent */}
         <div className="p-4 space-y-2.5">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-1.5 h-1.5 rounded-full bg-btc" />
-            <span className="text-caption text-btc/90 font-semibold uppercase tracking-wider">Outputs</span>
-            <span className="text-caption text-btc/60 font-medium">{1 + tx.outputs.length}</span>
+            <span className="text-caption text-btc/90 font-semibold uppercase tracking-wider">Output</span>
+            <span className="text-caption text-btc/60 font-medium">1</span>
           </div>
           <div className="px-3 py-2.5 rounded-[8px] bg-btc/4 border border-btc/10 space-y-2">
             <div className="flex items-center gap-2">
               <BitcoinIcon className="w-3.5 h-3.5 text-btc shrink-0" />
-              {tx.unshieldAmount ? (
-                <span className="text-body2 text-foreground font-mono font-semibold">
-                  {formatTokenAmount(tx.unshieldAmount, token)}
-                </span>
-              ) : (
-                <span className="text-caption text-gray/40">Amount pending re-index</span>
-              )}
+              <span className="text-body2 text-foreground font-mono font-semibold">
+                {netReceived ? formatTokenAmount(netReceived, token) : "—"}
+              </span>
             </div>
             {tx.unshieldRecipient ? (
               <div className="group flex items-center gap-2">
-                <BitcoinIcon className="w-3.5 h-3.5 text-btc/50 shrink-0" />
+                <span className="text-[10px] text-gray/50 shrink-0">&rarr;</span>
                 <code className="text-caption font-mono text-foreground/80 truncate">{truncate(tx.unshieldRecipient, 10, 6)}</code>
                 <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
                   <CopyButton text={tx.unshieldRecipient} label="BTC Address" variant="default" iconSize="sm" />
-                  <a
-                    href={`${getMempoolExplorerUrl()}/address/${tx.unshieldRecipient}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-btc hover:text-btc/80 transition-colors p-0.5"
-                  >
+                  <a href={`${getMempoolExplorerUrl()}/address/${tx.unshieldRecipient}`} target="_blank" rel="noopener noreferrer" className="text-btc hover:text-btc/80 transition-colors p-0.5">
                     <ExternalLink className="w-3 h-3" />
                   </a>
                 </div>
@@ -392,15 +424,82 @@ function RedeemDetails({ tx }: { tx: TransferTx }) {
             ) : (
               <div className="flex items-center gap-2">
                 <BitcoinIcon className="w-3.5 h-3.5 text-gray/30 shrink-0" />
-                <span className="text-caption text-gray/40">BTC address pending re-index</span>
+                <span className="text-caption text-gray/40">Recipient pending</span>
               </div>
             )}
           </div>
+          {/* BTC tx */}
+          {r?.btcTxid && (
+            <TxLinkRow label="BTC tx" txSignature={r.btcTxid} type="btc" />
+          )}
+          {/* complete_redemption Solana tx */}
+          {r?.completeTxSignature && (
+            <TxLinkRow label="complete_redemption" txSignature={r.completeTxSignature} type="solana" />
+          )}
+          {/* Change outputs */}
           {tx.outputs.map((out, i) => (
             <CommitmentRow key={out.leafIndex} commitment={out.commitment} leafIndex={out.leafIndex} txSignature={tx.txSignature} index={i + 2} />
           ))}
         </div>
       </div>
+
+      {/* Service fee + progress bar */}
+      <div className="px-4 pb-3 pt-1 border-t border-gray/10 flex items-center justify-between gap-4">
+        {serviceFee > 0 && (
+          <span className="text-[10px] text-gray/60 font-mono shrink-0">
+            Service fee: {formatTokenAmount(serviceFee, token)}
+          </span>
+        )}
+        <WithdrawProgressBar status={r?.status ?? "Pending"} />
+      </div>
+    </div>
+  );
+}
+
+/** Tx link row for BTC or Solana */
+function TxLinkRow({ label, txSignature, type }: { label: string; txSignature: string; type: "btc" | "solana" }) {
+  const isBtc = type === "btc";
+  const href = isBtc
+    ? `${getMempoolExplorerUrl()}/tx/${txSignature}`
+    : getSolanaExplorerTxUrl(txSignature);
+  const colorClass = isBtc ? "text-btc hover:text-btc/80" : "text-sol hover:text-sol/80";
+  const borderClass = isBtc ? "hover:border-btc/20" : "hover:border-purple-500/20";
+
+  return (
+    <div className={cn("group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 transition-colors", borderClass)}>
+      {isBtc ? <BitcoinIcon className="w-3.5 h-3.5 text-btc/60 shrink-0" /> : <Shield className="w-3.5 h-3.5 text-sol/60 shrink-0" />}
+      <span className="text-[10px] text-gray/60 shrink-0">{label}</span>
+      <code className="text-caption font-mono text-foreground/80 truncate">{truncate(txSignature, 8, 4)}</code>
+      <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+        <CopyButton text={txSignature} label={label} variant="default" iconSize="sm" />
+        <a href={href} target="_blank" rel="noopener noreferrer" className={cn("transition-colors p-0.5", colorClass)}>
+          <ExternalLink className="w-3 h-3" />
+        </a>
+      </div>
+    </div>
+  );
+}
+
+/** Withdraw progress bar: Request → Processing → BTC Sent → Complete */
+function WithdrawProgressBar({ status }: { status: string }) {
+  const steps = ["Request", "Processing", "BTC Sent", "Complete"];
+  const stepDone: Record<string, number> = { Pending: 1, Processing: 2, "BTC Sent": 3, Completed: 4 };
+  const current = stepDone[status] ?? 0;
+
+  return (
+    <div className="flex items-center gap-1.5">
+      {steps.map((label, i) => {
+        const done = current > i;
+        return (
+          <Fragment key={label}>
+            <div className="flex items-center gap-1">
+              <CheckCircle2 className={cn("w-3 h-3", done ? "text-green-400" : "text-gray/30")} />
+              <span className={cn("text-[10px]", done ? "text-green-400/80" : "text-gray/40")}>{label}</span>
+            </div>
+            {i < steps.length - 1 && <div className={cn("w-4 h-px", done ? "bg-green-500/30" : "bg-gray/15")} />}
+          </Fragment>
+        );
+      })}
     </div>
   );
 }
