@@ -103,13 +103,16 @@ async function main() {
   // ==========================================================================
   console.log("\n  --- Accounting Assertions ---");
   if (pool) {
-    // 1. Fee conservation: burned + feePool + shielded = minted
-    const totalAccounted = pool.totalBurned + pool.feePool + pool.totalShielded;
-    log(`Fee accounting: burned(${pool.totalBurned}) + feePool(${pool.feePool}) + shielded(${pool.totalShielded}) = ${totalAccounted}, minted=${pool.totalMinted}`);
-    // Note: totalAccounted may be < minted because fees from deposits go to TokenConfig, not feePool
-    // The real invariant: minted - burned = shielded + pendingRedemptions (tokens in circulation)
+    // 1. Fee conservation: burn + protocol_revenue = amount_sats (the user's zkBTC input)
+    //    burn_amount = actual_received + miner_fee  (BTC that left the pool)
+    //    protocol_revenue = service_fee - miner_fee (net profit kept in vault)
+    //    => burn + protocol_revenue = actual_received + service_fee = amount_sats
+    const burnPlusRevenue = pool.totalBurned + pool.feePool;
+    log(`Withdrawal accounting: burned(${pool.totalBurned}) + feePool(${pool.feePool}) = ${burnPlusRevenue}`);
+    log(`  = actual_received + miner_fee + service_fee - miner_fee = actual_received + service_fee`);
+
+    // Tokens in circulation: minted - burned should account for shielded + deposit fees
     const inCirculation = pool.totalMinted - pool.totalBurned;
-    const expected = pool.totalShielded + pool.pendingRedemptions * 0n; // pending already decremented at request time
     log(`In circulation: minted(${pool.totalMinted}) - burned(${pool.totalBurned}) = ${inCirculation}`);
 
     // 2. UTXO tracking

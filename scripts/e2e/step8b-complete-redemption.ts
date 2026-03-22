@@ -205,18 +205,19 @@ async function main() {
   log(`Redeem amount: ${redeemAmount} sats, service_fee: ${serviceFee} sats, send: ${sendAmount} sats`);
   log(`Script: ${Buffer.from(btcScript).toString("hex")}`);
 
-  // Get a funded UTXO from the wallet (maxBuffer increased in regtest-helpers)
-  const utxos = JSON.parse(btc("listunspent 1 9999999"));
-  if (utxos.length === 0) throw new Error("No UTXOs in wallet");
-  log(`Found ${utxos.length} UTXOs`);
-  const utxo = utxos.find((u: any) => u.amount * 1e8 >= Number(sendAmount) + 5000);
-  if (!utxo) throw new Error("No UTXO large enough for withdrawal");
-  log(`Using UTXO: ${utxo.txid}:${utxo.vout} (${utxo.amount} BTC)`);
+  // Use the ACTUAL pool sweep UTXO (matches on-chain UTXO PDA) for realistic miner fee computation.
+  // total_input_sats (on-chain) = utxoAmountSats, so miner_fee = utxoAmountSats - sum(tx_outputs)
+  const poolUtxoTxid = btcNote2.sweepTxid;
+  const poolUtxoVout = btcNote2.sweepVout ?? 0;
+  const poolUtxoAmountBtc = Number(utxoAmountSats) / 1e8;
+  log(`Using pool UTXO: ${poolUtxoTxid}:${poolUtxoVout} (${poolUtxoAmountBtc} BTC = ${utxoAmountSats} sats)`);
 
-  // Build raw tx: pool UTXO → user's address (sendAmount) + change back to pool
+  // Build raw tx: pool sweep UTXO → user (sendAmount) + change back to pool
   const userAmountBtc = (Number(sendAmount) / 1e8).toFixed(8);
-  const fee = 0.00001;
-  const changeAmount = (utxo.amount - Number(sendAmount) / 1e8 - fee).toFixed(8);
+  const minerFee = 1000; // 1000 sats miner fee
+  const changeAmountSats = Number(utxoAmountSats) - Number(sendAmount) - minerFee;
+  const changeAmount = (changeAmountSats / 1e8).toFixed(8);
+  log(`Miner fee: ${minerFee} sats, change: ${changeAmountSats} sats`);
 
   // Decode btcScript (P2WPKH) to bech32 address using bitcoin-cli
   // btcScript = OP_0 (0x00) + PUSH20 (0x14) + 20-byte hash
@@ -227,13 +228,13 @@ async function main() {
   const poolAddr = state.poolBtcAddress || getNewAddress("bech32m");
 
   let outputs: any;
-  if (Number(changeAmount) > 0.00001) {
+  if (changeAmountSats > 546) { // dust threshold
     outputs = `[{"${userAddr}":${userAmountBtc}},{"${poolAddr}":${changeAmount}}]`;
   } else {
     outputs = `[{"${userAddr}":${userAmountBtc}}]`;
   }
 
-  const rawTx = btc(`-named createrawtransaction inputs='[{"txid":"${utxo.txid}","vout":${utxo.vout}}]' outputs='${outputs}'`);
+  const rawTx = btc(`-named createrawtransaction inputs='[{"txid":"${poolUtxoTxid}","vout":${poolUtxoVout}}]' outputs='${outputs}'`);
   const signed = JSON.parse(btc(`signrawtransactionwithwallet ${rawTx}`));
   if (!signed.complete) throw new Error("Failed to sign withdrawal tx");
 
