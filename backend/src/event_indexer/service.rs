@@ -272,7 +272,11 @@ impl EventIndexerService {
             (tx_data.btc_deposit_txid, tx_data.btc_sweep_txid, tx_data.btc_deposit_amount_sats)
         };
 
-        // Event-first classification: derive unshield/redeem data and transfer_type from events
+        // Event-first classification: derive unshield/redeem data and transfer_type from events.
+        // Fallback: use NullifierSpent instruction_disc when no structured event exists
+        // (the contract does NOT emit RedemptionRequested 0x08 — only NullifierSpent with ix_disc=5).
+        let nullifier_disc = nullifiers.first().map(|n| n.instruction_disc).or(tx_data.instruction_disc);
+
         let (unshield_amount, unshield_recipient, transfer_type) = if let Some(ref um) = unshield_meta {
             let recipient = bs58::encode(&um.recipient).into_string();
             tracing::debug!(amount = um.amount, recipient = %recipient, "Using event-sourced unshield data");
@@ -285,9 +289,19 @@ impl EventIndexerService {
             (Some(rr.amount_sats as i64), Some(btc_addr), "redeem")
         } else if !redemption_completions.is_empty() {
             (None, None, "redeem")
+        } else if matches!(nullifier_disc, Some(5) | Some(16)) {
+            // NullifierSpent with ix_disc=5 (request_redemption) or 16 (legacy redeem)
+            // No structured RedemptionRequested event — classify from nullifier disc
+            tracing::debug!(disc = ?nullifier_disc, "Classified as redeem from nullifier instruction_disc");
+            (None, None, "redeem")
         } else if !nullifiers.is_empty() {
-            // Nullifiers present but no unshield/redeem events → private transfer
-            (None, None, "private_transfer")
+            let op = nullifiers[0].operation_type;
+            if op == 0 {
+                // FullWithdrawal without UnshieldMeta → unshield (disc=30/15)
+                (None, None, "unshield")
+            } else {
+                (None, None, "private_transfer")
+            }
         } else if !announcements.is_empty() && announcements[0].announcement_type == 0 {
             (None, None, "deposit")
         } else {
