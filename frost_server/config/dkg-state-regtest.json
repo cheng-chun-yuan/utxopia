@@ -1,9 +1,9 @@
 {
   "network": "regtest",
-  "groupPubKey": "2afc4ba9628efe083217aba6c181dfc8f8daf8ac3c4af896960014195911b08b",
-  "taprootAddress": "tb1p9t7yh2tz3mlqsvsh4wnvrqwlerud479v8390395kqq2pjkg3kz9slx46nk",
+  "groupPubKey": "f950e120acdf0ce8b80b4503a85fd42d59784b2ade60965ac31dcfaec840ff10",
+  "taprootAddress": "tb1pl9gwzg9vmuxw3wqtg5p6sh7594vhsje2mesfvkkrrh86ajzqlugq6p0pkh",
   "threshold": 2,
   "participants": 3,
   "signerUrls": "http://localhost:9001,http://localhost:9002,http://localhost:9003",
-  "createdAt": "2026-03-21T14:56:30Z"
+  "createdAt": "2026-03-21T16:34:57Z"
 }

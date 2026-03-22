@@ -19,7 +19,7 @@ const steps = [
   { file: "step1-infra.ts", label: "Infrastructure" },
   { file: "step2-tokens.ts", label: "Additional Tokens" },
   { file: "step3-btc-deposit.ts", label: "BTC Deposit (real)" },
-  { file: "step4-demo-deposit.ts", label: "Demo Deposit" },
+  { file: "step4-btc-deposit-2.ts", label: "BTC Deposit 2 (for JoinSplit)" },
   { file: "step5-shield.ts", label: "Shield SPL Tokens" },
   { file: "step6-transfer.ts", label: "JoinSplit Transfer" },
   { file: "step7-unshield.ts", label: "Unshield tUSDC" },

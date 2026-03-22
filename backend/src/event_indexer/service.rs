@@ -59,10 +59,6 @@ struct TransactionData {
     btc_deposit_amount_sats: Option<i64>,
     /// Aegis instruction discriminator (first byte of instruction data)
     instruction_disc: Option<u8>,
-    /// Token transfer amount in sats (unshield txs only, from postTokenBalances)
-    unshield_amount: Option<i64>,
-    /// Token transfer recipient wallet (unshield txs only, from postTokenBalances)
-    unshield_recipient: Option<String>,
 }
 
 /// Mempool.space API base URL for testnet4
@@ -276,13 +272,26 @@ impl EventIndexerService {
             (tx_data.btc_deposit_txid, tx_data.btc_sweep_txid, tx_data.btc_deposit_amount_sats)
         };
 
-        // Prefer event-sourced unshield data (from UnshieldMeta event) over instruction data extraction
-        let (unshield_amount, unshield_recipient) = if let Some(ref um) = unshield_meta {
+        // Event-first classification: derive unshield/redeem data and transfer_type from events
+        let (unshield_amount, unshield_recipient, transfer_type) = if let Some(ref um) = unshield_meta {
             let recipient = bs58::encode(&um.recipient).into_string();
             tracing::debug!(amount = um.amount, recipient = %recipient, "Using event-sourced unshield data");
-            (Some(um.amount as i64), Some(recipient))
+            (Some(um.amount as i64), Some(recipient), "unshield")
+        } else if !redemption_requests.is_empty() {
+            let rr = &redemption_requests[0];
+            let btc_addr = Self::script_to_testnet_address(&rr.btc_script)
+                .unwrap_or_else(|| hex::encode(&rr.btc_script));
+            tracing::debug!(amount = rr.amount_sats, btc_addr = %btc_addr, "Using event-sourced redemption data");
+            (Some(rr.amount_sats as i64), Some(btc_addr), "redeem")
+        } else if !redemption_completions.is_empty() {
+            (None, None, "redeem")
+        } else if !nullifiers.is_empty() {
+            // Nullifiers present but no unshield/redeem events → private transfer
+            (None, None, "private_transfer")
+        } else if !announcements.is_empty() && announcements[0].announcement_type == 0 {
+            (None, None, "deposit")
         } else {
-            (tx_data.unshield_amount, tx_data.unshield_recipient)
+            (None, None, "private_transfer")
         };
 
         // Process announcements — leaf data derived from announcement (commitment + leaf_index)
@@ -321,6 +330,7 @@ impl EventIndexerService {
             let inserted = self.store.insert_nullifier(
                 null, signature, slot, block_time, disc,
                 unshield_amount, unshield_recipient.as_deref(),
+                Some(transfer_type),
             )?;
             if inserted {
                 if let Some(ref cache) = self.tree_cache {
@@ -536,31 +546,11 @@ impl EventIndexerService {
             &self.config.program_id,
         );
 
-        // Extract withdrawal amount + recipient from instruction data (disc=15 unshield, disc=16 redeem)
-        let (unshield_amount, unshield_recipient) = match instruction_disc {
-            Some(15) => {
-                // Unshield: extract SPL token amount + Solana recipient
-                Self::extract_unshield_from_ix_data(
-                    &json["result"]["transaction"]["message"]["instructions"],
-                    &account_keys,
-                    &self.config.program_id,
-                ).or_else(|| {
-                    tracing::debug!(sig = &signature[..20], "Falling back to token balance extraction");
-                    Self::extract_unshield_from_token_balances(&json["result"]["meta"])
-                }).unwrap_or((None, None))
-            }
-            Some(16) => {
-                // Redeem: extract BTC amount + BTC address from instruction data
-                Self::extract_redeem_from_ix_data(
-                    &json["result"]["transaction"]["message"]["instructions"],
-                    &account_keys,
-                    &self.config.program_id,
-                ).unwrap_or((None, None))
-            }
-            _ => (None, None),
-        };
+        // Event-first: unshield/redeem data comes from on-chain events (UnshieldMeta, RedemptionRequested),
+        // NOT from parsing raw instruction bytes. This avoids garbage values from layout mismatches.
+        // instruction_disc is still extracted for metadata, but never used for amount/recipient extraction.
 
-        Ok(TransactionData { logs, block_time, btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats, instruction_disc, unshield_amount, unshield_recipient })
+        Ok(TransactionData { logs, block_time, btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats, instruction_disc })
     }
 }
 
@@ -690,146 +680,12 @@ impl EventIndexerService {
         None
     }
 
-    /// Extract unshield amount + recipient from instruction data (primary method).
-    ///
-    /// Instruction data layout after disc(1) — unshield always has inline proof:
-    ///   [0]        n_inputs (u8)
-    ///   [1]        n_outputs (u8)
-    ///   [2..258]   proof (256 bytes, always inline)
-    ///   [258..290] merkle_root (32)
-    ///   [290..322] bound_params_hash (32)
-    ///   [322..]    nullifiers: [u8; 32] × n_inputs
-    ///   [..]       commitments_out: [u8; 32] × n_outputs
-    ///   [..]       stealth_data: (ephemeral_pub(32) + encrypted_amount(8)) × (n_outputs-1)
-    ///   [8 bytes]  unshield_amount (u64 LE)
-    ///   [32 bytes] unshield_address (pubkey)
-    fn extract_unshield_from_ix_data(
-        instructions: &serde_json::Value,
-        account_keys: &[&str],
-        program_id: &str,
-    ) -> Option<(Option<i64>, Option<String>)> {
-        let ixs = instructions.as_array()?;
-        for ix in ixs {
-            let program_idx = ix["programIdIndex"].as_u64()? as usize;
-            if program_idx >= account_keys.len() || account_keys[program_idx] != program_id {
-                continue;
-            }
-            let data_b58 = ix["data"].as_str()?;
-            let data = bs58::decode(data_b58).into_vec().ok()?;
-            if data.is_empty() || data[0] != 15 {
-                continue;
-            }
-            let ix_data = &data[1..]; // skip disc byte
-            if ix_data.len() < 3 {
-                continue;
-            }
-            let n_inputs = ix_data[0] as usize;
-            let n_outputs = ix_data[1] as usize;
-            if n_outputs == 0 {
-                continue;
-            }
-            let n_tree_outputs = n_outputs - 1;
+    // extract_unshield_from_ix_data: REMOVED — replaced by UnshieldMeta on-chain event (0x0E)
+    // extract_redeem_from_ix_data: REMOVED — replaced by RedemptionRequested on-chain event (0x08)
 
-            // Unshield (disc=15) always uses inline proof, no proof_source field
-            // Header: n_inputs(1) + n_outputs(1) + proof(256) + root(32) + bph(32) = 322
-            let stealth_end = 322
-                + (n_inputs * 32)       // nullifiers
-                + (n_outputs * 32)      // commitments_out
-                + (n_tree_outputs * 40); // stealth_data
-
-            let needed = stealth_end + 8 + 32; // amount(8) + address(32)
-            if ix_data.len() < needed {
-                tracing::debug!(
-                    ix_len = ix_data.len(), needed, n_inputs, n_outputs,
-                    "Unshield ix data too short"
-                );
-                continue;
-            }
-
-            let amount_bytes: [u8; 8] = ix_data[stealth_end..stealth_end + 8].try_into().ok()?;
-            let amount = u64::from_le_bytes(amount_bytes) as i64;
-
-            let address_bytes = &ix_data[stealth_end + 8..stealth_end + 40];
-            let recipient = bs58::encode(address_bytes).into_string();
-
-            tracing::debug!(amount, recipient = %recipient, "Extracted unshield from instruction data");
-            return Some((Some(amount), Some(recipient)));
-        }
-        None
-    }
-
-    /// Extract redeem amount + BTC address from instruction data (disc=16).
-    ///
-    /// Layout after disc(1): same as unshield but ends with:
-    ///   [8 bytes]            redeem_amount (u64 LE)
-    ///   [1 byte]             btc_script_len
-    ///   [btc_script_len]     btc_script (raw scriptPubKey)
-    ///   [8 bytes]            request_nonce (u64 LE)
-    fn extract_redeem_from_ix_data(
-        instructions: &serde_json::Value,
-        account_keys: &[&str],
-        program_id: &str,
-    ) -> Option<(Option<i64>, Option<String>)> {
-        let ixs = instructions.as_array()?;
-        for ix in ixs {
-            let program_idx = ix["programIdIndex"].as_u64()? as usize;
-            if program_idx >= account_keys.len() || account_keys[program_idx] != program_id {
-                continue;
-            }
-            let data_b58 = ix["data"].as_str()?;
-            let data = bs58::decode(data_b58).into_vec().ok()?;
-            if data.is_empty() || data[0] != 16 {
-                continue;
-            }
-            let ix_data = &data[1..];
-            if ix_data.len() < 3 {
-                continue;
-            }
-            let n_inputs = ix_data[0] as usize;
-            let n_outputs = ix_data[1] as usize;
-            let proof_source = ix_data[2];
-            if n_outputs == 0 {
-                continue;
-            }
-            let n_tree_outputs = n_outputs - 1;
-
-            // Header size depends on proof_source:
-            // 3 (n_inputs + n_outputs + proof_source) + proof(256 if inline, 0 if buffer) + root(32) + bph(32)
-            let proof_data_size = if proof_source == 0 { 256 } else { 0 };
-            let header_size = 3 + proof_data_size + 32 + 32;
-
-            let stealth_end = header_size
-                + (n_inputs * 32)
-                + (n_outputs * 32)
-                + (n_tree_outputs * 40);
-
-            // redeem_amount(8) + btc_script_len(1) + at least 1 byte script
-            if ix_data.len() < stealth_end + 10 {
-                tracing::debug!(ix_len = ix_data.len(), needed = stealth_end + 10, proof_source, "Redeem ix data too short");
-                continue;
-            }
-
-            let amount_bytes: [u8; 8] = ix_data[stealth_end..stealth_end + 8].try_into().ok()?;
-            let amount = u64::from_le_bytes(amount_bytes) as i64;
-
-            let script_len = ix_data[stealth_end + 8] as usize;
-            if ix_data.len() < stealth_end + 9 + script_len {
-                continue;
-            }
-            let btc_script = &ix_data[stealth_end + 9..stealth_end + 9 + script_len];
-
-            // Convert scriptPubKey to testnet4 bech32m address
-            let btc_address = Self::script_to_testnet_address(btc_script)
-                .unwrap_or_else(|| hex::encode(btc_script));
-
-            tracing::debug!(amount, btc_address = %btc_address, "Extracted redeem from instruction data");
-            return Some((Some(amount), Some(btc_address)));
-        }
-        None
-    }
-
-    /// Convert a scriptPubKey to a testnet bech32m address.
+    /// Convert a scriptPubKey to a bech32/bech32m address.
     /// Handles P2TR (OP_1 + PUSH32 + 32 bytes) and P2WPKH/P2WSH.
+    /// Uses AEGIS_NETWORK env var to determine HRP (tb for testnet, bcrt for regtest, bc for mainnet).
     fn script_to_testnet_address(script: &[u8]) -> Option<String> {
         if script.len() < 4 { return None; }
         let version = if script[0] == 0x00 { 0u8 } else if script[0] >= 0x51 && script[0] <= 0x60 { script[0] - 0x50 } else { return None };
@@ -853,7 +709,11 @@ impl EventIndexerService {
             data5.push(((acc << (5 - bits)) & 31) as u8);
         }
 
-        let hrp = "tb";
+        let hrp = match std::env::var("AEGIS_NETWORK").unwrap_or_default().as_str() {
+            "mainnet" | "main" => "bc",
+            "regtest" | "localnet" | "local" => "bcrt",
+            _ => "tb",
+        };
         let use_bech32m = version > 0;
         let gen: [u32; 5] = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
         let charset = b"qpzry9x8gf2tvdw0s3jn54khce6mua7l";
@@ -879,58 +739,7 @@ impl EventIndexerService {
         Some(format!("{}1{}", hrp, encoded))
     }
 
-    /// Fallback: extract unshield details from pre/post token balance delta.
-    fn extract_unshield_from_token_balances(
-        meta: &serde_json::Value,
-    ) -> Option<(Option<i64>, Option<String>)> {
-        const ZKBTC_MINT: &str = "G5CHaLkWjdUxxmnrVqNLQ29K7PoNwJAzvVT11jjkdGKC";
-        const POOL_STATE: &str = "5e5t7AgafazhjYA7Aa66Kbfh5nGjHJqzYdEy9jGNQ8Ny";
-
-        let post_balances = meta.get("postTokenBalances").and_then(|b| b.as_array())?;
-        let pre_balances = meta.get("preTokenBalances").and_then(|b| b.as_array());
-
-        for post in post_balances {
-            let mint = post.get("mint").and_then(|m| m.as_str()).unwrap_or("");
-            if mint != ZKBTC_MINT {
-                continue;
-            }
-            let owner = post.get("owner").and_then(|o| o.as_str()).unwrap_or("");
-            if owner == POOL_STATE || owner.is_empty() {
-                continue;
-            }
-
-            let post_amount_str = post
-                .pointer("/uiTokenAmount/amount")
-                .and_then(|a| a.as_str())
-                .unwrap_or("0");
-            let post_amount: i64 = match post_amount_str.parse() {
-                Ok(v) => v,
-                Err(e) => {
-                    tracing::warn!(raw = post_amount_str, error = %e, "failed to parse post_amount in token balance");
-                    0
-                }
-            };
-
-            let account_index = post.get("accountIndex").and_then(|i| i.as_u64());
-            let pre_amount: i64 = pre_balances
-                .and_then(|pbs| {
-                    pbs.iter().find(|pb| {
-                        pb.get("accountIndex").and_then(|i| i.as_u64()) == account_index
-                            && pb.get("mint").and_then(|m| m.as_str()) == Some(ZKBTC_MINT)
-                    })
-                })
-                .and_then(|pb| pb.pointer("/uiTokenAmount/amount").and_then(|a| a.as_str()))
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(0);
-
-            let delta = post_amount - pre_amount;
-            if delta > 0 {
-                tracing::debug!(recipient = owner, amount = delta, "Extracted unshield from token balances (fallback)");
-                return Some((Some(delta), Some(owner.to_string())));
-            }
-        }
-        None
-    }
+    // extract_unshield_from_token_balances: REMOVED — replaced by UnshieldMeta on-chain event (0x0E)
 
     /// Convert BTC internal byte order (little-endian txid) to display hex (big-endian).
     fn btc_internal_to_hex(bytes: &[u8]) -> String {

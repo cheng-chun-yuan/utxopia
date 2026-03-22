@@ -62,6 +62,8 @@ export interface GroupedTransfer {
   tokenId?: string;
   /** Resolved token symbol (BTC, SOL, USDC, USDT) from backend */
   tokenSymbol?: string;
+  /** Event-derived transfer type: "private_transfer", "unshield", "redeem", "deposit" */
+  transferType?: string;
 }
 
 export interface RedemptionRecord {
@@ -117,6 +119,7 @@ interface BackendTransferRow {
   unshield_recipient?: string;
   token_id?: string;
   token_symbol?: string;
+  transfer_type?: string;
 }
 
 // Backend announcement row from /api/announcements
@@ -253,6 +256,7 @@ export function useTransfers() {
         unshieldRecipient: t.unshield_recipient,
         tokenId: t.token_id,
         tokenSymbol: t.token_symbol,
+        transferType: t.transfer_type,
       }));
     },
     {

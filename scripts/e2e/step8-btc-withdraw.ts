@@ -78,8 +78,12 @@ async function main() {
   const proofHash = new Uint8Array(32); // zeros (demo mode)
   const vkHash = new Uint8Array(32);    // zeros (demo mode)
 
-  // BTC address as script: p2wpkh
-  const btcScript = Buffer.from("0014751e76e8199196d454941c45d1b3a323f1433bd6", "hex");
+  // BTC withdrawal address: generate a real regtest P2WPKH address
+  const { getNewAddress, bitcoinCli } = await import("../../contracts/scripts/regtest-helpers.js");
+  const withdrawAddr = getNewAddress("bech32");
+  const addrInfo = JSON.parse(bitcoinCli(`getaddressinfo ${withdrawAddr}`));
+  const btcScript = Buffer.from(addrInfo.scriptPubKey, "hex");
+  log(`Withdraw to: ${withdrawAddr}`);
   const requestNonce = 1n;
 
   const dataLen = 1 + 32 + 32 + 32 + 8 + 32 + 1 + btcScript.length + 8;

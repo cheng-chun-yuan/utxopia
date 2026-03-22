@@ -106,7 +106,6 @@ export const Disc = {
   REQUEST_REDEMPTION: 5,
   COMPLETE_REDEMPTION: 6,
   INIT_VK_REGISTRY: 11,
-  ADD_DEMO_STEALTH: 13,
   TRANSACT: 14,
   REGISTER_TOKEN: 28,
   SHIELD: 29,
@@ -169,7 +168,7 @@ export interface LocalnetState {
   tWsolMint?: string;
   tWsolVault?: string;
   btcNote?: NoteState;
-  demoNote?: NoteState;
+  btcNote2?: NoteState;
   usdcNote?: NoteState;
   wsolNote?: NoteState;
   transferNotes?: { send: NoteState; change: NoteState };

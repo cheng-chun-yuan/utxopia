@@ -35,7 +35,8 @@ export type TransferTxPublic = TransferTx;
 
 /** Determine the unified kind for a transfer row */
 export function getTransferKind(tx: TransferTx): "transfer" | "unshield" {
-  if (isRedeemType(tx) || tx.instructionDisc === 15) return "unshield";
+  if (tx.transferType === "redeem" || tx.transferType === "unshield") return "unshield";
+  if (isRedeemType(tx) || isUnshieldType(tx)) return "unshield";
   return "transfer";
 }
 
@@ -183,12 +184,21 @@ export function TransfersTab() {
 type TransferTx = ReturnType<typeof useTransfers>["transfers"][number];
 
 /**
- * Check if a transfer is a BTC redeem operation.
- * TODO(backward-compat): disc=5 is the legacy request_redemption instruction;
- * disc=16 is the current redeem. Remove disc=5 check once old txs are no longer indexed.
+ * Determine transfer type from backend-computed `transferType` field.
+ * Falls back to disc-based classification for old data without `transferType`.
  */
-function isRedeemType(tx: TransferTx) {
-  return tx.instructionDisc === 16 || tx.instructionDisc === 5 || (tx.operationType === 0 && tx.instructionDisc !== 15);
+function isRedeemType(tx: TransferTx): boolean {
+  if (tx.transferType) return tx.transferType === "redeem";
+  // Fallback: disc-based classification for old indexed data
+  if (tx.instructionDisc === 5 || tx.instructionDisc === 16) return true;
+  if (tx.operationType === 0 && tx.instructionDisc !== 30 && tx.instructionDisc !== 15) return true;
+  return false;
+}
+
+function isUnshieldType(tx: TransferTx): boolean {
+  if (tx.transferType) return tx.transferType === "unshield";
+  // Fallback: disc-based classification for old indexed data
+  return tx.instructionDisc === 30 || tx.instructionDisc === 15;
 }
 
 function TransferTypeBadge({ tx }: { tx: TransferTx }) {
@@ -205,7 +215,7 @@ function TransferTypeBadge({ tx }: { tx: TransferTx }) {
       </div>
     );
   }
-  if (tx.instructionDisc === 15) {
+  if (isUnshieldType(tx)) {
     return (
       <div className="flex items-center gap-1.5">
         <div className="p-1 rounded-[6px] bg-purple-500/10 border border-purple-500/20">
@@ -251,7 +261,7 @@ function TransferAssetBadge({ tx }: { tx: TransferTx }) {
 }
 
 function TransferOutputCount({ tx }: { tx: TransferTx }) {
-  if (tx.instructionDisc === 15 || isRedeemType(tx)) {
+  if (isUnshieldType(tx) || isRedeemType(tx)) {
     return (
       <span className="inline-flex items-center gap-1 text-caption text-purple-400/70 bg-purple-500/6 border border-purple-500/12 px-2 py-0.5 rounded-full">
         <span className="font-mono">{1 + tx.outputs.length}</span>
@@ -335,7 +345,7 @@ function CommitmentRow({ commitment, leafIndex, txSignature, index }: { commitme
 
 function TransferDetails({ tx }: { tx: TransferTx }) {
   if (isRedeemType(tx)) return <RedeemDetails tx={tx} />;
-  if (tx.instructionDisc === 15) return <UnshieldDetails tx={tx} />;
+  if (isUnshieldType(tx)) return <UnshieldDetails tx={tx} />;
   return <StandardTransferDetails tx={tx} />;
 }
 

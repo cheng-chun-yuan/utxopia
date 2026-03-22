@@ -57,6 +57,7 @@ interface TransferItem {
   timestamp: number;
   operation_type: number;
   instruction_disc?: number;
+  transfer_type?: string;
 }
 
 interface TxResult {

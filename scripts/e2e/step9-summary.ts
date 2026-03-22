@@ -82,8 +82,8 @@ async function main() {
   if (state.btcNote) {
     log(`BTC deposit: leaf ${state.btcNote.leafIndex}, ${state.btcNote.amount} sats`);
   }
-  if (state.demoNote) {
-    log(`Demo deposit: leaf ${state.demoNote.leafIndex}, ${state.demoNote.amount} sats`);
+  if (state.btcNote2) {
+    log(`BTC deposit 2: leaf ${state.btcNote2.leafIndex}, ${state.btcNote2.amount} sats`);
   }
   if (state.usdcNote) {
     log(`tUSDC shield: leaf ${state.usdcNote.leafIndex}, ${state.usdcNote.amount}`);

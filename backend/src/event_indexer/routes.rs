@@ -152,6 +152,8 @@ pub struct TransferItem {
     /// Token ID hex (from on-chain event, identifies which token)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token_id: Option<String>,
+    /// Event-derived transfer type: "private_transfer", "unshield", "redeem", "deposit"
+    pub transfer_type: String,
 }
 
 /// Response for GET /api/transfers
@@ -416,6 +418,7 @@ async fn get_transfers(
                     unshield_amount: t.unshield_amount,
                     unshield_recipient: t.unshield_recipient,
                     token_id: t.token_id,
+                    transfer_type: t.transfer_type,
                 }
             }).collect();
             Json(TransfersResponse {

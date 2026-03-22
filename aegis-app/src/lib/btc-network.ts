@@ -61,7 +61,7 @@ export function getMempoolExplorerUrl(): string {
     case "signet":
       return "https://mempool.space/signet";
     case "regtest":
-      return "http://localhost:8080";
+      return "http://localhost:3002/regtest";
     default:
       return "https://mempool.space/testnet4";
   }

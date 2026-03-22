@@ -171,9 +171,9 @@ async function main() {
   const nullifyingKey = BigInt("0x" + state.nullifyingKey!);
   const mpk = BigInt("0x" + state.mpk!);
 
-  // Load demo note from Step 4
-  if (!state.demoNote) throw new Error("Demo note not found. Run step4 first.");
-  const note = state.demoNote;
+  // Load BTC deposit 2 note from Step 4 (exact commitment + amount from on-chain logs)
+  if (!state.btcNote2) throw new Error("btcNote2 not found. Run step4 first.");
+  const note = state.btcNote2;
   const amount0 = BigInt(note.amount);
   const random0 = BigInt("0x" + note.random);
   const leafIndex0 = note.leafIndex;
@@ -245,14 +245,17 @@ async function main() {
   // Get token_id from the note
   const tokenId = BigInt("0x" + note.tokenId);
 
-  // Create 2 output notes using SDK
+  // Create 2 output notes using SDK — split input evenly
+  const halfAmount = amount0 / 2n;
+  const remainder = amount0 - halfAmount;
+
   const random1 = randomFieldElement();
-  const amount1 = 15_000n;
+  const amount1 = halfAmount;
   const npk1 = computeNPKSync(mpk, random1);
   const commitment1 = computeJoinSplitCommitmentSync(npk1, tokenId, amount1);
 
   const random2 = randomFieldElement();
-  const amount2 = 15_000n;
+  const amount2 = remainder;
   const npk2 = computeNPKSync(mpk, random2);
   const commitment2 = computeJoinSplitCommitmentSync(npk2, tokenId, amount2);
 
