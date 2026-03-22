@@ -23,6 +23,7 @@ const steps = [
   { file: "step5-shield.ts", label: "Shield SPL Tokens" },
   { file: "step6-transfer.ts", label: "JoinSplit Transfer" },
   { file: "step7-unshield.ts", label: "Unshield tUSDC" },
+  { file: "step7b-unshield-btc.ts", label: "Unshield zkBTC" },
   { file: "step8-btc-withdraw.ts", label: "BTC Withdrawal Request" },
   { file: "step8b-complete-redemption.ts", label: "Complete BTC Redemption" },
   { file: "step9-summary.ts", label: "Summary" },
