@@ -81,14 +81,15 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
   return (
     <div className="mx-4 my-3 rounded-[10px] bg-linear-to-b from-gray/6 to-transparent border border-gray/10 overflow-hidden">
       <div className="grid grid-cols-2 divide-x divide-gray/10">
-        {/* INPUT — BTC or SPL token deposited */}
+        {/* INPUT — deposit amount + address + BTC txids */}
         <div className="p-4 space-y-2.5">
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-1.5 h-1.5 rounded-full bg-btc" />
-            <span className="text-caption text-btc/90 font-semibold uppercase tracking-wider">Input</span>
-            <span className="text-caption text-btc/60 font-medium">1</span>
+            <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+            <span className="text-caption text-green-400/90 font-semibold uppercase tracking-wider">Inputs</span>
+            <span className="text-caption text-green-400/60 font-medium">1</span>
           </div>
-          <div className="px-3 py-2.5 rounded-[8px] bg-btc/4 border border-btc/10 space-y-2">
+          {/* Amount + address (colored card) */}
+          <div className="px-3 py-2.5 rounded-[8px] bg-btc/4 border border-btc/10 space-y-1.5">
             <div className="flex items-center gap-2">
               <img src={config.from.logo} alt={config.from.label} className="w-3.5 h-3.5 rounded-full shrink-0" />
               <span className="text-body2 text-foreground font-mono font-semibold">
@@ -108,11 +109,10 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
               </div>
             )}
           </div>
-          {/* BTC deposit tx */}
+          {/* BTC deposit tx (gray row) */}
           {d.btcTxid && (
-            <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-btc/20 transition-colors">
-              <BitcoinIcon className="w-3.5 h-3.5 text-btc/60 shrink-0" />
-              <span className="text-[10px] text-gray/60 shrink-0">Deposit tx</span>
+            <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-gray/15 transition-colors">
+              <span className="text-[10px] text-gray/50 shrink-0">Deposit tx</span>
               <code className="text-caption font-mono text-foreground/80 truncate">{truncate(d.btcTxid, 8, 4)}</code>
               <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
                 <CopyButton text={d.btcTxid} label="BTC Tx" variant="default" iconSize="sm" />
@@ -122,11 +122,10 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
               </div>
             </div>
           )}
-          {/* Sweep tx */}
+          {/* Sweep tx (gray row) */}
           {d.sweepTxid && (
-            <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-btc/20 transition-colors">
-              <BitcoinIcon className="w-3.5 h-3.5 text-btc/40 shrink-0" />
-              <span className="text-[10px] text-gray/60 shrink-0">Sweep tx</span>
+            <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-gray/15 transition-colors">
+              <span className="text-[10px] text-gray/50 shrink-0">Sweep tx</span>
               <code className="text-caption font-mono text-foreground/80 truncate">{truncate(d.sweepTxid, 8, 4)}</code>
               <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
                 <CopyButton text={d.sweepTxid} label="Sweep Tx" variant="default" iconSize="sm" />
@@ -138,39 +137,33 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
           )}
         </div>
 
-        {/* OUTPUT — Shielded commitment */}
+        {/* OUTPUT — commitment (matching transfer style) */}
         <div className="p-4 space-y-2.5">
           <div className="flex items-center gap-2 mb-3">
-            <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-            <span className="text-caption text-green-400/90 font-semibold uppercase tracking-wider">Output</span>
-            <span className="text-caption text-green-400/60 font-medium">1</span>
+            <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+            <span className="text-caption text-purple-400/90 font-semibold uppercase tracking-wider">Outputs</span>
+            <span className="text-caption text-purple-400/60 font-medium">1</span>
           </div>
-          <div className="px-3 py-2.5 rounded-[8px] bg-green-500/4 border border-green-500/10 space-y-2">
-            <div className="flex items-center gap-2">
-              <img src={config.to.logo} alt={config.to.label} className="w-3.5 h-3.5 rounded-full shrink-0" />
-              <span className="text-body2 text-foreground font-mono font-semibold">
-                {displayAmount} <span className="text-gray text-caption">{config.to.label}</span>
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 text-[10px] text-gray/60">
-              <Shield className="w-3 h-3 text-privacy/50" />
-              <span>Shielded note (commitment)</span>
-            </div>
-          </div>
-          {/* Commitment */}
+          {/* Commitment row (purple, matching transfer CommitmentRow style) */}
           {d.commitment && (
             <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-purple-500/4 border border-purple-500/10 hover:border-purple-500/20 transition-colors">
-              <span className="text-[10px] text-purple-400/60 font-mono font-semibold w-4 shrink-0">#{d.leafIndex}</span>
+              <span className="text-[10px] text-purple-400/60 font-mono font-semibold w-4 shrink-0">1</span>
               <code className="text-caption font-mono text-foreground/90 truncate">{truncate(d.commitment, 8, 6)}</code>
+              <span className="text-[10px] text-gray/50 font-mono bg-gray/8 px-1.5 py-0.5 rounded shrink-0">#{d.leafIndex}</span>
               <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
                 <CopyButton text={d.commitment} label="Commitment" variant="default" iconSize="sm" />
+                {d.txSignature && (
+                  <a href={getSolanaExplorerTxUrl(d.txSignature)} target="_blank" rel="noopener noreferrer" className="text-sol hover:text-sol/80 transition-colors p-0.5" title="View transaction">
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
               </div>
             </div>
           )}
-          {/* Solana verify tx */}
+          {/* Solana verify tx (gray row) */}
           {(d.solanaTx || d.txSignature) && (
-            <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-purple-500/20 transition-colors">
-              <span className="text-[10px] text-gray/60 shrink-0">Solana tx</span>
+            <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-gray/15 transition-colors">
+              <span className="text-[10px] text-gray/50 shrink-0">Solana tx</span>
               <code className="text-caption font-mono text-foreground/80 truncate">{truncate(d.solanaTx || d.txSignature, 8, 4)}</code>
               <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
                 <CopyButton text={d.solanaTx || d.txSignature} label="Solana Tx" variant="default" iconSize="sm" />
