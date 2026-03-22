@@ -294,29 +294,62 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
           </>}
         </div>
 
-        {/* Progress steps (horizontal) */}
-        <div className="flex items-center gap-2 text-[10px]">
+        {/* Vertical timeline */}
+        <div className="space-y-0">
           {[
-            { label: "Request", done: !isFailed && stepOrder >= 0, sig: redemption.requestTxSignature },
-            { label: "Processing", done: !isFailed && stepOrder >= 1, sig: redemption.processingTxSignature },
-            { label: "BTC Sent", done: !isFailed && stepOrder >= 3, sig: redemption.btcTxid },
-            { label: "Complete", done: !isFailed && stepOrder >= 4, sig: redemption.completeTxSignature },
+            { title: "Request Redemption", done: !isFailed && stepOrder >= 0, icon: "sol" as const, txId: redemption.requestTxSignature },
+            { title: "Mark Processing", done: !isFailed && stepOrder >= 1, icon: "sol" as const, txId: redemption.processingTxSignature },
+            { title: "BTC Sent", done: !isFailed && stepOrder >= 3, icon: "btc" as const, txId: redemption.btcTxid },
+            { title: "Complete Redemption", done: !isFailed && stepOrder >= 4, icon: "sol" as const, txId: redemption.completeTxSignature },
           ].map((step, i, arr) => (
-            <Fragment key={step.label}>
-              <div className="flex items-center gap-1">
-                {step.done ? (
-                  <CheckCircle2 className="w-3 h-3 text-green-400 shrink-0" />
-                ) : i === arr.findIndex(s => !s.done) && !isFailed ? (
-                  <Loader2 className="w-3 h-3 text-gray-light animate-spin shrink-0" />
-                ) : (
-                  <Clock className="w-3 h-3 text-gray/20 shrink-0" />
+            <div key={step.title} className="flex gap-3">
+              <div className="flex flex-col items-center w-5">
+                <div className={cn(
+                  "w-5 h-5 rounded-full flex items-center justify-center shrink-0 border",
+                  step.done ? "bg-green-500/15 border-green-500/30"
+                    : i === arr.findIndex(s => !s.done) && !isFailed ? "bg-gray/8 border-gray/15"
+                    : "bg-gray/5 border-gray/10"
+                )}>
+                  {step.done ? (
+                    <CheckCircle2 className="w-3 h-3 text-green-400" />
+                  ) : i === arr.findIndex(s => !s.done) && !isFailed ? (
+                    <Loader2 className="w-3 h-3 text-gray/40 animate-spin" />
+                  ) : (
+                    <Clock className="w-2.5 h-2.5 text-gray/20" />
+                  )}
+                </div>
+                {i < arr.length - 1 && (
+                  <div className={cn("w-px flex-1 min-h-[20px]", step.done ? "bg-green-500/20" : "bg-gray/10")} />
                 )}
-                <span className={step.done ? "text-foreground/70" : "text-gray/30"}>{step.label}</span>
               </div>
-              {i < arr.length - 1 && (
-                <div className={cn("h-px w-3", step.done ? "bg-green-500/30" : "bg-gray/10")} />
-              )}
-            </Fragment>
+              <div className="flex-1 pb-3">
+                <div className="flex items-center gap-2">
+                  {step.icon === "btc" ? (
+                    <BitcoinIcon className="w-3.5 h-3.5 text-btc/70" />
+                  ) : (
+                    <Image src="/tokens/sol.png" alt="SOL" width={14} height={14} className="rounded-full opacity-70" />
+                  )}
+                  <span className={cn("text-[12px] font-medium", step.done ? "text-foreground" : "text-gray/50")}>
+                    {step.title}
+                  </span>
+                </div>
+                {step.txId && step.done && (
+                  <div className="group flex items-center gap-1.5 mt-1">
+                    <span className="text-[10px] text-gray/40">{step.icon === "btc" ? "Transaction ID" : "Signature"}</span>
+                    <code className="text-[10px] font-mono text-gray/60 truncate max-w-[280px]">{step.txId}</code>
+                    <CopyButton text={step.txId} label={step.title} variant="default" iconSize="sm" />
+                    <a
+                      href={step.icon === "btc" ? `${getMempoolExplorerUrl()}/tx/${step.txId}` : getSolanaExplorerTxUrl(step.txId)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={cn("transition-colors p-0.5", step.icon === "btc" ? "text-btc/40 hover:text-btc" : "text-purple-400/40 hover:text-purple-400")}
+                    >
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
           ))}
         </div>
 
