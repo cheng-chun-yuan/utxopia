@@ -421,6 +421,41 @@ async function main() {
   saveState(state);
   log("State saved to localnet-state.json");
 
+  // 14. Set PoolConfig PDA (pool_script for change UTXO tracking)
+  // Convert bech32m P2TR address to scriptPubKey: OP_1(0x51) + PUSH32(0x20) + x-only-pubkey(32)
+  if (btcXOnlyPubKey) {
+    const xOnlyBytes = Buffer.from(btcXOnlyPubKey, "hex");
+    const poolScript = Buffer.concat([Buffer.from([0x51, 0x20]), xOnlyBytes]);
+
+    const { PublicKey: PK } = await import("@solana/web3.js");
+    const [poolConfigPda] = PK.findProgramAddressSync(
+      [Buffer.from("pool_config")],
+      AEGIS_ID,
+    );
+    const [poolStatePda] = derivePoolStatePDA(AEGIS_ID);
+
+    // disc(27) + pool_script_len(1) + pool_script(34) + group_pub_key(32)
+    const configData = Buffer.alloc(1 + 1 + poolScript.length + xOnlyBytes.length);
+    let off = 0;
+    configData[off++] = 27; // SET_POOL_CONFIG disc
+    configData[off++] = poolScript.length;
+    poolScript.copy(configData, off); off += poolScript.length;
+    xOnlyBytes.copy(configData, off);
+
+    const configIx = new TransactionInstruction({
+      programId: AEGIS_ID,
+      data: configData,
+      keys: [
+        { pubkey: poolStatePda, isSigner: false, isWritable: false },
+        { pubkey: poolConfigPda, isSigner: false, isWritable: true },
+        { pubkey: authority.publicKey, isSigner: true, isWritable: true },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      ],
+    });
+    await sendIx([configIx], [authority]);
+    log("PoolConfig set (pool_script for change UTXO tracking)");
+  }
+
   console.log("\nStep 1: Infrastructure .......... PASS");
 }
 

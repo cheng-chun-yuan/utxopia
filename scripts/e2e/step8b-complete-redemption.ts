@@ -348,9 +348,11 @@ async function main() {
     AEGIS,
   );
 
-  // No PoolConfig PDA on localnet — use pool_script_len=0 (skip change UTXO creation).
-  // Still pass consumed UTXO PDAs for proper accounting (close after verification).
-  const poolScriptBuf = Buffer.alloc(0);
+  // Build pool scriptPubKey from pool address (P2TR: OP_1 + PUSH32 + x-only-pubkey)
+  const xOnlyPubKey = state.btcXOnlyPubKey;
+  const poolScriptBuf = xOnlyPubKey
+    ? Buffer.concat([Buffer.from([0x51, 0x20]), Buffer.from(xOnlyPubKey, "hex")])
+    : Buffer.alloc(0);
   const consumedUtxoCount = 1; // the deposit UTXO reserved in mark_processing
 
   // Data: disc(1) + btc_txid(32) + tx_size(4) + pool_script_len(1) + pool_script(var) + consumed_utxo_count(1)
@@ -366,8 +368,13 @@ async function main() {
   }
   crData[off++] = consumedUtxoCount; // 1 consumed UTXO to close
 
-  // Change UTXO account only needed when pool_script_len > 0.
-  // When pool_script_len=0, no change UTXO is tracked and consumed UTXOs start at index 13.
+  // Derive change UTXO PDA from the withdrawal txid + change vout.
+  // If pool_script_len > 0, the contract creates a new UTXO PDA for the change output.
+  // Change output is typically vout=1 (user=vout=0, change=vout=1).
+  const hasPoolScript = poolScriptBuf.length > 0;
+  const changeUtxoAccount = hasPoolScript
+    ? deriveUtxoPDA(AEGIS, withdrawTxHash, 1)[0] // change output at vout=1
+    : SystemProgram.programId; // placeholder, won't be used
 
   // Debug: log all accounts and their owners
   const debugAccounts = [
@@ -407,8 +414,15 @@ async function main() {
       { pubkey: completionReceipt, isSigner: false, isWritable: true },  // 10
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // 11
       { pubkey: poolConfig, isSigner: false, isWritable: false },        // 12
-      // When pool_script_len=0: no change UTXO account. Consumed UTXOs start at index 13.
-      { pubkey: utxoPDA, isSigner: false, isWritable: true },             // 13 consumed UTXO
+      ...(hasPoolScript
+        ? [
+            { pubkey: changeUtxoAccount, isSigner: false, isWritable: true },  // 13 change UTXO
+            { pubkey: utxoPDA, isSigner: false, isWritable: true },            // 14 consumed UTXO
+          ]
+        : [
+            { pubkey: utxoPDA, isSigner: false, isWritable: true },            // 13 consumed UTXO
+          ]
+      )
     ],
   });
 
