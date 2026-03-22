@@ -23,6 +23,8 @@ const EVENT_NULLIFIERS_BATCH: u8 = 0x0B;
 const EVENT_ANNOUNCEMENTS_BATCH: u8 = 0x0C;
 const EVENT_DEPOSIT_VERIFIED: u8 = 0x0D;
 const EVENT_UNSHIELD_META: u8 = 0x0E;
+const EVENT_UTXO_CREATED: u8 = 0x0F;
+const EVENT_UTXO_CONSUMED: u8 = 0x10;
 
 /// Parsed nullifier spent event
 #[derive(Debug, Clone)]
@@ -100,6 +102,14 @@ pub struct StealthAnnouncementEvent {
     pub token_id: [u8; 32],
 }
 
+/// Parsed UTXO event (created or consumed)
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct UtxoEvent {
+    pub txid: [u8; 32],
+    pub vout: u32,
+    pub amount_sats: u64,
+}
+
 /// Union of all program events
 #[derive(Debug, Clone)]
 pub enum ProgramEvent {
@@ -110,6 +120,8 @@ pub enum ProgramEvent {
     RedemptionProcessing(RedemptionProcessingEvent),
     DepositVerified(DepositVerifiedEvent),
     UnshieldMeta(UnshieldMetaEvent),
+    UtxoCreated(UtxoEvent),
+    UtxoConsumed(UtxoEvent),
 }
 
 /// Parse program events from transaction log messages.
@@ -165,6 +177,18 @@ pub fn parse_program_events(logs: &[String]) -> Vec<ProgramEvent> {
                     }
                     continue;
                 }
+                EVENT_UTXO_CREATED => {
+                    if let Some(event) = parse_utxo_event_flat(&segments[0]) {
+                        events.push(ProgramEvent::UtxoCreated(event));
+                    }
+                    continue;
+                }
+                EVENT_UTXO_CONSUMED => {
+                    if let Some(event) = parse_utxo_event_flat(&segments[0]) {
+                        events.push(ProgramEvent::UtxoConsumed(event));
+                    }
+                    continue;
+                }
                 _ => {}
             }
         }
@@ -214,6 +238,16 @@ pub fn parse_program_events(logs: &[String]) -> Vec<ProgramEvent> {
             EVENT_UNSHIELD_META => {
                 if let Some(event) = parse_unshield_meta(&segments) {
                     events.push(ProgramEvent::UnshieldMeta(event));
+                }
+            }
+            EVENT_UTXO_CREATED => {
+                if let Some(event) = parse_utxo_event(&segments) {
+                    events.push(ProgramEvent::UtxoCreated(event));
+                }
+            }
+            EVENT_UTXO_CONSUMED => {
+                if let Some(event) = parse_utxo_event(&segments) {
+                    events.push(ProgramEvent::UtxoConsumed(event));
                 }
             }
             _ => {}
@@ -597,6 +631,31 @@ fn parse_unshield_meta_flat(data: &[u8]) -> Option<UnshieldMetaEvent> {
         amount: u64::from_le_bytes(data[1..9].try_into().ok()?),
         recipient: data[9..41].try_into().ok()?,
         token_id: data[41..73].try_into().ok()?,
+    })
+}
+
+/// Parse UtxoCreated/UtxoConsumed from multi-segment: disc(1) + txid(32) + vout(4) + amount_sats(8)
+fn parse_utxo_event(segments: &[Vec<u8>]) -> Option<UtxoEvent> {
+    // Multi-segment: [disc(1)], [txid(32)], [vout(4)], [amount(8)]
+    if segments.len() < 4 { return None; }
+    if segments[1].len() != 32 || segments[2].len() != 4 || segments[3].len() != 8 {
+        return None;
+    }
+    Some(UtxoEvent {
+        txid: segments[1].as_slice().try_into().ok()?,
+        vout: u32::from_le_bytes(segments[2].as_slice().try_into().ok()?),
+        amount_sats: u64::from_le_bytes(segments[3].as_slice().try_into().ok()?),
+    })
+}
+
+/// Parse UtxoCreated/UtxoConsumed from flat single-segment (45 bytes)
+fn parse_utxo_event_flat(data: &[u8]) -> Option<UtxoEvent> {
+    // disc(1) + txid(32) + vout(4) + amount_sats(8) = 45
+    if data.len() < 45 { return None; }
+    Some(UtxoEvent {
+        txid: data[1..33].try_into().ok()?,
+        vout: u32::from_le_bytes(data[33..37].try_into().ok()?),
+        amount_sats: u64::from_le_bytes(data[37..45].try_into().ok()?),
     })
 }
 

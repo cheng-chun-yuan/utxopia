@@ -259,6 +259,14 @@ impl EventIndexerService {
                 ProgramEvent::UnshieldMeta(e) => {
                     unshield_meta = Some(e);
                 }
+                ProgramEvent::UtxoCreated(e) => {
+                    let txid_hex = Self::btc_internal_to_hex(&e.txid);
+                    tracing::info!(txid = %txid_hex, vout = e.vout, amount = e.amount_sats, "UTXO created");
+                }
+                ProgramEvent::UtxoConsumed(e) => {
+                    let txid_hex = Self::btc_internal_to_hex(&e.txid);
+                    tracing::info!(txid = %txid_hex, vout = e.vout, amount = e.amount_sats, "UTXO consumed");
+                }
             }
         }
 

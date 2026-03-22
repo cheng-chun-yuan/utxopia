@@ -177,6 +177,8 @@ impl SolanaWsSubscriber {
                 ProgramEvent::RedemptionProcessing(_) => {} // handled by poll indexer
                 ProgramEvent::DepositVerified(_) => {} // handled by poll indexer
                 ProgramEvent::UnshieldMeta(_) => {} // handled by poll indexer
+                ProgramEvent::UtxoCreated(_) => {} // handled by poll indexer
+                ProgramEvent::UtxoConsumed(_) => {} // handled by poll indexer
             }
         }
 
