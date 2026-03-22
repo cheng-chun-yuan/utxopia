@@ -34,9 +34,9 @@ import { SUPPORTED_TOKENS, formatTokenAmount, getTokenBySymbol, type SupportedTo
 export type TransferTxPublic = TransferTx;
 
 /** Determine the unified kind for a transfer row */
-export function getTransferKind(tx: TransferTx): "transfer" | "unshield" {
-  if (tx.transferType === "redeem" || tx.transferType === "unshield") return "unshield";
-  if (isRedeemType(tx) || isUnshieldType(tx)) return "unshield";
+export function getTransferKind(tx: TransferTx): "transfer" | "unshield" | "withdraw" {
+  if (tx.transferType === "redeem" || isRedeemType(tx)) return "withdraw";
+  if (tx.transferType === "unshield" || isUnshieldType(tx)) return "unshield";
   return "transfer";
 }
 
@@ -50,7 +50,7 @@ export function TransferRow({
   onToggle: () => void;
 }) {
   const kind = getTransferKind(tx);
-  const isUnshield = kind === "unshield";
+  const isUnshieldOrWithdraw = kind === "unshield" || kind === "withdraw";
   const token = tx.tokenSymbol ? getTokenBySymbol(tx.tokenSymbol) ?? SUPPORTED_TOKENS[0] : SUPPORTED_TOKENS[0];
 
   return (
@@ -75,11 +75,11 @@ export function TransferRow({
           <TypeBadge kind={kind} />
         </Td>
         <Td>
-          {isUnshield ? (
+          {isUnshieldOrWithdraw ? (
             <FlowCell
               from={{ icon: "shield", label: "Shielded" }}
-              to={{ icon: isRedeemType(tx) ? "/tokens/btc.png" : token.logo, label: isRedeemType(tx) ? "BTC" : token.symbol }}
-              meta={`${tx.inputCount} in, ${isUnshield ? tx.outputs.length + 1 : tx.outputs.length} out`}
+              to={{ icon: kind === "withdraw" ? "/tokens/btc.png" : token.logo, label: kind === "withdraw" ? "BTC" : token.symbol }}
+              meta={`${tx.inputCount} in, ${tx.outputs.length + 1} out`}
             />
           ) : (
             <FlowCell
@@ -90,14 +90,14 @@ export function TransferRow({
           )}
         </Td>
         <Td>
-          {isUnshield && tx.unshieldAmount ? (
+          {isUnshieldOrWithdraw && tx.unshieldAmount ? (
             <span className="text-body2 text-foreground font-mono">
               {token.showRawAmount
                 ? tx.unshieldAmount.toLocaleString()
                 : (tx.unshieldAmount / (10 ** token.decimals)).toLocaleString(undefined, { maximumFractionDigits: token.decimals })
               } <span className="text-gray text-caption">{token.unit}</span>
             </span>
-          ) : isUnshield ? (
+          ) : isUnshieldOrWithdraw ? (
             <span className="text-caption text-gray/40">&mdash;</span>
           ) : (
             <span className="text-caption text-gray/40">&mdash; (private)</span>
@@ -344,8 +344,9 @@ function CommitmentRow({ commitment, leafIndex, txSignature, index }: { commitme
 // --- Transfer Details ---
 
 function TransferDetails({ tx }: { tx: TransferTx }) {
-  if (isRedeemType(tx)) return <RedeemDetails tx={tx} />;
-  if (isUnshieldType(tx)) return <UnshieldDetails tx={tx} />;
+  const kind = getTransferKind(tx);
+  if (kind === "withdraw") return <RedeemDetails tx={tx} />;
+  if (kind === "unshield") return <UnshieldDetails tx={tx} />;
   return <StandardTransferDetails tx={tx} />;
 }
 

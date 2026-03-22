@@ -243,10 +243,17 @@ async fn run_redemption_service(args: &[String]) {
     }
 }
 
-async fn run_tracker_service(args: &[String]) {
+// ---------------------------------------------------------------------------
+// Tracker service — split into focused setup functions
+// ---------------------------------------------------------------------------
+
+/// Load tracker config from CLI args and environment variables.
+fn load_tracker_config(args: &[String]) -> TrackerConfig {
+    use zkbtc::common::env::{env_or, env_bool};
+
     let mut config = TrackerConfig::default();
 
-    // Parse arguments
+    // Parse CLI arguments
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -271,8 +278,6 @@ async fn run_tracker_service(args: &[String]) {
     }
 
     // Load config from environment
-    use zkbtc::common::env::{env_or, env_bool, env_string};
-
     if let Ok(addr) = env::var("POOL_RECEIVE_ADDRESS") {
         config.pool_receive_address = addr;
     }
@@ -305,50 +310,48 @@ async fn run_tracker_service(args: &[String]) {
     }
     config.header_batch_size = env_or("HEADER_BATCH_SIZE", config.header_batch_size);
 
-    // Create data directory if using default path
-    if config.db_path.starts_with("data/") {
+    config
+}
+
+/// Ensure the data directory exists when using the default db path.
+fn ensure_data_dir(db_path: &str) {
+    if db_path.starts_with("data/") {
         if let Err(e) = std::fs::create_dir_all("data") {
             eprintln!("Warning: Failed to create data directory: {}", e);
         }
     }
+}
 
-    // Create service — use custom esplora_url if set, otherwise default testnet
-    let has_custom_esplora = env::var("ESPLORA_URL").is_ok();
-    let service = if has_custom_esplora {
+/// Create a deposit tracker service, choosing testnet or custom esplora based on env.
+fn create_tracker_service(config: &TrackerConfig) -> deposit_tracker::DepositTrackerService {
+    if env::var("ESPLORA_URL").is_ok() {
         deposit_tracker::DepositTrackerService::new(config.clone())
     } else {
         deposit_tracker::DepositTrackerService::new_testnet(config.clone())
-    };
+    }
+}
 
-    // Configure sweeper based on signing mode
-    let service = if let Ok(mode) = env::var("AEGIS_SIGNING_MODE") {
+/// Configure the sweeper (FROST or single-key) on a tracker service.
+fn configure_sweeper(
+    service: deposit_tracker::DepositTrackerService,
+    config: &TrackerConfig,
+) -> deposit_tracker::DepositTrackerService {
+    if let Ok(mode) = env::var("AEGIS_SIGNING_MODE") {
         if mode.to_lowercase() == "frost" {
-            // FROST threshold signing
-            match configure_frost_sweeper(service, &config) {
+            return match configure_frost_sweeper(service, config) {
                 Ok(s) => {
                     println!("Sweeper configured with FROST threshold signing");
                     s
                 }
                 Err(e) => {
                     eprintln!("Warning: Failed to configure FROST sweeper: {}", e);
-                    deposit_tracker::DepositTrackerService::new_testnet(config.clone())
+                    create_tracker_service(config)
                 }
-            }
-        } else if let Ok(key_hex) = env::var("POOL_SIGNING_KEY") {
-            match service.with_sweeper(&key_hex) {
-                Ok(s) => {
-                    println!("Sweeper configured with pool signing key");
-                    s
-                }
-                Err(e) => {
-                    eprintln!("Warning: Failed to configure sweeper: {}", e);
-                    deposit_tracker::DepositTrackerService::new_testnet(config.clone())
-                }
-            }
-        } else {
-            service
+            };
         }
-    } else if let Ok(key_hex) = env::var("POOL_SIGNING_KEY") {
+    }
+
+    if let Ok(key_hex) = env::var("POOL_SIGNING_KEY") {
         match service.with_sweeper(&key_hex) {
             Ok(s) => {
                 println!("Sweeper configured with pool signing key");
@@ -356,15 +359,19 @@ async fn run_tracker_service(args: &[String]) {
             }
             Err(e) => {
                 eprintln!("Warning: Failed to configure sweeper: {}", e);
-                deposit_tracker::DepositTrackerService::new_testnet(config.clone())
+                create_tracker_service(config)
             }
         }
     } else {
         service
-    };
+    }
+}
 
-    // Configure verifier if keypair available (supports inline JSON or file path)
-    let service = if let Ok(keypair_val) = env::var("VERIFIER_KEYPAIR") {
+/// Attach a Solana verifier keypair to the tracker service if available.
+fn configure_verifier(
+    service: deposit_tracker::DepositTrackerService,
+) -> deposit_tracker::DepositTrackerService {
+    if let Ok(keypair_val) = env::var("VERIFIER_KEYPAIR") {
         match zkbtc::common::keypair::load_keypair(&keypair_val) {
             Ok(keypair) => {
                 println!("Verifier configured with Solana keypair");
@@ -377,99 +384,66 @@ async fn run_tracker_service(args: &[String]) {
         }
     } else {
         service
-    };
-    let mut service = service;
+    }
+}
 
-    // API server port
-    let api_port: u16 = env_or("TRACKER_API_PORT", 3001);
+/// Resolve the Solana RPC URL from environment variables.
+fn solana_rpc_url() -> String {
+    env::var("AEGIS_SOLANA_RPC")
+        .or_else(|_| env::var("SOLANA_RPC_URL"))
+        .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string())
+}
 
-    println!("=== zkBTC Deposit Tracker ===");
-    println!();
-    println!("Configuration:");
-    println!("  Poll Interval: {} seconds", config.poll_interval_secs);
-    println!("  Required Confirmations: {}", config.required_confirmations);
-    println!(
-        "  Required Sweep Confirmations: {}",
-        config.required_sweep_confirmations
-    );
-    println!("  Pool Address: {}", config.pool_receive_address);
-    println!("  Database: {}", config.db_path);
-    println!("  Max Retries: {}", config.max_retries);
-    println!("  Retry Delay: {} seconds", config.retry_delay_secs);
-    println!("  API Port: {}", api_port);
-    println!();
-    println!("Watching for Bitcoin deposits...");
-    println!("Press Ctrl+C to stop");
-    println!();
-
-    // Create a separate tracker instance for the API server (shares same SQLite DB)
-    let has_custom_esplora_api = env::var("ESPLORA_URL").is_ok();
-    let api_tracker = if has_custom_esplora_api {
-        deposit_tracker::DepositTrackerService::new(config.clone())
-    } else {
-        deposit_tracker::DepositTrackerService::new_testnet(config.clone())
-    };
-
-    // =========================================================================
-    // Event Indexer + Merkle Tree Cache
-    // =========================================================================
-
-    let indexer_db_path = env_string("INDEXER_DB_PATH", "data/events.db");
-    let indexer_poll_secs: u64 = env_or("INDEXER_POLL_INTERVAL_SECS", 10);
-    let solana_rpc = std::env::var("AEGIS_SOLANA_RPC")
-        .or_else(|_| std::env::var("SOLANA_RPC_URL"))
-        .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
-    let aegis_program_id = match std::env::var("AEGIS_PROGRAM_ID") {
-        Ok(id) => id,
+/// Resolve the AEGIS_PROGRAM_ID from the environment, returning None on failure.
+fn require_aegis_program_id() -> Option<String> {
+    match env::var("AEGIS_PROGRAM_ID") {
+        Ok(id) => Some(id),
         Err(_) => {
             eprintln!("ERROR: AEGIS_PROGRAM_ID env var is required.");
             eprintln!("Run: ./scripts/sync-env.sh to generate .env files from localnet-state.json");
-            return;
+            None
         }
-    };
+    }
+}
 
-    let event_store = match EventStore::new(&indexer_db_path) {
+/// Set up the event store (SQLite) and tree cache.
+fn setup_event_store_and_tree(
+    indexer_db_path: &str,
+) -> Option<(Arc<EventStore>, Arc<TreeCache>)> {
+    let event_store = match EventStore::new(indexer_db_path) {
         Ok(store) => Arc::new(store),
         Err(e) => {
             eprintln!("Failed to create event store at '{}': {}", indexer_db_path, e);
-            return;
+            return None;
         }
     };
     let tree_cache = match TreeCache::new(event_store.clone()) {
         Ok(cache) => Arc::new(cache),
         Err(e) => {
             eprintln!("Failed to create tree cache: {}", e);
-            return;
+            return None;
         }
     };
+    Some((event_store, tree_cache))
+}
 
-    // Build the indexer router (proof, status, sync, ws, leaves, nullifiers)
-    let program_pubkey: solana_sdk::pubkey::Pubkey = match aegis_program_id.parse() {
-        Ok(pk) => pk,
-        Err(e) => {
-            eprintln!("Invalid AEGIS_PROGRAM_ID '{}': {}", aegis_program_id, e);
-            return;
-        }
-    };
-    // Create a deposit store handle so reset endpoints can clear stale tracker data
-    let deposit_store = match SqliteDepositStore::new(&config.db_path) {
-        Ok(store) => Arc::new(store),
-        Err(e) => {
-            eprintln!("Failed to open deposit store at '{}': {}", config.db_path, e);
-            return;
-        }
-    };
+/// Spawn the reconciler background task and return its status handle.
+fn spawn_reconciler(
+    solana_rpc: &str,
+    program_pubkey: &solana_sdk::pubkey::Pubkey,
+    event_store: Arc<EventStore>,
+    tree_cache: Arc<TreeCache>,
+) -> Arc<tokio::sync::RwLock<Option<zkbtc::event_indexer::reconciler::ReconciliationResult>>> {
+    use zkbtc::common::env::env_or;
 
-    // Reconciler: compare on-chain state with local SQLite periodically
     let reconcile_interval: u64 = env_or("RECONCILE_INTERVAL_SECS", 60);
     let reconciler_status = Arc::new(tokio::sync::RwLock::new(None));
 
-    // Derive PDAs from program ID (deterministic, no extra env vars needed)
     let (pool_state_pda_pubkey, _) = solana_sdk::pubkey::Pubkey::find_program_address(
-        &[b"pool_state"], &program_pubkey,
+        &[b"pool_state"], program_pubkey,
     );
     let (commitment_tree_pda_pubkey, _) = solana_sdk::pubkey::Pubkey::find_program_address(
-        &[b"commitment_tree"], &program_pubkey,
+        &[b"commitment_tree"], program_pubkey,
     );
     let pool_state_pda = pool_state_pda_pubkey.to_string();
     let commitment_tree_pda = commitment_tree_pda_pubkey.to_string();
@@ -477,11 +451,11 @@ async fn run_tracker_service(args: &[String]) {
     println!("Derived commitment_tree PDA: {}", commitment_tree_pda);
 
     let reconciler = Reconciler::new(
-        solana_rpc.clone(),
+        solana_rpc.to_string(),
         pool_state_pda,
         commitment_tree_pda,
-        event_store.clone(),
-        tree_cache.clone(),
+        event_store,
+        tree_cache,
         reconcile_interval,
         reconciler_status.clone(),
     );
@@ -489,24 +463,26 @@ async fn run_tracker_service(args: &[String]) {
         reconciler.run().await;
     });
 
-    let indexer_router = event_indexer_router_with_deposits(
-        event_store.clone(),
-        tree_cache.clone(),
-        program_pubkey,
-        Some(deposit_store),
-        reconciler_status,
-    );
+    reconciler_status
+}
 
-    // Start the event indexer service in background
-    let solana_rpc_clone = solana_rpc.clone();
-    let aegis_program_id_clone = aegis_program_id.clone();
+/// Spawn the event indexer polling service.
+fn spawn_event_indexer(
+    solana_rpc: &str,
+    aegis_program_id: &str,
+    event_store: Arc<EventStore>,
+    tree_cache: Arc<TreeCache>,
+) {
+    use zkbtc::common::env::env_or;
+
+    let indexer_poll_secs: u64 = env_or("INDEXER_POLL_INTERVAL_SECS", 10);
     let indexer_config = EventIndexerConfig {
-        rpc_url: solana_rpc,
-        program_id: aegis_program_id,
+        rpc_url: solana_rpc.to_string(),
+        program_id: aegis_program_id.to_string(),
         poll_interval_secs: indexer_poll_secs,
     };
-    let indexer_service = match EventIndexerService::new(indexer_config, event_store.clone()) {
-        Ok(svc) => svc.with_tree_cache(tree_cache.clone()),
+    let indexer_service = match EventIndexerService::new(indexer_config, event_store) {
+        Ok(svc) => svc.with_tree_cache(tree_cache),
         Err(e) => {
             eprintln!("Failed to create event indexer service: {}", e);
             return;
@@ -517,38 +493,39 @@ async fn run_tracker_service(args: &[String]) {
         let mut svc = indexer_service;
         svc.run().await;
     });
+}
 
-    // Start Solana logsSubscribe for real-time event detection
+/// Spawn the Solana WebSocket log subscriber for real-time events.
+fn spawn_solana_ws_subscriber(
+    solana_rpc: &str,
+    aegis_program_id: &str,
+    event_store: Arc<EventStore>,
+    tree_cache: Arc<TreeCache>,
+) {
     let solana_ws_url = env::var("SOLANA_WS_URL").unwrap_or_else(|_| {
-        solana_rpc_clone.replace("https://", "wss://").replace("http://", "ws://")
+        solana_rpc.replace("https://", "wss://").replace("http://", "ws://")
     });
     let ws_subscriber = SolanaWsSubscriber::new(
         SolanaWsConfig {
             ws_url: solana_ws_url,
-            program_id: aegis_program_id_clone,
+            program_id: aegis_program_id.to_string(),
         },
-        event_store.clone(),
-        tree_cache.clone(),
+        event_store,
+        tree_cache,
     );
     tokio::spawn(async move {
         ws_subscriber.run().await;
     });
+}
 
-    // Create stealth + redemption services (previously in backend-api)
-    let redemption_config = RedemptionConfig::default();
-    let redemption_api = create_service(redemption_config.clone());
-    let stealth = StealthDepositService::new_testnet();
-
-    // Spawn the redemption watcher (PDA scanner loop) in background
-    let redemption_watcher = create_service(redemption_config);
-    tokio::spawn(async move {
-        println!("=== Redemption Watcher Started ===");
-        if let Err(e) = redemption_watcher.run().await {
-            eprintln!("Redemption watcher error: {}", e);
-        }
-    });
-
-    // Spawn the unified API server (deposit tracker + event indexer + stealth/redeem) in background
+/// Spawn the unified API server (deposit tracker + event indexer + stealth/redeem).
+fn spawn_api_server(
+    api_port: u16,
+    api_tracker: deposit_tracker::DepositTrackerService,
+    indexer_router: axum::Router,
+    redemption_api: RedemptionService,
+    stealth: StealthDepositService,
+) {
     tokio::spawn(async move {
         let deposit_router = deposit_tracker::api::create_deposit_router(api_tracker);
         let api_router = api::create_combined_router(redemption_api, stealth);
@@ -582,10 +559,117 @@ async fn run_tracker_service(args: &[String]) {
             eprintln!("API server error: {}", e);
         }
     });
+}
 
+/// Run the tracker service: deposit tracker + event indexer + redemption + API.
+async fn run_tracker_service(args: &[String]) {
+    use zkbtc::common::env::{env_or, env_string};
+
+    let config = load_tracker_config(args);
+    ensure_data_dir(&config.db_path);
+
+    // Build and configure the deposit tracker
+    let service = create_tracker_service(&config);
+    let service = configure_sweeper(service, &config);
+    let service = configure_verifier(service);
+    let mut service = service;
+
+    let api_port: u16 = env_or("TRACKER_API_PORT", 3001);
+
+    print_tracker_banner(&config, api_port);
+
+    // Create a separate tracker instance for the API server (shares same SQLite DB)
+    let api_tracker = create_tracker_service(&config);
+
+    // Resolve common env values
+    let solana_rpc = solana_rpc_url();
+    let aegis_program_id = match require_aegis_program_id() {
+        Some(id) => id,
+        None => return,
+    };
+
+    // Event store + tree cache
+    let indexer_db_path = env_string("INDEXER_DB_PATH", "data/events.db");
+    let (event_store, tree_cache) = match setup_event_store_and_tree(&indexer_db_path) {
+        Some(pair) => pair,
+        None => return,
+    };
+
+    // Parse and validate program pubkey
+    let program_pubkey: solana_sdk::pubkey::Pubkey = match aegis_program_id.parse() {
+        Ok(pk) => pk,
+        Err(e) => {
+            eprintln!("Invalid AEGIS_PROGRAM_ID '{}': {}", aegis_program_id, e);
+            return;
+        }
+    };
+
+    // Deposit store for reset endpoints
+    let deposit_store = match SqliteDepositStore::new(&config.db_path) {
+        Ok(store) => Arc::new(store),
+        Err(e) => {
+            eprintln!("Failed to open deposit store at '{}': {}", config.db_path, e);
+            return;
+        }
+    };
+
+    // Background services
+    let reconciler_status = spawn_reconciler(
+        &solana_rpc, &program_pubkey, event_store.clone(), tree_cache.clone(),
+    );
+
+    let indexer_router = event_indexer_router_with_deposits(
+        event_store.clone(),
+        tree_cache.clone(),
+        program_pubkey,
+        Some(deposit_store),
+        reconciler_status,
+    );
+
+    spawn_event_indexer(&solana_rpc, &aegis_program_id, event_store.clone(), tree_cache.clone());
+    spawn_solana_ws_subscriber(&solana_rpc, &aegis_program_id, event_store.clone(), tree_cache.clone());
+
+    // Redemption + stealth services
+    let redemption_config = RedemptionConfig::default();
+    let redemption_api = create_service(redemption_config.clone());
+    let stealth = StealthDepositService::new_testnet();
+
+    let redemption_watcher = create_service(redemption_config);
+    tokio::spawn(async move {
+        println!("=== Redemption Watcher Started ===");
+        if let Err(e) = redemption_watcher.run().await {
+            eprintln!("Redemption watcher error: {}", e);
+        }
+    });
+
+    // Unified API server
+    spawn_api_server(api_port, api_tracker, indexer_router, redemption_api, stealth);
+
+    // Run the deposit tracker (blocks until shutdown)
     if let Err(e) = service.run().await {
         eprintln!("Error: {}", e);
     }
+}
+
+fn print_tracker_banner(config: &TrackerConfig, api_port: u16) {
+    println!("=== zkBTC Deposit Tracker ===");
+    println!();
+    println!("Configuration:");
+    println!("  Poll Interval: {} seconds", config.poll_interval_secs);
+    println!("  Required Confirmations: {}", config.required_confirmations);
+    println!(
+        "  Required Sweep Confirmations: {}",
+        config.required_sweep_confirmations
+    );
+    println!("  Pool Address: {}", config.pool_receive_address);
+    println!("  Database: {}", config.db_path);
+    println!("  Max Retries: {}", config.max_retries);
+    println!("  Retry Delay: {} seconds", config.retry_delay_secs);
+    println!("  API Port: {}", api_port);
+    println!();
+    println!("Watching for Bitcoin deposits...");
+    println!("Press Ctrl+C to stop");
+    println!();
 }
 
 /// Configure FROST sweeper for the tracker service

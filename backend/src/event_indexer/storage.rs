@@ -99,6 +99,28 @@ pub struct AnnouncementRow {
     pub token_id: String,
 }
 
+/// Intermediate struct for Step 1 of get_transfers(): grouped announcement outputs
+struct PartialTransfer {
+    tx_signature: String,
+    commitments: Vec<String>,
+    leaf_indices: Vec<i64>,
+    output_count: i64,
+    token_id: Option<String>,
+}
+
+/// Intermediate struct for nullifier row data used in get_transfers()
+struct NullRow {
+    hash: String,
+    spent_at: i64,
+    block_time: i64,
+    op_type: i64,
+    disc: Option<i64>,
+    ua: Option<i64>,
+    ur: Option<String>,
+    tt: Option<String>,
+    tid: Option<String>,
+}
+
 /// A completed redemption row (from on-chain event 0x07)
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct RedemptionCompletedRow {
@@ -197,7 +219,12 @@ impl EventStore {
                 spent_by TEXT NOT NULL,
                 tx_signature TEXT NOT NULL,
                 slot INTEGER NOT NULL,
-                block_time INTEGER NOT NULL DEFAULT 0
+                block_time INTEGER NOT NULL DEFAULT 0,
+                instruction_disc INTEGER,
+                unshield_amount INTEGER,
+                unshield_recipient TEXT,
+                transfer_type TEXT,
+                token_id TEXT
             );
 
             CREATE TABLE IF NOT EXISTS stealth_announcements (
@@ -336,6 +363,11 @@ impl EventStore {
             "ALTER TABLE nullifier_events ADD COLUMN transfer_type TEXT",
         );
 
+        // Add token_id column to nullifier_events (from UnshieldMeta event)
+        let _ = conn.execute_batch(
+            "ALTER TABLE nullifier_events ADD COLUMN token_id TEXT",
+        );
+
         Ok(())
     }
 
@@ -403,18 +435,20 @@ impl EventStore {
         unshield_amount: Option<i64>,
         unshield_recipient: Option<&str>,
         transfer_type: Option<&str>,
+        token_id: Option<&str>,
     ) -> Result<bool, String> {
         let conn = self.conn()?;
         let result = conn.execute(
-            "INSERT INTO nullifier_events (nullifier_hash, operation_type, spent_at, spent_by, tx_signature, slot, block_time, instruction_disc, unshield_amount, unshield_recipient, transfer_type)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            "INSERT INTO nullifier_events (nullifier_hash, operation_type, spent_at, spent_by, tx_signature, slot, block_time, instruction_disc, unshield_amount, unshield_recipient, transfer_type, token_id)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
              ON CONFLICT(nullifier_hash) DO UPDATE SET
                 spent_at = CASE WHEN excluded.block_time > 0 THEN excluded.block_time ELSE nullifier_events.spent_at END,
                 block_time = CASE WHEN excluded.block_time > 0 THEN excluded.block_time ELSE nullifier_events.block_time END,
                 instruction_disc = COALESCE(excluded.instruction_disc, nullifier_events.instruction_disc),
                 unshield_amount = COALESCE(excluded.unshield_amount, nullifier_events.unshield_amount),
                 unshield_recipient = COALESCE(excluded.unshield_recipient, nullifier_events.unshield_recipient),
-                transfer_type = COALESCE(excluded.transfer_type, nullifier_events.transfer_type)",
+                transfer_type = COALESCE(excluded.transfer_type, nullifier_events.transfer_type),
+                token_id = COALESCE(excluded.token_id, nullifier_events.token_id)",
             params![
                 event.nullifier_hash.as_slice(),
                 event.operation_type as i64,
@@ -427,6 +461,7 @@ impl EventStore {
                 unshield_amount,
                 unshield_recipient,
                 transfer_type,
+                token_id,
             ],
         );
         match result {
@@ -928,9 +963,17 @@ impl EventStore {
     /// Get transfers: announcements (type=1) grouped by tx_signature,
     /// enriched with nullifier hashes and timestamp from nullifier_events.
     pub fn get_transfers(&self) -> Result<Vec<TransferRow>, String> {
-        let conn = self.conn()?;
+        let partials = self.get_transfer_outputs()?;
+        let mut results = self.enrich_with_nullifiers(partials)?;
+        let orphans = self.get_orphan_nullifier_transfers()?;
+        results.extend(orphans);
+        results.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        Ok(results)
+    }
 
-        // Step 1: Get grouped outputs (with first token_id for display)
+    /// Step 1: Get grouped outputs from type=1 announcements (with first token_id for display)
+    fn get_transfer_outputs(&self) -> Result<Vec<PartialTransfer>, String> {
+        let conn = self.conn()?;
         let mut stmt = conn.prepare(
             "SELECT
                 a.tx_signature,
@@ -944,15 +987,7 @@ impl EventStore {
              ORDER BY MAX(a.leaf_index) DESC"
         ).map_err(|e| format!("query error: {}", e))?;
 
-        struct PartialTransfer {
-            tx_signature: String,
-            commitments: Vec<String>,
-            leaf_indices: Vec<i64>,
-            output_count: i64,
-            token_id: Option<String>,
-        }
-
-        let partials: Vec<PartialTransfer> = stmt.query_map([], |row| {
+        let rows = stmt.query_map([], |row| {
             let commitments_str: String = row.get(1)?;
             let leaf_indices_str: String = row.get(2)?;
             Ok(PartialTransfer {
@@ -962,12 +997,17 @@ impl EventStore {
                 output_count: row.get(3)?,
                 token_id: row.get::<_, Option<String>>(4).unwrap_or(None).map(|s| s.to_lowercase()),
             })
-        }).map_err(|e| format!("query error: {}", e))?
-          .collect::<Result<Vec<_>, _>>().map_err(|e| format!("row error: {}", e))?;
+        }).map_err(|e| format!("query error: {}", e))?;
 
-        // Step 2: For each tx, fetch nullifiers + block_time + operation_type + instruction_disc + unshield fields + transfer_type
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| format!("row error: {}", e))
+    }
+
+    /// Step 2: For each partial transfer, fetch nullifiers + block_time + operation_type +
+    /// instruction_disc + unshield fields + transfer_type, and build TransferRow.
+    fn enrich_with_nullifiers(&self, partials: Vec<PartialTransfer>) -> Result<Vec<TransferRow>, String> {
+        let conn = self.conn()?;
         let mut null_stmt = conn.prepare(
-            "SELECT HEX(nullifier_hash), spent_at, COALESCE(block_time, 0), operation_type, instruction_disc, unshield_amount, unshield_recipient, transfer_type FROM nullifier_events WHERE tx_signature = ?1"
+            "SELECT HEX(nullifier_hash), spent_at, COALESCE(block_time, 0), operation_type, instruction_disc, unshield_amount, unshield_recipient, transfer_type, token_id FROM nullifier_events WHERE tx_signature = ?1"
         ).map_err(|e| format!("query error: {}", e))?;
 
         // Fallback: get block_time from announcements when nullifier block_time is 0
@@ -977,16 +1017,6 @@ impl EventStore {
 
         let mut results = Vec::with_capacity(partials.len());
         for p in partials {
-            struct NullRow {
-                hash: String,
-                spent_at: i64,
-                block_time: i64,
-                op_type: i64,
-                disc: Option<i64>,
-                ua: Option<i64>,
-                ur: Option<String>,
-                tt: Option<String>,
-            }
             let nullifiers: Vec<NullRow> = null_stmt.query_map(
                 params![p.tx_signature],
                 |row| {
@@ -999,6 +1029,7 @@ impl EventStore {
                         ua: row.get(5)?,
                         ur: row.get(6)?,
                         tt: row.get(7)?,
+                        tid: row.get(8)?,
                     })
                 },
             ).map_err(|e| format!("query error: {}", e))?
@@ -1007,7 +1038,7 @@ impl EventStore {
             let input_count = nullifiers.len() as i64;
             let block_time = nullifiers.iter().map(|n| n.block_time).max().unwrap_or(0);
             let spent_at = nullifiers.iter().map(|n| n.spent_at).max().unwrap_or(0);
-            // Fallback chain: nullifier block_time → nullifier spent_at → announcement block_time
+            // Fallback chain: nullifier block_time -> nullifier spent_at -> announcement block_time
             let timestamp = if block_time > 0 {
                 block_time
             } else if spent_at > 0 {
@@ -1022,6 +1053,8 @@ impl EventStore {
             let unshield_recipient = nullifiers.first().and_then(|n| n.ur.clone());
             let transfer_type = nullifiers.first().and_then(|n| n.tt.clone())
                 .unwrap_or_else(|| "private_transfer".to_string());
+            // Prefer nullifier's token_id (from UnshieldMeta event) over announcement's
+            let nullifier_token_id = nullifiers.first().and_then(|n| n.tid.clone());
             let nullifier_hashes: Vec<String> = nullifiers.into_iter().map(|n| n.hash).collect();
 
             let status = if timestamp > 0 { "confirmed".to_string() } else { "processing".to_string() };
@@ -1038,16 +1071,22 @@ impl EventStore {
                 instruction_disc,
                 unshield_amount,
                 unshield_recipient,
-                token_id: p.token_id,
+                token_id: nullifier_token_id.or(p.token_id),
                 transfer_type,
             });
         }
 
-        // Step 3: Find unshield transactions — nullifier events whose
-        // tx_signature does NOT appear in transfer announcements (no type=1 outputs),
-        // and instruction_disc = 15 (UNSHIELD). Excludes request_redemption (disc=5)
-        // and redeem (disc=16) which belong in the Withdrawals tab.
-        let mut unshield_stmt = conn.prepare(
+        Ok(results)
+    }
+
+    /// Step 3: Find orphan nullifier events -- tx_signatures that have nullifiers
+    /// but NO type=1 stealth announcements. These are either:
+    ///   - Unshield (disc=15/30): shielded -> SPL token (show amount/recipient)
+    ///   - Private transfer (disc=14): JoinSplit whose announcements are in another tx
+    /// Excludes request_redemption (disc=5) and redeem (disc=16) which belong in Withdrawals.
+    fn get_orphan_nullifier_transfers(&self) -> Result<Vec<TransferRow>, String> {
+        let conn = self.conn()?;
+        let mut orphan_stmt = conn.prepare(
             "SELECT n.tx_signature,
                     GROUP_CONCAT(HEX(n.nullifier_hash), ',') AS hashes,
                     COUNT(*) AS input_count,
@@ -1055,7 +1094,10 @@ impl EventStore {
                     MAX(n.spent_at) AS spent_at,
                     MAX(COALESCE(n.block_time, 0)) AS block_time,
                     MAX(n.unshield_amount) AS unshield_amount,
-                    MAX(n.unshield_recipient) AS unshield_recipient
+                    MAX(n.unshield_recipient) AS unshield_recipient,
+                    MAX(n.instruction_disc) AS disc,
+                    MAX(n.transfer_type) AS ttype,
+                    MAX(n.token_id) AS tid
              FROM nullifier_events n
              WHERE n.tx_signature NOT IN (
                  SELECT DISTINCT tx_signature FROM stealth_announcements WHERE announcement_type = 1
@@ -1065,7 +1107,7 @@ impl EventStore {
              ORDER BY MAX(COALESCE(n.block_time, n.spent_at)) DESC"
         ).map_err(|e| format!("query error: {}", e))?;
 
-        let unshields: Vec<TransferRow> = unshield_stmt.query_map([], |row| {
+        let rows = orphan_stmt.query_map([], |row| {
             let tx_sig: String = row.get(0)?;
             let hashes_str: String = row.get(1)?;
             let input_count: i64 = row.get(2)?;
@@ -1074,7 +1116,18 @@ impl EventStore {
             let block_time: i64 = row.get(5)?;
             let unshield_amount: Option<i64> = row.get(6)?;
             let unshield_recipient: Option<String> = row.get(7)?;
+            let disc: Option<i64> = row.get(8)?;
+            let ttype: Option<String> = row.get(9)?;
+            let tid: Option<String> = row.get(10)?;
             let ts = if block_time > 0 { block_time } else { spent_at };
+
+            // Use actual disc/transfer_type from DB; only default to unshield for disc=15/30
+            let actual_disc = disc.map(|d| d as i64);
+            let is_unshield = matches!(actual_disc, Some(15) | Some(30));
+            let transfer_type = ttype.unwrap_or_else(|| {
+                if is_unshield { "unshield".to_string() } else { "private_transfer".to_string() }
+            });
+
             Ok(TransferRow {
                 tx_signature: tx_sig,
                 commitments: vec![],
@@ -1085,20 +1138,15 @@ impl EventStore {
                 timestamp: ts,
                 status: if ts > 0 { "confirmed".to_string() } else { "processing".to_string() },
                 operation_type: op_type,
-                instruction_disc: Some(15), // unshield
-                unshield_amount,
-                unshield_recipient,
-                token_id: None, // unshield nullifier events don't carry token_id yet
-                transfer_type: "unshield".to_string(),
+                instruction_disc: actual_disc.map(|d| d as i64),
+                unshield_amount: if is_unshield { unshield_amount } else { None },
+                unshield_recipient: if is_unshield { unshield_recipient } else { None },
+                token_id: tid,
+                transfer_type,
             })
-        }).map_err(|e| format!("query error: {}", e))?
-          .collect::<Result<Vec<_>, _>>().map_err(|e| format!("row error: {}", e))?;
+        }).map_err(|e| format!("query error: {}", e))?;
 
-        results.extend(unshields);
-        // Re-sort by timestamp descending
-        results.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
-
-        Ok(results)
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| format!("row error: {}", e))
     }
 
     fn map_announcement_row(row: &rusqlite::Row) -> rusqlite::Result<AnnouncementRow> {
@@ -1193,7 +1241,7 @@ mod tests {
             instruction_disc: 14,
         };
 
-        assert!(store.insert_nullifier(&event, "sig2", 101, 1700000001, Some(14), None, None, Some("private_transfer")).unwrap());
+        assert!(store.insert_nullifier(&event, "sig2", 101, 1700000001, Some(14), None, None, Some("private_transfer"), None).unwrap());
 
         let hash_hex = hex::encode([0xCD; 32]);
         let result = store.get_nullifier(&hash_hex).unwrap();

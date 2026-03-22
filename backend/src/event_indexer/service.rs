@@ -15,7 +15,10 @@
 use std::sync::Arc;
 use tokio::time::{interval, Duration};
 
-use super::parser::{parse_program_events, ProgramEvent};
+use super::parser::{
+    parse_program_events, NullifierSpentEvent, ProgramEvent, RedemptionCompletedEvent,
+    RedemptionRequestedEvent, StealthAnnouncementEvent, UnshieldMetaEvent,
+};
 use super::storage::EventStore;
 use super::tree_cache::TreeCache;
 
@@ -209,6 +212,59 @@ impl EventIndexerService {
         Ok(())
     }
 
+    /// Classify a transaction's transfer type from its parsed events.
+    ///
+    /// Returns `(unshield_amount, unshield_recipient, transfer_type)` where
+    /// `transfer_type` is one of: "unshield", "redeem", "deposit", "private_transfer".
+    fn classify_transfer(
+        unshield_meta: &Option<UnshieldMetaEvent>,
+        redemption_requests: &[RedemptionRequestedEvent],
+        redemption_completions: &[RedemptionCompletedEvent],
+        nullifier_disc: Option<u8>,
+        nullifiers: &[NullifierSpentEvent],
+        announcements: &[StealthAnnouncementEvent],
+    ) -> (Option<i64>, Option<String>, &'static str) {
+        if let Some(ref um) = unshield_meta {
+            let recipient = bs58::encode(&um.recipient).into_string();
+            tracing::debug!(amount = um.amount, recipient = %recipient, "Using event-sourced unshield data");
+            return (Some(um.amount as i64), Some(recipient), "unshield");
+        }
+
+        if !redemption_requests.is_empty() {
+            let rr = &redemption_requests[0];
+            let btc_addr = Self::script_to_testnet_address(&rr.btc_script)
+                .unwrap_or_else(|| hex::encode(&rr.btc_script));
+            tracing::debug!(amount = rr.amount_sats, btc_addr = %btc_addr, "Using event-sourced redemption data");
+            return (Some(rr.amount_sats as i64), Some(btc_addr), "redeem");
+        }
+
+        if !redemption_completions.is_empty() {
+            return (None, None, "redeem");
+        }
+
+        if matches!(nullifier_disc, Some(5) | Some(16)) {
+            // NullifierSpent with ix_disc=5 (request_redemption) or 16 (legacy redeem)
+            // No structured RedemptionRequested event — classify from nullifier disc
+            tracing::debug!(disc = ?nullifier_disc, "Classified as redeem from nullifier instruction_disc");
+            return (None, None, "redeem");
+        }
+
+        if !nullifiers.is_empty() {
+            let op = nullifiers[0].operation_type;
+            if op == 0 {
+                // FullWithdrawal without UnshieldMeta → unshield (disc=30/15)
+                return (None, None, "unshield");
+            }
+            return (None, None, "private_transfer");
+        }
+
+        if !announcements.is_empty() && announcements[0].announcement_type == 0 {
+            return (None, None, "deposit");
+        }
+
+        (None, None, "private_transfer")
+    }
+
     /// Process a single transaction: fetch logs + blockTime, parse events, store.
     ///
     /// Leaf data is derived from StealthAnnouncement events (which carry
@@ -234,7 +290,7 @@ impl EventIndexerService {
         let mut redemption_completions = Vec::new();
         let mut redemption_requests = Vec::new();
         let mut deposit_verified: Option<super::parser::DepositVerifiedEvent> = None;
-        let mut unshield_meta: Option<super::parser::UnshieldMetaEvent> = None;
+        let mut unshield_meta: Option<UnshieldMetaEvent> = None;
 
         for event in events {
             match event {
@@ -282,39 +338,17 @@ impl EventIndexerService {
 
         // Event-first classification: derive unshield/redeem data and transfer_type from events.
         // Fallback: use NullifierSpent instruction_disc when no structured event exists
-        // (the contract does NOT emit RedemptionRequested 0x08 — only NullifierSpent with ix_disc=5).
         let nullifier_disc = nullifiers.first().map(|n| n.instruction_disc).or(tx_data.instruction_disc);
+        let unshield_token_id: Option<String> = unshield_meta.as_ref().map(|um| hex::encode(um.token_id));
 
-        let (unshield_amount, unshield_recipient, transfer_type) = if let Some(ref um) = unshield_meta {
-            let recipient = bs58::encode(&um.recipient).into_string();
-            tracing::debug!(amount = um.amount, recipient = %recipient, "Using event-sourced unshield data");
-            (Some(um.amount as i64), Some(recipient), "unshield")
-        } else if !redemption_requests.is_empty() {
-            let rr = &redemption_requests[0];
-            let btc_addr = Self::script_to_testnet_address(&rr.btc_script)
-                .unwrap_or_else(|| hex::encode(&rr.btc_script));
-            tracing::debug!(amount = rr.amount_sats, btc_addr = %btc_addr, "Using event-sourced redemption data");
-            (Some(rr.amount_sats as i64), Some(btc_addr), "redeem")
-        } else if !redemption_completions.is_empty() {
-            (None, None, "redeem")
-        } else if matches!(nullifier_disc, Some(5) | Some(16)) {
-            // NullifierSpent with ix_disc=5 (request_redemption) or 16 (legacy redeem)
-            // No structured RedemptionRequested event — classify from nullifier disc
-            tracing::debug!(disc = ?nullifier_disc, "Classified as redeem from nullifier instruction_disc");
-            (None, None, "redeem")
-        } else if !nullifiers.is_empty() {
-            let op = nullifiers[0].operation_type;
-            if op == 0 {
-                // FullWithdrawal without UnshieldMeta → unshield (disc=30/15)
-                (None, None, "unshield")
-            } else {
-                (None, None, "private_transfer")
-            }
-        } else if !announcements.is_empty() && announcements[0].announcement_type == 0 {
-            (None, None, "deposit")
-        } else {
-            (None, None, "private_transfer")
-        };
+        let (unshield_amount, unshield_recipient, transfer_type) = Self::classify_transfer(
+            &unshield_meta,
+            &redemption_requests,
+            &redemption_completions,
+            nullifier_disc,
+            &nullifiers,
+            &announcements,
+        );
 
         // Process announcements — leaf data derived from announcement (commitment + leaf_index)
         for ann in &announcements {
@@ -353,6 +387,7 @@ impl EventIndexerService {
                 null, signature, slot, block_time, disc,
                 unshield_amount, unshield_recipient.as_deref(),
                 Some(transfer_type),
+                unshield_token_id.as_deref(),
             )?;
             if inserted {
                 if let Some(ref cache) = self.tree_cache {

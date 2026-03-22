@@ -172,7 +172,7 @@ export async function GET() {
     const resp = await fetch(`${BACKEND_URL}/api/transfers`, { cache: "no-store" });
     if (resp.ok) {
       const data = await resp.json();
-      if (data.success && data.transfers?.length > 0) {
+      if (data.success && Array.isArray(data.transfers) && data.transfers.length > 0) {
         // Enrich: for unshield txs without token_id, look up from announcements
         const missingTokenIds = data.transfers.some((t: any) => !t.token_id && t.instruction_disc === 15);
         if (missingTokenIds) {

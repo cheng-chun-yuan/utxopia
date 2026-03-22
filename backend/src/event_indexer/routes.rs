@@ -225,6 +225,25 @@ pub fn event_indexer_router_with_deposits(
 }
 
 // =============================================================================
+// Helpers
+// =============================================================================
+
+/// Derive on-chain nullifier PDA addresses (base58) from hex-encoded nullifier hashes.
+fn derive_nullifier_pdas(hashes: &[String], program_id: &Pubkey) -> Vec<String> {
+    hashes
+        .iter()
+        .filter_map(|hash_hex| {
+            let bytes = hex::decode(hash_hex).ok()?;
+            if bytes.len() != 32 {
+                return None;
+            }
+            let (pda, _) = Pubkey::find_program_address(&[b"nullifier", &bytes], program_id);
+            Some(pda.to_string())
+        })
+        .collect()
+}
+
+// =============================================================================
 // REST Handlers
 // =============================================================================
 
@@ -353,21 +372,7 @@ async fn get_all_nullifiers(
 ) -> Json<AllNullifiersResponse> {
     match state.store.get_nullifier_hashes_since(params.since) {
         Ok((hashes, total, latest_slot)) => {
-            // Derive PDA address from each nullifier hash
-            let pdas: Vec<String> = hashes
-                .iter()
-                .filter_map(|hash_hex| {
-                    let bytes = hex::decode(hash_hex).ok()?;
-                    if bytes.len() != 32 {
-                        return None;
-                    }
-                    let (pda, _) = Pubkey::find_program_address(
-                        &[b"nullifier", &bytes],
-                        &state.program_id,
-                    );
-                    Some(pda.to_string())
-                })
-                .collect();
+            let pdas = derive_nullifier_pdas(&hashes, &state.program_id);
             Json(AllNullifiersResponse {
                 pdas,
                 total,
@@ -392,17 +397,7 @@ async fn get_transfers(
         Ok(rows) => {
             let count = rows.len();
             let transfers: Vec<TransferItem> = rows.into_iter().map(|t| {
-                let nullifier_pdas: Vec<String> = t.nullifier_hashes.iter()
-                    .filter_map(|hash_hex| {
-                        let bytes = hex::decode(hash_hex).ok()?;
-                        if bytes.len() != 32 { return None; }
-                        let (pda, _) = Pubkey::find_program_address(
-                            &[b"nullifier", &bytes],
-                            &state.program_id,
-                        );
-                        Some(pda.to_string())
-                    })
-                    .collect();
+                let nullifier_pdas = derive_nullifier_pdas(&t.nullifier_hashes, &state.program_id);
                 TransferItem {
                     tx_signature: t.tx_signature,
                     commitments: t.commitments,
