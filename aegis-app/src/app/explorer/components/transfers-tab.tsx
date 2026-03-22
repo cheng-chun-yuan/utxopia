@@ -331,8 +331,8 @@ function NullifierRow({ pda, index }: { pda: string; index: number }) {
 
 function CommitmentRow({ commitment, leafIndex, txSignature, index }: { commitment: string; leafIndex: number; txSignature: string; index: number }) {
   return (
-    <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-purple-500/4 border border-purple-500/10 hover:border-purple-500/20 transition-colors">
-      <span className="text-[10px] text-purple-400/60 font-mono font-semibold w-4 shrink-0">{index}</span>
+    <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-gray/15 transition-colors">
+      <span className="text-[10px] text-gray/50 shrink-0">Commitment</span>
       <code className="text-caption font-mono text-foreground/90 truncate">{truncate(commitment, 8, 6)}</code>
       <span className="text-[10px] text-gray/50 font-mono bg-gray/8 px-1.5 py-0.5 rounded shrink-0">#{leafIndex}</span>
       <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
