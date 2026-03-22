@@ -212,20 +212,29 @@ async function main() {
   const poolUtxoAmountBtc = Number(utxoAmountSats) / 1e8;
   log(`Using pool UTXO: ${poolUtxoTxid}:${poolUtxoVout} (${poolUtxoAmountBtc} BTC = ${utxoAmountSats} sats)`);
 
-  // Build raw tx: pool sweep UTXO → user (sendAmount) + change back to pool
-  const userAmountBtc = (Number(sendAmount) / 1e8).toFixed(8);
-  const minerFee = 1000; // 1000 sats miner fee
-  const changeAmountSats = Number(utxoAmountSats) - Number(sendAmount) - minerFee;
-  const changeAmount = (changeAmountSats / 1e8).toFixed(8);
-  log(`Miner fee: ${minerFee} sats, change: ${changeAmountSats} sats`);
-
-  // Decode btcScript (P2WPKH) to bech32 address using bitcoin-cli
-  // btcScript = OP_0 (0x00) + PUSH20 (0x14) + 20-byte hash
+  // Decode btcScript to bech32 address
   const scriptHex = Buffer.from(btcScript).toString("hex");
   const decodedScript = JSON.parse(btc(`decodescript ${scriptHex}`));
   const userAddr = decodedScript.address || decodedScript.addresses?.[0];
   if (!userAddr) throw new Error(`Could not decode btc_script to address: ${scriptHex}`);
   const poolAddr = state.poolBtcAddress || getNewAddress("bech32m");
+
+  // Build tx with temporary zero fee to get vsize, then compute real miner fee
+  const userAmountBtc = (Number(sendAmount) / 1e8).toFixed(8);
+  const tempChange = (Number(utxoAmountSats) - Number(sendAmount)) / 1e8;
+  const tempOutputs = `[{"${userAddr}":${userAmountBtc}},{"${poolAddr}":${tempChange.toFixed(8)}}]`;
+  const tempRaw = btc(`-named createrawtransaction inputs='[{"txid":"${poolUtxoTxid}","vout":${poolUtxoVout}}]' outputs='${tempOutputs}'`);
+  const tempSigned = JSON.parse(btc(`signrawtransactionwithwallet ${tempRaw}`));
+  const decoded = JSON.parse(btc(`decoderawtransaction ${tempSigned.hex}`));
+  const vsize = decoded.vsize || decoded.size;
+  const feeRateSatPerVbyte = 2; // 2 sat/vbyte (regtest)
+  const minerFee = vsize * feeRateSatPerVbyte;
+  log(`Tx vsize: ${vsize}, fee rate: ${feeRateSatPerVbyte} sat/vB, miner fee: ${minerFee} sats`);
+
+  // Rebuild tx with correct change = input - user - minerFee
+  const changeAmountSats = Number(utxoAmountSats) - Number(sendAmount) - minerFee;
+  const changeAmount = (changeAmountSats / 1e8).toFixed(8);
+  log(`User: ${sendAmount} sats, change: ${changeAmountSats} sats, miner fee: ${minerFee} sats`);
 
   let outputs: any;
   if (changeAmountSats > 546) { // dust threshold
