@@ -144,10 +144,10 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
             <span className="text-caption text-purple-400/90 font-semibold uppercase tracking-wider">Outputs</span>
             <span className="text-caption text-purple-400/60 font-medium">1</span>
           </div>
-          {/* Commitment row (purple, matching transfer CommitmentRow style) */}
+          {/* Commitment row (gray, matching transfer style) */}
           {d.commitment && (
-            <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-purple-500/4 border border-purple-500/10 hover:border-purple-500/20 transition-colors">
-              <span className="text-[10px] text-purple-400/60 font-mono font-semibold w-4 shrink-0">1</span>
+            <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-gray/15 transition-colors">
+              <span className="text-[10px] text-gray/50 shrink-0">Commitment</span>
               <code className="text-caption font-mono text-foreground/90 truncate">{truncate(d.commitment, 8, 6)}</code>
               <span className="text-[10px] text-gray/50 font-mono bg-gray/8 px-1.5 py-0.5 rounded shrink-0">#{d.leafIndex}</span>
               <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
