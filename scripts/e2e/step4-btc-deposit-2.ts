@@ -306,6 +306,8 @@ async function main() {
       leafIndex: announcement.leafIndex,
       commitment: announcement.commitment,
       tokenId: tokenId.toString(16),
+      sweepTxid: sweepTxid, // display-order hex for UTXO PDA derivation
+      sweepVout: 0,
     },
   });
   trackCommitments(announcement.commitment);

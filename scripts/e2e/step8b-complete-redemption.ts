@@ -36,6 +36,7 @@ import {
   deriveBlockHeaderPDA,
   deriveHeightIndexPDA,
   deriveTokenConfigPDA,
+  deriveUtxoPDA,
   deriveATA,
   parsePoolState,
 } from "./shared.js";
@@ -137,20 +138,33 @@ async function main() {
   const poolBefore = parsePoolState(Buffer.from(poolInfoBefore!.data))!;
   log(`Pool before: shielded=${poolBefore.totalShielded}, pending=${poolBefore.pendingRedemptions}`);
 
-  // Find the pool UTXO from step3 (sweep tx output)
-  // The sweep created a UTXO tracked on-chain: seeds=["utxo", sweep_txid, vout_le]
-  // We need to find it. Let's check if the btcNote has the sweep info.
-  // The UTXO was created in verify_stealth_deposit from the sweep tx.
-  // For now, we'll skip mark_processing if there are no UTXOs tracked
-  // (localnet single-key mode may not have UTXO tracking)
+  // =========================================================================
+  // 1. mark_processing (disc=2) with UTXO reservation
+  // =========================================================================
+  // The withdrawal uses btcNote2's deposit UTXO (created by verify_stealth_deposit in step4).
+  // Derive the UTXO PDA from the sweep txid (internal byte order) and vout.
+  const btcNote2 = state.btcNote2;
+  if (!btcNote2?.sweepTxid) {
+    throw new Error("btcNote2.sweepTxid not found in state — run step4 first");
+  }
+  const sweepTxidBytes = Buffer.from(btcNote2.sweepTxid, "hex");
+  sweepTxidBytes.reverse(); // display → internal byte order
+  const sweepVout = btcNote2.sweepVout ?? 0;
+  const [utxoPDA] = deriveUtxoPDA(AEGIS, sweepTxidBytes, sweepVout);
 
-  // =========================================================================
-  // 1. mark_processing (disc=2)
-  // =========================================================================
-  log("Calling mark_processing...");
+  // Verify UTXO PDA exists on-chain
+  const utxoInfo = await connection.getAccountInfo(utxoPDA);
+  if (!utxoInfo || utxoInfo.data[0] !== 0x09) {
+    throw new Error(`UTXO PDA not found: ${utxoPDA.toBase58()}`);
+  }
+  const utxoStatus = utxoInfo.data[1]; // 0=Unspent, 1=Reserved
+  const utxoAmountSats = Buffer.from(utxoInfo.data).readBigUInt64LE(40); // offset: disc(1)+status(1)+padding(2)+vout(4)+txid(32)=40
+  log(`UTXO PDA: ${utxoPDA.toBase58().slice(0, 16)}... status=${utxoStatus} amount=${utxoAmountSats} sats`);
+
+  log("Calling mark_processing with 1 UTXO...");
   const mpData = Buffer.alloc(2);
   mpData[0] = 2; // MARK_PROCESSING disc
-  mpData[1] = 0; // utxo_count = 0 (backward compat, no UTXO tracking in simple mode)
+  mpData[1] = 1; // utxo_count = 1
 
   const mpIx = new TransactionInstruction({
     programId: AEGIS,
@@ -159,6 +173,7 @@ async function main() {
       { pubkey: poolState, isSigner: false, isWritable: true },
       { pubkey: redemptionPDA, isSigner: false, isWritable: true },
       { pubkey: authority.publicKey, isSigner: true, isWritable: true },
+      { pubkey: utxoPDA, isSigner: false, isWritable: true }, // UTXO to reserve
     ],
   });
 
@@ -177,25 +192,31 @@ async function main() {
   // =========================================================================
   log("Building BTC withdrawal tx...");
 
-  // Read redemption details: amount at offset 48, btc_script at offset 72
+  // Read redemption details from PDA layout:
+  //   offset 48: amount_sats (u64 LE)
+  //   offset 56: service_fee (u64 LE, locked at request time)
+  //   offset 72: btc_script (btc_script_len bytes)
   const redeemData = Buffer.from(redemptionAfterMp!.data);
   const redeemAmount = redeemData.readBigUInt64LE(48);
+  const serviceFee = redeemData.readBigUInt64LE(56);
   const btcScriptLen = redeemData[2];
   const btcScript = redeemData.subarray(72, 72 + btcScriptLen);
-  log(`Redeem amount: ${redeemAmount} sats, script: ${Buffer.from(btcScript).toString("hex")}`);
+  const sendAmount = redeemAmount - serviceFee; // net amount to user after fee
+  log(`Redeem amount: ${redeemAmount} sats, service_fee: ${serviceFee} sats, send: ${sendAmount} sats`);
+  log(`Script: ${Buffer.from(btcScript).toString("hex")}`);
 
   // Get a funded UTXO from the wallet (maxBuffer increased in regtest-helpers)
   const utxos = JSON.parse(btc("listunspent 1 9999999"));
   if (utxos.length === 0) throw new Error("No UTXOs in wallet");
   log(`Found ${utxos.length} UTXOs`);
-  const utxo = utxos.find((u: any) => u.amount * 1e8 >= Number(redeemAmount) + 5000);
+  const utxo = utxos.find((u: any) => u.amount * 1e8 >= Number(sendAmount) + 5000);
   if (!utxo) throw new Error("No UTXO large enough for withdrawal");
   log(`Using UTXO: ${utxo.txid}:${utxo.vout} (${utxo.amount} BTC)`);
 
-  // Build raw tx: pool UTXO → user's address (from btcScript) + change back to pool
-  const userAmountBtc = (Number(redeemAmount) / 1e8).toFixed(8);
+  // Build raw tx: pool UTXO → user's address (sendAmount) + change back to pool
+  const userAmountBtc = (Number(sendAmount) / 1e8).toFixed(8);
   const fee = 0.00001;
-  const changeAmount = (utxo.amount - Number(redeemAmount) / 1e8 - fee).toFixed(8);
+  const changeAmount = (utxo.amount - Number(sendAmount) / 1e8 - fee).toFixed(8);
 
   // Decode btcScript (P2WPKH) to bech32 address using bitcoin-cli
   // btcScript = OP_0 (0x00) + PUSH20 (0x14) + 20-byte hash
@@ -327,9 +348,10 @@ async function main() {
     AEGIS,
   );
 
-  // Skip pool_script / change UTXO tracking in e2e (no PoolConfig PDA on localnet)
-  // Setting pool_script_len=0 tells the program to skip PoolConfig validation
+  // No PoolConfig PDA on localnet — use pool_script_len=0 (skip change UTXO creation).
+  // Still pass consumed UTXO PDAs for proper accounting (close after verification).
   const poolScriptBuf = Buffer.alloc(0);
+  const consumedUtxoCount = 1; // the deposit UTXO reserved in mark_processing
 
   // Data: disc(1) + btc_txid(32) + tx_size(4) + pool_script_len(1) + pool_script(var) + consumed_utxo_count(1)
   const crDataLen = 1 + 32 + 4 + 1 + poolScriptBuf.length + 1;
@@ -342,12 +364,10 @@ async function main() {
   if (poolScriptBuf.length > 0) {
     poolScriptBuf.copy(crData, off); off += poolScriptBuf.length;
   }
-  crData[off++] = 0; // consumed_utxo_count = 0 (simple mode)
+  crData[off++] = consumedUtxoCount; // 1 consumed UTXO to close
 
-  // Change UTXO placeholder (system program when pool_script_len > 0)
-  const changeUtxoAccount = poolScriptBuf.length > 0
-    ? SystemProgram.programId // placeholder when there might be no change
-    : SystemProgram.programId;
+  // Change UTXO account only needed when pool_script_len > 0.
+  // When pool_script_len=0, no change UTXO is tracked and consumed UTXOs start at index 13.
 
   // Debug: log all accounts and their owners
   const debugAccounts = [
@@ -387,7 +407,8 @@ async function main() {
       { pubkey: completionReceipt, isSigner: false, isWritable: true },  // 10
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // 11
       { pubkey: poolConfig, isSigner: false, isWritable: false },        // 12
-      { pubkey: changeUtxoAccount, isSigner: false, isWritable: true },  // 13 change_utxo
+      // When pool_script_len=0: no change UTXO account. Consumed UTXOs start at index 13.
+      { pubkey: utxoPDA, isSigner: false, isWritable: true },             // 13 consumed UTXO
     ],
   });
 

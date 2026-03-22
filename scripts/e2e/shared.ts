@@ -121,6 +121,7 @@ export const Seeds = {
   STEALTH: "stealth",
   REDEMPTION: "redemption",
   DEPOSIT: "deposit",
+  UTXO: "utxo",
   TOKEN_CONFIG: "token_config",
   BTC_LIGHT_CLIENT: "btc_light_client",
   BLOCK: "block",
@@ -243,6 +244,16 @@ export function deriveRedemptionPDA(programId: PublicKey, user: PublicKey, nonce
   nonceBuf.writeBigUInt64LE(nonce);
   return PublicKey.findProgramAddressSync(
     [Buffer.from(Seeds.REDEMPTION), user.toBuffer(), nonceBuf],
+    programId,
+  );
+}
+
+/** Derive UTXO PDA: seeds = ["utxo", txid_internal(32), vout_le(4)] */
+export function deriveUtxoPDA(programId: PublicKey, txidInternal: Uint8Array, vout: number): [PublicKey, number] {
+  const voutBuf = Buffer.alloc(4);
+  voutBuf.writeUInt32LE(vout);
+  return PublicKey.findProgramAddressSync(
+    [Buffer.from(Seeds.UTXO), Buffer.from(txidInternal), voutBuf],
     programId,
   );
 }

@@ -445,6 +445,8 @@ async function main() {
       leafIndex: leafIndex0,
       commitment: onChainCommitment.toString(16),
       tokenId: tokenId.toString(16),
+      sweepTxid: sweepTxid, // display-order hex for UTXO PDA derivation
+      sweepVout: 0,
     },
   });
   trackCommitments(onChainCommitment.toString(16));

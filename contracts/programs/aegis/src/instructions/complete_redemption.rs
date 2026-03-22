@@ -338,14 +338,14 @@ pub fn process_complete_redemption(
     }
 
     // --- Compute miner fee trustlessly from on-chain data ---
+    // Require total_input_sats > 0: mark_processing MUST set this from UTXO PDAs.
+    // Backward compat mode (total_input_sats=0) is removed — it produces incorrect
+    // accounting when the signer overpays the user.
+    if total_input_sats == 0 {
+        return Err(AegisError::AmountTooSmall.into());
+    }
     let total_outputs = parsed_tx.sum_outputs();
-    let miner_fee = if total_input_sats > 0 {
-        // Trustless: backend committed total_input_sats at mark_processing
-        total_input_sats.saturating_sub(total_outputs)
-    } else {
-        // Backward compat: total_input_sats not set (old mark_processing)
-        expected_send.saturating_sub(actual_received)
-    };
+    let miner_fee = total_input_sats.saturating_sub(total_outputs);
 
     // Sanity: miner fee must not exceed MAX_FEE_SATS
     if miner_fee > MAX_FEE_SATS {
