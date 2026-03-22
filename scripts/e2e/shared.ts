@@ -369,6 +369,9 @@ export function parsePoolState(data: Buffer) {
     totalBurned: data.readBigUInt64LE(148),
     pendingRedemptions: data.readBigUInt64LE(156),
     totalShielded: data.readBigUInt64LE(188),
+    feePool: data.readBigUInt64LE(204),
+    totalBtcHeld: data.readBigUInt64LE(248),
+    utxoCount: data.readUInt16LE(256),
   };
 }
 
