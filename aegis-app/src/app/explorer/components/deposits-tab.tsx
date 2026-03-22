@@ -12,8 +12,11 @@ import {
   Clock,
   ExternalLink,
   Loader2,
+  Shield,
   XCircle,
 } from "lucide-react";
+import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
+import { getSolanaExplorerAddressUrl } from "@/lib/solana-network";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "@/components/ui/copy-button";
 import { useDeposits } from "@/hooks/use-explorer";
@@ -62,119 +65,154 @@ const DEPOSIT_STATUS_ORDER: Record<string, number> = {
 };
 
 function DepositDetails({ deposit }: { deposit: DepositRecord }) {
-  const stepOrder = DEPOSIT_STATUS_ORDER[deposit.status ?? ""] ?? 0;
-
-  const btcLink = "text-[11px] text-btc/70 hover:text-btc flex items-center gap-1 transition-colors";
-  const solLink = "text-[11px] text-purple-400/70 hover:text-purple-400 flex items-center gap-1 transition-colors";
-
-  const steps = [
-    {
-      title: "Deposit BTC to Reserve",
-      done: stepOrder >= 1,
-      active: stepOrder === 1,
-      detail: (deposit.btcTxid || deposit.taprootAddress) ? (
-        <div className="space-y-1 text-[10px] font-mono text-gray">
-          {deposit.btcTxid && (
-            <div className="flex items-center gap-1.5">
-              <a href={`${getMempoolExplorerUrl()}/tx/${deposit.btcTxid}`} target="_blank" rel="noopener noreferrer" className={btcLink}>
-                Deposit tx <ExternalLink className="w-2.5 h-2.5" />
-              </a>
-              <code className="text-gray/60">{truncate(deposit.btcTxid, 6, 4)}</code>
-              <CopyButton text={deposit.btcTxid} label="TX" variant="default" iconSize="sm" />
-            </div>
-          )}
-          {deposit.taprootAddress && (
-            <div className="flex items-center gap-1.5">
-              <a href={`${getMempoolExplorerUrl()}/address/${deposit.taprootAddress}`} target="_blank" rel="noopener noreferrer" className={btcLink}>
-                Address <ExternalLink className="w-2.5 h-2.5" />
-              </a>
-              <code className="text-gray/60">{truncate(deposit.taprootAddress, 8, 6)}</code>
-              <CopyButton text={deposit.taprootAddress} label="Address" variant="default" iconSize="sm" />
-            </div>
-          )}
-        </div>
-      ) : null,
-    },
-    {
-      title: "Sweep to Pool",
-      done: stepOrder >= 3,
-      active: stepOrder === 3,
-      detail: deposit.sweepTxid ? (
-        <div className="flex items-center gap-1.5 text-[10px] font-mono text-gray">
-          <a href={`${getMempoolExplorerUrl()}/tx/${deposit.sweepTxid}`} target="_blank" rel="noopener noreferrer" className={btcLink}>
-            Sweep tx <ExternalLink className="w-2.5 h-2.5" />
-          </a>
-          <code className="text-gray/60">{truncate(deposit.sweepTxid, 6, 4)}</code>
-          <CopyButton text={deposit.sweepTxid} label="TX" variant="default" iconSize="sm" />
-        </div>
-      ) : null,
-    },
-    {
-      title: "SPV Verification",
-      done: stepOrder >= 4,
-      active: stepOrder === 4,
-      detail: deposit.solanaTx ? (
-        <div className="space-y-1 text-[10px] font-mono text-gray">
-          <div className="flex items-center gap-1.5">
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gray/10 text-gray-light">
-              <CheckCircle2 className="w-2.5 h-2.5" /> SPV Confirmed
-            </span>
-            <a href={getSolanaExplorerTxUrl(deposit.solanaTx)} target="_blank" rel="noopener noreferrer" className={solLink}>
-              Solana tx <ExternalLink className="w-2.5 h-2.5" />
-            </a>
-          </div>
-          {deposit.commitment && (
-            <div className="flex items-center gap-1.5">
-              <span>Commitment</span>
-              <code className="text-gray/60">{truncate(deposit.commitment, 8, 6)}</code>
-              <CopyButton text={deposit.commitment} label="Commitment" variant="default" iconSize="sm" />
-            </div>
-          )}
-        </div>
-      ) : null,
-    },
-    {
-      title: "Mint zkBTC",
-      done: stepOrder >= 5,
-      active: false,
-      detail: deposit.mintedSats ? (
-        <span className="text-[10px] text-gray-light font-mono">{deposit.mintedSats.toLocaleString()} sats minted</span>
-      ) : null,
-    },
-  ];
+  const d = deposit;
+  const resolvedToken = d.tokenSymbol ? getTokenBySymbol(d.tokenSymbol) : null;
+  const shieldType = resolvedToken
+    ? (resolvedToken.explorerFilter as "btc" | "sol" | "usdc" | "usdt")
+    : getShieldType(d);
+  const config = resolvedToken
+    ? buildShieldConfig(resolvedToken)
+    : SHIELD_TYPE_CONFIG[shieldType];
+  const isBtc = shieldType === "btc";
+  const displayAmount = config.showRaw
+    ? d.amountSats.toLocaleString()
+    : (d.amountSats / (10 ** config.decimals)).toLocaleString(undefined, { maximumFractionDigits: config.decimals });
 
   return (
-    <div className="mx-4 my-3 px-4 py-3 rounded-[10px] bg-linear-to-b from-gray/6 to-transparent border border-gray/10 space-y-1">
-      {steps.map((step, i) => (
-        <div key={step.title} className="flex gap-2.5">
-          <div className="flex flex-col items-center">
-            <div className={cn(
-              "w-5 h-5 rounded-full flex items-center justify-center shrink-0",
-              step.done ? "bg-green-500/15" : step.active ? "bg-gray/15" : "bg-gray/8"
-            )}>
-              {step.done ? (
-                <CheckCircle2 className="w-3.5 h-3.5 text-green-400" />
-              ) : step.active ? (
-                <Loader2 className="w-3 h-3 text-gray-light animate-spin" />
-              ) : (
-                <Clock className="w-2.5 h-2.5 text-gray/30" />
-              )}
+    <div className="mx-4 my-3 rounded-[10px] bg-linear-to-b from-gray/6 to-transparent border border-gray/10 overflow-hidden">
+      <div className="grid grid-cols-2 divide-x divide-gray/10">
+        {/* INPUT — BTC or SPL token deposited */}
+        <div className="p-4 space-y-2.5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-1.5 h-1.5 rounded-full bg-btc" />
+            <span className="text-caption text-btc/90 font-semibold uppercase tracking-wider">Input</span>
+            <span className="text-caption text-btc/60 font-medium">1</span>
+          </div>
+          <div className="px-3 py-2.5 rounded-[8px] bg-btc/4 border border-btc/10 space-y-2">
+            <div className="flex items-center gap-2">
+              <img src={config.from.logo} alt={config.from.label} className="w-3.5 h-3.5 rounded-full shrink-0" />
+              <span className="text-body2 text-foreground font-mono font-semibold">
+                {displayAmount} <span className="text-gray text-caption">{config.unit}</span>
+              </span>
+            </div>
+            {d.taprootAddress && (
+              <div className="group flex items-center gap-2">
+                <span className="text-[10px] text-gray/50 shrink-0">&rarr;</span>
+                <code className="text-caption font-mono text-foreground/80 truncate">{truncate(d.taprootAddress, 10, 6)}</code>
+                <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                  <CopyButton text={d.taprootAddress} label="Address" variant="default" iconSize="sm" />
+                  <a href={`${getMempoolExplorerUrl()}/address/${d.taprootAddress}`} target="_blank" rel="noopener noreferrer" className="text-btc hover:text-btc/80 transition-colors p-0.5">
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+          {/* BTC deposit tx */}
+          {d.btcTxid && (
+            <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-btc/20 transition-colors">
+              <BitcoinIcon className="w-3.5 h-3.5 text-btc/60 shrink-0" />
+              <span className="text-[10px] text-gray/60 shrink-0">Deposit tx</span>
+              <code className="text-caption font-mono text-foreground/80 truncate">{truncate(d.btcTxid, 8, 4)}</code>
+              <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                <CopyButton text={d.btcTxid} label="BTC Tx" variant="default" iconSize="sm" />
+                <a href={`${getMempoolExplorerUrl()}/tx/${d.btcTxid}`} target="_blank" rel="noopener noreferrer" className="text-btc hover:text-btc/80 transition-colors p-0.5">
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+          )}
+          {/* Sweep tx */}
+          {d.sweepTxid && (
+            <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-btc/20 transition-colors">
+              <BitcoinIcon className="w-3.5 h-3.5 text-btc/40 shrink-0" />
+              <span className="text-[10px] text-gray/60 shrink-0">Sweep tx</span>
+              <code className="text-caption font-mono text-foreground/80 truncate">{truncate(d.sweepTxid, 8, 4)}</code>
+              <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                <CopyButton text={d.sweepTxid} label="Sweep Tx" variant="default" iconSize="sm" />
+                <a href={`${getMempoolExplorerUrl()}/tx/${d.sweepTxid}`} target="_blank" rel="noopener noreferrer" className="text-btc hover:text-btc/80 transition-colors p-0.5">
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* OUTPUT — Shielded commitment */}
+        <div className="p-4 space-y-2.5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+            <span className="text-caption text-green-400/90 font-semibold uppercase tracking-wider">Output</span>
+            <span className="text-caption text-green-400/60 font-medium">1</span>
+          </div>
+          <div className="px-3 py-2.5 rounded-[8px] bg-green-500/4 border border-green-500/10 space-y-2">
+            <div className="flex items-center gap-2">
+              <img src={config.to.logo} alt={config.to.label} className="w-3.5 h-3.5 rounded-full shrink-0" />
+              <span className="text-body2 text-foreground font-mono font-semibold">
+                {displayAmount} <span className="text-gray text-caption">{config.to.label}</span>
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-[10px] text-gray/60">
+              <Shield className="w-3 h-3 text-privacy/50" />
+              <span>Shielded note (commitment)</span>
+            </div>
+          </div>
+          {/* Commitment */}
+          {d.commitment && (
+            <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-purple-500/4 border border-purple-500/10 hover:border-purple-500/20 transition-colors">
+              <span className="text-[10px] text-purple-400/60 font-mono font-semibold w-4 shrink-0">#{d.leafIndex}</span>
+              <code className="text-caption font-mono text-foreground/90 truncate">{truncate(d.commitment, 8, 6)}</code>
+              <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                <CopyButton text={d.commitment} label="Commitment" variant="default" iconSize="sm" />
+              </div>
+            </div>
+          )}
+          {/* Solana verify tx */}
+          {(d.solanaTx || d.txSignature) && (
+            <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-purple-500/20 transition-colors">
+              <span className="text-[10px] text-gray/60 shrink-0">Solana tx</span>
+              <code className="text-caption font-mono text-foreground/80 truncate">{truncate(d.solanaTx || d.txSignature, 8, 4)}</code>
+              <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                <CopyButton text={d.solanaTx || d.txSignature} label="Solana Tx" variant="default" iconSize="sm" />
+                <a href={getSolanaExplorerTxUrl(d.solanaTx || d.txSignature)} target="_blank" rel="noopener noreferrer" className="text-sol hover:text-sol/80 transition-colors p-0.5">
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Status progress bar */}
+      {isBtc && (
+        <div className="px-4 pb-3 pt-1 border-t border-gray/10">
+          <DepositProgressBar status={d.status} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Compact deposit progress indicator */
+function DepositProgressBar({ status }: { status: string | null }) {
+  const stepOrder = DEPOSIT_STATUS_ORDER[status ?? ""] ?? 0;
+  const steps = ["Deposit", "Sweep", "SPV Verify", "Minted"];
+  return (
+    <div className="flex items-center gap-1.5 pt-2">
+      {steps.map((label, i) => {
+        const done = stepOrder >= (i === 0 ? 1 : i === 1 ? 3 : i === 2 ? 4 : 5);
+        return (
+          <Fragment key={label}>
+            <div className="flex items-center gap-1">
+              <CheckCircle2 className={cn("w-3 h-3", done ? "text-green-400" : "text-gray/30")} />
+              <span className={cn("text-[10px]", done ? "text-green-400/80" : "text-gray/40")}>{label}</span>
             </div>
             {i < steps.length - 1 && (
-              <div className={cn("w-px flex-1 min-h-[12px]", step.done ? "bg-green-500/20" : "bg-gray/8")} />
+              <div className={cn("w-4 h-px", done ? "bg-green-500/30" : "bg-gray/15")} />
             )}
-          </div>
-          <div className={cn("pb-2 flex-1", i === steps.length - 1 && "pb-0")}>
-            <p className={cn(
-              "text-[11px] font-medium",
-              step.done ? "text-foreground" : step.active ? "text-foreground" : "text-gray/40"
-            )}>{step.title}</p>
-            {step.detail && (step.done || step.active) && (
-              <div className="mt-1">{step.detail}</div>
-            )}
-          </div>
-        </div>
-      ))}
+          </Fragment>
+        );
+      })}
     </div>
   );
 }
@@ -311,6 +349,11 @@ export function DepositRow({
         <Td>
           <div className="flex items-center gap-1.5">
             {d.txSignature && <SolanaLink signature={d.txSignature} />}
+            {d.btcTxid && (
+              <a href={`${getMempoolExplorerUrl()}/tx/${d.btcTxid}`} target="_blank" rel="noopener noreferrer" className="text-btc/60 hover:text-btc transition-colors p-0.5" title="View BTC tx">
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
           </div>
         </Td>
       </tr>
