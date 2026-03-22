@@ -390,10 +390,6 @@ function RedeemDetails({ tx, redemption }: { tx: TransferTx; redemption?: Redemp
           {tx.nullifierPdas.length > 0 && tx.nullifierPdas.map((pda, i) => (
             <NullifierRow key={pda} pda={pda} index={i} />
           ))}
-          {/* mark_processing Solana tx */}
-          {r?.processingTxSignature && (
-            <TxLinkRow label="mark_processing" txSignature={r.processingTxSignature} type="solana" />
-          )}
         </div>
 
         {/* OUTPUT — BTC sent */}
@@ -428,14 +424,6 @@ function RedeemDetails({ tx, redemption }: { tx: TransferTx; redemption?: Redemp
               </div>
             )}
           </div>
-          {/* BTC tx */}
-          {r?.btcTxid && (
-            <TxLinkRow label="BTC tx" txSignature={r.btcTxid} type="btc" />
-          )}
-          {/* complete_redemption Solana tx */}
-          {r?.completeTxSignature && (
-            <TxLinkRow label="complete_redemption" txSignature={r.completeTxSignature} type="solana" />
-          )}
           {/* Change outputs */}
           {tx.outputs.map((out, i) => (
             <CommitmentRow key={out.leafIndex} commitment={out.commitment} leafIndex={out.leafIndex} txSignature={tx.txSignature} index={i + 2} />
@@ -443,63 +431,99 @@ function RedeemDetails({ tx, redemption }: { tx: TransferTx; redemption?: Redemp
         </div>
       </div>
 
-      {/* Service fee + progress bar */}
-      <div className="px-4 pb-3 pt-1 border-t border-gray/10 flex items-center justify-between gap-4">
+      {/* Vertical timeline + service fee */}
+      <div className="px-5 pb-4 pt-2 border-t border-gray/10 space-y-2">
         {serviceFee > 0 && (
-          <span className="text-[10px] text-gray/60 font-mono shrink-0">
+          <span className="text-[10px] text-gray/60 font-mono">
             Service fee: {formatTokenAmount(serviceFee, token)}
           </span>
         )}
-        <WithdrawProgressBar status={r?.status ?? "Pending"} />
+        <WithdrawTimeline tx={tx} redemption={r} />
       </div>
     </div>
   );
 }
 
-/** Tx link row for BTC or Solana */
-function TxLinkRow({ label, txSignature, type }: { label: string; txSignature: string; type: "btc" | "solana" }) {
-  const isBtc = type === "btc";
-  const href = isBtc
-    ? `${getMempoolExplorerUrl()}/tx/${txSignature}`
-    : getSolanaExplorerTxUrl(txSignature);
-  const colorClass = isBtc ? "text-btc hover:text-btc/80" : "text-sol hover:text-sol/80";
-  const borderClass = isBtc ? "hover:border-btc/20" : "hover:border-purple-500/20";
+/** Vertical timeline showing withdrawal lifecycle */
+function WithdrawTimeline({ tx, redemption: r }: { tx: TransferTx; redemption?: RedemptionRecord }) {
+  const statusOrder: Record<string, number> = { Pending: 1, Processing: 2, "BTC Sent": 3, Completed: 4 };
+  const current = statusOrder[r?.status ?? "Pending"] ?? 0;
+
+  const steps = [
+    {
+      title: "Request Redemption",
+      done: current >= 1,
+      icon: "sol" as const,
+      txId: tx.txSignature,
+    },
+    {
+      title: "Mark Processing",
+      done: current >= 2,
+      icon: "sol" as const,
+      txId: r?.processingTxSignature ?? null,
+    },
+    {
+      title: "BTC Sent",
+      done: current >= 3,
+      icon: "btc" as const,
+      txId: r?.btcTxid ?? null,
+    },
+    {
+      title: "Complete Redemption",
+      done: current >= 4,
+      icon: "sol" as const,
+      txId: r?.completeTxSignature ?? null,
+    },
+  ];
 
   return (
-    <div className={cn("group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 transition-colors", borderClass)}>
-      {isBtc ? <BitcoinIcon className="w-3.5 h-3.5 text-btc/60 shrink-0" /> : <Shield className="w-3.5 h-3.5 text-sol/60 shrink-0" />}
-      <span className="text-[10px] text-gray/60 shrink-0">{label}</span>
-      <code className="text-caption font-mono text-foreground/80 truncate">{truncate(txSignature, 8, 4)}</code>
-      <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
-        <CopyButton text={txSignature} label={label} variant="default" iconSize="sm" />
-        <a href={href} target="_blank" rel="noopener noreferrer" className={cn("transition-colors p-0.5", colorClass)}>
-          <ExternalLink className="w-3 h-3" />
-        </a>
-      </div>
-    </div>
-  );
-}
-
-/** Withdraw progress bar: Request → Processing → BTC Sent → Complete */
-function WithdrawProgressBar({ status }: { status: string }) {
-  const steps = ["Request", "Processing", "BTC Sent", "Complete"];
-  const stepDone: Record<string, number> = { Pending: 1, Processing: 2, "BTC Sent": 3, Completed: 4 };
-  const current = stepDone[status] ?? 0;
-
-  return (
-    <div className="flex items-center gap-1.5">
-      {steps.map((label, i) => {
-        const done = current > i;
-        return (
-          <Fragment key={label}>
-            <div className="flex items-center gap-1">
-              <CheckCircle2 className={cn("w-3 h-3", done ? "text-green-400" : "text-gray/30")} />
-              <span className={cn("text-[10px]", done ? "text-green-400/80" : "text-gray/40")}>{label}</span>
+    <div className="space-y-0">
+      {steps.map((step, i) => (
+        <div key={step.title} className="flex gap-3">
+          <div className="flex flex-col items-center w-5">
+            <div className={cn(
+              "w-5 h-5 rounded-full flex items-center justify-center shrink-0 border",
+              step.done ? "bg-green-500/15 border-green-500/30" : "bg-gray/8 border-gray/15"
+            )}>
+              {step.done ? (
+                <CheckCircle2 className="w-3 h-3 text-green-400" />
+              ) : (
+                <Loader2 className="w-3 h-3 text-gray/40 animate-spin" />
+              )}
             </div>
-            {i < steps.length - 1 && <div className={cn("w-4 h-px", done ? "bg-green-500/30" : "bg-gray/15")} />}
-          </Fragment>
-        );
-      })}
+            {i < steps.length - 1 && (
+              <div className={cn("w-px flex-1 min-h-[20px]", step.done ? "bg-green-500/20" : "bg-gray/10")} />
+            )}
+          </div>
+          <div className="flex-1 pb-3">
+            <div className="flex items-center gap-2">
+              {step.icon === "btc" ? (
+                <BitcoinIcon className="w-3.5 h-3.5 text-btc/70" />
+              ) : (
+                <img src="/tokens/sol.png" alt="SOL" className="w-3.5 h-3.5 rounded-full opacity-70" />
+              )}
+              <span className={cn("text-[12px] font-medium", step.done ? "text-foreground" : "text-gray/50")}>
+                {step.title}
+              </span>
+            </div>
+            {step.txId && step.done && (
+              <div className="group flex items-center gap-1.5 mt-1">
+                <span className="text-[10px] text-gray/40">{step.icon === "btc" ? "Transaction ID" : "Signature"}</span>
+                <code className="text-[10px] font-mono text-gray/60 truncate max-w-[280px]">{step.txId}</code>
+                <CopyButton text={step.txId} label={step.title} variant="default" iconSize="sm" />
+                <a
+                  href={step.icon === "btc" ? `${getMempoolExplorerUrl()}/tx/${step.txId}` : getSolanaExplorerTxUrl(step.txId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn("transition-colors p-0.5", step.icon === "btc" ? "text-btc/40 hover:text-btc" : "text-purple-400/40 hover:text-purple-400")}
+                >
+                  <ExternalLink className="w-2.5 h-2.5" />
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

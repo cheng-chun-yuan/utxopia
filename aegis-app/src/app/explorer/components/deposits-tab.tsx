@@ -136,64 +136,112 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
         </div>
       </div>
 
-      {/* Flow: tx links + progress bar */}
+      {/* Vertical timeline */}
       {isBtc && (
-        <div className="px-4 pb-3 pt-2 border-t border-gray/10 space-y-2">
-          {/* Tx links row */}
-          <div className="flex flex-wrap items-center gap-2">
-            {d.btcTxid && (
-              <div className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[6px] bg-btc/4 border border-btc/10 hover:border-btc/25 transition-colors">
-                <span className="text-[10px] text-btc/60 shrink-0">Deposit tx</span>
-                <code className="text-[11px] font-mono text-btc/80">{truncate(d.btcTxid, 6, 4)}</code>
-                <CopyButton text={d.btcTxid} label="Deposit Tx" variant="default" iconSize="sm" />
-                <a href={`${getMempoolExplorerUrl()}/tx/${d.btcTxid}`} target="_blank" rel="noopener noreferrer" className="text-btc/60 hover:text-btc transition-colors"><ExternalLink className="w-2.5 h-2.5" /></a>
-              </div>
-            )}
-            {d.sweepTxid && (
-              <div className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[6px] bg-btc/4 border border-btc/10 hover:border-btc/25 transition-colors">
-                <span className="text-[10px] text-btc/60 shrink-0">Sweep tx</span>
-                <code className="text-[11px] font-mono text-btc/80">{truncate(d.sweepTxid, 6, 4)}</code>
-                <CopyButton text={d.sweepTxid} label="Sweep Tx" variant="default" iconSize="sm" />
-                <a href={`${getMempoolExplorerUrl()}/tx/${d.sweepTxid}`} target="_blank" rel="noopener noreferrer" className="text-btc/60 hover:text-btc transition-colors"><ExternalLink className="w-2.5 h-2.5" /></a>
-              </div>
-            )}
-            {(d.solanaTx || d.txSignature) && (
-              <div className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[6px] bg-purple-500/4 border border-purple-500/10 hover:border-purple-500/25 transition-colors">
-                <span className="text-[10px] text-purple-400/60 shrink-0">SPV Verify</span>
-                <code className="text-[11px] font-mono text-purple-400/80">{truncate(d.solanaTx || d.txSignature, 6, 4)}</code>
-                <CopyButton text={d.solanaTx || d.txSignature} label="Solana Tx" variant="default" iconSize="sm" />
-                <a href={getSolanaExplorerTxUrl(d.solanaTx || d.txSignature)} target="_blank" rel="noopener noreferrer" className="text-purple-400/60 hover:text-purple-400 transition-colors"><ExternalLink className="w-2.5 h-2.5" /></a>
-              </div>
-            )}
-          </div>
-          {/* Progress bar */}
-          <DepositProgressBar status={d.status} />
+        <div className="px-5 pb-4 pt-2 border-t border-gray/10">
+          <DepositTimeline deposit={d} />
         </div>
       )}
     </div>
   );
 }
 
-/** Compact deposit progress indicator */
-function DepositProgressBar({ status }: { status: string | null }) {
-  const stepOrder = DEPOSIT_STATUS_ORDER[status ?? ""] ?? 0;
-  const steps = ["Deposit", "Sweep", "SPV Verify", "Minted"];
+/** Vertical timeline showing deposit lifecycle transactions */
+function DepositTimeline({ deposit: d }: { deposit: DepositRecord }) {
+  const stepOrder = DEPOSIT_STATUS_ORDER[d.status ?? ""] ?? 0;
+
+  const steps = [
+    {
+      title: "Deposit BTC",
+      done: stepOrder >= 1,
+      icon: "btc" as const,
+      txId: d.btcTxid,
+      txType: "btc" as const,
+      badge: stepOrder >= 4 ? "SPV Confirmed" : null,
+    },
+    {
+      title: "Sweep to Pool",
+      done: stepOrder >= 3,
+      icon: "btc" as const,
+      txId: d.sweepTxid,
+      txType: "btc" as const,
+      badge: null,
+    },
+    {
+      title: "SPV Verify",
+      done: stepOrder >= 4,
+      icon: "sol" as const,
+      txId: d.solanaTx || d.txSignature,
+      txType: "sol" as const,
+      badge: null,
+    },
+    {
+      title: "Mint zkBTC",
+      done: stepOrder >= 5,
+      icon: "sol" as const,
+      txId: d.txSignature,
+      txType: "sol" as const,
+      badge: d.mintedSats ? `${d.mintedSats.toLocaleString()} sats` : null,
+    },
+  ];
+
   return (
-    <div className="flex items-center gap-1.5 pt-2">
-      {steps.map((label, i) => {
-        const done = stepOrder >= (i === 0 ? 1 : i === 1 ? 3 : i === 2 ? 4 : 5);
-        return (
-          <Fragment key={label}>
-            <div className="flex items-center gap-1">
-              <CheckCircle2 className={cn("w-3 h-3", done ? "text-green-400" : "text-gray/30")} />
-              <span className={cn("text-[10px]", done ? "text-green-400/80" : "text-gray/40")}>{label}</span>
+    <div className="space-y-0">
+      {steps.map((step, i) => (
+        <div key={step.title} className="flex gap-3">
+          {/* Vertical line + dot */}
+          <div className="flex flex-col items-center w-5">
+            <div className={cn(
+              "w-5 h-5 rounded-full flex items-center justify-center shrink-0 border",
+              step.done
+                ? "bg-green-500/15 border-green-500/30"
+                : "bg-gray/8 border-gray/15"
+            )}>
+              {step.done ? (
+                <CheckCircle2 className="w-3 h-3 text-green-400" />
+              ) : (
+                <Loader2 className="w-3 h-3 text-gray/40 animate-spin" />
+              )}
             </div>
             {i < steps.length - 1 && (
-              <div className={cn("w-4 h-px", done ? "bg-green-500/30" : "bg-gray/15")} />
+              <div className={cn("w-px flex-1 min-h-[20px]", step.done ? "bg-green-500/20" : "bg-gray/10")} />
             )}
-          </Fragment>
-        );
-      })}
+          </div>
+          {/* Content */}
+          <div className="flex-1 pb-3">
+            <div className="flex items-center gap-2">
+              {step.icon === "btc" ? (
+                <BitcoinIcon className="w-3.5 h-3.5 text-btc/70" />
+              ) : (
+                <img src="/tokens/sol.png" alt="SOL" className="w-3.5 h-3.5 rounded-full opacity-70" />
+              )}
+              <span className={cn("text-[12px] font-medium", step.done ? "text-foreground" : "text-gray/50")}>
+                {step.title}
+              </span>
+              {step.badge && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-green-500/10 border border-green-500/20 text-[9px] text-green-400 font-medium">
+                  <CheckCircle2 className="w-2.5 h-2.5" /> {step.badge}
+                </span>
+              )}
+            </div>
+            {step.txId && step.done && (
+              <div className="group flex items-center gap-1.5 mt-1">
+                <span className="text-[10px] text-gray/40">{step.txType === "btc" ? "Transaction ID" : "Signature"}</span>
+                <code className="text-[10px] font-mono text-gray/60 truncate max-w-[280px]">{step.txId}</code>
+                <CopyButton text={step.txId} label={step.title} variant="default" iconSize="sm" />
+                <a
+                  href={step.txType === "btc" ? `${getMempoolExplorerUrl()}/tx/${step.txId}` : getSolanaExplorerTxUrl(step.txId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn("transition-colors p-0.5", step.txType === "btc" ? "text-btc/40 hover:text-btc" : "text-purple-400/40 hover:text-purple-400")}
+                >
+                  <ExternalLink className="w-2.5 h-2.5" />
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
