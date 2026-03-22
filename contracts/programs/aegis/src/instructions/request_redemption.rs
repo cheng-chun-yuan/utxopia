@@ -344,6 +344,16 @@ pub fn process_request_redemption(
         tc.add_fees(service_fee)?;
     }
 
+    // Emit structured event for indexer (0x08 RedemptionRequested)
+    crate::utils::events::emit_redemption_requested(
+        accounts.user.key().as_ref().try_into().unwrap(),
+        ix_data.amount_sats,
+        ix_data.request_nonce,
+        service_fee,
+        0, // fee_bps passed as 0; actual computed fee is in service_fee
+        &ix_data.btc_script[..ix_data.btc_script_len as usize],
+    );
+
     pinocchio::msg!("Aegis: redemption requested");
     Ok(())
 }
