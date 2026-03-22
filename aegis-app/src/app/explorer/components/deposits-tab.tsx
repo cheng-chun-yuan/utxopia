@@ -109,42 +109,15 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
               </div>
             )}
           </div>
-          {/* BTC deposit tx (gray row) */}
-          {d.btcTxid && (
-            <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-gray/15 transition-colors">
-              <span className="text-[10px] text-gray/50 shrink-0">Deposit tx</span>
-              <code className="text-caption font-mono text-foreground/80 truncate">{truncate(d.btcTxid, 8, 4)}</code>
-              <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
-                <CopyButton text={d.btcTxid} label="BTC Tx" variant="default" iconSize="sm" />
-                <a href={`${getMempoolExplorerUrl()}/tx/${d.btcTxid}`} target="_blank" rel="noopener noreferrer" className="text-btc hover:text-btc/80 transition-colors p-0.5">
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              </div>
-            </div>
-          )}
-          {/* Sweep tx (gray row) */}
-          {d.sweepTxid && (
-            <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-gray/15 transition-colors">
-              <span className="text-[10px] text-gray/50 shrink-0">Sweep tx</span>
-              <code className="text-caption font-mono text-foreground/80 truncate">{truncate(d.sweepTxid, 8, 4)}</code>
-              <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
-                <CopyButton text={d.sweepTxid} label="Sweep Tx" variant="default" iconSize="sm" />
-                <a href={`${getMempoolExplorerUrl()}/tx/${d.sweepTxid}`} target="_blank" rel="noopener noreferrer" className="text-btc hover:text-btc/80 transition-colors p-0.5">
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* OUTPUT — commitment (matching transfer style) */}
+        {/* OUTPUT — commitment */}
         <div className="p-4 space-y-2.5">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
             <span className="text-caption text-purple-400/90 font-semibold uppercase tracking-wider">Outputs</span>
             <span className="text-caption text-purple-400/60 font-medium">1</span>
           </div>
-          {/* Commitment row (gray, matching transfer style) */}
           {d.commitment && (
             <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-gray/15 transition-colors">
               <span className="text-[10px] text-gray/50 shrink-0">Commitment</span>
@@ -160,25 +133,40 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
               </div>
             </div>
           )}
-          {/* Solana verify tx (gray row) */}
-          {(d.solanaTx || d.txSignature) && (
-            <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-gray/15 transition-colors">
-              <span className="text-[10px] text-gray/50 shrink-0">Solana tx</span>
-              <code className="text-caption font-mono text-foreground/80 truncate">{truncate(d.solanaTx || d.txSignature, 8, 4)}</code>
-              <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
-                <CopyButton text={d.solanaTx || d.txSignature} label="Solana Tx" variant="default" iconSize="sm" />
-                <a href={getSolanaExplorerTxUrl(d.solanaTx || d.txSignature)} target="_blank" rel="noopener noreferrer" className="text-sol hover:text-sol/80 transition-colors p-0.5">
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Status progress bar */}
+      {/* Flow: tx links + progress bar */}
       {isBtc && (
-        <div className="px-4 pb-3 pt-1 border-t border-gray/10">
+        <div className="px-4 pb-3 pt-2 border-t border-gray/10 space-y-2">
+          {/* Tx links row */}
+          <div className="flex flex-wrap items-center gap-2">
+            {d.btcTxid && (
+              <div className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[6px] bg-btc/4 border border-btc/10 hover:border-btc/25 transition-colors">
+                <span className="text-[10px] text-btc/60 shrink-0">Deposit tx</span>
+                <code className="text-[11px] font-mono text-btc/80">{truncate(d.btcTxid, 6, 4)}</code>
+                <CopyButton text={d.btcTxid} label="Deposit Tx" variant="default" iconSize="sm" />
+                <a href={`${getMempoolExplorerUrl()}/tx/${d.btcTxid}`} target="_blank" rel="noopener noreferrer" className="text-btc/60 hover:text-btc transition-colors"><ExternalLink className="w-2.5 h-2.5" /></a>
+              </div>
+            )}
+            {d.sweepTxid && (
+              <div className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[6px] bg-btc/4 border border-btc/10 hover:border-btc/25 transition-colors">
+                <span className="text-[10px] text-btc/60 shrink-0">Sweep tx</span>
+                <code className="text-[11px] font-mono text-btc/80">{truncate(d.sweepTxid, 6, 4)}</code>
+                <CopyButton text={d.sweepTxid} label="Sweep Tx" variant="default" iconSize="sm" />
+                <a href={`${getMempoolExplorerUrl()}/tx/${d.sweepTxid}`} target="_blank" rel="noopener noreferrer" className="text-btc/60 hover:text-btc transition-colors"><ExternalLink className="w-2.5 h-2.5" /></a>
+              </div>
+            )}
+            {(d.solanaTx || d.txSignature) && (
+              <div className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[6px] bg-purple-500/4 border border-purple-500/10 hover:border-purple-500/25 transition-colors">
+                <span className="text-[10px] text-purple-400/60 shrink-0">SPV Verify</span>
+                <code className="text-[11px] font-mono text-purple-400/80">{truncate(d.solanaTx || d.txSignature, 6, 4)}</code>
+                <CopyButton text={d.solanaTx || d.txSignature} label="Solana Tx" variant="default" iconSize="sm" />
+                <a href={getSolanaExplorerTxUrl(d.solanaTx || d.txSignature)} target="_blank" rel="noopener noreferrer" className="text-purple-400/60 hover:text-purple-400 transition-colors"><ExternalLink className="w-2.5 h-2.5" /></a>
+              </div>
+            )}
+          </div>
+          {/* Progress bar */}
           <DepositProgressBar status={d.status} />
         </div>
       )}
