@@ -122,29 +122,32 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
             <span className="text-caption text-purple-400/90 font-semibold uppercase tracking-wider">Outputs</span>
             <span className="text-caption text-purple-400/60 font-medium">1</span>
           </div>
-          {/* Shielded amount */}
-          <div className="px-3 py-2.5 rounded-[8px] bg-privacy/4 border border-privacy/10 space-y-1.5">
-            <div className="flex items-center gap-2">
-              <img src={config.to.logo} alt={config.to.label} className="w-3.5 h-3.5 rounded-full shrink-0" />
-              <span className="text-body2 text-foreground font-mono font-semibold">
-                {fmtAmount(shieldedAmount)} <span className="text-gray text-caption">{config.to.label}</span>
-              </span>
-            </div>
-            <div className="text-[10px] text-gray/50">Shielded note</div>
-          </div>
-          {/* Commitment */}
+          {/* Commitment with shielded amount */}
           {d.commitment && (
-            <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-gray/15 transition-colors">
-              <span className="text-[10px] text-gray/50 shrink-0">Commitment</span>
-              <code className="text-caption font-mono text-foreground/90 truncate">{truncate(d.commitment, 8, 6)}</code>
-              <span className="text-[10px] text-gray/50 font-mono bg-gray/8 px-1.5 py-0.5 rounded shrink-0">#{d.leafIndex}</span>
-              <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
-                <CopyButton text={d.commitment} label="Commitment" variant="default" iconSize="sm" />
-                {d.txSignature && (
-                  <a href={getSolanaExplorerTxUrl(d.txSignature)} target="_blank" rel="noopener noreferrer" className="text-sol hover:text-sol/80 transition-colors p-0.5" title="View transaction">
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
+            <div className="group rounded-[8px] bg-gray/4 border border-gray/8 hover:border-gray/15 transition-colors overflow-hidden">
+              <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray/8">
+                <img src={config.to.logo} alt={config.to.label} className="w-3.5 h-3.5 rounded-full shrink-0" />
+                <span className="text-body2 text-foreground font-mono font-semibold">
+                  {fmtAmount(shieldedAmount)} <span className="text-gray text-caption">{config.to.label}</span>
+                </span>
+                {fee > 0 && (
+                  <span className="text-[10px] text-gray/50 font-mono ml-auto">
+                    fee: {fmtAmount(fee)} {config.unit}
+                  </span>
                 )}
+              </div>
+              <div className="flex items-center gap-2 px-3 py-2">
+                <span className="text-[10px] text-gray/50 shrink-0">Commitment</span>
+                <code className="text-caption font-mono text-foreground/90 truncate">{truncate(d.commitment, 8, 6)}</code>
+                <span className="text-[10px] text-gray/50 font-mono bg-gray/8 px-1.5 py-0.5 rounded shrink-0">#{d.leafIndex}</span>
+                <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                  <CopyButton text={d.commitment} label="Commitment" variant="default" iconSize="sm" />
+                  {d.txSignature && (
+                    <a href={getSolanaExplorerTxUrl(d.txSignature)} target="_blank" rel="noopener noreferrer" className="text-sol hover:text-sol/80 transition-colors p-0.5" title="View transaction">
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -152,14 +155,11 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
       </div>
 
       {/* Fee + timeline */}
-      <div className="px-5 pb-4 pt-2 border-t border-gray/10 space-y-2">
-        {fee > 0 && (
-          <span className="text-[10px] text-gray/60 font-mono">
-            Deposit fee: {fmtAmount(fee)} {config.unit}
-          </span>
-        )}
-        {isBtc && <DepositTimeline deposit={d} />}
-      </div>
+      {isBtc && (
+        <div className="px-5 pb-4 pt-2 border-t border-gray/10">
+          <DepositTimeline deposit={d} />
+        </div>
+      )}
     </div>
   );
 }
