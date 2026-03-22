@@ -311,8 +311,8 @@ function NullifierInputsList({ tx }: { tx: TransferTx }) {
 
 function NullifierRow({ pda, index }: { pda: string; index: number }) {
   return (
-    <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-green-500/4 border border-green-500/10 hover:border-green-500/20 transition-colors">
-      <span className="text-[10px] text-green-400/60 font-mono font-semibold w-4 shrink-0">{index + 1}</span>
+    <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 hover:border-gray/15 transition-colors">
+      <span className="text-[10px] text-gray/50 shrink-0">Nullifier</span>
       <code className="text-caption font-mono text-foreground/90 truncate">{truncate(pda, 8, 6)}</code>
       <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
         <CopyButton text={pda} label="Nullifier" variant="default" iconSize="sm" />
