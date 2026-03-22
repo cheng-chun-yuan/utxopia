@@ -46,6 +46,17 @@ const REDEMPTION_SERVICE_FEE_OFFSET: usize = 56; // 48+8
 const REDEMPTION_BTC_ADDR_OFFSET: usize = 64; // 56+8
 const REDEMPTION_MIN_LEN: usize = 98; // full struct size
 
+/// UtxoRecord account layout offsets (from contracts/programs/aegis/src/state/utxo.rs)
+///
+/// Layout (48 bytes): disc(1) + status(1) + padding(2) + vout(4) + txid(32) + amount_sats(8)
+/// PDA seeds: ["utxo", txid(32), vout_le(4)]
+const UTXO_RECORD_DISCRIMINATOR: u8 = 0x09;
+const UTXO_STATUS_OFFSET: usize = 1;
+const UTXO_AMOUNT_OFFSET: usize = 40;
+const UTXO_RECORD_LEN: usize = 48;
+/// UTXO status: Reserved = 1 (selected for a withdrawal tx)
+const UTXO_STATUS_RESERVED: u8 = 1;
+
 /// PoolState layout offsets for fee config
 const POOL_STATE_DISCRIMINATOR: u8 = 0x01;
 const POOL_STATE_SERVICE_FEE_BASE_OFFSET: usize = 196;
@@ -295,6 +306,126 @@ impl SolanaVerifier {
         );
 
         Ok(PoolFeeConfig { service_fee_bps: bps, service_fee_base: base })
+    }
+
+    /// Verify that BTC transaction inputs match on-chain Reserved UtxoRecord PDAs.
+    ///
+    /// For each UTXO input (txid, vout, amount), derives the UtxoRecord PDA,
+    /// fetches it via RPC, and validates:
+    /// - Discriminator is 0x09 (UtxoRecord)
+    /// - Status is Reserved (1)
+    /// - Amount matches the claimed prevout value
+    ///
+    /// Returns the total input amount from verified UTXOs.
+    pub async fn verify_utxo_inputs(
+        &self,
+        utxo_inputs: &[(String, u32, u64)], // (txid_hex, vout, amount_sats)
+    ) -> Result<u64, SolanaVerifyError> {
+        if utxo_inputs.is_empty() {
+            return Err(SolanaVerifyError::InvalidAccountData(
+                "no UTXO inputs provided".to_string(),
+            ));
+        }
+
+        let mut total_input_sats: u64 = 0;
+
+        for (txid_hex, vout, claimed_amount) in utxo_inputs {
+            // Decode txid from hex (internal byte order, same as on-chain)
+            let txid_bytes = hex::decode(txid_hex).map_err(|e| {
+                SolanaVerifyError::RpcError(format!("invalid txid hex '{}': {}", txid_hex, e))
+            })?;
+            if txid_bytes.len() != 32 {
+                return Err(SolanaVerifyError::RpcError(format!(
+                    "txid must be 32 bytes, got {}",
+                    txid_bytes.len()
+                )));
+            }
+
+            let vout_le = vout.to_le_bytes();
+            let seeds: &[&[u8]] = &[b"utxo", &txid_bytes, &vout_le];
+
+            let pda = find_program_address(seeds, &self.program_id).ok_or_else(|| {
+                SolanaVerifyError::RpcError(format!(
+                    "failed to derive UTXO PDA for {}:{}",
+                    txid_hex, vout
+                ))
+            })?;
+
+            let pda_base58 = bs58::encode(&pda.0).into_string();
+
+            tracing::debug!(
+                pda = %pda_base58,
+                txid = %txid_hex,
+                vout = vout,
+                claimed_amount = claimed_amount,
+                "verifying UtxoRecord PDA"
+            );
+
+            let data = self.get_account_data(&pda_base58).await?.ok_or_else(|| {
+                SolanaVerifyError::AccountNotFound(format!(
+                    "UtxoRecord PDA {} not found for {}:{}",
+                    pda_base58, txid_hex, vout
+                ))
+            })?;
+
+            if data.len() < UTXO_RECORD_LEN {
+                return Err(SolanaVerifyError::InvalidAccountData(format!(
+                    "UTXO account too small: {} < {}",
+                    data.len(),
+                    UTXO_RECORD_LEN
+                )));
+            }
+
+            if data[0] != UTXO_RECORD_DISCRIMINATOR {
+                return Err(SolanaVerifyError::InvalidAccountData(format!(
+                    "wrong UTXO discriminator: expected 0x{:02x}, got 0x{:02x}",
+                    UTXO_RECORD_DISCRIMINATOR, data[0]
+                )));
+            }
+
+            let status = data[UTXO_STATUS_OFFSET];
+            if status != UTXO_STATUS_RESERVED {
+                return Err(SolanaVerifyError::InvalidAccountData(format!(
+                    "UTXO {}:{} status is {} (expected Reserved={})",
+                    txid_hex, vout, status, UTXO_STATUS_RESERVED
+                )));
+            }
+
+            let on_chain_amount = u64::from_le_bytes(
+                data[UTXO_AMOUNT_OFFSET..UTXO_AMOUNT_OFFSET + 8]
+                    .try_into()
+                    .map_err(|_| {
+                        SolanaVerifyError::InvalidAccountData(
+                            "failed to parse UTXO amount_sats".to_string(),
+                        )
+                    })?,
+            );
+
+            if on_chain_amount != *claimed_amount {
+                return Err(SolanaVerifyError::AmountMismatch {
+                    on_chain: on_chain_amount,
+                    expected: *claimed_amount,
+                });
+            }
+
+            tracing::info!(
+                pda = %pda_base58,
+                txid = %txid_hex,
+                vout = vout,
+                amount = on_chain_amount,
+                "UtxoRecord verified: Reserved with correct amount"
+            );
+
+            total_input_sats += on_chain_amount;
+        }
+
+        tracing::info!(
+            utxo_count = utxo_inputs.len(),
+            total_input_sats = total_input_sats,
+            "all UTXO inputs verified against on-chain PDAs"
+        );
+
+        Ok(total_input_sats)
     }
 
     /// Verify that a DepositIntent PDA exists on-chain.

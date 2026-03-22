@@ -685,6 +685,18 @@ impl RedemptionService {
                     .assume_checked();
                 hex::encode(addr.script_pubkey().as_bytes())
             };
+            // Build UTXO inputs list from selected UTXOs for FROST signer verification.
+            // Each signer independently verifies these against on-chain Reserved UtxoRecord PDAs.
+            let utxo_inputs: Vec<(String, u32, u64)> = unsigned.utxos.iter().map(|u| {
+                // Convert txid to internal byte order (reverse of display order) for PDA derivation
+                let txid_bytes: Vec<u8> = hex::decode(&u.txid)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .rev()
+                    .collect();
+                (hex::encode(&txid_bytes), u.vout, u.amount_sats)
+            }).collect();
+
             unsigned.solana_verification =
                 Some(crate::bitcoin::frost_client::SolanaVerification::Withdrawal {
                     requester: request.user_solana_address.clone(),
@@ -692,6 +704,7 @@ impl RedemptionService {
                     expected_amount_sats: request.amount_sats,  // gross (PDA)
                     expected_send_amount: Some(unsigned.send_amount),  // net (tx output)
                     expected_btc_address: btc_script_hex,
+                    utxo_inputs,
                 });
         }
 

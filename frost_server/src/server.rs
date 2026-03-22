@@ -610,6 +610,9 @@ fn policy_error(err: crate::policy::PolicyError) -> (StatusCode, Json<ErrorRespo
         PolicyError::AlreadyPaid { .. } => ("POLICY_ALREADY_PAID", StatusCode::FORBIDDEN),
         PolicyError::InvalidAddress { .. } => ("POLICY_INVALID_ADDRESS", StatusCode::FORBIDDEN),
         PolicyError::VerificationRequired => ("POLICY_VERIFICATION_REQUIRED", StatusCode::FORBIDDEN),
+        PolicyError::UtxoPdaNotFound { .. } => ("POLICY_UTXO_PDA_NOT_FOUND", StatusCode::FORBIDDEN),
+        PolicyError::UtxoPdaMismatch(_) => ("POLICY_UTXO_PDA_MISMATCH", StatusCode::FORBIDDEN),
+        PolicyError::UtxoInputsMissing => ("POLICY_UTXO_INPUTS_MISSING", StatusCode::BAD_REQUEST),
     };
     (status, Json(ErrorResponse::new(code, err.to_string())))
 }

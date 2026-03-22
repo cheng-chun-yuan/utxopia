@@ -21,7 +21,7 @@ use pinocchio::{
 
 use crate::error::AegisError;
 use crate::state::{
-    PoolConfig, PoolState, RedemptionRequest, RedemptionStatus, UtxoRecord,
+    PoolConfig, PoolState, RedemptionRequest, RedemptionStatus, UtxoRecord, UtxoStatus,
     VerifiedTransactionView, light_client_tip_height,
     completion_receipt::{CompletionReceipt, COMPLETION_RECEIPT_DISCRIMINATOR},
     pool_config::POOL_CONFIG_DISCRIMINATOR,
@@ -442,6 +442,11 @@ pub fn process_complete_redemption(
                     return Err(AegisError::InvalidUtxo.into());
                 }
                 let utxo = UtxoRecord::from_bytes(&utxo_data)?;
+                // SECURITY: Verify UTXO is Reserved (set by mark_processing).
+                // Prevents consuming Unspent UTXOs that weren't part of this withdrawal.
+                if utxo.get_status() != UtxoStatus::Reserved {
+                    return Err(AegisError::InvalidUtxo.into());
+                }
                 let amount = utxo.amount_sats();
                 let vout = utxo.vout();
                 let mut txid = [0u8; 32];

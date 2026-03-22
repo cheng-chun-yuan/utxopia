@@ -125,6 +125,18 @@ pub enum PolicyError {
         index: usize,
         details: String,
     },
+
+    #[error("POLICY_UTXO_PDA_NOT_FOUND: UTXO {txid}:{vout} has no matching Reserved UtxoRecord PDA on Solana")]
+    UtxoPdaNotFound {
+        txid: String,
+        vout: u32,
+    },
+
+    #[error("POLICY_UTXO_PDA_MISMATCH: {0}")]
+    UtxoPdaMismatch(String),
+
+    #[error("POLICY_UTXO_INPUTS_MISSING: Solana verifier is configured but no utxo_inputs provided in withdrawal request")]
+    UtxoInputsMissing,
 }
 
 /// Tracks already-signed (requester, nonce) pairs to prevent duplicate signing.
@@ -327,6 +339,37 @@ impl SigningPolicy {
                     // Non-fatal: PDA service_fee is the user's committed fee at redemption time,
                     // PoolState is just a sanity cross-check. RPC flakiness shouldn't block signing.
                 }
+            }
+        }
+
+        // 6c. Verify BTC tx inputs match on-chain Reserved UtxoRecord PDAs (withdrawal only)
+        //     Prevents signing transactions that spend UTXOs not tracked by the Solana program.
+        if let (Some(ref verifier), Some(ref verification)) = (&self.solana_verifier, &request.solana_verification) {
+            if let SolanaVerification::Withdrawal { ref utxo_inputs, .. } = verification {
+                if utxo_inputs.is_empty() {
+                    return Err(PolicyError::UtxoInputsMissing);
+                }
+                let total_verified = verifier.verify_utxo_inputs(utxo_inputs).await.map_err(|e| {
+                    use crate::solana_verifier::SolanaVerifyError;
+                    match e {
+                        SolanaVerifyError::AccountNotFound(msg) => {
+                            // Extract txid:vout from error message if possible
+                            PolicyError::UtxoPdaMismatch(format!("UTXO PDA not found: {}", msg))
+                        }
+                        SolanaVerifyError::AmountMismatch { on_chain, expected } => {
+                            PolicyError::UtxoPdaMismatch(format!(
+                                "UTXO amount mismatch: on-chain {} != claimed {}",
+                                on_chain, expected
+                            ))
+                        }
+                        _ => PolicyError::UtxoPdaMismatch(format!("UTXO verification failed: {}", e)),
+                    }
+                })?;
+                tracing::info!(
+                    utxo_count = utxo_inputs.len(),
+                    total_verified_sats = total_verified,
+                    "UTXO inputs verified against on-chain Reserved PDAs"
+                );
             }
         }
 

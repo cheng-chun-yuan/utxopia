@@ -89,6 +89,9 @@ pub enum SolanaVerification {
         expected_send_amount: Option<u64>,
         /// Expected BTC destination address
         expected_btc_address: String,
+        /// UTXO inputs: (txid_hex, vout, amount_sats) — verified against on-chain Reserved UtxoRecord PDAs
+        #[serde(default)]
+        utxo_inputs: Vec<(String, u32, u64)>,
     },
     /// Verify a DepositIntent PDA exists for sweep signing
     Sweep {

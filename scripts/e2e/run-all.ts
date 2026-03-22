@@ -26,6 +26,7 @@ const steps = [
   { file: "step8-btc-withdraw.ts", label: "BTC Withdrawal Request" },
   { file: "step8b-complete-redemption.ts", label: "Complete BTC Redemption" },
   { file: "step9-summary.ts", label: "Summary" },
+  { file: "step10-security-negative.ts", label: "Security Negative Tests" },
 ];
 
 console.log("========================================");
