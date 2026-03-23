@@ -13,6 +13,7 @@
  */
 
 import { NextResponse } from "next/server";
+import bs58 from "bs58";
 import { fetchAnnouncementsFromRpc } from "@/lib/api/rpc-fallback";
 import { getBackendUrl } from "@/lib/api/constants";
 export const dynamic = "force-dynamic";
@@ -93,63 +94,67 @@ export interface ExplorerDeposit {
 }
 
 /**
- * Build a tokenId → symbol map by computing Poseidon(mint) for all known mints.
- * Uses the same logic as the SDK computeTokenId.
+ * Build a tokenId → symbol map by fetching TokenConfig PDAs from on-chain.
+ * Each TokenConfig stores mint(32) + token_id(32). We extract both and
+ * resolve mint → symbol using known mint addresses.
  */
 async function buildTokenIdMap(): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   try {
-    const { computeTokenId, initPoseidon } = await import("@aegis/sdk");
-    const { PublicKey } = await import("@solana/web3.js");
-    await initPoseidon();
+    const { getConfig } = await import("@aegis/sdk");
+    const { Connection, PublicKey } = await import("@solana/web3.js");
+    const config = getConfig();
+    const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com";
+    const connection = new Connection(rpcUrl);
 
-    // Known mints from env + defaults
-    const mints: { symbol: string; mint: string }[] = [];
+    // Fetch all TokenConfig PDAs (discriminator 0x0b, size 164)
+    const TOKEN_CONFIG_DISC = 0x0b;
+    const TOKEN_CONFIG_LEN = 164;
+    const programId = new PublicKey(config.aegisProgramId);
 
-    // zkBTC
-    const zkbtcMint = process.env.NEXT_PUBLIC_ZKBTC_MINT || process.env.AEGIS_ZKBTC_MINT;
-    if (zkbtcMint) mints.push({ symbol: "BTC", mint: zkbtcMint });
+    const accounts = await connection.getProgramAccounts(programId, {
+      filters: [
+        { dataSize: TOKEN_CONFIG_LEN },
+        { memcmp: { offset: 0, bytes: bs58.encode(Buffer.from([TOKEN_CONFIG_DISC])) } },
+      ],
+    });
 
-    // wSOL (NATIVE_MINT_2022)
-    mints.push({ symbol: "SOL", mint: "9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP" });
-
-    // USDC from env
+    // Known mint → symbol mapping
+    const knownMints: Record<string, string> = {};
+    const zkbtcMint = process.env.NEXT_PUBLIC_ZKBTC_MINT || config.zkbtcMint;
+    if (zkbtcMint) knownMints[zkbtcMint] = "BTC";
     const usdcMint = process.env.NEXT_PUBLIC_USDC_MINT;
-    if (usdcMint) mints.push({ symbol: "USDC", mint: usdcMint });
+    if (usdcMint) knownMints[usdcMint] = "USDC";
+    // wSOL (NATIVE_MINT_2022)
+    knownMints["9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP"] = "SOL";
 
-    // Test mints from state files (localnet or devnet)
-    try {
-      const fs = await import("fs");
-      const path = await import("path");
-      for (const stateFile of ["scripts/e2e/localnet-state.json", "scripts/devnet-state.json"]) {
-        const statePath = path.join(process.cwd(), "..", stateFile);
-        if (fs.existsSync(statePath)) {
-          const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
-          if (state.tUsdcMint) mints.push({ symbol: "USDC", mint: state.tUsdcMint });
-          if (state.tUsdtMint) mints.push({ symbol: "USDT", mint: state.tUsdtMint });
-          if (state.tWsolMint) mints.push({ symbol: "SOL", mint: state.tWsolMint });
-        }
+    for (const { account } of accounts) {
+      const data = account.data;
+      if (data.length < TOKEN_CONFIG_LEN) continue;
+
+      // Layout: disc(1) + bump(1) + mint(32) + token_id(32) + ...
+      const mintBytes = data.slice(2, 34);
+      const tokenIdBytes = data.slice(34, 66);
+      const enabled = data[99] !== 0;
+
+      const mintAddress = new PublicKey(mintBytes).toBase58();
+      let tokenIdHex = "";
+      for (const b of tokenIdBytes) tokenIdHex += b.toString(16).padStart(2, "0");
+
+      // Look up symbol from known mints
+      const symbol = knownMints[mintAddress];
+      if (symbol) {
+        map.set(tokenIdHex, symbol);
+      } else {
+        // Unknown mint — show shortened address
+        map.set(tokenIdHex, enabled ? mintAddress.slice(0, 6) + "..." : "disabled");
       }
-    } catch { /* ignore */ }
-
-    for (const { symbol, mint } of mints) {
-      try {
-        const mintBytes = new PublicKey(mint).toBytes();
-        const tokenId = computeTokenId(mintBytes);
-        const hex = tokenId.toString(16).padStart(64, "0");
-        map.set(hex, symbol);
-      } catch { /* skip invalid mints */ }
     }
+
+    console.log(`[Explorer] Token map: ${map.size} tokens from on-chain`);
   } catch (err) {
     console.error("[Explorer] Failed to build tokenId map:", err);
   }
-
-  // Hardcoded fallback for known devnet token IDs (in case Poseidon init fails)
-  if (map.size === 0) {
-    // zkBTC token_id = Poseidon(DV7Do8f7rKXehVXDSkuKi7pMwfHUeoKGcpHfnvAd5oUh)
-    map.set("0b0fe8dabc30b12b737303a7a36e7538a90499466e484d1fdeef1cbadf08a47e", "BTC");
-  }
-
   return map;
 }
 
