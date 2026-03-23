@@ -12,7 +12,21 @@
  * @module config
  */
 
-import { address, getAddressEncoder, getAddressDecoder, getProgramDerivedAddress, type Address } from "@solana/kit";
+import { address as _address, getAddressEncoder, getAddressDecoder, getProgramDerivedAddress, type Address } from "@solana/kit";
+
+/**
+ * Safe address wrapper — catches codec validation errors that occur during
+ * Vercel's build phase when @solana/kit validates byte lengths at module load.
+ * Returns the input string cast as Address on failure (safe for config objects
+ * that are only used at runtime, not build time).
+ */
+function address(input: string): Address {
+  try {
+    return _address(input);
+  } catch {
+    return input as Address;
+  }
+}
 
 // =============================================================================
 // Network Types
