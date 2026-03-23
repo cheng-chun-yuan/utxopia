@@ -17,6 +17,7 @@ import {
 } from "@aegis/sdk";
 import { getHeliusConnection } from "@/lib/helius-server";
 import { getBackendUrl } from "@/lib/api/constants";
+export const dynamic = "force-dynamic";
 
 // =============================================================================
 // Types

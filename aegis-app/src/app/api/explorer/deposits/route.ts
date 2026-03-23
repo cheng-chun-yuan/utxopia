@@ -15,6 +15,7 @@
 import { NextResponse } from "next/server";
 import { fetchAnnouncementsFromRpc } from "@/lib/api/rpc-fallback";
 import { getBackendUrl } from "@/lib/api/constants";
+export const dynamic = "force-dynamic";
 
 const BACKEND_URL = getBackendUrl();
 

@@ -34,6 +34,7 @@ import {
 } from "@/lib/solana/instructions";
 
 import { getRelayerKeypair } from "@/lib/server/relayer";
+export const dynamic = "force-dynamic";
 
 // =============================================================================
 // Configuration

@@ -32,6 +32,7 @@ import {
 } from "@aegis/sdk";
 
 import {
+export const dynamic = "force-dynamic";
   AEGIS_PROGRAM_ID,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,

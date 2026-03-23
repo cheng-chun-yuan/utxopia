@@ -5,6 +5,7 @@ import {
 } from "@/lib/commitment-index";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 /**
  * GET /api/merkle/status

@@ -22,6 +22,7 @@ const RPC_URL =
   "https://api.devnet.solana.com";
 
 import { getBackendUrl } from "@/lib/api/constants";
+export const dynamic = "force-dynamic";
 
 const BACKEND_URL = getBackendUrl();
 

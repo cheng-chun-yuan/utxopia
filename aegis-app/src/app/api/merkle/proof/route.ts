@@ -13,6 +13,7 @@ import { getHeliusConnection } from "@/lib/helius-server";
 import { getTreeProofFromBackend } from "@/lib/api/tree";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // =============================================================================
 // Poseidon init

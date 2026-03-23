@@ -61,6 +61,7 @@ import {
 import { hexToBytes as spvHexToBytes } from "@aegis/sdk";
 
 import {
+export const dynamic = "force-dynamic";
   buildMerkleProofPath,
 } from "@/lib/spv/verify";
 

@@ -13,6 +13,7 @@ function readU64LE(data: Uint8Array, offset: number): bigint {
 }
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // Pool state PDA from SDK (single source of truth)
 const getPoolStateAddress = () => getConfig().poolStatePda;
