@@ -9,12 +9,9 @@
  */
 
 import { NextResponse } from "next/server";
-import {
-  getConfig,
-  fetchExplorerRedemptions,
-  type RpcClient,
-} from "@aegis/sdk";
-// Lazy import to avoid build-time codec validation errors
+import type { RpcClient } from "@aegis/sdk";
+// Lazy imports to avoid build-time codec validation errors from @solana/kit
+const getAegisSDK = () => import("@aegis/sdk");
 const getSolanaKit = () => import("@solana/kit");
 
 const RPC_URL =
@@ -117,6 +114,7 @@ async function createServerRpc(): Promise<RpcClient> {
 export async function GET() {
   try {
     // Fetch all sources in parallel (including pool state for fee config + transfers for in/out counts)
+    const { getConfig, fetchExplorerRedemptions } = await getAegisSDK();
     const [redemptions, trackingResp, completedResp, requestedResp, processingResp, poolStateResp, transfersResp] = await Promise.all([
       createServerRpc().then(rpc => fetchExplorerRedemptions(
         rpc,

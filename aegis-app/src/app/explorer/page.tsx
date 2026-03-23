@@ -323,9 +323,9 @@ function ExplorerContent() {
 
 export default function ExplorerPage() {
   return (
-    <main className="min-h-screen bg-background hacker-bg noise-overlay overflow-x-hidden">
+    <main className="min-h-screen bg-background hacker-bg noise-overlay overflow-x-hidden flex flex-col">
       <SiteHeader />
-      <div className="container mx-auto px-4 pt-24 pb-8 relative z-10 max-w-7xl">
+      <div className="container mx-auto px-4 pt-24 pb-8 relative z-10 max-w-7xl flex-1 flex flex-col">
         {/* Title */}
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-3">
@@ -350,9 +350,11 @@ export default function ExplorerPage() {
           </div>
         </div>
 
-        <Suspense fallback={<LoadingState />}>
-          <ExplorerContent />
-        </Suspense>
+        <div className="flex-1 flex flex-col">
+          <Suspense fallback={<LoadingState />}>
+            <ExplorerContent />
+          </Suspense>
+        </div>
 
         {/* Privacy Note */}
         <div className="mt-6 p-3 glass-card border-privacy/15 rounded-[16px]">
