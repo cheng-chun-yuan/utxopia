@@ -4,6 +4,7 @@ import { fetchAccountInfo } from "@/lib/helius-server";
 import { getConfig } from "@aegis/sdk";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 // Height index PDAs live under the BTC Light Client program, not Aegis
 const getBtcLightClientId = () => getConfig().btcLightClientProgramId;
