@@ -43,7 +43,8 @@ interface CacheData {
 // =============================================================================
 
 const CACHE_TTL_MS = 30_000; // 30 seconds
-const AEGIS_PROGRAM_ID = new PublicKey(getConfig().aegisProgramId);
+let AEGIS_PROGRAM_ID: PublicKey;
+try { AEGIS_PROGRAM_ID = new PublicKey(getConfig().aegisProgramId); } catch { AEGIS_PROGRAM_ID = PublicKey.default; }
 
 // In-memory cache
 let announcementCache: CacheData | null = null;
