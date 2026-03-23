@@ -113,15 +113,22 @@ async function buildTokenIdMap(): Promise<Map<string, string>> {
     // wSOL (NATIVE_MINT_2022)
     mints.push({ symbol: "SOL", mint: "9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP" });
 
-    // Test mints from localnet-state.json (if available)
+    // USDC from env
+    const usdcMint = process.env.NEXT_PUBLIC_USDC_MINT;
+    if (usdcMint) mints.push({ symbol: "USDC", mint: usdcMint });
+
+    // Test mints from state files (localnet or devnet)
     try {
       const fs = await import("fs");
       const path = await import("path");
-      const statePath = path.join(process.cwd(), "..", "scripts", "e2e", "localnet-state.json");
-      if (fs.existsSync(statePath)) {
-        const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
-        if (state.tUsdcMint) mints.push({ symbol: "USDC", mint: state.tUsdcMint });
-        if (state.tWsolMint) mints.push({ symbol: "SOL", mint: state.tWsolMint });
+      for (const stateFile of ["scripts/e2e/localnet-state.json", "scripts/devnet-state.json"]) {
+        const statePath = path.join(process.cwd(), "..", stateFile);
+        if (fs.existsSync(statePath)) {
+          const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
+          if (state.tUsdcMint) mints.push({ symbol: "USDC", mint: state.tUsdcMint });
+          if (state.tUsdtMint) mints.push({ symbol: "USDT", mint: state.tUsdtMint });
+          if (state.tWsolMint) mints.push({ symbol: "SOL", mint: state.tWsolMint });
+        }
       }
     } catch { /* ignore */ }
 
@@ -136,6 +143,13 @@ async function buildTokenIdMap(): Promise<Map<string, string>> {
   } catch (err) {
     console.error("[Explorer] Failed to build tokenId map:", err);
   }
+
+  // Hardcoded fallback for known devnet token IDs (in case Poseidon init fails)
+  if (map.size === 0) {
+    // zkBTC token_id = Poseidon(DV7Do8f7rKXehVXDSkuKi7pMwfHUeoKGcpHfnvAd5oUh)
+    map.set("0b0fe8dabc30b12b737303a7a36e7538a90499466e484d1fdeef1cbadf08a47e", "BTC");
+  }
+
   return map;
 }
 
