@@ -19,7 +19,9 @@
  * - buildDepositPsbt(): Build PSBT for wallet signing (sats-connect/Unisat)
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import confetti from "canvas-confetti";
 import {
   Check, AlertCircle, Wallet,
   RefreshCw, ExternalLink,
@@ -616,62 +618,111 @@ export function DepositFlow() {
 
           {/* Wallet Deposit Result */}
           {walletDepositResult && (
-            <div className="mb-4">
-              <div className="p-4 bg-success/10 border border-success/30 rounded-[12px] mb-3">
-                <div className="flex items-center gap-2 text-success mb-3">
-                  <CheckCircle2 className="w-5 h-5" />
-                  <span className="text-body2-semibold">Deposit Broadcast!</span>
-                </div>
-                <p className="text-caption text-gray mb-2">
-                  The backend will automatically detect, sweep, and verify it on Solana.
-                </p>
-
-                <div className="mb-2">
-                  <p className="text-caption text-gray mb-1">TxID:</p>
-                  <a
-                    href={`${getMempoolExplorerUrl()}/tx/${walletDepositResult.txid}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block text-[10px] font-mono text-btc bg-muted p-2 rounded-[8px] break-all hover:underline"
-                  >
-                    {walletDepositResult.txid}
-                  </a>
-                </div>
-
-                <div className="mb-2">
-                  <p className="text-caption text-gray mb-1">Deposit Address:</p>
-                  <code className="block text-[10px] font-mono text-btc bg-muted p-2 rounded-[8px] break-all">
-                    {walletDepositResult.depositAddress}
-                  </code>
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-caption text-gray">OP_RETURN Data (64 bytes):</p>
-                  <div className="bg-muted p-2 rounded-[8px] space-y-1.5">
-                    <div>
-                      <p className="text-[10px] text-gray">ephemeralPub (32 bytes):</p>
-                      <code className="block text-[10px] font-mono text-sol break-all">
-                        {walletDepositResult.opReturnHex.slice(0, 64)}
-                      </code>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-gray">npk (32 bytes):</p>
-                      <code className="block text-[10px] font-mono text-sol break-all">
-                        {walletDepositResult.opReturnHex.slice(64)}
-                      </code>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <button onClick={resetFlow} className="btn-secondary w-full">
-                <RefreshCw className="w-4 h-4" />
-                New Deposit
-              </button>
-            </div>
+            <DepositSuccess
+              result={walletDepositResult}
+              onReset={resetFlow}
+            />
           )}
 
         </>
     </div>
+  );
+}
+
+/** Deposit success with confetti celebration */
+function DepositSuccess({
+  result,
+  onReset,
+}: {
+  result: { txid: string; depositAddress: string; opReturnHex: string };
+  onReset: () => void;
+}) {
+  const [showOpReturn, setShowOpReturn] = useState(false);
+
+  useEffect(() => {
+    const fire = () => {
+      confetti({
+        particleCount: 60,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ["#f7931a", "#ffa940", "#14f195", "#9945ff"],
+        disableForReducedMotion: true,
+      });
+    };
+    fire();
+    const t = setTimeout(fire, 200);
+    return () => clearTimeout(t);
+  }, []);
+
+  return (
+    <motion.div
+      className="mb-4"
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+    >
+      <div className="p-4 bg-success/10 border border-success/30 rounded-[12px] mb-3">
+        <div className="flex items-center gap-2 text-success mb-3">
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: [0, 1.3, 1] }}
+            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <CheckCircle2 className="w-5 h-5" />
+          </motion.div>
+          <span className="text-body2-semibold">Deposit Broadcast!</span>
+        </div>
+        <p className="text-caption text-gray mb-2">
+          The backend will automatically detect, sweep, and verify it on Solana.
+        </p>
+
+        <div className="mb-2">
+          <p className="text-caption text-gray mb-1">TxID:</p>
+          <a
+            href={`${getMempoolExplorerUrl()}/tx/${result.txid}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block text-[10px] font-mono text-btc bg-muted p-2 rounded-[8px] break-all hover:underline"
+          >
+            {result.txid}
+          </a>
+        </div>
+
+        <div className="mb-2">
+          <p className="text-caption text-gray mb-1">Deposit Address:</p>
+          <code className="block text-[10px] font-mono text-btc bg-muted p-2 rounded-[8px] break-all">
+            {result.depositAddress}
+          </code>
+        </div>
+
+        <button
+          onClick={() => setShowOpReturn(!showOpReturn)}
+          className="text-[10px] text-gray hover:text-gray-light transition-colors cursor-pointer"
+        >
+          {showOpReturn ? "Hide" : "Show"} OP_RETURN Data
+        </button>
+        {showOpReturn && (
+          <div className="mt-2 bg-muted p-2 rounded-[8px] space-y-1.5">
+            <div>
+              <p className="text-[10px] text-gray">ephemeralPub (32 bytes):</p>
+              <code className="block text-[10px] font-mono text-sol break-all">
+                {result.opReturnHex.slice(0, 64)}
+              </code>
+            </div>
+            <div>
+              <p className="text-[10px] text-gray">npk (32 bytes):</p>
+              <code className="block text-[10px] font-mono text-sol break-all">
+                {result.opReturnHex.slice(64)}
+              </code>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <button onClick={onReset} className="btn-secondary w-full">
+        <RefreshCw className="w-4 h-4" />
+        New Deposit
+      </button>
+    </motion.div>
   );
 }

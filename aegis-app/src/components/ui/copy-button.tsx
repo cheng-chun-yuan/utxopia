@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { notifyCopied } from "@/lib/notifications";
@@ -53,7 +54,7 @@ export function CopyButton({
   };
 
   return (
-    <button
+    <motion.button
       onClick={handleCopy}
       className={cn(
         "p-1.5 rounded-[6px] transition-colors",
@@ -62,13 +63,36 @@ export function CopyButton({
       )}
       title={`Copy ${label.toLowerCase()}`}
       aria-label={`Copy ${label.toLowerCase()} to clipboard`}
+      whileTap={{ scale: 0.85 }}
+      animate={copied ? {
+        boxShadow: ["0 0 12px rgba(74,222,128,0.4)", "0 0 0 rgba(74,222,128,0)"],
+      } : {}}
+      transition={{ duration: 0.5 }}
     >
-      {copied ? (
-        <Check className={cn(iconSizes[iconSize], "text-success")} />
-      ) : (
-        <Copy className={iconSizes[iconSize]} />
-      )}
-    </button>
+      <AnimatePresence mode="wait" initial={false}>
+        {copied ? (
+          <motion.span
+            key="check"
+            initial={{ scale: 0.5, opacity: 0 }}
+            animate={{ scale: [1.3, 1], opacity: 1 }}
+            exit={{ scale: 0.5, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <Check className={cn(iconSizes[iconSize], "text-success")} />
+          </motion.span>
+        ) : (
+          <motion.span
+            key="copy"
+            initial={{ scale: 0.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.5, opacity: 0 }}
+            transition={{ duration: 0.15 }}
+          >
+            <Copy className={iconSizes[iconSize]} />
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </motion.button>
   );
 }
 

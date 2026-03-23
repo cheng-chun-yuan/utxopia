@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckCircle2, Loader2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 export interface ProgressStep<T extends string> {
@@ -53,30 +54,53 @@ export function FlowProgress<T extends string>({
           <div key={step.id} className="flex items-start gap-3">
             {/* Step indicator */}
             <div className="flex flex-col items-center">
-              <div
-                className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300",
-                  status === "complete" && "bg-success/20 text-success",
-                  status === "active" && "bg-purple/20 text-purple animate-pulse",
-                  status === "pending" && "bg-gray/10 text-gray"
-                )}
-              >
+              <AnimatePresence mode="wait" initial={false}>
                 {status === "complete" ? (
-                  <CheckCircle2 className="w-4 h-4" />
+                  <motion.div
+                    key="complete"
+                    className="w-8 h-8 rounded-full flex items-center justify-center bg-success/20 text-success"
+                    initial={{ scale: 0.6, opacity: 0 }}
+                    animate={{
+                      scale: [1.15, 1],
+                      opacity: 1,
+                      boxShadow: ["0 0 16px rgba(74,222,128,0.3)", "0 0 0 rgba(74,222,128,0)"],
+                    }}
+                    transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                  </motion.div>
                 ) : status === "active" ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <motion.div
+                    key="active"
+                    className="w-8 h-8 rounded-full flex items-center justify-center bg-purple/20 text-purple"
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  </motion.div>
                 ) : (
-                  step.icon
+                  <motion.div
+                    key="pending"
+                    className="w-8 h-8 rounded-full flex items-center justify-center bg-gray/10 text-gray"
+                    initial={{ opacity: 0.5 }}
+                    animate={{ opacity: 1 }}
+                  >
+                    {step.icon}
+                  </motion.div>
                 )}
-              </div>
+              </AnimatePresence>
               {/* Connector line */}
               {!isLast && (
-                <div
-                  className={cn(
-                    "w-0.5 h-6 mt-1 transition-colors duration-300",
-                    status === "complete" ? "bg-success/40" : "bg-gray/20"
-                  )}
-                />
+                <div className="relative w-0.5 h-6 mt-1 bg-gray/20 overflow-hidden">
+                  <motion.div
+                    className="absolute inset-0 bg-success/60"
+                    initial={{ scaleY: 0 }}
+                    animate={{ scaleY: status === "complete" ? 1 : 0 }}
+                    transition={{ duration: 0.4, delay: 0.2, ease: "easeOut" }}
+                    style={{ transformOrigin: "top" }}
+                  />
+                </div>
               )}
             </div>
 
@@ -98,7 +122,14 @@ export function FlowProgress<T extends string>({
             {/* Status badge */}
             <div className="pt-1">
               {status === "complete" && (
-                <span className="text-caption text-success">Done</span>
+                <motion.span
+                  className="text-caption text-success"
+                  initial={{ opacity: 0, x: -4 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  Done
+                </motion.span>
               )}
               {status === "active" && (
                 <span className="text-caption text-purple animate-pulse">

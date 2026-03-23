@@ -400,9 +400,15 @@ export default function VaultPage() {
                       const btcEquivalent = btcPrice > 0 ? totalUsd / btcPrice : 0;
                       return (
                         <>
-                          <p className="text-[36px] sm:text-[42px] font-bold text-foreground tracking-tight leading-none mb-1">
+                          <motion.p
+                            className="text-[36px] sm:text-[42px] font-bold text-foreground tracking-tight leading-none mb-1"
+                            key={totalUsd.toFixed(2)}
+                            initial={{ opacity: 0.6, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.35, ease: "easeOut" }}
+                          >
                             ${totalUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </p>
+                          </motion.p>
                           <p className="text-body2 text-gray/60 font-mono flex items-center justify-center gap-1.5">
                             {btcEquivalent.toFixed(8)} BTC
                             <button
@@ -434,15 +440,20 @@ export default function VaultPage() {
                     href={action.href}
                     className="flex flex-col items-center gap-1.5 group cursor-pointer"
                   >
-                    <div className={cn(
-                      "w-12 h-12 rounded-full flex items-center justify-center",
-                      "bg-muted/80 border border-gray/15",
-                      "group-hover:border-privacy/30 group-hover:bg-privacy/10",
-                      "transition-all duration-200",
-                      action.color
-                    )}>
+                    <motion.div
+                      className={cn(
+                        "w-12 h-12 rounded-full flex items-center justify-center",
+                        "bg-muted/80 border border-gray/15",
+                        "group-hover:border-privacy/30 group-hover:bg-privacy/10",
+                        "transition-colors duration-200",
+                        action.color
+                      )}
+                      whileHover={{ scale: 1.08, y: -2 }}
+                      whileTap={{ scale: 0.92 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                    >
                       {action.icon}
-                    </div>
+                    </motion.div>
                     <span className="text-[11px] text-gray group-hover:text-foreground transition-colors">
                       {action.label}
                     </span>
@@ -476,18 +487,36 @@ export default function VaultPage() {
                       const zkbtc = VAULT_TOKENS.find((t) => t.shieldedSymbol === "zkBTC");
                       return (
                         <div className="flex items-center gap-3 px-4 h-[60px]">
-                          <img src={zkbtc?.shieldedLogo || "/zkbtc.png"} alt="zkBTC" className="w-9 h-9 rounded-full" />
+                          <motion.img
+                            src={zkbtc?.shieldedLogo || "/zkbtc.png"}
+                            alt="zkBTC"
+                            className="w-9 h-9 rounded-full"
+                            animate={{ y: [0, -2, 0] }}
+                            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                          />
                           <div className="flex-1 min-w-0">
                             <p className="text-body2-semibold text-foreground">zkBTC</p>
                             <p className="text-[11px] text-gray/50">Shielded Bitcoin</p>
                           </div>
-                          <Link
-                            href="/vault/deposit"
-                            className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-privacy/10 hover:bg-privacy/20 border border-privacy/20 text-[11px] font-semibold text-privacy transition-colors cursor-pointer"
+                          <motion.div
+                            animate={{
+                              boxShadow: [
+                                "0 0 0 rgba(20,241,149,0)",
+                                "0 0 12px rgba(20,241,149,0.2)",
+                                "0 0 0 rgba(20,241,149,0)",
+                              ],
+                            }}
+                            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+                            className="rounded-full"
                           >
-                            <ArrowDownToLine className="w-3 h-3" />
-                            Top Up
-                          </Link>
+                            <Link
+                              href="/vault/deposit"
+                              className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-privacy/10 hover:bg-privacy/20 border border-privacy/20 text-[11px] font-semibold text-privacy transition-colors cursor-pointer"
+                            >
+                              <ArrowDownToLine className="w-3 h-3" />
+                              Top Up
+                            </Link>
+                          </motion.div>
                         </div>
                       );
                     }

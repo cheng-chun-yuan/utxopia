@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 interface LoadingStateProps {
@@ -39,6 +40,24 @@ interface LoadingOverlayProps {
   className?: string;
 }
 
+function PulsingDot({ delay }: { delay: number }) {
+  return (
+    <motion.div
+      className="w-2 h-2 rounded-full bg-privacy"
+      animate={{
+        scale: [1, 1.4, 1],
+        opacity: [0.4, 1, 0.4],
+      }}
+      transition={{
+        duration: 1,
+        repeat: Infinity,
+        delay,
+        ease: "easeInOut",
+      }}
+    />
+  );
+}
+
 export function LoadingOverlay({
   message = "Loading...",
   className,
@@ -54,7 +73,11 @@ export function LoadingOverlay({
       aria-live="polite"
     >
       <div className="flex flex-col items-center gap-3">
-        <Loader2 className="w-8 h-8 animate-spin text-privacy" />
+        <div className="flex items-center gap-1.5">
+          <PulsingDot delay={0} />
+          <PulsingDot delay={0.15} />
+          <PulsingDot delay={0.3} />
+        </div>
         <span className="text-body2 text-gray">{message}</span>
       </div>
     </div>

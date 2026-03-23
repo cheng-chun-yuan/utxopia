@@ -12,7 +12,7 @@
  * @module config
  */
 
-import { address, getAddressEncoder, getProgramDerivedAddress, type Address } from "@solana/kit";
+import { address, getAddressEncoder, getAddressDecoder, getProgramDerivedAddress, type Address } from "@solana/kit";
 
 // =============================================================================
 // Network Types
@@ -481,6 +481,7 @@ export function createConfig(
 export async function initConfig(overrides?: {
   aegisProgramId?: string;
   zkbtcMint?: string;
+  solanaRpcUrl?: string;
 }): Promise<NetworkConfig> {
   const config = { ...DEVNET_CONFIG };
 
@@ -491,9 +492,15 @@ export async function initConfig(overrides?: {
     undefined;
 
   // Resolve mint: param > env > default
-  const mint =
+  let mint =
     overrides?.zkbtcMint ||
     (typeof process !== "undefined" && (process.env?.NEXT_PUBLIC_ZKBTC_MINT || process.env?.AEGIS_ZKBTC_MINT)) ||
+    undefined;
+
+  // Resolve RPC URL for on-chain fetching
+  const rpcUrl =
+    overrides?.solanaRpcUrl ||
+    (typeof process !== "undefined" && (process.env?.NEXT_PUBLIC_SOLANA_RPC_URL || process.env?.AEGIS_SOLANA_RPC)) ||
     undefined;
 
   if (programId) {
@@ -511,6 +518,35 @@ export async function initConfig(overrides?: {
     });
     config.poolStatePda = poolStatePda;
     config.commitmentTreePda = commitmentTreePda;
+
+    // If mint not provided, fetch from on-chain pool state (offset 36..68 = zkbtc_mint)
+    if (!mint && rpcUrl) {
+      try {
+        const res = await fetch(rpcUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "getAccountInfo",
+            params: [poolStatePda.toString(), { encoding: "base64" }],
+          }),
+        });
+        const json = await res.json() as { result?: { value?: { data?: [string, string] } } };
+        const b64 = json.result?.value?.data?.[0];
+        if (b64) {
+          const data = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+          // Pool state layout: disc(1) + bump(1) + flags(1) + pad(1) + authority(32) + zkbtc_mint(32)
+          if (data.length >= 68 && data[0] === 0x01) {
+            const mintBytes = data.slice(36, 68);
+            const decoder = getAddressDecoder();
+            mint = decoder.decode(mintBytes).toString();
+          }
+        }
+      } catch {
+        // Silently fall back to default config mint
+      }
+    }
   }
 
   if (mint) {

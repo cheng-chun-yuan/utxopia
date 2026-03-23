@@ -20,7 +20,7 @@ export function notifyDepositConfirmed(claimLink?: string) {
           },
         }
       : undefined,
-    duration: 10000, // 10 seconds
+    duration: 10000,
   });
 }
 
@@ -30,7 +30,7 @@ export function notifyDepositConfirmed(claimLink?: string) {
 export function notifyDepositDetected(confirmations: number, required: number) {
   toast("Deposit Detected", {
     description: `Waiting for confirmations (${confirmations}/${required})`,
-    icon: "🔍",
+    icon: "\u{26D3}\u{FE0F}",
     duration: 5000,
   });
 }
@@ -41,7 +41,8 @@ export function notifyDepositDetected(confirmations: number, required: number) {
 export function notifyClaimSuccess(amount: number) {
   const btcAmount = (amount / 100_000_000).toFixed(8);
   toast.success("zkBTC Claimed!", {
-    description: `${btcAmount} zkBTC has been added to your wallet`,
+    description: `${btcAmount} zkBTC shielded in your vault`,
+    icon: "\u{1F6E1}\u{FE0F}",
     duration: 8000,
   });
 }
@@ -52,7 +53,8 @@ export function notifyClaimSuccess(amount: number) {
 export function notifyWithdrawalSubmitted(btcAddress: string) {
   const shortAddress = `${btcAddress.slice(0, 10)}...${btcAddress.slice(-8)}`;
   toast.success("Withdrawal Submitted", {
-    description: `BTC will be sent to ${shortAddress}`,
+    description: `BTC en route to ${shortAddress}`,
+    icon: "\u{20BF}",
     duration: 8000,
   });
 }
@@ -61,7 +63,7 @@ export function notifyWithdrawalSubmitted(btcAddress: string) {
  * Show an error notification
  */
 export function notifyError(message: string) {
-  toast.error("Error", {
+  toast.error("Something went wrong", {
     description: message,
     duration: 6000,
   });
@@ -71,7 +73,7 @@ export function notifyError(message: string) {
  * Show a warning notification
  */
 export function notifyWarning(message: string) {
-  toast.warning("Warning", {
+  toast.warning("Heads up", {
     description: message,
     duration: 6000,
   });
@@ -93,7 +95,8 @@ export function notifyInfo(title: string, message: string) {
 export function notifyStealthReceived(amount: number) {
   const btcAmount = (amount / 100_000_000).toFixed(8);
   toast.success("Stealth Deposit Received!", {
-    description: `You received ${btcAmount} zkBTC via stealth address`,
+    description: `${btcAmount} zkBTC arrived via stealth address`,
+    icon: "\u{1F47B}",
     action: {
       label: "View Inbox",
       onClick: () => {

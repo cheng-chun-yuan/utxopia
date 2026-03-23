@@ -43,17 +43,18 @@ pub fn create_deposit_router(tracker: DepositTrackerService) -> Router {
     let ws_state = create_ws_state();
     let tracker_with_ws = tracker.with_websocket(ws_state.clone());
 
-    // Get pool group pubkey from sweeper if available
-    let group_pubkey = {
-        // Default POC key (secp256k1 generator x-coord)
+    // Read group pubkey from env (set by FROST DKG), fall back to POC default
+    let group_pubkey = std::env::var("AEGIS_FROST_GROUP_PUBKEY").unwrap_or_else(|_| {
         "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798".to_string()
-    };
+    });
+
+    let bitcoin_network = std::env::var("AEGIS_BITCOIN_NETWORK").unwrap_or_else(|_| "testnet4".to_string());
 
     let state = Arc::new(AppState {
         tracker: Arc::new(RwLock::new(tracker_with_ws)),
         ws_state,
         group_pubkey,
-        bitcoin_network: "testnet".to_string(),
+        bitcoin_network,
     });
 
     let cors = crate::common::cors::cors_from_env();
