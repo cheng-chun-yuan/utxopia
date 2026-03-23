@@ -13,9 +13,9 @@
  */
 
 import { NextResponse } from "next/server";
-import bs58 from "bs58";
 import { fetchAnnouncementsFromRpc } from "@/lib/api/rpc-fallback";
 import { getBackendUrl } from "@/lib/api/constants";
+import { buildTokenIdMap } from "@/lib/token-map";
 export const dynamic = "force-dynamic";
 
 const BACKEND_URL = getBackendUrl();
@@ -91,71 +91,6 @@ export interface ExplorerDeposit {
   fee: number | null;
   /** BTC-specific metadata — null for SPL shield deposits */
   btcMeta: BtcDepositMeta | null;
-}
-
-/**
- * Build a tokenId → symbol map by fetching TokenConfig PDAs from on-chain.
- * Each TokenConfig stores mint(32) + token_id(32). We extract both and
- * resolve mint → symbol using known mint addresses.
- */
-async function buildTokenIdMap(): Promise<Map<string, string>> {
-  const map = new Map<string, string>();
-  try {
-    const { getConfig } = await import("@aegis/sdk");
-    const { Connection, PublicKey } = await import("@solana/web3.js");
-    const config = getConfig();
-    const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com";
-    const connection = new Connection(rpcUrl);
-
-    // Fetch all TokenConfig PDAs (discriminator 0x0b, size 164)
-    const TOKEN_CONFIG_DISC = 0x0b;
-    const TOKEN_CONFIG_LEN = 164;
-    const programId = new PublicKey(config.aegisProgramId);
-
-    const accounts = await connection.getProgramAccounts(programId, {
-      filters: [
-        { dataSize: TOKEN_CONFIG_LEN },
-        { memcmp: { offset: 0, bytes: bs58.encode(Buffer.from([TOKEN_CONFIG_DISC])) } },
-      ],
-    });
-
-    // Known mint → symbol mapping
-    const knownMints: Record<string, string> = {};
-    const zkbtcMint = process.env.NEXT_PUBLIC_ZKBTC_MINT || config.zkbtcMint;
-    if (zkbtcMint) knownMints[zkbtcMint] = "BTC";
-    const usdcMint = process.env.NEXT_PUBLIC_USDC_MINT;
-    if (usdcMint) knownMints[usdcMint] = "USDC";
-    // wSOL (NATIVE_MINT_2022)
-    knownMints["9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP"] = "SOL";
-
-    for (const { account } of accounts) {
-      const data = account.data;
-      if (data.length < TOKEN_CONFIG_LEN) continue;
-
-      // Layout: disc(1) + bump(1) + mint(32) + token_id(32) + ...
-      const mintBytes = data.slice(2, 34);
-      const tokenIdBytes = data.slice(34, 66);
-      const enabled = data[99] !== 0;
-
-      const mintAddress = new PublicKey(mintBytes).toBase58();
-      let tokenIdHex = "";
-      for (const b of tokenIdBytes) tokenIdHex += b.toString(16).padStart(2, "0");
-
-      // Look up symbol from known mints
-      const symbol = knownMints[mintAddress];
-      if (symbol) {
-        map.set(tokenIdHex, symbol);
-      } else {
-        // Unknown mint — show shortened address
-        map.set(tokenIdHex, enabled ? mintAddress.slice(0, 6) + "..." : "disabled");
-      }
-    }
-
-    console.log(`[Explorer] Token map: ${map.size} tokens from on-chain`);
-  } catch (err) {
-    console.error("[Explorer] Failed to build tokenId map:", err);
-  }
-  return map;
 }
 
 interface LeafRow {

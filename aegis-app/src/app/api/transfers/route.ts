@@ -11,6 +11,7 @@
 import { NextResponse } from "next/server";
 import { fetchAnnouncementsFromRpc } from "@/lib/api/rpc-fallback";
 import { getBackendUrl } from "@/lib/api/constants";
+import { buildTokenIdMap } from "@/lib/token-map";
 export const dynamic = "force-dynamic";
 
 const BACKEND_URL = getBackendUrl();
@@ -198,35 +199,9 @@ export async function GET() {
             }
           } catch { /* ignore enrichment failure */ }
         }
-        // Resolve token_id → tokenSymbol server-side (handles localnet test mints)
+        // Resolve token_id → tokenSymbol using shared token map
         try {
-          const { computeTokenId, initPoseidon } = await import("@aegis/sdk");
-          const { PublicKey } = await import("@solana/web3.js");
-          await initPoseidon();
-
-          const tokenIdToSymbol = new Map<string, string>();
-          const mints: { symbol: string; mint: string }[] = [];
-          const zkbtcMint = process.env.NEXT_PUBLIC_ZKBTC_MINT || process.env.AEGIS_ZKBTC_MINT;
-          if (zkbtcMint) mints.push({ symbol: "BTC", mint: zkbtcMint });
-          mints.push({ symbol: "SOL", mint: "9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP" });
-          try {
-            const fs = await import("fs");
-            const path = await import("path");
-            const statePath = path.join(process.cwd(), "..", "scripts", "e2e", "localnet-state.json");
-            if (fs.existsSync(statePath)) {
-              const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
-              if (state.tUsdcMint) mints.push({ symbol: "USDC", mint: state.tUsdcMint });
-              if (state.tWsolMint) mints.push({ symbol: "SOL", mint: state.tWsolMint });
-            }
-          } catch { /* ignore */ }
-          for (const { symbol, mint } of mints) {
-            try {
-              const mintBytes = new PublicKey(mint).toBytes();
-              const tokenId = computeTokenId(mintBytes);
-              tokenIdToSymbol.set(tokenId.toString(16).padStart(64, "0"), symbol);
-            } catch { /* skip */ }
-          }
-
+          const tokenIdToSymbol = await buildTokenIdMap();
           for (const t of data.transfers) {
             if (t.token_id && !t.token_symbol) {
               t.token_symbol = tokenIdToSymbol.get(t.token_id) ?? null;

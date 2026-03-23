@@ -183,6 +183,49 @@ bash scripts/setup.sh
 
 ---
 
+## Adding a New Supported Token
+
+To add a new SPL token (e.g. USDC, USDT) to the shielded pool:
+
+### 1. Register on-chain TokenConfig
+
+```bash
+# Register the token's mint with the program (creates TokenConfig PDA + vault)
+bun run scripts/register-token.ts <MINT_ADDRESS> \
+  --service-fee 2000 \
+  --min-deposit 1000 \
+  --max-deposit 10000000000
+```
+
+### 2. Add to frontend token list
+
+Edit `aegis-app/src/lib/supported-tokens.ts` — add a new entry to `SUPPORTED_TOKENS`:
+
+```typescript
+{
+  symbol: "USDC",
+  name: "USD Coin",
+  decimals: 6,
+  logo: "/tokens/usdc.png",
+  mint: process.env.NEXT_PUBLIC_USDC_MINT || "",
+  // ... (copy pattern from existing tokens)
+}
+```
+
+### 3. Set env vars
+
+Add `NEXT_PUBLIC_<SYMBOL>_MINT=<address>` to:
+- Vercel environment variables (for production)
+- `aegis-app/.env.local` (for local dev)
+
+### 4. Add token logo
+
+Place a PNG at `aegis-app/public/tokens/<symbol>.png`
+
+That's it — the frontend resolves `tokenId → symbol` automatically using `supported-tokens.ts` + Poseidon hash. No backend changes needed.
+
+---
+
 ## Program IDs
 
 ### Devnet
