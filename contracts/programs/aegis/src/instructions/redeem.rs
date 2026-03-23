@@ -377,9 +377,11 @@ pub fn process_redeem(
         }
     }
 
-    // Emit redeem metadata for indexer
+    // Emit redeem metadata for indexer (fee is computed later, emit 0 for now — service_fee is in RedemptionRequested event)
     crate::utils::events::emit_unshield_meta(
         redeem_amount,
+        0, // fee computed at completion, not request time
+        redeem_amount, // payout TBD at completion
         user.key().as_ref().try_into().unwrap(),
         &token_id,
     );

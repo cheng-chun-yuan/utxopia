@@ -316,7 +316,12 @@ pub fn process_verify_stealth_deposit(
         .find_deposit_op_return()
         .ok_or(AegisError::InvalidStealthOpReturn)?;
 
-    // Extract deposit amount and vout from sweep TX's deposit output
+    // Extract original deposit amount from deposit TX (what user actually sent to taproot)
+    let original_deposit_sats = deposit_parsed.find_deposit_output()
+        .map(|o| o.value)
+        .unwrap_or(0);
+
+    // Extract sweep output amount and vout (what the pool received after miner fee)
     let (deposit_output, sweep_vout) = sweep_parsed.find_deposit_output_with_vout()
         .ok_or(AegisError::InvalidSpvProof)?;
     let amount_sats = deposit_output.value;
@@ -363,13 +368,17 @@ pub fn process_verify_stealth_deposit(
         &token_id,
     );
 
-    // Emit deposit verified event (BTC txids + amount for indexer)
+    // Emit deposit verified event (BTC txids + amount + original deposit for indexer)
     crate::utils::events::emit_deposit_verified(
         &ix_data.sweep_txid,
         &ix_data.deposit_txid,
         amount_sats,
         leaf_index as u32,
+        original_deposit_sats,
     );
+
+    // Emit shield metadata (sweep amount + total fee) for indexer
+    crate::utils::events::emit_shield_meta(amount_sats, total_fee, &token_id);
 
     // --- Create UTXO record PDA for the sweep tx's pool output ---
     {

@@ -154,6 +154,12 @@ pub struct TransferItem {
     pub token_id: Option<String>,
     /// Event-derived transfer type: "private_transfer", "unshield", "redeem", "deposit"
     pub transfer_type: String,
+    /// Protocol fee deducted from unshield (from UnshieldMeta v2 event)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unshield_fee: Option<i64>,
+    /// Net payout after fee (from UnshieldMeta v2 event)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unshield_payout: Option<i64>,
 }
 
 /// Response for GET /api/transfers
@@ -414,6 +420,8 @@ async fn get_transfers(
                     unshield_recipient: t.unshield_recipient,
                     token_id: t.token_id,
                     transfer_type: t.transfer_type,
+                    unshield_fee: t.unshield_fee,
+                    unshield_payout: t.unshield_payout,
                 }
             }).collect();
             Json(TransfersResponse {

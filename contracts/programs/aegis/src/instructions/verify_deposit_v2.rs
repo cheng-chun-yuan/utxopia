@@ -398,11 +398,13 @@ pub fn process_verify_deposit_v2(
     );
 
     // Emit deposit verified event (BTC txids + amount for indexer)
+    // v2 doesn't have deposit TX parsed outside scope, pass 0 for original_amount (Mempool fetch fills it)
     crate::utils::events::emit_deposit_verified(
         &ix_data.sweep_txid,
         &ix_data.deposit_txid,
         amount_sats,
         leaf_index as u32,
+        0,
     );
 
     // Mint zkBTC to pool vault

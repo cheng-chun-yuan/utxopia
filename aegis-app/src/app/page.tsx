@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { Bitcoin, Shield, Zap, Lock, ArrowRight, EyeOff, Fingerprint, ShieldCheck, Loader2, ChevronRight, Layers, Rocket } from "lucide-react";
 import { usePoolStats } from "@/hooks/use-pool-stats";
 import { useTokenPrices, type TokenPrices } from "@/hooks/use-btc-price";
+import { useDeposits, useTransfers, useRedemptions } from "@/hooks/use-explorer";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { ScrollReveal } from "@/components/ui/scroll-reveal";
@@ -229,6 +230,10 @@ function tvlToUsd(tokenTVL: { symbol: string; totalShielded: bigint; decimals: n
 export default function Home() {
   const { stats, isLoading } = usePoolStats();
   const prices = useTokenPrices();
+  const { deposits } = useDeposits();
+  const { transfers } = useTransfers();
+  const { redemptions } = useRedemptions();
+  const txCount = deposits.length + transfers.length + redemptions.length;
 
   return (
     <main className="min-h-screen bg-background hacker-bg noise-overlay overflow-x-hidden">
@@ -322,7 +327,7 @@ export default function Home() {
                 ) : (
                   <div className="flex items-center justify-center gap-8">
                     {[
-                      { label: "Deposits", value: stats?.depositCount ?? 0, decimals: 0, color: "text-privacy", icon: <Shield className="w-4 h-4 text-privacy privacy-glow" /> },
+                      { label: "Transactions", value: txCount ?? 0, decimals: 0, color: "text-privacy", icon: <Shield className="w-4 h-4 text-privacy privacy-glow" /> },
                       { label: "Commitments", value: stats?.totalCommitments ?? 0, decimals: 0, color: "text-foreground", icon: null },
                     ].map(({ label, value, decimals, color, icon }, i) => (
                       <React.Fragment key={label}>

@@ -148,14 +148,16 @@ async function main() {
   }
   // Override BTC_LC reference for the rest of the script
   const BTC_LC_EFFECTIVE = new PublicKey(useBtcLcFromDevnet ? BTC_LC_DEVNET : BTC_LC.toBase58());
-  if (fs.existsSync(chadbufferSoPath)) {
-    bpfArgs += ` --bpf-program ${chadbufferId.toBase58()} ${chadbufferSoPath}`;
-  }
 
-  // Clone ChadBuffer from devnet if .so not available locally
+  // ChadBuffer: always deploy at the devnet address (Aegis built with --features devnet expects it)
   const CHADBUFFER_DEVNET = "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF";
   let cloneArgs = "";
-  if (!fs.existsSync(chadbufferSoPath)) {
+  if (fs.existsSync(chadbufferSoPath)) {
+    // Deploy local .so at devnet address so Aegis can validate ownership
+    bpfArgs += ` --bpf-program ${CHADBUFFER_DEVNET} ${chadbufferSoPath}`;
+    chadbufferId = new PublicKey(CHADBUFFER_DEVNET);
+    log(`ChadBuffer: deploying local .so at devnet address ${CHADBUFFER_DEVNET}`);
+  } else {
     cloneArgs = `--clone-upgradeable-program ${CHADBUFFER_DEVNET}`;
     chadbufferId = new PublicKey(CHADBUFFER_DEVNET);
     log(`ChadBuffer not found locally, cloning from devnet: ${CHADBUFFER_DEVNET}`);
@@ -230,15 +232,15 @@ async function main() {
   log(`Frost Vault: ${frostVaultAccount.address.toBase58()}`);
 
   // 8. Initialize pool (disc=0)
-  // Fees: deposit_fee_bps=0, withdrawal_fee_bps=30 (0.3%)
+  // Fees: deposit_fee_bps=20 (0.2%), withdrawal_fee_bps=20 (0.2%)
   // On-chain also hardcodes service_fee_base=2000 sats
-  log("Initializing Aegis pool (withdrawal fee: 2000 sats + 0.3%)...");
+  log("Initializing Aegis pool (deposit fee: 0.2%, withdrawal fee: 2000 sats + 0.2%)...");
   const initData = Buffer.alloc(7); // disc(1) + pool_bump(1) + tree_bump(1) + deposit_bps(2) + withdrawal_bps(2)
   initData[0] = Disc.INITIALIZE;
   initData[1] = poolBump;
   initData[2] = treeBump;
-  initData.writeUInt16LE(0, 3);    // deposit_fee_bps = 0
-  initData.writeUInt16LE(30, 5);   // withdrawal_fee_bps = 30 (0.3%)
+  initData.writeUInt16LE(20, 3);   // deposit_fee_bps = 20 (0.2%)
+  initData.writeUInt16LE(20, 5);   // withdrawal_fee_bps = 20 (0.2%)
 
   const initIx = new TransactionInstruction({
     keys: [

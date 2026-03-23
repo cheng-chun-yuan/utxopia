@@ -74,10 +74,20 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
     ? buildShieldConfig(resolvedToken)
     : SHIELD_TYPE_CONFIG[shieldType];
   const isBtc = shieldType === "btc";
-  // Gross = original deposit amount, shielded = after fees
-  const grossAmount = d.btcDepositAmountSats ?? d.amountSats;
+  // For BTC deposits:
+  //   depositAmountSats = original deposit to taproot (25000, from DepositVerified event)
+  //   grossAmount = sweep output arriving at pool (24000, from ShieldMeta)
+  //   fee = protocol fee (2048, from ShieldMeta)
+  //   amountSats = shielded amount (21952)
+  //   minerFee = depositAmountSats - grossAmount (1000, computed)
+  const originalDeposit = isBtc ? (d.btcMeta?.depositAmountSats ?? null) : null;
+  const grossAmount = d.grossAmount ?? d.amountSats;
   const shieldedAmount = d.amountSats;
-  const fee = grossAmount - shieldedAmount;
+  const serviceFee = d.fee ?? (grossAmount - shieldedAmount);
+  // Miner fee: difference between original deposit and what arrived at pool
+  const minerFee = originalDeposit && originalDeposit > grossAmount ? originalDeposit - grossAmount : (d.btcMeta?.sweepFeeSats ?? 0);
+  // Display gross = original deposit if known, otherwise sweep amount
+  const displayGross = originalDeposit ?? grossAmount;
   const fmtAmount = (sats: number) => config.showRaw
     ? sats.toLocaleString()
     : (sats / (10 ** config.decimals)).toLocaleString(undefined, { maximumFractionDigits: config.decimals });
@@ -85,57 +95,67 @@ function DepositDetails({ deposit }: { deposit: DepositRecord }) {
   return (
     <div className="mx-4 my-3 rounded-[10px] bg-linear-to-b from-gray/6 to-transparent border border-gray/10 overflow-hidden">
       <div className="grid grid-cols-2 divide-x divide-gray/10">
-        {/* INPUT — gross deposit amount */}
+        {/* INPUT — token → shielded conversion */}
         <div className="p-4 space-y-2.5">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-            <span className="text-caption text-green-400/90 font-semibold uppercase tracking-wider">Inputs</span>
+            <span className="text-caption text-green-400/90 font-semibold uppercase tracking-wider">Input</span>
             <span className="text-caption text-green-400/60 font-medium">1</span>
           </div>
-          {/* Amount + address (colored card) */}
-          <div className="px-3 py-2.5 rounded-[8px] bg-btc/4 border border-btc/10 space-y-1.5">
-            <div className="flex items-center gap-2">
+          <div className={cn("px-3 py-2.5 rounded-[8px] space-y-2", isBtc ? "bg-btc/4 border border-btc/10" : "bg-green-500/4 border border-green-500/10")}>
+            {/* Token → Shielded conversion */}
+            <div className="flex items-center gap-2 flex-wrap">
               <img src={config.from.logo} alt={config.from.label} className="w-3.5 h-3.5 rounded-full shrink-0" />
               <span className="text-body2 text-foreground font-mono font-semibold">
-                {fmtAmount(grossAmount)} <span className="text-gray text-caption">{config.unit}</span>
+                {fmtAmount(displayGross)} <span className="text-[10px] text-gray font-normal">{config.unit}</span>
+              </span>
+              <span className="text-[10px] text-gray/40">→</span>
+              <img src={config.to.logo} alt={config.to.label} className="w-3.5 h-3.5 rounded-full shrink-0" />
+              <span className="text-body2 text-foreground font-mono font-semibold">
+                {fmtAmount(shieldedAmount)} <span className="text-[10px] text-gray font-normal">{config.to.label}</span>
               </span>
             </div>
-            {d.taprootAddress && (
+            {d.btcMeta?.taprootAddress && (
               <div className="group flex items-center gap-2">
-                <span className="text-[10px] text-gray/50 shrink-0">&rarr;</span>
-                <code className="text-caption font-mono text-foreground/80 truncate">{truncate(d.taprootAddress, 10, 6)}</code>
+                <span className="text-[10px] text-gray/50 shrink-0">→</span>
+                <code className="text-caption font-mono text-foreground/80 truncate">{truncate(d.btcMeta?.taprootAddress, 10, 6)}</code>
                 <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
-                  <CopyButton text={d.taprootAddress} label="Address" variant="default" iconSize="sm" />
-                  <a href={`${getMempoolExplorerUrl()}/address/${d.taprootAddress}`} target="_blank" rel="noopener noreferrer" className="text-btc hover:text-btc/80 transition-colors p-0.5">
+                  <CopyButton text={d.btcMeta?.taprootAddress} label="Address" variant="default" iconSize="sm" />
+                  <a href={`${getMempoolExplorerUrl()}/address/${d.btcMeta?.taprootAddress}`} target="_blank" rel="noopener noreferrer" className="text-btc hover:text-btc/80 transition-colors p-0.5">
                     <ExternalLink className="w-3 h-3" />
                   </a>
                 </div>
               </div>
             )}
+            {/* Fee breakdown */}
+            {(serviceFee > 0 || minerFee > 0) && (
+              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[10px] text-gray/50 font-mono pt-1 border-t border-green-500/8">
+                {serviceFee > 0 && (
+                  <>
+                    <span>Service fee</span>
+                    <span>{fmtAmount(serviceFee)} {config.unit}</span>
+                  </>
+                )}
+                {minerFee > 0 && (
+                  <>
+                    <span>Miner fee</span>
+                    <span>{fmtAmount(minerFee)} {config.unit}</span>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* OUTPUT — shielded amount + commitment */}
+        {/* OUTPUT — commitment only */}
         <div className="p-4 space-y-2.5">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
-            <span className="text-caption text-purple-400/90 font-semibold uppercase tracking-wider">Outputs</span>
+            <span className="text-caption text-purple-400/90 font-semibold uppercase tracking-wider">Output</span>
             <span className="text-caption text-purple-400/60 font-medium">1</span>
           </div>
-          {/* Commitment with shielded amount */}
           {d.commitment && (
             <div className="group rounded-[8px] bg-gray/4 border border-gray/8 hover:border-gray/15 transition-colors overflow-hidden">
-              <div className="flex items-center gap-2 px-3 py-2.5 border-b border-gray/8">
-                <img src={config.to.logo} alt={config.to.label} className="w-3.5 h-3.5 rounded-full shrink-0" />
-                <span className="text-body2 text-foreground font-mono font-semibold">
-                  {fmtAmount(shieldedAmount)} <span className="text-gray text-caption">{config.to.label}</span>
-                </span>
-                {fee > 0 && (
-                  <span className="text-[10px] text-gray/50 font-mono ml-auto">
-                    fee: {fmtAmount(fee)} {config.unit}
-                  </span>
-                )}
-              </div>
               <div className="flex items-center gap-2 px-3 py-2">
                 <span className="text-[10px] text-gray/50 shrink-0">Commitment</span>
                 <code className="text-caption font-mono text-foreground/90 truncate">{truncate(d.commitment, 8, 6)}</code>
@@ -173,15 +193,15 @@ function DepositTimeline({ deposit: d }: { deposit: DepositRecord }) {
       title: "Deposit BTC",
       done: stepOrder >= 1,
       icon: "btc" as const,
-      txId: d.btcTxid,
+      txId: d.btcMeta?.depositTxid,
       txType: "btc" as const,
-      badge: stepOrder >= 4 ? "SPV Confirmed" : null,
+      badge: null,
     },
     {
       title: "Sweep to Pool",
       done: stepOrder >= 3,
       icon: "btc" as const,
-      txId: d.sweepTxid,
+      txId: d.btcMeta?.sweepTxid,
       txType: "btc" as const,
       badge: null,
     },
@@ -189,7 +209,7 @@ function DepositTimeline({ deposit: d }: { deposit: DepositRecord }) {
       title: "SPV Verify",
       done: stepOrder >= 4,
       icon: "sol" as const,
-      txId: d.solanaTx || d.txSignature,
+      txId: d.txSignature || d.txSignature,
       txType: "sol" as const,
       badge: null,
     },
@@ -199,7 +219,7 @@ function DepositTimeline({ deposit: d }: { deposit: DepositRecord }) {
       icon: "sol" as const,
       txId: d.txSignature,
       txType: "sol" as const,
-      badge: d.mintedSats ? `${d.mintedSats.toLocaleString()} sats` : null,
+      badge: d.btcMeta?.mintedSats ? `${d.btcMeta?.mintedSats.toLocaleString()} sats` : null,
     },
   ];
 
@@ -346,9 +366,8 @@ export function DepositRow({
   const config = resolvedToken
     ? buildShieldConfig(resolvedToken)
     : SHIELD_TYPE_CONFIG[shieldType];
-  // Only BTC SPV deposits (disc=1) are expandable
   const isBtcDeposit = shieldType === "btc";
-  const canExpand = isBtcDeposit;
+  const canExpand = true;
 
   return (
     <Fragment>
@@ -367,10 +386,10 @@ export function DepositRow({
               <code className="text-caption font-mono text-foreground">{truncate(d.txSignature, 6, 4)}</code>
               <CopyButton text={d.txSignature} label="Tx" variant="default" iconSize="sm" />
             </div>
-          ) : d.btcTxid ? (
+          ) : d.btcMeta?.depositTxid ? (
             <div className="flex items-center gap-1.5">
-              <code className="text-caption font-mono text-foreground">{truncate(d.btcTxid, 6, 4)}</code>
-              <CopyButton text={d.btcTxid} label="BTC Tx" variant="default" iconSize="sm" />
+              <code className="text-caption font-mono text-foreground">{truncate(d.btcMeta?.depositTxid, 6, 4)}</code>
+              <CopyButton text={d.btcMeta?.depositTxid} label="BTC Tx" variant="default" iconSize="sm" />
             </div>
           ) : (
             <span className="text-caption text-gray">Pending...</span>
@@ -394,17 +413,16 @@ export function DepositRow({
           <span className="text-caption text-gray">{timeAgo(d.timestamp)}</span>
         </Td>
         <Td>
-          <div className="flex items-center gap-1.5">
-            {d.txSignature && <SolanaLink signature={d.txSignature} />}
-            {d.btcTxid && (
-              <a href={`${getMempoolExplorerUrl()}/tx/${d.btcTxid}`} target="_blank" rel="noopener noreferrer" className="text-btc/60 hover:text-btc transition-colors p-0.5" title="View BTC tx">
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            )}
-          </div>
+          {d.txSignature ? (
+            <SolanaLink signature={d.txSignature} />
+          ) : d.btcMeta?.depositTxid ? (
+            <a href={`${getMempoolExplorerUrl()}/tx/${d.btcMeta?.depositTxid}`} target="_blank" rel="noopener noreferrer" className="text-btc/60 hover:text-btc transition-colors p-0.5" title="View BTC tx">
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          ) : null}
         </Td>
       </tr>
-      {expanded && isBtcDeposit && (
+      {expanded && (
         <tr>
           <td colSpan={8} className="p-0">
             <DepositDetails deposit={d} />
@@ -457,7 +475,7 @@ export function DepositsTab() {
           </thead>
           <tbody className="divide-y divide-gray/10">
             {deposits.map((d, i) => {
-              const depositKey = `${d.btcTxid || d.txSignature || d.taprootAddress || d.commitment}-${i}`;
+              const depositKey = `${d.btcMeta?.depositTxid || d.txSignature || d.btcMeta?.taprootAddress || d.commitment}-${i}`;
               return (
                 <DepositRow
                   key={depositKey}

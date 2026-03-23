@@ -1,0 +1,16 @@
+{
+  "aegisProgramId": "D1SWYYy1BfwaRfWaTNEasTMvegCr3DpPpLLuYkMPtz3Z",
+  "btcLightClientId": "Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq",
+  "authority": "uFBMJSxoGkHj2NyncPzAkhNWsGSQirQcRjUnGfEfWg1",
+  "zkbtcMint": "DV7Do8f7rKXehVXDSkuKi7pMwfHUeoKGcpHfnvAd5oUh",
+  "poolState": "3n8diZkdznqp3LevwLypuFUA11F3rf5XyXMiTBvbrzr4",
+  "commitmentTree": "HLLgb8GvvqcZSJoBtF81gkZVKL2PDRzKm55Hxe7jgcM6",
+  "poolVault": "9rjXr73uBWdkzeeJFTuB4Nm7hoSNgBWMjds9jS7U7swk",
+  "frostVault": "EXa5TFf6mA7w6LLMmAinLNCydHiB7eo41PjJX7Hc5ytm",
+  "tUsdcMint": "6eD9uhGpUtZ8dciNR5RF4yvH5sLDpHnWmCRhDh2CTCVV",
+  "tUsdtMint": "CnqLMZ2DaKYgKXFp4huJmzZA57xyZjWFt97Vigf176Ld",
+  "btcXOnlyPubKey": "35da5912929a3be4bea4df8ad47c14b1907fa179e3c63bb630822edc7b6dd06a",
+  "poolBtcAddress": "tb1pxhd9jy5jnga7f04ym79dglq5kxg8lgteu0rrhd3ssghdc7md6p4q870x8f",
+  "signingMode": "frost",
+  "createdAt": "2026-03-23T03:12:57Z"
+}

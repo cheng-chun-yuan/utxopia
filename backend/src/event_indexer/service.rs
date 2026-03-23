@@ -64,8 +64,10 @@ struct TransactionData {
     instruction_disc: Option<u8>,
 }
 
-/// Mempool.space API base URL for testnet4
-const MEMPOOL_API_URL: &str = "https://mempool.space/testnet4/api";
+/// Mempool/Esplora API base URL — configurable via MEMPOOL_API_URL env var
+fn mempool_api_url() -> String {
+    std::env::var("MEMPOOL_API_URL").unwrap_or_else(|_| "https://mempool.space/testnet4/api".to_string())
+}
 
 impl EventIndexerService {
     pub fn new(config: EventIndexerConfig, store: Arc<EventStore>) -> Result<Self, String> {
@@ -291,6 +293,7 @@ impl EventIndexerService {
         let mut redemption_requests = Vec::new();
         let mut deposit_verified: Option<super::parser::DepositVerifiedEvent> = None;
         let mut unshield_meta: Option<UnshieldMetaEvent> = None;
+        let mut shield_meta: Option<super::parser::ShieldMetaEvent> = None;
 
         for event in events {
             match event {
@@ -315,6 +318,9 @@ impl EventIndexerService {
                 ProgramEvent::UnshieldMeta(e) => {
                     unshield_meta = Some(e);
                 }
+                ProgramEvent::ShieldMeta(e) => {
+                    shield_meta = Some(e);
+                }
                 ProgramEvent::UtxoCreated(e) => {
                     let txid_hex = Self::btc_internal_to_hex(&e.txid);
                     tracing::info!(txid = %txid_hex, vout = e.vout, amount = e.amount_sats, "UTXO created");
@@ -327,11 +333,20 @@ impl EventIndexerService {
         }
 
         // Prefer event-sourced BTC txids (from DepositVerified event) over instruction data extraction
+        // For btc_deposit_amount_sats (original deposit amount):
+        //   1. DepositVerified.original_amount (on-chain, extracted from deposit TX)
+        //   2. Mempool fetch via sweep tx input (tx_data.btc_deposit_amount_sats)
+        //   3. DepositVerified.amount_sats (sweep output, last resort)
         let (btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats) = if let Some(ref dv) = deposit_verified {
             let dep_txid = Self::btc_internal_to_hex(&dv.deposit_txid);
             let sweep_txid = Self::btc_internal_to_hex(&dv.sweep_txid);
-            tracing::debug!(deposit = %dep_txid, sweep = %sweep_txid, amount = dv.amount_sats, "Using event-sourced deposit data");
-            (Some(dep_txid), Some(sweep_txid), Some(dv.amount_sats as i64))
+            let original = if dv.original_amount > 0 {
+                Some(dv.original_amount as i64)
+            } else {
+                tx_data.btc_deposit_amount_sats.or(Some(dv.amount_sats as i64))
+            };
+            tracing::debug!(deposit = %dep_txid, sweep = %sweep_txid, sweep_amount = dv.amount_sats, original = ?original, "Using event-sourced deposit data");
+            (Some(dep_txid), Some(sweep_txid), original)
         } else {
             (tx_data.btc_deposit_txid, tx_data.btc_sweep_txid, tx_data.btc_deposit_amount_sats)
         };
@@ -367,6 +382,8 @@ impl EventIndexerService {
                 ann, signature, slot, block_time, is_verified,
                 btc_deposit_txid.as_deref(), btc_sweep_txid.as_deref(),
                 btc_deposit_amount_sats,
+                shield_meta.as_ref().map(|sm| sm.gross_amount as i64),
+                shield_meta.as_ref().map(|sm| sm.fee as i64),
             )?;
             if inserted {
                 if let Some(ref cache) = self.tree_cache {
@@ -383,11 +400,15 @@ impl EventIndexerService {
             } else {
                 tx_data.instruction_disc
             };
+            let unshield_fee = unshield_meta.as_ref().map(|um| um.fee as i64);
+            let unshield_payout = unshield_meta.as_ref().map(|um| um.payout as i64);
             let inserted = self.store.insert_nullifier(
                 null, signature, slot, block_time, disc,
                 unshield_amount, unshield_recipient.as_deref(),
                 Some(transfer_type),
                 unshield_token_id.as_deref(),
+                unshield_fee,
+                unshield_payout,
             )?;
             if inserted {
                 if let Some(ref cache) = self.tree_cache {
@@ -652,7 +673,7 @@ impl EventIndexerService {
         sweep_txid: &str,
         deposit_txid: Option<&str>,
     ) -> Option<i64> {
-        let url = format!("{}/tx/{}", MEMPOOL_API_URL, sweep_txid);
+        let url = format!("{}/tx/{}", mempool_api_url(), sweep_txid);
         let resp = self.http.get(&url).send().await.ok()?;
         if !resp.status().is_success() {
             tracing::debug!(txid = sweep_txid, "Mempool fetch failed for sweep tx");

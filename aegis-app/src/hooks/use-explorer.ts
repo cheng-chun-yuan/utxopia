@@ -7,34 +7,36 @@ import type { IndexerLeaf } from "@aegis/sdk";
 // Types
 // =============================================================================
 
-export interface DepositRecord {
-  txSignature: string;
-  commitment: string;
-  amountBtc: string;
-  amountSats: number;
-  leafIndex: number;
-  timestamp: number;
-  slot: number;
-  ephemeralPub?: string;
-  // Enriched from tracker (via /api/explorer/deposits)
-  status: string | null;
-  btcTxid: string | null;
+/** BTC-specific metadata */
+export interface BtcDepositMeta {
+  depositTxid: string | null;
   sweepTxid: string | null;
-  solanaTx: string | null;
+  taprootAddress: string | null;
   confirmations: number;
   sweepConfirmations: number;
   sweepFeeSats: number | null;
   mintedSats: number | null;
-  taprootAddress: string | null;
+  depositAmountSats: number | null;
   trackerError: string | null;
-  isDemo: boolean;
-  btcDepositAmountSats: number | null;
-  /** 1=BTC SPV deposit, 29=SPL shield */
+}
+
+export interface DepositRecord {
+  txSignature: string;
+  commitment: string;
+  amountSats: number;
+  leafIndex: number;
+  timestamp: number;
+  status: string | null;
   instructionDisc: number | null;
-  /** Token ID hex from on-chain event */
-  tokenId: string | null;
-  /** Resolved token symbol (BTC, SOL, USDC, USDT) */
   tokenSymbol: string | null;
+  tokenId: string | null;
+  ephemeralPub?: string;
+  /** Gross amount before fee */
+  grossAmount: number | null;
+  /** Protocol fee deducted */
+  fee: number | null;
+  /** BTC-specific — null for SPL deposits */
+  btcMeta: BtcDepositMeta | null;
 }
 
 export interface TransferOutput {
@@ -64,6 +66,10 @@ export interface GroupedTransfer {
   tokenSymbol?: string;
   /** Event-derived transfer type: "private_transfer", "unshield", "redeem", "deposit" */
   transferType?: string;
+  /** Protocol fee deducted from unshield (from UnshieldMeta v2 event) */
+  unshieldFee?: number;
+  /** Net payout after fee (from UnshieldMeta v2 event) */
+  unshieldPayout?: number;
 }
 
 export interface RedemptionRecord {
@@ -120,6 +126,8 @@ interface BackendTransferRow {
   token_id?: string;
   token_symbol?: string;
   transfer_type?: string;
+  unshield_fee?: number;
+  unshield_payout?: number;
 }
 
 // Backend announcement row from /api/announcements
@@ -257,6 +265,8 @@ export function useTransfers() {
         tokenId: t.token_id,
         tokenSymbol: t.token_symbol,
         transferType: t.transfer_type,
+        unshieldFee: t.unshield_fee,
+        unshieldPayout: t.unshield_payout,
       }));
     },
     {

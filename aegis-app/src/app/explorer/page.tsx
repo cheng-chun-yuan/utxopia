@@ -76,7 +76,7 @@ function ExplorerContent() {
         kind: "shield",
         data: d,
         timestamp: d.timestamp,
-        key: `shield-${d.btcTxid || d.txSignature || d.commitment}`,
+        key: `shield-${d.btcMeta?.depositTxid || d.txSignature || d.commitment}`,
       });
     }
 

@@ -331,9 +331,11 @@ pub fn process_unshield(
         .checked_sub(protocol_fee)
         .ok_or(ProgramError::ArithmeticOverflow)?;
 
-    // Emit unshield metadata
+    // Emit unshield metadata (gross amount, fee, payout)
     crate::utils::events::emit_unshield_meta(
         unshield_amount,
+        protocol_fee,
+        payout,
         user.key().as_ref().try_into().unwrap(),
         &token_id,
     );

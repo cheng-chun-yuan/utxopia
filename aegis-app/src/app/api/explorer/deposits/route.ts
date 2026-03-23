@@ -32,6 +32,8 @@ interface AnnouncementRow {
   btc_sweep_txid?: string | null;   // BTC sweep txid (from instruction data)
   btc_deposit_amount_sats?: number | null; // Original BTC deposit amount (from mempool)
   token_id?: string | null; // Token ID hex (32 bytes, from on-chain event)
+  deposit_gross_amount?: number | null; // Gross amount before fee (from ShieldMeta event)
+  deposit_fee?: number | null; // Fee deducted (from ShieldMeta event)
 }
 
 interface TrackerDeposit {
@@ -54,32 +56,39 @@ interface TrackerDeposit {
   updated_at: number;
 }
 
-export interface ExplorerDeposit {
-  txSignature: string;
-  commitment: string;
-  amountSats: number;
-  leafIndex: number;
-  timestamp: number;
-  slot: number;
-  ephemeralPub?: string;
-  status: string | null;
-  btcTxid: string | null;
+/** BTC-specific metadata (only present for BTC SPV deposits) */
+export interface BtcDepositMeta {
+  depositTxid: string | null;
   sweepTxid: string | null;
-  solanaTx: string | null;
+  taprootAddress: string | null;
   confirmations: number;
   sweepConfirmations: number;
   sweepFeeSats: number | null;
   mintedSats: number | null;
-  taprootAddress: string | null;
+  /** Original deposit amount in sats (what user sent to taproot) */
+  depositAmountSats: number | null;
   trackerError: string | null;
-  isDemo: boolean;
-  btcDepositAmountSats: number | null;
+}
+
+export interface ExplorerDeposit {
+  txSignature: string;
+  commitment: string;
+  /** Shielded amount (after fees) */
+  amountSats: number;
+  leafIndex: number;
+  timestamp: number;
+  status: string | null;
   /** Instruction discriminator: 1=BTC SPV deposit, 29=SPL shield */
   instructionDisc: number | null;
-  /** Token ID hex (from on-chain event, identifies which token) */
-  tokenId: string | null;
-  /** Resolved token symbol (BTC, SOL, USDC, USDT) */
   tokenSymbol: string | null;
+  tokenId: string | null;
+  ephemeralPub?: string;
+  /** Gross amount before fee (from ShieldMeta event or tracker) */
+  grossAmount: number | null;
+  /** Protocol fee deducted (from ShieldMeta event) */
+  fee: number | null;
+  /** BTC-specific metadata — null for SPL shield deposits */
+  btcMeta: BtcDepositMeta | null;
 }
 
 /**
@@ -217,30 +226,31 @@ export async function GET() {
           amountSats: decodeLeU64(a.encrypted_amount),
           leafIndex: a.leaf_index,
           timestamp,
-          slot: a.slot,
-          ephemeralPub: a.ephemeral_pub,
           status: tracker?.status ?? (isVerifiedNoTracker ? "claimed" : "claimed"),
-          btcTxid: tracker?.btc_txid ?? a.btc_deposit_txid ?? null,
-          sweepTxid: tracker?.sweep_txid ?? a.btc_sweep_txid ?? null,
-          solanaTx: tracker?.solana_tx ?? a.tx_signature,
-          confirmations: tracker?.confirmations ?? 0,
-          sweepConfirmations: tracker?.sweep_confirmations ?? 0,
-          sweepFeeSats: tracker?.sweep_fee_sats ?? null,
-          mintedSats: isVerifiedNoTracker ? decodeLeU64(a.encrypted_amount) : (tracker?.minted_sats ?? null),
-          taprootAddress: tracker?.taproot_address ?? null,
-          trackerError: tracker?.error ?? null,
-          isDemo: false,
-          btcDepositAmountSats: tracker?.amount_sats ?? a.btc_deposit_amount_sats ?? null,
           instructionDisc: disc,
           tokenId: a.token_id ?? null,
           tokenSymbol: a.token_id ? (tokenIdMap.get(a.token_id) ?? null) : null,
+          ephemeralPub: a.ephemeral_pub,
+          grossAmount: a.deposit_gross_amount ?? (tracker?.amount_sats ?? a.btc_deposit_amount_sats ?? null),
+          fee: a.deposit_fee ?? null,
+          btcMeta: isBtcDeposit ? {
+            depositTxid: tracker?.btc_txid ?? a.btc_deposit_txid ?? null,
+            sweepTxid: tracker?.sweep_txid ?? a.btc_sweep_txid ?? null,
+            taprootAddress: tracker?.taproot_address ?? null,
+            confirmations: tracker?.confirmations ?? 0,
+            sweepConfirmations: tracker?.sweep_confirmations ?? 0,
+            sweepFeeSats: tracker?.sweep_fee_sats ?? null,
+            mintedSats: isVerifiedNoTracker ? decodeLeU64(a.encrypted_amount) : (tracker?.minted_sats ?? null),
+            depositAmountSats: tracker?.amount_sats ?? a.btc_deposit_amount_sats ?? null,
+            trackerError: tracker?.error ?? null,
+          } : null,
         };
       });
 
     // Track which btcTxids are already represented from announcements
     const matchedBtcTxids = new Set<string>();
     for (const d of deposits) {
-      if (d.btcTxid) matchedBtcTxids.add(d.btcTxid);
+      if (d.btcMeta?.depositTxid) matchedBtcTxids.add(d.btcMeta.depositTxid);
     }
 
     // Add tracker-only deposits (ongoing: detected, confirming, sweeping, etc.)
@@ -252,26 +262,27 @@ export async function GET() {
       deposits.push({
         txSignature: tracker.solana_tx ?? "",
         commitment: "",
-        amountSats: tracker.amount_sats ?? 0,
+        amountSats: tracker.minted_sats ?? tracker.amount_sats ?? 0,
         leafIndex: tracker.leaf_index ?? -1,
         timestamp: tracker.created_at ?? 0,
-        slot: 0,
-        ephemeralPub: tracker.ephemeral_pub,
         status: tracker.status,
-        btcTxid: tracker.btc_txid ?? null,
-        sweepTxid: tracker.sweep_txid ?? null,
-        solanaTx: tracker.solana_tx ?? null,
-        confirmations: tracker.confirmations ?? 0,
-        sweepConfirmations: tracker.sweep_confirmations ?? 0,
-        sweepFeeSats: tracker.sweep_fee_sats ?? null,
-        mintedSats: tracker.minted_sats ?? null,
-        taprootAddress: tracker.taproot_address ?? null,
-        trackerError: tracker.error ?? null,
-        isDemo: false,
-        btcDepositAmountSats: tracker.amount_sats ?? null,
-        instructionDisc: 1, // tracker deposits are always real BTC
+        instructionDisc: 1,
         tokenId: null,
         tokenSymbol: "BTC",
+        ephemeralPub: tracker.ephemeral_pub,
+        grossAmount: tracker.amount_sats ?? null,
+        fee: null,
+        btcMeta: {
+          depositTxid: tracker.btc_txid ?? null,
+          sweepTxid: tracker.sweep_txid ?? null,
+          taprootAddress: tracker.taproot_address ?? null,
+          confirmations: tracker.confirmations ?? 0,
+          sweepConfirmations: tracker.sweep_confirmations ?? 0,
+          sweepFeeSats: tracker.sweep_fee_sats ?? null,
+          mintedSats: tracker.minted_sats ?? null,
+          depositAmountSats: tracker.amount_sats ?? null,
+          trackerError: tracker.error ?? null,
+        },
       });
     }
 
@@ -298,23 +309,14 @@ export async function GET() {
             amountSats: decodeLeU64(ann.encryptedAmount),
             leafIndex: ann.leafIndex,
             timestamp: tx.blockTime,
-            slot: tx.slot,
-            ephemeralPub: ann.ephemeralPub,
             status: isVerified ? "claimed" : null,
-            btcTxid: null,
-            sweepTxid: null,
-            solanaTx: tx.signature,
-            confirmations: 0,
-            sweepConfirmations: 0,
-            sweepFeeSats: null,
-            mintedSats: isVerified ? decodeLeU64(ann.encryptedAmount) : null,
-            taprootAddress: null,
-            trackerError: null,
-            isDemo: false,
-            btcDepositAmountSats: null,
             instructionDisc: tx.instructionDisc,
             tokenId: null,
             tokenSymbol: null,
+            ephemeralPub: ann.ephemeralPub,
+            grossAmount: null,
+            fee: null,
+            btcMeta: null,
           });
         }
       }

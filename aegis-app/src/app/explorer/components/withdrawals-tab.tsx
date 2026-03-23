@@ -42,24 +42,25 @@ const fmtBtc = (sats: number) => {
 
 const REQUIRED_CONFIRMATIONS = 6;
 
-function BtcConfirmationStatus({ txid }: { txid: string }) {
+function BtcConfirmationStatus({ txid, onMinerFee }: { txid: string; onMinerFee?: (fee: number) => void }) {
   const [confirmations, setConfirmations] = useState<number | null>(null);
   const [blockHeight, setBlockHeight] = useState<number | null>(null);
   const [relayedHeight, setRelayedHeight] = useState<number | null>(null);
+  const [minerFee, setMinerFee] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     async function fetchStatus() {
       try {
-        // Fetch BTC tx status + on-chain relayed header height in parallel
-        const [statusResp, tipResp, relayResp] = await Promise.all([
-          fetch(`${getEsploraApiUrl()}/tx/${txid}/status`),
+        // Fetch BTC tx details + tip + on-chain relayed header height in parallel
+        const [txResp, tipResp, relayResp] = await Promise.all([
+          fetch(`${getEsploraApiUrl()}/tx/${txid}`),
           fetch(`${getEsploraApiUrl()}/blocks/tip/height`),
           fetch("/api/relayer/meta").catch(() => null),
         ]);
         if (cancelled) return;
 
-        const status = await statusResp.json();
+        const txData = await txResp.json();
         const tip = await tipResp.json();
 
         if (relayResp?.ok) {
@@ -69,9 +70,15 @@ function BtcConfirmationStatus({ txid }: { txid: string }) {
           } catch { /* ignore */ }
         }
 
-        if (status.confirmed && status.block_height) {
-          setConfirmations(tip - status.block_height + 1);
-          setBlockHeight(status.block_height);
+        // Compute miner fee from tx data
+        if (txData.fee != null) {
+          setMinerFee(txData.fee);
+          onMinerFee?.(txData.fee);
+        }
+
+        if (txData.status?.confirmed && txData.status?.block_height) {
+          setConfirmations(tip - txData.status.block_height + 1);
+          setBlockHeight(txData.status.block_height);
         } else {
           setConfirmations(0);
         }
@@ -105,14 +112,24 @@ function BtcConfirmationStatus({ txid }: { txid: string }) {
           }
         </span>
       </div>
-      {blockHeight && (
+      {(blockHeight || minerFee !== null) && (
         <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 text-[10px] font-mono text-gray/40 pl-5">
-          <span>Confirmed at</span>
-          <span>block #{blockHeight.toLocaleString()}</span>
+          {blockHeight && (
+            <>
+              <span>Confirmed at</span>
+              <span>block #{blockHeight.toLocaleString()}</span>
+            </>
+          )}
           {relayedHeight && (
             <>
               <span>Relayed to</span>
-              <span>block #{relayedHeight.toLocaleString()}{relayedHeight >= blockHeight ? " ✓" : ""}</span>
+              <span>block #{relayedHeight.toLocaleString()}{blockHeight && relayedHeight >= blockHeight ? " ✓" : ""}</span>
+            </>
+          )}
+          {minerFee !== null && (
+            <>
+              <span>Miner fee</span>
+              <span>{fmtBtc(minerFee)} BTC</span>
             </>
           )}
         </div>
@@ -190,7 +207,8 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
     : Math.floor(amount * bps / 10000) + base;
   const expectedSend = amount - serviceFee;
   const actualReceived = redemption.actualReceived ? Number(redemption.actualReceived) : null;
-  const minerFee = actualReceived !== null ? expectedSend - actualReceived : null;
+  const [btcMinerFee, setBtcMinerFee] = useState<number | null>(null);
+  const poolRevenue = btcMinerFee !== null && serviceFee > 0 ? serviceFee - btcMinerFee : null;
 
   return (
     <div className="mx-4 my-3 rounded-[10px] bg-gradient-to-b from-gray/6 to-transparent border border-gray/10 overflow-hidden">
@@ -206,23 +224,15 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
         </div>
       )}
 
-      {/* ── Input / Output 2-column (matches transfer detail layout) ── */}
+      {/* ── Input / Output 2-column ── */}
       <div className="grid grid-cols-2 divide-x divide-gray/10">
-        {/* INPUT side */}
+        {/* INPUT side — nullifier only */}
         <div className="p-4 space-y-2.5">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
             <span className="text-caption text-green-400/90 font-semibold uppercase tracking-wider">Input</span>
             <span className="text-caption text-green-400/60 font-medium">1</span>
           </div>
-          <div className="group flex items-center gap-2 px-3 py-2.5 rounded-[8px] bg-green-500/4 border border-green-500/10">
-            <Image src="/zkbtc.png" alt="zkBTC" width={16} height={16} className="rounded-full shrink-0" />
-            <div className="flex-1 min-w-0">
-              <div className="text-body2 text-foreground font-mono font-semibold">{fmtBtc(amount)} <span className="text-[10px] text-gray font-normal">zkBTC</span></div>
-              <div className="text-[10px] text-gray/50">Shielded note (burned)</div>
-            </div>
-          </div>
-          {/* Nullifier */}
           {redemption.requestTxSignature && (
             <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8">
               <span className="text-[10px] text-gray/40 shrink-0">Nullifier</span>
@@ -237,7 +247,7 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
           )}
         </div>
 
-        {/* OUTPUT side */}
+        {/* OUTPUT side — zkBTC → BTC conversion */}
         <div className="p-4 space-y-2.5">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-1.5 h-1.5 rounded-full bg-btc" />
@@ -245,8 +255,14 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
             <span className="text-caption text-btc/60 font-medium">1</span>
           </div>
           <div className="px-3 py-2.5 rounded-[8px] bg-btc/4 border border-btc/10 space-y-2">
-            <div className="flex items-center gap-2">
-              <BitcoinIcon className="w-4 h-4 text-btc shrink-0" />
+            {/* zkBTC → BTC conversion */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Image src="/zkbtc.png" alt="zkBTC" width={14} height={14} className="rounded-full shrink-0" />
+              <span className="text-body2 text-foreground font-mono font-semibold">
+                {fmtBtc(amount)} <span className="text-[10px] text-gray font-normal">zkBTC</span>
+              </span>
+              <span className="text-[10px] text-gray/40">→</span>
+              <Image src="/tokens/btc.png" alt="BTC" width={14} height={14} className="rounded-full shrink-0" />
               <span className="text-body2 text-foreground font-mono font-semibold">
                 {fmtBtc(actualReceived ?? expectedSend)} <span className="text-[10px] text-gray font-normal">BTC</span>
               </span>
@@ -263,46 +279,28 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
                 </div>
               </div>
             )}
-          </div>
-          {/* BTC tx link */}
-          {redemption.btcTxid && !redemption.simulated && (
-            <div className="group flex items-center gap-2 px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8">
-              <span className="text-[10px] text-gray/40 shrink-0">BTC tx</span>
-              <code className="text-caption font-mono text-foreground/70 truncate">{truncate(redemption.btcTxid, 6, 4)}</code>
-              <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
-                <CopyButton text={redemption.btcTxid} label="BTC TX" variant="default" iconSize="sm" />
-                <a href={`${getMempoolExplorerUrl()}/tx/${redemption.btcTxid}`} target="_blank" rel="noopener noreferrer" className="text-btc hover:text-btc/80 transition-colors p-0.5">
-                  <ExternalLink className="w-3 h-3" />
-                </a>
+            {/* Fee line */}
+            {serviceFee > 0 && (
+              <div className="flex items-center gap-2 pt-1 border-t border-btc/8">
+                <span className="text-[10px] text-gray/40">Service Fee</span>
+                <span className="text-[10px] font-mono text-gray/60">{fmtBtc(serviceFee)} BTC</span>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
-      {/* ── Fee Breakdown + Progress ── */}
+      {/* ── Progress Timeline ── */}
       <div className="border-t border-gray/10 px-4 py-3 space-y-3">
-        {/* Fees */}
-        <div className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-[11px]">
-          {serviceFee > 0 && <>
-            <span className="text-gray/50">Service fee</span>
-            <span className="font-mono text-gray">{fmtBtc(serviceFee)} BTC</span>
-          </>}
-          {minerFee !== null && minerFee > 0 && <>
-            <span className="text-gray/50">Miner fee</span>
-            <span className="font-mono text-gray">{fmtBtc(minerFee)} BTC</span>
-          </>}
-        </div>
-
         {/* Vertical timeline */}
         <div className="space-y-0">
           {[
-            { title: "Request Redemption", done: !isFailed && stepOrder >= 0, icon: "sol" as const, txId: redemption.requestTxSignature },
-            { title: "Mark Processing", done: !isFailed && stepOrder >= 1, icon: "sol" as const, txId: redemption.processingTxSignature },
-            { title: "BTC Sent", done: !isFailed && stepOrder >= 3, icon: "btc" as const, txId: redemption.btcTxid },
-            { title: "Complete Redemption", done: !isFailed && stepOrder >= 4, icon: "sol" as const, txId: redemption.completeTxSignature },
+            { key: "request", title: "Request Redemption", done: !isFailed && stepOrder >= 0, icon: "sol" as const, txId: redemption.requestTxSignature },
+            { key: "processing", title: "Mark Processing", done: !isFailed && stepOrder >= 1, icon: "sol" as const, txId: redemption.processingTxSignature },
+            { key: "btc_sent", title: "BTC Sent", done: !isFailed && stepOrder >= 3, icon: "btc" as const, txId: redemption.btcTxid },
+            { key: "complete", title: "Complete Redemption", done: !isFailed && stepOrder >= 4, icon: "sol" as const, txId: redemption.completeTxSignature },
           ].map((step, i, arr) => (
-            <div key={step.title} className="flex gap-3">
+            <div key={step.key} className="flex gap-3">
               <div className="flex flex-col items-center w-5">
                 <div className={cn(
                   "w-5 h-5 rounded-full flex items-center justify-center shrink-0 border",
@@ -348,15 +346,33 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
                     </a>
                   </div>
                 )}
+                {/* BTC Sent — block height, confirmations, miner fee */}
+                {step.key === "btc_sent" && step.done && !redemption.simulated && redemption.btcTxid && (
+                  <div className="mt-1.5">
+                    <BtcConfirmationStatus txid={redemption.btcTxid} onMinerFee={setBtcMinerFee} />
+                  </div>
+                )}
+                {/* Complete Redemption — burn amount + pool fee */}
+                {step.key === "complete" && step.done && (
+                  <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 mt-1.5 text-[10px] font-mono text-gray/50 pl-5">
+                    {redemption.burnAmount && (
+                      <>
+                        <span className="text-gray/40 font-sans">Burned</span>
+                        <span>{fmtBtc(Number(redemption.burnAmount))} zkBTC</span>
+                      </>
+                    )}
+                    {redemption.burnAmount && amount > Number(redemption.burnAmount) && (
+                      <>
+                        <span className="text-gray/40 font-sans">Pool fee</span>
+                        <span>{fmtBtc(amount - Number(redemption.burnAmount))} zkBTC</span>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           ))}
         </div>
-
-        {/* BTC confirmation status */}
-        {!redemption.simulated && redemption.btcTxid && stepOrder < 4 && (
-          <BtcConfirmationStatus txid={redemption.btcTxid} />
-        )}
       </div>
     </div>
   );
@@ -421,7 +437,7 @@ export function WithdrawalRow({
         </Td>
         <Td>
           <span className="text-body2 text-foreground font-mono">
-            {fmtBtc(Number(r.amountSats))} <span className="text-gray text-caption">BTC</span>
+            {fmtBtc(Number(r.actualReceived ?? r.amountSats))} <span className="text-gray text-caption">BTC</span>
           </span>
         </Td>
         <Td>

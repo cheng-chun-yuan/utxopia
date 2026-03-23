@@ -22,7 +22,7 @@ use crate::error::AegisError;
 use crate::state::{CommitmentTree, PoolState, TokenConfig};
 use crate::utils::{
     crypto::compute_commitment,
-    events::{emit_stealth_announcement, ANNOUNCEMENT_TYPE_DEPOSIT},
+    events::{emit_stealth_announcement, emit_shield_meta, ANNOUNCEMENT_TYPE_DEPOSIT},
     transfer_token_user,
     validate_account_writable, validate_program_owner,
     validate_token_2022_owner, validate_token_program_key,
@@ -158,6 +158,9 @@ pub fn process_shield(
         leaf_index as u32,
         &token_id,
     );
+
+    // Emit shield metadata (gross amount + fee) for indexer
+    emit_shield_meta(amount, protocol_fee, &token_id);
 
     // Update token config: total_shielded and accumulated_fees
     {

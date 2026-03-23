@@ -12,10 +12,11 @@
 //! - 0x0A RedemptionProcessing: disc(1) + requester(32) + amount(8) + request_id(8) + slot(4) = 53 bytes
 //! - 0x0B NullifiersBatch: disc(1) + count(1) + op_type(1) + ix_disc(1) + [hash(32)] x N
 //! - 0x0C AnnouncementsBatch: disc(1) + count(1) + [type(1) + ephemeral(32) + amount(8) + commitment(32) + leaf_index(4)] x N
-//! - 0x0D DepositVerified: disc(1) + sweep_txid(32) + deposit_txid(32) + amount_sats(8) + leaf_index(4) = 77 bytes
-//! - 0x0E UnshieldMeta: disc(1) + amount(8) + recipient(32) + token_id(32) = 73 bytes
+//! - 0x0D DepositVerified: disc(1) + sweep_txid(32) + deposit_txid(32) + amount_sats(8) + leaf_index(4) + original_amount(8) = 85 bytes
+//! - 0x0E UnshieldMeta: disc(1) + gross_amount(8) + fee(8) + payout(8) + recipient(32) + token_id(32) = 89 bytes
 //! - 0x0F UtxoCreated: disc(1) + txid(32) + vout(4) + amount_sats(8) = 45 bytes
 //! - 0x10 UtxoConsumed: disc(1) + txid(32) + vout(4) + amount_sats(8) = 45 bytes
+//! - 0x11 ShieldMeta: disc(1) + gross_amount(8) + fee(8) + token_id(32) = 49 bytes
 
 use pinocchio::log::sol_log_data;
 
@@ -57,6 +58,9 @@ const EVENT_UTXO_CREATED: u8 = 0x0F;
 
 /// Event discriminator: UTXO consumed (spent in withdrawal)
 const EVENT_UTXO_CONSUMED: u8 = 0x10;
+
+/// Event discriminator: shield metadata (gross amount + fee for SPL/BTC deposits)
+const EVENT_SHIELD_META: u8 = 0x11;
 
 /// Max batch items for stack-allocated buffer (MAX_SAFE_JOINSPLIT_SIZE = 14)
 const MAX_BATCH: usize = 14;
@@ -198,30 +202,36 @@ pub fn emit_nullifiers_batch(
 
 /// Emit when a BTC deposit is SPV-verified on-chain.
 ///
-/// Layout: disc(1) + sweep_txid(32) + deposit_txid(32) + amount_sats(8) + leaf_index(4) = 77 bytes
+/// Layout: disc(1) + sweep_txid(32) + deposit_txid(32) + amount_sats(8) + leaf_index(4) + original_amount(8) = 85 bytes
 pub fn emit_deposit_verified(
     sweep_txid: &[u8; 32],
     deposit_txid: &[u8; 32],
     amount_sats: u64,
     leaf_index: u32,
+    original_amount: u64,
 ) {
     let disc = [EVENT_DEPOSIT_VERIFIED];
     let amt = amount_sats.to_le_bytes();
     let li = leaf_index.to_le_bytes();
-    sol_log_data(&[&disc, sweep_txid, deposit_txid, &amt, &li]);
+    let orig = original_amount.to_le_bytes();
+    sol_log_data(&[&disc, sweep_txid, deposit_txid, &amt, &li, &orig]);
 }
 
 /// Emit unshield/redeem metadata so indexer doesn't need to parse instruction data.
 ///
-/// Layout: disc(1) + amount(8) + recipient(32) + token_id(32) = 73 bytes
+/// Layout: disc(1) + gross_amount(8) + fee(8) + payout(8) + recipient(32) + token_id(32) = 89 bytes
 pub fn emit_unshield_meta(
-    amount: u64,
+    gross_amount: u64,
+    fee: u64,
+    payout: u64,
     recipient: &[u8; 32],
     token_id: &[u8; 32],
 ) {
     let disc = [EVENT_UNSHIELD_META];
-    let amt = amount.to_le_bytes();
-    sol_log_data(&[&disc, &amt, recipient, token_id]);
+    let gross = gross_amount.to_le_bytes();
+    let f = fee.to_le_bytes();
+    let p = payout.to_le_bytes();
+    sol_log_data(&[&disc, &gross, &f, &p, recipient, token_id]);
 }
 
 /// Emit when a UTXO is created (deposit or change output).
@@ -250,6 +260,20 @@ pub fn emit_utxo_consumed(
     let v = vout.to_le_bytes();
     let amt = amount_sats.to_le_bytes();
     sol_log_data(&[&disc, txid, &v, &amt]);
+}
+
+/// Emit shield metadata so indexer can record gross amount and fee.
+///
+/// Layout: disc(1) + gross_amount(8) + fee(8) + token_id(32) = 49 bytes
+pub fn emit_shield_meta(
+    gross_amount: u64,
+    fee: u64,
+    token_id: &[u8; 32],
+) {
+    let disc = [EVENT_SHIELD_META];
+    let gross = gross_amount.to_le_bytes();
+    let f = fee.to_le_bytes();
+    sol_log_data(&[&disc, &gross, &f, token_id]);
 }
 
 /// Data for a single announcement in a batch (with token_id)

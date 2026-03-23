@@ -10,6 +10,7 @@
 //! - 0x0C = AnnouncementsBatch (count + [type + ephemeral + amount + commitment + leaf_index] x N)
 //! - 0x0D = DepositVerified (sweep_txid + deposit_txid + amount_sats + leaf_index)
 //! - 0x0E = UnshieldMeta (amount + recipient + token_id)
+//! - 0x11 = ShieldMeta (gross_amount + fee + token_id)
 
 use base64::Engine;
 
@@ -25,6 +26,7 @@ const EVENT_DEPOSIT_VERIFIED: u8 = 0x0D;
 const EVENT_UNSHIELD_META: u8 = 0x0E;
 const EVENT_UTXO_CREATED: u8 = 0x0F;
 const EVENT_UTXO_CONSUMED: u8 = 0x10;
+const EVENT_SHIELD_META: u8 = 0x11;
 
 /// Parsed nullifier spent event
 #[derive(Debug, Clone)]
@@ -42,12 +44,19 @@ pub struct DepositVerifiedEvent {
     pub deposit_txid: [u8; 32],
     pub amount_sats: u64,
     pub leaf_index: u32,
+    /// Original BTC deposit amount (what user sent to taproot, before miner fee)
+    pub original_amount: u64,
 }
 
 /// Parsed unshield/redeem metadata event
 #[derive(Debug, Clone)]
 pub struct UnshieldMetaEvent {
+    /// Gross amount (before fee)
     pub amount: u64,
+    /// Protocol fee deducted
+    pub fee: u64,
+    /// Net payout to user
+    pub payout: u64,
     pub recipient: [u8; 32],
     pub token_id: [u8; 32],
 }
@@ -102,6 +111,14 @@ pub struct StealthAnnouncementEvent {
     pub token_id: [u8; 32],
 }
 
+/// Parsed shield metadata event (gross amount + fee for deposits)
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ShieldMetaEvent {
+    pub gross_amount: u64,
+    pub fee: u64,
+    pub token_id: [u8; 32],
+}
+
 /// Parsed UTXO event (created or consumed)
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct UtxoEvent {
@@ -122,6 +139,7 @@ pub enum ProgramEvent {
     UnshieldMeta(UnshieldMetaEvent),
     UtxoCreated(UtxoEvent),
     UtxoConsumed(UtxoEvent),
+    ShieldMeta(ShieldMetaEvent),
 }
 
 /// Parse program events from transaction log messages.
@@ -189,6 +207,12 @@ pub fn parse_program_events(logs: &[String]) -> Vec<ProgramEvent> {
                     }
                     continue;
                 }
+                EVENT_SHIELD_META => {
+                    if let Some(event) = parse_shield_meta_flat(&segments[0]) {
+                        events.push(ProgramEvent::ShieldMeta(event));
+                    }
+                    continue;
+                }
                 _ => {}
             }
         }
@@ -248,6 +272,11 @@ pub fn parse_program_events(logs: &[String]) -> Vec<ProgramEvent> {
             EVENT_UTXO_CONSUMED => {
                 if let Some(event) = parse_utxo_event(&segments) {
                     events.push(ProgramEvent::UtxoConsumed(event));
+                }
+            }
+            EVENT_SHIELD_META => {
+                if let Some(event) = parse_shield_meta(&segments) {
+                    events.push(ProgramEvent::ShieldMeta(event));
                 }
             }
             _ => {}
@@ -574,7 +603,7 @@ fn parse_redemption_processing(segments: &[Vec<u8>]) -> Option<RedemptionProcess
     })
 }
 
-/// Parse deposit verified (multi-segment): disc(1) + sweep_txid(32) + deposit_txid(32) + amount_sats(8) + leaf_index(4)
+/// Parse deposit verified (multi-segment): v2 has 6 segments (+ original_amount), v1 has 5
 fn parse_deposit_verified(segments: &[Vec<u8>]) -> Option<DepositVerifiedEvent> {
     if segments.len() < 5 {
         return None;
@@ -583,55 +612,102 @@ fn parse_deposit_verified(segments: &[Vec<u8>]) -> Option<DepositVerifiedEvent> 
         return None;
     }
 
+    let original_amount = if segments.len() >= 6 && segments[5].len() == 8 {
+        read_u64(&segments[5]).unwrap_or(0)
+    } else {
+        0
+    };
+
     Some(DepositVerifiedEvent {
         sweep_txid: read_bytes32(&segments[1])?,
         deposit_txid: read_bytes32(&segments[2])?,
         amount_sats: read_u64(&segments[3])?,
         leaf_index: u32::from_le_bytes(segments[4][..4].try_into().ok()?),
+        original_amount,
     })
 }
 
-/// Parse deposit verified (flat): disc(1) + sweep_txid(32) + deposit_txid(32) + amount_sats(8) + leaf_index(4) = 77 bytes
+/// Parse deposit verified (flat): v2 = 85 bytes (+ original_amount), v1 = 77 bytes
 fn parse_deposit_verified_flat(data: &[u8]) -> Option<DepositVerifiedEvent> {
     if data.len() < 77 {
         return None;
     }
+
+    let original_amount = if data.len() >= 85 {
+        u64::from_le_bytes(data[77..85].try_into().ok()?)
+    } else {
+        0
+    };
 
     Some(DepositVerifiedEvent {
         sweep_txid: data[1..33].try_into().ok()?,
         deposit_txid: data[33..65].try_into().ok()?,
         amount_sats: u64::from_le_bytes(data[65..73].try_into().ok()?),
         leaf_index: u32::from_le_bytes(data[73..77].try_into().ok()?),
+        original_amount,
     })
 }
 
 /// Parse unshield meta (multi-segment): disc(1) + amount(8) + recipient(32) + token_id(32)
 fn parse_unshield_meta(segments: &[Vec<u8>]) -> Option<UnshieldMetaEvent> {
-    if segments.len() < 4 {
-        return None;
+    // v2: disc(1) + gross_amount(8) + fee(8) + payout(8) + recipient(32) + token_id(32) = 6 segments
+    if segments.len() >= 6
+        && segments[1].len() == 8
+        && segments[2].len() == 8
+        && segments[3].len() == 8
+        && segments[4].len() == 32
+        && segments[5].len() == 32
+    {
+        return Some(UnshieldMetaEvent {
+            amount: read_u64(&segments[1])?,
+            fee: read_u64(&segments[2])?,
+            payout: read_u64(&segments[3])?,
+            recipient: read_bytes32(&segments[4])?,
+            token_id: read_bytes32(&segments[5])?,
+        });
     }
-    if segments[1].len() != 8 || segments[2].len() != 32 || segments[3].len() != 32 {
-        return None;
+    // v1 fallback: disc(1) + amount(8) + recipient(32) + token_id(32) = 4 segments
+    if segments.len() >= 4
+        && segments[1].len() == 8
+        && segments[2].len() == 32
+        && segments[3].len() == 32
+    {
+        let amount = read_u64(&segments[1])?;
+        return Some(UnshieldMetaEvent {
+            amount,
+            fee: 0,
+            payout: amount,
+            recipient: read_bytes32(&segments[2])?,
+            token_id: read_bytes32(&segments[3])?,
+        });
     }
-
-    Some(UnshieldMetaEvent {
-        amount: read_u64(&segments[1])?,
-        recipient: read_bytes32(&segments[2])?,
-        token_id: read_bytes32(&segments[3])?,
-    })
+    None
 }
 
 /// Parse unshield meta (flat): disc(1) + amount(8) + recipient(32) + token_id(32) = 73 bytes
 fn parse_unshield_meta_flat(data: &[u8]) -> Option<UnshieldMetaEvent> {
-    if data.len() < 73 {
-        return None;
+    // v2: disc(1) + gross_amount(8) + fee(8) + payout(8) + recipient(32) + token_id(32) = 89 bytes
+    if data.len() >= 89 {
+        return Some(UnshieldMetaEvent {
+            amount: u64::from_le_bytes(data[1..9].try_into().ok()?),
+            fee: u64::from_le_bytes(data[9..17].try_into().ok()?),
+            payout: u64::from_le_bytes(data[17..25].try_into().ok()?),
+            recipient: data[25..57].try_into().ok()?,
+            token_id: data[57..89].try_into().ok()?,
+        });
     }
-
-    Some(UnshieldMetaEvent {
-        amount: u64::from_le_bytes(data[1..9].try_into().ok()?),
-        recipient: data[9..41].try_into().ok()?,
-        token_id: data[41..73].try_into().ok()?,
-    })
+    // v1 fallback: disc(1) + amount(8) + recipient(32) + token_id(32) = 73 bytes
+    if data.len() >= 73 {
+        let amount = u64::from_le_bytes(data[1..9].try_into().ok()?);
+        return Some(UnshieldMetaEvent {
+            amount,
+            fee: 0,
+            payout: amount,
+            recipient: data[9..41].try_into().ok()?,
+            token_id: data[41..73].try_into().ok()?,
+        });
+    }
+    None
 }
 
 /// Parse UtxoCreated/UtxoConsumed from multi-segment: disc(1) + txid(32) + vout(4) + amount_sats(8)
@@ -656,6 +732,26 @@ fn parse_utxo_event_flat(data: &[u8]) -> Option<UtxoEvent> {
         txid: data[1..33].try_into().ok()?,
         vout: u32::from_le_bytes(data[33..37].try_into().ok()?),
         amount_sats: u64::from_le_bytes(data[37..45].try_into().ok()?),
+    })
+}
+
+/// Parse shield metadata: disc(1) + gross_amount(8) + fee(8) + token_id(32) = 4 segments
+fn parse_shield_meta(segments: &[Vec<u8>]) -> Option<ShieldMetaEvent> {
+    if segments.len() < 4 { return None; }
+    Some(ShieldMetaEvent {
+        gross_amount: read_u64(&segments[1])?,
+        fee: read_u64(&segments[2])?,
+        token_id: read_bytes32(&segments[3])?,
+    })
+}
+
+/// Parse shield metadata from flat buffer: disc(1) + gross_amount(8) + fee(8) + token_id(32) = 49
+fn parse_shield_meta_flat(data: &[u8]) -> Option<ShieldMetaEvent> {
+    if data.len() < 49 { return None; }
+    Some(ShieldMetaEvent {
+        gross_amount: u64::from_le_bytes(data[1..9].try_into().ok()?),
+        fee: u64::from_le_bytes(data[9..17].try_into().ok()?),
+        token_id: data[17..49].try_into().ok()?,
     })
 }
 
@@ -832,7 +928,38 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_deposit_verified() {
+    fn test_parse_deposit_verified_v2() {
+        let sweep_txid = [0xAAu8; 32];
+        let deposit_txid = [0xBBu8; 32];
+        let amount: u64 = 24_000;
+        let leaf_index: u32 = 7;
+        let original: u64 = 25_000;
+
+        let log = encode_segments(&[
+            &[EVENT_DEPOSIT_VERIFIED],
+            &sweep_txid,
+            &deposit_txid,
+            &amount.to_le_bytes(),
+            &leaf_index.to_le_bytes(),
+            &original.to_le_bytes(),
+        ]);
+        let events = parse_program_events(&[log]);
+
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            ProgramEvent::DepositVerified(e) => {
+                assert_eq!(e.sweep_txid, sweep_txid);
+                assert_eq!(e.deposit_txid, deposit_txid);
+                assert_eq!(e.amount_sats, 24_000);
+                assert_eq!(e.leaf_index, 7);
+                assert_eq!(e.original_amount, 25_000);
+            }
+            _ => panic!("wrong event type"),
+        }
+    }
+
+    #[test]
+    fn test_parse_deposit_verified_v1_fallback() {
         let sweep_txid = [0xAAu8; 32];
         let deposit_txid = [0xBBu8; 32];
         let amount: u64 = 100_000;
@@ -850,17 +977,46 @@ mod tests {
         assert_eq!(events.len(), 1);
         match &events[0] {
             ProgramEvent::DepositVerified(e) => {
-                assert_eq!(e.sweep_txid, sweep_txid);
-                assert_eq!(e.deposit_txid, deposit_txid);
                 assert_eq!(e.amount_sats, 100_000);
-                assert_eq!(e.leaf_index, 7);
+                assert_eq!(e.original_amount, 0); // v1 has no original_amount
             }
             _ => panic!("wrong event type"),
         }
     }
 
     #[test]
-    fn test_parse_unshield_meta() {
+    fn test_parse_unshield_meta_v2() {
+        let gross: u64 = 50_000;
+        let fee: u64 = 100;
+        let payout: u64 = 49_900;
+        let recipient = [0xCCu8; 32];
+        let token_id = [0xAAu8; 32];
+
+        let log = encode_segments(&[
+            &[EVENT_UNSHIELD_META],
+            &gross.to_le_bytes(),
+            &fee.to_le_bytes(),
+            &payout.to_le_bytes(),
+            &recipient,
+            &token_id,
+        ]);
+        let events = parse_program_events(&[log]);
+
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            ProgramEvent::UnshieldMeta(e) => {
+                assert_eq!(e.amount, 50_000);
+                assert_eq!(e.fee, 100);
+                assert_eq!(e.payout, 49_900);
+                assert_eq!(e.recipient, recipient);
+                assert_eq!(e.token_id, token_id);
+            }
+            _ => panic!("wrong event type"),
+        }
+    }
+
+    #[test]
+    fn test_parse_unshield_meta_v1_fallback() {
         let amount: u64 = 50_000;
         let recipient = [0xCCu8; 32];
         let token_id = [0xAAu8; 32];
@@ -877,6 +1033,8 @@ mod tests {
         match &events[0] {
             ProgramEvent::UnshieldMeta(e) => {
                 assert_eq!(e.amount, 50_000);
+                assert_eq!(e.fee, 0);
+                assert_eq!(e.payout, 50_000);
                 assert_eq!(e.recipient, recipient);
                 assert_eq!(e.token_id, token_id);
             }

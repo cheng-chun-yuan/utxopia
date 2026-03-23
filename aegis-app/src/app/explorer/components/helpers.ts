@@ -21,7 +21,21 @@ export function timeAgo(timestamp: number): string {
   return new Date(timestamp * 1000).toLocaleDateString();
 }
 
-/** Decode a hex scriptPubKey to a testnet bech32m address */
+import { getConfig } from "@aegis/sdk";
+
+/** Get the bech32 HRP for the current Bitcoin network */
+function getBech32Hrp(): string {
+  try {
+    const net = getConfig().bitcoinNetwork;
+    if (net === "mainnet") return "bc";
+    if (net === "regtest") return "bcrt";
+    return "tb"; // testnet, testnet4, signet
+  } catch {
+    return "tb";
+  }
+}
+
+/** Decode a hex scriptPubKey to a bech32/bech32m address */
 export function scriptToAddress(hexScript: string): string | null {
   try {
     const bytes = new Uint8Array(hexScript.match(/.{2}/g)!.map(b => parseInt(b, 16)));
@@ -36,7 +50,7 @@ export function scriptToAddress(hexScript: string): string | null {
     let acc = 0, bits = 0;
     for (const b of program) { acc = (acc << 8) | b; bits += 8; while (bits >= 5) { bits -= 5; data5.push((acc >> bits) & 31); } }
     if (bits > 0) data5.push((acc << (5 - bits)) & 31);
-    const hrp = "tb";
+    const hrp = getBech32Hrp();
     const useBech32m = version > 0;
     function polymod(values: number[]): number {
       const GEN = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];

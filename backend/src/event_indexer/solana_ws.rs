@@ -179,6 +179,7 @@ impl SolanaWsSubscriber {
                 ProgramEvent::UnshieldMeta(_) => {} // handled by poll indexer
                 ProgramEvent::UtxoCreated(_) => {} // handled by poll indexer
                 ProgramEvent::UtxoConsumed(_) => {} // handled by poll indexer
+                ProgramEvent::ShieldMeta(_) => {} // handled by poll indexer
             }
         }
 
@@ -197,7 +198,7 @@ impl SolanaWsSubscriber {
             }
 
             // Insert announcement (is_verified=false from WS; poll service upgrades it later)
-            if let Ok(inserted) = self.store.insert_announcement(ann, signature, slot, 0, false, None, None, None) {
+            if let Ok(inserted) = self.store.insert_announcement(ann, signature, slot, 0, false, None, None, None, None, None) {
                 if inserted {
                     self.tree_cache.broadcast_announcement(ann);
                     tracing::debug!(leaf_index = ann.leaf_index, "Real-time stealth announcement indexed");
@@ -207,7 +208,7 @@ impl SolanaWsSubscriber {
 
         // Handle nullifiers
         for null in &nullifiers {
-            if let Ok(inserted) = self.store.insert_nullifier(null, signature, slot, 0, None, None, None, None, None) {
+            if let Ok(inserted) = self.store.insert_nullifier(null, signature, slot, 0, None, None, None, None, None, None, None) {
                 if inserted {
                     self.tree_cache.broadcast_nullifier(&hex::encode(null.nullifier_hash), slot);
                 }

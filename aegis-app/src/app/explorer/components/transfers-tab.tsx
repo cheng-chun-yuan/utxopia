@@ -80,7 +80,7 @@ export function TransferRow({
           {isUnshieldOrWithdraw ? (
             <FlowCell
               from={{ icon: "shield", label: "Shielded" }}
-              to={{ icon: kind === "withdraw" ? "/tokens/btc.png" : token.logo, label: kind === "withdraw" ? "BTC" : token.symbol }}
+              to={{ icon: kind === "withdraw" ? "/tokens/btc.png" : (token.isBtcNative ? token.shieldedLogo : token.logo), label: kind === "withdraw" ? "BTC" : (token.isBtcNative ? token.shieldedSymbol : token.symbol) }}
               meta={`${tx.inputCount} in, ${tx.outputs.length + 1} out`}
             />
           ) : (
@@ -94,9 +94,15 @@ export function TransferRow({
         <Td>
           {isUnshieldOrWithdraw && tx.unshieldAmount ? (
             <span className="text-body2 text-foreground font-mono">
-              {token.showRawAmount
-                ? tx.unshieldAmount.toLocaleString()
-                : (tx.unshieldAmount / (10 ** token.decimals)).toLocaleString(undefined, { maximumFractionDigits: token.decimals })
+              {(() => {
+                // For withdrawals, use actualReceived from redemption (net after service + miner fee)
+                const amt = kind === "withdraw" && redemption?.actualReceived
+                  ? Number(redemption.actualReceived)
+                  : (tx.unshieldPayout ?? tx.unshieldAmount);
+                return token.showRawAmount
+                  ? amt.toLocaleString()
+                  : (amt / (10 ** token.decimals)).toLocaleString(undefined, { maximumFractionDigits: token.decimals });
+              })()
               } <span className="text-gray text-caption">{token.unit}</span>
             </span>
           ) : isUnshieldOrWithdraw ? (
@@ -528,29 +534,60 @@ function WithdrawTimeline({ tx, redemption: r }: { tx: TransferTx; redemption?: 
   );
 }
 
+function UnshieldAmountDisplay({ grossAmount, netAmount, fee, token }: { grossAmount: number; netAmount: number; fee: number; token: SupportedToken }) {
+  const fmt = (v: number) => token.showRawAmount
+    ? v.toLocaleString()
+    : (v / (10 ** token.decimals)).toLocaleString(undefined, { maximumFractionDigits: token.decimals });
+  // Unshield output is the SPL token: zkBTC for BTC, USDC for USDC, etc.
+  const outSymbol = token.isBtcNative ? token.shieldedSymbol : token.symbol;
+  const outLogo = token.isBtcNative ? token.shieldedLogo : token.logo;
+  return (
+    <>
+      <div className="flex items-center gap-2 flex-wrap">
+        <img src={token.shieldedLogo} alt={token.shieldedSymbol} className="w-3.5 h-3.5 rounded-full shrink-0" />
+        <span className="text-body2 text-foreground font-mono font-semibold">
+          {fmt(grossAmount)} <span className="text-[10px] text-gray font-normal">{token.shieldedSymbol}</span>
+        </span>
+        <span className="text-[10px] text-gray/40">→</span>
+        <img src={outLogo} alt={outSymbol} className="w-3.5 h-3.5 rounded-full shrink-0" />
+        <span className="text-body2 text-foreground font-mono font-semibold">
+          {fmt(netAmount)} <span className="text-[10px] text-gray font-normal">{outSymbol}</span>
+        </span>
+      </div>
+      {fee > 0 && (
+        <div className="text-[10px] text-gray/50 font-mono pt-1 border-t border-purple-500/8">
+          Service fee {fmt(fee)} {token.unit}
+        </div>
+      )}
+    </>
+  );
+}
+
 function UnshieldDetails({ tx }: { tx: TransferTx }) {
   const token = tx.tokenSymbol ? getTokenBySymbol(tx.tokenSymbol) ?? SUPPORTED_TOKENS[0] : SUPPORTED_TOKENS[0];
+  const grossAmount = tx.unshieldAmount;
+  const fee = tx.unshieldFee ?? 0;
+  const netAmount = tx.unshieldPayout ?? tx.unshieldAmount;
   return (
     <div className="mx-4 my-3 rounded-[10px] bg-linear-to-b from-gray/6 to-transparent border border-gray/10 overflow-hidden">
       <div className="grid grid-cols-2 divide-x divide-gray/10">
+        {/* INPUT — nullifiers only */}
         <NullifierInputsList tx={tx} />
+
+        {/* OUTPUT — zkToken → Token conversion */}
         <div className="p-4 space-y-2.5">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
-            <span className="text-caption text-purple-400/90 font-semibold uppercase tracking-wider">Outputs</span>
+            <span className="text-caption text-purple-400/90 font-semibold uppercase tracking-wider">Output</span>
             <span className="text-caption text-purple-400/60 font-medium">{1 + tx.outputs.length}</span>
           </div>
           <div className="px-3 py-2.5 rounded-[8px] bg-purple-500/4 border border-purple-500/10 space-y-2">
-            <div className="flex items-center gap-2">
-              <img src={token.logo} alt={token.symbol} className="w-3.5 h-3.5 rounded-full shrink-0" />
-              {tx.unshieldAmount ? (
-                <span className="text-body2 text-foreground font-mono font-semibold">
-                  {formatTokenAmount(tx.unshieldAmount, token)}
-                </span>
-              ) : (
-                <span className="text-caption text-gray/40">Amount pending re-index</span>
-              )}
-            </div>
+            {/* zkToken → Token conversion */}
+            {grossAmount ? (
+              <UnshieldAmountDisplay grossAmount={grossAmount} netAmount={netAmount ?? grossAmount} fee={fee} token={token} />
+            ) : (
+              <span className="text-caption text-gray/40">Amount pending re-index</span>
+            )}
             {tx.unshieldRecipient ? (
               <div className="group flex items-center gap-2">
                 <Wallet className="w-3.5 h-3.5 text-sol/50 shrink-0" />
@@ -574,6 +611,7 @@ function UnshieldDetails({ tx }: { tx: TransferTx }) {
               </div>
             )}
           </div>
+          {/* Change outputs */}
           {tx.outputs.map((out, i) => (
             <CommitmentRow key={out.leafIndex} commitment={out.commitment} leafIndex={out.leafIndex} txSignature={tx.txSignature} index={i + 2} />
           ))}

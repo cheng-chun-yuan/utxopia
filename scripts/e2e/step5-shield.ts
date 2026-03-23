@@ -79,7 +79,13 @@ async function shieldToken(
   const tcInfo = await connection.getAccountInfo(tokenConfig);
   const tc = parseTokenConfig(Buffer.from(tcInfo!.data))!;
   const tokenIdBigint = BigInt("0x" + Buffer.from(tc.tokenId).toString("hex"));
-  const commitment = computeJoinSplitCommitmentSync(npk, tokenIdBigint, amount);
+
+  // Compute shielded amount after deposit_fee_bps (0.2% = 20 bps)
+  const DEPOSIT_FEE_BPS = 20n;
+  const fee = amount * DEPOSIT_FEE_BPS / 10_000n;
+  const shieldedAmount = amount - fee;
+
+  const commitment = computeJoinSplitCommitmentSync(npk, tokenIdBigint, shieldedAmount);
 
   // Read tree
   const treeInfo = await connection.getAccountInfo(commitmentTree);
@@ -118,7 +124,7 @@ async function shieldToken(
   return {
     npk: npk.toString(16),
     random: random.toString(16),
-    amount: Number(amount),
+    amount: Number(shieldedAmount),
     leafIndex,
     commitment: commitment.toString(16),
     tokenId: tokenIdBigint.toString(16),
@@ -156,12 +162,17 @@ async function shieldSOL(
   // Vault for wSOL (owned by pool state PDA)
   const vault = new PublicKey(tc.vault);
 
+  // Compute shielded amount after deposit_fee_bps (0.2% = 20 bps)
+  const DEPOSIT_FEE_BPS = 20n;
+  const fee = lamports * DEPOSIT_FEE_BPS / 10_000n;
+  const shieldedLamports = lamports - fee;
+
   // Generate note
   const random = randomFieldElement();
   const npk = computeNPKSync(mpk, random);
   const npkBytes = bigintToBytes32BE(npk);
   const ephPub = crypto.randomBytes(32);
-  const commitment = computeJoinSplitCommitmentSync(npk, tokenIdBigint, lamports);
+  const commitment = computeJoinSplitCommitmentSync(npk, tokenIdBigint, shieldedLamports);
 
   // Read tree for leaf index
   const treeInfo = await connection.getAccountInfo(commitmentTree);
@@ -233,7 +244,7 @@ async function shieldSOL(
   return {
     npk: npk.toString(16),
     random: random.toString(16),
-    amount: Number(lamports),
+    amount: Number(shieldedLamports),
     leafIndex,
     commitment: commitment.toString(16),
     tokenId: tokenIdBigint.toString(16),
