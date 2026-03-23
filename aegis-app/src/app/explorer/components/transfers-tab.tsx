@@ -26,6 +26,7 @@ import { getSolanaExplorerTxUrl, getSolanaExplorerAddressUrl } from "@/lib/solan
 import { truncate, timeAgo } from "./helpers";
 import { Th, Td, SolanaLink, TypeBadge, StatusDot, FlowCell, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
 import { SUPPORTED_TOKENS, formatTokenAmount, getTokenBySymbol, type SupportedToken } from "@/lib/supported-tokens";
+import { resolveTokenSymbolSync } from "@/lib/token-map";
 
 // =============================================================================
 // Transfer Row — single unified table row + expandable detail
@@ -53,7 +54,8 @@ export function TransferRow({
 }) {
   const kind = getTransferKind(tx);
   const isUnshieldOrWithdraw = kind === "unshield" || kind === "withdraw";
-  const token = tx.tokenSymbol ? getTokenBySymbol(tx.tokenSymbol) ?? SUPPORTED_TOKENS[0] : SUPPORTED_TOKENS[0];
+  const tokenSym = tx.tokenSymbol ?? (tx.tokenId ? resolveTokenSymbolSync(tx.tokenId) : null);
+  const token = tokenSym ? getTokenBySymbol(tokenSym) ?? SUPPORTED_TOKENS[0] : SUPPORTED_TOKENS[0];
 
   return (
     <Fragment>
@@ -258,7 +260,8 @@ function TransferTypeBadge({ tx }: { tx: TransferTx }) {
 }
 
 function TransferAssetBadge({ tx }: { tx: TransferTx }) {
-  const token = tx.tokenSymbol ? getTokenBySymbol(tx.tokenSymbol) ?? SUPPORTED_TOKENS[0] : SUPPORTED_TOKENS[0];
+  const tokenSym = tx.tokenSymbol ?? (tx.tokenId ? resolveTokenSymbolSync(tx.tokenId) : null);
+  const token = tokenSym ? getTokenBySymbol(tokenSym) ?? SUPPORTED_TOKENS[0] : SUPPORTED_TOKENS[0];
   // Redeem = zkBTC → BTC, everything else = shielded token
   if (isRedeemType(tx)) {
     return (
@@ -367,7 +370,8 @@ function TransferDetails({ tx, redemption }: { tx: TransferTx; redemption?: Rede
 }
 
 function RedeemDetails({ tx, redemption }: { tx: TransferTx; redemption?: RedemptionRecord }) {
-  const token = tx.tokenSymbol ? getTokenBySymbol(tx.tokenSymbol) ?? SUPPORTED_TOKENS[0] : SUPPORTED_TOKENS[0];
+  const tokenSym = tx.tokenSymbol ?? (tx.tokenId ? resolveTokenSymbolSync(tx.tokenId) : null);
+  const token = tokenSym ? getTokenBySymbol(tokenSym) ?? SUPPORTED_TOKENS[0] : SUPPORTED_TOKENS[0];
   const r = redemption;
   const grossAmount = r ? Number(r.amountSats) : tx.unshieldAmount;
   const netReceived = r?.actualReceived ? Number(r.actualReceived) : tx.unshieldAmount;
@@ -564,7 +568,8 @@ function UnshieldAmountDisplay({ grossAmount, netAmount, fee, token }: { grossAm
 }
 
 function UnshieldDetails({ tx }: { tx: TransferTx }) {
-  const token = tx.tokenSymbol ? getTokenBySymbol(tx.tokenSymbol) ?? SUPPORTED_TOKENS[0] : SUPPORTED_TOKENS[0];
+  const tokenSym = tx.tokenSymbol ?? (tx.tokenId ? resolveTokenSymbolSync(tx.tokenId) : null);
+  const token = tokenSym ? getTokenBySymbol(tokenSym) ?? SUPPORTED_TOKENS[0] : SUPPORTED_TOKENS[0];
   const grossAmount = tx.unshieldAmount;
   const fee = tx.unshieldFee ?? 0;
   const netAmount = tx.unshieldPayout ?? tx.unshieldAmount;

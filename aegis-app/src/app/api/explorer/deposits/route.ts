@@ -15,7 +15,6 @@
 import { NextResponse } from "next/server";
 import { fetchAnnouncementsFromRpc } from "@/lib/api/rpc-fallback";
 import { getBackendUrl } from "@/lib/api/constants";
-import { buildTokenIdMap } from "@/lib/token-map";
 export const dynamic = "force-dynamic";
 
 const BACKEND_URL = getBackendUrl();
@@ -119,7 +118,7 @@ function decodeLeU64(hex: string): number {
 
 export async function GET() {
   try {
-    const tokenIdMap = await buildTokenIdMap();
+    // tokenSymbol resolved on frontend via token-map.ts (no server-side Poseidon needed)
 
     const [annResp, depResp, leavesResp] = await Promise.all([
       fetch(`${BACKEND_URL}/api/announcements`),
@@ -184,7 +183,7 @@ export async function GET() {
           status: tracker?.status ?? (isVerifiedNoTracker ? "claimed" : "claimed"),
           instructionDisc: disc,
           tokenId: a.token_id ?? null,
-          tokenSymbol: a.token_id ? (tokenIdMap.get(a.token_id) ?? null) : null,
+          tokenSymbol: null, // resolved on frontend
           ephemeralPub: a.ephemeral_pub,
           grossAmount: a.deposit_gross_amount ?? (tracker?.amount_sats ?? a.btc_deposit_amount_sats ?? null),
           fee: a.deposit_fee ?? null,

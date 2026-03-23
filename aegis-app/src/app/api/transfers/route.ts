@@ -11,7 +11,6 @@
 import { NextResponse } from "next/server";
 import { fetchAnnouncementsFromRpc } from "@/lib/api/rpc-fallback";
 import { getBackendUrl } from "@/lib/api/constants";
-import { buildTokenIdMap } from "@/lib/token-map";
 export const dynamic = "force-dynamic";
 
 const BACKEND_URL = getBackendUrl();
@@ -199,16 +198,7 @@ export async function GET() {
             }
           } catch { /* ignore enrichment failure */ }
         }
-        // Resolve token_id → tokenSymbol using shared token map
-        try {
-          const tokenIdToSymbol = await buildTokenIdMap();
-          for (const t of data.transfers) {
-            if (t.token_id && !t.token_symbol) {
-              t.token_symbol = tokenIdToSymbol.get(t.token_id) ?? null;
-            }
-          }
-        } catch { /* ignore */ }
-
+        // tokenSymbol resolved on frontend via token-map.ts
         return NextResponse.json(data);
       }
     }

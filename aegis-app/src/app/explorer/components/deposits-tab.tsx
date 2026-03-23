@@ -29,6 +29,7 @@ import { Th, Td, SolanaLink, TypeBadge, StatusDot, FlowCell, LoadingState, Error
 import type { StatusDotVariant } from "./shared";
 import { SUPPORTED_TOKENS, formatTokenAmount, type SupportedToken } from "@/lib/supported-tokens";
 import { getTokenBySymbol } from "@/lib/supported-tokens";
+import { resolveTokenSymbolSync } from "@/lib/token-map";
 
 // =============================================================================
 // Deposit Status
@@ -66,7 +67,8 @@ const DEPOSIT_STATUS_ORDER: Record<string, number> = {
 
 function DepositDetails({ deposit }: { deposit: DepositRecord }) {
   const d = deposit;
-  const resolvedToken = d.tokenSymbol ? getTokenBySymbol(d.tokenSymbol) : null;
+  const tokenSym = d.tokenSymbol ?? (d.tokenId ? resolveTokenSymbolSync(d.tokenId) : null);
+  const resolvedToken = tokenSym ? getTokenBySymbol(tokenSym) : null;
   const shieldType = resolvedToken
     ? (resolvedToken.explorerFilter as "btc" | "sol" | "usdc" | "usdt")
     : getShieldType(d);
@@ -359,7 +361,8 @@ export function DepositRow({
 }) {
   const d = deposit;
   // Use tokenSymbol from backend if available, fall back to heuristic
-  const resolvedToken = d.tokenSymbol ? getTokenBySymbol(d.tokenSymbol) : null;
+  const tokenSym = d.tokenSymbol ?? (d.tokenId ? resolveTokenSymbolSync(d.tokenId) : null);
+  const resolvedToken = tokenSym ? getTokenBySymbol(tokenSym) : null;
   const shieldType = resolvedToken
     ? (resolvedToken.explorerFilter as "btc" | "sol" | "usdc" | "usdt")
     : getShieldType(d);
