@@ -1,8 +1,8 @@
-# Aegis - Privacy-Preserving BTC on Solana
+# Privacy Coin - Private Bitcoin on Solana
 
-**Private Bitcoin on Solana using Zero-Knowledge Proofs**
+**Trustless BTC bridge with full transaction privacy using Zero-Knowledge Proofs**
 
-Aegis is a trustless bridge that enables Bitcoin holders to access Solana DeFi with full transaction privacy. Deposit BTC, receive shielded zkBTC, and transact without revealing amounts or linking identities.
+Privacy Coin lets Bitcoin holders access Solana DeFi without sacrificing privacy. Deposit BTC, receive shielded commitments, and transact — amounts and identities stay hidden.
 
 ```
 BTC Deposit → Taproot Address → SPV Verify → On-Chain Commitment → ZK Transfers → Withdraw BTC
@@ -15,7 +15,7 @@ BTC Deposit → Taproot Address → SPV Verify → On-Chain Commitment → ZK Tr
                               ┌───────────────────┴────────────────────┐
                               │                                        │
                     Amounts hidden in commitments        Unlinkable stealth addresses
-                    Nullifier-based double-spend         .zkey.sol human-readable names
+                    Nullifier-based double-spend         .btcpro.sol human-readable names
 ```
 
 ---
@@ -27,7 +27,7 @@ Bitcoin's transparent blockchain makes privacy challenging:
 - Cross-chain bridges expose user activity on both chains
 - DeFi participation requires revealing transaction history
 
-**Aegis solves this** by creating a privacy layer between Bitcoin and Solana using zero-knowledge proofs.
+**Privacy Coin solves this** by creating a privacy layer between Bitcoin and Solana using zero-knowledge proofs.
 
 ---
 
@@ -40,9 +40,9 @@ Bitcoin's transparent blockchain makes privacy challenging:
 | **Smart Contracts** | Pinocchio (Solana) | Zero-copy state, CU-optimized with LTO |
 | **Bitcoin Integration** | Taproot + SPV light client | Permissionless deposit verification |
 | **Stealth Addresses** | Baby Jubjub + Ed25519 ECDH | Unlinkable one-time addresses (EIP-5564/DKSAP) |
-| **Name Service** | .zkey.sol (SNS-style) | Human-readable stealth addresses |
+| **Name Service** | .btcpro.sol (SNS subdomains) | Human-readable stealth addresses |
 | **Data Publishing** | ChadBuffer | Large data upload on-chain |
-| **Client SDK** | @aegis/sdk (TypeScript) | Full privacy toolkit with React hooks |
+| **Client SDK** | TypeScript | Full privacy toolkit |
 | **Frontend** | Next.js | Web interface |
 | **Backend** | Rust (Axum) + FROST | API server + threshold BTC signing |
 
@@ -60,7 +60,7 @@ Single parameterized circuit for all private operations — no trusted backend:
 | `joinsplit_2x2` | Standard private transfer |
 | `joinsplit_NxM` | General case (N+M ≤ 14, 91 total variants) |
 
-**Commitment Model (Railgun-aligned):**
+**Commitment Model:**
 ```
 MPK        = Poseidon(spendingPub.x, spendingPub.y, nullifyingKey)
 NPK        = Poseidon(MPK, random)
@@ -83,7 +83,7 @@ Sender:                              Recipient:
 └────────────────────┘               └────────────────────┘
 ```
 
-- **Viewing Key** (Ed25519): Detect and decrypt incoming transfers via stealth announcements (cannot spend)
+- **Viewing Key** (Ed25519): Detect and decrypt incoming transfers (cannot spend)
 - **Spending Key** (Baby Jubjub): Sign JoinSplit transactions (EdDSA-Poseidon)
 
 ### 3. Three-Key Model
@@ -96,16 +96,16 @@ Spending Key (Baby Jubjub) ─► Signs JoinSplit transactions (EdDSA-Poseidon)
        └─► Viewing Key (Ed25519) ─► Scans stealth announcements, decrypts amounts
 ```
 
-Share viewing key with accountants, regulators, or compliance without risk of fund loss.
+Share viewing key with accountants or compliance without risk of fund loss.
 
-### 4. .zkey Name Registry
+### 4. .btcpro.sol Name Registry
 
-Human-readable stealth addresses:
+Human-readable stealth addresses via SNS subdomains:
 
 ```typescript
-// Send to alice.zkey.sol
-const entry = await lookupZkeyName(connection, 'alice');
-await sendPrivate(config, myNote, entry.stealthMetaAddress);
+// Send privately to alice.btcpro.sol
+const meta = await resolveStealthName(connection, 'alice');
+await sendPrivate(config, myNote, meta.stealthMetaAddress);
 ```
 
 ---
@@ -113,17 +113,16 @@ await sendPrivate(config, myNote, entry.stealthMetaAddress);
 ## Project Structure
 
 ```
-Aegis/
+privacy-coin/
 ├── contracts/                  # Solana programs (Pinocchio)
-│   ├── programs/aegis/        # Main Aegis program (14 instructions)
+│   ├── programs/aegis/        # Main program (14 instructions)
 │   └── programs/btc-light-client/ # Bitcoin header tracking (standalone)
 ├── circuits/                   # Zero-knowledge circuits (circom)
 │   ├── circom/joinsplit.circom # Parameterized JoinSplit(N,M,16) template
 │   └── circom/lib/             # Shared (commitment, nullifier, merkle, mpk)
-├── sdk/                        # @aegis/sdk TypeScript client
+├── sdk/                        # TypeScript client SDK
 ├── aegis-app/                 # Next.js web interface
 ├── backend/                    # Rust API + deposit tracker + redemption
-│   └── header-relayer/         # Bitcoin header sync (TypeScript)
 ├── frost_server/               # FROST threshold signing (BTC redemption)
 └── docs/                       # Technical docs + operational guide
 ```
@@ -138,12 +137,23 @@ Aegis/
 - Rust + Solana CLI (for contracts)
 - circom (for circuits)
 
-### Frontend
+### Quick Start (Localnet)
 
 ```bash
-cd aegis-app
-bun install
-bun run dev
+# 1. Deploy everything to local validator
+bun run scripts/e2e/run-all.ts
+
+# 2. Sync env files
+./scripts/sync-env.sh
+
+# 3. Start backend API (terminal 1)
+cd backend && cargo run --bin zkbtc-api -- api
+
+# 4. Start backend tracker (terminal 2)
+cd backend && cargo run --bin zkbtc-api -- tracker
+
+# 5. Start frontend (terminal 3)
+cd aegis-app && bun run dev
 ```
 
 ### SDK
@@ -170,16 +180,6 @@ bun install
 bash scripts/compile.sh
 bash scripts/setup.sh
 ```
-
----
-
-## Program IDs (Devnet)
-
-| Program | Address |
-|---------|---------|
-| Aegis | `4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1` |
-| BTC Light Client | `Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq` |
-| ChadBuffer | `C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF` |
 
 ---
 
