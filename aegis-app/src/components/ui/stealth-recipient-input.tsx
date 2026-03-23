@@ -155,7 +155,7 @@ export function StealthRecipientInput({
               "w-full bg-muted text-body2 font-mono text-foreground placeholder:text-gray/40 outline-none transition-shadow",
               compact ? "py-2.5 rounded-[8px]" : "py-3 rounded-[10px] border border-gray/20 focus:border-purple/40",
               icon ? (compact ? "pl-8" : "pl-10") : (compact ? "pl-3" : "pl-4"),
-              selfMeta ? "pr-16" : (compact ? "pr-3" : "pr-4"),
+              "pr-12",
               compact
                 ? error
                   ? "ring-1 ring-red-500/50"
@@ -179,19 +179,26 @@ export function StealthRecipientInput({
               }
             }}
           />
-          {selfMeta && !resolvedMeta && (
+          {!resolvedMeta && (
             <button
               type="button"
+              disabled={!selfMeta}
               onClick={() => {
+                if (!selfMeta) return;
                 const encoded = encodeStealthMetaAddress(selfMeta);
                 setRecipient(encoded);
                 onResolved(selfMeta, null);
                 onError(null);
               }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-md bg-purple/10 hover:bg-purple/20 border border-purple/20 transition-colors"
-              title="Send to yourself"
+              className={cn(
+                "absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-md border transition-colors",
+                selfMeta
+                  ? "bg-purple/10 hover:bg-purple/20 border-purple/20 cursor-pointer"
+                  : "bg-gray/5 border-gray/15 cursor-not-allowed opacity-40"
+              )}
+              title={selfMeta ? "Fill with your stealth address" : "Connect wallet to use your address"}
             >
-              <UserRound className="w-3.5 h-3.5 text-purple" />
+              <UserRound className={cn("w-3.5 h-3.5", selfMeta ? "text-purple" : "text-gray")} />
             </button>
           )}
         </div>
