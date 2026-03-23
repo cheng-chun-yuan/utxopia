@@ -20,7 +20,7 @@ import { address as _address, getAddressEncoder, getAddressDecoder, getProgramDe
  * Returns the input string cast as Address on failure (safe for config objects
  * that are only used at runtime, not build time).
  */
-function address(input: string): Address {
+export function address(input: string): Address {
   try {
     return _address(input);
   } catch {

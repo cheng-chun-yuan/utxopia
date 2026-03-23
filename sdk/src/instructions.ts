@@ -8,12 +8,11 @@
  */
 
 import {
-  address,
   AccountRole,
   type Address,
 } from "@solana/kit";
 
-import { getConfig, TOKEN_2022_PROGRAM_ID } from "./config";
+import { address, getConfig, TOKEN_2022_PROGRAM_ID } from "./config";
 
 /** System program address */
 const SYSTEM_PROGRAM_ADDRESS = address("11111111111111111111111111111111");
