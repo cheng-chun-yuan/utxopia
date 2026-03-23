@@ -24,15 +24,11 @@ import {
   ComputeBudgetProgram,
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
-import {
-  getConfig,
-  INSTRUCTION_DISCRIMINATORS,
-  hexToBytes,
-  PDA_SEEDS,
-} from "@aegis/sdk";
+const getAegisSDK = () => import("@aegis/sdk");
 
 import {
   AEGIS_PROGRAM_ID,
+  CHADBUFFER_PROGRAM_ID,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
   deriveNullifierPDA,
@@ -47,8 +43,6 @@ export const dynamic = "force-dynamic";
 const RELAYER_FEE_SATS = parseInt(process.env.RELAYER_FEE_SATS || "2000", 10);
 /** Relayer stealth meta-address (96-byte hex: spendingPub + viewingPub + mpk) */
 const RELAYER_STEALTH_META = process.env.RELAYER_STEALTH_META || "";
-
-const CHADBUFFER_PROGRAM_ID = new PublicKey(getConfig().chadbufferProgramId);
 
 const CHADBUFFER = {
   INIT: 0,
@@ -109,7 +103,12 @@ function getRelayerKeypair(): Keypair {
   }
 }
 
-function validateHexField(value: string | undefined, name: string, expectedBytes: number): Uint8Array {
+function validateHexField(
+  hexToBytes: (hex: string) => Uint8Array,
+  value: string | undefined,
+  name: string,
+  expectedBytes: number,
+): Uint8Array {
   if (!value) {
     throw new Error(`Missing required field: ${name}`);
   }
@@ -121,13 +120,14 @@ function validateHexField(value: string | undefined, name: string, expectedBytes
 }
 
 function deriveVkRegistryPDA(
+  pdaSeeds: { VK_REGISTRY: string },
   nInputs: number,
   nOutputs: number,
   programId: PublicKey = AEGIS_PROGRAM_ID
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [
-      Buffer.from(PDA_SEEDS.VK_REGISTRY),
+      Buffer.from(pdaSeeds.VK_REGISTRY),
       new Uint8Array([nInputs]),
       new Uint8Array([nOutputs]),
     ],
@@ -260,6 +260,7 @@ async function closeBuffer(
 // =============================================================================
 
 function buildTransactIx(
+  discriminators: { TRANSACT: number },
   relayer: Keypair,
   params: {
     nInputs: number;
@@ -289,7 +290,7 @@ function buildTransactIx(
   const ixData = Buffer.alloc(totalSize);
   let offset = 0;
 
-  ixData[offset++] = INSTRUCTION_DISCRIMINATORS.TRANSACT;
+  ixData[offset++] = discriminators.TRANSACT;
   ixData[offset++] = nInputs;
   ixData[offset++] = nOutputs;
   ixData[offset++] = 1; // proof_source = 1 (buffer)
@@ -357,6 +358,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<RelayResp
   const startTime = Date.now();
 
   try {
+    // Lazy-load SDK to avoid build-time codec crashes
+    const { hexToBytes, PDA_SEEDS, INSTRUCTION_DISCRIMINATORS } = await getAegisSDK();
+
     const body: TransactRelayRequest = await request.json();
 
     // Validate required fields
@@ -399,23 +403,23 @@ export async function POST(request: NextRequest): Promise<NextResponse<RelayResp
     const relayer = getRelayerKeypair();
 
     // Parse fields
-    const proofBytes = validateHexField(proof, "proof", 256);
-    const merkleRootBytes = validateHexField(merkleRoot, "merkleRoot", 32);
-    const boundParamsHashBytes = validateHexField(boundParamsHash, "boundParamsHash", 32);
+    const proofBytes = validateHexField(hexToBytes, proof, "proof", 256);
+    const merkleRootBytes = validateHexField(hexToBytes, merkleRoot, "merkleRoot", 32);
+    const boundParamsHashBytes = validateHexField(hexToBytes, boundParamsHash, "boundParamsHash", 32);
 
     const nullifierBytes = nullifiers.map((n, i) =>
-      validateHexField(n, `nullifiers[${i}]`, 32)
+      validateHexField(hexToBytes, n, `nullifiers[${i}]`, 32)
     );
     const commitmentBytes = commitmentsOut.map((c, i) =>
-      validateHexField(c, `commitmentsOut[${i}]`, 32)
+      validateHexField(hexToBytes, c, `commitmentsOut[${i}]`, 32)
     );
     const stealthDataBytes = stealthData.map((s, i) =>
-      validateHexField(s, `stealthData[${i}]`, STEALTH_DATA_PER_OUTPUT)
+      validateHexField(hexToBytes, s, `stealthData[${i}]`, STEALTH_DATA_PER_OUTPUT)
     );
 
     // Derive PDAs
     const nullifierPDAs = nullifierBytes.map((n) => deriveNullifierPDA(n)[0]);
-    const [vkRegistryPDA] = deriveVkRegistryPDA(nInputs, nOutputs);
+    const [vkRegistryPDA] = deriveVkRegistryPDA(PDA_SEEDS, nInputs, nOutputs);
 
     // =========================================================================
     // Relayer fee verification — check before paying Solana tx fees
@@ -464,7 +468,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<RelayResp
     ];
 
     instructions.push(
-      buildTransactIx(relayer, {
+      buildTransactIx(INSTRUCTION_DISCRIMINATORS, relayer, {
         nInputs,
         nOutputs,
         merkleRoot: merkleRootBytes,

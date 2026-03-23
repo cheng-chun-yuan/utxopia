@@ -18,15 +18,11 @@ import {
   ComputeBudgetProgram,
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
-import {
-  getConfig,
-  INSTRUCTION_DISCRIMINATORS,
-  hexToBytes,
-  PDA_SEEDS,
-} from "@aegis/sdk";
+const getAegisSDK = () => import("@aegis/sdk");
 
 import {
   AEGIS_PROGRAM_ID,
+  CHADBUFFER_PROGRAM_ID,
   ZKBTC_MINT_ADDRESS,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
@@ -41,7 +37,6 @@ export const dynamic = "force-dynamic";
 // =============================================================================
 
 const STEALTH_DATA_PER_OUTPUT = 40;
-const CHADBUFFER_PROGRAM_ID = new PublicKey(getConfig().chadbufferProgramId);
 const CHADBUFFER = { INIT: 0, WRITE: 2, CLOSE: 3 } as const;
 const AUTHORITY_SIZE = 32;
 const MAX_CHUNK_SIZE = 950;
@@ -73,7 +68,12 @@ interface RedeemRelayRequest {
 // Helpers
 // =============================================================================
 
-function validateHexField(value: string | undefined, name: string, expectedBytes: number): Uint8Array {
+function validateHexField(
+  hexToBytes: (hex: string) => Uint8Array,
+  value: string | undefined,
+  name: string,
+  expectedBytes: number,
+): Uint8Array {
   if (!value) {
     throw new Error(`Missing required field: ${name}`);
   }
@@ -85,13 +85,14 @@ function validateHexField(value: string | undefined, name: string, expectedBytes
 }
 
 function deriveVkRegistryPDA(
+  pdaSeeds: { VK_REGISTRY: string },
   nInputs: number,
   nOutputs: number,
   programId: PublicKey = AEGIS_PROGRAM_ID
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [
-      Buffer.from(PDA_SEEDS.VK_REGISTRY),
+      Buffer.from(pdaSeeds.VK_REGISTRY),
       new Uint8Array([nInputs]),
       new Uint8Array([nOutputs]),
     ],
@@ -233,6 +234,9 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
+    // Lazy-load SDK to avoid build-time codec crashes
+    const { hexToBytes, PDA_SEEDS } = await getAegisSDK();
+
     const body: RedeemRelayRequest = await request.json();
 
     const {
@@ -302,18 +306,18 @@ export async function POST(request: NextRequest) {
     );
 
     // Parse fields
-    const proofBytes = validateHexField(proof, "proof", 256);
-    const merkleRootBytes = validateHexField(merkleRoot, "merkleRoot", 32);
-    const boundParamsHashBytes = validateHexField(boundParamsHash, "boundParamsHash", 32);
+    const proofBytes = validateHexField(hexToBytes, proof, "proof", 256);
+    const merkleRootBytes = validateHexField(hexToBytes, merkleRoot, "merkleRoot", 32);
+    const boundParamsHashBytes = validateHexField(hexToBytes, boundParamsHash, "boundParamsHash", 32);
 
     const nullifierBytes = nullifiers.map((n, i) =>
-      validateHexField(n, `nullifiers[${i}]`, 32)
+      validateHexField(hexToBytes, n, `nullifiers[${i}]`, 32)
     );
     const commitmentBytes = commitmentsOut.map((c, i) =>
-      validateHexField(c, `commitmentsOut[${i}]`, 32)
+      validateHexField(hexToBytes, c, `commitmentsOut[${i}]`, 32)
     );
     const stealthDataBytes = stealthData.map((s, i) =>
-      validateHexField(s, `stealthData[${i}]`, STEALTH_DATA_PER_OUTPUT)
+      validateHexField(hexToBytes, s, `stealthData[${i}]`, STEALTH_DATA_PER_OUTPUT)
     );
 
     const btcScriptBytes = hexToBytes(btcScript);
@@ -329,7 +333,7 @@ export async function POST(request: NextRequest) {
 
     // Derive PDAs
     const nullifierPDAs = nullifierBytes.map((n) => deriveNullifierPDA(n)[0]);
-    const [vkRegistryPDA] = deriveVkRegistryPDA(nInputs, nOutputs);
+    const [vkRegistryPDA] = deriveVkRegistryPDA(PDA_SEEDS, nInputs, nOutputs);
     const [poolState] = derivePoolStatePDA();
     const [commitmentTree] = deriveCommitmentTreePDA();
     const [redemptionRequestPDA] = deriveRedemptionRequestPDA(relayer.publicKey, requestNonceBigint);
