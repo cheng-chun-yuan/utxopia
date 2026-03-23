@@ -23,7 +23,6 @@ use zkbtc::deposit_tracker::sqlite_db::SqliteDepositStore;
 use zkbtc::event_indexer::{EventIndexerConfig, EventIndexerService, EventStore, TreeCache, event_indexer_router_with_deposits, SolanaWsConfig, SolanaWsSubscriber, Reconciler};
 use zkbtc::redemption::{MpcSigner, RedemptionConfig, RedemptionService, SingleKeySigner};
 use zkbtc::stealth::StealthDepositService;
-use zkbtc::units;
 use std::env;
 use std::sync::Arc;
 
@@ -38,8 +37,6 @@ async fn main() {
     let sub_args = if args.len() > 2 { &args[2..] } else { &[] };
 
     match subcommand {
-        "tracker" => run_tracker_service(sub_args).await,
-        "demo" => run_demo().await,
         "help" | "--help" | "-h" => print_usage(),
         _ => run_tracker_service(sub_args).await,
     }
@@ -49,8 +46,7 @@ fn print_usage() {
     println!("zkBTC Backend - Server-Side Services");
     println!();
     println!("Usage:");
-    println!("  zkbtc-api [tracker] [options]  Start all services (default)");
-    println!("  zkbtc-api demo                 Run interactive demo");
+    println!("  zkbtc-api [options]  Start all services (API + tracker + indexer)");
     println!();
     println!("Tracker Options:");
     println!("  --interval <secs>       Poll interval (default: 30)");
@@ -173,68 +169,6 @@ fn create_frost_service(config: RedemptionConfig) -> Result<RedemptionService, S
     }
 
     Ok(RedemptionService::new_with_signer(config, signer, sol_client))
-}
-
-async fn run_api_server(args: &[String]) {
-    let mut port: u16 = zkbtc::common::env::env_or("API_PORT", 3001);
-
-    let mut i = 0;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--port" if i + 1 < args.len() => {
-                port = args[i + 1].parse().unwrap_or(3001);
-                i += 2;
-            }
-            _ => i += 1,
-        }
-    }
-
-    let config = RedemptionConfig::default();
-    let redemption = create_service(config);
-    let stealth = StealthDepositService::new_testnet();
-
-    if let Err(e) = api::start_combined_server(redemption, stealth, port).await {
-        eprintln!("API server error: {}", e);
-    }
-}
-
-async fn run_redemption_service(args: &[String]) {
-    let mut config = RedemptionConfig::default();
-
-    // Parse arguments
-    let mut i = 0;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--interval" if i + 1 < args.len() => {
-                config.check_interval_secs = args[i + 1].parse().unwrap_or(30);
-                i += 2;
-            }
-            "--min-amount" if i + 1 < args.len() => {
-                config.min_withdrawal = args[i + 1].parse().unwrap_or(10_000);
-                i += 2;
-            }
-            _ => i += 1,
-        }
-    }
-
-    let service = create_service(config.clone());
-
-    println!("=== zkBTC Redemption Processor ===");
-    println!();
-    println!("Configuration:");
-    println!("  Check Interval: {} seconds", config.check_interval_secs);
-    println!("  Min Withdrawal: {}", units::format_sats(config.min_withdrawal));
-    println!("  Max Withdrawal: {}", units::format_sats(config.max_withdrawal));
-    println!();
-    println!("Signer: {} ({})", service.signer_type(), service.pool_public_key());
-    println!();
-    println!("Watching for RedemptionRequest PDAs on Solana...");
-    println!("Press Ctrl+C to stop");
-    println!();
-
-    if let Err(e) = service.run().await {
-        eprintln!("Error: {}", e);
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -692,49 +626,3 @@ fn configure_frost_sweeper(
     Ok(service.with_frost_sweeper(frost_client, group_pubkey, network))
 }
 
-async fn run_demo() {
-    use zkbtc::bitcoin::taproot::{generate_deposit_address, PoolKeys};
-    use bitcoin::Network;
-
-    println!("\n=== zkBTC Demo ===\n");
-    println!("Note: In production, use the SDK for client-side operations.");
-    println!();
-
-    // Create pool keys
-    let pool_keys = PoolKeys::new();
-    println!("Pool Public Key: {}", hex::encode(pool_keys.internal_key.serialize()));
-    println!();
-
-    // Generate a sample commitment
-    let sample_commitment = [0x42u8; 32];
-    let amount = 100_000u64; // 0.001 BTC
-
-    // Generate deposit address
-    let deposit_addr =
-        generate_deposit_address(&pool_keys, &sample_commitment, Network::Testnet).unwrap();
-    println!("Sample Deposit Address: {}", deposit_addr.address);
-    println!("Amount: {}", units::format_sats(amount));
-    println!();
-
-    println!("=== Flow Overview ===");
-    println!();
-    println!("1. DEPOSIT (Client-side via SDK):");
-    println!("   - SDK generates note (nullifier + secret)");
-    println!("   - SDK derives taproot address");
-    println!("   - User sends BTC externally");
-    println!("   - SDK verifies via Esplora + submits to Solana");
-    println!();
-    println!("2. CLAIM (Client-side via SDK):");
-    println!("   - SDK generates Groth16 ZK proof locally");
-    println!("   - SDK submits claim transaction to Solana");
-    println!("   - zkBTC minted to user's wallet");
-    println!();
-    println!("3. WITHDRAW (Server-side redemption processor):");
-    println!("   - User burns zkBTC via SDK (creates RedemptionRequest PDA)");
-    println!("   - Redemption processor detects request");
-    println!("   - Processor signs and broadcasts BTC transaction");
-    println!("   - Processor calls complete_redemption after confirms");
-    println!();
-
-    println!("=== Demo Complete ===");
-}
