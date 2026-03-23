@@ -11,7 +11,6 @@
 
 import { fromBase64 } from "./utils/encoding";
 import {
-  address,
   getProgramDerivedAddress,
   generateKeyPairSigner,
   createKeyPairSignerFromBytes,
@@ -33,6 +32,7 @@ import {
   type SolanaRpcSubscriptionsApi,
 } from "@solana/kit";
 import { getCreateAccountInstruction } from "@solana-program/system";
+import { address } from "./config";
 
 /** Instruction type for v2 */
 interface Instruction {

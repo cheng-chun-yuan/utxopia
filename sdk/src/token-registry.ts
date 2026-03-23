@@ -7,10 +7,10 @@
  * @module token-registry
  */
 
-import { address, type Address } from "@solana/kit";
+import { type Address } from "@solana/kit";
 import { computeTokenId } from "./poseidon";
 import { deriveTokenConfigPDA } from "./pda";
-import { getConfig } from "./config";
+import { address, getConfig } from "./config";
 
 // ============================================================================
 // Types
