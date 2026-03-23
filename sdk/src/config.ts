@@ -24,6 +24,7 @@ function address(input: string): Address {
   try {
     return _address(input);
   } catch {
+    console.warn(`[aegis-sdk] address() failed for "${input.slice(0, 12)}..." — returning raw string (build-time fallback)`);
     return input as Address;
   }
 }

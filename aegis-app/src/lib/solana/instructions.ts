@@ -46,20 +46,25 @@ export { INSTRUCTION_DISCRIMINATORS, bigintTo32Bytes, hexToBytes, bytesToHex };
 
 /** Aegis Program ID (dynamic — reads from SDK config) */
 export const getAegisProgramId = () => new PublicKey(getConfig().aegisProgramId);
-export const AEGIS_PROGRAM_ID = new PublicKey(getConfig().aegisProgramId);
+export let AEGIS_PROGRAM_ID: PublicKey;
+try { AEGIS_PROGRAM_ID = new PublicKey(getConfig().aegisProgramId); } catch { console.warn("[instructions] AEGIS_PROGRAM_ID failed to init at build time — using default"); AEGIS_PROGRAM_ID = PublicKey.default; }
 
 /** BTC Light Client Program ID */
-export const BTC_LIGHT_CLIENT_PROGRAM_ID = new PublicKey(getConfig().btcLightClientProgramId);
+export let BTC_LIGHT_CLIENT_PROGRAM_ID: PublicKey;
+try { BTC_LIGHT_CLIENT_PROGRAM_ID = new PublicKey(getConfig().btcLightClientProgramId); } catch { console.warn("[instructions] BTC_LIGHT_CLIENT_PROGRAM_ID failed to init at build time — using default"); BTC_LIGHT_CLIENT_PROGRAM_ID = PublicKey.default; }
 
 /** Token-2022 Program ID */
-export const TOKEN_2022_PROGRAM_ID = new PublicKey(getConfig().token2022ProgramId);
+export let TOKEN_2022_PROGRAM_ID: PublicKey;
+try { TOKEN_2022_PROGRAM_ID = new PublicKey(getConfig().token2022ProgramId); } catch { console.warn("[instructions] TOKEN_2022_PROGRAM_ID failed to init at build time — using default"); TOKEN_2022_PROGRAM_ID = PublicKey.default; }
 
 /** zkBTC Mint Address */
 export const getZkbtcMintAddress = () => new PublicKey(getConfig().zkbtcMint);
-export const ZKBTC_MINT_ADDRESS = new PublicKey(getConfig().zkbtcMint);
+export let ZKBTC_MINT_ADDRESS: PublicKey;
+try { ZKBTC_MINT_ADDRESS = new PublicKey(getConfig().zkbtcMint); } catch { console.warn("[instructions] ZKBTC_MINT_ADDRESS failed to init at build time — using default"); ZKBTC_MINT_ADDRESS = PublicKey.default; }
 
 /** Groth16 Verifier Program ID */
-export const GROTH16_VERIFIER_PROGRAM_ID = new PublicKey(getConfig().groth16VerifierProgramId);
+export let GROTH16_VERIFIER_PROGRAM_ID: PublicKey;
+try { GROTH16_VERIFIER_PROGRAM_ID = new PublicKey(getConfig().groth16VerifierProgramId); } catch { console.warn("[instructions] GROTH16_VERIFIER_PROGRAM_ID failed to init at build time — using default"); GROTH16_VERIFIER_PROGRAM_ID = PublicKey.default; }
 
 // =============================================================================
 // PDA Derivation (using SDK seeds)
@@ -485,7 +490,8 @@ export function deriveDepositReceiptPDA(
 // =============================================================================
 
 /** ChadBuffer Program ID */
-export const CHADBUFFER_PROGRAM_ID = new PublicKey(getConfig().chadbufferProgramId);
+export let CHADBUFFER_PROGRAM_ID: PublicKey;
+try { CHADBUFFER_PROGRAM_ID = new PublicKey(getConfig().chadbufferProgramId); } catch { console.warn("[instructions] CHADBUFFER_PROGRAM_ID failed to init at build time — using default"); CHADBUFFER_PROGRAM_ID = PublicKey.default; }
 
 /** ChadBuffer instruction discriminators */
 const CHADBUFFER_IX = {
