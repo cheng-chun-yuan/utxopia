@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchAccountInfo, isHeliusConfigured } from "@/lib/helius-server";
-import { getConfig } from "@aegis/sdk";
+const getAegisSDK = () => import("@aegis/sdk");
 import bs58 from "bs58";
 export const dynamic = "force-dynamic";
 
@@ -14,9 +14,6 @@ function readU64LE(data: Uint8Array, offset: number): bigint {
 }
 
 export const runtime = "nodejs";
-
-// Pool state PDA from SDK (single source of truth)
-const getPoolStateAddress = () => getConfig().poolStatePda;
 
 // Discriminator for PoolState account (not exported by SDK yet)
 const POOL_STATE_DISCRIMINATOR = 0x01;
@@ -52,8 +49,9 @@ interface PoolStateData {
  * Fetch Aegis pool state from Solana using @solana/kit.
  */
 export async function GET() {
+  const { getConfig } = await getAegisSDK();
   try {
-    const accountInfo = await fetchAccountInfo(getPoolStateAddress(), "devnet");
+    const accountInfo = await fetchAccountInfo(getConfig().poolStatePda, "devnet");
 
     if (!accountInfo) {
       return NextResponse.json(
@@ -108,7 +106,7 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       helius: isHeliusConfigured(),
-      address: getPoolStateAddress(),
+      address: getConfig().poolStatePda,
       state,
     });
   } catch (error) {

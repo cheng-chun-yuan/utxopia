@@ -26,9 +26,7 @@ import {
   ComputeBudgetProgram,
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
-import {
-  hexToBytes,
-} from "@aegis/sdk";
+const getAegisSDK = () => import("@aegis/sdk");
 
 import {
   AEGIS_PROGRAM_ID,
@@ -58,7 +56,7 @@ import {
 import {
   reverseBytes,
 } from "@/lib/spv/mempool";
-import { hexToBytes as spvHexToBytes } from "@aegis/sdk";
+// hexToBytes imported lazily via getAegisSDK()
 
 import {
   buildMerkleProofPath,
@@ -327,6 +325,8 @@ async function closeBuffer(
 
 export async function POST(request: NextRequest): Promise<NextResponse<VerifyResponse>> {
   const startTime = Date.now();
+  const { hexToBytes } = await getAegisSDK();
+  const spvHexToBytes = hexToBytes;
 
   try {
     const body: VerifyRequest = await request.json();

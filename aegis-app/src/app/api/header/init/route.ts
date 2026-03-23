@@ -1,17 +1,21 @@
 import { NextResponse } from "next/server";
 import { Connection, PublicKey } from "@solana/web3.js";
-import { getConfig } from "@aegis/sdk";
+const getAegisSDK = () => import("@aegis/sdk");
 export const dynamic = "force-dynamic";
 
 export const runtime = "nodejs";
 
 
-const getBtcLightClientProgramId = () => new PublicKey(getConfig().btcLightClientProgramId);
+const getBtcLightClientProgramId = async () => {
+  const { getConfig } = await getAegisSDK();
+  return new PublicKey(getConfig().btcLightClientProgramId);
+};
 
-function deriveLightClientPDA(): [PublicKey, number] {
+async function deriveLightClientPDA(): Promise<[PublicKey, number]> {
+  const programId = await getBtcLightClientProgramId();
   return PublicKey.findProgramAddressSync(
     [Buffer.from("btc_light_client")],
-    getBtcLightClientProgramId()
+    programId
   );
 }
 
@@ -20,7 +24,7 @@ export async function POST() {
     const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com";
     const connection = new Connection(rpcUrl, "confirmed");
 
-    const [lightClientPDA] = deriveLightClientPDA();
+    const [lightClientPDA] = await deriveLightClientPDA();
     const existingAccount = await connection.getAccountInfo(lightClientPDA);
 
     if (existingAccount) {
