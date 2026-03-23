@@ -23,6 +23,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   ArrowDownToLine,
+  ArrowLeft,
   Wallet,
   Shield,
   Key,
@@ -53,10 +54,6 @@ import { VAULT_TOKENS } from "@/lib/supported-tokens";
 import { OnboardingModal } from "@/components/onboarding-modal";
 import { AuthModal } from "@/components/auth-modal";
 import { HoldButton } from "@/components/ui/hold-button";
-import { FloatingOrbs } from "@/components/ui/floating-orbs";
-import { MouseSpotlight } from "@/components/ui/mouse-spotlight";
-import { SiteHeader } from "@/components/site-header";
-import { SiteFooter } from "@/components/site-footer";
 
 export default function VaultPage() {
   const wallet = useWallet();
@@ -145,27 +142,40 @@ export default function VaultPage() {
   };
 
   return (
-    <main className="min-h-screen bg-background hacker-bg noise-overlay relative overflow-hidden flex flex-col">
-      <MouseSpotlight />
-      <SiteHeader />
-      {/* Background effects */}
-      <div className="hacker-grid fixed inset-0 pointer-events-none opacity-30 animate-grid-drift" />
-      <FloatingOrbs className="fixed" />
+    <main className="min-h-screen bg-background hacker-bg noise-overlay flex flex-col items-center py-8 px-4 sm:py-12">
 
-      {/* Content */}
-      <div className="relative z-10 flex-1 flex flex-col items-center pt-24 pb-8 px-4">
-
-        {/* Dashboard Container — glassmorphism card */}
-        <motion.div
-          className={cn(
-            "glass-card-strong",
-            "w-[680px] max-w-[calc(100vw-32px)] rounded-[24px]",
-            "p-4 sm:p-8"
-          )}
-          initial={{ opacity: 0, y: 20, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+      {/* Header — Back + Badges (matches deposit/send layout) */}
+      <div className="w-full mb-4 flex items-center justify-between relative z-10" style={{ maxWidth: "680px" }}>
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 text-body2 text-gray hover:text-gray-light transition-colors"
         >
+          <ArrowLeft className="w-4 h-4" />
+          Back
+        </Link>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border bg-privacy/10 border-privacy/20">
+            <Shield className="w-3 h-3 text-privacy" />
+            <span className="text-caption text-privacy">Vault</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border bg-privacy/10 border-privacy/20">
+            <Shield className="w-3 h-3 text-privacy" />
+            <span className="text-caption text-privacy">ZK</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Dashboard Container */}
+      <motion.div
+        className={cn(
+          "bg-card border border-solid border-gray/30 p-4 sm:p-8",
+          "w-[680px] max-w-[calc(100vw-32px)] rounded-[16px]",
+          "glow-border cyber-corners relative z-10"
+        )}
+        initial={{ opacity: 0, y: 20, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+      >
           {/* Wallet Header — identity bar */}
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2 min-w-0">
@@ -604,9 +614,15 @@ export default function VaultPage() {
             </span>
           </div>
 
+        {/* Footer */}
+        <div className="flex flex-row justify-between items-center gap-2 mt-4 text-gray px-2 pt-4 border-t border-gray/15">
+          <a href="/docs" className="hover:text-gray-light transition-colors text-caption">Privacy Coin</a>
+          <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption hover:text-gray-light transition-colors flex items-center gap-1.5">
+            Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network
+          </a>
+        </div>
+
         </motion.div>
-      </div>
-      <SiteFooter />
 
       {/* First-time user onboarding */}
       <OnboardingModal />

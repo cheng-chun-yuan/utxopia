@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-const BINANCE_SYMBOLS = ["BTCUSDT", "SOLUSDT", "USDCUSDT", "USDTDAI"];
+const BINANCE_SYMBOLS = ["BTCUSDT", "SOLUSDT", "USDCUSDT"];
 const BINANCE_URL = `https://api.binance.com/api/v3/ticker/price?symbols=${JSON.stringify(BINANCE_SYMBOLS)}`;
 
 const COINGECKO_IDS = "bitcoin,solana,usd-coin,tether";

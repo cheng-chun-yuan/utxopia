@@ -565,9 +565,6 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
               {token.isBtcNative && (
                 <span className="px-1.5 py-0.5 rounded bg-btc/10 text-[8px] text-btc font-semibold uppercase">Native</span>
               )}
-              {token.isSOL && (
-                <span className="px-1.5 py-0.5 rounded bg-sol/10 text-[8px] text-sol font-semibold uppercase">Native</span>
-              )}
             </button>
           ))}
         </div>
