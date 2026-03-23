@@ -34,18 +34,14 @@ async fn main() {
 
     let args: Vec<String> = env::args().collect();
 
-    if args.len() < 2 {
-        print_usage();
-        return;
-    }
+    let subcommand = args.get(1).map(|s| s.as_str()).unwrap_or("tracker");
+    let sub_args = if args.len() > 2 { &args[2..] } else { &[] };
 
-    match args[1].as_str() {
-        "api" => run_api_server(&args[2..]).await,
-        "redemption" => run_redemption_service(&args[2..]).await,
-        "tracker" => run_tracker_service(&args[2..]).await,
+    match subcommand {
+        "tracker" => run_tracker_service(sub_args).await,
         "demo" => run_demo().await,
         "help" | "--help" | "-h" => print_usage(),
-        _ => print_usage(),
+        _ => run_tracker_service(sub_args).await,
     }
 }
 
@@ -53,10 +49,8 @@ fn print_usage() {
     println!("zkBTC Backend - Server-Side Services");
     println!();
     println!("Usage:");
-    println!("  zkbtc-api api [--port <port>]               Start REST API server (default: 3001)");
-    println!("  zkbtc-api redemption [--interval <secs>]    Start redemption processor");
-    println!("  zkbtc-api tracker [options]                 Start deposit tracker");
-    println!("  zkbtc-api demo                              Run interactive demo");
+    println!("  zkbtc-api [tracker] [options]  Start all services (default)");
+    println!("  zkbtc-api demo                 Run interactive demo");
     println!();
     println!("Tracker Options:");
     println!("  --interval <secs>       Poll interval (default: 30)");
