@@ -119,7 +119,7 @@ export async function GET() {
       createServerRpc().then(rpc => fetchExplorerRedemptions(
         rpc,
         getConfig().aegisProgramId,
-      )),
+      )).catch((e) => { console.warn("[Redemptions] PDA scan failed:", e.message); return []; }),
       fetch(`${BACKEND_URL}/api/redemption/tracking`).catch(() => null),
       fetch(`${BACKEND_URL}/api/redemption/completed`).catch(() => null),
       fetch(`${BACKEND_URL}/api/redemption/requested`).catch(() => null),
