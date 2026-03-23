@@ -14,7 +14,8 @@ import {
   fetchExplorerRedemptions,
   type RpcClient,
 } from "@aegis/sdk";
-import { createSolanaRpc } from "@solana/kit";
+// Lazy import to avoid build-time codec validation errors
+const getSolanaKit = () => import("@solana/kit");
 
 const RPC_URL =
   process.env.NEXT_PUBLIC_SOLANA_RPC_URL ||
@@ -78,7 +79,8 @@ interface ProcessingEntry {
   block_time: number;
 }
 
-function createServerRpc(): RpcClient {
+async function createServerRpc(): Promise<RpcClient> {
+  const { createSolanaRpc } = await getSolanaKit();
   const rpc = createSolanaRpc(RPC_URL);
   return {
     async getProgramAccounts(programId, config) {
@@ -116,10 +118,10 @@ export async function GET() {
   try {
     // Fetch all sources in parallel (including pool state for fee config + transfers for in/out counts)
     const [redemptions, trackingResp, completedResp, requestedResp, processingResp, poolStateResp, transfersResp] = await Promise.all([
-      fetchExplorerRedemptions(
-        createServerRpc(),
+      createServerRpc().then(rpc => fetchExplorerRedemptions(
+        rpc,
         getConfig().aegisProgramId,
-      ),
+      )),
       fetch(`${BACKEND_URL}/api/redemption/tracking`).catch(() => null),
       fetch(`${BACKEND_URL}/api/redemption/completed`).catch(() => null),
       fetch(`${BACKEND_URL}/api/redemption/requested`).catch(() => null),

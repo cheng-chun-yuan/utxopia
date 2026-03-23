@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getProgramDerivedAddress, address } from "@solana/kit";
 import { fetchAccountInfo } from "@/lib/helius-server";
 import { getConfig } from "@aegis/sdk";
+const getSolanaKit = () => import("@solana/kit");
 export const dynamic = "force-dynamic";
 
 export const runtime = "nodejs";
@@ -15,6 +15,7 @@ async function deriveHeightIndexPDA(blockHeight: number): Promise<string> {
   const view = new DataView(heightBuffer.buffer);
   view.setBigUint64(0, BigInt(blockHeight), true);
 
+  const { getProgramDerivedAddress, address } = await getSolanaKit();
   const [pda] = await getProgramDerivedAddress({
     programAddress: address(getBtcLightClientId()),
     seeds: [new TextEncoder().encode("height_index"), heightBuffer],
