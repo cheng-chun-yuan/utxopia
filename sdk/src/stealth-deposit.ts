@@ -9,7 +9,6 @@
  */
 
 import {
-  address,
   createTransactionMessage,
   setTransactionMessageFeePayer,
   setTransactionMessageLifetimeUsingBlockhash,
@@ -28,6 +27,7 @@ import {
   type SolanaRpcSubscriptionsApi,
 } from "@solana/kit";
 import { sha256 } from "@noble/hashes/sha2.js";
+import { address } from "./config";
 
 import {
   bytesToBigint,

@@ -8,7 +8,6 @@
  */
 
 import {
-  address,
   getProgramDerivedAddress,
   generateKeyPairSigner,
   pipe,
@@ -29,7 +28,7 @@ import {
   type SolanaRpcSubscriptionsApi,
 } from "@solana/kit";
 import { getCreateAccountInstruction } from "@solana-program/system";
-import { getConfig } from "./config";
+import { address, getConfig } from "./config";
 
 /** Instruction type for @solana/kit v2 */
 interface Instruction {
