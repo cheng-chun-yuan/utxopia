@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { fetchAccountInfo, isHeliusConfigured } from "@/lib/helius-server";
 import { getConfig } from "@aegis/sdk";
 import bs58 from "bs58";
+export const dynamic = "force-dynamic";
 
 /** Read a little-endian u64 from a Uint8Array slice as bigint */
 function readU64LE(data: Uint8Array, offset: number): bigint {
@@ -13,7 +14,6 @@ function readU64LE(data: Uint8Array, offset: number): bigint {
 }
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
 // Pool state PDA from SDK (single source of truth)
 const getPoolStateAddress = () => getConfig().poolStatePda;

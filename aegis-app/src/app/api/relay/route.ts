@@ -32,12 +32,12 @@ import {
 } from "@aegis/sdk";
 
 import {
-export const dynamic = "force-dynamic";
   AEGIS_PROGRAM_ID,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
   deriveNullifierPDA,
 } from "@/lib/solana/instructions";
+export const dynamic = "force-dynamic";
 
 // =============================================================================
 // Configuration

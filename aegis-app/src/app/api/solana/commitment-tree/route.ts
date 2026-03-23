@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { fetchAccountInfo, isHeliusConfigured } from "@/lib/helius-server";
 import { getConfig, parseCommitmentTreeData } from "@aegis/sdk";
+export const dynamic = "force-dynamic";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
 // Commitment tree PDA from SDK config (single source of truth)
 const getCommitmentTreeAddress = () => getConfig().commitmentTreePda;

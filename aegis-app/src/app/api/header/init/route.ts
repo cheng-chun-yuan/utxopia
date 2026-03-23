@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { getConfig } from "@aegis/sdk";
+export const dynamic = "force-dynamic";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
 
 const getBtcLightClientProgramId = () => new PublicKey(getConfig().btcLightClientProgramId);

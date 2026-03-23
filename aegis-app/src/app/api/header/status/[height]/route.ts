@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getProgramDerivedAddress, address } from "@solana/kit";
 import { fetchAccountInfo } from "@/lib/helius-server";
 import { getConfig } from "@aegis/sdk";
+export const dynamic = "force-dynamic";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
 // Height index PDAs live under the BTC Light Client program, not Aegis
 const getBtcLightClientId = () => getConfig().btcLightClientProgramId;

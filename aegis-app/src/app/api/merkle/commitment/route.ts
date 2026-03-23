@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { addCommitmentToIndex } from "@/lib/commitment-index";
+export const dynamic = "force-dynamic";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
 /**
  * POST /api/merkle/commitment
