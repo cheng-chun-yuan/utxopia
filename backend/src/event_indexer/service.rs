@@ -283,10 +283,11 @@ impl EventIndexerService {
         tracing::debug!(signature = &signature[..20], count = events.len(), block_time = tx_data.block_time, "Parsed events");
 
         let block_time = tx_data.block_time;
-        // Determine is_verified from instruction discriminator:
-        //   disc 1 (verify_stealth_deposit) or 25 (verify_deposit_v2) = real SPV deposit
-        //   disc 15 (add_demo_stealth) or anything else = demo/non-SPV
-        let is_verified = matches!(tx_data.instruction_disc, Some(1) | Some(25));
+        // Determine is_verified from instruction discriminator or DepositVerified event:
+        //   disc 11 (verify_stealth_deposit) or 25 (verify_deposit_v2) = real SPV deposit
+        //   Also: DepositVerified event presence is authoritative (event-first)
+        let has_deposit_verified = events.iter().any(|e| matches!(e, ProgramEvent::DepositVerified(_)));
+        let is_verified = has_deposit_verified || matches!(tx_data.instruction_disc, Some(11) | Some(25));
 
         // Separate events by type
         let mut announcements = Vec::new();
