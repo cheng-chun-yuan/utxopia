@@ -92,8 +92,6 @@ export const SDK_DIR = path.resolve(__dirname, "../../sdk");
 export const CIRCUITS_DIR = path.resolve(__dirname, "../../circuits");
 
 export const ZKBTC_TOKEN_ID = 0x7a627463n; // "zkbtc" as u32
-// BN254_FIELD_PRIME, TREE_DEPTH, randomFieldElement, bigintToBytes32BE, bytes32ToBigintBE
-// are re-exported from SDK above
 
 export const TOKEN_2022 = TOKEN_2022_PROGRAM_ID;
 export const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");

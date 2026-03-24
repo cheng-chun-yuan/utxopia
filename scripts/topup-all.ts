@@ -16,7 +16,6 @@ import {
   PublicKey,
   SystemProgram,
   Keypair,
-  Connection,
   Transaction,
   TransactionInstruction,
   sendAndConfirmTransaction,
@@ -27,16 +26,9 @@ import {
   createAssociatedTokenAccountIdempotentInstruction,
   createMintToInstruction,
 } from "@solana/spl-token";
-import fs from "fs";
-import path from "path";
+import { setupScript } from "./lib/common.ts";
 
-const ROOT = path.resolve(import.meta.dir, "../..");
-const state = JSON.parse(fs.readFileSync(path.join(ROOT, "scripts/e2e/localnet-state.json"), "utf-8"));
-const AEGIS = new PublicKey(state.aegisProgramId);
-const conn = new Connection("http://localhost:8899", "confirmed");
-const authority = Keypair.fromSecretKey(Uint8Array.from(
-  JSON.parse(fs.readFileSync(path.join(process.env.HOME!, ".config/solana/id.json"), "utf-8"))
-));
+const { conn, authority, programId: AEGIS, state } = setupScript("localnet");
 
 function pda(seeds: (string | Uint8Array)[]) {
   return PublicKey.findProgramAddressSync(

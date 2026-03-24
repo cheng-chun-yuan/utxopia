@@ -26,23 +26,19 @@ import {
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import * as fs from "fs";
 import * as path from "path";
+import { setupScript, TOKEN_2022 } from "./lib/common.ts";
 
 // =============================================================================
-// Configuration — update these for your deployment
+// Configuration from shared module + state file
 // =============================================================================
 
-const RPC_URL = process.env.RPC_URL || "https://api.devnet.solana.com";
+const { conn: _conn, authority: _authority, programId: _pid, state } = setupScript();
+const AEGIS_PROGRAM_ID = _pid;
+const BTC_LIGHT_CLIENT_PROGRAM_ID = new PublicKey(state.btcLightClientId!);
+const CHADBUFFER_PROGRAM_ID = new PublicKey(state.chadbufferId || "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF");
+const TOKEN_2022_PROGRAM_ID = TOKEN_2022;
+const ZKBTC_MINT = new PublicKey(state.zkbtcMint);
 const MEMPOOL_API = "https://mempool.space/testnet4/api";
-
-const AEGIS_PROGRAM_ID = new PublicKey(
-  process.env.AEGIS_PROGRAM_ID || "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ"
-);
-const BTC_LIGHT_CLIENT_PROGRAM_ID = new PublicKey("Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq");
-const CHADBUFFER_PROGRAM_ID = new PublicKey("C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF");
-const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
-const ZKBTC_MINT = new PublicKey(
-  process.env.ZKBTC_MINT || "G5CHaLkWjdUxxmnrVqNLQ29K7PoNwJAzvVT11jjkdGKC"
-);
 
 const CHADBUFFER_INIT = 0;
 const CHADBUFFER_WRITE = 2;
@@ -114,10 +110,7 @@ function buildPathBits(txIndex: number, depth: number): number {
   return bits;
 }
 
-function loadKeypair(keyPath: string): Keypair {
-  const abs = keyPath.replace("~", process.env.HOME || "");
-  return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(abs, "utf-8"))));
-}
+// loadKeypair imported from ./lib/common.ts
 
 async function fetchJson(url: string): Promise<any> {
   const res = await fetch(url);
@@ -421,9 +414,8 @@ async function main() {
     process.exit(1);
   }
 
-  const keypairPath = process.env.KEYPAIR_PATH || "~/.config/solana/johnny.json";
-  const payer = loadKeypair(keypairPath);
-  const connection = new Connection(RPC_URL, "confirmed");
+  const payer = _authority;
+  const connection = _conn;
 
   console.log("Authority:", payer.publicKey.toBase58());
   console.log("Program:", AEGIS_PROGRAM_ID.toBase58());

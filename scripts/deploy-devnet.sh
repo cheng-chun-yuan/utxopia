@@ -224,11 +224,11 @@ run_phase_3() {
 
   local AEGIS_ID=$(read_state "aegisProgramId")
 
-  log "Running init-devnet.mjs..."
+  log "Running init-devnet.ts..."
   local OUTPUT=$(AEGIS_PROGRAM_ID="$AEGIS_ID" \
     RPC_URL="$RPC_URL" \
     KEYPAIR_PATH="$KEYPAIR_PATH" \
-    node "$ROOT/scripts/init-devnet.mjs" 2>&1)
+    bun run "$ROOT/scripts/init-devnet.ts" 2>&1)
 
   echo "$OUTPUT"
 
@@ -277,7 +277,7 @@ run_phase_4() {
   AEGIS_PROGRAM_ID="$AEGIS_ID" \
     RPC_URL="$RPC_URL" \
     KEYPAIR_PATH="$KEYPAIR_PATH" \
-    bun run "$ROOT/scripts/register-vk-hashes.mjs" 2>&1
+    bun run "$ROOT/scripts/register-vk-hashes.ts" 2>&1
 
   log "VK hashes registered!"
   save_phase 4
@@ -296,7 +296,7 @@ run_phase_5() {
     RPC_URL="$RPC_URL" \
     KEYPAIR_PATH="$KEYPAIR_PATH" \
     BTC_API_URL="$BTC_API" \
-    node "$ROOT/scripts/init-btc-light-client.mjs" 2>&1
+    bun run "$ROOT/scripts/init-btc-light-client.ts" 2>&1
 
   log "BTC Light Client initialized!"
   save_phase 5
