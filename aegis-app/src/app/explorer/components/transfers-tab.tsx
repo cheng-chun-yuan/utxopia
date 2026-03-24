@@ -83,7 +83,7 @@ export function TransferRow({
             <FlowCell
               from={{ icon: "shield", label: "Shielded" }}
               to={{ icon: kind === "withdraw" ? "/tokens/btc.png" : (token.isBtcNative ? token.shieldedLogo : token.logo), label: kind === "withdraw" ? "BTC" : token.symbol }}
-              meta={`${getTxInputCount(tx)} in, ${tx.outputs.length + 1} out`}
+              meta={`${getTxInputCount(tx)} in, ${tx.outputs.length} out`}
             />
           ) : (
             <FlowCell
@@ -305,7 +305,7 @@ function TransferOutputCount({ tx }: { tx: TransferTx }) {
   if (isUnshieldType(tx) || isRedeemType(tx)) {
     return (
       <span className="inline-flex items-center gap-1 text-caption text-purple-400/70 bg-purple-500/6 border border-purple-500/12 px-2 py-0.5 rounded-full">
-        <span className="font-mono">{1 + tx.outputs.length}</span>
+        <span className="font-mono">{tx.outputs.length}</span>
         <span className="hidden sm:inline">output{tx.outputs.length > 0 ? "s" : ""}</span>
       </span>
     );
@@ -592,55 +592,63 @@ function UnshieldAmountDisplay({ grossAmount, netAmount, fee, token }: { grossAm
 function UnshieldDetails({ tx }: { tx: TransferTx }) {
   const tokenSym = tx.tokenSymbol ?? (tx.tokenId ? resolveTokenSymbolSync(tx.tokenId) : null);
   const token = tokenSym ? getTokenBySymbol(tokenSym) ?? SUPPORTED_TOKENS[0] : SUPPORTED_TOKENS[0];
-  const grossAmount = getTxUnshieldAmount(tx);
-  const fee = getTxUnshieldFee(tx) ?? 0;
-  const netAmount = getTxUnshieldPayout(tx) ?? getTxUnshieldAmount(tx);
+  const unshieldOutputs = getTxUnshieldOutputs(tx);
+  const commitmentOutputs = getTxCommitmentOutputs(tx);
   return (
     <div className="mx-4 my-3 rounded-[10px] bg-linear-to-b from-gray/6 to-transparent border border-gray/10 overflow-hidden">
       <div className="grid grid-cols-2 divide-x divide-gray/10">
         {/* INPUT — nullifiers only */}
         <NullifierInputsList tx={tx} />
 
-        {/* OUTPUT — zkToken → Token conversion */}
+        {/* OUTPUTS — each rendered separately */}
         <div className="p-4 space-y-2.5">
           <div className="flex items-center gap-2 mb-3">
             <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
-            <span className="text-caption text-purple-400/90 font-semibold uppercase tracking-wider">Output</span>
-            <span className="text-caption text-purple-400/60 font-medium">{1 + tx.outputs.length}</span>
+            <span className="text-caption text-purple-400/90 font-semibold uppercase tracking-wider">
+              Output{tx.outputs.length !== 1 ? "s" : ""}
+            </span>
+            <span className="text-caption text-purple-400/60 font-medium">{tx.outputs.length}</span>
           </div>
-          <div className="px-3 py-2.5 rounded-[8px] bg-purple-500/4 border border-purple-500/10 space-y-2">
-            {/* zkToken → Token conversion */}
-            {grossAmount ? (
-              <UnshieldAmountDisplay grossAmount={grossAmount} netAmount={netAmount ?? grossAmount} fee={fee} token={token} />
-            ) : (
-              <span className="text-caption text-gray/40">Amount pending re-index</span>
-            )}
-            {(getTxUnshieldRecipient(tx) ?? "") ? (
-              <div className="group flex items-center gap-2">
-                <Wallet className="w-3.5 h-3.5 text-sol/50 shrink-0" />
-                <code className="text-caption font-mono text-foreground/80 truncate">{truncate((getTxUnshieldRecipient(tx) ?? ""), 8, 6)}</code>
-                <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
-                  <CopyButton text={(getTxUnshieldRecipient(tx) ?? "")} label="Address" variant="default" iconSize="sm" />
-                  <a
-                    href={getSolanaExplorerAddressUrl((getTxUnshieldRecipient(tx) ?? ""))}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sol hover:text-sol/80 transition-colors p-0.5"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
+          {/* Unshield/withdraw outputs — each separate */}
+          {unshieldOutputs.map((out, i) => (
+            <div key={i} className="px-3 py-2.5 rounded-[8px] bg-purple-500/4 border border-purple-500/10 space-y-2">
+              {out.amount ? (
+                <UnshieldAmountDisplay
+                  grossAmount={out.amount}
+                  netAmount={out.payout ?? out.amount}
+                  fee={out.fee ?? 0}
+                  token={token}
+                />
+              ) : (
+                <span className="text-caption text-gray/40">Amount pending re-index</span>
+              )}
+              {out.recipient ? (
+                <div className="group flex items-center gap-2">
+                  <Wallet className="w-3.5 h-3.5 text-sol/50 shrink-0" />
+                  <code className="text-caption font-mono text-foreground/80 truncate">{truncate(out.recipient, 8, 6)}</code>
+                  <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                    <CopyButton text={out.recipient} label="Address" variant="default" iconSize="sm" />
+                    <a
+                      href={getSolanaExplorerAddressUrl(out.recipient)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sol hover:text-sol/80 transition-colors p-0.5"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Wallet className="w-3.5 h-3.5 text-gray/30 shrink-0" />
-                <span className="text-caption text-gray/40">Recipient pending re-index</span>
-              </div>
-            )}
-          </div>
-          {/* Change outputs */}
-          {getTxCommitmentOutputs(tx).map((out, i) => (
-            <CommitmentRow key={out.leafIndex} commitment={out.commitment!} leafIndex={out.leafIndex!} txSignature={tx.txSignature} index={i + 2} />
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Wallet className="w-3.5 h-3.5 text-gray/30 shrink-0" />
+                  <span className="text-caption text-gray/40">Recipient pending re-index</span>
+                </div>
+              )}
+            </div>
+          ))}
+          {/* Commitment change outputs */}
+          {commitmentOutputs.map((out, i) => (
+            <CommitmentRow key={out.leafIndex} commitment={out.commitment!} leafIndex={out.leafIndex!} txSignature={tx.txSignature} index={unshieldOutputs.length + i + 1} />
           ))}
         </div>
       </div>
