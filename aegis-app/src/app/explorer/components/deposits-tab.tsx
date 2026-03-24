@@ -339,12 +339,13 @@ const SHIELD_TYPE_CONFIG: Record<string, ShieldTypeConfig> = {
   },
 };
 
+const SHIELDED = { icon: "shield", label: "Shielded" };
 const FLOW_ICONS: Record<string, { from: { icon: string; label: string }; to: { icon: string; label: string } }> = {
-  btc: { from: { icon: "/tokens/btc.png", label: "BTC" }, to: { icon: "shield", label: "zkBTC" } },
-  sol: { from: { icon: "/tokens/sol.png", label: "SOL" }, to: { icon: "shield", label: "zkSOL" } },
-  usdc: { from: { icon: "/tokens/usdc.png", label: "USDC" }, to: { icon: "shield", label: "zkUSDC" } },
-  usdt: { from: { icon: "/tokens/usdt.png", label: "USDT" }, to: { icon: "shield", label: "zkUSDT" } },
-  spl: { from: { icon: "/tokens/sol.png", label: "SPL" }, to: { icon: "shield", label: "Shielded" } },
+  btc: { from: { icon: "/tokens/btc.png", label: "BTC" }, to: SHIELDED },
+  sol: { from: { icon: "/tokens/sol.png", label: "SOL" }, to: SHIELDED },
+  usdc: { from: { icon: "/tokens/usdc.png", label: "USDC" }, to: SHIELDED },
+  usdt: { from: { icon: "/tokens/usdt.png", label: "USDT" }, to: SHIELDED },
+  spl: { from: { icon: "/tokens/sol.png", label: "SPL" }, to: SHIELDED },
 };
 
 export function DepositRow({
