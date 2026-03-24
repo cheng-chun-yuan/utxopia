@@ -478,10 +478,11 @@ pub fn process_redeem(
 
         // Emit per-output metadata
         let btc_script = &data[btc_script_starts[k]..btc_script_starts[k] + btc_script_lens[k]];
+        let payout = redeem_amounts[k].saturating_sub(service_fee);
         crate::utils::events::emit_unshield_meta(
             redeem_amounts[k],
-            0, // fee computed at completion
-            redeem_amounts[k],
+            service_fee,
+            payout,
             user.key().as_ref().try_into().unwrap(),
             &token_id,
         );
