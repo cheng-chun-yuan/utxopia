@@ -431,17 +431,21 @@ export interface TransactInstructionOptions {
 export function buildTransactInstructionData(options: {
   nInputs: number;
   nOutputs: number;
-  proofBytes: Uint8Array;
+  /** Groth16 proof (256 bytes). Omit when using buffer mode. */
+  proofBytes?: Uint8Array;
   merkleRoot: Uint8Array;
   boundParamsHash: Uint8Array;
   nullifiers: Uint8Array[];
   commitmentsOut: Uint8Array[];
   stealthData: Uint8Array[];
+  /** 0=inline proof (default), 1=proof in separate ChadBuffer account */
+  proofSource?: 0 | 1;
 }): Uint8Array {
   const { nInputs, nOutputs, proofBytes, merkleRoot, boundParamsHash, nullifiers, commitmentsOut, stealthData } = options;
+  const proofSource = options.proofSource ?? 0;
 
-  if (proofBytes.length !== 256) {
-    throw new Error(`Groth16 proof must be 256 bytes, got ${proofBytes.length}`);
+  if (proofSource === 0 && (!proofBytes || proofBytes.length !== 256)) {
+    throw new Error(`Inline mode requires 256-byte proof, got ${proofBytes?.length ?? 0}`);
   }
   if (nullifiers.length !== nInputs) {
     throw new Error(`Expected ${nInputs} nullifiers, got ${nullifiers.length}`);
@@ -454,8 +458,8 @@ export function buildTransactInstructionData(options: {
   }
 
   const STEALTH_DATA_PER_OUTPUT = 72; // ephemeral_pub(32) + encrypted_amount(8) + encrypted_token_id(32)
-  // disc(1) + n_inputs(1) + n_outputs(1) + proof_source(1) + proof(256) + merkle_root(32) + bound_params_hash(32) + ...
-  const totalSize = 1 + 3 + 256 + 32 + 32 + (nInputs * 32) + (nOutputs * 32) + (nOutputs * STEALTH_DATA_PER_OUTPUT);
+  const proofSize = proofSource === 0 ? 256 : 0;
+  const totalSize = 1 + 3 + proofSize + 32 + 32 + (nInputs * 32) + (nOutputs * 32) + (nOutputs * STEALTH_DATA_PER_OUTPUT);
   const data = new Uint8Array(totalSize);
 
   let offset = 0;
@@ -466,11 +470,13 @@ export function buildTransactInstructionData(options: {
   // Header
   data[offset++] = nInputs;
   data[offset++] = nOutputs;
-  data[offset++] = 0; // proof_source = 0 (inline proof)
+  data[offset++] = proofSource;
 
-  // Proof (256 bytes)
-  data.set(proofBytes, offset);
-  offset += 256;
+  // Proof (256 bytes, only in inline mode)
+  if (proofSource === 0 && proofBytes) {
+    data.set(proofBytes, offset);
+    offset += 256;
+  }
 
   // Merkle root (32 bytes)
   data.set(merkleRoot, offset);
