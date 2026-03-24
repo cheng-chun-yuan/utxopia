@@ -417,6 +417,11 @@ impl EventIndexerService {
                 // Fall back to tx-level values (from classify_transfer)
                 (unshield_amount, unshield_recipient.clone(), None, None)
             };
+            let output_count = if !unshield_metas.is_empty() {
+                Some(unshield_metas.len() as i64)
+            } else {
+                None
+            };
             let inserted = self.store.insert_nullifier(
                 null, signature, slot, block_time, disc,
                 null_amount, null_recipient.as_deref(),
@@ -424,6 +429,7 @@ impl EventIndexerService {
                 unshield_token_id.as_deref(),
                 null_fee,
                 null_payout,
+                output_count,
             )?;
             if inserted {
                 if let Some(ref cache) = self.tree_cache {

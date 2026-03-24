@@ -208,7 +208,7 @@ impl SolanaWsSubscriber {
 
         // Handle nullifiers
         for null in &nullifiers {
-            if let Ok(inserted) = self.store.insert_nullifier(null, signature, slot, 0, None, None, None, None, None, None, None) {
+            if let Ok(inserted) = self.store.insert_nullifier(null, signature, slot, 0, None, None, None, None, None, None, None, None) {
                 if inserted {
                     self.tree_cache.broadcast_nullifier(&hex::encode(null.nullifier_hash), slot);
                 }

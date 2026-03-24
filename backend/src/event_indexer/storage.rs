@@ -396,6 +396,11 @@ impl EventStore {
             "ALTER TABLE nullifier_events ADD COLUMN unshield_payout INTEGER",
         );
 
+        // Add unshield output count (number of UnshieldMeta events per tx)
+        let _ = conn.execute_batch(
+            "ALTER TABLE nullifier_events ADD COLUMN unshield_output_count INTEGER",
+        );
+
         Ok(())
     }
 
@@ -466,11 +471,12 @@ impl EventStore {
         token_id: Option<&str>,
         unshield_fee: Option<i64>,
         unshield_payout: Option<i64>,
+        unshield_output_count: Option<i64>,
     ) -> Result<bool, String> {
         let conn = self.conn()?;
         let result = conn.execute(
-            "INSERT INTO nullifier_events (nullifier_hash, operation_type, spent_at, spent_by, tx_signature, slot, block_time, instruction_disc, unshield_amount, unshield_recipient, transfer_type, token_id, unshield_fee, unshield_payout)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            "INSERT INTO nullifier_events (nullifier_hash, operation_type, spent_at, spent_by, tx_signature, slot, block_time, instruction_disc, unshield_amount, unshield_recipient, transfer_type, token_id, unshield_fee, unshield_payout, unshield_output_count)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
              ON CONFLICT(nullifier_hash) DO UPDATE SET
                 spent_at = CASE WHEN excluded.block_time > 0 THEN excluded.block_time ELSE nullifier_events.spent_at END,
                 block_time = CASE WHEN excluded.block_time > 0 THEN excluded.block_time ELSE nullifier_events.block_time END,
@@ -480,7 +486,8 @@ impl EventStore {
                 transfer_type = COALESCE(excluded.transfer_type, nullifier_events.transfer_type),
                 token_id = COALESCE(excluded.token_id, nullifier_events.token_id),
                 unshield_fee = COALESCE(excluded.unshield_fee, nullifier_events.unshield_fee),
-                unshield_payout = COALESCE(excluded.unshield_payout, nullifier_events.unshield_payout)",
+                unshield_payout = COALESCE(excluded.unshield_payout, nullifier_events.unshield_payout),
+                unshield_output_count = COALESCE(excluded.unshield_output_count, nullifier_events.unshield_output_count)",
             params![
                 event.nullifier_hash.as_slice(),
                 event.operation_type as i64,
@@ -496,6 +503,7 @@ impl EventStore {
                 token_id,
                 unshield_fee,
                 unshield_payout,
+                unshield_output_count,
             ],
         );
         match result {
@@ -1165,7 +1173,8 @@ impl EventStore {
                     MAX(n.transfer_type) AS ttype,
                     MAX(n.token_id) AS tid,
                     MAX(n.unshield_fee) AS ufee,
-                    MAX(n.unshield_payout) AS upayout
+                    MAX(n.unshield_payout) AS upayout,
+                    MAX(n.unshield_output_count) AS uoutcnt
              FROM nullifier_events n
              WHERE n.tx_signature NOT IN (
                  SELECT DISTINCT tx_signature FROM stealth_announcements WHERE announcement_type = 1
@@ -1189,6 +1198,7 @@ impl EventStore {
             let tid: Option<String> = row.get(10)?;
             let ufee: Option<i64> = row.get(11)?;
             let upayout: Option<i64> = row.get(12)?;
+            let uoutcnt: Option<i64> = row.get(13)?;
             let ts = if block_time > 0 { block_time } else { spent_at };
 
             // Use actual disc/transfer_type from DB; disc=14(unshield), 15(redeem/old unshield), 30(legacy)
@@ -1204,7 +1214,7 @@ impl EventStore {
                 commitments: vec![],
                 leaf_indices: vec![],
                 nullifier_hashes: hashes_str.split(',').map(|s| s.to_lowercase()).collect(),
-                output_count: 0,
+                output_count: if is_unshield { uoutcnt.unwrap_or(1) } else { 0 },
                 input_count,
                 timestamp: ts,
                 status: if ts > 0 { "confirmed".to_string() } else { "processing".to_string() },
@@ -1316,7 +1326,7 @@ mod tests {
             instruction_disc: 14,
         };
 
-        assert!(store.insert_nullifier(&event, "sig2", 101, 1700000001, Some(14), None, None, Some("private_transfer"), None, None, None).unwrap());
+        assert!(store.insert_nullifier(&event, "sig2", 101, 1700000001, Some(14), None, None, Some("private_transfer"), None, None, None, None).unwrap());
 
         let hash_hex = hex::encode([0xCD; 32]);
         let result = store.get_nullifier(&hash_hex).unwrap();
