@@ -81,8 +81,8 @@ export function TransferRow({
         <Td>
           {isUnshieldOrWithdraw ? (
             <FlowCell
-              from={{ icon: "shield", label: "Shielded" }}
-              to={{ icon: kind === "withdraw" ? "/tokens/btc.png" : (token.isBtcNative ? token.shieldedLogo : token.logo), label: kind === "withdraw" ? "BTC" : (token.isBtcNative ? token.shieldedSymbol : token.symbol) }}
+              from={{ icon: "shield", label: token.shieldedSymbol }}
+              to={{ icon: kind === "withdraw" ? "/tokens/btc.png" : (token.isBtcNative ? token.shieldedLogo : token.logo), label: kind === "withdraw" ? "BTC" : token.symbol }}
               meta={`${tx.inputCount} in, ${tx.outputs.length + 1} out`}
             />
           ) : (
