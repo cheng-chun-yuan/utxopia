@@ -406,13 +406,38 @@ export async function GET() {
       });
     }
 
+    // Deduplicate by requestTxSignature — multi-output redeems from the same tx
+    // get merged into one entry with summed amounts
+    const byTxSig = new Map<string, typeof serialized[0]>();
+    const deduplicated: typeof serialized = [];
+    for (const r of serialized) {
+      const txSig = r.requestTxSignature;
+      if (!txSig) {
+        deduplicated.push(r);
+        continue;
+      }
+      const existing = byTxSig.get(txSig);
+      if (existing) {
+        // Merge: sum amounts, keep the more advanced status
+        const existingAmt = BigInt(existing.amountSats || "0");
+        const thisAmt = BigInt(r.amountSats || "0");
+        existing.amountSats = (existingAmt + thisAmt).toString();
+        if (existing.serviceFee && r.serviceFee) {
+          existing.serviceFee = (BigInt(existing.serviceFee) + BigInt(r.serviceFee)).toString();
+        }
+      } else {
+        byTxSig.set(txSig, r);
+        deduplicated.push(r);
+      }
+    }
+
     // Sort by time descending (newest first)
-    serialized.sort((a, b) => b.createdAt - a.createdAt);
+    deduplicated.sort((a, b) => b.createdAt - a.createdAt);
 
     return NextResponse.json({
       success: true,
-      redemptions: serialized,
-      count: serialized.length,
+      redemptions: deduplicated,
+      count: deduplicated.length,
     });
   } catch (err) {
     console.error("[Explorer Redemptions API] Error:", err);

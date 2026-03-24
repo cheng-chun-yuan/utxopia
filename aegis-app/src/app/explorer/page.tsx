@@ -104,7 +104,6 @@ function ExplorerContent() {
     // Redemptions → Unshield (skip if already represented by a transfer with same tx signature)
     const transferTxSigs = new Set(transfers.map((t) => t.txSignature));
     for (const r of redemptions) {
-      // If the request tx already appears as a transfer, skip to avoid duplicate rows
       if (r.requestTxSignature && transferTxSigs.has(r.requestTxSignature)) continue;
       items.push({
         kind: "unshield",
