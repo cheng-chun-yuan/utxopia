@@ -198,7 +198,16 @@ export async function GET() {
             }
           } catch { /* ignore enrichment failure */ }
         }
-        // tokenSymbol resolved on frontend via token-map.ts
+        // Resolve token symbols server-side (client resolveTokenSymbolSync needs cache populated)
+        try {
+          const { buildTokenIdMap } = await import("@/lib/token-map");
+          const tokenMap = await buildTokenIdMap();
+          for (const t of data.transfers) {
+            if (t.token_id && !t.token_symbol) {
+              t.token_symbol = tokenMap.get(t.token_id) ?? tokenMap.get(t.token_id.toLowerCase()) ?? null;
+            }
+          }
+        } catch { /* fallback: client-side resolution */ }
         return NextResponse.json(data);
       }
     }
