@@ -1191,9 +1191,10 @@ impl EventStore {
             let upayout: Option<i64> = row.get(12)?;
             let ts = if block_time > 0 { block_time } else { spent_at };
 
-            // Use actual disc/transfer_type from DB; only default to unshield for disc=15/30
+            // Use actual disc/transfer_type from DB; disc=14(unshield), 15(redeem/old unshield), 30(legacy)
             let actual_disc = disc.map(|d| d as i64);
-            let is_unshield = matches!(actual_disc, Some(15) | Some(30));
+            let is_unshield = matches!(actual_disc, Some(14) | Some(15) | Some(30))
+                || ttype.as_deref() == Some("unshield") || ttype.as_deref() == Some("redeem");
             let transfer_type = ttype.unwrap_or_else(|| {
                 if is_unshield { "unshield".to_string() } else { "private_transfer".to_string() }
             });

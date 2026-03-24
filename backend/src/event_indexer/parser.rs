@@ -1052,3 +1052,44 @@ mod tests {
         assert!(events.is_empty());
     }
 }
+
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+    
+    #[test]
+    fn test_parse_real_unshield_logs() {
+        let logs = vec![
+            "Program ComputeBudget111111111111111111111111111111 invoke [1]".to_string(),
+            "Program ComputeBudget111111111111111111111111111111 success".to_string(),
+            "Program 6cv5vLKCc19oDHMSv1eSLvkJw6Nq1QkvznXavEF6hcDT invoke [1]".to_string(),
+            "Program log: Aegis: groth16 verifying".to_string(),
+            "Program log: Aegis: groth16 pairing check".to_string(),
+            "Program log: Aegis: groth16 proof verified".to_string(),
+            "Program 11111111111111111111111111111111 invoke [2]".to_string(),
+            "Program 11111111111111111111111111111111 success".to_string(),
+            "Program data: Ag== Drf9e9z3IYQJFoHdF53QX4aedxOBneEhhRj8nykHQ2E= AA== Dg==".to_string(),
+            "Program data: Dg== QLKRAwAAAAA= 0NMBAAAAAAA= cN6PAwAAAAA= KWz0BxV5FyNQycyLzzPRucF88GTc8IKN1WAlRxUvNII= Ac1BKFX9QwlNB4dvmAFYq/uioh8T/Z28qUCnogTtWno=".to_string(),
+            "Program TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb invoke [2]".to_string(),
+            "Program TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb success".to_string(),
+            "Program data: Dg== gCFhAgAAAAA= 4DcBAAAAAAA= oOlfAgAAAAA= KWz0BxV5FyNQycyLzzPRucF88GTc8IKN1WAlRxUvNII= Ac1BKFX9QwlNB4dvmAFYq/uioh8T/Z28qUCnogTtWno=".to_string(),
+            "Program 6cv5vLKCc19oDHMSv1eSLvkJw6Nq1QkvznXavEF6hcDT success".to_string(),
+        ];
+        
+        let events = parse_program_events(&logs);
+        let mut nullifiers = 0;
+        let mut unshield_metas = 0;
+        for e in &events {
+            match e {
+                ProgramEvent::NullifierSpent(_) => nullifiers += 1,
+                ProgramEvent::UnshieldMeta(um) => {
+                    unshield_metas += 1;
+                    println!("UnshieldMeta: amount={}, fee={}, payout={}", um.amount, um.fee, um.payout);
+                },
+                _ => {}
+            }
+        }
+        println!("Total events: {}, nullifiers: {}, unshield_metas: {}", events.len(), nullifiers, unshield_metas);
+        assert!(unshield_metas >= 2, "Expected at least 2 UnshieldMeta events, got {}", unshield_metas);
+    }
+}
