@@ -193,83 +193,6 @@ export function deriveRedemptionRequestPDA(
 // Transaction Builders (with Helius priority fees)
 // =============================================================================
 
-export interface RedeemParams {
-  userPubkey: PublicKey;
-  userTokenAccount: PublicKey;
-  amountSats: bigint;
-  btcAddress: string;
-}
-
-/**
- * Build REQUEST_REDEMPTION transaction with Helius priority fees
- */
-export async function buildRedeemTransaction(
-  connection: Connection,
-  params: RedeemParams
-): Promise<Transaction> {
-  const { userPubkey, amountSats, btcAddress } = params;
-
-  const [poolState] = derivePoolStatePDA();
-
-  // TODO: Convert bech32 btcAddress to raw scriptPubKey bytes (max 34 bytes)
-  const btcAddressBytes = new TextEncoder().encode(btcAddress);
-  const requestNonce = BigInt(Date.now());
-  const [commitmentTree] = deriveCommitmentTreePDA();
-  const nullifierHash = new Uint8Array(32); // demo mode
-  const [nullifierPDA] = PublicKey.findProgramAddressSync(
-    [Buffer.from(PDA_SEEDS.NULLIFIER), Buffer.from(nullifierHash)],
-    AEGIS_PROGRAM_ID,
-  );
-  const nonceBuf = Buffer.alloc(8);
-  nonceBuf.writeBigUInt64LE(requestNonce);
-  const [redemptionPDA] = PublicKey.findProgramAddressSync(
-    [Buffer.from("redemption"), userPubkey.toBuffer(), nonceBuf],
-    AEGIS_PROGRAM_ID,
-  );
-  const [tokenConfig] = PublicKey.findProgramAddressSync(
-    [Buffer.from("token_config"), ZKBTC_MINT_ADDRESS.toBuffer()],
-    AEGIS_PROGRAM_ID,
-  );
-
-  const instructionData = sdkBuildRedemptionRequestInstructionData({
-    proofHash: new Uint8Array(32),
-    merkleRoot: new Uint8Array(32),
-    nullifierHash,
-    amountSats,
-    vkHash: new Uint8Array(32),
-    btcScript: btcAddressBytes,
-    requestNonce,
-  });
-
-  const instruction = new TransactionInstruction({
-    programId: AEGIS_PROGRAM_ID,
-    keys: [
-      { pubkey: poolState, isSigner: false, isWritable: true },
-      { pubkey: commitmentTree, isSigner: false, isWritable: false },
-      { pubkey: nullifierPDA, isSigner: false, isWritable: true },
-      { pubkey: redemptionPDA, isSigner: false, isWritable: true },
-      { pubkey: userPubkey, isSigner: true, isWritable: true },
-      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      { pubkey: tokenConfig, isSigner: false, isWritable: true },
-    ],
-    data: Buffer.from(instructionData),
-  });
-
-  const priorityFeeIxs = await getPriorityFeeInstructions([
-    AEGIS_PROGRAM_ID.toBase58(),
-  ]);
-
-  const transaction = new Transaction();
-  transaction.add(...priorityFeeIxs);
-  transaction.add(instruction);
-  transaction.feePayer = userPubkey;
-
-  const { blockhash } = await connection.getLatestBlockhash();
-  transaction.recentBlockhash = blockhash;
-
-  return transaction;
-}
-
 // =============================================================================
 // Utility Functions
 // =============================================================================
@@ -284,37 +207,6 @@ export function getTokenAccountAddress(userPubkey: PublicKey): PublicKey {
     false,
     TOKEN_2022_PROGRAM_ID
   );
-}
-
-/**
- * Check if a nullifier has been used (claimed).
- * Uses @solana/kit for efficient RPC reads.
- */
-export async function isNullifierUsed(
-  nullifierHash: Uint8Array
-): Promise<boolean> {
-  const [nullifierPDA] = deriveNullifierPDA(nullifierHash);
-  try {
-    const account = await fetchAccountInfo(nullifierPDA.toBase58());
-    return account !== null;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Get current Merkle root from commitment tree.
- * Uses @solana/kit for efficient RPC reads.
- */
-export async function getMerkleRoot(): Promise<Uint8Array | null> {
-  try {
-    const account = await fetchAccountInfo(getConfig().commitmentTreePda);
-    if (!account) return null;
-    // Root is at offset 8 (after discriminator), 32 bytes
-    return account.data.slice(8, 40);
-  } catch {
-    return null;
-  }
 }
 
 // =============================================================================
