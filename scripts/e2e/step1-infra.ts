@@ -135,19 +135,12 @@ async function main() {
   const aegisSo = path.join(targetDir, "aegis_pinocchio.so");
   const btclcSo = path.join(targetDir, "btc_light_client.so");
 
-  // BTC LC: prefer cloning from devnet to match the hardcoded program ID constant in Aegis
-  // (cargo clean may regenerate the keypair with a different address)
-  const BTC_LC_DEVNET = "Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq";
-  const useBtcLcFromDevnet = BTC_LC.toBase58() !== BTC_LC_DEVNET;
+  // BTC LC: always deploy local binary at the keypair address.
+  // The aegis contract's localnet feature uses this keypair's address as the hardcoded constant.
   let bpfArgs = `--bpf-program ${AEGIS.toBase58()} ${aegisSo}`;
-  if (useBtcLcFromDevnet) {
-    bpfArgs += ` --clone-upgradeable-program ${BTC_LC_DEVNET}`;
-    log(`BTC LC keypair mismatch — cloning from devnet: ${BTC_LC_DEVNET}`);
-  } else {
-    bpfArgs += ` --bpf-program ${BTC_LC.toBase58()} ${btclcSo}`;
-  }
-  // Override BTC_LC reference for the rest of the script
-  const BTC_LC_EFFECTIVE = new PublicKey(useBtcLcFromDevnet ? BTC_LC_DEVNET : BTC_LC.toBase58());
+  bpfArgs += ` --bpf-program ${BTC_LC.toBase58()} ${btclcSo}`;
+  log(`BTC LC: ${BTC_LC.toBase58()}`);
+  const BTC_LC_EFFECTIVE = BTC_LC;
 
   // ChadBuffer: always deploy at the devnet address (Aegis built with --features devnet expects it)
   const CHADBUFFER_DEVNET = "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF";
