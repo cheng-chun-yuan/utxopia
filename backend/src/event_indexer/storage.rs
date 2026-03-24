@@ -918,6 +918,16 @@ impl EventStore {
             .map_err(|e| format!("query error: {}", e))
     }
 
+    /// Count unshield/redeem nullifiers missing amount data (legacy/stale records)
+    pub fn get_stale_unshield_count(&self) -> Result<i64, String> {
+        let conn = self.conn()?;
+        conn.query_row(
+            "SELECT COUNT(*) FROM nullifier_events WHERE transfer_type IN ('unshield', 'redeem') AND unshield_amount IS NULL",
+            [],
+            |row| row.get(0),
+        ).map_err(|e| format!("query error: {}", e))
+    }
+
     /// Count of deposit announcements (announcement_type = 0)
     pub fn get_deposit_count(&self) -> Result<i64, String> {
         let conn = self.conn()?;
