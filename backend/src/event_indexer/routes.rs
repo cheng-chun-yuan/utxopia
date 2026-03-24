@@ -160,6 +160,9 @@ pub struct TransferItem {
     /// Net payout after fee (from UnshieldMeta v2 event)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub unshield_payout: Option<i64>,
+    /// Per-output detail for multi-output unshield/withdraw
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unshield_outputs: Option<Vec<serde_json::Value>>,
 }
 
 /// Response for GET /api/transfers
@@ -424,6 +427,7 @@ async fn get_transfers(
                     transfer_type: t.transfer_type,
                     unshield_fee: t.unshield_fee,
                     unshield_payout: t.unshield_payout,
+                    unshield_outputs: t.unshield_outputs,
                 }
             }).collect();
             Json(TransfersResponse {

@@ -75,6 +75,8 @@ pub struct TransferRow {
     pub unshield_fee: Option<i64>,
     /// Net payout after fee (from UnshieldMeta v2 event)
     pub unshield_payout: Option<i64>,
+    /// Per-output detail JSON array for multi-output unshield/withdraw
+    pub unshield_outputs: Option<Vec<serde_json::Value>>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -131,6 +133,7 @@ struct NullRow {
     tid: Option<String>,
     uf: Option<i64>,
     up: Option<i64>,
+    uoutputs: Option<String>,
 }
 
 /// A completed redemption row (from on-chain event 0x07)
@@ -401,6 +404,11 @@ impl EventStore {
             "ALTER TABLE nullifier_events ADD COLUMN unshield_output_count INTEGER",
         );
 
+        // Add unshield_outputs JSON array for multi-output detail
+        let _ = conn.execute_batch(
+            "ALTER TABLE nullifier_events ADD COLUMN unshield_outputs TEXT",
+        );
+
         Ok(())
     }
 
@@ -472,11 +480,12 @@ impl EventStore {
         unshield_fee: Option<i64>,
         unshield_payout: Option<i64>,
         unshield_output_count: Option<i64>,
+        unshield_outputs_json: Option<&str>,
     ) -> Result<bool, String> {
         let conn = self.conn()?;
         let result = conn.execute(
-            "INSERT INTO nullifier_events (nullifier_hash, operation_type, spent_at, spent_by, tx_signature, slot, block_time, instruction_disc, unshield_amount, unshield_recipient, transfer_type, token_id, unshield_fee, unshield_payout, unshield_output_count)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+            "INSERT INTO nullifier_events (nullifier_hash, operation_type, spent_at, spent_by, tx_signature, slot, block_time, instruction_disc, unshield_amount, unshield_recipient, transfer_type, token_id, unshield_fee, unshield_payout, unshield_output_count, unshield_outputs)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
              ON CONFLICT(nullifier_hash) DO UPDATE SET
                 spent_at = CASE WHEN excluded.block_time > 0 THEN excluded.block_time ELSE nullifier_events.spent_at END,
                 block_time = CASE WHEN excluded.block_time > 0 THEN excluded.block_time ELSE nullifier_events.block_time END,
@@ -487,7 +496,8 @@ impl EventStore {
                 token_id = COALESCE(excluded.token_id, nullifier_events.token_id),
                 unshield_fee = COALESCE(excluded.unshield_fee, nullifier_events.unshield_fee),
                 unshield_payout = COALESCE(excluded.unshield_payout, nullifier_events.unshield_payout),
-                unshield_output_count = COALESCE(excluded.unshield_output_count, nullifier_events.unshield_output_count)",
+                unshield_output_count = COALESCE(excluded.unshield_output_count, nullifier_events.unshield_output_count),
+                unshield_outputs = COALESCE(excluded.unshield_outputs, nullifier_events.unshield_outputs)",
             params![
                 event.nullifier_hash.as_slice(),
                 event.operation_type as i64,
@@ -504,6 +514,7 @@ impl EventStore {
                 unshield_fee,
                 unshield_payout,
                 unshield_output_count,
+                unshield_outputs_json,
             ],
         );
         match result {
@@ -1065,7 +1076,7 @@ impl EventStore {
     fn enrich_with_nullifiers(&self, partials: Vec<PartialTransfer>) -> Result<Vec<TransferRow>, String> {
         let conn = self.conn()?;
         let mut null_stmt = conn.prepare(
-            "SELECT HEX(nullifier_hash), spent_at, COALESCE(block_time, 0), operation_type, instruction_disc, unshield_amount, unshield_recipient, transfer_type, token_id, unshield_fee, unshield_payout FROM nullifier_events WHERE tx_signature = ?1"
+            "SELECT HEX(nullifier_hash), spent_at, COALESCE(block_time, 0), operation_type, instruction_disc, unshield_amount, unshield_recipient, transfer_type, token_id, unshield_fee, unshield_payout, unshield_outputs FROM nullifier_events WHERE tx_signature = ?1"
         ).map_err(|e| format!("query error: {}", e))?;
 
         // Fallback: get block_time from announcements when nullifier block_time is 0
@@ -1090,6 +1101,7 @@ impl EventStore {
                         tid: row.get(8)?,
                         uf: row.get(9)?,
                         up: row.get(10)?,
+                        uoutputs: row.get(11)?,
                     })
                 },
             ).map_err(|e| format!("query error: {}", e))?
@@ -1127,6 +1139,9 @@ impl EventStore {
                 let sum: i64 = nullifiers.iter().filter_map(|n| n.up).sum();
                 if sum > 0 { Some(sum) } else { nullifiers.first().and_then(|n| n.up) }
             };
+            let unshield_outputs: Option<Vec<serde_json::Value>> = nullifiers.first()
+                .and_then(|n| n.uoutputs.as_ref())
+                .and_then(|s| serde_json::from_str(s).ok());
             let nullifier_hashes: Vec<String> = nullifiers.into_iter().map(|n| n.hash).collect();
 
             let status = if timestamp > 0 { "confirmed".to_string() } else { "processing".to_string() };
@@ -1147,6 +1162,7 @@ impl EventStore {
                 transfer_type,
                 unshield_fee,
                 unshield_payout,
+                unshield_outputs,
             });
         }
 
@@ -1174,7 +1190,8 @@ impl EventStore {
                     MAX(n.token_id) AS tid,
                     MAX(n.unshield_fee) AS ufee,
                     MAX(n.unshield_payout) AS upayout,
-                    MAX(n.unshield_output_count) AS uoutcnt
+                    MAX(n.unshield_output_count) AS uoutcnt,
+                    MAX(n.unshield_outputs) AS uoutputs
              FROM nullifier_events n
              WHERE n.tx_signature NOT IN (
                  SELECT DISTINCT tx_signature FROM stealth_announcements WHERE announcement_type = 1
@@ -1199,6 +1216,9 @@ impl EventStore {
             let ufee: Option<i64> = row.get(11)?;
             let upayout: Option<i64> = row.get(12)?;
             let uoutcnt: Option<i64> = row.get(13)?;
+            let uoutputs_str: Option<String> = row.get(14)?;
+            let unshield_outputs: Option<Vec<serde_json::Value>> = uoutputs_str
+                .and_then(|s| serde_json::from_str(&s).ok());
             let ts = if block_time > 0 { block_time } else { spent_at };
 
             // Use actual disc/transfer_type from DB; disc=14(unshield), 15(redeem/old unshield), 30(legacy)
@@ -1226,6 +1246,7 @@ impl EventStore {
                 transfer_type,
                 unshield_fee: if is_unshield { ufee } else { None },
                 unshield_payout: if is_unshield { upayout } else { None },
+                unshield_outputs: if is_unshield { unshield_outputs } else { None },
             })
         }).map_err(|e| format!("query error: {}", e))?;
 
@@ -1326,7 +1347,7 @@ mod tests {
             instruction_disc: 14,
         };
 
-        assert!(store.insert_nullifier(&event, "sig2", 101, 1700000001, Some(14), None, None, Some("private_transfer"), None, None, None, None).unwrap());
+        assert!(store.insert_nullifier(&event, "sig2", 101, 1700000001, Some(14), None, None, Some("private_transfer"), None, None, None, None, None).unwrap());
 
         let hash_hex = hex::encode([0xCD; 32]);
         let result = store.get_nullifier(&hash_hex).unwrap();

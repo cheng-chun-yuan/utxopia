@@ -396,9 +396,23 @@ impl EventIndexerService {
             tracing::debug!(leaf_index = ann.leaf_index, is_verified, "Indexed stealth announcement");
         }
 
+        // Build per-output JSON array from all UnshieldMeta events
+        let outputs_json = if !unshield_metas.is_empty() {
+            let arr: Vec<serde_json::Value> = unshield_metas.iter().map(|um| {
+                serde_json::json!({
+                    "type": if !redemption_requests.is_empty() { "withdraw" } else { "unshield" },
+                    "amount": um.amount,
+                    "fee": um.fee,
+                    "payout": um.payout,
+                    "recipient": bs58::encode(&um.recipient).into_string(),
+                })
+            }).collect();
+            Some(serde_json::to_string(&arr).unwrap_or_default())
+        } else {
+            None
+        };
+
         // Handle nullifiers — match each nullifier to its UnshieldMeta by index for multi-output support.
-        // For single-output: nullifiers[0] gets unshield_metas[0].
-        // For multi-output: nullifiers[i] gets unshield_metas[i] (events emitted in same order as nullifiers).
         for (null_idx, null) in nullifiers.iter().enumerate() {
             let disc = if null.instruction_disc > 0 {
                 Some(null.instruction_disc)
@@ -414,7 +428,6 @@ impl EventIndexerService {
                     Some(um.payout as i64),
                 )
             } else {
-                // Fall back to tx-level values (from classify_transfer)
                 (unshield_amount, unshield_recipient.clone(), None, None)
             };
             let output_count = if !unshield_metas.is_empty() {
@@ -430,6 +443,7 @@ impl EventIndexerService {
                 null_fee,
                 null_payout,
                 output_count,
+                outputs_json.as_deref(),
             )?;
             if inserted {
                 if let Some(ref cache) = self.tree_cache {
