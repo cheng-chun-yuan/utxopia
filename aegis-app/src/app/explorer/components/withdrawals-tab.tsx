@@ -257,7 +257,7 @@ function WithdrawalDetails({ redemption }: { redemption: RedemptionRecord }) {
           <div className="px-3 py-2.5 rounded-[8px] bg-btc/4 border border-btc/10 space-y-2">
             {/* zkBTC → BTC conversion */}
             <div className="flex items-center gap-2 flex-wrap">
-              <Image src="/zkbtc.png" alt="zkBTC" width={14} height={14} className="rounded-full shrink-0" />
+              <Image src="/tokens/zkbtc.png" alt="zkBTC" width={14} height={14} className="rounded-full shrink-0" />
               <span className="text-body2 text-foreground font-mono font-semibold">
                 {fmtBtc(amount)} <span className="text-[10px] text-gray font-normal">zkBTC</span>
               </span>
@@ -545,7 +545,7 @@ function WithdrawalAmountCell({ r }: { r: RedemptionRecord }) {
 
   return (
     <div className="flex items-center gap-1.5 font-mono text-body2">
-      <Image src="/zkbtc.png" alt="zkBTC" width={14} height={14} className="rounded-full shrink-0" />
+      <Image src="/tokens/zkbtc.png" alt="zkBTC" width={14} height={14} className="rounded-full shrink-0" />
       <span className="text-foreground">{fmtBtc(Number(r.amountSats))}</span>
       <span className="text-gray/40">→</span>
       <BitcoinIcon className="w-3.5 h-3.5 text-btc shrink-0" />

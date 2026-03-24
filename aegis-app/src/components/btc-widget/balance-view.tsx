@@ -266,7 +266,7 @@ const DepositCard = memo(({ deposit }: { deposit: TrackerDepositStatus & { token
               <div className="flex items-center justify-between">
                 <span className="text-xs text-gray">Receive</span>
                 <span className="flex items-center gap-1.5">
-                  <Image src="/zkbtc.png" alt="zkBTC" width={16} height={16} className="rounded-full" />
+                  <Image src="/tokens/zkbtc.png" alt="zkBTC" width={16} height={16} className="rounded-full" />
                   {deposit.minted_sats != null ? (
                     <span className="text-base font-semibold text-white">{formatBtc(deposit.minted_sats)}</span>
                   ) : (

@@ -68,7 +68,7 @@ export const SUPPORTED_TOKENS: SupportedToken[] = [
     unit: "BTC",
     priceKey: "btc",
     shieldedSymbol: "zkBTC",
-    shieldedLogo: "/zkbtc.png",
+    shieldedLogo: "/tokens/zkbtc.png",
     explorerFilter: "btc",
     showRawAmount: false,
     explorerColors: {
@@ -77,13 +77,13 @@ export const SUPPORTED_TOKENS: SupportedToken[] = [
     },
     explorerLabel: "BTC / zkBTC",
     explorerSubtitle: "Shielded Bitcoin",
-    explorerSecondLogo: "/zkbtc.png",
+    explorerSecondLogo: "/tokens/zkbtc.png",
   },
   {
     symbol: "zkBTC",
     name: "Shielded Bitcoin",
     decimals: 8,
-    logo: "/zkbtc.png",
+    logo: "/tokens/zkbtc.png",
     mint: "",
     isBtcNative: false,
     isSOL: false,
@@ -91,7 +91,7 @@ export const SUPPORTED_TOKENS: SupportedToken[] = [
     unit: "BTC",
     priceKey: "btc",
     shieldedSymbol: "zkBTC",
-    shieldedLogo: "/zkbtc.png",
+    shieldedLogo: "/tokens/zkbtc.png",
     explorerFilter: "btc",
     showRawAmount: false,
     explorerColors: {
@@ -100,7 +100,7 @@ export const SUPPORTED_TOKENS: SupportedToken[] = [
     },
     explorerLabel: "BTC / zkBTC",
     explorerSubtitle: "Shielded Bitcoin",
-    explorerSecondLogo: "/zkbtc.png",
+    explorerSecondLogo: "/tokens/zkbtc.png",
   },
   {
     symbol: "SOL",

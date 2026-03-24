@@ -498,7 +498,7 @@ export default function VaultPage() {
                       return (
                         <div className="flex items-center gap-3 px-4 h-[60px]">
                           <motion.img
-                            src={zkbtc?.shieldedLogo || "/zkbtc.png"}
+                            src={zkbtc?.shieldedLogo || "/tokens/zkbtc.png"}
                             alt="zkBTC"
                             className="w-9 h-9 rounded-full"
                             animate={{ y: [0, -2, 0] }}
