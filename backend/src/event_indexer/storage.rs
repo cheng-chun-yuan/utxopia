@@ -1091,14 +1091,24 @@ impl EventStore {
             };
             let operation_type = nullifiers.first().map(|n| n.op_type).unwrap_or(2);
             let instruction_disc = nullifiers.first().and_then(|n| n.disc);
-            let unshield_amount = nullifiers.first().and_then(|n| n.ua);
+            // For multi-output unshield: sum amounts across all nullifiers
+            let unshield_amount: Option<i64> = {
+                let sum: i64 = nullifiers.iter().filter_map(|n| n.ua).sum();
+                if sum > 0 { Some(sum) } else { nullifiers.first().and_then(|n| n.ua) }
+            };
             let unshield_recipient = nullifiers.first().and_then(|n| n.ur.clone());
             let transfer_type = nullifiers.first().and_then(|n| n.tt.clone())
                 .unwrap_or_else(|| "private_transfer".to_string());
             // Prefer nullifier's token_id (from UnshieldMeta event) over announcement's
             let nullifier_token_id = nullifiers.first().and_then(|n| n.tid.clone());
-            let unshield_fee = nullifiers.first().and_then(|n| n.uf);
-            let unshield_payout = nullifiers.first().and_then(|n| n.up);
+            let unshield_fee: Option<i64> = {
+                let sum: i64 = nullifiers.iter().filter_map(|n| n.uf).sum();
+                if sum > 0 { Some(sum) } else { nullifiers.first().and_then(|n| n.uf) }
+            };
+            let unshield_payout: Option<i64> = {
+                let sum: i64 = nullifiers.iter().filter_map(|n| n.up).sum();
+                if sum > 0 { Some(sum) } else { nullifiers.first().and_then(|n| n.up) }
+            };
             let nullifier_hashes: Vec<String> = nullifiers.into_iter().map(|n| n.hash).collect();
 
             let status = if timestamp > 0 { "confirmed".to_string() } else { "processing".to_string() };

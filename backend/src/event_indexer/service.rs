@@ -219,17 +219,19 @@ impl EventIndexerService {
     /// Returns `(unshield_amount, unshield_recipient, transfer_type)` where
     /// `transfer_type` is one of: "unshield", "redeem", "deposit", "private_transfer".
     fn classify_transfer(
-        unshield_meta: &Option<UnshieldMetaEvent>,
+        unshield_metas: &[UnshieldMetaEvent],
         redemption_requests: &[RedemptionRequestedEvent],
         redemption_completions: &[RedemptionCompletedEvent],
         nullifier_disc: Option<u8>,
         nullifiers: &[NullifierSpentEvent],
         announcements: &[StealthAnnouncementEvent],
     ) -> (Option<i64>, Option<String>, &'static str) {
-        if let Some(ref um) = unshield_meta {
+        // For multi-output: return first meta as tx-level summary; per-nullifier data handled in caller
+        if let Some(um) = unshield_metas.first() {
             let recipient = bs58::encode(&um.recipient).into_string();
-            tracing::debug!(amount = um.amount, recipient = %recipient, "Using event-sourced unshield data");
-            return (Some(um.amount as i64), Some(recipient), "unshield");
+            let total_amount: u64 = unshield_metas.iter().map(|m| m.amount).sum();
+            tracing::debug!(total_amount, outputs = unshield_metas.len(), recipient = %recipient, "Using event-sourced unshield data");
+            return (Some(total_amount as i64), Some(recipient), "unshield");
         }
 
         if !redemption_requests.is_empty() {
@@ -292,7 +294,7 @@ impl EventIndexerService {
         let mut redemption_completions = Vec::new();
         let mut redemption_requests = Vec::new();
         let mut deposit_verified: Option<super::parser::DepositVerifiedEvent> = None;
-        let mut unshield_meta: Option<UnshieldMetaEvent> = None;
+        let mut unshield_metas: Vec<UnshieldMetaEvent> = Vec::new();
         let mut shield_meta: Option<super::parser::ShieldMetaEvent> = None;
 
         for event in events {
@@ -316,7 +318,7 @@ impl EventIndexerService {
                     deposit_verified = Some(e);
                 }
                 ProgramEvent::UnshieldMeta(e) => {
-                    unshield_meta = Some(e);
+                    unshield_metas.push(e);
                 }
                 ProgramEvent::ShieldMeta(e) => {
                     shield_meta = Some(e);
@@ -351,13 +353,13 @@ impl EventIndexerService {
             (tx_data.btc_deposit_txid, tx_data.btc_sweep_txid, tx_data.btc_deposit_amount_sats)
         };
 
-        // Event-first classification: derive unshield/redeem data and transfer_type from events.
-        // Fallback: use NullifierSpent instruction_disc when no structured event exists
+        // Event-first classification: derive transfer_type from events.
+        // For multi-output unshield/redeem, per-nullifier data is matched by index below.
         let nullifier_disc = nullifiers.first().map(|n| n.instruction_disc).or(tx_data.instruction_disc);
-        let unshield_token_id: Option<String> = unshield_meta.as_ref().map(|um| hex::encode(um.token_id));
+        let unshield_token_id: Option<String> = unshield_metas.first().map(|um| hex::encode(um.token_id));
 
         let (unshield_amount, unshield_recipient, transfer_type) = Self::classify_transfer(
-            &unshield_meta,
+            &unshield_metas,
             &redemption_requests,
             &redemption_completions,
             nullifier_disc,
@@ -393,22 +395,34 @@ impl EventIndexerService {
             tracing::debug!(leaf_index = ann.leaf_index, is_verified, "Indexed stealth announcement");
         }
 
-        // Handle nullifiers — use instruction_disc from event when available, fall back to tx-level extraction
-        for null in &nullifiers {
+        // Handle nullifiers — match each nullifier to its UnshieldMeta by index for multi-output support.
+        // For single-output: nullifiers[0] gets unshield_metas[0].
+        // For multi-output: nullifiers[i] gets unshield_metas[i] (events emitted in same order as nullifiers).
+        for (null_idx, null) in nullifiers.iter().enumerate() {
             let disc = if null.instruction_disc > 0 {
                 Some(null.instruction_disc)
             } else {
                 tx_data.instruction_disc
             };
-            let unshield_fee = unshield_meta.as_ref().map(|um| um.fee as i64);
-            let unshield_payout = unshield_meta.as_ref().map(|um| um.payout as i64);
+            // Per-nullifier unshield data: match by index, fall back to tx-level classify_transfer result
+            let (null_amount, null_recipient, null_fee, null_payout) = if let Some(um) = unshield_metas.get(null_idx) {
+                (
+                    Some(um.amount as i64),
+                    Some(bs58::encode(&um.recipient).into_string()),
+                    Some(um.fee as i64),
+                    Some(um.payout as i64),
+                )
+            } else {
+                // Fall back to tx-level values (from classify_transfer)
+                (unshield_amount, unshield_recipient.clone(), None, None)
+            };
             let inserted = self.store.insert_nullifier(
                 null, signature, slot, block_time, disc,
-                unshield_amount, unshield_recipient.as_deref(),
+                null_amount, null_recipient.as_deref(),
                 Some(transfer_type),
                 unshield_token_id.as_deref(),
-                unshield_fee,
-                unshield_payout,
+                null_fee,
+                null_payout,
             )?;
             if inserted {
                 if let Some(ref cache) = self.tree_cache {
