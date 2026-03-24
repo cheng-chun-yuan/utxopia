@@ -7,6 +7,7 @@ set -euo pipefail
 # Usage:
 #   ./scripts/deploy-devnet.sh                    # Full deploy
 #   ./scripts/deploy-devnet.sh --resume           # Resume from last phase
+#   ./scripts/deploy-devnet.sh --close-old         # Close old programs first (reclaim SOL)
 #   ./scripts/deploy-devnet.sh --skip-frost       # Skip FROST DKG
 #   ./scripts/deploy-devnet.sh --skip-deploy      # Skip contract deploy (reuse existing)
 #   ./scripts/deploy-devnet.sh --rpc <url>        # Custom Solana RPC
@@ -22,6 +23,7 @@ RPC_URL="${RPC_URL:-https://api.devnet.solana.com}"
 BTC_API="https://mempool.space/testnet4/api"
 SKIP_FROST=false
 SKIP_DEPLOY=false
+CLOSE_OLD=false
 RESUME=false
 AUTO_YES=false
 
@@ -30,6 +32,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --skip-frost)  SKIP_FROST=true; shift ;;
     --skip-deploy) SKIP_DEPLOY=true; shift ;;
+    --close-old)   CLOSE_OLD=true; shift ;;
     --resume)      RESUME=true; shift ;;
     --yes)         AUTO_YES=true; shift ;;
     --rpc)         RPC_URL="$2"; shift 2 ;;
@@ -138,6 +141,63 @@ run_phase_0() {
   fi
 
   save_phase 0
+}
+
+# =============================================================================
+# Close Old Programs (optional, --close-old)
+# =============================================================================
+close_old_programs() {
+  if [ "$CLOSE_OLD" != true ]; then return; fi
+
+  phase "X" "Close Old Programs (reclaim SOL)"
+
+  local AUTHORITY=$(solana-keygen pubkey "$KEYPAIR_PATH" 2>/dev/null)
+  local BEFORE=$(solana balance "$AUTHORITY" --url "$RPC_URL" 2>/dev/null | awk '{print $1}')
+  log "Balance before: $BEFORE SOL"
+
+  # Try closing old Aegis program
+  local OLD_AEGIS=$(read_state "aegisProgramId")
+  if [ -n "$OLD_AEGIS" ]; then
+    log "Closing old Aegis program: $OLD_AEGIS"
+    solana program close "$OLD_AEGIS" \
+      --url "$RPC_URL" \
+      --keypair "$KEYPAIR_PATH" \
+      --bypass-warning 2>&1 || warn "Failed to close $OLD_AEGIS (may already be closed)"
+  fi
+
+  # Try closing old BTC LC program
+  local OLD_BTCLC=$(read_state "btcLightClientId")
+  if [ -n "$OLD_BTCLC" ]; then
+    log "Closing old BTC LC program: $OLD_BTCLC"
+    solana program close "$OLD_BTCLC" \
+      --url "$RPC_URL" \
+      --keypair "$KEYPAIR_PATH" \
+      --bypass-warning 2>&1 || warn "Failed to close $OLD_BTCLC (may already be closed)"
+  fi
+
+  # Also try the known devnet2 programs
+  for PID in "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ"; do
+    if solana program show "$PID" --url "$RPC_URL" 2>/dev/null | grep -q "Authority: $AUTHORITY"; then
+      log "Closing known program: $PID"
+      solana program close "$PID" \
+        --url "$RPC_URL" \
+        --keypair "$KEYPAIR_PATH" \
+        --bypass-warning 2>&1 || warn "Failed to close $PID"
+    fi
+  done
+
+  # Close any lingering buffer accounts
+  log "Closing orphaned buffer accounts..."
+  solana program close --buffers \
+    --url "$RPC_URL" \
+    --keypair "$KEYPAIR_PATH" 2>&1 || true
+
+  local AFTER=$(solana balance "$AUTHORITY" --url "$RPC_URL" 2>/dev/null | awk '{print $1}')
+  log "Balance after: $AFTER SOL (reclaimed $(echo "$AFTER - $BEFORE" | bc) SOL)"
+
+  # Clear state for fresh deploy
+  rm -f "$STATE_FILE"
+  log "Cleared old state file"
 }
 
 # =============================================================================
@@ -466,6 +526,7 @@ if [ "$SKIP_DEPLOY" = true ]; then
   fi
 fi
 
+close_old_programs
 [ $LAST_PHASE -lt 0 ] && run_phase_0
 [ $LAST_PHASE -lt 1 ] && run_phase_1
 [ $LAST_PHASE -lt 2 ] && run_phase_2
