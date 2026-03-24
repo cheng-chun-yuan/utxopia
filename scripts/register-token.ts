@@ -77,7 +77,7 @@ const ix = new TransactionInstruction({
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ],
   programId,
-  data: Buffer.concat([Buffer.from([28]), payload]), // disc 28 = REGISTER_TOKEN
+  data: Buffer.concat([Buffer.from([8]), payload]), // disc 8 = REGISTER_TOKEN
 });
 
 try {
