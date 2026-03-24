@@ -47,6 +47,8 @@ import {
   computeBoundParamsHash as _computeBoundParamsHash,
   createUnshieldBoundParams as _createUnshieldBoundParams,
   createRedeemBoundParams as _createRedeemBoundParams,
+  computeStealthDataHash as _computeStealthDataHash,
+  createTransferBoundParams as _createTransferBoundParams,
   deriveKeysFromSeedCircuit as _deriveKeysFromSeedCircuit,
   buildTransactInstructionData as _buildTransactInstructionData,
   buildUnshieldInstructionData as _buildUnshieldInstructionData,
@@ -72,6 +74,8 @@ export const eddsaGetPubKey = _eddsaGetPubKey;
 export const computeBoundParamsHash = _computeBoundParamsHash;
 export const createUnshieldBoundParams = _createUnshieldBoundParams;
 export const createRedeemBoundParams = _createRedeemBoundParams;
+export const computeStealthDataHash = _computeStealthDataHash;
+export const createTransferBoundParams = _createTransferBoundParams;
 export const deriveKeysFromSeedCircuit = _deriveKeysFromSeedCircuit;
 export const buildTransactInstructionData = _buildTransactInstructionData;
 export const buildUnshieldInstructionData = _buildUnshieldInstructionData;
@@ -79,6 +83,80 @@ export const buildRedemptionRequestInstructionData = _buildRedemptionRequestInst
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// =============================================================================
+// Shared helpers — used across multiple test steps
+// =============================================================================
+
+/**
+ * Parse a stealth announcement event from Solana transaction log messages.
+ * Returns commitment hex, plaintext amount, and leaf index — or null if not found.
+ */
+export function parseStealthAnnouncementFromLogs(logMessages: string[]): { commitment: string; amount: number; leafIndex: number } | null {
+  for (const logLine of logMessages) {
+    if (!logLine.startsWith("Program data: ")) continue;
+    const parts = logLine.slice(14).split(" ");
+    const bufs = parts.map(p => Buffer.from(p, "base64"));
+    const full = Buffer.concat(bufs);
+    // Stealth announcement: disc(0x03) + type(1) + ephemeral(32) + amount(8) + commitment(32) + leaf_index(4)
+    if (full.length >= 78 && full[0] === 0x03 && full[1] === 0x00) {
+      const amount = Number(full.readBigUInt64LE(34));
+      const commitment = full.subarray(42, 74).toString("hex");
+      const leafIndex = full.readUInt32LE(74);
+      return { commitment, amount, leafIndex };
+    }
+  }
+  return null;
+}
+
+/**
+ * Precompute ZERO_HASHES for the merkle tree.
+ * Must be called after initPoseidon().
+ */
+let _zeroHashes: bigint[] | null = null;
+export function getZeroHashes(): bigint[] {
+  if (_zeroHashes) return _zeroHashes;
+  _zeroHashes = [0n];
+  for (let i = 1; i <= _TREE_DEPTH; i++) {
+    _zeroHashes[i] = _poseidonHashSync([_zeroHashes[i - 1], _zeroHashes[i - 1]]);
+  }
+  return _zeroHashes;
+}
+
+/**
+ * Build a Merkle tree from leaves and return root + proof accessor.
+ * Must be called after initPoseidon().
+ */
+export function buildMerkleTree(leaves: bigint[]): { root: bigint; getProof: (idx: number) => { siblings: bigint[]; indices: number[] } } {
+  const ZERO = getZeroHashes();
+  const layers: bigint[][] = [new Array(1 << _TREE_DEPTH).fill(0n)];
+  for (let i = 0; i < leaves.length; i++) layers[0][i] = leaves[i];
+
+  for (let level = 0; level < _TREE_DEPTH; level++) {
+    const prev = layers[level];
+    const next: bigint[] = [];
+    for (let i = 0; i < prev.length; i += 2) {
+      next.push(_poseidonHashSync([prev[i], prev[i + 1] ?? ZERO[level]]));
+    }
+    layers.push(next);
+  }
+
+  return {
+    root: layers[_TREE_DEPTH][0],
+    getProof(idx: number) {
+      const siblings: bigint[] = [];
+      const indices: number[] = [];
+      let i = idx;
+      for (let level = 0; level < _TREE_DEPTH; level++) {
+        const bit = i & 1;
+        indices.push(bit);
+        siblings.push(bit === 0 ? layers[level][i + 1] ?? ZERO[level] : layers[level][i - 1]);
+        i >>= 1;
+      }
+      return { siblings, indices };
+    },
+  };
+}
 
 // =============================================================================
 // Constants
@@ -96,18 +174,28 @@ export const ZKBTC_TOKEN_ID = 0x7a627463n; // "zkbtc" as u32
 export const TOKEN_2022 = TOKEN_2022_PROGRAM_ID;
 export const ATA_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
 
-// Instruction discriminators
+// Instruction discriminators (sequential 0-19)
 export const Disc = {
   INITIALIZE: 0,
-  VERIFY_STEALTH_DEPOSIT: 1,
-  MARK_PROCESSING: 2,
-  REQUEST_REDEMPTION: 5,
-  COMPLETE_REDEMPTION: 6,
-  INIT_VK_REGISTRY: 11,
-  TRANSACT: 14,
-  REGISTER_TOKEN: 28,
-  SHIELD: 29,
-  UNSHIELD: 30,
+  SET_PAUSED: 1,
+  SET_POOL_CONFIG: 2,
+  PROPOSE_POOL_UPDATE: 3,
+  EXECUTE_POOL_UPDATE: 4,
+  CANCEL_POOL_UPDATE: 5,
+  INIT_VK_REGISTRY: 6,
+  UPDATE_VK_REGISTRY: 7,
+  REGISTER_TOKEN: 8,
+  UPDATE_TOKEN_CONFIG: 9,
+  CLAIM_FEES: 10,
+  VERIFY_STEALTH_DEPOSIT: 11,
+  SHIELD: 12,
+  TRANSACT: 13,
+  UNSHIELD: 14,
+  REDEEM: 15,
+  REQUEST_REDEMPTION: 16,
+  COMPLETE_REDEMPTION: 17,
+  MARK_PROCESSING: 18,
+  CANCEL_REDEMPTION: 19,
 } as const;
 
 // PDA seeds

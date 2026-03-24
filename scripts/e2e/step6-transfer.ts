@@ -39,6 +39,8 @@ import {
   computeJoinSplitCommitmentSync,
   computeJoinSplitNullifierSync,
   computeBoundParamsHash,
+  createTransferBoundParams,
+  computeStealthDataHash,
   bigintToBytes32BE,
   bytes32ToBigintBE,
   randomFieldElement,
@@ -46,6 +48,8 @@ import {
   eddsaGetPubKey,
   buildTransactInstructionData,
   TREE_DEPTH,
+  buildMerkleTree,
+  getZeroHashes,
 } from "./shared.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -54,16 +58,8 @@ const __dirname = path.dirname(__filename);
 stepHeader(6, "JoinSplit Transfer");
 
 // =============================================================================
-// Merkle tree helpers (uses SDK Poseidon)
+// Merkle tree helpers
 // =============================================================================
-
-const ZERO_HASHES: bigint[] = [0n];
-
-function computeZeroHashes() {
-  for (let i = 1; i <= TREE_DEPTH; i++) {
-    ZERO_HASHES[i] = poseidonHashSync([ZERO_HASHES[i - 1], ZERO_HASHES[i - 1]]);
-  }
-}
 
 function verifyMerkleProof(
   leaf: bigint, proof: { siblings: bigint[]; indices: number[] }, expectedRoot: bigint,
@@ -161,7 +157,7 @@ async function main() {
 
   // Init SDK Poseidon (replaces circomlibjs buildPoseidon)
   await initPoseidon();
-  computeZeroHashes();
+  getZeroHashes();
 
   // Load keys using SDK
   const spendingSeed = Buffer.from(state.spendingSeed!, "hex");
@@ -197,26 +193,9 @@ async function main() {
     }
   }
 
-  // Build the full tree bottom-up
-  const treeNodes: bigint[][] = [];
-  const levelSize = 1 << TREE_DEPTH;
-  const level0 = new Array<bigint>(levelSize).fill(ZERO_HASHES[0]);
-  for (let i = 0; i < nextIndex; i++) {
-    level0[i] = leaves[i];
-  }
-  treeNodes.push(level0);
-
-  for (let level = 1; level <= TREE_DEPTH; level++) {
-    const prevLevel = treeNodes[level - 1];
-    const size = 1 << (TREE_DEPTH - level);
-    const currentLevel = new Array<bigint>(size);
-    for (let i = 0; i < size; i++) {
-      currentLevel[i] = poseidonHashSync([prevLevel[2 * i], prevLevel[2 * i + 1]]);
-    }
-    treeNodes.push(currentLevel);
-  }
-
-  const computedRoot = treeNodes[TREE_DEPTH][0];
+  // Build the full tree and extract proof
+  const fullTree = buildMerkleTree(leaves);
+  const computedRoot = fullTree.root;
   log(`Computed root: ${computedRoot.toString(16).slice(0, 16)}...`);
   log(`On-chain root: ${merkleRoot.toString(16).slice(0, 16)}...`);
 
@@ -224,18 +203,7 @@ async function main() {
     throw new Error("Cannot build valid Merkle proof — commitment mismatch with on-chain tree");
   }
 
-  // Extract proof from the full tree
-  const siblings: bigint[] = [];
-  const indices: number[] = [];
-  let idx = leafIndex0;
-  for (let level = 0; level < TREE_DEPTH; level++) {
-    const bit = idx & 1;
-    indices.push(bit);
-    const siblingIdx = bit === 0 ? idx + 1 : idx - 1;
-    siblings.push(treeNodes[level][siblingIdx]);
-    idx >>= 1;
-  }
-  const proof = { siblings, indices };
+  const proof = fullTree.getProof(leafIndex0);
 
   if (!verifyMerkleProof(commitment0, proof, merkleRoot)) {
     throw new Error("Full tree Merkle proof verification failed");
@@ -263,8 +231,24 @@ async function main() {
   const nullifier0 = computeJoinSplitNullifierSync(nullifyingKey, BigInt(leafIndex0));
   log(`Nullifier: ${nullifier0.toString(16).slice(0, 16)}...`);
 
-  // Bound params hash using SDK
-  const boundParamsHash = computeBoundParamsHash({ treeNumber: 0, unshieldAddress: null, chainId: 103n });
+  // Bound params hash using SDK (private transfer)
+  // Note: stealthDataHash is computed AFTER stealth data is generated (below),
+  // but for the circuit proof we need boundParamsHash first. The stealth data
+  // is random ephemeral keys — we generate them here so we can compute the hash.
+  const ephPub1 = crypto.randomBytes(32);
+  const ephPub2 = crypto.randomBytes(32);
+  const stealth1 = new Uint8Array(72);
+  stealth1.set(ephPub1, 0);
+  stealth1.set(new Uint8Array(new BigUint64Array([BigInt(halfAmount)]).buffer), 32);
+  stealth1.set(crypto.randomBytes(32), 40); // encrypted_token_id
+  const stealth2 = new Uint8Array(72);
+  stealth2.set(ephPub2, 0);
+  stealth2.set(new Uint8Array(new BigUint64Array([BigInt(remainder)]).buffer), 32);
+  stealth2.set(crypto.randomBytes(32), 40); // encrypted_token_id
+
+  const stealthDataHash = computeStealthDataHash([stealth1, stealth2]);
+  const transferParams = createTransferBoundParams(stealthDataHash, 103n);
+  const boundParamsHash = computeBoundParamsHash(transferParams);
   const msgHash = poseidonHashSync([merkleRoot, boundParamsHash, nullifier0, commitment1, commitment2]);
 
   // EdDSA sign using SDK (circuit-compatible — wraps circomlibjs internally)
@@ -296,18 +280,7 @@ async function main() {
   const proofBytes = serializeGroth16Proof(groth16Proof);
   log(`Proof: ${proofBytes.length} bytes`);
 
-  // Build transact instruction using SDK
-  const ephPub1 = crypto.randomBytes(32);
-  const ephPub2 = crypto.randomBytes(32);
-  const stealth1 = new Uint8Array(72);
-  stealth1.set(ephPub1, 0);
-  stealth1.set(new Uint8Array(new BigUint64Array([BigInt(amount1)]).buffer), 32);
-  stealth1.set(crypto.randomBytes(32), 40); // encrypted_token_id
-  const stealth2 = new Uint8Array(72);
-  stealth2.set(ephPub2, 0);
-  stealth2.set(new Uint8Array(new BigUint64Array([BigInt(amount2)]).buffer), 32);
-  stealth2.set(crypto.randomBytes(32), 40); // encrypted_token_id
-
+  // Build transact instruction using SDK (stealth data already generated above)
   const txData = buildTransactInstructionData({
     nInputs: 1,
     nOutputs: 2,

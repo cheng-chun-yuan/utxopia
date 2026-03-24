@@ -27,6 +27,7 @@ import {
   loadState,
   stepHeader,
   log,
+  Disc,
   dsha256,
   sendIx,
   ESPLORA_URL,
@@ -163,7 +164,7 @@ async function main() {
 
   log("Calling mark_processing with 1 UTXO...");
   const mpData = Buffer.alloc(2);
-  mpData[0] = 2; // MARK_PROCESSING disc
+  mpData[0] = Disc.MARK_PROCESSING;
   mpData[1] = 1; // utxo_count = 1
 
   const mpIx = new TransactionInstruction({
@@ -369,7 +370,7 @@ async function main() {
   const crDataLen = 1 + 32 + 4 + 1 + poolScriptBuf.length + 1;
   const crData = Buffer.alloc(crDataLen);
   off = 0;
-  crData[off++] = 6; // COMPLETE_REDEMPTION discriminator
+  crData[off++] = Disc.COMPLETE_REDEMPTION;
   Buffer.from(withdrawTxHash).copy(crData, off); off += 32;
   crData.writeUInt32LE(strippedWithdraw.length, off); off += 4;
   crData[off++] = poolScriptBuf.length;

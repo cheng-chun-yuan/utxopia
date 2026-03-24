@@ -32,32 +32,35 @@ export interface Instruction {
 // Constants
 // =============================================================================
 
-/** Instruction discriminators (must match contracts/programs/aegis/src/lib.rs) */
+/** Instruction discriminators — sequential 0-19 (must match contracts/programs/aegis/src/lib.rs) */
 const INSTRUCTION = {
-  // Core operations
+  // Core (0-2)
   INITIALIZE: 0,
-  VERIFY_STEALTH_DEPOSIT: 1,
-  MARK_PROCESSING: 2,
-  CANCEL_REDEMPTION: 3,
-  REQUEST_REDEMPTION: 5,
-  COMPLETE_REDEMPTION: 6,
-  SET_PAUSED: 7,
-  // VK Registry
-  INIT_VK_REGISTRY: 11,
-  UPDATE_VK_REGISTRY: 12,
-  ADD_DEMO_STEALTH: 13,
-  // JoinSplit
-  TRANSACT: 14,
-  // Timelocked pool updates
-  PROPOSE_POOL_UPDATE: 21,
-  EXECUTE_POOL_UPDATE: 22,
-  CANCEL_POOL_UPDATE: 23,
-  // Multi-token instructions
-  REGISTER_TOKEN: 28,
-  SHIELD: 29,
-  UNSHIELD: 30,
-  UPDATE_TOKEN_CONFIG: 31,
-  CLAIM_FEES: 32,
+  SET_PAUSED: 1,
+  SET_POOL_CONFIG: 2,
+  // Pool updates (3-5)
+  PROPOSE_POOL_UPDATE: 3,
+  EXECUTE_POOL_UPDATE: 4,
+  CANCEL_POOL_UPDATE: 5,
+  // VK admin (6-7)
+  INIT_VK_REGISTRY: 6,
+  UPDATE_VK_REGISTRY: 7,
+  // Multi-token (8-10)
+  REGISTER_TOKEN: 8,
+  UPDATE_TOKEN_CONFIG: 9,
+  CLAIM_FEES: 10,
+  // Deposit (11-12)
+  VERIFY_STEALTH_DEPOSIT: 11,
+  SHIELD: 12,
+  // JoinSplit (13-15) — all share n_in + n_out + n_pub + proof_source header
+  TRANSACT: 13,
+  UNSHIELD: 14,
+  REDEEM: 15,
+  // Redemption lifecycle (16-19)
+  REQUEST_REDEMPTION: 16,
+  COMPLETE_REDEMPTION: 17,
+  MARK_PROCESSING: 18,
+  CANCEL_REDEMPTION: 19,
 } as const;
 
 /** Export instruction discriminators for consumers */
@@ -420,6 +423,7 @@ export interface TransactInstructionOptions {
  * Layout (after disc stripped by entrypoint):
  * - n_inputs: u8
  * - n_outputs: u8
+ * - n_public_outputs: u8 (always 0 for transact)
  * - proof_source: u8 (0=inline, 1=buffer account)
  * - proof: [u8; 256] (only if proof_source=0)
  * - merkle_root: [u8; 32]
@@ -459,7 +463,7 @@ export function buildTransactInstructionData(options: {
 
   const STEALTH_DATA_PER_OUTPUT = 72; // ephemeral_pub(32) + encrypted_amount(8) + encrypted_token_id(32)
   const proofSize = proofSource === 0 ? 256 : 0;
-  const totalSize = 1 + 3 + proofSize + 32 + 32 + (nInputs * 32) + (nOutputs * 32) + (nOutputs * STEALTH_DATA_PER_OUTPUT);
+  const totalSize = 1 + 4 + proofSize + 32 + 32 + (nInputs * 32) + (nOutputs * 32) + (nOutputs * STEALTH_DATA_PER_OUTPUT);
   const data = new Uint8Array(totalSize);
 
   let offset = 0;
@@ -467,9 +471,10 @@ export function buildTransactInstructionData(options: {
   // Discriminator
   data[offset++] = INSTRUCTION.TRANSACT;
 
-  // Header
+  // Header (4 bytes)
   data[offset++] = nInputs;
   data[offset++] = nOutputs;
+  data[offset++] = 0; // n_public_outputs = 0 for transact
   data[offset++] = proofSource;
 
   // Proof (256 bytes, only in inline mode)
@@ -553,67 +558,66 @@ export function buildTransactInstruction(options: TransactInstructionOptions): I
 }
 
 // =============================================================================
-// Public Unshield Instruction Builder
+// JoinSplit + BTC Redeem Instruction Builder (disc=16)
 // =============================================================================
 
-/** Unshield instruction options */
-export interface UnshieldInstructionOptions {
-  /** Number of input notes being spent */
-  nInputs: number;
-  /** Number of output notes (includes burn output as last) */
-  nOutputs: number;
-  /** Groth16 proof bytes (256 bytes) */
-  proofBytes: Uint8Array;
-  /** Merkle root */
-  merkleRoot: Uint8Array;
-  /** Bound parameters hash */
-  boundParamsHash: Uint8Array;
-  /** Nullifiers (32 bytes each) */
-  nullifiers: Uint8Array[];
-  /** Output commitments (32 bytes each, last = burn commitment) */
-  commitmentsOut: Uint8Array[];
-  /** Per-output stealth data for tree outputs only (n_outputs - 1 entries) */
-  stealthData: Uint8Array[];
-  /** Amount being unshielded */
-  unshieldAmount: bigint;
-  /** Account addresses */
-  accounts: {
-    poolState: Address;
-    commitmentTree: Address;
-    vkRegistry: Address;
-    user: Address;
-    tokenConfig: Address;
-    vault: Address;
-    userTokenAccount: Address;
-    /** Nullifier record PDAs (one per input) */
-    nullifierRecords: Address[];
-  };
-}
-
 /**
- * Build unshield instruction data (multi-token version, disc 30).
+ * Build instruction data for REDEEM (disc=15) — atomic JoinSplit + BTC withdrawal (multi-output)
  *
- * Layout: disc(1) + n_inputs(1) + n_outputs(1) + proof(256) + merkle_root(32)
- *       + bound_params_hash(32) + nullifiers(N*32) + commitments_out(M*32)
- *       + stealth_data((M-1)*40) + unshield_amount(8)
+ * Combines Groth16 proof verification with RedemptionRequest PDA creation.
+ * Supports 1..3 public outputs, each creating a separate RedemptionRequest.
  *
- * No unshield_address — burn commitment uses Poseidon([0], token_id, amount).
+ * Layout (4-byte common header):
+ * - n_inputs: u8
+ * - n_outputs: u8
+ * - n_public_outputs: u8 (1..3)
+ * - proof_source: u8 (0=inline, 1=buffer account)
+ * - proof: [u8; 256] (only if proof_source=0)
+ * - merkle_root: [u8; 32]
+ * - bound_params_hash: [u8; 32]
+ * - nullifiers: [[u8; 32]; n_inputs]
+ * - commitments_out: [[u8; 32]; n_outputs]
+ * - stealth_data: [ephemeral_pub(32) + encrypted_amount(8)] x n_tree_outputs
+ * - For each public output: amount(8) + script_len(1) + script(var) + nonce(8)
  */
-export function buildUnshieldInstructionData(options: {
+export function buildRedeemInstructionData(options: {
   nInputs: number;
   nOutputs: number;
-  proofBytes: Uint8Array;
+  /** Number of public (redeem) outputs. Defaults to 1 for backward compat. */
+  nPublicOutputs?: number;
+  /** Groth16 proof (256 bytes). Omit when using buffer mode. */
+  proofBytes?: Uint8Array;
   merkleRoot: Uint8Array;
   boundParamsHash: Uint8Array;
   nullifiers: Uint8Array[];
   commitmentsOut: Uint8Array[];
+  /** Stealth data for tree outputs only (n_tree_outputs entries, 40 bytes each) */
   stealthData: Uint8Array[];
-  unshieldAmount: bigint;
+  /** Amount(s) to redeem in satoshis — single or array */
+  redeemAmounts: bigint[];
+  /** Bitcoin scriptPubKey(s) (raw bytes, max 62 each) — single or array */
+  btcScripts: Uint8Array[];
+  /** Unique request nonce(s) — single or array */
+  requestNonces: bigint[];
+  /** 0=inline proof (default), 1=proof in separate ChadBuffer account */
+  proofSource?: 0 | 1;
 }): Uint8Array {
-  const { nInputs, nOutputs, proofBytes, merkleRoot, boundParamsHash, nullifiers, commitmentsOut, stealthData, unshieldAmount } = options;
+  const {
+    nInputs, nOutputs, proofBytes, merkleRoot, boundParamsHash,
+    nullifiers, commitmentsOut, stealthData, redeemAmounts, btcScripts, requestNonces,
+  } = options;
+  const nPublicOutputs = options.nPublicOutputs ?? redeemAmounts.length;
+  const proofSource = options.proofSource ?? 0;
 
-  if (proofBytes.length !== 256) {
-    throw new Error(`Groth16 proof must be 256 bytes, got ${proofBytes.length}`);
+  if (proofSource === 0 && (!proofBytes || proofBytes.length !== 256)) {
+    throw new Error(`Inline mode requires 256-byte proof, got ${proofBytes?.length ?? 0}`);
+  }
+  if (nPublicOutputs < 1 || nPublicOutputs > 3) {
+    throw new Error(`nPublicOutputs must be 1-3, got ${nPublicOutputs}`);
+  }
+  const nTreeOutputs = nOutputs - nPublicOutputs;
+  if (nTreeOutputs < 0) {
+    throw new Error(`nOutputs (${nOutputs}) must be >= nPublicOutputs (${nPublicOutputs})`);
   }
   if (nullifiers.length !== nInputs) {
     throw new Error(`Expected ${nInputs} nullifiers, got ${nullifiers.length}`);
@@ -621,28 +625,51 @@ export function buildUnshieldInstructionData(options: {
   if (commitmentsOut.length !== nOutputs) {
     throw new Error(`Expected ${nOutputs} commitments, got ${commitmentsOut.length}`);
   }
-  const nTreeOutputs = nOutputs - 1;
   if (stealthData.length !== nTreeOutputs) {
-    throw new Error(`Expected ${nTreeOutputs} stealth data entries (tree outputs), got ${stealthData.length}`);
+    throw new Error(`Expected ${nTreeOutputs} stealth data entries, got ${stealthData.length}`);
+  }
+  if (redeemAmounts.length !== nPublicOutputs) {
+    throw new Error(`Expected ${nPublicOutputs} redeem amounts, got ${redeemAmounts.length}`);
+  }
+  if (btcScripts.length !== nPublicOutputs) {
+    throw new Error(`Expected ${nPublicOutputs} BTC scripts, got ${btcScripts.length}`);
+  }
+  if (requestNonces.length !== nPublicOutputs) {
+    throw new Error(`Expected ${nPublicOutputs} request nonces, got ${requestNonces.length}`);
+  }
+  for (let k = 0; k < nPublicOutputs; k++) {
+    if (btcScripts[k].length === 0 || btcScripts[k].length > 62) {
+      throw new Error(`BTC script[${k}] must be 1-62 bytes, got ${btcScripts[k].length}`);
+    }
   }
 
-  const STEALTH_DATA_PER_OUTPUT = 72; // ephemeral_pub(32) + encrypted_amount(8) + encrypted_token_id(32)
-  const totalSize = 1 + 2 + 256 + 32 + 32 + (nInputs * 32) + (nOutputs * 32) + (nTreeOutputs * STEALTH_DATA_PER_OUTPUT) + 8;
+  // On-chain redeem uses 40-byte stealth data: ephemeral_pub(32) + encrypted_amount(8)
+  const STEALTH_DATA_SIZE = 40;
+  const proofSize = proofSource === 0 ? 256 : 0;
+  let totalScriptLen = 0;
+  for (const s of btcScripts) totalScriptLen += s.length;
+  const totalSize = 1 + 4 + proofSize + 32 + 32
+    + (nInputs * 32) + (nOutputs * 32) + (nTreeOutputs * STEALTH_DATA_SIZE)
+    + nPublicOutputs * (8 + 1 + 8) + totalScriptLen;
+
   const data = new Uint8Array(totalSize);
   const view = new DataView(data.buffer);
-
   let offset = 0;
 
   // Discriminator
-  data[offset++] = INSTRUCTION.UNSHIELD;
+  data[offset++] = INSTRUCTION.REDEEM;
 
-  // Header
+  // Header (4 bytes)
   data[offset++] = nInputs;
   data[offset++] = nOutputs;
+  data[offset++] = nPublicOutputs;
+  data[offset++] = proofSource;
 
-  // Proof (256 bytes)
-  data.set(proofBytes, offset);
-  offset += 256;
+  // Proof (256 bytes, only in inline mode)
+  if (proofSource === 0 && proofBytes) {
+    data.set(proofBytes, offset);
+    offset += 256;
+  }
 
   // Merkle root (32 bytes)
   data.set(merkleRoot, offset);
@@ -658,26 +685,190 @@ export function buildUnshieldInstructionData(options: {
     offset += 32;
   }
 
-  // Output commitments (all n_outputs, last = burn)
+  // Output commitments (all n_outputs, last n_public_outputs = redeem)
   for (const commitment of commitmentsOut) {
     data.set(commitment, offset);
     offset += 32;
   }
 
-  // Stealth data for tree outputs only (n_outputs - 1)
+  // Stealth data for tree outputs only (40 bytes each)
+  for (const sd of stealthData) {
+    data.set(sd.slice(0, STEALTH_DATA_SIZE), offset);
+    offset += STEALTH_DATA_SIZE;
+  }
+
+  // Per-output redeem data: amount(8) + script_len(1) + script(var) + nonce(8)
+  for (let k = 0; k < nPublicOutputs; k++) {
+    view.setBigUint64(offset, redeemAmounts[k], true);
+    offset += 8;
+    data[offset++] = btcScripts[k].length;
+    data.set(btcScripts[k], offset);
+    offset += btcScripts[k].length;
+    view.setBigUint64(offset, requestNonces[k], true);
+    offset += 8;
+  }
+
+  return data;
+}
+
+// =============================================================================
+// Public Unshield Instruction Builder
+// =============================================================================
+
+/** Unshield instruction options (multi-output) */
+export interface UnshieldInstructionOptions {
+  /** Number of input notes being spent */
+  nInputs: number;
+  /** Number of output notes (includes burn outputs at end) */
+  nOutputs: number;
+  /** Number of public (unshield) outputs. Defaults to 1. */
+  nPublicOutputs?: number;
+  /** Groth16 proof bytes (256 bytes) */
+  proofBytes: Uint8Array;
+  /** Merkle root */
+  merkleRoot: Uint8Array;
+  /** Bound parameters hash */
+  boundParamsHash: Uint8Array;
+  /** Nullifiers (32 bytes each) */
+  nullifiers: Uint8Array[];
+  /** Output commitments (32 bytes each, last nPublicOutputs = burn commitments) */
+  commitmentsOut: Uint8Array[];
+  /** Per-output stealth data for tree outputs only */
+  stealthData: Uint8Array[];
+  /** Amount(s) being unshielded */
+  unshieldAmounts: bigint[];
+  /** Account addresses */
+  accounts: {
+    poolState: Address;
+    commitmentTree: Address;
+    vkRegistry: Address;
+    user: Address;
+    tokenConfig: Address;
+    vault: Address;
+    /** Recipient token accounts (one per public output) */
+    recipientTokenAccounts: Address[];
+    /** Nullifier record PDAs (one per input) */
+    nullifierRecords: Address[];
+  };
+}
+
+/**
+ * Build unshield instruction data (multi-output, disc=14).
+ *
+ * Layout (4-byte common header):
+ * - disc(1) + n_inputs(1) + n_outputs(1) + n_public_outputs(1) + proof_source(1)
+ * - proof(256) if inline
+ * - merkle_root(32) + bound_params_hash(32)
+ * - nullifiers(N*32) + commitments_out(M*32)
+ * - stealth_data(n_tree_outputs * 72)
+ * - amounts[P] (each u64 LE)
+ *
+ * Recipients come from accounts array (one token account per public output).
+ */
+export function buildUnshieldInstructionData(options: {
+  nInputs: number;
+  nOutputs: number;
+  /** Number of public (unshield) outputs. Defaults to 1. */
+  nPublicOutputs?: number;
+  /** Groth16 proof (256 bytes). Omit when using buffer mode. */
+  proofBytes?: Uint8Array;
+  merkleRoot: Uint8Array;
+  boundParamsHash: Uint8Array;
+  nullifiers: Uint8Array[];
+  commitmentsOut: Uint8Array[];
+  stealthData: Uint8Array[];
+  /** Amount(s) being unshielded — single or array */
+  unshieldAmounts: bigint[];
+  /** 0=inline proof (default), 1=proof in separate ChadBuffer account */
+  proofSource?: 0 | 1;
+}): Uint8Array {
+  const { nInputs, nOutputs, proofBytes, merkleRoot, boundParamsHash, nullifiers, commitmentsOut, stealthData, unshieldAmounts } = options;
+  const nPublicOutputs = options.nPublicOutputs ?? unshieldAmounts.length;
+  const proofSource = options.proofSource ?? 0;
+
+  if (proofSource === 0 && (!proofBytes || proofBytes.length !== 256)) {
+    throw new Error(`Inline mode requires 256-byte proof, got ${proofBytes?.length ?? 0}`);
+  }
+  if (nPublicOutputs < 1 || nPublicOutputs > 3) {
+    throw new Error(`nPublicOutputs must be 1-3, got ${nPublicOutputs}`);
+  }
+  if (nullifiers.length !== nInputs) {
+    throw new Error(`Expected ${nInputs} nullifiers, got ${nullifiers.length}`);
+  }
+  if (commitmentsOut.length !== nOutputs) {
+    throw new Error(`Expected ${nOutputs} commitments, got ${commitmentsOut.length}`);
+  }
+  const nTreeOutputs = nOutputs - nPublicOutputs;
+  if (nTreeOutputs < 0) {
+    throw new Error(`nOutputs (${nOutputs}) must be >= nPublicOutputs (${nPublicOutputs})`);
+  }
+  if (stealthData.length !== nTreeOutputs) {
+    throw new Error(`Expected ${nTreeOutputs} stealth data entries (tree outputs), got ${stealthData.length}`);
+  }
+  if (unshieldAmounts.length !== nPublicOutputs) {
+    throw new Error(`Expected ${nPublicOutputs} unshield amounts, got ${unshieldAmounts.length}`);
+  }
+
+  const STEALTH_DATA_PER_OUTPUT = 72; // ephemeral_pub(32) + encrypted_amount(8) + encrypted_token_id(32)
+  const proofSize = proofSource === 0 ? 256 : 0;
+  const totalSize = 1 + 4 + proofSize + 32 + 32 + (nInputs * 32) + (nOutputs * 32) + (nTreeOutputs * STEALTH_DATA_PER_OUTPUT) + (nPublicOutputs * 8);
+  const data = new Uint8Array(totalSize);
+  const view = new DataView(data.buffer);
+
+  let offset = 0;
+
+  // Discriminator
+  data[offset++] = INSTRUCTION.UNSHIELD;
+
+  // Header (4 bytes)
+  data[offset++] = nInputs;
+  data[offset++] = nOutputs;
+  data[offset++] = nPublicOutputs;
+  data[offset++] = proofSource;
+
+  // Proof (256 bytes, only in inline mode)
+  if (proofSource === 0 && proofBytes) {
+    data.set(proofBytes, offset);
+    offset += 256;
+  }
+
+  // Merkle root (32 bytes)
+  data.set(merkleRoot, offset);
+  offset += 32;
+
+  // Bound params hash (32 bytes)
+  data.set(boundParamsHash, offset);
+  offset += 32;
+
+  // Nullifiers
+  for (const nullifier of nullifiers) {
+    data.set(nullifier, offset);
+    offset += 32;
+  }
+
+  // Output commitments (all n_outputs, last nPublicOutputs = burn)
+  for (const commitment of commitmentsOut) {
+    data.set(commitment, offset);
+    offset += 32;
+  }
+
+  // Stealth data for tree outputs only
   for (const sd of stealthData) {
     data.set(sd.slice(0, STEALTH_DATA_PER_OUTPUT), offset);
     offset += STEALTH_DATA_PER_OUTPUT;
   }
 
-  // Unshield amount (u64 LE)
-  view.setBigUint64(offset, unshieldAmount, true);
+  // Per-output unshield amounts (u64 LE each)
+  for (const amount of unshieldAmounts) {
+    view.setBigUint64(offset, amount, true);
+    offset += 8;
+  }
 
   return data;
 }
 
 /**
- * Build a complete unshield instruction (multi-token, disc 30)
+ * Build a complete unshield instruction (multi-output, disc=14)
  *
  * Accounts:
  * 0. pool_state (read)
@@ -687,23 +878,25 @@ export function buildUnshieldInstructionData(options: {
  * 4. system_program (read)
  * 5. token_config (writable)
  * 6. vault (writable)
- * 7. user_token_account (writable)
- * 8. token_program (read)
- * 9..9+N nullifier_records (writable)
+ * 7. token_program (read)
+ * 8..8+P recipient_token_accounts (writable, one per public output)
+ * 8+P..8+P+N nullifier_records (writable)
  */
 export function buildUnshieldInstruction(options: UnshieldInstructionOptions): Instruction {
   const config = getConfig();
+  const nPublicOutputs = options.nPublicOutputs ?? options.unshieldAmounts.length;
 
   const data = buildUnshieldInstructionData({
     nInputs: options.nInputs,
     nOutputs: options.nOutputs,
+    nPublicOutputs,
     proofBytes: options.proofBytes,
     merkleRoot: options.merkleRoot,
     boundParamsHash: options.boundParamsHash,
     nullifiers: options.nullifiers,
     commitmentsOut: options.commitmentsOut,
     stealthData: options.stealthData,
-    unshieldAmount: options.unshieldAmount,
+    unshieldAmounts: options.unshieldAmounts,
   });
 
   const accounts: Instruction["accounts"] = [
@@ -714,9 +907,13 @@ export function buildUnshieldInstruction(options: UnshieldInstructionOptions): I
     { address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY },
     { address: options.accounts.tokenConfig, role: AccountRole.WRITABLE },
     { address: options.accounts.vault, role: AccountRole.WRITABLE },
-    { address: options.accounts.userTokenAccount, role: AccountRole.WRITABLE },
     { address: TOKEN_2022_PROGRAM_ID, role: AccountRole.READONLY },
   ];
+
+  // Recipient token accounts (one per public output)
+  for (const rta of options.accounts.recipientTokenAccounts) {
+    accounts.push({ address: rta, role: AccountRole.WRITABLE });
+  }
 
   // Nullifier records (writable PDAs)
   for (const nr of options.accounts.nullifierRecords) {

@@ -299,6 +299,8 @@ export {
 
 export {
   computeBoundParamsHash,
+  computeStealthDataHash,
+  createTransferBoundParams,
   createUnshieldBoundParams,
   createRedeemBoundParams,
   DEFAULT_BOUND_PARAMS,
@@ -532,6 +534,8 @@ export {
   // JoinSplit transact instruction
   buildTransactInstructionData,
   buildTransactInstruction,
+  // JoinSplit + BTC redeem instruction
+  buildRedeemInstructionData,
   // Public unshield instruction
   buildUnshieldInstructionData,
   buildUnshieldInstruction,

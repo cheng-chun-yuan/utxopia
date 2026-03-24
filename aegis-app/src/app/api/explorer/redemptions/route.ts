@@ -3,9 +3,7 @@
  *
  * Server-side join of:
  * 1. On-chain RedemptionRequest PDAs (active: Pending/Processing/Failed)
- * 2. Backend tracking data (enrichment: BTC txids, status, errors)
- * 3. On-chain completion events via /api/redemption/completed (completed redemptions
- *    whose PDAs are closed — reconstructed purely from indexed on-chain events)
+ * 2. Backend consolidated data (tracking + requested/processing/completed events)
  */
 
 import { NextResponse } from "next/server";
@@ -113,17 +111,18 @@ async function createServerRpc(): Promise<RpcClient> {
 
 export async function GET() {
   try {
-    // Fetch all sources in parallel (including pool state for fee config + transfers for in/out counts)
     const { getConfig, fetchExplorerRedemptions } = await getAegisSDK();
-    const [redemptions, trackingResp, completedResp, requestedResp, processingResp, poolStateResp, transfersResp] = await Promise.all([
+
+    // Fetch all sources in parallel: PDA scan + consolidated backend + pool state + transfers
+    const [redemptions, allResp, poolStateResp, transfersResp] = await Promise.all([
       createServerRpc().then(rpc => fetchExplorerRedemptions(
         rpc,
         getConfig().aegisProgramId,
-      )).catch((e) => { console.warn("[Redemptions] PDA scan failed:", e.message); return []; }),
-      fetch(`${BACKEND_URL}/api/redemption/tracking`).catch(() => null),
-      fetch(`${BACKEND_URL}/api/redemption/completed`).catch(() => null),
-      fetch(`${BACKEND_URL}/api/redemption/requested`).catch(() => null),
-      fetch(`${BACKEND_URL}/api/redemption/processing`).catch(() => null),
+      )).catch((e) => {
+        console.warn("[Redemptions] PDA scan failed:", e.message);
+        return [];
+      }),
+      fetch(`${BACKEND_URL}/api/redemption/all`).catch(() => null),
       fetch(`${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/solana/pool-state`).catch(() => null),
       fetch(`${BACKEND_URL}/api/transfers`).catch(() => null),
     ]);
@@ -142,50 +141,23 @@ export async function GET() {
       } catch { /* use defaults */ }
     }
 
-    // Parse tracking data (keyed by PDA address)
+    // Parse consolidated backend response
     const trackingMap = new Map<string, TrackingEntry>();
-    if (trackingResp?.ok) {
+    let completedEntries: CompletedEntry[] = [];
+    let requestedEntries: RequestedEntry[] = [];
+    let processingEntries: ProcessingEntry[] = [];
+
+    if (allResp?.ok) {
       try {
-        const trackingData = await trackingResp.json();
-        const entries: TrackingEntry[] = trackingData.tracking ?? [];
-        for (const entry of entries) {
+        const allData = await allResp.json();
+        for (const entry of (allData.tracking ?? []) as TrackingEntry[]) {
           trackingMap.set(entry.pda_address, entry);
         }
+        completedEntries = allData.completed ?? [];
+        requestedEntries = allData.requested ?? [];
+        processingEntries = allData.processing ?? [];
       } catch {
-        // Ignore parse errors — tracking data is optional enrichment
-      }
-    }
-
-    // Parse completed redemptions from on-chain events (backend-independent source)
-    let completedEntries: CompletedEntry[] = [];
-    if (completedResp?.ok) {
-      try {
-        const completedData = await completedResp.json();
-        completedEntries = completedData.redemptions ?? [];
-      } catch {
-        // Ignore parse errors
-      }
-    }
-
-    // Parse requested redemptions from on-chain events (fallback for missing PDAs)
-    let requestedEntries: RequestedEntry[] = [];
-    if (requestedResp?.ok) {
-      try {
-        const requestedData = await requestedResp.json();
-        requestedEntries = requestedData.redemptions ?? [];
-      } catch {
-        // Ignore parse errors
-      }
-    }
-
-    // Parse processing redemptions from on-chain events (0x0A mark_processing)
-    let processingEntries: ProcessingEntry[] = [];
-    if (processingResp?.ok) {
-      try {
-        const processingData = await processingResp.json();
-        processingEntries = processingData.redemptions ?? [];
-      } catch {
-        // Ignore parse errors
+        // Backend unavailable — continue with PDA-only data
       }
     }
 
@@ -233,7 +205,7 @@ export async function GET() {
       );
     }
 
-    // Index requested/completed events by request_id for tx signature lookup
+    // Index events by request_id for tx signature lookup
     const requestedByReqId = new Map<string, RequestedEntry>();
     for (const req of requestedEntries) {
       requestedByReqId.set(req.request_id.toString(), req);
@@ -245,6 +217,14 @@ export async function GET() {
     const processingByReqId = new Map<string, ProcessingEntry>();
     for (const p of processingEntries) {
       processingByReqId.set(p.request_id.toString(), p);
+    }
+
+    // Build tracking lookup by request_id (no heuristic matching)
+    const trackingByReqId = new Map<string, TrackingEntry>();
+    for (const t of trackingMap.values()) {
+      if (t.request_id != null) {
+        trackingByReqId.set(t.request_id.toString(), t);
+      }
     }
 
     // Join PDA data with tracking data (active redemptions)
@@ -337,8 +317,8 @@ export async function GET() {
       });
     }
 
-    // Try to recover BTC txids for orphaned redemptions by scanning pool wallet txs.
-    // This handles the case where backend restarted and lost tracking state.
+    // Add requested redemptions that don't have PDA or completed entry
+    // Determine status by request_id lookup only (no heuristic matching)
     const POOL_ADDRESS = process.env.POOL_BTC_ADDRESS || "tb1pksj664hdqkzvw2tlfvqshnevxt2qdutk47p9z964dkcsxazmf0vsjas4n4";
     const ESPLORA = process.env.ESPLORA_URL || "https://mempool.space/testnet4/api";
     let poolTxCache: Array<{ txid: string; outputs: Array<{ script: string; value: number }> }> | null = null;
@@ -354,7 +334,6 @@ export async function GET() {
             outputs: tx.vout.map((o: any) => ({ script: o.scriptpubkey, value: o.value })),
           }));
         }
-        // Find tx with an output matching the btc_script
         for (const tx of poolTxCache) {
           if (tx.outputs.some((o) => o.script === btcScript)) {
             return tx.txid;
@@ -364,28 +343,24 @@ export async function GET() {
       return null;
     }
 
-    // Add requested redemptions from on-chain events for any that don't have
-    // a PDA or completed entry. Check tracking data to determine real status:
-    // - Has tracking with BTC txid → AwaitingConfirmation (BTC sent, waiting for SPV)
-    // - Has tracking without BTC txid → Processing (backend is working on it)
-    // - Has processing event → scan pool wallet for matching BTC tx
-    // - No tracking, no completion → Cancelled (PDA closed without completion)
     const knownRequestIds = new Set(serialized.map((r) => r.requestId));
+    const onChainPdaRequestIds = new Set(
+      (redemptions as any[]).map((r: any) => r.requestId?.toString()).filter(Boolean)
+    );
+
     for (const req of requestedEntries) {
       const rid = req.request_id.toString();
-      if (knownRequestIds.has(rid)) continue; // already present
+      if (knownRequestIds.has(rid)) continue;
 
-      // Check if backend has tracking data for this redemption
-      const trackingEntries = [...trackingMap.values()];
-      const tracking = trackingEntries.find(
-        (t) => t.request_id?.toString() === rid || (t.requester === req.requester && t.amount_sats === req.amount_sats)
-      );
+      // Look up tracking by request_id only (no heuristic matching by requester+amount)
+      const tracking = trackingByReqId.get(rid);
 
-      // Check if a processing event exists (BTC was likely sent)
       const hasProcessingEvent = processingByReqId.has(rid);
+      const hasOnChainPda = onChainPdaRequestIds.has(rid);
+      const isRecent = req.block_time && (Date.now() / 1000 - req.block_time) < 3600;
 
-      let status = "Cancelled";
-      let localStatus = "Cancelled";
+      let status = hasOnChainPda || isRecent ? "Pending" : "Cancelled";
+      let localStatus = hasOnChainPda || isRecent ? "Pending" : "Cancelled";
       let btcTxid: string | null = null;
 
       if (tracking) {
@@ -399,8 +374,6 @@ export async function GET() {
           status = "Processing";
         }
       } else if (hasProcessingEvent) {
-        // Processing event exists but no tracking — backend likely restarted
-        // and lost state. Try to find the BTC tx by scanning pool wallet.
         btcTxid = await findBtcTxByScript(req.btc_script);
         status = btcTxid ? "AwaitingConfirmation" : "AwaitingConfirmation";
         localStatus = btcTxid ? "AwaitingConfirmation" : "Processing";

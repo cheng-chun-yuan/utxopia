@@ -47,6 +47,7 @@ import {
   deriveBlockHeaderPDA,
   deriveHeightIndexPDA,
   deriveTokenConfigPDA,
+  parseStealthAnnouncementFromLogs,
 } from "./shared.js";
 
 import {
@@ -417,39 +418,36 @@ async function main() {
   const vsdSig = await sendIx([vsdIx], [authority], 600_000);
   log(`verify_stealth_deposit: ${vsdSig.slice(0, 20)}...`);
 
-  // Verify tree updated
-  const treeAfter = await connection.getAccountInfo(commitmentTree);
-  const treeDataAfter = parseCommitmentTree(Buffer.from(treeAfter!.data));
-  if (Number(treeDataAfter!.nextIndex) !== leafIndex0 + 1) {
-    throw new Error(`next_index expected ${leafIndex0 + 1}, got ${treeDataAfter!.nextIndex}`);
-  }
-  log(`Commitment at leaf ${leafIndex0}`);
+  // Read EXACT commitment + shielded amount from on-chain tx logs
+  // (amount after deposit fees, matching what Poseidon hashed into the commitment)
+  const txResult = await connection.getTransaction(vsdSig, { maxSupportedTransactionVersion: 0 });
+  if (!txResult?.meta?.logMessages) throw new Error("Could not fetch tx logs");
+
+  const announcement = parseStealthAnnouncementFromLogs(txResult.meta.logMessages);
+  if (!announcement) throw new Error("Stealth announcement not found in tx logs");
+
+  log(`Commitment at leaf ${announcement.leafIndex}`);
+  log(`On-chain commitment: ${announcement.commitment.slice(0, 16)}...`);
 
   // Read actual token_id from on-chain TokenConfig
   const tcInfo = await connection.getAccountInfo(zkbtcTokenConfig);
   const tc = parseTokenConfig(Buffer.from(tcInfo!.data))!;
   const tokenId = BigInt("0x" + Buffer.from(tc.tokenId).toString("hex"));
 
-  // Read the actual on-chain commitment from the frontier (frontier[0] = last inserted leaf)
-  const onChainCommitment = bytes32ToBigintBE(new Uint8Array(treeDataAfter!.frontier.subarray(0, 32)));
-  log(`On-chain commitment: ${onChainCommitment.toString(16).slice(0, 16)}...`);
-
-  // The on-chain amount may differ from our `amount` due to sweep fee + deposit fees
-  // We can't know the exact shielded amount, so we store the on-chain commitment directly
-  // Note: this note may not be spendable in JoinSplit without knowing the exact shielded amount
+  // Save note with EXACT on-chain data (commitment + shielded amount from logs)
   updateState({
     btcNote: {
       npk: npk0.toString(16),
       random: random0.toString(16),
-      amount: Number(amount), // may not match on-chain shielded amount
-      leafIndex: leafIndex0,
-      commitment: onChainCommitment.toString(16),
+      amount: announcement.amount, // exact shielded amount after fees
+      leafIndex: announcement.leafIndex,
+      commitment: announcement.commitment,
       tokenId: tokenId.toString(16),
       sweepTxid: sweepTxid, // display-order hex for UTXO PDA derivation
       sweepVout: 0,
     },
   });
-  trackCommitments(onChainCommitment.toString(16));
+  trackCommitments(announcement.commitment);
 
   console.log("\nStep 3: BTC Deposit (real) ...... PASS");
 }

@@ -83,30 +83,18 @@ fn poseidon2_hash_syscall(left: &[u8; 32], right: &[u8; 32]) -> Result<[u8; 32],
         .map_err(|_| ProgramError::InvalidArgument)
 }
 
-/// Reference implementation for testing (not for production on-chain use)
+/// Off-chain implementation using light-poseidon (matches on-chain Poseidon syscall exactly)
 #[cfg(not(target_os = "solana"))]
 fn poseidon2_hash_reference(left: &[u8; 32], right: &[u8; 32]) -> Result<[u8; 32], ProgramError> {
-    // For off-chain testing, use a deterministic hash
-    // This matches the structure but uses SHA256 as placeholder
-    // Real tests should use the actual Poseidon implementation
-    let mut hasher_input = [0u8; 65];
-    hasher_input[0] = 0x01; // Domain separator for Merkle node
-    hasher_input[1..33].copy_from_slice(left);
-    hasher_input[33..65].copy_from_slice(right);
+    use light_poseidon::{Poseidon, PoseidonBytesHasher};
+    use ark_bn254::Fr;
 
-    // Simple deterministic hash for testing
-    let mut result = [0u8; 32];
-    for (i, chunk) in hasher_input.chunks(2).enumerate() {
-        if i < 32 {
-            result[i] = chunk.iter().fold(0u8, |acc, &x| acc.wrapping_add(x));
-        }
-    }
-    // Add mixing
-    for i in 0..32 {
-        result[i] = result[i].wrapping_add(result[(i + 7) % 32]);
-    }
-
-    Ok(result)
+    // Reduce inputs to valid field elements (matches on-chain reduce_to_field)
+    let left_r = reduce_to_field_exact(left);
+    let right_r = reduce_to_field_exact(right);
+    let mut poseidon = Poseidon::<Fr>::new_circom(2).map_err(|_| ProgramError::InvalidArgument)?;
+    let hash = poseidon.hash_bytes_be(&[&left_r, &right_r]).map_err(|_| ProgramError::InvalidArgument)?;
+    Ok(hash)
 }
 
 /// Poseidon hash of three 32-byte inputs (for commitment computation)
@@ -141,26 +129,19 @@ fn poseidon3_hash_syscall(a: &[u8; 32], b: &[u8; 32], c: &[u8; 32]) -> Result<[u
         .map_err(|_| ProgramError::InvalidArgument)
 }
 
-/// Reference implementation for testing with 3 inputs
+/// Off-chain implementation using light-poseidon (matches on-chain Poseidon syscall exactly)
 #[cfg(not(target_os = "solana"))]
 fn poseidon3_hash_reference(a: &[u8; 32], b: &[u8; 32], c: &[u8; 32]) -> Result<[u8; 32], ProgramError> {
-    let mut hasher_input = [0u8; 97];
-    hasher_input[0] = 0x03; // Domain separator for 3-input Poseidon
-    hasher_input[1..33].copy_from_slice(a);
-    hasher_input[33..65].copy_from_slice(b);
-    hasher_input[65..97].copy_from_slice(c);
+    use light_poseidon::{Poseidon, PoseidonBytesHasher};
+    use ark_bn254::Fr;
 
-    let mut result = [0u8; 32];
-    for (i, chunk) in hasher_input.chunks(3).enumerate() {
-        if i < 32 {
-            result[i] = chunk.iter().fold(0u8, |acc, &x| acc.wrapping_add(x));
-        }
-    }
-    for i in 0..32 {
-        result[i] = result[i].wrapping_add(result[(i + 11) % 32]);
-    }
-
-    Ok(result)
+    // Reduce inputs to valid field elements (matches on-chain reduce_to_field)
+    let a_r = reduce_to_field_exact(a);
+    let b_r = reduce_to_field_exact(b);
+    let c_r = reduce_to_field_exact(c);
+    let mut poseidon = Poseidon::<Fr>::new_circom(3).map_err(|_| ProgramError::InvalidArgument)?;
+    let hash = poseidon.hash_bytes_be(&[&a_r, &b_r, &c_r]).map_err(|_| ProgramError::InvalidArgument)?;
+    Ok(hash)
 }
 
 /// Subtract BN254 Fr modulus from a big-endian 32-byte value.
@@ -197,42 +178,50 @@ fn reduce_to_field_exact(val: &[u8; 32]) -> [u8; 32] {
 /// Compute bound params hash for private transfer verification.
 /// Must match SDK's `computeBoundParamsHash()` exactly.
 ///
-/// Layout (45 bytes LE):
-///   treeNumber(4) + hasUnshield(1) + unshieldAddress(32) + chainId(8)
+/// Layout (77 bytes LE):
+///   treeNumber(4) + flag(1) + address(32) + chainId(8) + stealthDataHash(32)
 ///   → SHA256 → mod BN254_SCALAR_FIELD
 ///
-/// For private transfers: treeNumber=0, hasUnshield=0, address=zeros
-pub fn compute_bound_params_hash_private_transfer(chain_id: u64) -> [u8; 32] {
+/// For private transfers: treeNumber=0, flag=0, address=zeros
+pub fn compute_bound_params_hash_private_transfer(
+    chain_id: u64,
+    stealth_data_hash: &[u8; 32],
+) -> [u8; 32] {
     use super::sha256;
 
-    let mut buf = [0u8; 45];
+    let mut buf = [0u8; 77];
     // treeNumber = 0 (first 4 bytes already zero)
-    // hasUnshield = 0 (byte 4 already zero)
+    // flag = 0 (byte 4 already zero)
     // unshieldAddress = zeros (bytes 5-36 already zero)
-    // chainId (bytes 37-44, LE)
     buf[37..45].copy_from_slice(&chain_id.to_le_bytes());
+    buf[45..77].copy_from_slice(stealth_data_hash);
 
     let hash: [u8; 32] = sha256(&buf);
     reduce_to_field_exact(&hash)
 }
 
-/// Compute bound params hash for public unshield verification.
+/// Compute bound params hash for public unshield verification (multi-output).
 /// Must match SDK's `computeBoundParamsHash(createUnshieldBoundParams(...))`.
 ///
-/// Layout (45 bytes LE):
-///   treeNumber(4) + hasUnshield(1) + unshieldAddress(32) + chainId(8)
+/// Layout (77 bytes LE):
+///   treeNumber(4) + flag(1) + destinations_hash(32) + chainId(8) + stealthDataHash(32)
 ///   → SHA256 → mod BN254_SCALAR_FIELD
 ///
-/// For unshield: treeNumber=0, hasUnshield=1, address=recipient pubkey
-pub fn compute_bound_params_hash_unshield(chain_id: u64, unshield_address: &[u8; 32]) -> [u8; 32] {
+/// destinations_hash = SHA256(owner_1 || owner_2 || ...)
+/// For single output: SHA256(owner_1) — no special case.
+pub fn compute_bound_params_hash_unshield(
+    chain_id: u64,
+    owners_concat: &[u8],
+    stealth_data_hash: &[u8; 32],
+) -> [u8; 32] {
     use super::sha256;
 
-    let mut buf = [0u8; 45];
-    // treeNumber = 0 (first 4 bytes already zero)
-    buf[4] = 1; // hasUnshield = 1
-    buf[5..37].copy_from_slice(unshield_address);
-    // chainId (bytes 37-44, LE)
+    let mut buf = [0u8; 77];
+    buf[4] = 1; // flag = 1 (unshield)
+    let destinations_hash: [u8; 32] = sha256(owners_concat);
+    buf[5..37].copy_from_slice(&destinations_hash);
     buf[37..45].copy_from_slice(&chain_id.to_le_bytes());
+    buf[45..77].copy_from_slice(stealth_data_hash);
 
     let hash: [u8; 32] = sha256(&buf);
     reduce_to_field_exact(&hash)
@@ -241,20 +230,24 @@ pub fn compute_bound_params_hash_unshield(chain_id: u64, unshield_address: &[u8;
 /// Compute bound params hash for redeem (JoinSplit → BTC withdrawal).
 /// Must match SDK's `computeBoundParamsHash(createRedeemBoundParams(...))`.
 ///
-/// Layout (45 bytes LE):
-///   treeNumber(4) + flag(1) + address(32) + chainId(8)
+/// Layout (77 bytes LE):
+///   treeNumber(4) + flag(1) + address(32) + chainId(8) + stealthDataHash(32)
 ///   → SHA256 → mod BN254_SCALAR_FIELD
 ///
-/// For redeem: treeNumber=0, flag=2, address=zeros
-pub fn compute_bound_params_hash_redeem(chain_id: u64) -> [u8; 32] {
+/// For redeem: treeNumber=0, flag=2, address=SHA256(btcScript)
+pub fn compute_bound_params_hash_redeem(
+    chain_id: u64,
+    btc_script: &[u8],
+    stealth_data_hash: &[u8; 32],
+) -> [u8; 32] {
     use super::sha256;
 
-    let mut buf = [0u8; 45];
-    // treeNumber = 0 (first 4 bytes already zero)
+    let mut buf = [0u8; 77];
     buf[4] = 2; // flag = 2 (redeem)
-    // address = zeros (bytes 5-36 already zero)
-    // chainId (bytes 37-44, LE)
+    let script_hash: [u8; 32] = sha256(btc_script);
+    buf[5..37].copy_from_slice(&script_hash);
     buf[37..45].copy_from_slice(&chain_id.to_le_bytes());
+    buf[45..77].copy_from_slice(stealth_data_hash);
 
     let hash: [u8; 32] = sha256(&buf);
     reduce_to_field_exact(&hash)
@@ -484,22 +477,133 @@ mod tests {
 
     #[test]
     fn test_bound_params_hash_deterministic() {
-        let hash1 = compute_bound_params_hash_private_transfer(103);
-        let hash2 = compute_bound_params_hash_private_transfer(103);
-        // Debug: println!("bound_params_hash(103) = {:02x?}", hash1);
+        let stealth = [0u8; 32];
+        let hash1 = compute_bound_params_hash_private_transfer(103, &stealth);
+        let hash2 = compute_bound_params_hash_private_transfer(103, &stealth);
         assert_eq!(hash1, hash2);
     }
 
     #[test]
     fn test_bound_params_hash_different_chain_ids() {
-        let devnet = compute_bound_params_hash_private_transfer(103);
-        let mainnet = compute_bound_params_hash_private_transfer(101);
+        let stealth = [0u8; 32];
+        let devnet = compute_bound_params_hash_private_transfer(103, &stealth);
+        let mainnet = compute_bound_params_hash_private_transfer(101, &stealth);
         assert_ne!(devnet, mainnet, "Different chain IDs must produce different hashes");
     }
 
     #[test]
     fn test_bound_params_hash_is_valid_field_element() {
-        let hash = compute_bound_params_hash_private_transfer(103);
+        let stealth = [0u8; 32];
+        let hash = compute_bound_params_hash_private_transfer(103, &stealth);
         assert!(!is_ge_modulus(&hash), "Hash must be a valid BN254 field element");
+    }
+
+    #[test]
+    fn test_bound_params_hash_different_stealth_data() {
+        let stealth_a = [0xAAu8; 32];
+        let stealth_b = [0xBBu8; 32];
+        let hash_a = compute_bound_params_hash_private_transfer(103, &stealth_a);
+        let hash_b = compute_bound_params_hash_private_transfer(103, &stealth_b);
+        assert_ne!(hash_a, hash_b, "Different stealth data must produce different hashes");
+    }
+
+    #[test]
+    fn test_bound_params_hash_redeem_binds_btc_script() {
+        let stealth = [0u8; 32];
+        let script_a = [0x51u8, 0x20, 0xAAu8, 0xBB]; // dummy P2TR-like
+        let script_b = [0x51u8, 0x20, 0xCC, 0xDD];
+        let hash_a = compute_bound_params_hash_redeem(103, &script_a, &stealth);
+        let hash_b = compute_bound_params_hash_redeem(103, &script_b, &stealth);
+        assert_ne!(hash_a, hash_b, "Different BTC scripts must produce different hashes");
+
+        // Same script, same stealth → deterministic
+        let hash_a2 = compute_bound_params_hash_redeem(103, &script_a, &stealth);
+        assert_eq!(hash_a, hash_a2, "Same inputs must produce same hash");
+    }
+
+    #[test]
+    fn test_bound_params_hash_redeem_binds_stealth() {
+        let stealth_a = [0xAAu8; 32];
+        let stealth_b = [0xBBu8; 32];
+        let script = [0x51u8, 0x20, 0xAA, 0xBB];
+        let hash_a = compute_bound_params_hash_redeem(103, &script, &stealth_a);
+        let hash_b = compute_bound_params_hash_redeem(103, &script, &stealth_b);
+        assert_ne!(hash_a, hash_b, "Different stealth data must produce different redeem hashes");
+    }
+
+    /// Cross-language test vectors — these hex values must match the SDK tests.
+    #[test]
+    fn test_bound_params_cross_lang_vectors() {
+        let stealth = [0u8; 32]; // zero stealth hash
+
+        // Vector 1: private transfer, chain_id=103, zero stealth
+        let transfer = compute_bound_params_hash_private_transfer(103, &stealth);
+        let transfer_hex: String = transfer.iter().map(|b| format!("{:02x}", b)).collect();
+        println!("VECTOR_transfer={}", transfer_hex);
+
+        // Vector 2: unshield, chain_id=103, address=0xAA*32, zero stealth
+        let addr = [0xAAu8; 32];
+        let unshield = compute_bound_params_hash_unshield(103, &addr, &stealth);
+        // Note: single owner passed as 32-byte slice → SHA256(owner)
+        let unshield_hex: String = unshield.iter().map(|b| format!("{:02x}", b)).collect();
+        println!("VECTOR_unshield={}", unshield_hex);
+
+        // Vector 3: redeem, chain_id=103, btcScript=5120+0xBB*32, zero stealth
+        let mut script = vec![0x51u8, 0x20];
+        script.extend_from_slice(&[0xBBu8; 32]);
+        let redeem = compute_bound_params_hash_redeem(103, &script, &stealth);
+        let redeem_hex: String = redeem.iter().map(|b| format!("{:02x}", b)).collect();
+        println!("VECTOR_redeem={}", redeem_hex);
+
+        // Vector 4: transfer with non-zero stealth
+        let stealth_nz = [0xCCu8; 32];
+        let transfer_nz = compute_bound_params_hash_private_transfer(103, &stealth_nz);
+        let transfer_nz_hex: String = transfer_nz.iter().map(|b| format!("{:02x}", b)).collect();
+        println!("VECTOR_transfer_nz={}", transfer_nz_hex);
+
+        // Ensure they're all different
+        assert_ne!(transfer, unshield);
+        assert_ne!(transfer, redeem);
+        assert_ne!(unshield, redeem);
+        assert_ne!(transfer, transfer_nz);
+    }
+
+    #[test]
+    /// Test real Poseidon3 against circomlibjs expected output
+    /// circomlibjs: poseidon([1n, 2n, 3n]) = 0e7732d89e6939c0ff03d5e58dab6302f3230e269dc5b968f725df34ab36d732
+    #[test]
+    fn test_poseidon3_vs_circomlibjs() {
+        let mut a = [0u8; 32]; a[31] = 1;
+        let mut b = [0u8; 32]; b[31] = 2;
+        let mut c = [0u8; 32]; c[31] = 3;
+        let hash = poseidon3_hash(&a, &b, &c).unwrap();
+        let hex: String = hash.iter().map(|b| format!("{:02x}", b)).collect();
+        println!("Poseidon3(1,2,3) = {}", hex);
+        assert_eq!(hex, "0e7732d89e6939c0ff03d5e58dab6302f3230e269dc5b968f725df34ab36d732");
+    }
+
+    /// Test real Poseidon2 against circomlibjs expected output
+    /// circomlibjs: poseidon([1n, 2n]) = 115cc0f5e7d690413df64c6b9662e9cf2a3617f2743245519e19607a4417189a
+    #[test]
+    fn test_poseidon2_vs_circomlibjs() {
+        let mut a = [0u8; 32]; a[31] = 1;
+        let mut b = [0u8; 32]; b[31] = 2;
+        let hash = poseidon2_hash(&a, &b).unwrap();
+        let hex: String = hash.iter().map(|b| format!("{:02x}", b)).collect();
+        println!("Poseidon2(1,2) = {}", hex);
+        assert_eq!(hex, "115cc0f5e7d690413df64c6b9662e9cf2a3617f2743245519e19607a4417189a");
+    }
+
+    fn test_bound_params_hash_modes_are_distinct() {
+        let stealth = [0u8; 32];
+        let addr = [0u8; 32]; // single 32-byte owner
+        let transfer = compute_bound_params_hash_private_transfer(103, &stealth);
+        let unshield = compute_bound_params_hash_unshield(103, &addr, &stealth);
+        let redeem = compute_bound_params_hash_redeem(103, &[], &stealth);
+        // At minimum, transfer and unshield should differ (different flag byte)
+        assert_ne!(transfer, unshield, "Transfer and unshield hashes must differ");
+        // Note: redeem with empty script may fail in production (btc_script_len=0 check),
+        // but the hash function itself should still work and produce a different result
+        assert_ne!(transfer, redeem, "Transfer and redeem hashes must differ");
     }
 }

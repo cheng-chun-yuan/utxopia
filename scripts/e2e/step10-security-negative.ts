@@ -26,6 +26,7 @@ import {
   loadState,
   stepHeader,
   log,
+  Disc,
   dsha256,
   sendIx,
   initPoseidon,
@@ -143,7 +144,7 @@ async function testCompleteWithoutMarkProcessing() {
   // Build complete_redemption instruction data
   const crData = Buffer.alloc(1 + 32 + 4 + 1 + 1);
   let off = 0;
-  crData[off++] = 6; // COMPLETE_REDEMPTION
+  crData[off++] = Disc.COMPLETE_REDEMPTION;
   fakeTxidBytes.copy(crData, off); off += 32;
   crData.writeUInt32LE(100, off); off += 4; // fake tx_size
   crData[off++] = 0; // pool_script_len = 0
@@ -230,7 +231,7 @@ async function testCompleteWithWrongTxid() {
 
   const crData = Buffer.alloc(1 + 32 + 4 + 1 + 1);
   let off = 0;
-  crData[off++] = 6;
+  crData[off++] = Disc.COMPLETE_REDEMPTION;
   wrongTxidBytes.copy(crData, off); off += 32;
   crData.writeUInt32LE(200, off); off += 4;
   crData[off++] = 0;
@@ -344,7 +345,7 @@ async function testDuplicateDeposit() {
   //   disc(1) + sweep_txid(32) + block_height(8) + sweep_tx_size(4) + deposit_tx_size(4) + deposit_txid(32)
   const ixData = Buffer.alloc(1 + 32 + 8 + 4 + 4 + 32);
   let off = 0;
-  ixData[off++] = 1; // VERIFY_STEALTH_DEPOSIT disc
+  ixData[off++] = Disc.VERIFY_STEALTH_DEPOSIT;
   sweepTxidBytes.copy(ixData, off); off += 32;
   ixData.writeBigUInt64LE(BigInt(blockHeight), off); off += 8;
   ixData.writeUInt32LE(200, off); off += 4; // fake sweep_tx_size

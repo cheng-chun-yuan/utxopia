@@ -289,7 +289,7 @@ export function buildVerifyStealthDepositInstructionData(params: {
   const buf = Buffer.alloc(81);
   let offset = 0;
 
-  buf[offset++] = 1; // discriminator
+  buf[offset++] = 11; // discriminator (VERIFY_STEALTH_DEPOSIT)
   Buffer.from(params.sweepTxid).copy(buf, offset); offset += 32;
   buf.writeBigUInt64LE(BigInt(params.blockHeight), offset); offset += 8;
   buf.writeUInt32LE(params.sweepTxSize, offset); offset += 4;

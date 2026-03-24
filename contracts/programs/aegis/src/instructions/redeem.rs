@@ -1,36 +1,31 @@
-//! Redeem instruction (disc 16)
+//! Multi-output Redeem instruction (disc=15)
 //!
-//! JoinSplit N→M where the last output creates a RedemptionRequest PDA
+//! JoinSplit N→M where the last `n_public_outputs` outputs create RedemptionRequest PDAs
 //! for BTC withdrawal — atomic private transfer + BTC redemption in one tx.
 //!
-//! The last output commitment is verified in the ZK proof but NOT inserted
-//! into the Merkle tree. Instead, a RedemptionRequest PDA is created for
-//! the backend FROST signing pipeline to process.
-//! Remaining M-1 outputs go into the tree as normal (change notes).
+//! The last n_public_outputs commitments are verified in the ZK proof but NOT inserted
+//! into the Merkle tree. Instead, RedemptionRequest PDAs are created for each.
+//! Remaining tree outputs go into the tree as normal (change notes).
 //!
-//! Supports two modes:
-//! - **Inline proof**: proof is in instruction data (legacy, small JoinSplits)
-//! - **Buffer proof**: proof_source=1, proof omitted from ix data, read from
-//!   proof_buffer account (ChadBuffer) appended after redemption_request.
-//!   Saves 256 bytes of instruction data for large JoinSplits.
-//!
-//! Instruction Data Layout:
+//! Instruction Data Layout (4-byte common header):
 //! - [0]     n_inputs:           u8
-//! - [1]     n_outputs:          u8  (includes redeem output as last)
-//! - [2]     proof_source:       u8  (0=inline, 1=buffer account)
+//! - [1]     n_outputs:          u8
+//! - [2]     n_public_outputs:   u8  (1..3)
+//! - [3]     proof_source:       u8  (0=inline, 1=buffer account)
 //! - If proof_source=0:
-//!   - [3..259]  proof:          [u8; 256]  (Groth16 proof)
+//!   - [4..260]  proof:          [u8; 256]  (Groth16 proof)
 //! - If proof_source=1:
 //!   - proof is read from the proof_buffer account (last account)
 //! - [..]     merkle_root:       [u8; 32]
 //! - [..]     bound_params_hash: [u8; 32]
 //! - [..]     nullifiers:        [[u8; 32]; n_inputs]
-//! - [..]     commitments_out:   [[u8; 32]; n_outputs]  (last = redeem)
-//! - [..]     stealth_data:      [ephemeral_pub(32) + encrypted_amount(8)] × (n_outputs - 1)
-//! - [..]     redeem_amount:     u64 (8 bytes LE)
-//! - [..]     btc_script_len:    u8
-//! - [..]     btc_script:        [u8; btc_script_len] (variable, max 62)
-//! - [..]     request_nonce:     u64 (8 bytes LE)
+//! - [..]     commitments_out:   [[u8; 32]; n_outputs]
+//! - [..]     stealth_data:      [ephemeral_pub(32) + encrypted_amount(8)] × n_tree_outputs
+//! - For each public output:
+//!   - amount:       u64 (8 bytes LE)
+//!   - script_len:   u8
+//!   - script:       [u8; script_len] (variable, max 62)
+//!   - nonce:        u64 (8 bytes LE)
 //!
 //! Accounts:
 //! 0. pool_state           (writable)
@@ -40,7 +35,7 @@
 //! 4. system_program       (read)
 //! 5. token_config         (read) — for token_id + enabled check
 //! 6..6+N                  nullifier_records (writable PDA)
-//! 6+N                     redemption_request (writable PDA)
+//! 6+N..6+N+P             redemption_request PDAs (writable)
 //! [optional]              proof_buffer (read, only when proof_source=1, last account)
 
 use pinocchio::{
@@ -69,6 +64,9 @@ const MAX_JOINSPLIT_SIZE: usize = crate::constants::MAX_SAFE_JOINSPLIT_SIZE;
 /// Stealth data per output: ephemeral_pub (32) + encrypted_amount (8)
 const STEALTH_DATA_PER_OUTPUT: usize = 40;
 
+/// Maximum number of public outputs per redeem
+const MAX_PUBLIC_OUTPUTS: usize = 3;
+
 /// Number of fixed accounts before nullifiers (pool_state, tree, vk, user, system, token_config)
 const FIXED_ACCOUNTS: usize = 6;
 
@@ -80,38 +78,42 @@ pub fn process_redeem(
     accounts: &[AccountInfo],
     data: &[u8],
 ) -> ProgramResult {
-    // Parse header
-    if data.len() < 3 {
+    // Parse header: n_inputs(1) + n_outputs(1) + n_public_outputs(1) + proof_source(1)
+    if data.len() < 4 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
     let n_inputs = data[0] as usize;
     let n_outputs = data[1] as usize;
-    let proof_source = data[2]; // 0 = inline, 1 = buffer account
+    let n_public_outputs = data[2] as usize;
+    let proof_source = data[3]; // 0 = inline, 1 = buffer account
 
-    // n_outputs must be >= 1 (the redeem output itself)
     if n_inputs == 0 || n_outputs == 0 || n_inputs + n_outputs > MAX_JOINSPLIT_SIZE {
         return Err(ProgramError::InvalidInstructionData);
     }
+    if n_public_outputs == 0 || n_public_outputs > MAX_PUBLIC_OUTPUTS || n_public_outputs > n_outputs {
+        return Err(ProgramError::InvalidInstructionData);
+    }
 
-    // Tree outputs = n_outputs - 1 (last output is redeem, not inserted)
-    let n_tree_outputs = n_outputs - 1;
+    // Tree outputs = n_outputs - n_public_outputs
+    let n_tree_outputs = n_outputs - n_public_outputs;
 
-    // Calculate minimum data length based on proof source
+    // Calculate minimum data length (without variable-length scripts)
     let proof_data_size = if proof_source == 0 { GROTH16_PROOF_SIZE } else { 0 };
-    let header_size = 3 + proof_data_size + 32 + 32;
+    let header_size = 4 + proof_data_size + 32 + 32;
     let nullifiers_size = n_inputs * 32;
     let commitments_size = n_outputs * 32;
     let stealth_size = n_tree_outputs * STEALTH_DATA_PER_OUTPUT;
-    let redeem_fixed_size = 8 + 1; // redeem_amount(8) + btc_script_len(1)
-    let min_len = header_size + nullifiers_size + commitments_size + stealth_size + redeem_fixed_size;
+    let redeem_fixed_per_output = 8 + 1 + 8; // amount(8) + script_len(1) + nonce(8)
+    let min_len = header_size + nullifiers_size + commitments_size + stealth_size
+        + n_public_outputs * redeem_fixed_per_output;
 
     if data.len() < min_len {
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    // Parse instruction data
-    let mut offset = 3;
+    // Parse instruction data (skip 4-byte header)
+    let mut offset = 4;
 
     // Read proof: inline or from buffer account
     let proof_buf: [u8; GROTH16_PROOF_SIZE];
@@ -120,13 +122,10 @@ pub fn process_redeem(
         offset += GROTH16_PROOF_SIZE;
         p
     } else {
-        // proof_source == 1: read from last account (proof_buffer)
         let buf_idx = accounts.len() - 1;
         let buf_info = &accounts[buf_idx];
-        // Validate buffer is owned by ChadBuffer program
         crate::utils::chadbuffer::validate_chadbuffer_owner(buf_info)?;
         let buf_data = buf_info.try_borrow_data()?;
-        // ChadBuffer layout: authority(32) + data(256)
         if buf_data.len() < CHADBUFFER_AUTHORITY_SIZE + GROTH16_PROOF_SIZE {
             return Err(ProgramError::InvalidAccountData);
         }
@@ -149,51 +148,80 @@ pub fn process_redeem(
         offset += 32;
     }
 
-    // Parse output commitments (all n_outputs, including redeem)
+    // Parse output commitments (all n_outputs)
     let mut commitments_out: [&[u8; 32]; MAX_JOINSPLIT_SIZE] = [ZERO_REF; MAX_JOINSPLIT_SIZE];
     for i in 0..n_outputs {
         commitments_out[i] = data[offset..offset + 32].try_into().unwrap();
         offset += 32;
     }
 
-    // Parse stealth data for tree outputs only (n_outputs - 1)
+    // Parse stealth data for tree outputs only
     let stealth_data_start = offset;
-    offset += n_tree_outputs * STEALTH_DATA_PER_OUTPUT;
+    let stealth_data_len = n_tree_outputs * STEALTH_DATA_PER_OUTPUT;
+    let stealth_data_end = stealth_data_start + stealth_data_len;
+    offset += stealth_data_len;
 
-    // Parse redeem amount
-    let redeem_amount = u64::from_le_bytes(data[offset..offset + 8].try_into().unwrap());
-    offset += 8;
+    // Parse per-output redeem data (amount + script + nonce)
+    let mut redeem_amounts: [u64; MAX_PUBLIC_OUTPUTS] = [0u64; MAX_PUBLIC_OUTPUTS];
+    let mut btc_script_starts: [usize; MAX_PUBLIC_OUTPUTS] = [0; MAX_PUBLIC_OUTPUTS];
+    let mut btc_script_lens: [usize; MAX_PUBLIC_OUTPUTS] = [0; MAX_PUBLIC_OUTPUTS];
+    let mut request_nonces: [u64; MAX_PUBLIC_OUTPUTS] = [0u64; MAX_PUBLIC_OUTPUTS];
 
-    // Parse btc_script (variable length to save tx space)
-    let btc_script_len = data[offset] as usize;
-    offset += 1;
+    for k in 0..n_public_outputs {
+        // Amount
+        redeem_amounts[k] = u64::from_le_bytes(data[offset..offset + 8].try_into().unwrap());
+        offset += 8;
 
-    if btc_script_len == 0 || btc_script_len > crate::constants::MAX_BTC_SCRIPT_LEN {
-        return Err(AegisError::InvalidBtcAddress.into());
+        // BTC script (variable length)
+        let script_len = data[offset] as usize;
+        offset += 1;
+
+        if script_len == 0 || script_len > crate::constants::MAX_BTC_SCRIPT_LEN {
+            return Err(AegisError::InvalidBtcAddress.into());
+        }
+        if data.len() < offset + script_len + 8 {
+            return Err(ProgramError::InvalidInstructionData);
+        }
+
+        btc_script_starts[k] = offset;
+        btc_script_lens[k] = script_len;
+        offset += script_len;
+
+        // Request nonce
+        request_nonces[k] = u64::from_le_bytes(data[offset..offset + 8].try_into().unwrap());
+        offset += 8;
     }
 
-    if data.len() < offset + btc_script_len + 8 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let btc_script = &data[offset..offset + btc_script_len];
-    offset += btc_script_len;
-
-    // Parse request nonce
-    let request_nonce = u64::from_le_bytes(data[offset..offset + 8].try_into().unwrap());
-
-    // Verify bound params hash matches expected value for redeem
+    // Verify bound params hash — binds BTC scripts + stealth data to proof.
+    // destinations_hash = SHA256(script_1 || script_2 || ...)
     {
+        // Concatenate all scripts for hashing
+        let mut scripts_total_len = 0usize;
+        for k in 0..n_public_outputs {
+            scripts_total_len += btc_script_lens[k];
+        }
+        // Use a stack buffer for concatenated scripts (max 3 * 62 = 186 bytes)
+        let mut scripts_concat = [0u8; MAX_PUBLIC_OUTPUTS * 62];
+        let mut soff = 0usize;
+        for k in 0..n_public_outputs {
+            let s = &data[btc_script_starts[k]..btc_script_starts[k] + btc_script_lens[k]];
+            scripts_concat[soff..soff + btc_script_lens[k]].copy_from_slice(s);
+            soff += btc_script_lens[k];
+        }
+
+        let stealth_data_hash = crate::utils::sha256(&data[stealth_data_start..stealth_data_end]);
         let expected = crate::utils::crypto::compute_bound_params_hash_redeem(
             crate::constants::CHAIN_ID,
+            &scripts_concat[..scripts_total_len],
+            &stealth_data_hash,
         );
         if *bound_params_hash != expected {
             return Err(AegisError::InvalidBoundParams.into());
         }
     }
 
-    // Validate account count: fixed + nullifiers + 1 redemption_request
-    let min_accounts = FIXED_ACCOUNTS + n_inputs + 1;
+    // Validate account count: FIXED + n_inputs nullifiers + n_public_outputs redemption PDAs
+    let min_accounts = FIXED_ACCOUNTS + n_inputs + n_public_outputs;
     if accounts.len() < min_accounts {
         return Err(ProgramError::NotEnoughAccountKeys);
     }
@@ -228,7 +256,7 @@ pub fn process_redeem(
         tc.token_id
     };
 
-    // Validate pool is not paused
+    // Validate pool is not paused, read state
     let (pending_redemptions, total_shielded) = {
         let pool_data = pool_state_info.try_borrow_data()?;
         let pool = PoolState::from_bytes(&pool_data)?;
@@ -238,11 +266,17 @@ pub fn process_redeem(
         (pool.pending_redemptions(), pool.total_shielded())
     };
 
-    // Validate redeem amount
-    if redeem_amount == 0 {
-        return Err(AegisError::ZeroAmount.into());
+    // Validate total redeem amount
+    let mut total_redeem: u64 = 0;
+    for k in 0..n_public_outputs {
+        if redeem_amounts[k] == 0 {
+            return Err(AegisError::ZeroAmount.into());
+        }
+        total_redeem = total_redeem
+            .checked_add(redeem_amounts[k])
+            .ok_or(ProgramError::ArithmeticOverflow)?;
     }
-    if redeem_amount > total_shielded {
+    if total_redeem > total_shielded {
         return Err(AegisError::InsufficientFunds.into());
     }
 
@@ -266,8 +300,8 @@ pub fn process_redeem(
     }
 
     // Build public inputs array for verification
-    const MAX_PUBLIC_INPUTS: usize = 2 + MAX_JOINSPLIT_SIZE;
-    let mut public_inputs: [&[u8; 32]; MAX_PUBLIC_INPUTS] = [ZERO_REF; MAX_PUBLIC_INPUTS];
+    const MAX_PI: usize = 2 + MAX_JOINSPLIT_SIZE;
+    let mut public_inputs: [&[u8; 32]; MAX_PI] = [ZERO_REF; MAX_PI];
     let mut pi_len = 0;
     public_inputs[pi_len] = merkle_root; pi_len += 1;
     public_inputs[pi_len] = bound_params_hash; pi_len += 1;
@@ -287,15 +321,17 @@ pub fn process_redeem(
         proof_bytes, &public_inputs[..pi_len], delta_g2, ic,
     )?;
 
-    // Verify redeem commitment: last output = Poseidon(0, token_id, redeem_amount)
-    // This binds the instruction data amount to the ZK proof — relayer cannot inflate.
+    // Verify burn commitments: last n_public_outputs = Poseidon(0, token_id, amount_k)
     {
         let zero_npk = [0u8; 32];
-        let expected_commitment = crate::utils::crypto::compute_commitment(
-            &zero_npk, &token_id, redeem_amount,
-        )?;
-        if *commitments_out[n_outputs - 1] != expected_commitment {
-            return Err(AegisError::InvalidCommitment.into());
+        for k in 0..n_public_outputs {
+            let idx = n_tree_outputs + k;
+            let expected_commitment = crate::utils::crypto::compute_commitment(
+                &zero_npk, &token_id, redeem_amounts[k],
+            )?;
+            if *commitments_out[idx] != expected_commitment {
+                return Err(AegisError::InvalidCommitment.into());
+            }
         }
     }
 
@@ -303,7 +339,7 @@ pub fn process_redeem(
     let clock = Clock::get()?;
     let rent = Rent::get()?;
 
-    // Process nullifiers — same as unshield
+    // Process nullifiers
     for i in 0..n_inputs {
         let nullifier_info = &accounts[FIXED_ACCOUNTS + i];
         validate_account_writable(nullifier_info)?;
@@ -347,10 +383,10 @@ pub fn process_redeem(
     crate::utils::events::emit_nullifiers_batch(
         &nullifiers[..n_inputs],
         NullifierOperationType::FullWithdrawal as u8,
-        16, // instruction::REDEEM
+        crate::instruction::REDEEM,
     );
 
-    // Insert tree outputs (all except the last redeem output) into Merkle tree
+    // Insert tree outputs into Merkle tree
     {
         let mut tree_data = commitment_tree_info.try_borrow_mut_data()?;
         let tree = CommitmentTree::from_bytes_mut(&mut tree_data)?;
@@ -372,26 +408,18 @@ pub fn process_redeem(
                 encrypted_amount,
                 commitments_out[i],
                 leaf_index as u32,
-                &token_id, // Plaintext token_id for BTC-only redeem change notes
+                &token_id,
             );
         }
     }
 
-    // Emit redeem metadata for indexer (fee is computed later, emit 0 for now — service_fee is in RedemptionRequested event)
-    crate::utils::events::emit_unshield_meta(
-        redeem_amount,
-        0, // fee computed at completion, not request time
-        redeem_amount, // payout TBD at completion
-        user.key().as_ref().try_into().unwrap(),
-        &token_id,
-    );
-
-    // Create RedemptionRequest PDA — same pattern as request_redemption.rs
-    {
-        let redemption_info = &accounts[FIXED_ACCOUNTS + n_inputs];
+    // Create RedemptionRequest PDAs — one per public output
+    let redemption_base = FIXED_ACCOUNTS + n_inputs;
+    for k in 0..n_public_outputs {
+        let redemption_info = &accounts[redemption_base + k];
         validate_account_writable(redemption_info)?;
 
-        let nonce_bytes = request_nonce.to_le_bytes();
+        let nonce_bytes = request_nonces[k].to_le_bytes();
         let redemption_seeds: &[&[u8]] = &[
             RedemptionRequest::SEED,
             user.key().as_ref(),
@@ -433,43 +461,58 @@ pub fn process_redeem(
         let service_fee = {
             let pool_data = pool_state_info.try_borrow_data()?;
             let pool = PoolState::from_bytes(&pool_data)?;
-            pool.compute_service_fee(redeem_amount)
+            pool.compute_service_fee(redeem_amounts[k])
         };
 
         {
             let mut redemption_data = redemption_info.try_borrow_mut_data()?;
             let redemption = RedemptionRequest::init(&mut redemption_data)?;
-            redemption.set_request_id(request_nonce);
+            redemption.set_request_id(request_nonces[k]);
             redemption.requester.copy_from_slice(user.key().as_ref());
-            redemption.set_amount_sats(redeem_amount);
+            redemption.set_amount_sats(redeem_amounts[k]);
             redemption.set_service_fee(service_fee);
+            let btc_script = &data[btc_script_starts[k]..btc_script_starts[k] + btc_script_lens[k]];
             redemption.set_btc_script(btc_script)?;
             redemption.set_status(RedemptionStatus::Pending);
         }
+
+        // Emit per-output metadata
+        let btc_script = &data[btc_script_starts[k]..btc_script_starts[k] + btc_script_lens[k]];
+        crate::utils::events::emit_unshield_meta(
+            redeem_amounts[k],
+            0, // fee computed at completion
+            redeem_amounts[k],
+            user.key().as_ref().try_into().unwrap(),
+            &token_id,
+        );
+
+        // Read fee config for event
+        let (fee_base, fee_bps) = {
+            let pool_data = pool_state_info.try_borrow_data()?;
+            let pool = PoolState::from_bytes(&pool_data)?;
+            (pool.service_fee_base(), pool.withdrawal_fee_bps())
+        };
+
+        crate::utils::events::emit_redemption_requested(
+            user.key().as_ref().try_into().unwrap(),
+            redeem_amounts[k],
+            request_nonces[k],
+            fee_base,
+            fee_bps,
+            btc_script,
+        );
     }
 
-    // Update pool state: decrement total_shielded, increment pending_redemptions
-    // Read fee config before mutating for the event emission
-    let (fee_base, fee_bps) = {
+    // Update pool state: decrement total_shielded by sum, increment pending_redemptions
+    {
         let mut pool_data = pool_state_info.try_borrow_mut_data()?;
         let pool = PoolState::from_bytes_mut(&mut pool_data)?;
-        let fb = pool.service_fee_base();
-        let fbps = pool.service_fee_bps();
-        pool.sub_shielded(redeem_amount)?;
-        pool.set_pending_redemptions(pending_redemptions.saturating_add(1));
+        pool.sub_shielded(total_redeem)?;
+        pool.set_pending_redemptions(
+            pending_redemptions.saturating_add(n_public_outputs as u64),
+        );
         pool.set_last_update(clock.unix_timestamp);
-        (fb, fbps)
-    };
-
-    // Emit redemption requested event (includes fee config locked at request time)
-    crate::utils::events::emit_redemption_requested(
-        user.key().as_ref().try_into().unwrap(),
-        redeem_amount,
-        request_nonce,
-        fee_base,
-        fee_bps,
-        btc_script,
-    );
+    }
 
     pinocchio::msg!("Aegis: redeem");
     Ok(())

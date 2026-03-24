@@ -39,6 +39,7 @@ import {
   deriveBlockHeaderPDA,
   deriveHeightIndexPDA,
   deriveTokenConfigPDA,
+  parseStealthAnnouncementFromLogs,
 } from "./shared.js";
 
 import {
@@ -95,24 +96,6 @@ async function submitHeaders(
     await sendIx([ix], [authority]);
     log(`  Header ${h} submitted`);
   }
-}
-
-/** Parse stealth announcement from tx logs. Returns { commitment, amount, leafIndex }. */
-function parseStealthAnnouncementFromLogs(logMessages: string[]): { commitment: string; amount: number; leafIndex: number } | null {
-  for (const logLine of logMessages) {
-    if (!logLine.startsWith("Program data: ")) continue;
-    const parts = logLine.slice(14).split(" ");
-    const bufs = parts.map(p => Buffer.from(p, "base64"));
-    const full = Buffer.concat(bufs);
-    // Stealth announcement: disc(0x03) + type(1) + ephemeral(32) + amount(8) + commitment(32) + leaf_index(4)
-    if (full.length >= 78 && full[0] === 0x03 && full[1] === 0x00) {
-      const amount = Number(full.readBigUInt64LE(34));
-      const commitment = full.subarray(42, 74).toString("hex");
-      const leafIndex = full.readUInt32LE(74);
-      return { commitment, amount, leafIndex };
-    }
-  }
-  return null;
 }
 
 async function main() {

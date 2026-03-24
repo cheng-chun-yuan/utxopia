@@ -594,7 +594,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       await initPoseidon();
 
       const { computeJoinSplitCommitmentSync, createStealthDepositWithKeys,
-              eddsaPoseidonSign, computeBoundParamsHash, DEFAULT_BOUND_PARAMS,
+              eddsaPoseidonSign, computeBoundParamsHash,
               createUnshieldBoundParams, poseidonHashSync,
               getCommitmentIndex: getCommitmentIndexSdk,
               hexToBytes: sdkHexToBytes,
@@ -895,18 +895,32 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       let boundParamsHash: bigint;
       let unshieldRecipientAddress: Uint8Array | null = null;
 
-      const { createRedeemBoundParams } = await import("@aegis/sdk");
+      const { createRedeemBoundParams, computeStealthDataHash, createTransferBoundParams } = await import("@aegis/sdk");
+
+      // Compute stealth data hash — binds change output metadata to the proof,
+      // preventing a relayer from corrupting ephemeralPub/encryptedAmount.
+      // For unshield/redeem: tree outputs only (exclude last public/redeem output)
+      const isPublicOutput = isPublicUnshield || isBtcRedeem;
+      const treeStealthResults = isPublicOutput ? stealthResults.slice(0, -1) : stealthResults;
+      const stealthArraysForHash = treeStealthResults.map((result) => {
+        const sd = new Uint8Array(72);
+        sd.set(result.ephemeralPub, 0);
+        sd.set(result.encryptedAmount, 32);
+        return sd;
+      });
+      const stealthDataHash = computeStealthDataHash(stealthArraysForHash);
 
       if (isBtcRedeem) {
-        const redeemParams = createRedeemBoundParams();
+        const redeemParams = createRedeemBoundParams(btcOutput!.btcScriptPubKey!, stealthDataHash);
         boundParamsHash = computeBoundParamsHash(redeemParams);
       } else if (isPublicUnshield) {
         const recipientPubkey = new PublicKey(publicOutput.solanaAddress);
         unshieldRecipientAddress = recipientPubkey.toBytes();
-        const unshieldParams = createUnshieldBoundParams(unshieldRecipientAddress);
+        const unshieldParams = createUnshieldBoundParams(unshieldRecipientAddress, stealthDataHash);
         boundParamsHash = computeBoundParamsHash(unshieldParams);
       } else {
-        boundParamsHash = computeBoundParamsHash(DEFAULT_BOUND_PARAMS);
+        const transferParams = createTransferBoundParams(stealthDataHash);
+        boundParamsHash = computeBoundParamsHash(transferParams);
       }
 
       const allNullifiers = inputsData.map((d) => d.claimInputs.nullifier);
@@ -969,9 +983,11 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       setProofStatus("Submitting transaction...");
 
       const stealthDataArrays: Uint8Array[] = stealthResults.map((result) => {
-        const sd = new Uint8Array(40);
+        // 72 bytes: ephemeral_pub(32) + encrypted_amount(8) + encrypted_token_id(32)
+        const sd = new Uint8Array(72);
         sd.set(result.ephemeralPub, 0);
         sd.set(result.encryptedAmount, 32);
+        // encrypted_token_id: zeros for now (scanner infers token from context)
         return sd;
       });
 
@@ -999,39 +1015,40 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 
       let relayResult: { success: boolean; signature?: string; error?: string };
 
+      // Common fields for all modes
+      const commonFields = {
+        nInputs: effectiveNInputs,
+        nOutputs: actualNOutputs,
+        proof: bytesToHex(proofBytes),
+        merkleRoot: merkleRootHex,
+        boundParamsHash: boundParamsHashHex,
+        nullifiers: nullifierHexes,
+        commitmentsOut: commitmentHexes,
+      };
+
       if (isBtcRedeem && btcOutput) {
-        // BTC Redeem: submit via relayer API (same as transact/unshield)
+        // BTC Redeem: disc=15 atomic JoinSplit + RedemptionRequest (multi-output)
         const redeemAmountSats = BigInt(parseSats(btcOutput.amount) ?? 0);
         const requestNonce = BigInt(Date.now());
-
-        // Tree stealth data = all except the last (redeem output)
         const treeStealthData = stealthDataArrays.slice(0, -1);
 
-        const redeemResponse = await fetch("/api/redeem", {
+        const redeemResponse = await fetch("/api/relay", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            nInputs: effectiveNInputs,
-            nOutputs: actualNOutputs,
-            proof: bytesToHex(proofBytes),
-            merkleRoot: merkleRootHex,
-            boundParamsHash: boundParamsHashHex,
-            nullifiers: nullifierHexes,
-            commitmentsOut: commitmentHexes,
+            ...commonFields,
+            mode: "redeem",
             stealthData: treeStealthData.map((sd) => bytesToHex(sd)),
-            redeemAmount: redeemAmountSats.toString(),
-            btcScript: bytesToHex(btcOutput.btcScriptPubKey!),
-            requestNonce: requestNonce.toString(),
+            redeemAmounts: [redeemAmountSats.toString()],
+            btcScripts: [bytesToHex(btcOutput.btcScriptPubKey!)],
+            requestNonces: [requestNonce.toString()],
           }),
         });
 
         relayResult = await redeemResponse.json();
       } else if (isPublicUnshield && unshieldRecipientAddress) {
-        // Public unshield: call /api/unshield
-        // The unshield output is the LAST commitment — stealth data is only for tree outputs (all except last)
+        // Public unshield: disc=14 (multi-output)
         const unshieldAmount = parseSats(publicOutput!.amount) ?? 0;
-
-        // Get or create associated token account for recipient
         const { getAssociatedTokenAddressSync } = await import("@solana/spl-token");
         const recipientPubkey = new PublicKey(publicOutput!.solanaAddress);
         const zkbtcMint = new PublicKey(getConfig().zkbtcMint);
@@ -1039,42 +1056,30 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         const recipientTokenAccount = getAssociatedTokenAddressSync(
           zkbtcMint, recipientPubkey, false, TOKEN_2022_PID
         );
-
-        // Tree outputs = all except the last (unshield output)
         const treeStealthData = stealthDataArrays.slice(0, -1);
 
-        const relayResponse = await fetch("/api/unshield", {
+        const relayResponse = await fetch("/api/relay", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            nInputs: effectiveNInputs,
-            nOutputs: actualNOutputs,
-            proof: bytesToHex(proofBytes),
-            merkleRoot: merkleRootHex,
-            boundParamsHash: boundParamsHashHex,
-            nullifiers: nullifierHexes,
-            commitmentsOut: commitmentHexes,
+            ...commonFields,
+            mode: "unshield",
             stealthData: treeStealthData.map((sd) => bytesToHex(sd)),
-            unshieldAmount: unshieldAmount.toString(),
-            recipientAddress: recipientPubkey.toBase58(),
-            recipientTokenAccount: recipientTokenAccount.toBase58(),
+            unshieldAmounts: [unshieldAmount.toString()],
+            recipientAddresses: [recipientPubkey.toBase58()],
+            recipientTokenAccounts: [recipientTokenAccount.toBase58()],
           }),
         });
 
         relayResult = await relayResponse.json();
       } else {
-        // Private transfer: call /api/relay
+        // Private transfer: disc=13
         const relayResponse = await fetch("/api/relay", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            nInputs: effectiveNInputs,
-            nOutputs: actualNOutputs,
-            proof: bytesToHex(proofBytes),
-            merkleRoot: merkleRootHex,
-            boundParamsHash: boundParamsHashHex,
-            nullifiers: nullifierHexes,
-            commitmentsOut: commitmentHexes,
+            ...commonFields,
+            mode: "transfer",
             stealthData: stealthDataArrays.map((sd) => bytesToHex(sd)),
             relayerFeeOutputIndex,
           }),

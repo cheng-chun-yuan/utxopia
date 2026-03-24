@@ -66,7 +66,7 @@ import {
 export const STEALTH_OP_RETURN_SIZE = 32;
 
 /** Instruction discriminator for verify_stealth_deposit */
-export const VERIFY_STEALTH_DEPOSIT_DISCRIMINATOR = 1;
+export const VERIFY_STEALTH_DEPOSIT_DISCRIMINATOR = 11;
 
 import { AEGIS_PROGRAM_ID } from "./pda";
 const SYSTEM_PROGRAM_ID: Address = address(

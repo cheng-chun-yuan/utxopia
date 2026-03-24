@@ -46,9 +46,16 @@ pub fn sha256(data: &[u8]) -> [u8; 32] {
         }
     }
 
-    #[cfg(not(target_os = "solana"))]
+    #[cfg(all(not(target_os = "solana"), test))]
     {
-        // For testing, use a simple XOR-based hash (not cryptographically secure)
+        use sha2::{Sha256, Digest};
+        let hash = Sha256::digest(data);
+        result.copy_from_slice(&hash);
+    }
+
+    #[cfg(all(not(target_os = "solana"), not(test)))]
+    {
+        // Fallback XOR hash for non-test, non-Solana builds (e.g. cargo check)
         for (i, byte) in data.iter().enumerate() {
             result[i % 32] ^= byte;
             result[(i + 1) % 32] = result[(i + 1) % 32].wrapping_add(*byte);

@@ -79,7 +79,12 @@ export async function resolveTokenSymbol(tokenIdHex: string): Promise<string | n
   return map.get(tokenIdHex.toLowerCase()) ?? map.get(tokenIdHex) ?? null;
 }
 
-/** Sync resolve — uses precomputed map only (no Poseidon needed). Safe for client components. */
+/** Sync resolve — uses cached map if available, falls back to precomputed.
+ * Call buildTokenIdMap() once at startup to populate the cache with localnet mints. */
 export function resolveTokenSymbolSync(tokenIdHex: string): string | null {
-  return KNOWN_TOKEN_IDS[tokenIdHex] ?? KNOWN_TOKEN_IDS[tokenIdHex.toLowerCase()] ?? null;
+  const hex = tokenIdHex.toLowerCase();
+  if (cachedMap) {
+    return cachedMap.get(hex) ?? cachedMap.get(tokenIdHex) ?? null;
+  }
+  return KNOWN_TOKEN_IDS[hex] ?? KNOWN_TOKEN_IDS[tokenIdHex] ?? null;
 }

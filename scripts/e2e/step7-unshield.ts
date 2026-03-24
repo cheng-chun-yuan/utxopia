@@ -37,6 +37,8 @@ import {
   computeJoinSplitCommitmentSync,
   computeJoinSplitNullifierSync,
   computeBoundParamsHash as sdkComputeBoundParamsHash,
+  createUnshieldBoundParams,
+  computeStealthDataHash,
   eddsaPoseidonSign,
   eddsaGetPubKey,
   parseCommitmentTree,
@@ -49,21 +51,14 @@ import {
   deriveATA,
   parseTokenConfig,
   TOKEN_2022,
+  buildMerkleTree,
+  getZeroHashes,
 } from "./shared.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 stepHeader(7, "Unshield tUSDC");
-
-// Merkle tree helpers (uses SDK Poseidon)
-const ZERO_HASHES: bigint[] = [0n];
-
-function computeZeroHashes() {
-  for (let i = 1; i <= TREE_DEPTH; i++) {
-    ZERO_HASHES[i] = poseidonHashSync([ZERO_HASHES[i - 1], ZERO_HASHES[i - 1]]);
-  }
-}
 
 function generateProofViaNode(
   circuitName: string, inputs: Record<string, any>,
@@ -145,7 +140,7 @@ async function main() {
 
   // Init SDK Poseidon
   await initPoseidon();
-  computeZeroHashes();
+  getZeroHashes();
 
   // Load keys using SDK
   const spendingSeed = Buffer.from(state.spendingSeed!, "hex");
@@ -183,38 +178,7 @@ async function main() {
     treeLeaves.push(c);
   }
 
-  // Build Merkle tree
-  function buildTree(leaves: bigint[]): { root: bigint; getProof: (idx: number) => { siblings: bigint[]; indices: number[] } } {
-    const layers: bigint[][] = [new Array(1 << TREE_DEPTH).fill(0n)];
-    for (let i = 0; i < leaves.length; i++) layers[0][i] = leaves[i];
-
-    for (let level = 0; level < TREE_DEPTH; level++) {
-      const prev = layers[level];
-      const next: bigint[] = [];
-      for (let i = 0; i < prev.length; i += 2) {
-        next.push(poseidonHashSync([prev[i], prev[i + 1] ?? ZERO_HASHES[level]]));
-      }
-      layers.push(next);
-    }
-
-    return {
-      root: layers[TREE_DEPTH][0],
-      getProof(idx: number) {
-        const siblings: bigint[] = [];
-        const indices: number[] = [];
-        let i = idx;
-        for (let level = 0; level < TREE_DEPTH; level++) {
-          const bit = i & 1;
-          indices.push(bit);
-          siblings.push(bit === 0 ? layers[level][i + 1] ?? ZERO_HASHES[level] : layers[level][i - 1]);
-          i >>= 1;
-        }
-        return { siblings, indices };
-      },
-    };
-  }
-
-  const fullTree = buildTree(treeLeaves);
+  const fullTree = buildMerkleTree(treeLeaves);
   const merkleRoot = fullTree.root;
   const proof = fullTree.getProof(leafIndex0);
 
@@ -238,8 +202,11 @@ async function main() {
   log(`Nullifier: ${nullifier0.toString(16).slice(0, 16)}...`);
   log(`Burn commitment: ${burnCommitment.toString(16).slice(0, 16)}...`);
 
-  // Bound params using SDK (unshield mode)
-  const boundParamsHash = sdkComputeBoundParamsHash({ treeNumber: 0, unshieldAddress: null, chainId: 103n, mode: 'unshield' });
+  // Bound params using SDK (unshield mode — multi-output format)
+  const stealthDataHash = computeStealthDataHash([]); // no tree outputs
+  const ownerBytes = new Uint8Array(authority.publicKey.toBytes());
+  const unshieldParams = createUnshieldBoundParams(ownerBytes, stealthDataHash, 103n);
+  const boundParamsHash = sdkComputeBoundParamsHash(unshieldParams);
   const msgHash = poseidonHashSync([merkleRoot, boundParamsHash, nullifier0, burnCommitment]);
   // EdDSA sign using SDK (circuit-compatible — wraps circomlibjs internally)
   const signature = await eddsaPoseidonSign(spendingSeed, msgHash);
@@ -270,20 +237,24 @@ async function main() {
   const proofBytes = serializeGroth16Proof(groth16Proof);
   log(`Proof: ${proofBytes.length} bytes`);
 
-  // Build unshield instruction (disc=30)
-  // Data: n_inputs(1) + n_outputs(1) + proof(256) + merkle_root(32) + bound_params_hash(32) +
-  //       nullifiers(32*N) + commitments(32*M) + stealth_data(72*(M-1)) + unshield_amount(8)
+  // Build unshield instruction (disc=14)
+  // Data: n_inputs(1) + n_outputs(1) + n_public_outputs(1) + proof_source(1) + proof(256) +
+  //       merkle_root(32) + bound_params_hash(32) + nullifiers(32*N) + commitments(32*M) +
+  //       stealth_data(72*n_tree_outputs) + amounts(8*n_public_outputs)
   const nInputs = 1;
   const nOutputs = 1; // just the burn output
-  const nTreeOutputs = nOutputs - 1; // 0 tree outputs for pure unshield
+  const nPublicOutputs = 1;
+  const nTreeOutputs = nOutputs - nPublicOutputs; // 0 tree outputs for pure unshield
   const stealthPerOutput = 72;
-  const dataLen = 1 + 1 + 1 + 256 + 32 + 32 + nInputs * 32 + nOutputs * 32 + nTreeOutputs * stealthPerOutput + 8;
+  const dataLen = 1 + 1 + 1 + 1 + 1 + 256 + 32 + 32 + nInputs * 32 + nOutputs * 32 + nTreeOutputs * stealthPerOutput + nPublicOutputs * 8;
   const txData = Buffer.alloc(dataLen);
   let off = 0;
 
   txData[off++] = Disc.UNSHIELD;
   txData[off++] = nInputs;
   txData[off++] = nOutputs;
+  txData[off++] = nPublicOutputs;
+  txData[off++] = 0; // proof_source=inline
   Buffer.from(proofBytes).copy(txData, off); off += 256;
   Buffer.from(bigintToBytes32BE(merkleRoot)).copy(txData, off); off += 32;
   Buffer.from(bigintToBytes32BE(boundParamsHash)).copy(txData, off); off += 32;
@@ -293,10 +264,9 @@ async function main() {
   // Unshield amount
   txData.writeBigUInt64LE(amount0, off); off += 8;
 
-  // Accounts for unshield (disc=30):
+  // Accounts for unshield (disc=14, multi-output):
   // 0. pool_state, 1. commitment_tree, 2. vk_registry, 3. user, 4. system_program,
-  // 5. token_config, 6. vault, 7. user_token_account, 8. token_program,
-  // 9+ nullifier_records
+  // 5. token_config, 6. vault, 7. token_program, 8..8+P recipients, 8+P+ nullifiers
   const nullifierBytes0 = bigintToBytes32BE(nullifier0);
   const [nullifierPDA0] = deriveNullifierPDA(AEGIS, nullifierBytes0);
   const [vkRegistry1x1] = deriveVkRegistryPDA(AEGIS, 1, 1);
@@ -310,8 +280,8 @@ async function main() {
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       { pubkey: tokenConfig, isSigner: false, isWritable: true },
       { pubkey: tUsdcVault, isSigner: false, isWritable: true },
-      { pubkey: userAta, isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: userAta, isSigner: false, isWritable: true }, // recipient
       { pubkey: nullifierPDA0, isSigner: false, isWritable: true },
     ],
     programId: AEGIS,

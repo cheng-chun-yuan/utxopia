@@ -146,7 +146,7 @@ impl RedemptionService {
     ) -> Self {
         let scanner = RedemptionScanner::new(SolClient::new_like(&sol_client));
         let sol_client = Arc::new(sol_client);
-        let tracking = TrackingStore::new("redemption_tracking.json");
+        let tracking = TrackingStore::new("data/redemption_tracking.db");
         let ws_notify = Arc::new(Notify::new());
 
         let mut builder = TxBuilder::new_testnet();

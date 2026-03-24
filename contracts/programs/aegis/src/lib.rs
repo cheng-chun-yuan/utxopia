@@ -47,38 +47,41 @@ pub const ID: Pubkey = [
     0x9c, 0x5e, 0x2b, 0x8f, 0x4a, 0x7d, 0x3c, 0x1e,
 ];
 
-/// Instruction discriminators (multi-token version — fresh deploy)
+/// Instruction discriminators — sequential 0-19, grouped by category
 pub mod instruction {
-    // Core operations
+    // Core (0-2)
     pub const INITIALIZE: u8 = 0;
-    pub const VERIFY_STEALTH_DEPOSIT: u8 = 1;
-    pub const MARK_PROCESSING: u8 = 2;
-    pub const CANCEL_REDEMPTION: u8 = 3;
-    pub const REQUEST_REDEMPTION: u8 = 5;
-    pub const COMPLETE_REDEMPTION: u8 = 6;
-    pub const SET_PAUSED: u8 = 7;
+    pub const SET_PAUSED: u8 = 1;
+    pub const SET_POOL_CONFIG: u8 = 2;
 
-    // VK Registry (admin)
-    pub const INIT_VK_REGISTRY: u8 = 11;
-    pub const UPDATE_VK_REGISTRY: u8 = 12;
+    // Pool updates (3-5)
+    pub const PROPOSE_POOL_UPDATE: u8 = 3;
+    pub const EXECUTE_POOL_UPDATE: u8 = 4;
+    pub const CANCEL_POOL_UPDATE: u8 = 5;
 
-    // JoinSplit (Railgun-aligned)
-    pub const TRANSACT: u8 = 14;
+    // VK admin (6-7)
+    pub const INIT_VK_REGISTRY: u8 = 6;
+    pub const UPDATE_VK_REGISTRY: u8 = 7;
 
-    // Timelocked pool parameter updates
-    pub const PROPOSE_POOL_UPDATE: u8 = 21;
-    pub const EXECUTE_POOL_UPDATE: u8 = 22;
-    pub const CANCEL_POOL_UPDATE: u8 = 23;
+    // Multi-token (8-10)
+    pub const REGISTER_TOKEN: u8 = 8;
+    pub const UPDATE_TOKEN_CONFIG: u8 = 9;
+    pub const CLAIM_FEES: u8 = 10;
 
-    // Admin config
-    pub const SET_POOL_CONFIG: u8 = 27;
+    // Deposit (11-12)
+    pub const VERIFY_STEALTH_DEPOSIT: u8 = 11;
+    pub const SHIELD: u8 = 12;
 
-    // Multi-token instructions
-    pub const REGISTER_TOKEN: u8 = 28;
-    pub const SHIELD: u8 = 29;
-    pub const UNSHIELD: u8 = 30;
-    pub const UPDATE_TOKEN_CONFIG: u8 = 31;
-    pub const CLAIM_FEES: u8 = 32;
+    // JoinSplit (13-15) — all share n_in + n_out + n_pub + proof_source header
+    pub const TRANSACT: u8 = 13;
+    pub const UNSHIELD: u8 = 14;
+    pub const REDEEM: u8 = 15;
+
+    // Redemption lifecycle (16-19)
+    pub const REQUEST_REDEMPTION: u8 = 16;
+    pub const COMPLETE_REDEMPTION: u8 = 17;
+    pub const MARK_PROCESSING: u8 = 18;
+    pub const CANCEL_REDEMPTION: u8 = 19;
 }
 
 entrypoint!(process_instruction);
@@ -94,63 +97,33 @@ pub fn process_instruction(
         .ok_or(ProgramError::InvalidInstructionData)?;
 
     match *discriminator {
-        instruction::INITIALIZE => {
-            instructions::process_initialize(program_id, accounts, data)
-        }
-        instruction::VERIFY_STEALTH_DEPOSIT => {
-            instructions::process_verify_stealth_deposit(program_id, accounts, data)
-        }
-        instruction::MARK_PROCESSING => {
-            instructions::process_mark_processing(program_id, accounts, data)
-        }
-        instruction::CANCEL_REDEMPTION => {
-            instructions::process_cancel_redemption(program_id, accounts, data)
-        }
-        instruction::REQUEST_REDEMPTION => {
-            instructions::process_request_redemption(program_id, accounts, data)
-        }
-        instruction::COMPLETE_REDEMPTION => {
-            instructions::process_complete_redemption(program_id, accounts, data)
-        }
-        instruction::SET_PAUSED => {
-            process_set_paused(program_id, accounts, data)
-        }
-        instruction::INIT_VK_REGISTRY => {
-            instructions::process_init_vk_registry(program_id, accounts, data)
-        }
-        instruction::UPDATE_VK_REGISTRY => {
-            instructions::process_update_vk_registry(program_id, accounts, data)
-        }
-        instruction::TRANSACT => {
-            instructions::process_transact(program_id, accounts, data)
-        }
-        instruction::PROPOSE_POOL_UPDATE => {
-            instructions::process_propose_pool_update(program_id, accounts, data)
-        }
-        instruction::EXECUTE_POOL_UPDATE => {
-            instructions::process_execute_pool_update(program_id, accounts, data)
-        }
-        instruction::CANCEL_POOL_UPDATE => {
-            instructions::process_cancel_pool_update(program_id, accounts, data)
-        }
-        instruction::SET_POOL_CONFIG => {
-            instructions::process_set_pool_config(program_id, accounts, data)
-        }
-        instruction::REGISTER_TOKEN => {
-            instructions::process_register_token(program_id, accounts, data)
-        }
-        instruction::SHIELD => {
-            instructions::process_shield(program_id, accounts, data)
-        }
-        instruction::UNSHIELD => {
-            instructions::process_unshield(program_id, accounts, data)
-        }
-        instruction::UPDATE_TOKEN_CONFIG => {
-            instructions::process_update_token_config(program_id, accounts, data)
-        }
-        instruction::CLAIM_FEES => {
-            instructions::process_claim_fees(program_id, accounts, data)
-        }
+        // Core (0-2)
+        instruction::INITIALIZE => instructions::process_initialize(program_id, accounts, data),
+        instruction::SET_PAUSED => process_set_paused(program_id, accounts, data),
+        instruction::SET_POOL_CONFIG => instructions::process_set_pool_config(program_id, accounts, data),
+        // Pool updates (3-5)
+        instruction::PROPOSE_POOL_UPDATE => instructions::process_propose_pool_update(program_id, accounts, data),
+        instruction::EXECUTE_POOL_UPDATE => instructions::process_execute_pool_update(program_id, accounts, data),
+        instruction::CANCEL_POOL_UPDATE => instructions::process_cancel_pool_update(program_id, accounts, data),
+        // VK admin (6-7)
+        instruction::INIT_VK_REGISTRY => instructions::process_init_vk_registry(program_id, accounts, data),
+        instruction::UPDATE_VK_REGISTRY => instructions::process_update_vk_registry(program_id, accounts, data),
+        // Multi-token (8-10)
+        instruction::REGISTER_TOKEN => instructions::process_register_token(program_id, accounts, data),
+        instruction::UPDATE_TOKEN_CONFIG => instructions::process_update_token_config(program_id, accounts, data),
+        instruction::CLAIM_FEES => instructions::process_claim_fees(program_id, accounts, data),
+        // Deposit (11-12)
+        instruction::VERIFY_STEALTH_DEPOSIT => instructions::process_verify_stealth_deposit(program_id, accounts, data),
+        instruction::SHIELD => instructions::process_shield(program_id, accounts, data),
+        // JoinSplit (13-15)
+        instruction::TRANSACT => instructions::process_transact(program_id, accounts, data),
+        instruction::UNSHIELD => instructions::process_unshield(program_id, accounts, data),
+        instruction::REDEEM => instructions::process_redeem(program_id, accounts, data),
+        // Redemption lifecycle (16-19)
+        instruction::REQUEST_REDEMPTION => instructions::process_request_redemption(program_id, accounts, data),
+        instruction::COMPLETE_REDEMPTION => instructions::process_complete_redemption(program_id, accounts, data),
+        instruction::MARK_PROCESSING => instructions::process_mark_processing(program_id, accounts, data),
+        instruction::CANCEL_REDEMPTION => instructions::process_cancel_redemption(program_id, accounts, data),
         _ => Err(ProgramError::InvalidInstructionData),
     }
 }
@@ -208,23 +181,25 @@ mod tests {
     fn test_discriminators_unique() {
         let discriminators: &[u8] = &[
             instruction::INITIALIZE,
-            instruction::VERIFY_STEALTH_DEPOSIT,
-            instruction::MARK_PROCESSING,
-            instruction::CANCEL_REDEMPTION,
-            instruction::REQUEST_REDEMPTION,
-            instruction::COMPLETE_REDEMPTION,
             instruction::SET_PAUSED,
-            instruction::INIT_VK_REGISTRY,
-            instruction::UPDATE_VK_REGISTRY,
-            instruction::TRANSACT,
+            instruction::SET_POOL_CONFIG,
             instruction::PROPOSE_POOL_UPDATE,
             instruction::EXECUTE_POOL_UPDATE,
             instruction::CANCEL_POOL_UPDATE,
+            instruction::INIT_VK_REGISTRY,
+            instruction::UPDATE_VK_REGISTRY,
             instruction::REGISTER_TOKEN,
-            instruction::SHIELD,
-            instruction::UNSHIELD,
             instruction::UPDATE_TOKEN_CONFIG,
             instruction::CLAIM_FEES,
+            instruction::VERIFY_STEALTH_DEPOSIT,
+            instruction::SHIELD,
+            instruction::TRANSACT,
+            instruction::UNSHIELD,
+            instruction::REDEEM,
+            instruction::REQUEST_REDEMPTION,
+            instruction::COMPLETE_REDEMPTION,
+            instruction::MARK_PROCESSING,
+            instruction::CANCEL_REDEMPTION,
         ];
 
         for (i, &d1) in discriminators.iter().enumerate() {

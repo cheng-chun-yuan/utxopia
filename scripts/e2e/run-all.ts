@@ -24,8 +24,10 @@ const steps = [
   { file: "step6-transfer.ts", label: "JoinSplit Transfer" },
   { file: "step7-unshield.ts", label: "Unshield tUSDC" },
   { file: "step7b-unshield-btc.ts", label: "Unshield zkBTC" },
+  { file: "step7c-multi-unshield.ts", label: "Multi-Output Unshield (wSOL)" },
   { file: "step8-btc-withdraw.ts", label: "BTC Withdrawal Request" },
   { file: "step8b-complete-redemption.ts", label: "Complete BTC Redemption" },
+  { file: "step8c-multi-redeem.ts", label: "Multi-Output Redeem (BTC)" },
   { file: "step9-summary.ts", label: "Summary" },
   { file: "step10-security-negative.ts", label: "Security Negative Tests" },
 ];

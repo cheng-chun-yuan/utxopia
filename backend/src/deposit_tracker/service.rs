@@ -172,20 +172,18 @@ impl DepositTrackerService {
         amount_sats: u64,
         ephemeral_pub: Option<String>,
     ) -> Result<DepositRecord, TrackerError> {
-        // Check for existing deposit at this address
-        if let Some(existing) = self.db.get_by_address(&taproot_address)? {
-            return Ok(existing);
-        }
-
-        let mut record = DepositRecord::new(taproot_address, commitment.clone(), amount_sats);
+        let mut record = DepositRecord::new(taproot_address.clone(), commitment.clone(), amount_sats);
         record.ephemeral_pub = ephemeral_pub;
         // commitment field is the npk for npk-based deposits
         record.npk = Some(commitment);
 
-        self.db.insert(&record).map_err(|e| match e {
-            SqliteError::Duplicate(msg) => TrackerError::Duplicate(msg),
-            other => TrackerError::Database(other),
-        })?;
+        let inserted = self.db.insert(&record).map_err(|e| TrackerError::Database(e))?;
+        if !inserted {
+            // Conflict on taproot_address — return existing record
+            if let Some(existing) = self.db.get_by_address(&taproot_address)? {
+                return Ok(existing);
+            }
+        }
         Ok(record)
     }
 

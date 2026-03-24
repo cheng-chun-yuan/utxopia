@@ -12,16 +12,17 @@
 //! Instruction Data Layout:
 //! - [0]     n_inputs:         u8
 //! - [1]     n_outputs:        u8
-//! - [2]     proof_source:     u8  (0=inline, 1=buffer account)
+//! - [2]     n_public_outputs: u8  (must be 0 for transact)
+//! - [3]     proof_source:     u8  (0=inline, 1=buffer account)
 //! - If proof_source=0:
-//!   - [3..259]  proof:        [u8; 256]  (Groth16 proof)
+//!   - [4..260]  proof:        [u8; 256]  (Groth16 proof)
 //! - If proof_source=1:
 //!   - proof is read from the proof_buffer account (last account)
 //! - [..]     merkle_root:     [u8; 32]
 //! - [..]     bound_params_hash: [u8; 32]
 //! - [..]     nullifiers:      [[u8; 32]; n_inputs]
 //! - [..]     commitments_out: [[u8; 32]; n_outputs]
-//! - [..]     stealth_data:    [ephemeral_pub(32) + encrypted_amount(8)] × n_outputs
+//! - [..]     stealth_data:    [ephemeral_pub(32) + encrypted_amount(8) + encrypted_token_id(32)] × n_outputs
 //!
 //! Accounts:
 //! 0. pool_state         (writable)
@@ -66,23 +67,28 @@ pub fn process_transact(
     accounts: &[AccountInfo],
     data: &[u8],
 ) -> ProgramResult {
-    // Parse header
-    if data.len() < 3 {
+    // Parse header: n_inputs(1) + n_outputs(1) + n_public_outputs(1) + proof_source(1)
+    if data.len() < 4 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
     let n_inputs = data[0] as usize;
     let n_outputs = data[1] as usize;
-    let proof_source = data[2]; // 0 = inline, 1 = buffer account
+    let n_public_outputs = data[2] as usize;
+    let proof_source = data[3]; // 0 = inline, 1 = buffer account
+
+    // Transact requires n_public_outputs == 0 (all outputs go to tree)
+    if n_public_outputs != 0 {
+        return Err(ProgramError::InvalidInstructionData);
+    }
 
     if n_inputs == 0 || n_outputs == 0 || n_inputs + n_outputs > MAX_JOINSPLIT_SIZE {
-
         return Err(ProgramError::InvalidInstructionData);
     }
 
     // Calculate expected data length
     let proof_data_size = if proof_source == 0 { GROTH16_PROOF_SIZE } else { 0 };
-    let header_size = 3 + proof_data_size + 32 + 32;
+    let header_size = 4 + proof_data_size + 32 + 32;
     let nullifiers_size = n_inputs * 32;
     let commitments_size = n_outputs * 32;
     let stealth_size = n_outputs * STEALTH_DATA_PER_OUTPUT;
@@ -93,8 +99,8 @@ pub fn process_transact(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    // Parse instruction data
-    let mut offset = 3;
+    // Parse instruction data (skip 4-byte header)
+    let mut offset = 4;
 
     // Read proof: inline or from buffer account
     let proof_buf: [u8; GROTH16_PROOF_SIZE];
@@ -124,18 +130,6 @@ pub fn process_transact(
     let bound_params_hash: &[u8; 32] = data[offset..offset + 32].try_into().unwrap();
     offset += 32;
 
-    // Verify bound params hash matches expected value for this chain.
-    // This prevents cross-chain replay attacks.
-    {
-        let expected = crate::utils::crypto::compute_bound_params_hash_private_transfer(
-            crate::constants::CHAIN_ID,
-        );
-        if *bound_params_hash != expected {
-
-            return Err(AegisError::InvalidBoundParams.into());
-        }
-    }
-
     // Parse nullifiers (stack-allocated, no heap)
     const ZERO_REF: &[u8; 32] = &[0u8; 32];
     let mut nullifiers: [&[u8; 32]; MAX_JOINSPLIT_SIZE] = [ZERO_REF; MAX_JOINSPLIT_SIZE];
@@ -153,6 +147,20 @@ pub fn process_transact(
 
     // Parse stealth data
     let stealth_data_start = offset;
+    let stealth_data_len = n_outputs * STEALTH_DATA_PER_OUTPUT;
+    let stealth_data_end = stealth_data_start + stealth_data_len;
+
+    // Verify bound params hash — includes stealth data hash to prevent relayer tampering
+    {
+        let stealth_data_hash = crate::utils::sha256(&data[stealth_data_start..stealth_data_end]);
+        let expected = crate::utils::crypto::compute_bound_params_hash_private_transfer(
+            crate::constants::CHAIN_ID,
+            &stealth_data_hash,
+        );
+        if *bound_params_hash != expected {
+            return Err(AegisError::InvalidBoundParams.into());
+        }
+    }
 
     // Validate account count: 5 fixed + n_inputs nullifiers
     let min_accounts = 5 + n_inputs;
@@ -310,7 +318,7 @@ pub fn process_transact(
     crate::utils::events::emit_nullifiers_batch(
         &null_hashes[..n_inputs],
         NullifierOperationType::PrivateTransfer as u8,
-        14, // instruction::TRANSACT
+        crate::instruction::TRANSACT,
     );
 
     // Insert output commitments into Merkle tree and emit stealth announcements

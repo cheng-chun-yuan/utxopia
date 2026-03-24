@@ -1,29 +1,35 @@
 //! Instruction handlers for Aegis (Multi-Token Shielded Pool)
 //!
-//! ## Core Operations
+//! ## Discriminator Map (sequential 0-19)
 //!
-//! | Instruction | Disc | Purpose |
-//! |-------------|------|---------|
-//! | `initialize` | 0 | Setup pool state and commitment tree |
-//! | `verify_stealth_deposit` | 1 | Verify BTC via SPV, create commitment |
-//! | `transact` | 14 | JoinSplit N-to-M private transfer (Groth16) |
-//! | `request_redemption` | 5 | Queue BTC withdrawal with escrow |
-//! | `complete_redemption` | 6 | Relayer marks redemption complete |
-//!
-//! ## Multi-Token Operations
-//!
-//! | Instruction | Disc | Purpose |
-//! |-------------|------|---------|
-//! | `register_token` | 28 | Admin registers SPL token for shielding |
-//! | `shield` | 29 | User deposits SPL token → shielded commitment |
-//! | `unshield` | 30 | User withdraws SPL token via ZK proof |
-//! | `update_token_config` | 31 | Admin updates per-token config |
-//! | `claim_fees` | 32 | Admin claims accumulated per-token fees |
+//! | Disc | Instruction | Category |
+//! |------|-------------|----------|
+//! | 0 | `initialize` | Core |
+//! | 1 | `set_paused` | Core |
+//! | 2 | `set_pool_config` | Core |
+//! | 3 | `propose_pool_update` | Pool updates |
+//! | 4 | `execute_pool_update` | Pool updates |
+//! | 5 | `cancel_pool_update` | Pool updates |
+//! | 6 | `init_vk_registry` | VK admin |
+//! | 7 | `update_vk_registry` | VK admin |
+//! | 8 | `register_token` | Multi-token |
+//! | 9 | `update_token_config` | Multi-token |
+//! | 10 | `claim_fees` | Multi-token |
+//! | 11 | `verify_stealth_deposit` | Deposit |
+//! | 12 | `shield` | Deposit |
+//! | 13 | `transact` | JoinSplit |
+//! | 14 | `unshield` | JoinSplit (multi-output) |
+//! | 15 | `redeem` | JoinSplit (multi-output) |
+//! | 16 | `request_redemption` | Redemption |
+//! | 17 | `complete_redemption` | Redemption |
+//! | 18 | `mark_processing` | Redemption |
+//! | 19 | `cancel_redemption` | Redemption |
 
 // Core operations
 pub mod initialize;
 pub mod verify_stealth_deposit;
 pub mod transact;
+pub mod redeem;
 pub mod request_redemption;
 pub mod mark_processing;
 pub mod cancel_redemption;
@@ -47,6 +53,7 @@ pub mod init_vk_registry;
 pub use initialize::*;
 pub use verify_stealth_deposit::*;
 pub use transact::*;
+pub use redeem::*;
 pub use request_redemption::*;
 pub use mark_processing::*;
 pub use cancel_redemption::*;

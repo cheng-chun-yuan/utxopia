@@ -210,7 +210,7 @@ pub fn event_indexer_router_with_deposits(
         .route("/api/announcements/status", get(get_announcements_status))
         // Transfers (grouped announcements + nullifier inputs)
         .route("/api/transfers", get(get_transfers))
-        // Redemption tracking (reads from persistent JSON file)
+        // Redemption tracking (reads from SQLite tracking database)
         .route("/api/redemption/tracking", get(get_redemption_tracking))
         // Completed redemptions (from on-chain events, backend-independent)
         .route("/api/redemption/completed", get(get_completed_redemptions))
@@ -218,6 +218,8 @@ pub fn event_indexer_router_with_deposits(
         .route("/api/redemption/requested", get(get_requested_redemptions))
         // Processing redemptions (from on-chain events 0x0A)
         .route("/api/redemption/processing", get(get_processing_redemptions))
+        // Consolidated: all redemption data in one response
+        .route("/api/redemption/all", get(get_all_redemptions))
         // Reconciliation
         .route("/api/reconciliation/status", get(get_reconciliation_status))
         // Global
@@ -742,49 +744,63 @@ async fn get_processing_redemptions(
 
 /// GET /api/redemption/tracking — expose local redemption tracking state
 ///
-/// Reads `redemption_tracking.json` from disk (written atomically by the
-/// redemption watcher). Returns BTC txids, status, timestamps, and errors
-/// keyed by PDA address for the frontend to join with on-chain PDA data.
+/// Reads from the SQLite tracking database. Returns BTC txids, status,
+/// timestamps, and errors keyed by PDA address for the frontend to join
+/// with on-chain PDA data.
 async fn get_redemption_tracking() -> Json<serde_json::Value> {
-    let path = std::path::Path::new("redemption_tracking.json");
-    if !path.exists() {
-        return Json(serde_json::json!({
-            "success": true,
-            "tracking": [],
-            "count": 0,
-        }));
-    }
+    use crate::redemption::tracking::TrackingStore;
 
-    match std::fs::read_to_string(path) {
-        Ok(data) => {
-            match serde_json::from_str::<Vec<serde_json::Value>>(&data) {
-                Ok(entries) => {
-                    let count = entries.len();
-                    Json(serde_json::json!({
-                        "success": true,
-                        "tracking": entries,
-                        "count": count,
-                    }))
-                }
-                Err(e) => {
-                    tracing::error!(error = %e, "Failed to parse redemption tracking JSON");
-                    Json(serde_json::json!({
-                        "success": false,
-                        "tracking": [],
-                        "count": 0,
-                        "error": format!("Parse error: {}", e),
-                    }))
-                }
-            }
-        }
-        Err(e) => {
-            tracing::error!(error = %e, "Failed to read redemption tracking file");
-            Json(serde_json::json!({
-                "success": false,
-                "tracking": [],
-                "count": 0,
-                "error": format!("Read error: {}", e),
-            }))
-        }
-    }
+    let db_path = "data/redemption_tracking.db";
+    let store = TrackingStore::new(db_path);
+    let entries = store.get_all().await;
+    let count = entries.len();
+
+    let tracking: Vec<serde_json::Value> = entries
+        .into_iter()
+        .map(|e| serde_json::to_value(e).unwrap_or_default())
+        .collect();
+
+    Json(serde_json::json!({
+        "success": true,
+        "tracking": tracking,
+        "count": count,
+    }))
+}
+
+/// GET /api/redemption/all — consolidated endpoint returning tracking + all event types
+///
+/// Combines tracking state, requested/processing/completed events in one response
+/// so the frontend needs only a single backend fetch.
+async fn get_all_redemptions(
+    State(state): State<IndexerAppState>,
+) -> Json<serde_json::Value> {
+    use crate::redemption::tracking::TrackingStore;
+
+    // Tracking from SQLite
+    let store = TrackingStore::new("data/redemption_tracking.db");
+    let tracking_entries = store.get_all().await;
+    let tracking: Vec<serde_json::Value> = tracking_entries
+        .into_iter()
+        .map(|e| serde_json::to_value(e).unwrap_or_default())
+        .collect();
+
+    // Requested events
+    let requested = state.store.get_requested_redemptions()
+        .unwrap_or_default();
+
+    // Processing events
+    let processing = state.store.get_processing_redemptions()
+        .unwrap_or_default();
+
+    // Completed events
+    let completed = state.store.get_completed_redemptions()
+        .unwrap_or_default();
+
+    Json(serde_json::json!({
+        "success": true,
+        "tracking": tracking,
+        "requested": requested,
+        "processing": processing,
+        "completed": completed,
+    }))
 }

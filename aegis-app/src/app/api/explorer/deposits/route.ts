@@ -118,7 +118,9 @@ function decodeLeU64(hex: string): number {
 
 export async function GET() {
   try {
-    // tokenSymbol resolved on frontend via token-map.ts (no server-side Poseidon needed)
+    // Build token ID map (async — uses Poseidon for localnet mint resolution)
+    const { buildTokenIdMap } = await import("@/lib/token-map");
+    const tokenMap = await buildTokenIdMap();
 
     const [annResp, depResp, leavesResp] = await Promise.all([
       fetch(`${BACKEND_URL}/api/announcements`),
@@ -183,7 +185,7 @@ export async function GET() {
           status: tracker?.status ?? (isVerifiedNoTracker ? "claimed" : "claimed"),
           instructionDisc: disc,
           tokenId: a.token_id ?? null,
-          tokenSymbol: null, // resolved on frontend
+          tokenSymbol: (a.token_id ? tokenMap.get(a.token_id) ?? tokenMap.get(a.token_id.toLowerCase()) : null) ?? null,
           ephemeralPub: a.ephemeral_pub,
           grossAmount: a.deposit_gross_amount ?? (tracker?.amount_sats ?? a.btc_deposit_amount_sats ?? null),
           fee: a.deposit_fee ?? null,

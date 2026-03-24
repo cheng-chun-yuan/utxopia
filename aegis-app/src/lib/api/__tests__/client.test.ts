@@ -26,7 +26,7 @@ describe("zkBTCApiClient", () => {
 
       expect(result).toEqual(mockResponse);
       expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining("/api/redeem"),
+        expect.stringContaining("/api/relay"),
         expect.objectContaining({
           method: "POST",
           headers: expect.objectContaining({

@@ -8,7 +8,7 @@
  * - Deposit status checked via mempool.space directly (no backend needed)
  *
  * Backend provides:
- * 1. POST /api/redeem - Process BTC withdrawal request
+ * 1. POST /api/relay - Unified relay (transfer, unshield, redeem)
  * 2. GET /api/withdrawal/:id - Check withdrawal status
  */
 
@@ -90,7 +90,7 @@ class zkBTCApiClient {
       solana_address: solanaAddress,
     };
 
-    return this.request<RedeemResponse>(API_ENDPOINTS.REDEEM, {
+    return this.request<RedeemResponse>(API_ENDPOINTS.RELAY, {
       method: "POST",
       body: JSON.stringify(body),
     });

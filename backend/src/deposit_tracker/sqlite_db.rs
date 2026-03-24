@@ -143,6 +143,14 @@ impl SqliteDepositStore {
             ).ok();
         }
 
+        // Migration: add unique index on deposit_txid to prevent duplicate processing
+        conn.execute_batch(
+            r#"
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_deposits_deposit_txid
+                ON deposits(deposit_txid) WHERE deposit_txid IS NOT NULL;
+            "#,
+        ).ok();
+
         // Metadata table for persisting service state (e.g. last_scanned_height)
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);"
@@ -172,13 +180,16 @@ impl SqliteDepositStore {
         Ok(())
     }
 
-    /// Insert a new deposit record
-    pub fn insert(&self, record: &DepositRecord) -> Result<(), SqliteError> {
+    /// Insert a new deposit record, ignoring conflicts on taproot_address or deposit_txid.
+    ///
+    /// Returns `true` if the row was inserted, `false` if it already existed (conflict).
+    /// This eliminates TOCTOU races between get_by_address() and insert().
+    pub fn insert(&self, record: &DepositRecord) -> Result<bool, SqliteError> {
         let conn = self.conn()?;
 
-        conn.execute(
+        let rows = conn.execute(
             r#"
-            INSERT INTO deposits (
+            INSERT OR IGNORE INTO deposits (
                 id, taproot_address, commitment, amount_sats, status,
                 confirmations, deposit_txid, deposit_vout, deposit_block_height,
                 sweep_txid, sweep_confirmations, sweep_block_height, pool_address,
@@ -223,16 +234,9 @@ impl SqliteDepositStore {
                 record.npk,
                 record.sweep_fee_sats.map(|v| v as i64),
             ],
-        ).map_err(|e| {
-            if let rusqlite::Error::SqliteFailure(ref err, _) = e {
-                if err.extended_code == 1555 || err.extended_code == 2067 {
-                    return SqliteError::Duplicate(record.taproot_address.clone());
-                }
-            }
-            SqliteError::Database(e)
-        })?;
+        )?;
 
-        Ok(())
+        Ok(rows > 0)
     }
 
     /// Update an existing deposit record
@@ -539,16 +543,22 @@ mod tests {
     }
 
     #[test]
-    fn test_duplicate_address() {
+    fn test_duplicate_address_ignored() {
         let store = SqliteDepositStore::in_memory().unwrap();
 
         let record1 = create_test_record("test1", "tb1p_same");
         let record2 = create_test_record("test2", "tb1p_same");
 
-        store.insert(&record1).unwrap();
-        let result = store.insert(&record2);
+        let inserted = store.insert(&record1).unwrap();
+        assert!(inserted);
 
-        assert!(matches!(result, Err(SqliteError::Duplicate(_))));
+        // Second insert with same address is silently ignored
+        let inserted2 = store.insert(&record2).unwrap();
+        assert!(!inserted2);
+
+        // Original record is preserved
+        let retrieved = store.get_by_address("tb1p_same").unwrap().unwrap();
+        assert_eq!(retrieved.id, "test1");
     }
 
     #[test]
