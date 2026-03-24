@@ -62,10 +62,6 @@ pub mod instruction {
     pub const INIT_VK_REGISTRY: u8 = 11;
     pub const UPDATE_VK_REGISTRY: u8 = 12;
 
-    // Demo/testing (admin only) - DISABLED IN PRODUCTION
-    #[cfg(feature = "devnet")]
-    pub const ADD_DEMO_STEALTH: u8 = 13;
-
     // JoinSplit (Railgun-aligned)
     pub const TRANSACT: u8 = 14;
 
@@ -118,10 +114,6 @@ pub fn process_instruction(
         }
         instruction::SET_PAUSED => {
             process_set_paused(program_id, accounts, data)
-        }
-        #[cfg(feature = "devnet")]
-        instruction::ADD_DEMO_STEALTH => {
-            instructions::process_add_demo_stealth(program_id, accounts, data)
         }
         instruction::INIT_VK_REGISTRY => {
             instructions::process_init_vk_registry(program_id, accounts, data)
@@ -224,8 +216,6 @@ mod tests {
             instruction::SET_PAUSED,
             instruction::INIT_VK_REGISTRY,
             instruction::UPDATE_VK_REGISTRY,
-            #[cfg(feature = "devnet")]
-            instruction::ADD_DEMO_STEALTH,
             instruction::TRANSACT,
             instruction::PROPOSE_POOL_UPDATE,
             instruction::EXECUTE_POOL_UPDATE,

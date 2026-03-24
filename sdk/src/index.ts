@@ -627,12 +627,3 @@ export {
   type NullifierPdasResponse,
 } from "./event-client";
 
-// ==========================================================================
-// Demo Instructions (devnet/localnet only)
-// ==========================================================================
-
-export {
-  DEMO_INSTRUCTION,
-  buildAddDemoStealthData,
-  parseAddDemoStealthData,
-} from "./demo";

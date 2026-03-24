@@ -40,9 +40,6 @@ pub mod claim_fees;
 pub mod admin_update_pool;
 pub mod set_pool_config;
 
-// Demo/testing
-pub mod add_demo_stealth;
-
 // VK registry (deployment)
 pub mod init_vk_registry;
 
@@ -61,5 +58,4 @@ pub use update_token_config::*;
 pub use claim_fees::*;
 pub use admin_update_pool::*;
 pub use set_pool_config::*;
-pub use add_demo_stealth::*;
 pub use init_vk_registry::*;

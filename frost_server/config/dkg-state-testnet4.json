@@ -1,0 +1,9 @@
+{
+  "network": "testnet4",
+  "groupPubKey": "35da5912929a3be4bea4df8ad47c14b1907fa179e3c63bb630822edc7b6dd06a",
+  "taprootAddress": "tb1pxhd9jy5jnga7f04ym79dglq5kxg8lgteu0rrhd3ssghdc7md6p4q870x8f",
+  "threshold": 2,
+  "participants": 3,
+  "signerUrls": "http://localhost:9001,http://localhost:9002,http://localhost:9003",
+  "createdAt": "2026-03-23T03:12:21Z"
+}

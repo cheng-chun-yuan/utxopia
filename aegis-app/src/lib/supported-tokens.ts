@@ -122,7 +122,7 @@ export const SUPPORTED_TOKENS: SupportedToken[] = [
       to: "text-privacy/80 bg-privacy/6 border-privacy/10",
     },
     explorerLabel: "SOL",
-    explorerSubtitle: "Solana (native)",
+    explorerSubtitle: "Solana",
   },
   {
     symbol: "USDC",
