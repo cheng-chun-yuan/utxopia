@@ -20,7 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { CopyButton } from "@/components/ui/copy-button";
 import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
-import { useTransfers, useRedemptions, type RedemptionRecord } from "@/hooks/use-explorer";
+import { useTransfers, useRedemptions, type RedemptionRecord, type ExplorerTransaction } from "@/hooks/use-explorer";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { getSolanaExplorerTxUrl, getSolanaExplorerAddressUrl } from "@/lib/solana-network";
 import { truncate, timeAgo } from "./helpers";
@@ -36,8 +36,8 @@ export type TransferTxPublic = TransferTx;
 
 /** Determine the unified kind for a transfer row */
 export function getTransferKind(tx: TransferTx): "transfer" | "unshield" | "withdraw" {
-  if (tx.transferType === "redeem" || isRedeemType(tx)) return "withdraw";
-  if (tx.transferType === "unshield" || isUnshieldType(tx)) return "unshield";
+  if (tx.type === "withdraw") return "withdraw";
+  if (tx.type === "unshield") return "unshield";
   return "transfer";
 }
 
@@ -83,24 +83,24 @@ export function TransferRow({
             <FlowCell
               from={{ icon: "shield", label: "Shielded" }}
               to={{ icon: kind === "withdraw" ? "/tokens/btc.png" : (token.isBtcNative ? token.shieldedLogo : token.logo), label: kind === "withdraw" ? "BTC" : token.symbol }}
-              meta={`${tx.inputCount} in, ${tx.outputs.length + 1} out`}
+              meta={`${getTxInputCount(tx)} in, ${tx.outputs.length + 1} out`}
             />
           ) : (
             <FlowCell
               from={{ icon: "shield", label: "Shielded" }}
               to={{ icon: "shield", label: "Shielded" }}
-              meta={`${tx.inputCount} in, ${tx.outputs.length} out`}
+              meta={`${getTxInputCount(tx)} in, ${tx.outputs.length} out`}
             />
           )}
         </Td>
         <Td>
-          {isUnshieldOrWithdraw && tx.unshieldAmount ? (
+          {isUnshieldOrWithdraw && getTxUnshieldAmount(tx) ? (
             <span className="text-body2 text-foreground font-mono">
               {(() => {
                 // For withdrawals, use actualReceived from redemption (net after service + miner fee)
                 const amt = kind === "withdraw" && redemption?.actualReceived
                   ? Number(redemption.actualReceived)
-                  : (tx.unshieldPayout ?? tx.unshieldAmount);
+                  : (getTxUnshieldPayout(tx) ?? getTxUnshieldAmount(tx) ?? 0);
                 return token.showRawAmount
                   ? amt.toLocaleString()
                   : (amt / (10 ** token.decimals)).toLocaleString(undefined, { maximumFractionDigits: token.decimals });
@@ -199,24 +199,46 @@ export function TransfersTab() {
 // Sub-components
 // =============================================================================
 
-type TransferTx = ReturnType<typeof useTransfers>["transfers"][number];
+type TransferTx = ExplorerTransaction;
 
-/**
- * Determine transfer type from backend-computed `transferType` field.
- * Falls back to disc-based classification for old data without `transferType`.
- */
+// Helper accessors — extract old flat fields from new typed outputs
+function getTxUnshieldOutputs(tx: TransferTx) {
+  return tx.outputs.filter((o) => o.type === "unshield" || o.type === "withdraw");
+}
+function getTxCommitmentOutputs(tx: TransferTx) {
+  return tx.outputs.filter((o) => o.type === "commitment");
+}
+function getTxUnshieldAmount(tx: TransferTx): number | undefined {
+  const outs = getTxUnshieldOutputs(tx);
+  if (outs.length === 0) return undefined;
+  return outs.reduce((sum, o) => sum + (o.amount ?? 0), 0);
+}
+function getTxUnshieldFee(tx: TransferTx): number | undefined {
+  const outs = getTxUnshieldOutputs(tx);
+  if (outs.length === 0) return undefined;
+  return outs.reduce((sum, o) => sum + (o.fee ?? 0), 0);
+}
+function getTxUnshieldPayout(tx: TransferTx): number | undefined {
+  const outs = getTxUnshieldOutputs(tx);
+  if (outs.length === 0) return undefined;
+  return outs.reduce((sum, o) => sum + (o.payout ?? 0), 0);
+}
+function getTxUnshieldRecipient(tx: TransferTx): string | undefined {
+  return getTxUnshieldOutputs(tx)[0]?.recipient;
+}
+function getTxInputCount(tx: TransferTx): number {
+  return tx.inputs.length;
+}
+function getTxNullifierPdas(tx: TransferTx): string[] {
+  return tx.inputs.map((i) => i.nullifierPda).filter(Boolean) as string[];
+}
+
 function isRedeemType(tx: TransferTx): boolean {
-  if (tx.transferType) return tx.transferType === "redeem";
-  // Fallback: disc-based classification for old indexed data
-  if (tx.instructionDisc === 5 || tx.instructionDisc === 16) return true;
-  if (tx.operationType === 0 && tx.instructionDisc !== 30 && tx.instructionDisc !== 15) return true;
-  return false;
+  return tx.type === "withdraw";
 }
 
 function isUnshieldType(tx: TransferTx): boolean {
-  if (tx.transferType) return tx.transferType === "unshield";
-  // Fallback: disc-based classification for old indexed data
-  return tx.instructionDisc === 30 || tx.instructionDisc === 15;
+  return tx.type === "unshield";
 }
 
 function TransferTypeBadge({ tx }: { tx: TransferTx }) {
@@ -304,9 +326,9 @@ function NullifierInputsList({ tx }: { tx: TransferTx }) {
       <div className="flex items-center gap-2 mb-3">
         <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
         <span className="text-caption text-green-400/90 font-semibold uppercase tracking-wider">Inputs</span>
-        <span className="text-caption text-green-400/60 font-medium">{tx.inputCount}</span>
+        <span className="text-caption text-green-400/60 font-medium">{getTxInputCount(tx)}</span>
       </div>
-      {tx.nullifierPdas.length > 0 ? tx.nullifierPdas.map((pda, i) => (
+      {getTxNullifierPdas(tx).length > 0 ? getTxNullifierPdas(tx).map((pda, i) => (
         <NullifierRow key={pda} pda={pda} index={i} />
       )) : (
         <div className="flex items-center justify-center gap-2 px-3 py-3 rounded-[8px] bg-gray/4 border border-gray/8">
@@ -373,8 +395,8 @@ function RedeemDetails({ tx, redemption }: { tx: TransferTx; redemption?: Redemp
   const tokenSym = tx.tokenSymbol ?? (tx.tokenId ? resolveTokenSymbolSync(tx.tokenId) : null);
   const token = tokenSym ? getTokenBySymbol(tokenSym) ?? SUPPORTED_TOKENS[0] : SUPPORTED_TOKENS[0];
   const r = redemption;
-  const grossAmount = r ? Number(r.amountSats) : tx.unshieldAmount;
-  const netReceived = r?.actualReceived ? Number(r.actualReceived) : tx.unshieldAmount;
+  const grossAmount = r ? Number(r.amountSats) : getTxUnshieldAmount(tx);
+  const netReceived = r?.actualReceived ? Number(r.actualReceived) : getTxUnshieldAmount(tx);
   const serviceFee = r?.serviceFee ? Number(r.serviceFee) : 0;
 
   return (
@@ -385,7 +407,7 @@ function RedeemDetails({ tx, redemption }: { tx: TransferTx; redemption?: Redemp
           <div className="flex items-center gap-2 mb-3">
             <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
             <span className="text-caption text-green-400/90 font-semibold uppercase tracking-wider">Input</span>
-            <span className="text-caption text-green-400/60 font-medium">{tx.inputCount}</span>
+            <span className="text-caption text-green-400/60 font-medium">{getTxInputCount(tx)}</span>
           </div>
           <div className="px-3 py-2.5 rounded-[8px] bg-green-500/4 border border-green-500/10 space-y-1.5">
             <div className="flex items-center gap-2">
@@ -397,7 +419,7 @@ function RedeemDetails({ tx, redemption }: { tx: TransferTx; redemption?: Redemp
             <span className="text-[10px] text-gray/50">Shielded note (burned)</span>
           </div>
           {/* Nullifier */}
-          {tx.nullifierPdas.length > 0 && tx.nullifierPdas.map((pda, i) => (
+          {getTxNullifierPdas(tx).length > 0 && getTxNullifierPdas(tx).map((pda, i) => (
             <NullifierRow key={pda} pda={pda} index={i} />
           ))}
         </div>
@@ -416,13 +438,13 @@ function RedeemDetails({ tx, redemption }: { tx: TransferTx; redemption?: Redemp
                 {netReceived ? formatTokenAmount(netReceived, token) : "—"}
               </span>
             </div>
-            {tx.unshieldRecipient ? (
+            {(getTxUnshieldRecipient(tx) ?? "") ? (
               <div className="group flex items-center gap-2">
                 <span className="text-[10px] text-gray/50 shrink-0">&rarr;</span>
-                <code className="text-caption font-mono text-foreground/80 truncate">{truncate(tx.unshieldRecipient, 10, 6)}</code>
+                <code className="text-caption font-mono text-foreground/80 truncate">{truncate((getTxUnshieldRecipient(tx) ?? ""), 10, 6)}</code>
                 <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
-                  <CopyButton text={tx.unshieldRecipient} label="BTC Address" variant="default" iconSize="sm" />
-                  <a href={`${getMempoolExplorerUrl()}/address/${tx.unshieldRecipient}`} target="_blank" rel="noopener noreferrer" className="text-btc hover:text-btc/80 transition-colors p-0.5">
+                  <CopyButton text={(getTxUnshieldRecipient(tx) ?? "")} label="BTC Address" variant="default" iconSize="sm" />
+                  <a href={`${getMempoolExplorerUrl()}/address/${(getTxUnshieldRecipient(tx) ?? "")}`} target="_blank" rel="noopener noreferrer" className="text-btc hover:text-btc/80 transition-colors p-0.5">
                     <ExternalLink className="w-3 h-3" />
                   </a>
                 </div>
@@ -435,8 +457,8 @@ function RedeemDetails({ tx, redemption }: { tx: TransferTx; redemption?: Redemp
             )}
           </div>
           {/* Change outputs */}
-          {tx.outputs.map((out, i) => (
-            <CommitmentRow key={out.leafIndex} commitment={out.commitment} leafIndex={out.leafIndex} txSignature={tx.txSignature} index={i + 2} />
+          {getTxCommitmentOutputs(tx).map((out, i) => (
+            <CommitmentRow key={out.leafIndex} commitment={out.commitment!} leafIndex={out.leafIndex!} txSignature={tx.txSignature} index={i + 2} />
           ))}
         </div>
       </div>
@@ -570,9 +592,9 @@ function UnshieldAmountDisplay({ grossAmount, netAmount, fee, token }: { grossAm
 function UnshieldDetails({ tx }: { tx: TransferTx }) {
   const tokenSym = tx.tokenSymbol ?? (tx.tokenId ? resolveTokenSymbolSync(tx.tokenId) : null);
   const token = tokenSym ? getTokenBySymbol(tokenSym) ?? SUPPORTED_TOKENS[0] : SUPPORTED_TOKENS[0];
-  const grossAmount = tx.unshieldAmount;
-  const fee = tx.unshieldFee ?? 0;
-  const netAmount = tx.unshieldPayout ?? tx.unshieldAmount;
+  const grossAmount = getTxUnshieldAmount(tx);
+  const fee = getTxUnshieldFee(tx) ?? 0;
+  const netAmount = getTxUnshieldPayout(tx) ?? getTxUnshieldAmount(tx);
   return (
     <div className="mx-4 my-3 rounded-[10px] bg-linear-to-b from-gray/6 to-transparent border border-gray/10 overflow-hidden">
       <div className="grid grid-cols-2 divide-x divide-gray/10">
@@ -593,14 +615,14 @@ function UnshieldDetails({ tx }: { tx: TransferTx }) {
             ) : (
               <span className="text-caption text-gray/40">Amount pending re-index</span>
             )}
-            {tx.unshieldRecipient ? (
+            {(getTxUnshieldRecipient(tx) ?? "") ? (
               <div className="group flex items-center gap-2">
                 <Wallet className="w-3.5 h-3.5 text-sol/50 shrink-0" />
-                <code className="text-caption font-mono text-foreground/80 truncate">{truncate(tx.unshieldRecipient, 8, 6)}</code>
+                <code className="text-caption font-mono text-foreground/80 truncate">{truncate((getTxUnshieldRecipient(tx) ?? ""), 8, 6)}</code>
                 <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
-                  <CopyButton text={tx.unshieldRecipient} label="Address" variant="default" iconSize="sm" />
+                  <CopyButton text={(getTxUnshieldRecipient(tx) ?? "")} label="Address" variant="default" iconSize="sm" />
                   <a
-                    href={getSolanaExplorerAddressUrl(tx.unshieldRecipient)}
+                    href={getSolanaExplorerAddressUrl((getTxUnshieldRecipient(tx) ?? ""))}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sol hover:text-sol/80 transition-colors p-0.5"
@@ -617,8 +639,8 @@ function UnshieldDetails({ tx }: { tx: TransferTx }) {
             )}
           </div>
           {/* Change outputs */}
-          {tx.outputs.map((out, i) => (
-            <CommitmentRow key={out.leafIndex} commitment={out.commitment} leafIndex={out.leafIndex} txSignature={tx.txSignature} index={i + 2} />
+          {getTxCommitmentOutputs(tx).map((out, i) => (
+            <CommitmentRow key={out.leafIndex} commitment={out.commitment!} leafIndex={out.leafIndex!} txSignature={tx.txSignature} index={i + 2} />
           ))}
         </div>
       </div>
@@ -637,8 +659,8 @@ function StandardTransferDetails({ tx }: { tx: TransferTx }) {
             <span className="text-caption text-purple-400/90 font-semibold uppercase tracking-wider">Outputs</span>
             <span className="text-caption text-purple-400/60 font-medium">{tx.outputs.length}</span>
           </div>
-          {tx.outputs.map((out, i) => (
-            <CommitmentRow key={out.leafIndex} commitment={out.commitment} leafIndex={out.leafIndex} txSignature={tx.txSignature} index={i + 1} />
+          {getTxCommitmentOutputs(tx).map((out, i) => (
+            <CommitmentRow key={out.leafIndex} commitment={out.commitment!} leafIndex={out.leafIndex!} txSignature={tx.txSignature} index={i + 1} />
           ))}
         </div>
       </div>

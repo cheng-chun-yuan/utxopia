@@ -245,7 +245,34 @@ export async function GET() {
     // Sort by timestamp descending (newest first); ongoing deposits (with recent created_at) appear at top
     deposits.sort((a, b) => b.timestamp - a.timestamp);
 
-    return NextResponse.json({ success: true, deposits, count: deposits.length });
+    // Transform to unified ExplorerTransaction format
+    const transactions = deposits.map((d) => ({
+      txSignature: d.txSignature,
+      type: "shield" as const,
+      tokenId: d.tokenId,
+      tokenSymbol: d.tokenSymbol,
+      timestamp: d.timestamp,
+      status: d.status ?? "confirmed",
+      inputs: [{
+        grossAmount: d.grossAmount ?? undefined,
+        fee: d.fee ?? undefined,
+        netAmount: d.amountSats,
+        btcDepositTxid: d.btcMeta?.depositTxid ?? undefined,
+        btcSweepTxid: d.btcMeta?.sweepTxid ?? undefined,
+        taprootAddress: d.btcMeta?.taprootAddress ?? undefined,
+        depositAmountSats: d.btcMeta?.depositAmountSats ?? undefined,
+      }],
+      outputs: [{
+        type: "commitment" as const,
+        commitment: d.commitment,
+        leafIndex: d.leafIndex,
+        amount: d.amountSats,
+      }],
+      // Keep btcMeta for deposit lifecycle display
+      btcMeta: d.btcMeta,
+    }));
+
+    return NextResponse.json({ success: true, deposits, transactions, count: deposits.length });
   } catch (err) {
     console.error("[Explorer Deposits API] Backend unavailable, trying RPC fallback:", err);
 

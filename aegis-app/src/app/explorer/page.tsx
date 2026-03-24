@@ -8,7 +8,7 @@ import {
   Shield,
 } from "lucide-react";
 import { useDeposits, useTransfers, useRedemptions } from "@/hooks/use-explorer";
-import type { DepositRecord, GroupedTransfer, RedemptionRecord } from "@/hooks/use-explorer";
+import type { DepositRecord, GroupedTransfer, RedemptionRecord, ExplorerTransaction } from "@/hooks/use-explorer";
 import { usePoolStats } from "@/hooks/use-pool-stats";
 import { useTokenPrices, type TokenPrices } from "@/hooks/use-btc-price";
 import { SiteHeader } from "@/components/site-header";
@@ -27,14 +27,14 @@ import { getTokenByFilter, formatTokenAmount, type TokenFilterId } from "@/lib/s
 
 type UnifiedTransaction =
   | { kind: "shield"; data: DepositRecord; timestamp: number; key: string }
-  | { kind: "transfer"; data: GroupedTransfer; timestamp: number; key: string }
-  | { kind: "unshield"; data: GroupedTransfer | RedemptionRecord; timestamp: number; key: string; source: "transfer" | "redemption" };
+  | { kind: "transfer"; data: ExplorerTransaction; timestamp: number; key: string }
+  | { kind: "unshield"; data: ExplorerTransaction | RedemptionRecord; timestamp: number; key: string; source: "transfer" | "redemption" };
 
 function isRedemption(tx: UnifiedTransaction): tx is UnifiedTransaction & { kind: "unshield"; data: RedemptionRecord; source: "redemption" } {
   return tx.kind === "unshield" && (tx as any).source === "redemption";
 }
 
-function isTransferUnshield(tx: UnifiedTransaction): tx is UnifiedTransaction & { kind: "unshield"; data: GroupedTransfer; source: "transfer" } {
+function isTransferUnshield(tx: UnifiedTransaction): tx is UnifiedTransaction & { kind: "unshield"; data: ExplorerTransaction; source: "transfer" } {
   return tx.kind === "unshield" && (tx as any).source === "transfer";
 }
 
@@ -281,7 +281,7 @@ function ExplorerContent() {
                     return (
                       <TransferRow
                         key={tx.key}
-                        tx={tx.data as GroupedTransfer}
+                        tx={tx.data as ExplorerTransaction}
                         expanded={expanded.has(tx.key)}
                         onToggle={() => toggle(tx.key)}
                       />

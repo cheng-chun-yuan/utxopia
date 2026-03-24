@@ -44,31 +44,65 @@ export interface TransferOutput {
   leafIndex: number;
 }
 
+/** Typed output in a transaction */
+export interface TxOutput {
+  type: "commitment" | "unshield" | "withdraw";
+  commitment?: string;
+  leafIndex?: number;
+  amount?: number;
+  fee?: number;
+  payout?: number;
+  recipient?: string;
+  requestId?: string;
+  btcScript?: string;
+  btcTxid?: string;
+  localStatus?: string;
+}
+
+/** Input in a transaction */
+export interface TxInput {
+  nullifierHash?: string;
+  nullifierPda?: string;
+  // Shield-specific
+  grossAmount?: number;
+  fee?: number;
+  netAmount?: number;
+  btcDepositTxid?: string;
+  btcSweepTxid?: string;
+  taprootAddress?: string;
+  depositAmountSats?: number;
+}
+
+/** Unified transaction type used across the explorer */
+export interface ExplorerTransaction {
+  txSignature: string;
+  type: "shield" | "transfer" | "unshield" | "withdraw";
+  tokenId: string | null;
+  tokenSymbol: string | null;
+  timestamp: number;
+  status: string;
+  inputs: TxInput[];
+  outputs: TxOutput[];
+  /** BTC deposit lifecycle (shield only) */
+  btcMeta?: any;
+}
+
+/** @deprecated Use ExplorerTransaction instead */
 export interface GroupedTransfer {
   txSignature: string;
   timestamp: number;
-  /** "confirmed" when timestamp > 0, "processing" when not yet confirmed */
   status: "confirmed" | "processing";
   inputCount: number;
   nullifierPdas: string[];
   outputs: TransferOutput[];
-  /** NullifierOperationType: 0=FullWithdrawal (unshield), 2=PrivateTransfer */
   operationType: number;
-  /** Aegis instruction discriminator: 14=transact, 15=unshield */
   instructionDisc?: number;
-  /** Token transfer amount in sats (unshield txs only) */
   unshieldAmount?: number;
-  /** Token transfer recipient wallet (unshield txs only) */
   unshieldRecipient?: string;
-  /** Token ID hex from on-chain event (identifies which token) */
   tokenId?: string;
-  /** Resolved token symbol (BTC, SOL, USDC, USDT) from backend */
   tokenSymbol?: string;
-  /** Event-derived transfer type: "private_transfer", "unshield", "redeem", "deposit" */
   transferType?: string;
-  /** Protocol fee deducted from unshield (from UnshieldMeta v2 event) */
   unshieldFee?: number;
-  /** Net payout after fee (from UnshieldMeta v2 event) */
   unshieldPayout?: number;
 }
 
@@ -203,25 +237,27 @@ const SWR_OPTIONS = {
 };
 
 export function useDeposits() {
-  const { data, error, isLoading, mutate } = useSWR<DepositRecord[]>(
+  const { data, error, isLoading, mutate } = useSWR<{ deposits: DepositRecord[]; transactions: ExplorerTransaction[] }>(
     "explorer-deposits",
     async () => {
       const resp = await fetch("/api/explorer/deposits");
-      if (!resp.ok) return [];
+      if (!resp.ok) return { deposits: [], transactions: [] };
       const json = await resp.json();
-      return (json.deposits ?? []).map(
+      const deposits = (json.deposits ?? []).map(
         (d: any): DepositRecord => ({
           ...d,
           amountBtc: (d.amountSats / 1e8).toFixed(8),
         }),
       );
+      const transactions = (json.transactions ?? []) as ExplorerTransaction[];
+      return { deposits, transactions };
     },
     {
       ...SWR_OPTIONS,
       // Auto-refetch faster when any deposit is missing leaf index or timestamp
-      refreshInterval: (data?: DepositRecord[]) => {
-        if (!data) return SWR_OPTIONS.refreshInterval;
-        const hasIncomplete = data.some(
+      refreshInterval: (data?: { deposits: DepositRecord[]; transactions: ExplorerTransaction[] }) => {
+        if (!data?.deposits) return SWR_OPTIONS.refreshInterval;
+        const hasIncomplete = data.deposits.some(
           (d) => !d.timestamp || d.leafIndex < 0,
         );
         return hasIncomplete ? 5_000 : SWR_OPTIONS.refreshInterval;
@@ -229,50 +265,57 @@ export function useDeposits() {
     },
   );
   return {
-    deposits: data ?? [],
+    deposits: data?.deposits ?? [],
+    shieldTransactions: data?.transactions ?? [],
     isLoading,
-    error: error
-      ? error instanceof Error
-        ? error.message
-        : "Failed to fetch deposits"
-      : null,
+    error: error ? (error instanceof Error ? error.message : "Failed to fetch deposits") : null,
     refresh: () => mutate(),
   };
 }
 
 export function useTransfers() {
-  const { data, error, isLoading, mutate } = useSWR<GroupedTransfer[]>(
+  const { data, error, isLoading, mutate } = useSWR<ExplorerTransaction[]>(
     "explorer-transfers",
     async () => {
       const resp = await fetch("/api/transfers");
-      if (!resp.ok) return []; // graceful fallback — backend may not have this endpoint yet
+      if (!resp.ok) return [];
       const json = await resp.json();
-      if (!json.success || !json.transfers) return [];
-      return json.transfers.map((t: BackendTransferRow) => ({
-        txSignature: t.tx_signature,
-        timestamp: t.timestamp,
-        status: t.status === "processing" ? "processing" : "confirmed",
-        inputCount: t.input_count,
-        nullifierPdas: t.nullifier_pdas ?? [],
-        outputs: (t.commitments ?? []).map((c: string, i: number) => ({
-          commitment: c,
-          leafIndex: (t.leaf_indices ?? [])[i] ?? 0,
-        })),
-        operationType: t.operation_type ?? 2,
-        instructionDisc: t.instruction_disc,
-        unshieldAmount: t.unshield_amount,
-        unshieldRecipient: t.unshield_recipient,
-        tokenId: t.token_id,
-        tokenSymbol: t.token_symbol,
-        transferType: t.transfer_type,
-        unshieldFee: t.unshield_fee,
-        unshieldPayout: t.unshield_payout,
-      }));
+      // New format: json.transactions (typed outputs)
+      if (json.transactions) return json.transactions as ExplorerTransaction[];
+      // Legacy fallback: json.transfers (flat)
+      if (json.transfers) {
+        return json.transfers.map((t: any) => ({
+          txSignature: t.tx_signature ?? t.txSignature,
+          type: t.transfer_type === "redeem" ? "withdraw" : t.transfer_type === "unshield" ? "unshield" : "transfer",
+          tokenId: t.token_id ?? t.tokenId ?? null,
+          tokenSymbol: t.token_symbol ?? t.tokenSymbol ?? null,
+          timestamp: t.timestamp,
+          status: t.status ?? "confirmed",
+          inputs: (t.nullifier_hashes ?? []).map((h: string, i: number) => ({
+            nullifierHash: h,
+            nullifierPda: (t.nullifier_pdas ?? [])[i],
+          })),
+          outputs: [
+            ...(t.commitments ?? []).map((c: string, i: number) => ({
+              type: "commitment" as const,
+              commitment: c,
+              leafIndex: (t.leaf_indices ?? [])[i],
+            })),
+            ...(t.unshield_amount != null ? [{
+              type: (t.transfer_type === "redeem" ? "withdraw" : "unshield") as "withdraw" | "unshield",
+              amount: t.unshield_amount,
+              fee: t.unshield_fee,
+              payout: t.unshield_payout,
+              recipient: t.unshield_recipient,
+            }] : []),
+          ],
+        }));
+      }
+      return [];
     },
     {
       ...SWR_OPTIONS,
-      // Auto-refetch faster when any transfer is processing (unconfirmed)
-      refreshInterval: (data?: GroupedTransfer[]) => {
+      refreshInterval: (data?: ExplorerTransaction[]) => {
         if (!data) return SWR_OPTIONS.refreshInterval;
         const hasProcessing = data.some((t) => t.status === "processing");
         return hasProcessing ? 5_000 : SWR_OPTIONS.refreshInterval;
@@ -282,11 +325,7 @@ export function useTransfers() {
   return {
     transfers: data ?? [],
     isLoading,
-    error: error
-      ? error instanceof Error
-        ? error.message
-        : "Failed to fetch transfers"
-      : null,
+    error: error ? (error instanceof Error ? error.message : "Failed to fetch transfers") : null,
     refresh: () => mutate(),
   };
 }
