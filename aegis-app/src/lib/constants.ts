@@ -1,16 +1,21 @@
 // Centralized application constants
 
-// Import SDK config (single source of truth)
-// initConfig() reads NEXT_PUBLIC_AEGIS_PROGRAM_ID + NEXT_PUBLIC_ZKBTC_MINT env vars
-// and derives all PDAs automatically.
+// Import network config (single source of truth — no env vars needed for addresses)
+import { getNetworkConfig } from "./network-config";
 import { initConfig, getConfig } from "@aegis/sdk";
 
-// Initialize SDK once at module load — reads env vars, derives PDAs.
-// Eagerly called so getConfig() returns devnet2 addresses from the start.
+const networkCfg = getNetworkConfig();
+
+// Initialize SDK once at module load — passes addresses from config/networks.json.
+// Env vars (NEXT_PUBLIC_SOLANA_RPC_URL) can still override RPC URL.
 let _initPromise: Promise<void> | null = null;
 export function ensureSdkInit(): Promise<void> {
   if (!_initPromise) {
-    _initPromise = initConfig().then(() => {});
+    _initPromise = initConfig({
+      aegisProgramId: networkCfg.solana.aegisProgramId,
+      zkbtcMint: networkCfg.tokens.zkbtcMint,
+      solanaRpcUrl: networkCfg.solana.rpcUrl,
+    }).then(() => {});
   }
   return _initPromise;
 }

@@ -50,10 +50,12 @@ export interface SupportedToken {
 /** NATIVE_MINT_2022 — Token-2022 wrapped SOL mint */
 export const NATIVE_MINT_2022_ADDRESS = "9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP";
 
-/** Resolve mint address from env var at build time (for localnet/devnet test mints) */
-const ENV_USDC_MINT = process.env.NEXT_PUBLIC_USDC_MINT || "";
-const ENV_USDT_MINT = process.env.NEXT_PUBLIC_USDT_MINT || "";
-const ENV_WSOL_MINT = process.env.NEXT_PUBLIC_WSOL_MINT || "";
+/** Resolve mint addresses from network config (single source of truth) */
+import { getNetworkConfig } from "./network-config";
+const _netCfg = getNetworkConfig();
+const ENV_USDC_MINT = _netCfg.tokens.usdcMint || process.env.NEXT_PUBLIC_USDC_MINT || "";
+const ENV_USDT_MINT = _netCfg.tokens.usdtMint || process.env.NEXT_PUBLIC_USDT_MINT || "";
+const ENV_WSOL_MINT = _netCfg.tokens.wsolMint || process.env.NEXT_PUBLIC_WSOL_MINT || "";
 
 export const SUPPORTED_TOKENS: SupportedToken[] = [
   {

@@ -18,18 +18,19 @@ export const API_ENDPOINTS = {
   HEADER_STATUS: (height: number) => `/api/header/status/${height}`,
 } as const;
 
+import { getNetworkConfig } from "../network-config";
+
 export const DEFAULT_API_URL = "http://localhost:3001";
 
 /**
- * Get the backend API URL from environment.
+ * Get the backend API URL.
  *
- * Server-side: BACKEND_API_URL (not exposed to client)
- * Client-side: NEXT_PUBLIC_BACKEND_API_URL (available in browser)
- * Both fall back to DEFAULT_API_URL (localhost:3001).
+ * Priority: env var override > config/networks.json > localhost fallback
  */
 export function getBackendUrl(): string {
+  const cfgUrl = getNetworkConfig().backend.url;
   if (typeof window === "undefined") {
-    return process.env.BACKEND_API_URL || DEFAULT_API_URL;
+    return process.env.BACKEND_API_URL || cfgUrl || DEFAULT_API_URL;
   }
-  return process.env.NEXT_PUBLIC_BACKEND_API_URL || DEFAULT_API_URL;
+  return process.env.NEXT_PUBLIC_BACKEND_API_URL || cfgUrl || DEFAULT_API_URL;
 }
