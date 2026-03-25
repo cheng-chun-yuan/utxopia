@@ -38,10 +38,14 @@ export function StealthRecipientInput({
   compact = false,
 }: StealthRecipientInputProps) {
   const [recipient, setRecipient] = useState("");
+  const [resolvedInput, setResolvedInput] = useState(""); // the input value that was resolved
   const [resolving, setResolving] = useState(false);
 
   const config = getConfig();
   const parentDomain = config.snsParentDomain || "btcpro";
+
+  // resolvedMeta is only valid when current input matches what was resolved
+  const isValid = !!resolvedMeta && recipient.trim() === resolvedInput;
 
   // Auto-detect: long hex = stealth address, otherwise = .btcpro.sol name
   const resolveRecipient = useCallback(async () => {
@@ -81,6 +85,7 @@ export function StealthRecipientInput({
           onError(`Invalid stealth address: ${short}`);
           return;
         }
+        setResolvedInput(trimmed);
         onResolved(meta, null);
         return;
       }
@@ -122,6 +127,7 @@ export function StealthRecipientInput({
         viewingPubKey: result.viewingPubKey,
         mpk: result.mpk,
       };
+      setResolvedInput(trimmed);
       onResolved(meta, `${subdomain}.${parentDomain}.sol`);
     } catch (err) {
       onError(err instanceof Error ? err.message : "Failed to resolve recipient");
@@ -164,12 +170,12 @@ export function StealthRecipientInput({
               compact
                 ? error
                   ? "ring-1 ring-red-500/50"
-                  : resolvedMeta
+                  : isValid
                     ? "ring-1 ring-privacy/40"
                     : "focus:ring-1 focus:ring-purple/30"
                 : error
                   ? "border-red-500/50"
-                  : resolvedMeta
+                  : isValid
                     ? "border-privacy/40"
                     : ""
             )}
@@ -188,7 +194,7 @@ export function StealthRecipientInput({
               }
             }}
           />
-          {!resolvedMeta && (
+          {!isValid && (
             <button
               type="button"
               disabled={!selfMeta}
@@ -196,6 +202,7 @@ export function StealthRecipientInput({
                 if (!selfMeta) return;
                 const encoded = encodeStealthMetaAddress(selfMeta);
                 setRecipient(encoded);
+                setResolvedInput(encoded);
                 onResolved(selfMeta, null);
                 onError(null);
               }}
@@ -214,7 +221,7 @@ export function StealthRecipientInput({
       </div>
 
       {/* Error */}
-      {error && !resolvedMeta && (
+      {error && !isValid && (
         <div className="flex items-start gap-2 text-red-400 pl-2">
           <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
           <span className="text-caption break-all">{error}</span>
@@ -222,7 +229,7 @@ export function StealthRecipientInput({
       )}
 
       {/* Resolved */}
-      {resolvedMeta && recipient.trim() && (
+      {isValid && (
         <p className="text-caption text-privacy pl-2 flex items-center gap-1">
           <Check className="w-3.5 h-3.5" />
           {resolvedName ? (

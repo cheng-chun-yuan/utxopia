@@ -113,14 +113,8 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  // Auto-resolve self stealth address as default recipient (only on first load)
-  const autoResolvedRef = useRef(false);
-  useEffect(() => {
-    if (stealthAddress && !autoResolvedRef.current) {
-      autoResolvedRef.current = true;
-      setResolvedMeta(stealthAddress);
-    }
-  }, [stealthAddress]);
+  // No auto-resolve — user clicks the Self button or types a recipient.
+  // This avoids resolvedMeta getting out of sync with the input value.
 
   // Fetch SOL balance when SOL is selected
   useEffect(() => {
