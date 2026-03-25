@@ -15,6 +15,11 @@
   "tUsdcVault": "59nj8rD2bgBXCTs9URhb86gbnXjiAbLPd9VY9WXiS4Xd",
   "tUsdtVault": "ASLPTKWUiZ8uexJ4h3DgSaheGZKJc7ozDMSb1sUR9Usb",
   "jupUsdVault": "DUhwPymrVnUBQpEqwPevzeArTX1VUWNCnaGhemd4a8bq",
+  "btcXOnlyPubKey": "29485d031f6ad1ab0c4ca7183bef6cb9ce2d914d0bec8dc842a6962f0fcc3362",
+  "poolBtcAddress": "tb1p99y96qcldtg6krzv5uvrhmmvh88zmy2dp0kgmjzz56tz7r7vxd3qqn2q95",
+  "btcNetwork": "testnet4",
+  "solanaRpc": "https://api.devnet.solana.com",
+  "backendUrl": "https://api-aegis.amidoggy.xyz",
   "createdAt": "2026-03-25T06:14:03.443Z",
   "signingMode": "frost"
 }
