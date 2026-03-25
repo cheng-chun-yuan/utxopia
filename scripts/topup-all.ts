@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
 /**
- * Top up a stealth address using the SDK's createStealthDepositWithKeys
- * (same ECDH as the wallet scanner).
+ * Top up a stealth address with all registered tokens.
  *
- * Usage: bun run scripts/topup-all.ts [aegis:address]
+ * Usage:
+ *   AEGIS_NETWORK=devnet bun run scripts/topup-all.ts aegis:<address>
+ *   bun run scripts/topup-all.ts aegis:<address>   # defaults to localnet
  */
 
 import {
@@ -19,16 +20,22 @@ import {
   Transaction,
   TransactionInstruction,
   sendAndConfirmTransaction,
+  LAMPORTS_PER_SOL,
 } from "@solana/web3.js";
 import {
   TOKEN_2022_PROGRAM_ID,
+  TOKEN_PROGRAM_ID,
+  NATIVE_MINT,
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountIdempotentInstruction,
   createMintToInstruction,
+  createSyncNativeInstruction,
+  createCloseAccountInstruction,
 } from "@solana/spl-token";
 import { setupScript } from "./lib/common.ts";
 
-const { conn, authority, programId: AEGIS, state } = setupScript("localnet");
+const network = (process.env.AEGIS_NETWORK || "localnet") as "localnet" | "devnet";
+const { conn, authority, programId: AEGIS, state } = setupScript(network);
 
 function pda(seeds: (string | Uint8Array)[]) {
   return PublicKey.findProgramAddressSync(
@@ -40,55 +47,22 @@ async function readTokenId(mint: PublicKey): Promise<bigint> {
   return computeTokenId(mint.toBytes());
 }
 
-async function demoDeposit(meta: ReturnType<typeof decodeStealthMetaAddress>, tokenId: bigint, mint: PublicKey, vault: PublicKey, amountSats: bigint, label: string) {
-  const stealth = await createStealthDepositWithKeys(meta, amountSats, tokenId);
-  const [poolState] = pda(["pool_state"]);
-  const [commitmentTree] = pda(["commitment_tree"]);
-  const [tokenConfig] = pda(["token_config", mint.toBuffer()]);
-
-  // Build add_demo_stealth (disc=13): ephemeralPub(32) + npk(32) + amount(8) = 72
-  const data = Buffer.alloc(73);
-  data[0] = 13;
-  Buffer.from(stealth.ephemeralPub).copy(data, 1);
-  // npk bytes from stealth output
-  const npkBytes = Buffer.alloc(32);
-  let npk = stealth.stealthPubKeyX;
-  for (let i = 31; i >= 0; i--) { npkBytes[i] = Number(npk & 0xffn); npk >>= 8n; }
-  npkBytes.copy(data, 33);
-  data.writeBigUInt64LE(amountSats, 65);
-
-  const ix = new TransactionInstruction({
-    keys: [
-      { pubkey: poolState, isSigner: false, isWritable: true },
-      { pubkey: commitmentTree, isSigner: false, isWritable: true },
-      { pubkey: authority.publicKey, isSigner: true, isWritable: true },
-      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      { pubkey: mint, isSigner: false, isWritable: true },
-      { pubkey: vault, isSigner: false, isWritable: true },
-      { pubkey: new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"), isSigner: false, isWritable: false },
-      { pubkey: tokenConfig, isSigner: false, isWritable: false },
-    ],
-    programId: AEGIS,
-    data,
-  });
-
-  const tx = new Transaction().add(ix);
-  tx.feePayer = authority.publicKey;
-  tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
-  const sig = await sendAndConfirmTransaction(conn, tx, [authority], { commitment: "confirmed" });
-  console.log(`  ✓ ${label} — ${sig.slice(0, 20)}...`);
-}
-
-async function shieldSPL(meta: ReturnType<typeof decodeStealthMetaAddress>, tokenId: bigint, mint: PublicKey, vault: PublicKey, amount: bigint, label: string) {
+/**
+ * Shield Token-2022 SPL tokens to a stealth address.
+ */
+async function shieldToken2022(
+  meta: ReturnType<typeof decodeStealthMetaAddress>,
+  tokenId: bigint, mint: PublicKey, vault: PublicKey,
+  amount: bigint, label: string,
+) {
   const stealth = await createStealthDepositWithKeys(meta, amount, tokenId);
   const [poolState] = pda(["pool_state"]);
   const [commitmentTree] = pda(["commitment_tree"]);
   const [tokenConfig] = pda(["token_config", mint.toBuffer()]);
   const userAta = getAssociatedTokenAddressSync(mint, authority.publicKey, false, TOKEN_2022_PROGRAM_ID);
 
-  // Build shield (disc=29): amount(8) + npk(32) + ephemeralPub(32) = 72
   const data = Buffer.alloc(73);
-  data[0] = 29;
+  data[0] = 12; // shield discriminator
   data.writeBigUInt64LE(amount, 1);
   const npkBytes = Buffer.alloc(32);
   let npk = stealth.stealthPubKeyX;
@@ -117,6 +91,74 @@ async function shieldSPL(meta: ReturnType<typeof decodeStealthMetaAddress>, toke
   console.log(`  ✓ ${label} — ${sig.slice(0, 20)}...`);
 }
 
+/**
+ * Shield native wSOL (legacy Token program) to a stealth address.
+ * Wraps SOL → wSOL → shield → close wSOL account.
+ */
+async function shieldNativeSOL(
+  meta: ReturnType<typeof decodeStealthMetaAddress>,
+  tokenId: bigint, vault: PublicKey,
+  amount: bigint, label: string,
+) {
+  const stealth = await createStealthDepositWithKeys(meta, amount, tokenId);
+  const [poolState] = pda(["pool_state"]);
+  const [commitmentTree] = pda(["commitment_tree"]);
+  const [tokenConfig] = pda(["token_config", NATIVE_MINT.toBuffer()]);
+  const wsolAta = getAssociatedTokenAddressSync(NATIVE_MINT, authority.publicKey, false, TOKEN_PROGRAM_ID);
+
+  const data = Buffer.alloc(73);
+  data[0] = 29;
+  data.writeBigUInt64LE(amount, 1);
+  const npkBytes = Buffer.alloc(32);
+  let npk = stealth.stealthPubKeyX;
+  for (let i = 31; i >= 0; i--) { npkBytes[i] = Number(npk & 0xffn); npk >>= 8n; }
+  npkBytes.copy(data, 9);
+  Buffer.from(stealth.ephemeralPub).copy(data, 41);
+
+  const tx = new Transaction();
+
+  // 1. Create wSOL ATA
+  tx.add(createAssociatedTokenAccountIdempotentInstruction(
+    authority.publicKey, wsolAta, authority.publicKey, NATIVE_MINT, TOKEN_PROGRAM_ID,
+  ));
+
+  // 2. Transfer SOL → wSOL
+  tx.add(SystemProgram.transfer({
+    fromPubkey: authority.publicKey,
+    toPubkey: wsolAta,
+    lamports: Number(amount),
+  }));
+
+  // 3. Sync native
+  tx.add(createSyncNativeInstruction(wsolAta, TOKEN_PROGRAM_ID));
+
+  // 4. Shield instruction (legacy Token program)
+  tx.add(new TransactionInstruction({
+    keys: [
+      { pubkey: authority.publicKey, isSigner: true, isWritable: true },
+      { pubkey: wsolAta, isSigner: false, isWritable: true },
+      { pubkey: poolState, isSigner: false, isWritable: false },
+      { pubkey: tokenConfig, isSigner: false, isWritable: true },
+      { pubkey: vault, isSigner: false, isWritable: true },
+      { pubkey: commitmentTree, isSigner: false, isWritable: true },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    programId: AEGIS,
+    data,
+  }));
+
+  // 5. Close wSOL account
+  tx.add(createCloseAccountInstruction(wsolAta, authority.publicKey, authority.publicKey, [], TOKEN_PROGRAM_ID));
+
+  tx.feePayer = authority.publicKey;
+  tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+  const sig = await sendAndConfirmTransaction(conn, tx, [authority], { commitment: "confirmed" });
+  console.log(`  ✓ ${label} — ${sig.slice(0, 20)}...`);
+}
+
+/**
+ * Mint Token-2022 test tokens to authority's ATA.
+ */
 async function mintTokens(mint: PublicKey, amount: number, label: string) {
   const userAta = getAssociatedTokenAddressSync(mint, authority.publicKey, false, TOKEN_2022_PROGRAM_ID);
   const tx = new Transaction();
@@ -129,45 +171,53 @@ async function mintTokens(mint: PublicKey, amount: number, label: string) {
 }
 
 async function main() {
-  const addr = process.argv[2] || "aegis:9d2cb3fea6912aeb783760f47367c53f2fb2ed7240c98a99786172982950fe988f45b56ecd1d6d02f5007accc9fa430bc4dc91f1fabe1d37977cb773468ef3451b592c4e3881b34572c0d83baacfda725f04ac6810dbaf7227e7f69f784c1eb6";
+  const addr = process.argv[2] || "aegis:c4b3323759ae3e33d82ce13f9e6454ab01400f509f3092deb7d1b31b60c37d14552ab7a1ce6a4fca70783bd40b3c03e8a24c50b65a3fb9edc6e0c70ee389f2af20c7827efc517ed74a46be26953f715ae945d9d49ee9bcd275ab1ea217cfe708";
 
   await initPoseidon();
   const meta = decodeStealthMetaAddress(addr);
 
-  console.log("=== Top-up All Tokens (SDK ECDH) ===");
+  console.log(`=== Top-up All Tokens (${network}) ===`);
   console.log("Recipient:", addr.slice(0, 30) + "...");
   console.log("Program:", AEGIS.toBase58());
+  console.log("Authority:", authority.publicKey.toBase58());
   console.log();
 
-  const zkbtcMint = new PublicKey(state.zkbtcMint);
-  const zkbtcVault = new PublicKey(state.poolVault);
-  const zkbtcTokenId = await readTokenId(zkbtcMint);
+  // 1. wSOL (native — wrap SOL and shield)
+  if (state.wsolMint) {
+    console.log("─── wSOL (native wrap) ───");
+    const wsolVault = new PublicKey(state.wsolVault);
+    const wsolTokenId = await readTokenId(NATIVE_MINT);
+    await shieldNativeSOL(meta, wsolTokenId, wsolVault, 10_000_000n, "0.01 SOL");
+  }
 
-  // 1. zkBTC
-  console.log("─── zkBTC (demo) ───");
-  await demoDeposit(meta, zkbtcTokenId, zkbtcMint, zkbtcVault, 50_000n, "50,000 sats");
-  await demoDeposit(meta, zkbtcTokenId, zkbtcMint, zkbtcVault, 100_000n, "100,000 sats");
-
-  // 2. tUSDC
+  // 2. USDC
   if (state.tUsdcMint) {
-    console.log("\n─── tUSDC (real shield) ───");
+    console.log("\n─── USDC ───");
     const usdcMint = new PublicKey(state.tUsdcMint);
     const usdcVault = new PublicKey(state.tUsdcVault);
     const usdcTokenId = await readTokenId(usdcMint);
-    await mintTokens(usdcMint, 5_000_000_000, "5000 tUSDC");
-    await shieldSPL(meta, usdcTokenId, usdcMint, usdcVault, 2_000_000_000n, "2,000 USDC");
-    await shieldSPL(meta, usdcTokenId, usdcMint, usdcVault, 500_000_000n, "500 USDC");
+    await mintTokens(usdcMint, 5_000_000_000, "5,000 USDC");
+    await shieldToken2022(meta, usdcTokenId, usdcMint, usdcVault, 2_000_000_000n, "2,000 USDC");
   }
 
-  // 3. tWSOL
-  if (state.tWsolMint) {
-    console.log("\n─── tWSOL (real shield) ───");
-    const wsolMint = new PublicKey(state.tWsolMint);
-    const wsolVault = new PublicKey(state.tWsolVault);
-    const wsolTokenId = await readTokenId(wsolMint);
-    await mintTokens(wsolMint, 500_000_000, "0.5 tWSOL");
-    await shieldSPL(meta, wsolTokenId, wsolMint, wsolVault, 200_000_000n, "0.2 SOL");
-    await shieldSPL(meta, wsolTokenId, wsolMint, wsolVault, 50_000_000n, "0.05 SOL");
+  // 3. USDT
+  if (state.tUsdtMint) {
+    console.log("\n─── USDT ───");
+    const usdtMint = new PublicKey(state.tUsdtMint);
+    const usdtVault = new PublicKey(state.tUsdtVault);
+    const usdtTokenId = await readTokenId(usdtMint);
+    await mintTokens(usdtMint, 5_000_000_000, "5,000 USDT");
+    await shieldToken2022(meta, usdtTokenId, usdtMint, usdtVault, 2_000_000_000n, "2,000 USDT");
+  }
+
+  // 4. jupUSD
+  if (state.jupUsdMint) {
+    console.log("\n─── jupUSD ───");
+    const jupMint = new PublicKey(state.jupUsdMint);
+    const jupVault = new PublicKey(state.jupUsdVault);
+    const jupTokenId = await readTokenId(jupMint);
+    await mintTokens(jupMint, 5_000_000_000, "5,000 jupUSD");
+    await shieldToken2022(meta, jupTokenId, jupMint, jupVault, 2_000_000_000n, "2,000 jupUSD");
   }
 
   console.log("\n========================================");

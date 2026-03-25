@@ -396,7 +396,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
 
         // 4. Shield instruction (use legacy Token program for wSOL)
         const ixData = new Uint8Array(73);
-        ixData[0] = 29;
+        ixData[0] = 12; // SHIELD discriminator
         const dataView = new DataView(ixData.buffer);
         dataView.setBigUint64(1, amountRaw, true);
         ixData.set(npkBytes, 9);
@@ -442,7 +442,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
         const vaultPubkey = new PublicKey(vaultBytes);
 
         const ixData = new Uint8Array(73);
-        ixData[0] = 29;
+        ixData[0] = 12; // SHIELD discriminator
         const dataView = new DataView(ixData.buffer);
         dataView.setBigUint64(1, amountRaw, true);
         ixData.set(npkBytes, 9);
