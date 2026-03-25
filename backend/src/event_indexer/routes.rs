@@ -225,6 +225,8 @@ pub fn event_indexer_router_with_deposits(
         .route("/api/redemption/all", get(get_all_redemptions))
         // Reconciliation
         .route("/api/reconciliation/status", get(get_reconciliation_status))
+        // Pool stats (cached, for frontend landing page)
+        .route("/api/pool/stats", get(get_pool_stats))
         // Global
         .route("/api/sync", post(post_sync_all))
         .route("/api/reset", post(post_reset_all))
@@ -590,6 +592,44 @@ async fn get_reconciliation_status(
             "message": "No reconciliation check has run yet",
         })),
     }
+}
+
+/// GET /api/pool/stats — cached pool statistics for frontend
+///
+/// Returns on-chain pool state (from reconciler cache) + local event counts.
+/// Cached by reconciler interval (~30s), no RPC calls per request.
+async fn get_pool_stats(
+    State(state): State<IndexerAppState>,
+) -> Json<serde_json::Value> {
+    let recon = state.reconciler_status.read().await;
+
+    let (on_chain, local_leaves, local_nullifiers) = match recon.as_ref() {
+        Some(r) => (Some(&r.on_chain), r.local_leaf_count, r.local_nullifier_count),
+        None => (None, 0, 0),
+    };
+
+    // Local event counts (always fresh from SQLite)
+    let local_deposits = state.store.get_deposit_count().unwrap_or(0);
+    let local_transfers = state.store.get_nullifier_count().unwrap_or(0);
+
+    Json(serde_json::json!({
+        "success": true,
+        "onChain": on_chain.map(|oc| serde_json::json!({
+            "depositCount": oc.deposit_count,
+            "totalMinted": oc.total_minted,
+            "totalBurned": oc.total_burned,
+            "totalShielded": oc.total_shielded,
+            "pendingRedemptions": oc.pending_redemptions,
+            "treeNextIndex": oc.tree_next_index,
+            "treeRoot": oc.tree_root,
+        })),
+        "local": {
+            "leafCount": local_leaves,
+            "depositCount": local_deposits,
+            "nullifierCount": local_nullifiers,
+            "transferCount": local_transfers,
+        },
+    }))
 }
 
 // =============================================================================
