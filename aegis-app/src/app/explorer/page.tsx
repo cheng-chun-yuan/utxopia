@@ -7,8 +7,8 @@ import {
   ArrowUpFromLine,
   Shield,
 } from "lucide-react";
-import { useDeposits, useTransfers } from "@/hooks/use-explorer";
-import type { DepositRecord, ExplorerTransaction } from "@/hooks/use-explorer";
+import { useExplorer } from "@/hooks/use-explorer";
+import type { ExplorerTransaction } from "@/hooks/use-explorer";
 import { usePoolStats } from "@/hooks/use-pool-stats";
 import { useTokenPrices, type TokenPrices } from "@/hooks/use-btc-price";
 import { SiteHeader } from "@/components/site-header";
@@ -16,18 +16,13 @@ import { SiteFooter } from "@/components/site-footer";
 
 import { TypeFilterBar, LoadingState, StatCard, Th, RefreshButton, EmptyState } from "./components/shared";
 import type { FilterType, TokenFilter } from "./components/shared";
-import { DepositRow, getShieldType } from "./components/deposits-tab";
 import { TransferRow, getTransferKind } from "./components/transfers-tab";
 import { getTokenByFilter, formatTokenAmount, type TokenFilterId } from "@/lib/supported-tokens";
 
 // =============================================================================
-// Unified Transaction Type
-// =============================================================================
-
-type UnifiedTransaction =
-  | { kind: "shield"; data: DepositRecord; timestamp: number; key: string }
-  | { kind: "transfer"; data: ExplorerTransaction; timestamp: number; key: string }
-  | { kind: "unshield"; data: ExplorerTransaction; timestamp: number; key: string };
+// Filter type maps directly to ExplorerTransaction.type
+// "all" shows everything, others filter by tx.type
+// "unshield" filter also includes "withdraw" type
 
 // =============================================================================
 // Explorer Content
@@ -38,8 +33,7 @@ function ExplorerContent() {
   const [selectedTokens, setSelectedTokens] = useState<Set<TokenFilter>>(() => new Set(["btc", "sol", "usdc", "usdt"] as TokenFilter[]));
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  const { deposits, refresh: refreshDeposits } = useDeposits();
-  const { transfers, refresh: refreshTransfers } = useTransfers();
+  const { transactions: allTransactions, refresh: refreshAll } = useExplorer();
 
   const toggle = useCallback((key: string) => {
     setExpanded((prev) => {
@@ -50,101 +44,53 @@ function ExplorerContent() {
     });
   }, []);
 
-  const refreshAll = useCallback(() => {
-    refreshDeposits();
-    refreshTransfers();
-  }, [refreshDeposits, refreshTransfers]);
 
-  // Build unified list
-  const unified = useMemo(() => {
-    const items: UnifiedTransaction[] = [];
+  // All transactions come from useExplorer() — already sorted by timestamp desc
 
-    // Deposits → Shield
-    for (const d of deposits) {
-      items.push({
-        kind: "shield",
-        data: d,
-        timestamp: d.timestamp,
-        key: `shield-${d.btcMeta?.depositTxid || d.txSignature || d.commitment}`,
-      });
-    }
-
-    // Transfers → Transfer or Unshield
-    for (const t of transfers) {
-      const kind = getTransferKind(t);
-      if (kind === "transfer") {
-        items.push({
-          kind: "transfer",
-          data: t,
-          timestamp: t.timestamp,
-          key: `transfer-${t.txSignature}`,
-        });
-      } else {
-        items.push({
-          kind: "unshield",
-          data: t,
-          timestamp: t.timestamp,
-          key: `unshield-t-${t.txSignature}`,
-        });
-      }
-    }
-
-    // Sort by timestamp desc
-    items.sort((a, b) => b.timestamp - a.timestamp);
-    return items;
-  }, [deposits, transfers]);
-
-  // Counts
+  // Counts by type (withdraw counts as unshield)
   const counts = useMemo(() => {
     const c: Record<FilterType, number> = { all: 0, shield: 0, transfer: 0, unshield: 0 };
-    for (const item of unified) {
-      c[item.kind]++;
+    for (const tx of allTransactions) {
+      if (tx.type === "shield") c.shield++;
+      else if (tx.type === "transfer") c.transfer++;
+      else c.unshield++; // unshield + withdraw
     }
-    c.all = unified.length;
+    c.all = allTransactions.length;
     return c;
-  }, [unified]);
+  }, [allTransactions]);
 
-  // Helper: get token filter for a deposit (use tokenSymbol from backend when available)
-  const getDepositTokenFilter = useCallback((d: DepositRecord): TokenFilterId => {
-    if (d.tokenSymbol) {
-      const sym = d.tokenSymbol.toUpperCase();
-      if (sym === "SOL") return "sol";
-      if (sym === "USDC") return "usdc";
-      if (sym === "USDT") return "usdt";
-      return "btc";
-    }
-    const shieldType = getShieldType(d);
-    if (shieldType === "btc") return "btc";
-    if (shieldType === "sol") return "sol";
-    if (shieldType === "usdc") return "usdc";
-    if (shieldType === "usdt") return "usdt";
+  // Map token symbol to filter ID
+  function getTokenFilter(tx: ExplorerTransaction): TokenFilterId {
+    const sym = tx.tokenSymbol?.toUpperCase();
+    if (sym === "SOL") return "sol";
+    if (sym === "USDC") return "usdc";
+    if (sym === "USDT") return "usdt";
     return "btc";
-  }, []);
+  }
 
   // Filter by type AND token
   const filtered = useMemo(() => {
-    let items = unified;
+    let items = allTransactions;
 
     // Type filter
     if (activeFilter !== "all") {
-      items = items.filter((t) => t.kind === activeFilter);
+      if (activeFilter === "unshield") {
+        items = items.filter((t) => t.type === "unshield" || t.type === "withdraw");
+      } else {
+        items = items.filter((t) => t.type === activeFilter);
+      }
     }
 
     // Token filter (only applies to shield and unshield — transfers are token-agnostic)
     if (selectedTokens.size < 4) {
       items = items.filter((t) => {
-        if (t.kind === "shield") {
-          const tokenFilter = getDepositTokenFilter(t.data as DepositRecord);
-          return selectedTokens.has(tokenFilter);
-        }
-        if (t.kind === "transfer") return true; // transfers are encrypted, can't filter by token
-        if (t.kind === "unshield") return selectedTokens.has("btc"); // unshields are currently BTC-only
-        return true;
+        if (t.type === "transfer") return true;
+        return selectedTokens.has(getTokenFilter(t));
       });
     }
 
     return items;
-  }, [unified, activeFilter, selectedTokens, getDepositTokenFilter]);
+  }, [allTransactions, activeFilter, selectedTokens]);
 
   // TVL from on-chain pool state (same as main page)
   const { stats } = usePoolStats();
@@ -240,38 +186,14 @@ function ExplorerContent() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray/10">
-                {filtered.map((tx, i) => {
-                  if (tx.kind === "shield") {
-                    return (
-                      <DepositRow
-                        key={tx.key}
-                        deposit={tx.data}
-                        index={i}
-                        expanded={expanded.has(tx.key)}
-                        onToggle={() => toggle(tx.key)}
-                      />
-                    );
-                  }
-                  if (tx.kind === "transfer") {
-                    return (
-                      <TransferRow
-                        key={tx.key}
-                        tx={tx.data as ExplorerTransaction}
-                        expanded={expanded.has(tx.key)}
-                        onToggle={() => toggle(tx.key)}
-                      />
-                    );
-                  }
-                  // Unshield/Withdraw — all come from transfers now
-                  return (
-                    <TransferRow
-                      key={tx.key}
-                      tx={tx.data as ExplorerTransaction}
-                      expanded={expanded.has(tx.key)}
-                      onToggle={() => toggle(tx.key)}
-                    />
-                  );
-                })}
+                {filtered.map((tx) => (
+                  <TransferRow
+                    key={`${tx.type}-${tx.txSignature}`}
+                    tx={tx}
+                    expanded={expanded.has(tx.txSignature)}
+                    onToggle={() => toggle(tx.txSignature)}
+                  />
+                ))}
               </tbody>
             </table>
           </div>

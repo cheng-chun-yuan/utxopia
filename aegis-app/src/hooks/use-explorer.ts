@@ -236,6 +236,7 @@ const SWR_OPTIONS = {
   errorRetryCount: 3,
 };
 
+/** @deprecated Use useExplorer() instead */
 export function useDeposits() {
   const { data, error, isLoading, mutate } = useSWR<{ deposits: DepositRecord[]; transactions: ExplorerTransaction[] }>(
     "explorer-deposits",
@@ -244,25 +245,12 @@ export function useDeposits() {
       if (!resp.ok) return { deposits: [], transactions: [] };
       const json = await resp.json();
       const deposits = (json.deposits ?? []).map(
-        (d: any): DepositRecord => ({
-          ...d,
-          amountBtc: (d.amountSats / 1e8).toFixed(8),
-        }),
+        (d: any): DepositRecord => ({ ...d, amountBtc: (d.amountSats / 1e8).toFixed(8) }),
       );
       const transactions = (json.transactions ?? []) as ExplorerTransaction[];
       return { deposits, transactions };
     },
-    {
-      ...SWR_OPTIONS,
-      // Auto-refetch faster when any deposit is missing leaf index or timestamp
-      refreshInterval: (data?: { deposits: DepositRecord[]; transactions: ExplorerTransaction[] }) => {
-        if (!data?.deposits) return SWR_OPTIONS.refreshInterval;
-        const hasIncomplete = data.deposits.some(
-          (d) => !d.timestamp || d.leafIndex < 0,
-        );
-        return hasIncomplete ? 5_000 : SWR_OPTIONS.refreshInterval;
-      },
-    },
+    SWR_OPTIONS,
   );
   return {
     deposits: data?.deposits ?? [],
@@ -349,6 +337,64 @@ export function useRedemptions() {
         ? error.message
         : "Failed to fetch redemptions"
       : null,
+    refresh: () => mutate(),
+  };
+}
+
+// =============================================================================
+// Unified hook — single source for all explorer transactions
+// =============================================================================
+
+/**
+ * Unified explorer hook. Fetches shields (deposits) + transfers/unshields/withdraws
+ * in parallel and returns a single sorted ExplorerTransaction[].
+ *
+ * Types: shield | transfer | unshield | withdraw
+ */
+export function useExplorer() {
+  const { data, error, isLoading, mutate } = useSWR<ExplorerTransaction[]>(
+    "explorer-unified",
+    async () => {
+      const [depositsResp, transfersResp] = await Promise.all([
+        fetch("/api/explorer/deposits").catch(() => null),
+        fetch("/api/transfers").catch(() => null),
+      ]);
+
+      const all: ExplorerTransaction[] = [];
+
+      // Shields from deposits API
+      if (depositsResp?.ok) {
+        const json = await depositsResp.json();
+        const txns = (json.transactions ?? []) as ExplorerTransaction[];
+        all.push(...txns);
+      }
+
+      // Transfers/unshields/withdraws from transfers API
+      if (transfersResp?.ok) {
+        const json = await transfersResp.json();
+        if (json.transactions) {
+          all.push(...(json.transactions as ExplorerTransaction[]));
+        }
+      }
+
+      // Sort by timestamp desc
+      all.sort((a, b) => b.timestamp - a.timestamp);
+      return all;
+    },
+    {
+      ...SWR_OPTIONS,
+      refreshInterval: (data?: ExplorerTransaction[]) => {
+        if (!data) return SWR_OPTIONS.refreshInterval;
+        const hasProcessing = data.some((t) => t.status === "processing");
+        return hasProcessing ? 5_000 : SWR_OPTIONS.refreshInterval;
+      },
+    },
+  );
+
+  return {
+    transactions: data ?? [],
+    isLoading,
+    error: error ? (error instanceof Error ? error.message : "Failed to fetch explorer data") : null,
     refresh: () => mutate(),
   };
 }
