@@ -49,3 +49,4 @@ sdk/circuits/
 # Unused programs
 contracts/programs/chadbuffer/
 .gstack/
+backend/data/*.db
