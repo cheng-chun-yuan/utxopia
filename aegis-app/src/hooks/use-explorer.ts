@@ -355,31 +355,10 @@ export function useExplorer() {
   const { data, error, isLoading, mutate } = useSWR<ExplorerTransaction[]>(
     "explorer-unified",
     async () => {
-      const [depositsResp, transfersResp] = await Promise.all([
-        fetch("/api/explorer/deposits").catch(() => null),
-        fetch("/api/transfers").catch(() => null),
-      ]);
-
-      const all: ExplorerTransaction[] = [];
-
-      // Shields from deposits API
-      if (depositsResp?.ok) {
-        const json = await depositsResp.json();
-        const txns = (json.transactions ?? []) as ExplorerTransaction[];
-        all.push(...txns);
-      }
-
-      // Transfers/unshields/withdraws from transfers API
-      if (transfersResp?.ok) {
-        const json = await transfersResp.json();
-        if (json.transactions) {
-          all.push(...(json.transactions as ExplorerTransaction[]));
-        }
-      }
-
-      // Sort by timestamp desc
-      all.sort((a, b) => b.timestamp - a.timestamp);
-      return all;
+      const resp = await fetch("/api/explorer/transactions");
+      if (!resp.ok) return [];
+      const json = await resp.json();
+      return (json.transactions ?? []) as ExplorerTransaction[];
     },
     {
       ...SWR_OPTIONS,
