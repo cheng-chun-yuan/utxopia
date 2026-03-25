@@ -25,6 +25,7 @@ import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { getSolanaExplorerTxUrl, getSolanaExplorerAddressUrl } from "@/lib/solana-network";
 import { truncate, timeAgo } from "./helpers";
 import { Th, Td, SolanaLink, TypeBadge, StatusDot, FlowCell, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
+import type { StatusDotVariant } from "./shared";
 import { SUPPORTED_TOKENS, formatTokenAmount, getTokenBySymbol, type SupportedToken } from "@/lib/supported-tokens";
 import { resolveTokenSymbolSync } from "@/lib/token-map";
 
@@ -35,10 +36,36 @@ import { resolveTokenSymbolSync } from "@/lib/token-map";
 export type TransferTxPublic = TransferTx;
 
 /** Determine the unified kind for a transfer row */
-export function getTransferKind(tx: TransferTx): "transfer" | "unshield" | "withdraw" {
+export function getTransferKind(tx: TransferTx): "shield" | "transfer" | "unshield" | "withdraw" {
+  if (tx.type === "shield") return "shield";
   if (tx.type === "withdraw") return "withdraw";
   if (tx.type === "unshield") return "unshield";
   return "transfer";
+}
+
+/** Map deposit tracker status to StatusDot variant + label */
+function getShieldStatus(status: string): { variant: StatusDotVariant; label: string } {
+  switch (status) {
+    case "detected":
+      return { variant: "processing", label: "Detected" };
+    case "confirming":
+      return { variant: "processing", label: "Confirming" };
+    case "sweeping":
+    case "sweep_confirming":
+      return { variant: "processing", label: "Sweeping" };
+    case "verifying":
+    case "ready":
+      return { variant: "processing", label: "Verifying" };
+    case "claimed":
+    case "verified":
+    case "already_verified":
+    case "confirmed":
+      return { variant: "confirmed", label: "Confirmed" };
+    case "failed":
+      return { variant: "failed", label: "Failed" };
+    default:
+      return { variant: "pending", label: status || "Pending" };
+  }
 }
 
 export function TransferRow({
@@ -64,22 +91,42 @@ export function TransferRow({
         onClick={onToggle}
       >
         <Td>
-          <StatusDot
-            variant={tx.status === "processing" ? "processing" : "confirmed"}
-            label={tx.status === "processing" ? "Processing" : "Confirmed"}
-          />
+          {tx.type === "shield" ? (() => {
+            const s = getShieldStatus(tx.status);
+            return <StatusDot variant={s.variant} label={s.label} />;
+          })() : (
+            <StatusDot
+              variant={tx.status === "processing" ? "processing" : "confirmed"}
+              label={tx.status === "processing" ? "Processing" : "Confirmed"}
+            />
+          )}
         </Td>
         <Td>
-          <div className="flex items-center gap-1.5">
-            <code className="text-caption font-mono text-foreground">{truncate(tx.txSignature, 6, 4)}</code>
-            <CopyButton text={tx.txSignature} label="Tx" variant="default" iconSize="sm" />
-          </div>
+          {tx.txSignature ? (
+            <div className="flex items-center gap-1.5">
+              <code className="text-caption font-mono text-foreground">{truncate(tx.txSignature, 6, 4)}</code>
+              <CopyButton text={tx.txSignature} label="Tx" variant="default" iconSize="sm" />
+            </div>
+          ) : tx.btcMeta?.depositTxid ? (
+            <div className="flex items-center gap-1.5">
+              <code className="text-caption font-mono text-gray">{truncate(tx.btcMeta.depositTxid, 6, 4)}</code>
+              <CopyButton text={tx.btcMeta.depositTxid} label="BTC Tx" variant="default" iconSize="sm" />
+            </div>
+          ) : (
+            <span className="text-caption text-gray/40">&mdash;</span>
+          )}
         </Td>
         <Td>
           <TypeBadge kind={kind} />
         </Td>
         <Td>
-          {isUnshieldOrWithdraw ? (
+          {kind === "shield" ? (
+            <FlowCell
+              from={{ icon: token.isBtcNative ? "/tokens/btc.png" : token.logo, label: token.symbol }}
+              to={{ icon: "shield", label: "Shielded" }}
+              meta={tx.btcMeta ? `${tx.btcMeta.confirmations ?? 0} conf` : undefined}
+            />
+          ) : isUnshieldOrWithdraw ? (
             <FlowCell
               from={{ icon: "shield", label: "Shielded" }}
               to={{ icon: kind === "withdraw" ? "/tokens/btc.png" : (token.isBtcNative ? token.shieldedLogo : token.logo), label: kind === "withdraw" ? "BTC" : token.symbol }}
@@ -94,10 +141,20 @@ export function TransferRow({
           )}
         </Td>
         <Td>
-          {isUnshieldOrWithdraw && getTxUnshieldAmount(tx) ? (
+          {kind === "shield" ? (() => {
+            const amt = tx.inputs?.[0]?.grossAmount ?? tx.inputs?.[0]?.netAmount ?? tx.outputs?.[0]?.amount ?? 0;
+            if (!amt) return <span className="text-caption text-gray/40">&mdash;</span>;
+            return (
+              <span className="text-body2 text-foreground font-mono">
+                {token.showRawAmount
+                  ? amt.toLocaleString()
+                  : (amt / (10 ** token.decimals)).toLocaleString(undefined, { maximumFractionDigits: token.decimals })
+                } <span className="text-gray text-caption">{token.unit}</span>
+              </span>
+            );
+          })() : isUnshieldOrWithdraw && getTxUnshieldAmount(tx) ? (
             <span className="text-body2 text-foreground font-mono">
               {(() => {
-                // For withdrawals, use actualReceived from redemption (net after service + miner fee)
                 const amt = kind === "withdraw" && redemption?.actualReceived
                   ? Number(redemption.actualReceived)
                   : (getTxUnshieldPayout(tx) ?? getTxUnshieldAmount(tx) ?? 0);
@@ -117,7 +174,19 @@ export function TransferRow({
           <span className="text-caption text-gray">{timeAgo(tx.timestamp)}</span>
         </Td>
         <Td>
-          <SolanaLink signature={tx.txSignature} />
+          {tx.txSignature ? (
+            <SolanaLink signature={tx.txSignature} />
+          ) : tx.btcMeta?.depositTxid ? (
+            <a
+              href={`${getMempoolExplorerUrl()}/tx/${tx.btcMeta.depositTxid}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-caption text-gray hover:text-foreground transition-colors"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          ) : null}
         </Td>
       </tr>
       {expanded && (

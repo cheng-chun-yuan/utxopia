@@ -186,14 +186,17 @@ function ExplorerContent() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray/10">
-                {filtered.map((tx) => (
-                  <TransferRow
-                    key={`${tx.type}-${tx.txSignature}`}
-                    tx={tx}
-                    expanded={expanded.has(tx.txSignature)}
-                    onToggle={() => toggle(tx.txSignature)}
-                  />
-                ))}
+                {filtered.map((tx) => {
+                  const rowKey = tx.txSignature || tx.btcMeta?.depositTxid || `${tx.type}-${tx.timestamp}`;
+                  return (
+                    <TransferRow
+                      key={`${tx.type}-${rowKey}`}
+                      tx={tx}
+                      expanded={expanded.has(rowKey)}
+                      onToggle={() => toggle(rowKey)}
+                    />
+                  );
+                })}
               </tbody>
             </table>
           </div>
