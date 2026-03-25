@@ -527,6 +527,10 @@ export {
 
 export {
   INSTRUCTION_DISCRIMINATORS,
+  // Shield instruction
+  buildShieldInstructionData,
+  buildShieldInstruction,
+  type ShieldInstructionOptions,
   buildRedemptionRequestInstructionData,
   buildRedemptionRequestInstruction,
   bigintTo32Bytes,

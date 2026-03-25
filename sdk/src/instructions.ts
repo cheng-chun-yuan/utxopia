@@ -127,6 +127,81 @@ function addressToBytes(addr: Address): Uint8Array {
 }
 
 // =============================================================================
+// Shield Instruction Builder (disc=12)
+// =============================================================================
+
+/** Shield instruction options */
+export interface ShieldInstructionOptions {
+  /** Amount to shield (in token's smallest unit — lamports, micro-USDC, sats) */
+  amount: bigint;
+  /** NPK bytes (32) — recipient's note public key */
+  npk: Uint8Array;
+  /** Ephemeral public key (32) — for stealth address derivation */
+  ephemeralPub: Uint8Array;
+  /** Accounts required for the shield instruction */
+  accounts: {
+    user: Address;
+    userTokenAccount: Address;
+    poolState: Address;
+    tokenConfig: Address;
+    vault: Address;
+    commitmentTree: Address;
+    tokenProgram: Address;
+  };
+}
+
+/**
+ * Build shield instruction data (disc=12).
+ *
+ * Layout (after disc stripped by entrypoint):
+ * - amount: u64 LE (8 bytes)
+ * - npk: [u8; 32]
+ * - ephemeral_pub: [u8; 32]
+ */
+export function buildShieldInstructionData(options: {
+  amount: bigint;
+  npk: Uint8Array;
+  ephemeralPub: Uint8Array;
+}): Uint8Array {
+  const data = new Uint8Array(73);
+  data[0] = INSTRUCTION.SHIELD;
+  const view = new DataView(data.buffer);
+  view.setBigUint64(1, options.amount, true);
+  data.set(options.npk.slice(0, 32), 9);
+  data.set(options.ephemeralPub.slice(0, 32), 41);
+  return data;
+}
+
+/**
+ * Build a complete shield instruction (disc=12).
+ *
+ * Shields SPL tokens into the privacy pool. Works with both
+ * legacy Token program (wSOL) and Token-2022 (USDC, USDT, etc.).
+ */
+export function buildShieldInstruction(options: ShieldInstructionOptions): Instruction {
+  const config = getConfig();
+  const data = buildShieldInstructionData({
+    amount: options.amount,
+    npk: options.npk,
+    ephemeralPub: options.ephemeralPub,
+  });
+
+  return {
+    programAddress: config.aegisProgramId,
+    accounts: [
+      { address: options.accounts.user, role: AccountRole.WRITABLE_SIGNER },
+      { address: options.accounts.userTokenAccount, role: AccountRole.WRITABLE },
+      { address: options.accounts.poolState, role: AccountRole.READONLY },
+      { address: options.accounts.tokenConfig, role: AccountRole.WRITABLE },
+      { address: options.accounts.vault, role: AccountRole.WRITABLE },
+      { address: options.accounts.commitmentTree, role: AccountRole.WRITABLE },
+      { address: options.accounts.tokenProgram, role: AccountRole.READONLY },
+    ],
+    data,
+  };
+}
+
+// =============================================================================
 // Redemption Request Instruction Builder
 // =============================================================================
 
