@@ -509,6 +509,7 @@ export default function ActivityPage() {
 
         </div>
       </div>
+      <SiteFooter />
     </main>
   );
 }
