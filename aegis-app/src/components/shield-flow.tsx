@@ -113,12 +113,14 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  // Auto-resolve self stealth address as default recipient
+  // Auto-resolve self stealth address as default recipient (only on first load)
+  const autoResolvedRef = useRef(false);
   useEffect(() => {
-    if (stealthAddress && !resolvedMeta) {
+    if (stealthAddress && !autoResolvedRef.current) {
+      autoResolvedRef.current = true;
       setResolvedMeta(stealthAddress);
     }
-  }, [stealthAddress, resolvedMeta]);
+  }, [stealthAddress]);
 
   // Fetch SOL balance when SOL is selected
   useEffect(() => {

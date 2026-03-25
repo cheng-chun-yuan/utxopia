@@ -222,7 +222,7 @@ export function StealthRecipientInput({
       )}
 
       {/* Resolved */}
-      {resolvedMeta && (
+      {resolvedMeta && recipient.trim() && (
         <p className="text-caption text-privacy pl-2 flex items-center gap-1">
           <Check className="w-3.5 h-3.5" />
           {resolvedName ? (
