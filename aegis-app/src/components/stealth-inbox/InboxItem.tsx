@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Clock, Shield, Send, Bitcoin } from "lucide-react";
+import { Clock, Shield, Bitcoin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { InboxNote } from "@/hooks/use-aegis";
 import { SUPPORTED_TOKENS, type SupportedToken } from "@/lib/supported-tokens";
@@ -20,10 +20,8 @@ function getTokenForNote(note: InboxNote): SupportedToken {
 
 function formatNoteAmount(amount: bigint | number, token: SupportedToken): string {
   const num = Number(amount) / 10 ** token.decimals;
-  // Use enough precision to show the value, but trim trailing zeros
   const maxDecimals = token.decimals > 2 ? token.decimals : 2;
   const formatted = num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: maxDecimals });
-  // Trim trailing zeros after decimal, keep at least 2 decimals
   return formatted.replace(/(\.\d{2,}?)0+$/, "$1");
 }
 
@@ -55,104 +53,66 @@ export function InboxItem({ note }: InboxItemProps) {
   const price = tokenPrices[token.priceKey];
   const usdValue = price ? (Number(note.amount) / 10 ** token.decimals) * price : 0;
 
-  // Navigate to pay page with note data
-  const handleSend = () => {
+  // Click entire card to navigate to pay page
+  const handleClick = () => {
+    if (note.isSpent) return;
     const params = new URLSearchParams({
       commitment: note.commitmentHex,
       leafIndex: note.leafIndex.toString(),
       amount: note.amount.toString(),
-    });
-    router.push(`/vault/pay?${params.toString()}`);
-  };
-
-  const handleWithdrawBtc = () => {
-    const params = new URLSearchParams({
-      commitment: note.commitmentHex,
-      leafIndex: note.leafIndex.toString(),
-      amount: note.amount.toString(),
-      mode: "btc_withdraw",
     });
     router.push(`/vault/pay?${params.toString()}`);
   };
 
   return (
     <div
+      onClick={handleClick}
       className={cn(
-        "p-4 rounded-[12px] border border-gray/15 bg-muted",
-        "hover:border-privacy/40 transition-colors"
+        "px-3 py-2.5 rounded-[10px] border border-gray/15 bg-muted transition-colors",
+        !note.isSpent && "hover:border-privacy/40 cursor-pointer"
       )}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-[6px] bg-privacy/10">
-            <Shield className="w-4 h-4 text-privacy" />
+      {/* Single-row: icon + label + time | amount + badge */}
+      <div className="flex items-center gap-2">
+        {/* Left: icon + label + time */}
+        <div className="p-1 rounded-[5px] bg-privacy/10">
+          <Shield className="w-3.5 h-3.5 text-privacy" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="text-caption text-foreground font-medium">Stealth Deposit</span>
+            <span className="text-[10px] text-gray flex items-center gap-0.5">
+              <Clock className="w-2.5 h-2.5" />
+              {formatRelativeTime(note.createdAt)}
+            </span>
           </div>
-          <span className="text-body2-semibold text-foreground">
-            Stealth Deposit
-          </span>
+          <code className="text-[10px] font-mono text-gray/60 block truncate">
+            {note.commitmentHex.slice(0, 10)}...{note.commitmentHex.slice(-8)}
+          </code>
         </div>
-        <div className="flex items-center gap-1 text-caption text-gray">
-          <Clock className="w-3 h-3" />
-          <span>{formatRelativeTime(note.createdAt)}</span>
-        </div>
-      </div>
 
-      {/* Amount */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
+        {/* Right: amount + badge */}
+        <div className="text-right shrink-0">
           <p className={cn(
-            "text-heading5",
+            "text-body2-semibold font-mono leading-tight",
             note.isSpent ? "text-gray" : "text-privacy"
           )}>
-            {formatNoteAmount(note.amount, token)} {token.shieldedSymbol}
+            {formatNoteAmount(note.amount, token)}
           </p>
-          {usdValue > 0 && (
-            <p className="text-caption text-gray">
+          {usdValue > 0 ? (
+            <p className="text-[10px] text-gray font-mono">
               ${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
+          ) : (
+            <span className={cn(
+              "text-[10px] px-1.5 py-0.5 rounded-full inline-block",
+              note.isSpent ? "bg-gray/10 text-gray" : "bg-privacy/10 text-privacy"
+            )}>
+              {note.isSpent ? "Spent" : "Spendable"}
+            </span>
           )}
         </div>
-        {note.isSpent ? (
-          <div className="px-2 py-1 rounded-full bg-gray/10 border border-gray/20">
-            <span className="text-caption text-gray">Spent</span>
-          </div>
-        ) : (
-          <div className="px-2 py-1 rounded-full bg-privacy/10 border border-privacy/20">
-            <span className="text-caption text-privacy">Spendable</span>
-          </div>
-        )}
       </div>
-
-      {/* Commitment (truncated) */}
-      <div className="p-2 bg-background rounded-[8px] mb-4">
-        <p className="text-caption text-gray mb-1">Commitment</p>
-        <code className="text-caption font-mono text-gray-light truncate block">
-          {note.commitmentHex.slice(0, 16)}...{note.commitmentHex.slice(-16)}
-        </code>
-      </div>
-
-      {/* Action buttons */}
-      {!note.isSpent && (
-        <div className="flex gap-2">
-          <button
-            onClick={handleSend}
-            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px] bg-privacy/10 hover:bg-privacy/20 text-privacy transition-colors text-body2"
-          >
-            <Send className="w-4 h-4" />
-            Send
-          </button>
-          {token.isBtcNative && (
-            <button
-              onClick={handleWithdrawBtc}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px] bg-btc/10 hover:bg-btc/20 text-btc transition-colors text-body2"
-            >
-              <Bitcoin className="w-4 h-4" />
-              Withdraw BTC
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 }

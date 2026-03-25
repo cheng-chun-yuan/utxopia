@@ -14,6 +14,8 @@ export function StoreHydration(): JSX.Element {
   const hydrateBtcWallet = useBitcoinWalletStore((s) => s._hydrate);
   const initPoseidon = useAegisStore((s) => s.initPoseidon);
   const keys = useAegisStore((s) => s.keys);
+  const viewOnlyKeys = useAegisStore((s) => s.viewOnlyKeys);
+  const hasAnyKeys = !!(keys || viewOnlyKeys);
   const isPoseidonReady = useAegisStore((s) => s.isPoseidonReady);
   const hydrateKeys = useAegisStore((s) => s.hydrateKeys);
   const hydratePasskeyKeys = useAegisStore((s) => s.hydratePasskeyKeys);
@@ -60,29 +62,30 @@ export function StoreHydration(): JSX.Element {
   }, [walletPubkey]);
 
   // Auto-refresh inbox when keys become available (ONCE per session)
+  // Covers both full keys (wallet login) and viewOnlyKeys (view-only paste)
   useEffect(() => {
-    if (keys && !inboxLoading && inboxNotesLength === 0 && !hasRefreshedRef.current) {
+    if (hasAnyKeys && !inboxLoading && inboxNotesLength === 0 && !hasRefreshedRef.current) {
       hasRefreshedRef.current = true;
       refreshInbox();
     }
-  }, [keys, inboxLoading, inboxNotesLength, refreshInbox]);
+  }, [hasAnyKeys, inboxLoading, inboxNotesLength, refreshInbox]);
 
   // Reset refresh flag when keys are cleared (user disconnects)
   useEffect(() => {
-    if (!keys) {
+    if (!hasAnyKeys) {
       hasRefreshedRef.current = false;
     }
-  }, [keys]);
+  }, [hasAnyKeys]);
 
-  // Auto-refresh balances every 30s when keys are available and page is visible
+  // Auto-refresh balances every 60s when keys are available and page is visible
   const refreshAll = useCallback(() => {
-    if (!keys) return;
+    if (!hasAnyKeys) return;
     refreshInbox();
     if (walletPubkey) refreshPublicBalance(walletPubkey);
-  }, [keys, refreshInbox, walletPubkey, refreshPublicBalance]);
+  }, [hasAnyKeys, refreshInbox, walletPubkey, refreshPublicBalance]);
 
   useEffect(() => {
-    if (!keys) return;
+    if (!hasAnyKeys) return;
 
     const interval = setInterval(() => {
       if (!document.hidden) refreshAll();
@@ -98,7 +101,7 @@ export function StoreHydration(): JSX.Element {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [keys, refreshAll]);
+  }, [hasAnyKeys, refreshAll]);
 
   return <></>;
 }
