@@ -39,7 +39,8 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { FlowPageLayout } from "@/components/ui/flow-page-layout";
+import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useAegisKeys } from "@/hooks/use-aegis";
@@ -143,29 +144,10 @@ export default function VaultPage() {
   };
 
   return (
-    <main className="min-h-screen bg-background hacker-bg noise-overlay flex flex-col items-center py-8 px-4 sm:py-12">
+    <main className="min-h-screen bg-background hacker-bg noise-overlay flex flex-col">
+      <SiteHeader />
 
-      {/* Header — Back + Badges */}
-      <div className="w-full mb-4 flex items-center justify-between relative z-10" style={{ maxWidth: "680px" }}>
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-body2 text-gray hover:text-gray-light transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </Link>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border bg-privacy/10 border-privacy/20">
-            <Shield className="w-3 h-3 text-privacy" />
-            <span className="text-caption text-privacy">Vault</span>
-          </div>
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border bg-privacy/10 border-privacy/20">
-            <Shield className="w-3 h-3 text-privacy" />
-            <span className="text-caption text-privacy">ZK</span>
-          </div>
-        </div>
-      </div>
-
+      <div className="flex-1 flex flex-col items-center pt-24 pb-8 px-4">
       <motion.div
         className={cn(
           "bg-card border border-solid border-gray/30 p-4 sm:p-8",
@@ -690,6 +672,8 @@ export default function VaultPage() {
           </div>
         </div>
       )}
+      </div>
+      <SiteFooter />
     </main>
   );
 }
