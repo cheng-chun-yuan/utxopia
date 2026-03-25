@@ -964,6 +964,40 @@ impl EventStore {
             .map_err(|e| format!("query error: {}", e))
     }
 
+    /// Aggregate shielded amounts per token_id from deposit announcements (type=0).
+    /// Returns Vec<(token_id_hex, total_amount)>.
+    /// For deposits, encrypted_amount is plaintext LE u64.
+    pub fn get_token_tvl(&self) -> Result<Vec<(String, u64)>, String> {
+        let conn = self.conn()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT COALESCE(hex(token_id), ''), encrypted_amount \
+                 FROM stealth_announcements WHERE announcement_type = 0"
+            )
+            .map_err(|e| format!("prepare error: {}", e))?;
+
+        let mut tvl_map: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+
+        let rows = stmt
+            .query_map([], |row| {
+                let token_hex: String = row.get(0)?;
+                let amount_bytes: Vec<u8> = row.get(1)?;
+                Ok((token_hex, amount_bytes))
+            })
+            .map_err(|e| format!("query error: {}", e))?;
+
+        for row in rows {
+            let (token_hex, amount_bytes) = row.map_err(|e| format!("row error: {}", e))?;
+            // Decode LE u64 from encrypted_amount (plaintext for deposits)
+            if amount_bytes.len() >= 8 {
+                let amount = u64::from_le_bytes(amount_bytes[..8].try_into().unwrap_or([0; 8]));
+                *tvl_map.entry(token_hex).or_insert(0) += amount;
+            }
+        }
+
+        Ok(tvl_map.into_iter().collect())
+    }
+
     pub fn get_latest_announcement_leaf_index(&self) -> Result<Option<i64>, String> {
         let conn = self.conn()?;
         conn.query_row("SELECT MAX(leaf_index) FROM stealth_announcements", [], |row| row.get(0))

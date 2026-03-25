@@ -700,6 +700,16 @@ async fn get_pool_stats(
     let local_deposits = state.store.get_deposit_count().unwrap_or(0);
     let local_transfers = state.store.get_nullifier_count().unwrap_or(0);
 
+    // Per-token TVL from deposit announcements
+    let token_tvl: Vec<serde_json::Value> = state.store.get_token_tvl()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(token_id_hex, total)| serde_json::json!({
+            "tokenId": token_id_hex,
+            "totalShielded": total,
+        }))
+        .collect();
+
     Json(serde_json::json!({
         "success": true,
         "onChain": on_chain.map(|oc| serde_json::json!({
@@ -717,6 +727,7 @@ async fn get_pool_stats(
             "nullifierCount": local_nullifiers,
             "transferCount": local_transfers,
         },
+        "tokenTVL": token_tvl,
     }))
 }
 
