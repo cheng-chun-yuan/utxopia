@@ -118,14 +118,6 @@ export function OutputRowCard({
         </div>
       </div>
 
-      {/* Privacy warning for non-private modes */}
-      {(output.mode === "public" || output.mode === "btc") && (
-        <p className="text-[11px] text-yellow-500 flex items-center gap-1.5 pl-1">
-          <AlertCircle className="w-3 h-3 shrink-0" />
-          Reveals amount &amp; destination on-chain
-        </p>
-      )}
-
       {/* BTC fee estimate */}
       {output.mode === "btc" && (
         <BtcFeeEstimate amount={output.amount} serviceFeeSats={serviceFeeSats} serviceFeeBps={serviceFeeBps} />
