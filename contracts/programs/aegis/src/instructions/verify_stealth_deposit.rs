@@ -45,7 +45,7 @@ use crate::utils::bitcoin::{compute_tx_hash, DepositOpReturn, ParsedTransaction}
 use crate::utils::chadbuffer::read_transaction_from_buffer;
 use crate::utils::{
     create_pda_account, mint_zkbtc, validate_program_owner, validate_system_program,
-    validate_token_2022_owner, validate_token_program_key, validate_account_writable,
+    validate_token_owner, validate_any_token_program_key, validate_account_writable,
 };
 
 /// Required confirmations for deposits
@@ -156,9 +156,9 @@ pub fn process_verify_stealth_deposit(
     validate_program_owner(verified_tx_info, btc_lc_id)?;
     validate_program_owner(light_client_info, btc_lc_id)?;
     validate_program_owner(commitment_tree_info, program_id)?;
-    validate_token_2022_owner(zkbtc_mint)?;
-    validate_token_2022_owner(pool_vault)?;
-    validate_token_program_key(token_program)?;
+    validate_token_owner(zkbtc_mint)?;
+    validate_token_owner(pool_vault)?;
+    validate_any_token_program_key(token_program)?;
     validate_system_program(system_program)?;
 
     // SECURITY: Validate writable accounts

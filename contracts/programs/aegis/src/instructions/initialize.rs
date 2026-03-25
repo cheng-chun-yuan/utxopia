@@ -8,7 +8,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::utils::{create_pda_account, validate_system_program, validate_token_2022_owner};
+use crate::utils::{create_pda_account, validate_system_program, validate_token_owner};
 
 use crate::constants::{MAX_DEPOSIT_SATS, MIN_DEPOSIT_SATS};
 use crate::error::AegisError;
@@ -100,7 +100,7 @@ pub fn process_initialize(
     let ix_data = InitializeData::from_bytes(data)?;
 
     // Validate zkbtc_mint is owned by Token-2022
-    validate_token_2022_owner(accounts.zkbtc_mint)?;
+    validate_token_owner(accounts.zkbtc_mint)?;
     validate_system_program(accounts.system_program)?;
 
     // Verify pool_state PDA

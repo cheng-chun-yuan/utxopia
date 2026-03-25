@@ -11,7 +11,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::constants::TOKEN_2022_PROGRAM_ID;
+use crate::constants::{TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID};
 use crate::error::AegisError;
 
 // ============================================================================
@@ -119,10 +119,30 @@ pub fn validate_token_2022_owner(account: &AccountInfo) -> Result<(), ProgramErr
     Ok(())
 }
 
+/// Validate that an account is owned by either Token or Token-2022 program
+#[inline(always)]
+pub fn validate_token_owner(account: &AccountInfo) -> Result<(), ProgramError> {
+    let owner = account.owner().as_ref();
+    if owner != &TOKEN_2022_PROGRAM_ID && owner != &TOKEN_PROGRAM_ID {
+        return Err(ProgramError::InvalidAccountOwner);
+    }
+    Ok(())
+}
+
 /// Validate that an account key matches the Token-2022 program ID
 #[inline(always)]
 pub fn validate_token_program_key(account: &AccountInfo) -> Result<(), ProgramError> {
     if account.key().as_ref() != &TOKEN_2022_PROGRAM_ID {
+        return Err(ProgramError::IncorrectProgramId);
+    }
+    Ok(())
+}
+
+/// Validate that an account key matches either Token or Token-2022 program ID
+#[inline(always)]
+pub fn validate_any_token_program_key(account: &AccountInfo) -> Result<(), ProgramError> {
+    let key = account.key().as_ref();
+    if key != &TOKEN_2022_PROGRAM_ID && key != &TOKEN_PROGRAM_ID {
         return Err(ProgramError::IncorrectProgramId);
     }
     Ok(())

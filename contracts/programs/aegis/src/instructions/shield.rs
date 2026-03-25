@@ -25,7 +25,7 @@ use crate::utils::{
     events::{emit_stealth_announcement, emit_shield_meta, ANNOUNCEMENT_TYPE_DEPOSIT},
     transfer_token_user,
     validate_account_writable, validate_program_owner,
-    validate_token_2022_owner, validate_token_program_key,
+    validate_token_owner, validate_any_token_program_key,
 };
 
 /// Instruction data: amount(8) + npk(32) + ephemeral_pub(32) = 72 bytes
@@ -65,9 +65,9 @@ pub fn process_shield(
     validate_program_owner(pool_state_info, program_id)?;
     validate_program_owner(token_config_info, program_id)?;
     validate_program_owner(commitment_tree_info, program_id)?;
-    validate_token_2022_owner(user_token_account)?;
-    validate_token_2022_owner(vault)?;
-    validate_token_program_key(token_program)?;
+    validate_token_owner(user_token_account)?;
+    validate_token_owner(vault)?;
+    validate_any_token_program_key(token_program)?;
     validate_account_writable(user_token_account)?;
     validate_account_writable(token_config_info)?;
     validate_account_writable(vault)?;

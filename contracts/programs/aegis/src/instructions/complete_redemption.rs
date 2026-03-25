@@ -32,7 +32,7 @@ use crate::utils::chadbuffer::read_transaction_from_buffer;
 use crate::utils::{
     burn_zkbtc_signed, close_account_securely, create_pda_account,
     validate_account_writable, validate_program_owner,
-    validate_token_2022_owner, validate_token_program_key,
+    validate_token_owner, validate_any_token_program_key,
 };
 
 /// Required BTC confirmations before completing redemption
@@ -160,9 +160,9 @@ pub fn process_complete_redemption(
     };
     validate_program_owner(verified_tx_info, btc_lc_id)?;
     validate_program_owner(light_client_info, btc_lc_id)?;
-    validate_token_2022_owner(zkbtc_mint)?;
-    validate_token_2022_owner(pool_vault)?;
-    validate_token_program_key(token_program)?;
+    validate_token_owner(zkbtc_mint)?;
+    validate_token_owner(pool_vault)?;
+    validate_any_token_program_key(token_program)?;
 
     // Validate writable accounts
     validate_account_writable(pool_state_info)?;

@@ -21,7 +21,7 @@ use crate::error::AegisError;
 use crate::state::{PoolState, TokenConfig};
 use crate::utils::{
     validate_account_writable, validate_program_owner,
-    validate_token_2022_owner, validate_token_program_key,
+    validate_token_owner, validate_any_token_program_key,
 };
 use crate::utils::token::transfer_zkbtc;
 
@@ -52,9 +52,9 @@ pub fn process_claim_fees(
 
     validate_program_owner(pool_state_info, program_id)?;
     validate_program_owner(token_config_info, program_id)?;
-    validate_token_2022_owner(vault)?;
-    validate_token_2022_owner(admin_token_account)?;
-    validate_token_program_key(token_program)?;
+    validate_token_owner(vault)?;
+    validate_token_owner(admin_token_account)?;
+    validate_any_token_program_key(token_program)?;
     validate_account_writable(token_config_info)?;
     validate_account_writable(vault)?;
     validate_account_writable(admin_token_account)?;

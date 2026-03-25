@@ -49,7 +49,7 @@ use crate::state::{
 use crate::utils::groth16::GROTH16_PROOF_SIZE;
 use crate::utils::{
     create_pda_account, validate_account_writable, validate_program_owner,
-    validate_system_program, validate_token_2022_owner, validate_token_program_key,
+    validate_system_program, validate_token_owner, validate_any_token_program_key,
 };
 use crate::utils::token::transfer_zkbtc;
 
@@ -187,8 +187,8 @@ pub fn process_unshield(
     validate_program_owner(vk_registry_info, program_id)?;
     validate_program_owner(token_config_info, program_id)?;
     validate_system_program(system_program)?;
-    validate_token_2022_owner(vault)?;
-    validate_token_program_key(token_program)?;
+    validate_token_owner(vault)?;
+    validate_any_token_program_key(token_program)?;
     validate_account_writable(commitment_tree_info)?;
     validate_account_writable(token_config_info)?;
     validate_account_writable(vault)?;
@@ -200,7 +200,7 @@ pub fn process_unshield(
     // Validate recipient token accounts
     for k in 0..n_public_outputs {
         let recipient = &accounts[FIXED_ACCOUNTS + k];
-        validate_token_2022_owner(recipient)?;
+        validate_token_owner(recipient)?;
         validate_account_writable(recipient)?;
     }
 

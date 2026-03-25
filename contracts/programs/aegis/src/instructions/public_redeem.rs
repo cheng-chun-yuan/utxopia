@@ -34,7 +34,7 @@ use crate::state::{
 use crate::utils::token::{burn_zkbtc, validate_token_account};
 use crate::utils::{
     create_pda_account, validate_account_writable, validate_program_owner,
-    validate_system_program, validate_token_2022_owner, validate_token_program_key,
+    validate_system_program, validate_token_owner, validate_any_token_program_key,
 };
 
 pub fn process_public_redeem(
@@ -81,9 +81,9 @@ pub fn process_public_redeem(
     // Validate core accounts
     validate_program_owner(pool_state_info, program_id)?;
     validate_system_program(system_program)?;
-    validate_token_2022_owner(zkbtc_mint)?;
-    validate_token_2022_owner(user_token_account)?;
-    validate_token_program_key(token_program)?;
+    validate_token_owner(zkbtc_mint)?;
+    validate_token_owner(user_token_account)?;
+    validate_any_token_program_key(token_program)?;
     validate_account_writable(pool_state_info)?;
     validate_account_writable(zkbtc_mint)?;
     validate_account_writable(user_token_account)?;

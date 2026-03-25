@@ -48,7 +48,7 @@ use crate::utils::chadbuffer::read_transaction_from_buffer;
 use crate::utils::secp256k1::{extract_p2tr_output_key, verify_taproot_output_key};
 use crate::utils::{
     create_pda_account, mint_zkbtc, validate_program_owner, validate_system_program,
-    validate_token_2022_owner, validate_token_program_key, validate_account_writable,
+    validate_token_owner, validate_any_token_program_key, validate_account_writable,
 };
 
 use super::verify_stealth_deposit::DEMO_REQUIRED_CONFIRMATIONS;
@@ -155,9 +155,9 @@ pub fn process_verify_deposit_v2(
     validate_program_owner(commitment_tree_info, program_id)?;
     validate_program_owner(deposit_intent_info, program_id)?;
     validate_program_owner(token_config_info, program_id)?;
-    validate_token_2022_owner(zkbtc_mint)?;
-    validate_token_2022_owner(pool_vault)?;
-    validate_token_program_key(token_program)?;
+    validate_token_owner(zkbtc_mint)?;
+    validate_token_owner(pool_vault)?;
+    validate_any_token_program_key(token_program)?;
     validate_system_program(system_program)?;
 
     // SECURITY: Validate writable accounts

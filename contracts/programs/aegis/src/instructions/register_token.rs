@@ -25,7 +25,7 @@ use crate::utils::{
     create_pda_account,
     crypto::compute_token_id,
     validate_account_writable, validate_program_owner,
-    validate_system_program, validate_token_2022_owner,
+    validate_system_program, validate_token_owner,
 };
 
 /// Instruction data layout:
@@ -69,7 +69,7 @@ pub fn process_register_token(
     }
 
     // Validate mint is Token-2022
-    validate_token_2022_owner(mint_info)?;
+    validate_token_owner(mint_info)?;
 
     // Read decimals from mint (offset 44 in Token-2022 mint layout)
     let decimals = {

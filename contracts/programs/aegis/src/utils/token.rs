@@ -9,9 +9,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::constants::TOKEN_2022_PROGRAM_ID;
-
-/// Token-2022 instruction discriminators
+/// Token instruction discriminators (same for both Token and Token-2022)
 mod token_instruction {
     pub const MINT_TO: u8 = 7;
     pub const BURN: u8 = 8;
@@ -27,19 +25,16 @@ mod token_instruction {
 /// * `amount` - Amount to mint (in satoshis)
 /// * `signer_seeds` - PDA signer seeds
 pub fn mint_zkbtc(
-    _token_program: &AccountInfo,
+    token_program: &AccountInfo,
     mint: &AccountInfo,
     destination: &AccountInfo,
     authority: &AccountInfo,
     amount: u64,
     signer_seeds: &[&[u8]],
 ) -> ProgramResult {
-    // Build instruction data: [discriminator, amount (8 bytes LE)]
     let mut data = [0u8; 9];
     data[0] = token_instruction::MINT_TO;
     data[1..9].copy_from_slice(&amount.to_le_bytes());
-
-    let token_program_id = Pubkey::from(TOKEN_2022_PROGRAM_ID);
 
     let accounts = [
         AccountMeta::writable(mint.key()),
@@ -48,12 +43,11 @@ pub fn mint_zkbtc(
     ];
 
     let instruction = Instruction {
-        program_id: &token_program_id,
+        program_id: token_program.key(),
         accounts: &accounts,
         data: &data,
     };
 
-    // Create signer from seeds (fixed array, no heap allocation)
     let seeds: [Seed; 2] = [
         Seed::from(signer_seeds[0]),
         Seed::from(signer_seeds[1]),
@@ -72,7 +66,7 @@ pub fn mint_zkbtc(
 /// * `authority` - The token account authority (user)
 /// * `amount` - Amount to burn (in satoshis)
 pub fn burn_zkbtc(
-    _token_program: &AccountInfo,
+    token_program: &AccountInfo,
     mint: &AccountInfo,
     source: &AccountInfo,
     authority: &AccountInfo,
@@ -82,8 +76,6 @@ pub fn burn_zkbtc(
     data[0] = token_instruction::BURN;
     data[1..9].copy_from_slice(&amount.to_le_bytes());
 
-    let token_program_id = Pubkey::from(TOKEN_2022_PROGRAM_ID);
-
     let accounts = [
         AccountMeta::writable(source.key()),
         AccountMeta::writable(mint.key()),
@@ -91,7 +83,7 @@ pub fn burn_zkbtc(
     ];
 
     let instruction = Instruction {
-        program_id: &token_program_id,
+        program_id: token_program.key(),
         accounts: &accounts,
         data: &data,
     };
@@ -108,7 +100,7 @@ pub fn burn_zkbtc(
 /// * `amount` - Amount to burn (in satoshis)
 /// * `signer_seeds` - PDA signer seeds
 pub fn burn_zkbtc_signed(
-    _token_program: &AccountInfo,
+    token_program: &AccountInfo,
     mint: &AccountInfo,
     source: &AccountInfo,
     authority: &AccountInfo,
@@ -119,8 +111,6 @@ pub fn burn_zkbtc_signed(
     data[0] = token_instruction::BURN;
     data[1..9].copy_from_slice(&amount.to_le_bytes());
 
-    let token_program_id = Pubkey::from(TOKEN_2022_PROGRAM_ID);
-
     let accounts = [
         AccountMeta::writable(source.key()),
         AccountMeta::writable(mint.key()),
@@ -128,7 +118,7 @@ pub fn burn_zkbtc_signed(
     ];
 
     let instruction = Instruction {
-        program_id: &token_program_id,
+        program_id: token_program.key(),
         accounts: &accounts,
         data: &data,
     };
@@ -143,16 +133,11 @@ pub fn burn_zkbtc_signed(
     invoke_signed(&instruction, &[source, mint, authority], &signers)
 }
 
-/// Transfer zkBTC tokens between accounts
-///
-/// # Arguments
-/// * `source` - The source token account
-/// * `destination` - The destination token account
-/// * `authority` - The source account authority
-/// * `amount` - Amount to transfer
-/// * `signer_seeds` - Optional PDA signer seeds
+/// Transfer tokens between accounts.
+/// Uses the passed token_program's key so it works with both
+/// legacy Token program and Token-2022.
 pub fn transfer_zkbtc(
-    _token_program: &AccountInfo,
+    token_program: &AccountInfo,
     source: &AccountInfo,
     destination: &AccountInfo,
     authority: &AccountInfo,
@@ -163,8 +148,6 @@ pub fn transfer_zkbtc(
     data[0] = token_instruction::TRANSFER;
     data[1..9].copy_from_slice(&amount.to_le_bytes());
 
-    let token_program_id = Pubkey::from(TOKEN_2022_PROGRAM_ID);
-
     let accounts = [
         AccountMeta::writable(source.key()),
         AccountMeta::writable(destination.key()),
@@ -172,7 +155,7 @@ pub fn transfer_zkbtc(
     ];
 
     let instruction = Instruction {
-        program_id: &token_program_id,
+        program_id: token_program.key(),
         accounts: &accounts,
         data: &data,
     };
@@ -190,9 +173,11 @@ pub fn transfer_zkbtc(
     }
 }
 
-/// Transfer tokens from a user-signed account (no PDA signing needed)
+/// Transfer tokens from a user-signed account (no PDA signing needed).
+/// Uses the passed token_program account's key so it works with both
+/// legacy Token program and Token-2022.
 pub fn transfer_token_user(
-    _token_program: &AccountInfo,
+    token_program: &AccountInfo,
     source: &AccountInfo,
     destination: &AccountInfo,
     authority: &AccountInfo,
@@ -202,8 +187,6 @@ pub fn transfer_token_user(
     data[0] = token_instruction::TRANSFER;
     data[1..9].copy_from_slice(&amount.to_le_bytes());
 
-    let token_program_id = Pubkey::from(TOKEN_2022_PROGRAM_ID);
-
     let accounts = [
         AccountMeta::writable(source.key()),
         AccountMeta::writable(destination.key()),
@@ -211,7 +194,7 @@ pub fn transfer_token_user(
     ];
 
     let instruction = Instruction {
-        program_id: &token_program_id,
+        program_id: token_program.key(),
         accounts: &accounts,
         data: &data,
     };
@@ -219,20 +202,21 @@ pub fn transfer_token_user(
     invoke(&instruction, &[source, destination, authority])
 }
 
-/// Validate that an account is owned by Token-2022 program
+/// Check if account is owned by either Token or Token-2022 program
 #[inline(always)]
-pub fn is_token_2022_account(account: &AccountInfo) -> bool {
-    account.owner() == &Pubkey::from(TOKEN_2022_PROGRAM_ID)
+pub fn is_token_account(account: &AccountInfo) -> bool {
+    use crate::constants::{TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID};
+    let owner = account.owner().as_ref();
+    owner == &TOKEN_2022_PROGRAM_ID || owner == &TOKEN_PROGRAM_ID
 }
 
-/// Validate token account basics
+/// Validate token account basics (works with both Token and Token-2022)
 pub fn validate_token_account(
     account: &AccountInfo,
     expected_mint: &Pubkey,
     expected_owner: &Pubkey,
 ) -> Result<(), ProgramError> {
-    // Check program owner
-    if !is_token_2022_account(account) {
+    if !is_token_account(account) {
         return Err(ProgramError::InvalidAccountOwner);
     }
 
