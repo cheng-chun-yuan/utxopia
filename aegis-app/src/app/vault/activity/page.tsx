@@ -450,11 +450,8 @@ function ActivityContent() {
 
 export default function ActivityPage() {
   return (
-    <main className="min-h-screen bg-background hacker-bg noise-overlay flex flex-col">
-      <SiteHeader />
-
-      {/* Content — centered, grows to push footer down */}
-      <div className="flex-1 flex flex-col items-center pt-24 pb-8 px-4">
+    <main className="min-h-screen bg-background hacker-bg noise-overlay flex flex-col items-center py-8 px-4 sm:py-12">
+      <div className="flex-1 flex flex-col items-center pb-8">
         {/* Widget */}
         <div
           className={cn(
@@ -490,7 +487,6 @@ export default function ActivityPage() {
 
         </div>
       </div>
-      <SiteFooter />
     </main>
   );
 }

@@ -143,20 +143,34 @@ export default function VaultPage() {
   };
 
   return (
-    <FlowPageLayout
-      backHref="/"
-      backLabel="Back"
-      width={680}
-      badges={[
-        { icon: <Shield className="w-full h-full" />, label: "Vault", color: "privacy" },
-      ]}
-      titleIcon={<Wallet className="w-full h-full" />}
-      title="Your Notes"
-      description="View and spend your shielded tokens"
-    >
+    <main className="min-h-screen bg-background hacker-bg noise-overlay flex flex-col items-center py-8 px-4 sm:py-12">
+
+      {/* Header — Back + Badges */}
+      <div className="w-full mb-4 flex items-center justify-between relative z-10" style={{ maxWidth: "680px" }}>
+        <Link
+          href="/"
+          className="inline-flex items-center gap-2 text-body2 text-gray hover:text-gray-light transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back
+        </Link>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border bg-privacy/10 border-privacy/20">
+            <Shield className="w-3 h-3 text-privacy" />
+            <span className="text-caption text-privacy">Vault</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border bg-privacy/10 border-privacy/20">
+            <Shield className="w-3 h-3 text-privacy" />
+            <span className="text-caption text-privacy">ZK</span>
+          </div>
+        </div>
+      </div>
+
       <motion.div
         className={cn(
-          "relative"
+          "bg-card border border-solid border-gray/30 p-4 sm:p-8",
+          "w-[680px] max-w-[calc(100vw-32px)] rounded-[16px]",
+          "glow-border cyber-corners relative z-10"
         )}
         initial={{ opacity: 0, y: 20, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -600,13 +614,6 @@ export default function VaultPage() {
             </span>
           </div>
 
-        {/* Footer */}
-        <div className="flex flex-row justify-between items-center gap-2 mt-4 text-gray px-2 pt-4 border-t border-gray/15">
-          <a href="/docs" className="hover:text-gray-light transition-colors text-caption">Privacy Coin</a>
-          <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption hover:text-gray-light transition-colors flex items-center gap-1.5">
-            Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network
-          </a>
-        </div>
 
         </motion.div>
 
@@ -683,6 +690,6 @@ export default function VaultPage() {
           </div>
         </div>
       )}
-    </FlowPageLayout>
+    </main>
   );
 }
