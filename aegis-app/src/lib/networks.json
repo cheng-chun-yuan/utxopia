@@ -2,15 +2,16 @@
   "devnet": {
     "solana": {
       "rpcUrl": "https://api.devnet.solana.com",
-      "aegisProgramId": "6cv5vLKCc19oDHMSv1eSLvkJw6Nq1QkvznXavEF6hcDT",
+      "aegisProgramId": "AjbX243s2JMFG2uhfTjKkadjPvQEPgcuyV3vfLJv36MT",
       "btcLightClientId": "859B7kw1xDyY8rzSXY6pAPNxaAsPWrsaAPJk3iivd43g",
       "chadbufferId": "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF"
     },
     "tokens": {
-      "zkbtcMint": "F2CjPchNPwsybDf7NwAcSTxzEBxEH4zTnsr7hLU7QgYX",
-      "usdcMint": "FqTQiuMGHgQk1rZZXiu3RYxWTVHmaei2gKBVAgAK8FH9",
-      "usdtMint": "Ei4tbPZxCr1bBrpEhdTFMV6QLEcuqHWMHNAHNC4N4eAq",
-      "wsolMint": "9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP"
+      "zkbtcMint": "5m3bbj8tzvGfS1ikv4zxa6zraFUVnff5yYWM51wCDQjB",
+      "usdcMint": "HyzNNEUL3W2dyPGrZJ2XcpoASdQL99Smxz2yyBqJ8yj1",
+      "usdtMint": "EpvkQMMuqHQH1HajcD74WyabzjNxjJW53xtBpnHUwgQv",
+      "wsolMint": "So11111111111111111111111111111111111111112",
+      "jupusdMint": "2Z82qqmoJsb5gtVzpHBYJrsmLPpV83VRG1aCqp2onG7t"
     },
     "bitcoin": {
       "network": "testnet4",

@@ -47,8 +47,11 @@ export interface SupportedToken {
   explorerSecondLogo?: string;
 }
 
-/** NATIVE_MINT_2022 — Token-2022 wrapped SOL mint */
-export const NATIVE_MINT_2022_ADDRESS = "9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP";
+/** Native wSOL mint (legacy Token program) */
+export const NATIVE_WSOL_MINT = "So11111111111111111111111111111111111111112";
+
+/** @deprecated Use NATIVE_WSOL_MINT instead */
+export const NATIVE_MINT_2022_ADDRESS = NATIVE_WSOL_MINT;
 
 /** Resolve mint addresses from network config (single source of truth) */
 import { getNetworkConfig } from "./network-config";
@@ -56,6 +59,7 @@ const _netCfg = getNetworkConfig();
 const ENV_USDC_MINT = _netCfg.tokens.usdcMint || process.env.NEXT_PUBLIC_USDC_MINT || "";
 const ENV_USDT_MINT = _netCfg.tokens.usdtMint || process.env.NEXT_PUBLIC_USDT_MINT || "";
 const ENV_WSOL_MINT = _netCfg.tokens.wsolMint || process.env.NEXT_PUBLIC_WSOL_MINT || "";
+const ENV_JUPUSD_MINT = (_netCfg.tokens as any).jupusdMint || process.env.NEXT_PUBLIC_JUPUSD_MINT || "";
 
 export const SUPPORTED_TOKENS: SupportedToken[] = [
   {
@@ -109,7 +113,7 @@ export const SUPPORTED_TOKENS: SupportedToken[] = [
     name: "Solana",
     decimals: 9,
     logo: "/tokens/sol.png",
-    mint: ENV_WSOL_MINT || NATIVE_MINT_2022_ADDRESS,
+    mint: ENV_WSOL_MINT || NATIVE_WSOL_MINT,
     isBtcNative: false,
     isSOL: true,
     enabled: true,
@@ -169,6 +173,28 @@ export const SUPPORTED_TOKENS: SupportedToken[] = [
     },
     explorerLabel: "USDT",
     explorerSubtitle: "SPL Token",
+  },
+  {
+    symbol: "jupUSD",
+    name: "Jupiter USD",
+    decimals: 9,
+    logo: "/tokens/jupusd.png",
+    mint: ENV_JUPUSD_MINT,
+    isBtcNative: false,
+    isSOL: false,
+    enabled: true,
+    unit: "jupUSD",
+    priceKey: "usdc",
+    shieldedSymbol: "zkJupUSD",
+    shieldedLogo: "/tokens/jupusd.png",
+    explorerFilter: "usdc",
+    showRawAmount: false,
+    explorerColors: {
+      from: "text-green-400/70 bg-green-500/6 border-green-500/10",
+      to: "text-privacy/80 bg-privacy/6 border-privacy/10",
+    },
+    explorerLabel: "jupUSD",
+    explorerSubtitle: "Jupiter Stablecoin",
   },
 ];
 

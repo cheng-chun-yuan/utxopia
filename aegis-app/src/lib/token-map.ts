@@ -17,14 +17,16 @@ import { SUPPORTED_TOKENS } from "./supported-tokens";
 // ---------------------------------------------------------------------------
 
 export const KNOWN_TOKEN_IDS: Record<string, string> = {
-  // zkBTC mint: DV7Do8f7rKXehVXDSkuKi7pMwfHUeoKGcpHfnvAd5oUh
-  "0b0fe8dabc30b12b737303a7a36e7538a90499466e484d1fdeef1cbadf08a47e": "BTC",
-  // wSOL mint: 9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP
-  "01cd412855fd43094d07876f980158abfba2a21f13fd9dbca940a7a204ed5a7a": "SOL",
-  // tUSDC mint: 6eD9uhGpUtZ8dciNR5RF4yvH5sLDpHnWmCRhDh2CTCVV
-  "2ec04019262b079aaf7458e3216a3e5efc63ab0bbc61616f4d9984ecb6eb78dd": "USDC",
-  // tUSDT mint: CnqLMZ2DaKYgKXFp4huJmzZA57xyZjWFt97Vigf176Ld
-  "248334e6ea3119ca0c7a5b68bc69ce3834cb84f5f5c67b0298d03d254de6b8e8": "USDT",
+  // zkBTC mint: 5m3bbj8tzvGfS1ikv4zxa6zraFUVnff5yYWM51wCDQjB
+  "019b79fd89c3f11729f30df6229b932742d6030efe264abd774a3c8fc83e7165": "BTC",
+  // wSOL (native) mint: So11111111111111111111111111111111111111112
+  "2c1de4dadda2901001910aa8c4f8ea56c51a5a5b2d156a50003d9a3cd3801cae": "SOL",
+  // USDC mint: HyzNNEUL3W2dyPGrZJ2XcpoASdQL99Smxz2yyBqJ8yj1
+  "0fe717580e6af5dc1051f06fd7c697e4a11e388d221640814a6eb998806abb8f": "USDC",
+  // USDT mint: EpvkQMMuqHQH1HajcD74WyabzjNxjJW53xtBpnHUwgQv
+  "06db61dd810e2589eb944051114416b9e99181408c52de9b73088cf19653cbb8": "USDT",
+  // jupUSD mint: 2Z82qqmoJsb5gtVzpHBYJrsmLPpV83VRG1aCqp2onG7t
+  "06013329f547d34ba63bc7dca2634fc8054748e00143db21c8865566b38bb94b": "jupUSD",
 };
 
 // ---------------------------------------------------------------------------

@@ -15,7 +15,8 @@ import {
   createAssociatedTokenAccountIdempotentInstruction,
   createSyncNativeInstruction,
   createCloseAccountInstruction,
-  NATIVE_MINT_2022,
+  NATIVE_MINT,
+  TOKEN_PROGRAM_ID as SPL_TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID as SPL_TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
 import { getConfig, computeTokenId, computeNPKSync, computeMPKSync } from "@aegis/sdk";
@@ -323,9 +324,9 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
         n >>= 8n;
       }
 
-      // Determine mint: SOL uses NATIVE_MINT_2022, others use zkBTC mint for now
+      // Determine mint: SOL uses native wSOL, others use their configured mint
       const mintPubkey = selectedToken.isSOL
-        ? NATIVE_MINT_2022
+        ? NATIVE_MINT
         : selectedToken.mint
           ? new PublicKey(selectedToken.mint)
           : new PublicKey(config.zkbtcMint);
@@ -349,12 +350,12 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
       let userTokenAccount: PublicKey;
 
       if (selectedToken.isSOL) {
-        // SOL shielding: wrap SOL → wSOL (Token-2022) → shield → close wSOL account
+        // SOL shielding: wrap SOL → wSOL (native, legacy Token program) → shield → close wSOL account
         const wsolAta = getAssociatedTokenAddressSync(
-          NATIVE_MINT_2022,
+          NATIVE_MINT,
           publicKey,
           false,
-          SPL_TOKEN_2022_PROGRAM_ID,
+          SPL_TOKEN_PROGRAM_ID,
         );
 
         // 1. Create wSOL ATA if needed (idempotent)
@@ -363,8 +364,8 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
             publicKey,
             wsolAta,
             publicKey,
-            NATIVE_MINT_2022,
-            SPL_TOKEN_2022_PROGRAM_ID,
+            NATIVE_MINT,
+            SPL_TOKEN_PROGRAM_ID,
           ),
         );
 
@@ -379,7 +380,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
 
         // 3. Sync native balance
         tx.add(
-          createSyncNativeInstruction(wsolAta, SPL_TOKEN_2022_PROGRAM_ID),
+          createSyncNativeInstruction(wsolAta, SPL_TOKEN_PROGRAM_ID),
         );
 
         userTokenAccount = wsolAta;
@@ -387,13 +388,13 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
         // Read vault from TokenConfig PDA on-chain
         const tokenConfigAccount = await connection.getAccountInfo(tokenConfigPda);
         if (!tokenConfigAccount) {
-          throw new Error("SOL token not registered on-chain. Admin must register wSOL (NATIVE_MINT_2022) first.");
+          throw new Error("SOL token not registered on-chain. Admin must register wSOL first.");
         }
         // vault is at offset 66..98 in TokenConfig (disc:1 + bump:1 + mint:32 + tokenId:32 = 66)
         const vaultBytes = tokenConfigAccount.data.slice(66, 98);
         const vaultPubkey = new PublicKey(vaultBytes);
 
-        // 4. Shield instruction
+        // 4. Shield instruction (use legacy Token program for wSOL)
         const ixData = new Uint8Array(73);
         ixData[0] = 29;
         const dataView = new DataView(ixData.buffer);
@@ -411,13 +412,13 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
             { pubkey: tokenConfigPda, isSigner: false, isWritable: true },
             { pubkey: vaultPubkey, isSigner: false, isWritable: true },
             { pubkey: commitmentTreePda, isSigner: false, isWritable: true },
-            { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
+            { pubkey: new PublicKey(SPL_TOKEN_PROGRAM_ID), isSigner: false, isWritable: false },
           ],
         }));
 
         // 5. Close wSOL account to reclaim rent (returns leftover SOL to user)
         tx.add(
-          createCloseAccountInstruction(wsolAta, publicKey, publicKey, [], SPL_TOKEN_2022_PROGRAM_ID),
+          createCloseAccountInstruction(wsolAta, publicKey, publicKey, [], SPL_TOKEN_PROGRAM_ID),
         );
       } else {
         // SPL token shielding (zkBTC, USDC, etc.)
