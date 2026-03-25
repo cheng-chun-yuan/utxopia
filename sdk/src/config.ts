@@ -195,22 +195,22 @@ export const LOCALNET_CHADBUFFER_PROGRAM_ID: Address = address(
 export const DEVNET_CONFIG: NetworkConfig = {
   network: "devnet",
 
-  // Program IDs (localnet multi-token deployment 2026-03-16)
-  aegisProgramId: address("8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim"),
-  btcLightClientProgramId: address("Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"),
+  // Program IDs (devnet deployment 2026-03-25)
+  aegisProgramId: address("AjbX243s2JMFG2uhfTjKkadjPvQEPgcuyV3vfLJv36MT"),
+  btcLightClientProgramId: address("859B7kw1xDyY8rzSXY6pAPNxaAsPWrsaAPJk3iivd43g"),
   chadbufferProgramId: CHADBUFFER_PROGRAM_ID,
   token2022ProgramId: TOKEN_2022_PROGRAM_ID,
   ataProgramId: ATA_PROGRAM_ID,
 
-  // Deployed Accounts (localnet multi-token deployment 2026-03-16)
-  poolStatePda: address("9XASi9bFNFLgDgdVG13UNg4Q9vzWC8XydnEBbdsd4dVt"),
-  commitmentTreePda: address("CbaDvGVVQqskcu4cz6Fsu3i2q8eWG8GjeqpZiKgPiCaW"),
-  zkbtcMint: address("AYJpCnAPbLbcfiCJLwRSpvNgH2yt9UktMPMYSTRA9fLL"),
-  poolVault: address("9DnSJffD5jBZXgGNQbDgGRxGw3j87J3zBi96P6REeTBa"),
+  // Deployed Accounts (devnet deployment 2026-03-25)
+  poolStatePda: address("Gq2UWqttgbT92Dn4dRAdQzJE3yHAEAi4GGZYY2VHEXMP"),
+  commitmentTreePda: address("FMML3M5NU5kMS9nbMAeMhtZ1ecuzhGwM2oTaRVqWvhcQ"),
+  zkbtcMint: address("5m3bbj8tzvGfS1ikv4zxa6zraFUVnff5yYWM51wCDQjB"),
+  poolVault: address("6mXkh6qHunbRFUJtDxB55ZG3aDd9MxUyHV2Z2BpQi4HX"),
 
-  // RPC Endpoints (local test validator)
-  solanaRpcUrl: "http://localhost:8899",
-  solanaWsUrl: "ws://localhost:8900",
+  // RPC Endpoints
+  solanaRpcUrl: "https://api.devnet.solana.com",
+  solanaWsUrl: "wss://api.devnet.solana.com",
 
   // Bitcoin Network
   bitcoinNetwork: "testnet4",
@@ -220,7 +220,7 @@ export const DEVNET_CONFIG: NetworkConfig = {
   circuitCdnUrl: "https://circuits.amidoggy.xyz",
 
   // Groth16 Verifier: verification is inline in the Aegis program (no separate verifier program)
-  groth16VerifierProgramId: address("8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim"), // inline in aegis program
+  groth16VerifierProgramId: address("AjbX243s2JMFG2uhfTjKkadjPvQEPgcuyV3vfLJv36MT"), // inline in aegis program
 
   // VK Hashes (SHA256 of serialized VK bytes, generated from circom trusted setup)
   vkHashes: {
@@ -244,7 +244,7 @@ export const DEVNET_CONFIG: NetworkConfig = {
   },
 
   // Pool group key (FROST 2-of-3 DKG output, x-only secp256k1)
-  groupPubKey: "b425ad56ed0584c7297f4b010bcf2c32d406f176af825117556db103745b4bd9",
+  groupPubKey: "29485d031f6ad1ab0c4ca7183bef6cb9ce2d914d0bec8dc842a6962f0fcc3362",
 
   // SNS Subdomain Resolution (devnet)
   snsNameServiceProgramId: "namesLPneVptA9Z5rqUDD9tMTWEJwofgaYwp8cawRkX",  // SPL Name Service (devnet)
