@@ -495,7 +495,7 @@ export default function ActivityPage() {
           </div>
 
           {/* Content with Suspense for searchParams */}
-          <div className="min-h-[40vh]">
+          <div className="min-h-[200px]">
             <Suspense
               fallback={
                 <div className="flex items-center justify-center py-8">
