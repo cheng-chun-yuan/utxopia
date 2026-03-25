@@ -125,9 +125,15 @@ function ActivityFeed() {
         </button>
       </div>
 
+      {isLoading && sorted.length === 0 && (
+        <div className="flex items-center justify-center py-6">
+          <div className="w-6 h-6 border-2 border-privacy border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+
       {sorted.length === 0 && !isLoading && (
-        <div className="text-center py-8">
-          <Shield className="w-8 h-8 text-gray/20 mx-auto mb-3" />
+        <div className="text-center py-6">
+          <Shield className="w-8 h-8 text-gray/20 mx-auto mb-2" />
           <p className="text-sm text-gray/50">No activity yet</p>
           <p className="text-xs text-gray/30 mt-1">Deposits and transfers will appear here</p>
         </div>
