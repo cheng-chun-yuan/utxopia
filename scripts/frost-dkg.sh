@@ -158,7 +158,7 @@ const fs = require('fs');
   groupPubKey.copy(poolScript, 2);
 
   const data = Buffer.alloc(1 + 1 + 34 + 32);
-  data[0] = 27; // SET_POOL_CONFIG disc
+  data[0] = 2; // SET_POOL_CONFIG disc
   data[1] = 34; // pool_script_len
   poolScript.copy(data, 2);
   groupPubKey.copy(data, 36);
