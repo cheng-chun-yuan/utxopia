@@ -7,6 +7,7 @@ import Image from "next/image";
 import {
   Wallet,
   ArrowDownToLine,
+  ArrowLeft,
   Shield,
   Inbox,
   Link2,
@@ -451,6 +452,27 @@ function ActivityContent() {
 export default function ActivityPage() {
   return (
     <main className="min-h-screen bg-background hacker-bg noise-overlay flex flex-col items-center py-8 px-4 sm:py-12">
+      {/* Header — Back + Badges (matches /vault layout) */}
+      <div className="w-full mb-4 flex items-center justify-between relative z-10" style={{ maxWidth: "480px" }}>
+        <Link
+          href="/vault"
+          className="inline-flex items-center gap-2 text-body2 text-gray hover:text-gray-light transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back
+        </Link>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border bg-privacy/10 border-privacy/20">
+            <Shield className="w-3 h-3 text-privacy" />
+            <span className="text-caption text-privacy">Vault</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border bg-privacy/10 border-privacy/20">
+            <Shield className="w-3 h-3 text-privacy" />
+            <span className="text-caption text-privacy">ZK</span>
+          </div>
+        </div>
+      </div>
+
       <div className="flex-1 flex flex-col items-center pb-8">
         {/* Widget */}
         <div
