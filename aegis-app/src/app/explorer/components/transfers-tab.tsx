@@ -448,9 +448,93 @@ function CommitmentRow({ commitment, leafIndex, txSignature, index }: { commitme
 
 function TransferDetails({ tx, redemption }: { tx: TransferTx; redemption?: RedemptionRecord }) {
   const kind = getTransferKind(tx);
+  if (kind === "shield") return <ShieldDetails tx={tx} />;
   if (kind === "withdraw") return <RedeemDetails tx={tx} redemption={redemption} />;
   if (kind === "unshield") return <UnshieldDetails tx={tx} />;
   return <StandardTransferDetails tx={tx} />;
+}
+
+function ShieldDetails({ tx }: { tx: TransferTx }) {
+  const tokenSym = tx.tokenSymbol ?? (tx.tokenId ? resolveTokenSymbolSync(tx.tokenId) : null);
+  const token = tokenSym ? getTokenBySymbol(tokenSym) ?? SUPPORTED_TOKENS[0] : SUPPORTED_TOKENS[0];
+  const isPending = !tx.txSignature || (tx.outputs?.[0]?.leafIndex ?? -1) < 0;
+  const amount = tx.inputs?.[0]?.grossAmount ?? tx.inputs?.[0]?.netAmount ?? tx.outputs?.[0]?.amount ?? 0;
+  const btcMeta = tx.btcMeta as any;
+  const statusInfo = getShieldStatus(tx.status);
+
+  return (
+    <div className="mx-4 my-3 rounded-[10px] bg-linear-to-b from-gray/6 to-transparent border border-gray/10 overflow-hidden">
+      <div className="grid grid-cols-2 divide-x divide-gray/10">
+        {/* INPUT — BTC deposit */}
+        <div className="p-4 space-y-2.5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-1.5 h-1.5 rounded-full bg-btc" />
+            <span className="text-caption text-btc/90 font-semibold uppercase tracking-wider">Input</span>
+          </div>
+          <div className="px-3 py-2.5 rounded-[8px] bg-btc/4 border border-btc/10 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <BitcoinIcon className="w-3.5 h-3.5 text-btc shrink-0" />
+              <span className="text-body2 text-foreground font-mono font-semibold">
+                {amount ? formatTokenAmount(amount, token) : "—"}
+              </span>
+            </div>
+            {btcMeta?.depositTxid && (
+              <div className="group flex items-center gap-2">
+                <span className="text-[10px] text-gray/50 shrink-0">BTC Tx</span>
+                <code className="text-caption font-mono text-foreground/80 truncate">{truncate(btcMeta.depositTxid, 8, 6)}</code>
+                <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                  <CopyButton text={btcMeta.depositTxid} label="BTC Tx" variant="default" iconSize="sm" />
+                  <a href={`${getMempoolExplorerUrl()}/tx/${btcMeta.depositTxid}`} target="_blank" rel="noopener noreferrer" className="text-btc hover:text-btc/80 transition-colors p-0.5">
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+            )}
+            {btcMeta?.taprootAddress && (
+              <div className="group flex items-center gap-2">
+                <span className="text-[10px] text-gray/50 shrink-0">&rarr;</span>
+                <code className="text-caption font-mono text-foreground/80 truncate">{truncate(btcMeta.taprootAddress, 8, 6)}</code>
+                <CopyButton text={btcMeta.taprootAddress} label="Address" variant="default" iconSize="sm" />
+              </div>
+            )}
+          </div>
+          {btcMeta && (
+            <div className="px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 text-caption text-gray/60 space-y-1">
+              <div className="flex justify-between"><span>Confirmations</span><span className="font-mono">{btcMeta.confirmations ?? 0}</span></div>
+              {btcMeta.sweepTxid && <div className="flex justify-between"><span>Sweep</span><span className="font-mono text-foreground/80">{truncate(btcMeta.sweepTxid, 6, 4)}</span></div>}
+              {(btcMeta.sweepConfirmations ?? 0) > 0 && <div className="flex justify-between"><span>Sweep Conf</span><span className="font-mono">{btcMeta.sweepConfirmations}</span></div>}
+            </div>
+          )}
+        </div>
+
+        {/* OUTPUT — Shielded commitment */}
+        <div className="p-4 space-y-2.5">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+            <span className="text-caption text-green-400/90 font-semibold uppercase tracking-wider">Output</span>
+          </div>
+          {isPending ? (
+            <div className="flex items-center justify-center gap-2 px-3 py-3 rounded-[8px] bg-gray/4 border border-gray/8">
+              <Loader2 className="w-3.5 h-3.5 text-gray/40 animate-spin" />
+              <span className="text-caption text-gray/50">Waiting for confirmation</span>
+            </div>
+          ) : (
+            <CommitmentRow
+              commitment={tx.outputs[0]?.commitment ?? ""}
+              leafIndex={tx.outputs[0]?.leafIndex ?? 0}
+              txSignature={tx.txSignature}
+              index={0}
+            />
+          )}
+          <div className="px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8">
+            <div className="flex items-center gap-2">
+              <StatusDot variant={statusInfo.variant} label={statusInfo.label} />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function RedeemDetails({ tx, redemption }: { tx: TransferTx; redemption?: RedemptionRecord }) {
