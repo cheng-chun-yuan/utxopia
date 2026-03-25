@@ -495,17 +495,9 @@ export default function ActivityPage() {
           </div>
 
           {/* Content with Suspense for searchParams */}
-          <div className="min-h-[200px]">
-            <Suspense
-              fallback={
-                <div className="flex items-center justify-center py-8">
-                  <div className="w-8 h-8 border-2 border-privacy border-t-transparent rounded-full animate-spin" />
-                </div>
-              }
-            >
-              <ActivityContent />
-            </Suspense>
-          </div>
+          <Suspense fallback={<div className="flex items-center justify-center py-8"><div className="w-6 h-6 border-2 border-privacy border-t-transparent rounded-full animate-spin" /></div>}>
+            <ActivityContent />
+          </Suspense>
 
           {/* Footer inside card */}
           <div className="flex flex-row justify-between items-center gap-2 mt-4 text-gray px-2 pt-4 border-t border-gray/15">
