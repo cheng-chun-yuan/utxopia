@@ -174,7 +174,11 @@ export function StealthRecipientInput({
                     : ""
             )}
             onBlur={() => {
-              if (recipient.trim() && !resolvedMeta && !resolving) {
+              // Only auto-resolve stealth addresses (aegis: prefix or long hex)
+              // SNS names require explicit Enter/button to avoid false positives
+              const trimmed = recipient.trim();
+              const isStealthFormat = trimmed.startsWith("aegis:") || /^[0-9a-fA-F]{50,}$/.test(trimmed);
+              if (isStealthFormat && !resolvedMeta && !resolving) {
                 resolveRecipient();
               }
             }}
