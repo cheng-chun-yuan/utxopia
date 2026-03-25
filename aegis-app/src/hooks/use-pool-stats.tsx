@@ -3,23 +3,15 @@
 /**
  * Pool Statistics Hook
  *
- * Fetches Aegis pool statistics using @solana/kit for efficient RPC calls.
- * Uses SWR for automatic caching, deduplication, and stale-while-revalidate.
- *
- * PoolState layout (repr(C), 268 bytes):
- *   offset 0:   discriminator (u8, 0x01)
- *   offset 132: deposit_count (u64 LE)
- *   offset 140: total_minted (u64 LE)
- *   offset 148: total_burned (u64 LE)
- *   offset 156: pending_redemptions (u64 LE)
- *   offset 188: total_shielded (u64 LE)
+ * Fetches pool stats from backend /api/reconciliation/status (which reads on-chain PDAs).
+ * Falls back to direct RPC if backend unavailable.
  */
 
 import useSWR from "swr";
 import { getConfig } from "@aegis/sdk";
 import { fetchAccountInfo } from "@/lib/adapters/connection-adapter";
-import { getRpc } from "@/lib/adapters/connection-adapter";
 import { VAULT_TOKENS } from "@/lib/supported-tokens";
+import { getNetworkConfig } from "@/lib/network-config";
 
 /** Per-token TVL info */
 export interface TokenTVL {
@@ -30,25 +22,13 @@ export interface TokenTVL {
 }
 
 export interface PoolStats {
-  /** Total zkBTC currently in shielded commitments (sats) — "Vault" */
   totalShielded: bigint;
-  /** Number of deposits (from pool state counter) */
   depositCount: number;
-  /** Total commitments in merkle tree (deposits + transfers + redeems) — "Transactions" */
   totalCommitments: number;
-  /** Total transaction volume: total_minted + total_burned (sats) — "Volume" */
   volume: bigint;
-  /** Per-token TVL from TokenConfig PDAs */
   tokenTVL: TokenTVL[];
 }
 
-/**
- * Fetch pool stats from on-chain data.
- */
-/**
- * Derive TokenConfig PDA address for a given mint.
- * Seeds: ["token_config", mint_pubkey_bytes]
- */
 async function deriveTokenConfigAddress(mintBase58: string): Promise<string> {
   const { PublicKey } = await import("@solana/web3.js");
   const config = getConfig();
@@ -61,48 +41,34 @@ async function deriveTokenConfigAddress(mintBase58: string): Promise<string> {
   return pda.toBase58();
 }
 
-async function fetchPoolStats(): Promise<PoolStats> {
-  let totalShielded = 0n;
-  let depositCount = 0n;
-  let totalMinted = 0n;
-  let totalBurned = 0n;
-  let totalCommitments = 0;
+async function fetchFromBackend(): Promise<PoolStats | null> {
+  try {
+    const backendUrl = getNetworkConfig().backend.url;
+    if (!backendUrl) return null;
+
+    const resp = await fetch(`${backendUrl}/api/reconciliation/status`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!resp.ok) return null;
+
+    const data = await resp.json();
+    const onChain = data.reconciliation?.on_chain;
+    if (!onChain) return null;
+
+    return {
+      totalShielded: BigInt(onChain.total_shielded ?? 0),
+      depositCount: Number(onChain.deposit_count ?? 0),
+      totalCommitments: Number(onChain.tree_next_index ?? 0),
+      volume: BigInt(onChain.total_minted ?? 0) + BigInt(onChain.total_burned ?? 0),
+      tokenTVL: [], // filled by RPC fallback below if needed
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchTokenTVL(): Promise<TokenTVL[]> {
   const tokenTVL: TokenTVL[] = [];
-
-  // Fetch pool state + commitment tree in parallel
-  const [poolInfo, treeInfo] = await Promise.all([
-    fetchAccountInfo(getConfig().poolStatePda),
-    fetchAccountInfo(getConfig().commitmentTreePda),
-  ]);
-
-  if (poolInfo && poolInfo.data.length >= 196 && poolInfo.data[0] === 0x01) {
-    const view = new DataView(
-      poolInfo.data.buffer,
-      poolInfo.data.byteOffset,
-      poolInfo.data.byteLength
-    );
-    depositCount = view.getBigUint64(132, true);
-    totalMinted = view.getBigUint64(140, true);
-    totalBurned = view.getBigUint64(148, true);
-    totalShielded = view.getBigUint64(188, true);
-  }
-
-  // Commitment tree: next_index at offset 8 (after disc(1) + bump(1) + padding(6))
-  // counts all commitments (deposits + transfers + redeems)
-  if (treeInfo && treeInfo.data.length >= 48 && treeInfo.data[0] === 0x05) {
-    const view = new DataView(
-      treeInfo.data.buffer,
-      treeInfo.data.byteOffset,
-      treeInfo.data.byteLength
-    );
-    // next_index is at offset 40 (disc:1 + bump:1 + padding:6 + current_root:32 = 40)
-    totalCommitments = Number(view.getBigUint64(40, true));
-  }
-
-  // Fetch per-token TVL from TokenConfig PDAs
-  // TokenConfig layout: disc(1) + bump(1) + mint(32) + token_id(32) + vault(32) + decimals(1) + enabled(1)
-  //   + service_fee(8) + min_deposit(8) + max_deposit(8) + deposit_cap(8) + total_shielded(8) + ...
-  // total_shielded is at offset 132
   try {
     const tokensWithMint = VAULT_TOKENS.filter((t) => t.mint);
     const configAddresses = await Promise.all(
@@ -132,12 +98,56 @@ async function fetchPoolStats(): Promise<PoolStats> {
         }
       }
     }
-  } catch (e) {
-    // Non-critical — TVL just won't show per-token data
-    console.warn("Failed to fetch TokenConfig PDAs:", e);
+  } catch {
+    // Non-critical
+  }
+  return tokenTVL;
+}
+
+async function fetchPoolStats(): Promise<PoolStats> {
+  // Try backend first (reads on-chain via reconciler)
+  const backendStats = await fetchFromBackend();
+
+  if (backendStats) {
+    // Enrich with per-token TVL from RPC (backend doesn't track this)
+    const tokenTVL = await fetchTokenTVL();
+    if (backendStats.totalShielded > 0n) {
+      tokenTVL.unshift({
+        symbol: "BTC",
+        shieldedSymbol: "zkBTC",
+        totalShielded: backendStats.totalShielded,
+        decimals: 8,
+      });
+    }
+    return { ...backendStats, tokenTVL };
   }
 
-  // Also add zkBTC from pool state (BTC deposits tracked separately)
+  // Fallback: direct RPC
+  let totalShielded = 0n;
+  let depositCount = 0n;
+  let totalMinted = 0n;
+  let totalBurned = 0n;
+  let totalCommitments = 0;
+
+  const [poolInfo, treeInfo] = await Promise.all([
+    fetchAccountInfo(getConfig().poolStatePda),
+    fetchAccountInfo(getConfig().commitmentTreePda),
+  ]);
+
+  if (poolInfo && poolInfo.data.length >= 196 && poolInfo.data[0] === 0x01) {
+    const view = new DataView(poolInfo.data.buffer, poolInfo.data.byteOffset, poolInfo.data.byteLength);
+    depositCount = view.getBigUint64(132, true);
+    totalMinted = view.getBigUint64(140, true);
+    totalBurned = view.getBigUint64(148, true);
+    totalShielded = view.getBigUint64(188, true);
+  }
+
+  if (treeInfo && treeInfo.data.length >= 48 && treeInfo.data[0] === 0x05) {
+    const view = new DataView(treeInfo.data.buffer, treeInfo.data.byteOffset, treeInfo.data.byteLength);
+    totalCommitments = Number(view.getBigUint64(40, true));
+  }
+
+  const tokenTVL = await fetchTokenTVL();
   if (totalShielded > 0n) {
     tokenTVL.unshift({
       symbol: "BTC",
@@ -147,22 +157,11 @@ async function fetchPoolStats(): Promise<PoolStats> {
     });
   }
 
-  // Volume = total minted + total burned (represents all BTC flow through the bridge)
-  const volume = totalMinted + totalBurned;
-
-  return { totalShielded, depositCount: Number(depositCount), totalCommitments, volume, tokenTVL };
+  return { totalShielded, depositCount: Number(depositCount), totalCommitments, volume: totalMinted + totalBurned, tokenTVL };
 }
 
-/**
- * Hook to fetch pool statistics with automatic caching and deduplication.
- */
 export function usePoolStats() {
-  const {
-    data: stats,
-    error,
-    isLoading,
-    mutate,
-  } = useSWR<PoolStats>("pool-stats", fetchPoolStats, {
+  const { data: stats, error, isLoading, mutate } = useSWR<PoolStats>("pool-stats", fetchPoolStats, {
     refreshInterval: 30000,
     dedupingInterval: 5000,
     revalidateOnFocus: false,
@@ -172,11 +171,7 @@ export function usePoolStats() {
   return {
     stats: stats ?? null,
     isLoading,
-    error: error
-      ? error instanceof Error
-        ? error.message
-        : "Failed to fetch stats"
-      : null,
+    error: error ? (error instanceof Error ? error.message : "Failed to fetch stats") : null,
     refresh: () => mutate(),
   };
 }
