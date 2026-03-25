@@ -525,12 +525,14 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
             View on mempool.space <ExternalLink className="w-3 h-3" />
           </a>
         )}
-        <button
-          onClick={resetDone}
-          className="px-5 py-2 rounded-[10px] bg-muted border border-gray/15 text-body2 text-gray-light hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
-        >
-          Shield more
-        </button>
+        <div className="pt-2">
+          <button
+            onClick={resetDone}
+            className="px-5 py-2 rounded-[10px] bg-muted border border-gray/15 text-body2 text-gray-light hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
+          >
+            Shield more
+          </button>
+        </div>
       </div>
     );
   }
