@@ -20,7 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { CopyButton } from "@/components/ui/copy-button";
 import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
-import { useTransfers, useRedemptions, type RedemptionRecord, type ExplorerTransaction } from "@/hooks/use-explorer";
+import { useTransfers, type ExplorerTransaction, type RedemptionRecord } from "@/hooks/use-explorer";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { getSolanaExplorerTxUrl, getSolanaExplorerAddressUrl } from "@/lib/solana-network";
 import { truncate, timeAgo } from "./helpers";
@@ -137,14 +137,7 @@ export function TransferRow({
 
 export function TransfersTab() {
   const { transfers, isLoading, error, refresh } = useTransfers();
-  const { redemptions } = useRedemptions();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-
-  // Build lookup: requestTxSignature → RedemptionRecord (for withdraw detail enrichment)
-  const redemptionByRequestTx = new Map<string, RedemptionRecord>();
-  for (const r of redemptions) {
-    if (r.requestTxSignature) redemptionByRequestTx.set(r.requestTxSignature, r);
-  }
 
   const toggle = useCallback((sig: string) => {
     setExpanded((prev) => {
@@ -185,7 +178,7 @@ export function TransfersTab() {
                 tx={tx}
                 expanded={expanded.has(tx.txSignature)}
                 onToggle={() => toggle(tx.txSignature)}
-                redemption={redemptionByRequestTx.get(tx.txSignature)}
+                redemption={undefined}
               />
             ))}
           </tbody>

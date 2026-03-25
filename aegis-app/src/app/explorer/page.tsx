@@ -7,8 +7,8 @@ import {
   ArrowUpFromLine,
   Shield,
 } from "lucide-react";
-import { useDeposits, useTransfers, useRedemptions } from "@/hooks/use-explorer";
-import type { DepositRecord, GroupedTransfer, RedemptionRecord, ExplorerTransaction } from "@/hooks/use-explorer";
+import { useDeposits, useTransfers } from "@/hooks/use-explorer";
+import type { DepositRecord, ExplorerTransaction } from "@/hooks/use-explorer";
 import { usePoolStats } from "@/hooks/use-pool-stats";
 import { useTokenPrices, type TokenPrices } from "@/hooks/use-btc-price";
 import { SiteHeader } from "@/components/site-header";
@@ -18,7 +18,6 @@ import { TypeFilterBar, LoadingState, StatCard, Th, RefreshButton, EmptyState } 
 import type { FilterType, TokenFilter } from "./components/shared";
 import { DepositRow, getShieldType } from "./components/deposits-tab";
 import { TransferRow, getTransferKind } from "./components/transfers-tab";
-import { WithdrawalRow } from "./components/withdrawals-tab";
 import { getTokenByFilter, formatTokenAmount, type TokenFilterId } from "@/lib/supported-tokens";
 
 // =============================================================================
@@ -28,15 +27,7 @@ import { getTokenByFilter, formatTokenAmount, type TokenFilterId } from "@/lib/s
 type UnifiedTransaction =
   | { kind: "shield"; data: DepositRecord; timestamp: number; key: string }
   | { kind: "transfer"; data: ExplorerTransaction; timestamp: number; key: string }
-  | { kind: "unshield"; data: ExplorerTransaction | RedemptionRecord; timestamp: number; key: string; source: "transfer" | "redemption" };
-
-function isRedemption(tx: UnifiedTransaction): tx is UnifiedTransaction & { kind: "unshield"; data: RedemptionRecord; source: "redemption" } {
-  return tx.kind === "unshield" && (tx as any).source === "redemption";
-}
-
-function isTransferUnshield(tx: UnifiedTransaction): tx is UnifiedTransaction & { kind: "unshield"; data: ExplorerTransaction; source: "transfer" } {
-  return tx.kind === "unshield" && (tx as any).source === "transfer";
-}
+  | { kind: "unshield"; data: ExplorerTransaction; timestamp: number; key: string };
 
 // =============================================================================
 // Explorer Content
@@ -49,7 +40,6 @@ function ExplorerContent() {
 
   const { deposits, refresh: refreshDeposits } = useDeposits();
   const { transfers, refresh: refreshTransfers } = useTransfers();
-  const { redemptions, refresh: refreshRedemptions } = useRedemptions();
 
   const toggle = useCallback((key: string) => {
     setExpanded((prev) => {
@@ -63,8 +53,7 @@ function ExplorerContent() {
   const refreshAll = useCallback(() => {
     refreshDeposits();
     refreshTransfers();
-    refreshRedemptions();
-  }, [refreshDeposits, refreshTransfers, refreshRedemptions]);
+  }, [refreshDeposits, refreshTransfers]);
 
   // Build unified list
   const unified = useMemo(() => {
@@ -96,28 +85,14 @@ function ExplorerContent() {
           data: t,
           timestamp: t.timestamp,
           key: `unshield-t-${t.txSignature}`,
-          source: "transfer",
         });
       }
-    }
-
-    // Redemptions → Unshield (skip if already represented by a transfer with same tx signature)
-    const transferTxSigs = new Set(transfers.map((t) => t.txSignature));
-    for (const r of redemptions) {
-      if (r.requestTxSignature && transferTxSigs.has(r.requestTxSignature)) continue;
-      items.push({
-        kind: "unshield",
-        data: r,
-        timestamp: r.createdAt,
-        key: `unshield-r-${r.requestId || r.pubkey}`,
-        source: "redemption",
-      });
     }
 
     // Sort by timestamp desc
     items.sort((a, b) => b.timestamp - a.timestamp);
     return items;
-  }, [deposits, transfers, redemptions]);
+  }, [deposits, transfers]);
 
   // Counts
   const counts = useMemo(() => {
@@ -287,28 +262,15 @@ function ExplorerContent() {
                       />
                     );
                   }
-                  // Unshield — either from transfer or redemption
-                  if (isTransferUnshield(tx)) {
-                    return (
-                      <TransferRow
-                        key={tx.key}
-                        tx={tx.data}
-                        expanded={expanded.has(tx.key)}
-                        onToggle={() => toggle(tx.key)}
-                      />
-                    );
-                  }
-                  if (isRedemption(tx)) {
-                    return (
-                      <WithdrawalRow
-                        key={tx.key}
-                        redemption={tx.data}
-                        expanded={expanded.has(tx.key)}
-                        onToggle={() => toggle(tx.key)}
-                      />
-                    );
-                  }
-                  return null;
+                  // Unshield/Withdraw — all come from transfers now
+                  return (
+                    <TransferRow
+                      key={tx.key}
+                      tx={tx.data as ExplorerTransaction}
+                      expanded={expanded.has(tx.key)}
+                      onToggle={() => toggle(tx.key)}
+                    />
+                  );
                 })}
               </tbody>
             </table>
