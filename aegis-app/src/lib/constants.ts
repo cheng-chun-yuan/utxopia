@@ -15,6 +15,7 @@ export function ensureSdkInit(): Promise<void> {
       aegisProgramId: networkCfg.solana.aegisProgramId,
       zkbtcMint: networkCfg.tokens.zkbtcMint,
       solanaRpcUrl: networkCfg.solana.rpcUrl,
+      groupPubKey: networkCfg.bitcoin.groupPubkey,
     }).then(() => {});
   }
   return _initPromise;

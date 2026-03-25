@@ -497,6 +497,7 @@ export async function initConfig(overrides?: {
   aegisProgramId?: string;
   zkbtcMint?: string;
   solanaRpcUrl?: string;
+  groupPubKey?: string;
 }): Promise<NetworkConfig> {
   const config = { ...DEVNET_CONFIG };
 
@@ -578,6 +579,11 @@ export async function initConfig(overrides?: {
       ],
     });
     config.poolVault = poolVault;
+  }
+
+  // Apply groupPubKey override
+  if (overrides?.groupPubKey) {
+    config.groupPubKey = overrides.groupPubKey;
   }
 
   currentConfig = config;
