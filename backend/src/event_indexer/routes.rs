@@ -213,6 +213,8 @@ pub fn event_indexer_router_with_deposits(
         .route("/api/announcements/status", get(get_announcements_status))
         // Transfers (grouped announcements + nullifier inputs)
         .route("/api/transfers", get(get_transfers))
+        // Unified explorer: all tx types (shield + transfer + unshield + withdraw)
+        .route("/api/explorer/transactions", get(get_explorer_transactions))
         // Redemption tracking (reads from SQLite tracking database)
         .route("/api/redemption/tracking", get(get_redemption_tracking))
         // Completed redemptions (from on-chain events, backend-independent)
@@ -629,6 +631,118 @@ async fn get_pool_stats(
             "nullifierCount": local_nullifiers,
             "transferCount": local_transfers,
         },
+    }))
+}
+
+/// GET /api/explorer/transactions — unified endpoint: shield + transfer + unshield + withdraw
+///
+/// Combines deposit announcements (type=0 → shield) with transfers (transfer/unshield/withdraw)
+/// into a single sorted response. This is the single endpoint the frontend needs.
+async fn get_explorer_transactions(
+    State(state): State<IndexerAppState>,
+) -> Json<serde_json::Value> {
+    let mut transactions = Vec::new();
+
+    // 1. Shield transactions from deposit announcements (type=0)
+    if let Ok(announcements) = state.store.get_announcements(None) {
+        for a in announcements.iter().filter(|a| a.announcement_type == 0) {
+            // encrypted_amount is hex string of LE u64
+            let amount = hex::decode(&a.encrypted_amount).ok()
+                .filter(|b| b.len() >= 8)
+                .map(|b| u64::from_le_bytes(b[..8].try_into().unwrap_or([0; 8])))
+                .unwrap_or(0);
+
+            transactions.push(serde_json::json!({
+                "txSignature": a.tx_signature,
+                "type": "shield",
+                "tokenId": &a.token_id,
+                "timestamp": a.block_time,
+                "status": "confirmed",
+                "inputs": [{
+                    "grossAmount": a.btc_deposit_amount_sats,
+                    "fee": a.deposit_fee,
+                    "netAmount": amount,
+                    "btcDepositTxid": a.btc_deposit_txid,
+                    "btcSweepTxid": a.btc_sweep_txid,
+                }],
+                "outputs": [{
+                    "type": "commitment",
+                    "commitment": &a.commitment,
+                    "leafIndex": a.leaf_index,
+                    "amount": amount,
+                }],
+            }));
+        }
+    }
+
+    // 2. Transfer/unshield/withdraw from nullifier-based transfers
+    if let Ok(rows) = state.store.get_transfers() {
+        for t in rows {
+            let nullifier_pdas = derive_nullifier_pdas(&t.nullifier_hashes, &state.program_id);
+
+            let mut outputs: Vec<serde_json::Value> = Vec::new();
+
+            // Commitment outputs
+            for (i, c) in t.commitments.iter().enumerate() {
+                outputs.push(serde_json::json!({
+                    "type": "commitment",
+                    "commitment": c,
+                    "leafIndex": t.leaf_indices.get(i),
+                }));
+            }
+
+            // Per-output unshield/withdraw from JSON array
+            if let Some(ref uo) = t.unshield_outputs {
+                for o in uo {
+                    outputs.push(o.clone());
+                }
+            } else if let Some(amt) = t.unshield_amount {
+                if t.transfer_type == "unshield" || t.transfer_type == "redeem" {
+                    outputs.push(serde_json::json!({
+                        "type": if t.transfer_type == "redeem" { "withdraw" } else { "unshield" },
+                        "amount": amt,
+                        "fee": t.unshield_fee,
+                        "payout": t.unshield_payout,
+                        "recipient": t.unshield_recipient,
+                    }));
+                }
+            }
+
+            let tx_type = match t.transfer_type.as_str() {
+                "redeem" => "withdraw",
+                "unshield" => "unshield",
+                _ => "transfer",
+            };
+
+            transactions.push(serde_json::json!({
+                "txSignature": t.tx_signature,
+                "type": tx_type,
+                "tokenId": t.token_id,
+                "timestamp": t.timestamp,
+                "status": t.status,
+                "inputs": t.nullifier_hashes.iter().enumerate().map(|(i, h)| {
+                    serde_json::json!({
+                        "nullifierHash": h,
+                        "nullifierPda": nullifier_pdas.get(i),
+                    })
+                }).collect::<Vec<_>>(),
+                "outputs": outputs,
+            }));
+        }
+    }
+
+    // Sort by timestamp desc
+    transactions.sort_by(|a, b| {
+        let ta = a["timestamp"].as_i64().unwrap_or(0);
+        let tb = b["timestamp"].as_i64().unwrap_or(0);
+        tb.cmp(&ta)
+    });
+
+    let count = transactions.len();
+    Json(serde_json::json!({
+        "success": true,
+        "transactions": transactions,
+        "count": count,
     }))
 }
 
