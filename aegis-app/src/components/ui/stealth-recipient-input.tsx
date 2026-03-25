@@ -91,11 +91,16 @@ export function StealthRecipientInput({
         return;
       }
 
-      // Otherwise treat as .btcpro.sol name
+      // Otherwise treat as .btcpro.sol name — must be alphanumeric/hyphen only
       const subdomain = trimmed
         .replace(new RegExp(`\\.${parentDomain}\\.sol$`, "i"), "")
         .replace(new RegExp(`\\.${parentDomain}$`, "i"), "")
         .toLowerCase();
+
+      if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(subdomain) || subdomain.length < 1) {
+        onError(`Invalid name — enter a .${parentDomain}.sol name or aegis: stealth address`);
+        return;
+      }
 
       if (subdomain.length > 32) {
         onError("Name too long — expected a short .btcpro.sol subdomain");
