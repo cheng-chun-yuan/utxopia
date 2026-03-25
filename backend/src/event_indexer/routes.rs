@@ -229,6 +229,8 @@ pub fn event_indexer_router_with_deposits(
         .route("/api/reconciliation/status", get(get_reconciliation_status))
         // Pool stats (cached, for frontend landing page)
         .route("/api/pool/stats", get(get_pool_stats))
+        // Unified indexer status (announcements + nullifiers + transfers)
+        .route("/api/indexer/status", get(get_indexer_status))
         // Global
         .route("/api/sync", post(post_sync_all))
         .route("/api/reset", post(post_reset_all))
@@ -513,6 +515,90 @@ async fn get_nullifiers_status(
     Json(serde_json::json!({
         "count": total,
         "latest_slot": latest_slot,
+    }))
+}
+
+/// GET /api/indexer/status — unified status: announcements + nullifiers + transfers + tree + reconciler
+///
+/// If a drift is detected between on-chain state and the local tree, a non-blocking
+/// tree rebuild is triggered automatically.
+async fn get_indexer_status(
+    State(state): State<IndexerAppState>,
+) -> Json<serde_json::Value> {
+    // Announcements
+    let announcement_count = state.store.get_announcement_count().unwrap_or(0);
+    let leaf_count = state.store.get_leaf_count().unwrap_or(0);
+    let latest_leaf = state.store.get_latest_announcement_leaf_index().ok().flatten();
+    let ann_mismatch = leaf_count != announcement_count;
+
+    // Nullifiers
+    let (_, nullifier_total, nullifier_latest_slot) = state
+        .store
+        .get_nullifier_hashes_since(None)
+        .unwrap_or_default();
+
+    // Transfers
+    let transfer_count = state.store.get_nullifier_count().unwrap_or(0);
+    let deposit_count = state.store.get_deposit_count().unwrap_or(0);
+
+    // Tree
+    let tree_status = state.tree_cache.get_status().await;
+
+    // Reconciler (on-chain vs local)
+    let recon = state.reconciler_status.read().await;
+    let (recon_json, tree_drift) = match recon.as_ref() {
+        Some(r) => {
+            let drift = !r.leaves_match || !r.deposits_match;
+            (serde_json::json!({
+                "on_chain_leaves": r.on_chain.tree_next_index,
+                "local_leaves": r.local_leaf_count,
+                "leaves_match": r.leaves_match,
+                "deposits_match": r.deposits_match,
+                "recovery_triggered": r.recovery_triggered,
+                "checked_at": r.checked_at,
+                "in_sync": !drift,
+            }), drift)
+        }
+        None => (serde_json::json!(null), false),
+    };
+    drop(recon);
+
+    // Auto-trigger tree rebuild on drift (non-blocking)
+    let mut rebuild_triggered = false;
+    if tree_drift || ann_mismatch {
+        let tc = state.tree_cache.clone();
+        rebuild_triggered = true;
+        tokio::spawn(async move {
+            if let Err(e) = tc.force_rebuild().await {
+                tracing::error!(error = %e, "Auto-rebuild from /api/indexer/status failed");
+            } else {
+                tracing::info!("Auto-rebuild from /api/indexer/status succeeded");
+            }
+        });
+    }
+
+    Json(serde_json::json!({
+        "announcements": {
+            "count": announcement_count,
+            "leaf_count": leaf_count,
+            "latest_leaf_index": latest_leaf,
+            "mismatch": ann_mismatch,
+        },
+        "nullifiers": {
+            "count": nullifier_total,
+            "latest_slot": nullifier_latest_slot,
+        },
+        "transactions": {
+            "deposit_count": deposit_count,
+            "transfer_count": transfer_count,
+        },
+        "tree": {
+            "root": tree_status.root,
+            "size": tree_status.size,
+            "next_index": tree_status.next_index,
+        },
+        "reconciler": recon_json,
+        "rebuild_triggered": rebuild_triggered,
     }))
 }
 

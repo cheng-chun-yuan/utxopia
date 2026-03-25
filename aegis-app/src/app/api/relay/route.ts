@@ -33,15 +33,18 @@ import {
 const getAegisSDK = () => import("@aegis/sdk");
 
 import {
-  AEGIS_PROGRAM_ID,
-  CHADBUFFER_PROGRAM_ID,
-  TOKEN_2022_PROGRAM_ID,
-  ZKBTC_MINT_ADDRESS,
+  getAegisProgramId,
+  getChadbufferProgramId,
+  getToken2022ProgramId,
+  getZkbtcMint,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
   deriveNullifierPDA,
+  deriveVkRegistryPDA,
   derivePoolVaultATA,
-} from "@/lib/solana/instructions";
+  deriveTokenConfigPDA,
+  deriveRedemptionRequestPDA as deriveSyncRedemptionRequestPDA,
+} from "@/lib/solana/pdas";
 
 import { getRelayerKeypair as getRelayerKeypairShared } from "@/lib/server/relayer";
 export const dynamic = "force-dynamic";
@@ -117,13 +120,9 @@ function validateHexField(
 }
 
 function deriveRedemptionRequestPDA(
-  user: PublicKey, nonce: bigint, programId: PublicKey = AEGIS_PROGRAM_ID
+  user: PublicKey, nonce: bigint, programId: PublicKey = getAegisProgramId()
 ): [PublicKey, number] {
-  const nonceBytes = new Uint8Array(8);
-  new DataView(nonceBytes.buffer).setBigUint64(0, nonce, true);
-  return PublicKey.findProgramAddressSync(
-    [Buffer.from("redemption"), user.toBuffer(), nonceBytes], programId
-  );
+  return deriveSyncRedemptionRequestPDA(user, nonce, programId);
 }
 
 // =============================================================================
@@ -145,7 +144,7 @@ async function uploadProofToBuffer(
     newAccountPubkey: bufferKeypair.publicKey,
     lamports: rentExemption,
     space: bufferSize,
-    programId: CHADBUFFER_PROGRAM_ID,
+    programId: getChadbufferProgramId(),
   });
 
   const initData = Buffer.alloc(1 + firstChunk.length);
@@ -153,7 +152,7 @@ async function uploadProofToBuffer(
   Buffer.from(firstChunk).copy(initData, 1);
 
   const initIx = new TransactionInstruction({
-    programId: CHADBUFFER_PROGRAM_ID,
+    programId: getChadbufferProgramId(),
     keys: [
       { pubkey: relayer.publicKey, isSigner: true, isWritable: true },
       { pubkey: bufferKeypair.publicKey, isSigner: true, isWritable: true },
@@ -181,7 +180,7 @@ async function uploadProofToBuffer(
     Buffer.from(chunk).copy(writeData, 4);
 
     const writeIx = new TransactionInstruction({
-      programId: CHADBUFFER_PROGRAM_ID,
+      programId: getChadbufferProgramId(),
       keys: [
         { pubkey: relayer.publicKey, isSigner: true, isWritable: true },
         { pubkey: bufferKeypair.publicKey, isSigner: false, isWritable: true },
@@ -205,7 +204,7 @@ async function closeBuffer(
   connection: Connection, relayer: Keypair, bufferPubkey: PublicKey
 ): Promise<void> {
   const closeIx = new TransactionInstruction({
-    programId: CHADBUFFER_PROGRAM_ID,
+    programId: getChadbufferProgramId(),
     keys: [
       { pubkey: relayer.publicKey, isSigner: true, isWritable: true },
       { pubkey: bufferPubkey, isSigner: false, isWritable: true },
@@ -229,7 +228,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const {
-      hexToBytes, PDA_SEEDS,
+      hexToBytes,
       buildTransactInstructionData,
       buildUnshieldInstructionData,
       buildRedeemInstructionData,
@@ -286,10 +285,7 @@ export async function POST(request: NextRequest) {
 
     // ── Derive common PDAs ─────────────────────────────────────────────
     const nullifierPDAs = nullifierBytes.map((n) => deriveNullifierPDA(n)[0]);
-    const [vkRegistryPDA] = PublicKey.findProgramAddressSync(
-      [Buffer.from(PDA_SEEDS.VK_REGISTRY), new Uint8Array([nInputs]), new Uint8Array([nOutputs])],
-      AEGIS_PROGRAM_ID
-    );
+    const [vkRegistryPDA] = deriveVkRegistryPDA(nInputs, nOutputs);
     const [poolState] = derivePoolStatePDA();
     const [commitmentTree] = deriveCommitmentTreePDA();
 
@@ -343,9 +339,7 @@ export async function POST(request: NextRequest) {
       });
 
       // Accounts: pool_state, tree, vk, user, system, token_config, vault, token_program, recipients..., nullifiers...
-      const [tokenConfigPDA] = PublicKey.findProgramAddressSync(
-        [Buffer.from("token_config"), ZKBTC_MINT_ADDRESS.toBuffer()], AEGIS_PROGRAM_ID
-      );
+      const [tokenConfigPDA] = deriveTokenConfigPDA(getZkbtcMint());
       keys.push(
         { pubkey: poolState, isSigner: false, isWritable: true },
         { pubkey: commitmentTree, isSigner: false, isWritable: true },
@@ -354,7 +348,7 @@ export async function POST(request: NextRequest) {
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         { pubkey: tokenConfigPDA, isSigner: false, isWritable: true },
         { pubkey: poolVault, isSigner: false, isWritable: true },
-        { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
+        { pubkey: getToken2022ProgramId(), isSigner: false, isWritable: false },
       );
       for (const rta of recipientTokenPubkeys) keys.push({ pubkey: rta, isSigner: false, isWritable: true });
       for (const pda of nullifierPDAs) keys.push({ pubkey: pda, isSigner: false, isWritable: true });
@@ -365,7 +359,7 @@ export async function POST(request: NextRequest) {
         const ataInfo = await connection.getAccountInfo(recipientTokenPubkeys[k]);
         if (!ataInfo) {
           const createAtaIx = createAssociatedTokenAccountIdempotentInstruction(
-            relayer.publicKey, recipientTokenPubkeys[k], recipientPubkeys[k], ZKBTC_MINT_ADDRESS, TOKEN_2022_PROGRAM_ID
+            relayer.publicKey, recipientTokenPubkeys[k], recipientPubkeys[k], getZkbtcMint(), getToken2022ProgramId()
           );
           const ataTx = new Transaction().add(createAtaIx);
           const { blockhash: ataBlockhash } = await connection.getLatestBlockhash();
@@ -398,9 +392,7 @@ export async function POST(request: NextRequest) {
       const redemptionRequestPDAs = requestNonceBigints.map(n =>
         deriveRedemptionRequestPDA(relayer.publicKey, n)[0]
       );
-      const [tokenConfigPDA] = PublicKey.findProgramAddressSync(
-        [Buffer.from("token_config"), ZKBTC_MINT_ADDRESS.toBuffer()], AEGIS_PROGRAM_ID
-      );
+      const [tokenConfigPDA] = deriveTokenConfigPDA(getZkbtcMint());
 
       ixData = buildRedeemInstructionData({
         nInputs, nOutputs,
@@ -453,7 +445,7 @@ export async function POST(request: NextRequest) {
 
     // ── Submit transaction ─────────────────────────────────────────────
     const mainIx = new TransactionInstruction({
-      programId: AEGIS_PROGRAM_ID,
+      programId: getAegisProgramId(),
       keys,
       data: Buffer.from(ixData),
     });

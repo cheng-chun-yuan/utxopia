@@ -45,17 +45,18 @@ import {
   type ScannedNote,
   type JoinSplitProofInputs,
 } from "@aegis/sdk";
+import { bytesToHex } from "@aegis/sdk";
 import {
-  bytesToHex,
-  AEGIS_PROGRAM_ID,
-  TOKEN_2022_PROGRAM_ID,
-  ZKBTC_MINT_ADDRESS,
+  getAegisProgramId,
+  getToken2022ProgramId,
+  getZkbtcMint,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
   deriveNullifierPDA,
   deriveRedemptionRequestPDA,
+  deriveTokenConfigPDA,
   getTokenAccountAddress,
-} from "@/lib/solana/instructions";
+} from "@/lib/solana/pdas";
 import { scanSecretPhrase, type ScannedSecretNote } from "@/lib/claim-utils";
 import { setActiveToken } from "@/lib/token-context";
 import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
@@ -528,10 +529,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         const [redemptionRequest] = deriveRedemptionRequestPDA(publicKey!, requestNonce);
         const nullifierHash = new Uint8Array(32); // demo mode
         const [nullifierPDA] = deriveNullifierPDA(nullifierHash);
-        const [tokenConfig] = PublicKey.findProgramAddressSync(
-          [Buffer.from("token_config"), ZKBTC_MINT_ADDRESS.toBuffer()],
-          AEGIS_PROGRAM_ID,
-        );
+        const [tokenConfig] = deriveTokenConfigPDA(getZkbtcMint());
 
         const ixData = buildRedemptionRequestInstructionData({
           proofHash: new Uint8Array(32),
@@ -544,7 +542,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         });
 
         const publicRedeemIx = new TransactionInstruction({
-          programId: AEGIS_PROGRAM_ID,
+          programId: getAegisProgramId(),
           keys: [
             { pubkey: poolState, isSigner: false, isWritable: true },
             { pubkey: commitmentTree, isSigner: false, isWritable: false },

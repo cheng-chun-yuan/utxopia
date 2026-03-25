@@ -1179,6 +1179,87 @@ export function deriveRedemptionRequestPDA(
 }
 
 // =============================================================================
+// BTC Light Client Verify Transaction (disc=2)
+// =============================================================================
+
+/**
+ * Build btc-light-client verify_transaction instruction data (disc=2)
+ *
+ * Layout (after disc byte):
+ * txid(32) + block_hash(32) + tx_size(u32 LE) + merkle_proof(variable)
+ *
+ * Merkle proof sub-layout:
+ * proof_txid(32) + path_bits(u32 LE) + path_len(u8) + tx_index(u32 LE) + siblings(32 * path_len)
+ */
+export function buildVerifyTransactionInstructionData(params: {
+  txid: Uint8Array;        // 32 bytes, internal byte order
+  blockHash: Uint8Array;   // 32 bytes
+  txSize: number;          // raw tx size in ChadBuffer (after 32-byte authority)
+  txIndex: number;
+  merkleSiblings: Uint8Array[]; // each 32 bytes, internal byte order
+  pathBits: number;        // bitmask of path direction
+}): Uint8Array {
+  const { txid, blockHash, txSize, txIndex, merkleSiblings, pathBits } = params;
+  const pathLen = merkleSiblings.length;
+
+  // disc(1) + txid(32) + blockHash(32) + txSize(4) + proofTxid(32) + pathBits(4) + pathLen(1) + txIndex(4) + siblings(32*N)
+  const totalSize = 1 + 32 + 32 + 4 + 32 + 4 + 1 + 4 + 32 * pathLen;
+  const data = new Uint8Array(totalSize);
+  const view = new DataView(data.buffer);
+  let offset = 0;
+
+  data[offset++] = 2; // discriminator for verify_transaction
+  data.set(txid, offset); offset += 32;
+  data.set(blockHash, offset); offset += 32;
+  view.setUint32(offset, txSize, true); offset += 4;
+
+  // Merkle proof sub-layout
+  data.set(txid, offset); offset += 32; // proof_txid = txid
+  view.setUint32(offset, pathBits, true); offset += 4;
+  data[offset++] = pathLen;
+  view.setUint32(offset, txIndex, true); offset += 4;
+  for (const sibling of merkleSiblings) {
+    data.set(sibling, offset); offset += 32;
+  }
+
+  return data;
+}
+
+// =============================================================================
+// Aegis Verify Stealth Deposit (disc=11)
+// =============================================================================
+
+/**
+ * Build aegis verify_stealth_deposit instruction data (disc=11)
+ *
+ * npk + ephemeral_pub are extracted ON-CHAIN from the deposit TX OP_RETURN.
+ * Amount is extracted from the SPV-verified sweep TX.
+ *
+ * Layout: disc(1) + sweep_txid(32) + block_height(u64 LE)
+ *         + sweep_tx_size(u32 LE) + deposit_tx_size(u32 LE) + deposit_txid(32) = 81 bytes
+ */
+export function buildVerifyStealthDepositInstructionData(params: {
+  sweepTxid: Uint8Array;      // 32 bytes, internal byte order
+  blockHeight: number;
+  sweepTxSize: number;
+  depositTxSize: number;
+  depositTxid: Uint8Array;    // 32 bytes, internal byte order
+}): Uint8Array {
+  const data = new Uint8Array(81);
+  const view = new DataView(data.buffer);
+  let offset = 0;
+
+  data[offset++] = INSTRUCTION.VERIFY_STEALTH_DEPOSIT;
+  data.set(params.sweepTxid, offset); offset += 32;
+  view.setBigUint64(offset, BigInt(params.blockHeight), true); offset += 8;
+  view.setUint32(offset, params.sweepTxSize, true); offset += 4;
+  view.setUint32(offset, params.depositTxSize, true); offset += 4;
+  data.set(params.depositTxid, offset); offset += 32;
+
+  return data;
+}
+
+// =============================================================================
 // Utility Exports
 // =============================================================================
 

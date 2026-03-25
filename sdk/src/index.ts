@@ -346,6 +346,7 @@ export {
   deriveVkRegistryPDA,
   deriveRedemptionRequestPDA,
   deriveTokenConfigPDA,
+  deriveDepositReceiptPDA,
   commitmentToBytes,
 } from "./pda";
 
@@ -550,6 +551,9 @@ export {
   buildExecutePoolUpdateInstruction,
   buildCancelPoolUpdateInstructionData,
   buildCancelPoolUpdateInstruction,
+  // Verify instruction data builders
+  buildVerifyTransactionInstructionData,
+  buildVerifyStealthDepositInstructionData,
   // Redemption PDA helper
   deriveRedemptionRequestPDA as deriveRedemptionRequestPDAFromInstruction,
   type Instruction,

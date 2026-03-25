@@ -8,7 +8,6 @@
  */
 
 import useSWR from "swr";
-import { getNetworkConfig } from "@/lib/network-config";
 
 /** Per-token TVL info */
 export interface TokenTVL {
@@ -27,9 +26,7 @@ export interface PoolStats {
 }
 
 async function fetchPoolStats(): Promise<PoolStats> {
-  const backendUrl = getNetworkConfig().backend.url || "http://localhost:3001";
-
-  const resp = await fetch(`${backendUrl}/api/pool/stats`, {
+  const resp = await fetch("/api/pool/stats", {
     signal: AbortSignal.timeout(5000),
   });
 

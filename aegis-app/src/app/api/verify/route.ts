@@ -29,22 +29,25 @@ import {
 const getAegisSDK = () => import("@aegis/sdk");
 
 import {
-  AEGIS_PROGRAM_ID,
-  BTC_LIGHT_CLIENT_PROGRAM_ID,
-  CHADBUFFER_PROGRAM_ID,
-  ZKBTC_MINT_ADDRESS,
+  buildVerifyTransactionInstructionData,
+  buildVerifyStealthDepositInstructionData,
   AUTHORITY_SIZE,
+} from "@aegis/sdk";
+
+import {
+  getAegisProgramId,
+  getBtcLightClientProgramId,
+  getChadbufferProgramId,
+  getZkbtcMint,
+  getToken2022ProgramId,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
   deriveLightClientPDA,
   derivePoolVaultATA,
   deriveVerifiedTransactionPDA,
-  buildVerifyTransactionInstructionData,
-  buildVerifyStealthDepositInstructionData,
-  buildVerifyTransactionInstruction,
-  buildVerifyStealthDepositInstruction,
+  deriveBlockHeaderPDA,
   deriveDepositReceiptPDA,
-} from "@/lib/solana/instructions";
+} from "@/lib/solana/pdas";
 
 import { getRelayerKeypair } from "@/lib/server/relayer";
 
@@ -222,7 +225,7 @@ async function uploadDataToBuffer(
     newAccountPubkey: bufferKeypair.publicKey,
     lamports: rentExemption,
     space: bufferSize,
-    programId: CHADBUFFER_PROGRAM_ID,
+    programId: getChadbufferProgramId(),
   });
 
   const initData = Buffer.alloc(1 + firstChunk.length);
@@ -230,7 +233,7 @@ async function uploadDataToBuffer(
   Buffer.from(firstChunk).copy(initData, 1);
 
   const initIx = new TransactionInstruction({
-    programId: CHADBUFFER_PROGRAM_ID,
+    programId: getChadbufferProgramId(),
     keys: [
       { pubkey: relayer.publicKey, isSigner: true, isWritable: true },
       { pubkey: bufferKeypair.publicKey, isSigner: true, isWritable: true },
@@ -264,7 +267,7 @@ async function uploadDataToBuffer(
     Buffer.from(chunk).copy(writeData, 4);
 
     const writeIx = new TransactionInstruction({
-      programId: CHADBUFFER_PROGRAM_ID,
+      programId: getChadbufferProgramId(),
       keys: [
         { pubkey: relayer.publicKey, isSigner: true, isWritable: true },
         { pubkey: bufferKeypair.publicKey, isSigner: false, isWritable: true },
@@ -298,7 +301,7 @@ async function closeBuffer(
   bufferPubkey: PublicKey
 ): Promise<void> {
   const closeIx = new TransactionInstruction({
-    programId: CHADBUFFER_PROGRAM_ID,
+    programId: getChadbufferProgramId(),
     keys: [
       { pubkey: relayer.publicKey, isSigner: true, isWritable: true },
       { pubkey: bufferPubkey, isSigner: false, isWritable: true },
@@ -394,10 +397,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
     const [depositReceiptPDA] = deriveDepositReceiptPDA(depositTxidInternal);
 
     // Block header PDA: derive from block hash
-    const blockHeaderPDA = PublicKey.findProgramAddressSync(
-      [Buffer.from("block"), Buffer.from(blockHashInternal)],
-      BTC_LIGHT_CLIENT_PROGRAM_ID
-    )[0];
+    const [blockHeaderPDA] = deriveBlockHeaderPDA(blockHashInternal);
 
     const [verifiedTxPDA] = deriveVerifiedTransactionPDA(blockHashInternal, sweepTxidInternal);
 
@@ -416,13 +416,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
       pathBits,
     });
 
-    const verifyTxIx = buildVerifyTransactionInstruction({
-      payer: relayer.publicKey,
-      verifiedTxPDA,
-      lightClientPDA,
-      blockHeaderPDA,
-      chadBuffer: sweepBuffer.bufferPubkey,
-      instructionData: verifyTxData,
+    const btcLcProgramId = getBtcLightClientProgramId();
+    const verifyTxIx = new TransactionInstruction({
+      programId: btcLcProgramId,
+      keys: [
+        { pubkey: verifiedTxPDA, isSigner: false, isWritable: true },
+        { pubkey: lightClientPDA, isSigner: false, isWritable: false },
+        { pubkey: blockHeaderPDA, isSigner: false, isWritable: false },
+        { pubkey: sweepBuffer.bufferPubkey, isSigner: false, isWritable: false },
+        { pubkey: relayer.publicKey, isSigner: true, isWritable: true },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      ],
+      data: Buffer.from(verifyTxData),
     });
 
     // 7. Build verify_stealth_deposit instruction
@@ -434,18 +439,24 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
       depositTxid: depositTxidInternal,
     });
 
-    const verifyDepositIx = buildVerifyStealthDepositInstruction({
-      poolStatePDA,
-      verifiedTxPDA,
-      lightClientPDA,
-      commitmentTreePDA,
-      sweepTxBuffer: sweepBuffer.bufferPubkey,
-      authority: relayer.publicKey,
-      zkbtcMint: ZKBTC_MINT_ADDRESS,
-      poolVaultATA,
-      depositTxBuffer: depositBuffer.bufferPubkey,
-      depositReceiptPDA,
-      instructionData: verifyDepositData,
+    const aegisProgramId = getAegisProgramId();
+    const verifyDepositIx = new TransactionInstruction({
+      programId: aegisProgramId,
+      keys: [
+        { pubkey: poolStatePDA, isSigner: false, isWritable: true },
+        { pubkey: verifiedTxPDA, isSigner: false, isWritable: false },
+        { pubkey: lightClientPDA, isSigner: false, isWritable: false },
+        { pubkey: commitmentTreePDA, isSigner: false, isWritable: true },
+        { pubkey: sweepBuffer.bufferPubkey, isSigner: false, isWritable: false },
+        { pubkey: relayer.publicKey, isSigner: true, isWritable: true },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        { pubkey: getZkbtcMint(), isSigner: false, isWritable: true },
+        { pubkey: poolVaultATA, isSigner: false, isWritable: true },
+        { pubkey: getToken2022ProgramId(), isSigner: false, isWritable: false },
+        { pubkey: depositBuffer.bufferPubkey, isSigner: false, isWritable: false },
+        { pubkey: depositReceiptPDA, isSigner: false, isWritable: true },
+      ],
+      data: Buffer.from(verifyDepositData),
     });
 
     // 8. Submit both instructions in one transaction

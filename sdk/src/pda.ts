@@ -236,6 +236,28 @@ export async function deriveVkRegistryPDA(
 }
 
 // =============================================================================
+// Deposit Receipt PDAs
+// =============================================================================
+
+/**
+ * Derive Deposit Receipt PDA
+ * Seeds: ["deposit_receipt", deposit_txid(32)]
+ */
+export async function deriveDepositReceiptPDA(
+  depositTxid: Uint8Array,
+  programId: Address = AEGIS_PROGRAM_ID
+): Promise<[Address, number]> {
+  if (depositTxid.length !== 32) {
+    throw new Error(`depositTxid must be 32 bytes, got ${depositTxid.length}`);
+  }
+  const result = await getProgramDerivedAddress({
+    programAddress: programId,
+    seeds: [new TextEncoder().encode("deposit_receipt"), depositTxid],
+  });
+  return [result[0], result[1]];
+}
+
+// =============================================================================
 // Utility Functions
 // =============================================================================
 
