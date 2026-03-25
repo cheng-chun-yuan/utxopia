@@ -133,51 +133,46 @@ function ActivityFeed() {
         </div>
       )}
 
-      <div className="rounded-[12px] border border-gray/10 overflow-hidden divide-y divide-gray/8">
-        {sorted.map((note) => {
-          const token = getToken(note.tokenSymbol);
-          const price = tokenPrices[token.priceKey];
-          const usdValue = price ? (Number(note.amount) / 10 ** token.decimals) * price : 0;
-          return (
-            <div key={note.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors">
-              {/* Token icon */}
-              <img src={token.shieldedLogo} alt={token.shieldedSymbol} className="w-8 h-8 rounded-full shrink-0" />
-
-              {/* Type + token name */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-medium text-foreground">
-                    {note.isSpent ? "Sent" : "Received"}
-                  </span>
-                  <span className="text-xs text-gray/40">{token.shieldedSymbol}</span>
+      {sorted.length > 0 && (
+        <div className="rounded-[12px] border border-gray/10 overflow-hidden divide-y divide-gray/8">
+          {sorted.map((note) => {
+            const token = getToken(note.tokenSymbol);
+            const price = tokenPrices[token.priceKey];
+            const usdValue = price ? (Number(note.amount) / 10 ** token.decimals) * price : 0;
+            return (
+              <div key={note.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors">
+                <img src={token.shieldedLogo} alt={token.shieldedSymbol} className="w-8 h-8 rounded-full shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-sm font-medium text-foreground">
+                      {note.isSpent ? "Sent" : "Received"}
+                    </span>
+                    <span className="text-xs text-gray/40">{token.shieldedSymbol}</span>
+                  </div>
+                  <p className="text-[11px] text-gray/40">{timeAgo(note.createdAt)}</p>
                 </div>
-                <p className="text-[11px] text-gray/40">{timeAgo(note.createdAt)}</p>
-              </div>
-
-              {/* Amount */}
-              <div className="text-right">
-                <p className={cn(
-                  "text-sm font-semibold font-mono",
-                  note.isSpent ? "text-gray" : "text-foreground"
-                )}>
-                  {note.isSpent ? "-" : "+"}{formatAmt(note.amount, token)}
-                </p>
-                {usdValue > 0 && (
-                  <p className="text-[11px] text-gray/40 font-mono">
-                    ${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                <div className="text-right">
+                  <p className={cn(
+                    "text-sm font-semibold font-mono",
+                    note.isSpent ? "text-gray" : "text-foreground"
+                  )}>
+                    {note.isSpent ? "-" : "+"}{formatAmt(note.amount, token)}
                   </p>
-                )}
+                  {usdValue > 0 && (
+                    <p className="text-[11px] text-gray/40 font-mono">
+                      ${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  )}
+                </div>
+                <div className={cn(
+                  "w-2 h-2 rounded-full shrink-0",
+                  note.isSpent ? "bg-gray/30" : "bg-success"
+                )} />
               </div>
-
-              {/* Status dot */}
-              <div className={cn(
-                "w-2 h-2 rounded-full shrink-0",
-                note.isSpent ? "bg-gray/30" : "bg-success"
-              )} />
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -500,7 +495,7 @@ export default function ActivityPage() {
           </Suspense>
 
           {/* Footer inside card */}
-          <div className="flex flex-row justify-between items-center gap-2 mt-4 text-gray px-2 pt-4 border-t border-gray/15">
+          <div className="flex flex-row justify-between items-center gap-2 mt-2 text-gray px-2 pt-2">
             <a href="/docs" className="hover:text-gray-light transition-colors text-caption">Privacy Coin</a>
             <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption hover:text-gray-light transition-colors flex items-center gap-1.5">
               Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network
