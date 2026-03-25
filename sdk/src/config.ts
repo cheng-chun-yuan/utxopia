@@ -493,15 +493,30 @@ export function createConfig(
  * // Or pass explicitly
  * await initConfig({ aegisProgramId: "...", zkbtcMint: "..." });
  */
+export type NetworkId = "devnet" | "localnet" | "mainnet";
+
 export async function initConfig(overrides?: {
+  network?: NetworkId;
   aegisProgramId?: string;
   zkbtcMint?: string;
   solanaRpcUrl?: string;
   groupPubKey?: string;
 }): Promise<NetworkConfig> {
-  const config = { ...DEVNET_CONFIG };
+  // Pick base config from network: param > env > devnet
+  const networkId: NetworkId =
+    overrides?.network ||
+    (typeof process !== "undefined" && (process.env?.NEXT_PUBLIC_NETWORK || process.env?.AEGIS_NETWORK) as NetworkId) ||
+    "devnet";
 
-  // Resolve program ID: param > env > default
+  const baseConfig = networkId === "localnet"
+    ? LOCALNET_CONFIG
+    : networkId === "mainnet"
+      ? MAINNET_CONFIG
+      : DEVNET_CONFIG;
+
+  const config = { ...baseConfig };
+
+  // Resolve program ID: param > env > base config default
   const programId =
     overrides?.aegisProgramId ||
     (typeof process !== "undefined" && (process.env?.NEXT_PUBLIC_AEGIS_PROGRAM_ID || process.env?.AEGIS_PROGRAM_ID)) ||
