@@ -23,7 +23,7 @@ import { useConnection } from "@solana/wallet-adapter-react";
 import {
   CheckCircle2, Send, Wallet, Shield, Clock, AlertCircle, AlertTriangle,
   Key, Check, X, Loader2, Zap, Plus, Bitcoin,
-  Download, Search, ChevronRight, ChevronDown, ArrowRight,
+  Download, Search, ChevronRight, ChevronDown, ArrowRight, SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { parseSats } from "@/lib/utils/validation";
@@ -150,6 +150,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   // Input notes state
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
   const [showNoteSelector, setShowNoteSelector] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const notePreselectedRef = useRef(false);
 
   // Token selector
@@ -1272,16 +1273,13 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
               >
                 + Top Up
               </a>
-              {!hasImportedNotes && !(initialSecretPhrase && (importLoading || importError)) && (
-                <button
-                  onClick={() => setShowNoteSelector(!showNoteSelector)}
-                  className="text-[12px] text-gray hover:text-purple transition-colors"
-                >
-                  {showNoteSelector ? "Done" : selectedNotes.length > 0
-                    ? `${selectedNotes.length} note${selectedNotes.length !== 1 ? "s" : ""} ›`
-                    : "Select notes"}
-                </button>
-              )}
+              <button
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="text-[12px] text-gray hover:text-purple transition-colors flex items-center gap-1"
+              >
+                <SlidersHorizontal className="w-3 h-3" />
+                {showAdvanced ? "Simple" : "Advanced"}
+              </button>
             </div>
           </div>
 
@@ -1304,7 +1302,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                 </button>
               </div>
             )
-          ) : showNoteSelector ? (
+          ) : showAdvanced && showNoteSelector ? (
             /* Expanded note selector (pro user) */
             <div className="space-y-1.5 mb-2">
               {availableNotes.map((note) => (
@@ -1333,7 +1331,16 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                 </button>
               ))}
             </div>
-          ) : null /* Notes auto-selected — no UI needed in default mode */}
+          ) : showAdvanced && !hasImportedNotes ? (
+            <button
+              onClick={() => setShowNoteSelector(true)}
+              className="text-[12px] text-gray hover:text-purple transition-colors mb-2"
+            >
+              {selectedNotes.length > 0
+                ? `${selectedNotes.length} note${selectedNotes.length !== 1 ? "s" : ""} selected — tap to change`
+                : "Select notes manually"}
+            </button>
+          ) : null}
 
           {/* Imported notes display — only show unspent */}
           {activeImportedNotes.length > 0 && (
@@ -1370,7 +1377,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
           )}
 
           {/* Import from Secret button/form — hide when ?note= scan failed (error shown above) */}
-          {!hasImportedNotes && !(initialSecretPhrase && (importLoading || importError)) && (
+          {showAdvanced && !hasImportedNotes && !(initialSecretPhrase && (importLoading || importError)) && (
             showImportInput ? (
               <div className="mb-2 p-3 rounded-[10px] bg-muted border border-btc/20">
                 <div className="flex items-center gap-2 mb-2">
@@ -1504,53 +1511,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 
         {/* === SUMMARY === */}
         <div className="mb-4 p-3 rounded-[12px] bg-muted border border-gray/15">
-          {/* Show breakdown if mixed outputs */}
-          {(hasPublicOutput || hasBtcOutput) && outputs.some(o => o.mode === "stealth" || o.mode === "note") && (
-            <>
-              <div className="flex justify-between items-center text-body2 mb-1">
-                <span className="text-gray flex items-center gap-1.5">
-                  <Shield className="w-3.5 h-3.5 text-purple" /> Stealth
-                </span>
-                <span className="text-gray-light font-semibold">
-                  {fmt(outputs.filter(o => o.mode === "stealth" || o.mode === "note").reduce((s, o) => s + (parseSats(o.amount) ?? 0), 0))} {selectedToken.shieldedSymbol}
-                </span>
-              </div>
-              {hasPublicOutput && (
-                <div className="flex justify-between items-center text-body2 mb-1">
-                  <span className="text-gray flex items-center gap-1.5">
-                    <Wallet className="w-3.5 h-3.5 text-privacy" /> Unshield
-                  </span>
-                  <span className="text-gray-light font-semibold">
-                    {fmt(outputs.filter(o => o.mode === "public").reduce((s, o) => s + (parseSats(o.amount) ?? 0), 0))} {selectedToken.shieldedSymbol}
-                  </span>
-                </div>
-              )}
-              {hasBtcOutput && (() => {
-                const btcTotalSats = outputs.filter(o => o.mode === "btc").reduce((s, o) => s + (parseSats(o.amount) ?? 0), 0);
-                const percentFee = Math.ceil(btcTotalSats * 0.003);
-                const totalFee = effectiveServiceFee + percentFee;
-                const userReceives = Math.max(0, btcTotalSats - totalFee);
-                return (
-                  <>
-                    <div className="flex justify-between items-center text-body2 mb-1">
-                      <span className="text-gray flex items-center gap-1.5">
-                        <Bitcoin className="w-3.5 h-3.5 text-btc" /> BTC Withdrawal
-                      </span>
-                      <span className="text-gray-light font-semibold">
-                        {fmt(btcTotalSats)} {selectedToken.shieldedSymbol}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center text-caption mb-1 ml-5">
-                      <span className="text-gray/80">You receive (after fees)</span>
-                      <span className="text-gray/80 font-medium">{fmt(userReceives)} {selectedToken.shieldedSymbol}</span>
-                    </div>
-                  </>
-                );
-              })()}
-              <div className="border-t border-gray/10 my-1" />
-            </>
-          )}
-          <div className="flex justify-between items-center text-body2 mb-1">
+          <div className="flex justify-between items-center text-body2">
             <span className="text-gray">
               {hasPublicOutput || hasBtcOutput ? "Total" : "Send Total"}
             </span>
@@ -1558,35 +1519,78 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
               {fmt(totalOutputSats)} {selectedToken.shieldedSymbol}
             </span>
           </div>
-          {/* Relayer fee — paid as a shielded note to relayer */}
-          {!isPublicRedeem && (
-            <div className="flex justify-between items-center text-caption mb-1">
-              <span className="text-gray/60">
-                Relayer fee (shielded note → relayer)
-              </span>
-              <span className="text-gray/60">
-                {relayerMetaLoaded ? fmt(effectiveRelayerFee) : "..."} {selectedToken.shieldedSymbol}
-              </span>
-            </div>
-          )}
-          {!isPublicRedeem && (
-            <div className="flex justify-between items-center text-body2 mb-1">
-              <span className="text-gray">{hasImportedNotes ? "Change (as Note)" : "Change (kept shielded)"}</span>
-              <span className={cn(
-                "font-semibold",
-                changeSats >= 0 ? "text-gray-light" : "text-error"
-              )}>
-                {changeSats >= 0 ? fmt(changeSats) : "-" + fmt(-changeSats)} {selectedToken.shieldedSymbol}
-              </span>
-            </div>
-          )}
-          {/* Collapsible technical details */}
-          <details className="pt-1 border-t border-gray/10 group">
+          {/* Collapsible details: fees, breakdown, privacy, circuit */}
+          <details className="mt-1.5 pt-1.5 border-t border-gray/10 group">
             <summary className="flex justify-between items-center text-body2 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
               <span className="text-gray">Details</span>
               <ChevronDown className="w-3.5 h-3.5 text-gray/50 transition-transform group-open:rotate-180" />
             </summary>
             <div className="mt-1.5 space-y-1">
+              {/* Mixed output breakdown */}
+              {(hasPublicOutput || hasBtcOutput) && outputs.some(o => o.mode === "stealth" || o.mode === "note") && (
+                <>
+                  <div className="flex justify-between items-center text-body2">
+                    <span className="text-gray flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5 text-purple" /> Stealth
+                    </span>
+                    <span className="text-gray-light font-semibold">
+                      {fmt(outputs.filter(o => o.mode === "stealth" || o.mode === "note").reduce((s, o) => s + (parseSats(o.amount) ?? 0), 0))} {selectedToken.shieldedSymbol}
+                    </span>
+                  </div>
+                  {hasPublicOutput && (
+                    <div className="flex justify-between items-center text-body2">
+                      <span className="text-gray flex items-center gap-1.5">
+                        <Wallet className="w-3.5 h-3.5 text-privacy" /> Unshield
+                      </span>
+                      <span className="text-gray-light font-semibold">
+                        {fmt(outputs.filter(o => o.mode === "public").reduce((s, o) => s + (parseSats(o.amount) ?? 0), 0))} {selectedToken.shieldedSymbol}
+                      </span>
+                    </div>
+                  )}
+                  {hasBtcOutput && (() => {
+                    const btcTotalSats = outputs.filter(o => o.mode === "btc").reduce((s, o) => s + (parseSats(o.amount) ?? 0), 0);
+                    const percentFee = Math.ceil(btcTotalSats * 0.003);
+                    const totalFee = effectiveServiceFee + percentFee;
+                    const userReceives = Math.max(0, btcTotalSats - totalFee);
+                    return (
+                      <>
+                        <div className="flex justify-between items-center text-body2">
+                          <span className="text-gray flex items-center gap-1.5">
+                            <Bitcoin className="w-3.5 h-3.5 text-btc" /> BTC Withdrawal
+                          </span>
+                          <span className="text-gray-light font-semibold">
+                            {fmt(btcTotalSats)} {selectedToken.shieldedSymbol}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-caption ml-5">
+                          <span className="text-gray/80">You receive (after fees)</span>
+                          <span className="text-gray/80 font-medium">{fmt(userReceives)} {selectedToken.shieldedSymbol}</span>
+                        </div>
+                      </>
+                    );
+                  })()}
+                  <div className="border-t border-gray/8 my-0.5" />
+                </>
+              )}
+              {/* Relayer fee */}
+              {!isPublicRedeem && (
+                <div className="flex justify-between items-center text-caption">
+                  <span className="text-gray/60">Relayer fee</span>
+                  <span className="text-gray/60">
+                    {relayerMetaLoaded ? fmt(effectiveRelayerFee) : "..."} {selectedToken.shieldedSymbol}
+                  </span>
+                </div>
+              )}
+              {/* Change */}
+              {!isPublicRedeem && (
+                <div className="flex justify-between items-center text-body2">
+                  <span className="text-gray">Change</span>
+                  <span className={cn("font-semibold", changeSats >= 0 ? "text-gray-light" : "text-error")}>
+                    {changeSats >= 0 ? fmt(changeSats) : "-" + fmt(-changeSats)} {selectedToken.shieldedSymbol}
+                  </span>
+                </div>
+              )}
+              {/* Privacy / Circuit / Tx Size */}
               <div className="flex justify-between items-center text-body2">
                 <span className="text-gray">Privacy</span>
                 <span className={cn("font-mono text-xs", isPublicRedeem ? "text-btc" : "text-gray-light")}>
@@ -1634,15 +1638,6 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
           </details>
         </div>
 
-        {/* Processing time info */}
-        <div className="flex items-center gap-3 p-3 bg-muted border border-gray/15 rounded-[12px] mb-4">
-          <Clock className="w-5 h-5 text-gray shrink-0" />
-          <div className="text-caption text-gray">
-            <span className="text-gray-light">Processing time:</span>{" "}
-            {isPublicRedeem ? "~5s (no proof needed)" : "30-60s (ZK proof generation)"}
-          </div>
-        </div>
-
         {/* Error */}
         {error && (
           <div className="warning-box mb-4">
@@ -1670,24 +1665,25 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         <button
           onClick={handlePay}
           disabled={!canSubmit}
+          title={isPublicRedeem ? "~5s processing" : "30-60s for ZK proof generation"}
           className={cn("w-full", hasBtcOutput ? "btn-bitcoin" : "btn-primary")}
         >
           {isPublicRedeem ? (
             <>
               <Bitcoin className="w-5 h-5" />
-              Redeem Public {selectedToken.shieldedSymbol} to BTC
+              Redeem to BTC
             </>
           ) : hasBtcOutput ? (
             <>
               <Bitcoin className="w-5 h-5" />
-              Generate Proof & Withdraw to BTC
+              Withdraw to BTC
             </>
           ) : (
             <>
               <Shield className="w-5 h-5" />
               {hasPublicOutput
-                ? outputs.some(o => o.mode === "stealth") ? "Unshield + Send Private" : "Unshield to Wallet"
-                : "Generate Proof & Pay"}
+                ? outputs.some(o => o.mode === "stealth") ? "Send" : "Unshield"
+                : "Send Privately"}
             </>
           )}
         </button>
