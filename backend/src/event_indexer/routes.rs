@@ -756,7 +756,7 @@ async fn get_explorer_transactions(
                 "timestamp": a.block_time,
                 "status": "confirmed",
                 "inputs": [{
-                    "grossAmount": a.btc_deposit_amount_sats,
+                    "grossAmount": a.deposit_gross_amount.or(a.btc_deposit_amount_sats),
                     "fee": a.deposit_fee,
                     "netAmount": amount,
                     "btcDepositTxid": a.btc_deposit_txid,
