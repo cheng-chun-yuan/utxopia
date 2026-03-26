@@ -88,25 +88,20 @@ export function InboxItem({ note }: InboxItemProps) {
       onClick={() => setExpanded(!expanded)}
       className={cn(
         "rounded-[10px] border border-gray/15 bg-muted transition-colors cursor-pointer",
-        expanded && "border-gray/25",
+        expanded && "border-privacy/25 bg-muted/80",
         !note.isSpent && "hover:border-privacy/30"
       )}
     >
       {/* Collapsed row */}
-      <div className="flex items-center gap-2.5 px-3 py-2.5">
-        {/* Arrow indicator */}
+      <div className="flex items-center gap-2 px-3 py-2.5">
+        {/* Dot indicator */}
         <div className={cn(
-          "w-5 h-5 rounded-full flex items-center justify-center shrink-0",
-          note.isSpent ? "bg-gray/10" : "bg-privacy/10"
-        )}>
-          <ArrowDown className={cn(
-            "w-3 h-3",
-            note.isSpent ? "text-gray" : "text-privacy"
-          )} />
-        </div>
+          "w-1.5 h-1.5 rounded-full shrink-0",
+          note.isSpent ? "bg-gray/30" : "bg-privacy"
+        )} />
 
         {/* Time */}
-        <span className="text-xs text-gray/60 flex-1">
+        <span className="text-xs text-gray/50 flex-1">
           {formatRelativeTime(note.createdAt)}
         </span>
 
@@ -121,48 +116,48 @@ export function InboxItem({ note }: InboxItemProps) {
 
       {/* Expanded detail panel */}
       {expanded && (
-        <div className="px-3 pb-3 pt-0">
-          <div className="border-t border-gray/10 pt-2.5 space-y-1.5">
-            {/* USD value */}
-            {usdValue > 0 && (
-              <p className="text-xs text-gray/60 font-mono tabular-nums">
-                ${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        <div className="px-3 pb-2.5">
+          <div className="border-t border-gray/10 pt-2 flex items-center justify-between gap-3">
+            {/* Left: metadata stack */}
+            <div className="min-w-0 space-y-0.5">
+              {usdValue > 0 && (
+                <p className="text-xs text-gray/50 font-mono tabular-nums">
+                  ${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+              )}
+              <p className="text-[11px] text-gray/40">
+                {formatFullDate(note.createdAt)}
               </p>
-            )}
-
-            {/* Timestamp */}
-            <p className="text-xs text-gray/50">
-              {formatFullDate(note.createdAt)}
-            </p>
-
-            {/* Commitment + Copy + Send */}
-            <div className="flex items-center gap-2">
-              <code className="text-[10px] font-mono text-gray/50 truncate flex-1">
-                {note.commitmentHex.slice(0, 12)}...{note.commitmentHex.slice(-8)}
-              </code>
-              <button
-                onClick={handleCopy}
-                className="p-1 rounded hover:bg-gray/10 transition-colors shrink-0"
-              >
-                {copied
-                  ? <Check className="w-3 h-3 text-privacy" />
-                  : <Copy className="w-3 h-3 text-gray/50" />
-                }
-              </button>
-              {!note.isSpent && (
+              <div className="flex items-center gap-1">
+                <code className="text-[10px] font-mono text-gray/35 truncate">
+                  {note.commitmentHex.slice(0, 10)}...{note.commitmentHex.slice(-6)}
+                </code>
                 <button
-                  onClick={(e) => { e.stopPropagation(); handleSend(); }}
-                  className="flex items-center gap-1 px-2 py-1 rounded-[6px] bg-privacy/10 text-privacy text-xs font-medium hover:bg-privacy/20 transition-colors shrink-0"
+                  onClick={handleCopy}
+                  className="p-0.5 rounded hover:bg-gray/10 transition-colors shrink-0"
                 >
-                  Send <ArrowRight className="w-3 h-3" />
+                  {copied
+                    ? <Check className="w-2.5 h-2.5 text-privacy" />
+                    : <Copy className="w-2.5 h-2.5 text-gray/40" />
+                  }
                 </button>
-              )}
-              {note.isSpent && (
-                <span className="text-[10px] text-gray/40 px-1.5 py-0.5 rounded-full bg-gray/8">
-                  Spent
-                </span>
-              )}
+              </div>
             </div>
+
+            {/* Right: action */}
+            {!note.isSpent && (
+              <button
+                onClick={(e) => { e.stopPropagation(); handleSend(); }}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-[8px] bg-privacy/10 text-privacy text-xs font-medium hover:bg-privacy/20 transition-colors shrink-0"
+              >
+                Send <ArrowRight className="w-3 h-3" />
+              </button>
+            )}
+            {note.isSpent && (
+              <span className="text-[10px] text-gray/35 px-2 py-1 rounded-full bg-gray/8 shrink-0">
+                Spent
+              </span>
+            )}
           </div>
         </div>
       )}
