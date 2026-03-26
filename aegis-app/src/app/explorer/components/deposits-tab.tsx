@@ -65,17 +65,8 @@ const DEPOSIT_STATUS_ORDER: Record<string, number> = {
   sweeping: 3, sweep_confirming: 3, verifying: 4, ready: 5, claimed: 5,
 };
 
-function DepositDetails({ deposit }: { deposit: DepositRecord }) {
+function DepositDetails({ deposit, config, isBtc }: { deposit: DepositRecord; config: ShieldTypeConfig; isBtc: boolean }) {
   const d = deposit;
-  const tokenSym = d.tokenSymbol ?? (d.tokenId ? resolveTokenSymbolSync(d.tokenId) : null);
-  const resolvedToken = tokenSym ? getTokenBySymbol(tokenSym) : null;
-  const shieldType = resolvedToken
-    ? (resolvedToken.explorerFilter as "btc" | "sol" | "usdc" | "usdt")
-    : getShieldType(d);
-  const config = resolvedToken
-    ? buildShieldConfig(resolvedToken)
-    : SHIELD_TYPE_CONFIG[shieldType];
-  const isBtc = shieldType === "btc";
   // For BTC deposits:
   //   depositAmountSats = original deposit to taproot (25000, from DepositVerified event)
   //   grossAmount = sweep output arriving at pool (24000, from ShieldMeta)
@@ -295,15 +286,18 @@ function DepositTimeline({ deposit: d }: { deposit: DepositRecord }) {
  * TODO: Once on-chain events include tokenMint (Issue 1B), replace heuristic with mint lookup.
  */
 export function getShieldType(d: DepositRecord): "btc" | "sol" | "usdc" | "usdt" | "spl" {
-  if (d.instructionDisc === 1) return "btc"; // verify_stealth_deposit
-  if (d.instructionDisc === 29) {
-    // SPL shield — detect token by amount heuristic (workaround until Issue 1B lands)
-    // SOL: 9 decimals (amounts like 100_000_000 = 0.1 SOL)
-    // USDC/USDT: 6 decimals (amounts like 1_000_000 = 1 USDC)
-    if (d.amountSats >= 1_000_000 && d.amountSats < 1_000_000_000) return "sol";
-    if (d.amountSats >= 1_000_000_000) return "usdc"; // could be USDC or USDT — ambiguous until Issue 1B
+  // Use resolved token symbol if available (from backend token_id mapping)
+  if (d.tokenSymbol) {
+    const sym = d.tokenSymbol.toUpperCase();
+    if (sym === "BTC" || sym === "ZKBTC") return "btc";
+    if (sym === "SOL" || sym === "WSOL") return "sol";
+    if (sym === "USDC") return "usdc";
+    if (sym === "USDT") return "usdt";
+    if (sym === "JUPUSD") return "usdc"; // same decimals/display as USDC
     return "spl";
   }
+  if (d.instructionDisc === 1) return "btc"; // verify_stealth_deposit
+  if (d.instructionDisc === 29) return "spl"; // SPL shield without token info
   return "btc"; // fallback
 }
 
@@ -428,7 +422,7 @@ export function DepositRow({
       {expanded && (
         <tr>
           <td colSpan={8} className="p-0">
-            <DepositDetails deposit={d} />
+            <DepositDetails deposit={d} config={config} isBtc={isBtcDeposit} />
           </td>
         </tr>
       )}
