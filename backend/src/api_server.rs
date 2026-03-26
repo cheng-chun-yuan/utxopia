@@ -312,8 +312,10 @@ async fn handle_relayer_meta(
     struct RelayerMetaResponse {
         /// Relayer's stealth meta-address (hex). Users send a fee note to this address.
         stealth_meta: Option<String>,
-        /// Flat fee for private sends — paid to relayer as a shielded output note
+        /// Flat fee for private sends — paid to relayer as a shielded output note (BTC default)
         relayer_fee_sats: u64,
+        /// Per-token relayer fees in native smallest units
+        relayer_fees: std::collections::HashMap<String, u64>,
         /// Base service fee for BTC withdrawals (sats)
         service_fee_base: u64,
         /// Service fee in basis points (e.g., 30 = 0.3%)
@@ -326,6 +328,18 @@ async fn handle_relayer_meta(
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(500);
+
+    // Per-token relayer fees (env override or sensible defaults)
+    let mut relayer_fees = std::collections::HashMap::new();
+    relayer_fees.insert("zkBTC".to_string(), relayer_fee_sats);
+    relayer_fees.insert("zkSOL".to_string(),
+        std::env::var("RELAYER_FEE_SOL").ok().and_then(|v| v.parse().ok()).unwrap_or(100_000)); // 0.0001 SOL
+    relayer_fees.insert("zkUSDC".to_string(),
+        std::env::var("RELAYER_FEE_USDC").ok().and_then(|v| v.parse().ok()).unwrap_or(5_000)); // 0.005 USDC
+    relayer_fees.insert("zkUSDT".to_string(),
+        std::env::var("RELAYER_FEE_USDT").ok().and_then(|v| v.parse().ok()).unwrap_or(5_000)); // 0.005 USDT
+    relayer_fees.insert("zkJupUSD".to_string(),
+        std::env::var("RELAYER_FEE_JUPUSD").ok().and_then(|v| v.parse().ok()).unwrap_or(5_000_000)); // 0.005 jupUSD (9 dec)
 
     // Read fee + limit config from on-chain PoolState (refreshed each tick)
     let (service_fee_bps, service_fee_base, min_withdrawal) = {
@@ -340,6 +354,7 @@ async fn handle_relayer_meta(
     Json(RelayerMetaResponse {
         stealth_meta,
         relayer_fee_sats,
+        relayer_fees,
         service_fee_base,
         service_fee_bps,
         min_withdrawal,

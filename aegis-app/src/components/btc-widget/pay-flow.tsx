@@ -176,6 +176,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   const [relayerMeta, setRelayerMeta] = useState<{
     stealthMeta: string | null;
     relayerFeeSats: number;
+    relayerFees: Record<string, number>;
     serviceFeeSats: number;
     serviceFeeBps: number;
   } | null>(null);
@@ -191,6 +192,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       setRelayerMeta({
         stealthMeta: relayerData?.stealth_meta || null,
         relayerFeeSats: relayerData?.relayer_fee_sats ?? RELAYER_FEE_SATS,
+        relayerFees: relayerData?.relayer_fees ?? {},
         serviceFeeSats: state ? Number(state.serviceFeeBase) : SERVICE_FEE_SATS,
         serviceFeeBps: state?.serviceFeeBps ?? 0,
       });
@@ -204,12 +206,11 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   ]);
 
   const isPurePrivateSend = !outputs.some(o => o.mode === "btc" || o.mode === "public");
-  // Per-token relayer fee (from token config), overridden by backend if available
+  // Per-token relayer fee: backend relayer_fees map > token config fallback
   const relayerMetaLoaded = relayerMeta !== null;
   const effectiveRelayerFee = relayerMetaLoaded
-    ? (relayerMeta.relayerFeeSats > 0 && selectedToken.isBtcNative
-        ? relayerMeta.relayerFeeSats   // Backend fee for BTC
-        : selectedToken.relayerFee)     // Per-token fee for all others
+    ? (relayerMeta.relayerFees[selectedToken.shieldedSymbol]
+        ?? selectedToken.relayerFee)
     : 0;
   const effectiveServiceFee = relayerMeta?.serviceFeeSats ?? 0;
   const effectiveServiceFeeBps = relayerMeta?.serviceFeeBps ?? 0;
