@@ -82,6 +82,9 @@ pub mod instruction {
     pub const COMPLETE_REDEMPTION: u8 = 17;
     pub const MARK_PROCESSING: u8 = 18;
     pub const CANCEL_REDEMPTION: u8 = 19;
+
+    // Tree management (20)
+    pub const ROTATE_TREE: u8 = 20;
 }
 
 entrypoint!(process_instruction);
@@ -124,6 +127,8 @@ pub fn process_instruction(
         instruction::COMPLETE_REDEMPTION => instructions::process_complete_redemption(program_id, accounts, data),
         instruction::MARK_PROCESSING => instructions::process_mark_processing(program_id, accounts, data),
         instruction::CANCEL_REDEMPTION => instructions::process_cancel_redemption(program_id, accounts, data),
+        // Tree management (20)
+        instruction::ROTATE_TREE => instructions::process_rotate_tree(program_id, accounts, data),
         _ => Err(ProgramError::InvalidInstructionData),
     }
 }

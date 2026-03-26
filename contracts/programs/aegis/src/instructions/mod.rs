@@ -49,6 +49,9 @@ pub mod set_pool_config;
 // VK registry (deployment)
 pub mod init_vk_registry;
 
+// Tree management
+pub mod rotate_tree;
+
 // Re-exports
 pub use initialize::*;
 pub use verify_stealth_deposit::*;
@@ -66,3 +69,4 @@ pub use claim_fees::*;
 pub use admin_update_pool::*;
 pub use set_pool_config::*;
 pub use init_vk_registry::*;
+pub use rotate_tree::*;

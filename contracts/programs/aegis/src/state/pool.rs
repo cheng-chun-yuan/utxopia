@@ -92,8 +92,13 @@ pub struct PoolState {
     /// Number of Unspent UTXOs. Carved from _reserved.
     utxo_count: [u8; 2],
 
-    /// Reserved for future use (remaining 10 bytes)
-    _reserved: [u8; 10],
+    /// Active commitment tree index for tree rotation.
+    /// When the current tree fills (65536 leaves), authority calls rotate_tree
+    /// to increment this and create a new tree PDA.
+    active_tree_index: [u8; 4],
+
+    /// Reserved for future use (remaining 6 bytes)
+    _reserved: [u8; 6],
 }
 
 impl PoolState {
@@ -240,6 +245,10 @@ impl PoolState {
         u16::from_le_bytes(self.utxo_count)
     }
 
+    pub fn active_tree_index(&self) -> u32 {
+        u32::from_le_bytes(self.active_tree_index)
+    }
+
     // Setters
     pub fn set_paused(&mut self, paused: bool) {
         if paused {
@@ -321,6 +330,10 @@ impl PoolState {
 
     pub fn set_utxo_count(&mut self, value: u16) {
         self.utxo_count = value.to_le_bytes();
+    }
+
+    pub fn set_active_tree_index(&mut self, value: u32) {
+        self.active_tree_index = value.to_le_bytes();
     }
 
     /// Clear all pending timelock fields

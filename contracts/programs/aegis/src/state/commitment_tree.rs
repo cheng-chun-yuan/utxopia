@@ -94,6 +94,9 @@ pub struct CommitmentTree {
 
 impl CommitmentTree {
     pub const LEN: usize = core::mem::size_of::<Self>();
+    pub const SEED_PREFIX: &'static [u8] = b"commitment_tree";
+
+    /// Legacy seed (tree index 0, backward compat)
     pub const SEED: &'static [u8] = b"commitment_tree";
 
     /// Maximum number of leaves (2^16 = 65536)

@@ -61,6 +61,8 @@ const INSTRUCTION = {
   COMPLETE_REDEMPTION: 17,
   MARK_PROCESSING: 18,
   CANCEL_REDEMPTION: 19,
+  // Tree management (20)
+  ROTATE_TREE: 20,
 } as const;
 
 /** Export instruction discriminators for consumers */
