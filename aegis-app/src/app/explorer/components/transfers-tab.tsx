@@ -142,14 +142,23 @@ export function TransferRow({
         </Td>
         <Td>
           {kind === "shield" ? (() => {
-            const amt = tx.inputs?.[0]?.grossAmount ?? tx.inputs?.[0]?.netAmount ?? tx.outputs?.[0]?.amount ?? 0;
-            if (!amt) return <span className="text-caption text-gray/40">&mdash;</span>;
-            return (
+            const gross = tx.inputs?.[0]?.grossAmount ?? tx.inputs?.[0]?.netAmount ?? tx.outputs?.[0]?.amount ?? 0;
+            const net = tx.inputs?.[0]?.netAmount ?? tx.outputs?.[0]?.amount ?? gross;
+            const fee = tx.inputs?.[0]?.fee ?? 0;
+            if (!gross) return <span className="text-caption text-gray/40">&mdash;</span>;
+            const fmt = (v: number) => token.showRawAmount
+              ? v.toLocaleString()
+              : (v / (10 ** token.decimals)).toLocaleString(undefined, { maximumFractionDigits: token.decimals });
+            return fee > 0 && gross !== net ? (
+              <div className="flex items-center gap-1.5 font-mono">
+                <span className="text-body2 text-gray/50 line-through">{fmt(gross)}</span>
+                <span className="text-[10px] text-gray/30">→</span>
+                <span className="text-body2 text-foreground">{fmt(net)}</span>
+                <span className="text-gray text-caption">{token.unit}</span>
+              </div>
+            ) : (
               <span className="text-body2 text-foreground font-mono">
-                {token.showRawAmount
-                  ? amt.toLocaleString()
-                  : (amt / (10 ** token.decimals)).toLocaleString(undefined, { maximumFractionDigits: token.decimals })
-                } <span className="text-gray text-caption">{token.unit}</span>
+                {fmt(gross)} <span className="text-gray text-caption">{token.unit}</span>
               </span>
             );
           })() : isUnshieldOrWithdraw && getTxUnshieldAmount(tx) ? (
@@ -459,7 +468,10 @@ function ShieldDetails({ tx }: { tx: TransferTx }) {
   const token = tokenSym ? getTokenBySymbol(tokenSym) ?? SUPPORTED_TOKENS[0] : SUPPORTED_TOKENS[0];
   const isBtc = token.isBtcNative || token.symbol === "BTC" || token.symbol === "zkBTC";
   const isPending = !tx.txSignature || (tx.outputs?.[0]?.leafIndex ?? -1) < 0;
-  const amount = tx.inputs?.[0]?.grossAmount ?? tx.inputs?.[0]?.netAmount ?? tx.outputs?.[0]?.amount ?? 0;
+  const grossAmount = tx.inputs?.[0]?.grossAmount ?? tx.inputs?.[0]?.netAmount ?? tx.outputs?.[0]?.amount ?? 0;
+  const netAmount = tx.inputs?.[0]?.netAmount ?? tx.outputs?.[0]?.amount ?? grossAmount;
+  const fee = tx.inputs?.[0]?.fee ?? 0;
+  const hasFee = fee > 0 && grossAmount !== netAmount;
   const btcMeta = tx.btcMeta as any;
 
   return (
@@ -475,9 +487,16 @@ function ShieldDetails({ tx }: { tx: TransferTx }) {
             <div className="flex items-center gap-2">
               <img src={token.logo} alt={token.symbol} className="w-3.5 h-3.5 rounded-full shrink-0" />
               <span className="text-body2 text-foreground font-mono font-semibold">
-                {amount ? formatTokenAmount(amount, token) : "—"}
+                {grossAmount ? formatTokenAmount(grossAmount, token) : "—"}
               </span>
             </div>
+            {hasFee && (
+              <div className="flex items-center gap-1.5 text-[10px]">
+                <span className="text-gray/50">Fee: {formatTokenAmount(fee, token)}</span>
+                <span className="text-gray/30">→</span>
+                <span className="text-green-400/80 font-mono font-medium">{formatTokenAmount(netAmount, token)} shielded</span>
+              </div>
+            )}
             {btcMeta?.depositTxid && (
               <div className="group flex items-center gap-2">
                 <span className="text-[10px] text-gray/50 shrink-0">BTC Tx</span>
