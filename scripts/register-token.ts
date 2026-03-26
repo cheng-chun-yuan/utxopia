@@ -20,6 +20,7 @@ import {
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID, getOrCreateAssociatedTokenAccount } from "@solana/spl-token";
+import { INSTRUCTION_DISCRIMINATORS } from "@aegis/sdk";
 import { setupScript } from "./lib/common.ts";
 
 // Parse args
@@ -77,7 +78,7 @@ const ix = new TransactionInstruction({
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ],
   programId,
-  data: Buffer.concat([Buffer.from([8]), payload]), // disc 8 = REGISTER_TOKEN
+  data: Buffer.concat([Buffer.from([INSTRUCTION_DISCRIMINATORS.REGISTER_TOKEN]), payload]),
 });
 
 try {

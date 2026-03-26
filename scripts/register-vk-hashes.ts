@@ -5,6 +5,7 @@
  */
 
 import { PublicKey, SystemProgram, TransactionInstruction } from "@solana/web3.js";
+import { INSTRUCTION_DISCRIMINATORS } from "@aegis/sdk";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -49,7 +50,7 @@ async function main() {
 
     const vkHash = computeVkHash(JSON.parse(fs.readFileSync(vkPath, "utf-8")));
     const data = Buffer.alloc(35);
-    data[0] = 6; // INIT_VK_REGISTRY
+    data[0] = INSTRUCTION_DISCRIMINATORS.INIT_VK_REGISTRY;
     data[1] = nIn;
     data[2] = nOut;
     vkHash.copy(data, 3);

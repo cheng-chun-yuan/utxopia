@@ -13,6 +13,7 @@ import {
   TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID,
   createMint, getOrCreateAssociatedTokenAccount,
 } from "@solana/spl-token";
+import { INSTRUCTION_DISCRIMINATORS } from "@aegis/sdk";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -38,7 +39,7 @@ function buildInitializeIx(
   poolBump: number, treeBump: number
 ): TransactionInstruction {
   const data = Buffer.alloc(3);
-  data[0] = 0; // INITIALIZE
+  data[0] = INSTRUCTION_DISCRIMINATORS.INITIALIZE;
   data[1] = poolBump;
   data[2] = treeBump;
   return new TransactionInstruction({
@@ -62,7 +63,7 @@ function buildRegisterTokenIx(
   serviceFee: bigint, minDeposit: bigint, maxDeposit: bigint, depositCap: bigint,
 ): TransactionInstruction {
   const payload = Buffer.alloc(33);
-  payload[0] = 8; // REGISTER_TOKEN
+  payload[0] = INSTRUCTION_DISCRIMINATORS.REGISTER_TOKEN;
   payload.writeBigUInt64LE(serviceFee, 1);
   payload.writeBigUInt64LE(minDeposit, 9);
   payload.writeBigUInt64LE(maxDeposit, 17);

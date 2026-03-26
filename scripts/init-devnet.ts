@@ -27,6 +27,7 @@ import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
+import { INSTRUCTION_DISCRIMINATORS } from "@aegis/sdk";
 import { loadKeypair, getStateFilePath, detectNetwork, sendTx, TOKEN_2022, ATA_PROGRAM } from "./lib/common.ts";
 import { Connection } from "@solana/web3.js";
 
@@ -114,7 +115,7 @@ async function main() {
 
   // 3. Initialize Pool
   const initData = Buffer.alloc(3);
-  initData[0] = 0; initData[1] = poolBump; initData[2] = treeBump;
+  initData[0] = INSTRUCTION_DISCRIMINATORS.INITIALIZE; initData[1] = poolBump; initData[2] = treeBump;
   await sendTx(conn, authority, new TransactionInstruction({
     programId, data: initData,
     keys: [

@@ -13,6 +13,7 @@ import {
   decodeStealthMetaAddress,
   computeTokenId,
   buildShieldInstructionData,
+  bigintTo32Bytes,
 } from "@aegis/sdk";
 import {
   PublicKey,
@@ -69,13 +70,9 @@ function shieldKeys(
  * Build shield instruction data using SDK.
  */
 function buildShieldData(stealth: { stealthPubKeyX: bigint; ephemeralPub: Uint8Array }, amount: bigint): Buffer {
-  const npkBytes = Buffer.alloc(32);
-  let npk = stealth.stealthPubKeyX;
-  for (let i = 31; i >= 0; i--) { npkBytes[i] = Number(npk & 0xffn); npk >>= 8n; }
-
   const data = buildShieldInstructionData({
     amount,
-    npk: npkBytes,
+    npk: bigintTo32Bytes(stealth.stealthPubKeyX),
     ephemeralPub: stealth.ephemeralPub,
   });
   return Buffer.from(data);
