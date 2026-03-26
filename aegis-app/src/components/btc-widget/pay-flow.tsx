@@ -23,7 +23,7 @@ import { useConnection } from "@solana/wallet-adapter-react";
 import {
   CheckCircle2, Send, Wallet, Shield, Clock, AlertCircle, AlertTriangle,
   Key, Check, X, Loader2, Zap, Plus, Bitcoin,
-  Download, Search, ChevronRight, ArrowRight,
+  Download, Search, ChevronRight, ChevronDown, ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { parseSats } from "@/lib/utils/validation";
@@ -1580,49 +1580,58 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
               </span>
             </div>
           )}
-          <div className="flex justify-between items-center text-body2 pt-1 border-t border-gray/10">
-            <span className="text-gray">Privacy</span>
-            <span className={cn("font-mono text-xs", isPublicRedeem ? "text-btc" : "text-gray-light")}>
-              {isPublicRedeem
-                ? "Public (no proof)"
-                : <>
-                    ZK Proof
-                    {hasPublicOutput && " + Unshield"}
-                    {hasBtcOutput && " + BTC Withdraw"}
+          {/* Collapsible technical details */}
+          <details className="pt-1 border-t border-gray/10 group">
+            <summary className="flex justify-between items-center text-body2 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+              <span className="text-gray">Details</span>
+              <ChevronDown className="w-3.5 h-3.5 text-gray/50 transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="mt-1.5 space-y-1">
+              <div className="flex justify-between items-center text-body2">
+                <span className="text-gray">Privacy</span>
+                <span className={cn("font-mono text-xs", isPublicRedeem ? "text-btc" : "text-gray-light")}>
+                  {isPublicRedeem
+                    ? "Public (no proof)"
+                    : <>
+                        ZK Proof
+                        {hasPublicOutput && " + Unshield"}
+                        {hasBtcOutput && " + BTC Withdraw"}
+                      </>
+                  }
+                </span>
+              </div>
+              {!isPublicRedeem && nInputs > 0 && nOutputs > 0 && (() => {
+                const txSize = estimateTransactionSize(nInputs, nOutputs);
+                const sizeOk = txSize <= SOLANA_MAX_TX_SIZE;
+                return (
+                  <>
+                    <div className="flex justify-between items-center text-body2">
+                      <span className="text-gray">Circuit</span>
+                      <span className={cn(
+                        "font-mono text-xs",
+                        AVAILABLE_CIRCUITS.has(`${nInputs}x${nOutputs}`)
+                          ? "text-gray-light"
+                          : "text-red-400"
+                      )}>
+                        JoinSplit({nInputs}x{nOutputs})
+                        {!AVAILABLE_CIRCUITS.has(`${nInputs}x${nOutputs}`) && " — N/A"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-body2">
+                      <span className="text-gray">Tx Size</span>
+                      <span className={cn(
+                        "font-mono text-xs",
+                        sizeOk ? "text-gray-light" : "text-orange-400"
+                      )}>
+                        {txSize}/{SOLANA_MAX_TX_SIZE} bytes
+                        {!sizeOk && " — too large"}
+                      </span>
+                    </div>
                   </>
-              }
-            </span>
-          </div>
-          {!isPublicRedeem && nInputs > 0 && nOutputs > 0 && (() => {
-            const txSize = estimateTransactionSize(nInputs, nOutputs);
-            const sizeOk = txSize <= SOLANA_MAX_TX_SIZE;
-            return (
-              <>
-                <div className="flex justify-between items-center text-body2 mt-1">
-                  <span className="text-gray">Circuit</span>
-                  <span className={cn(
-                    "font-mono text-xs",
-                    AVAILABLE_CIRCUITS.has(`${nInputs}x${nOutputs}`)
-                      ? "text-gray-light"
-                      : "text-red-400"
-                  )}>
-                    JoinSplit({nInputs}x{nOutputs})
-                    {!AVAILABLE_CIRCUITS.has(`${nInputs}x${nOutputs}`) && " — N/A"}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center text-body2 mt-1">
-                  <span className="text-gray">Tx Size</span>
-                  <span className={cn(
-                    "font-mono text-xs",
-                    sizeOk ? "text-gray-light" : "text-orange-400"
-                  )}>
-                    {txSize}/{SOLANA_MAX_TX_SIZE} bytes
-                    {!sizeOk && " — too large"}
-                  </span>
-                </div>
-              </>
-            );
-          })()}
+                );
+              })()}
+            </div>
+          </details>
         </div>
 
         {/* Processing time info */}
