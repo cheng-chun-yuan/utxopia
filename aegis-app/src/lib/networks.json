@@ -2,25 +2,25 @@
   "devnet": {
     "solana": {
       "rpcUrl": "https://api.devnet.solana.com",
-      "aegisProgramId": "AjbX243s2JMFG2uhfTjKkadjPvQEPgcuyV3vfLJv36MT",
-      "btcLightClientId": "859B7kw1xDyY8rzSXY6pAPNxaAsPWrsaAPJk3iivd43g",
+      "aegisProgramId": "G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy",
+      "btcLightClientId": "C8JoSKzondM7X1ESwrBSodGMrXWtEWNmawXyjh9zEWJZ",
       "chadbufferId": "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF"
     },
     "tokens": {
-      "zkbtcMint": "5m3bbj8tzvGfS1ikv4zxa6zraFUVnff5yYWM51wCDQjB",
-      "usdcMint": "HyzNNEUL3W2dyPGrZJ2XcpoASdQL99Smxz2yyBqJ8yj1",
-      "usdtMint": "EpvkQMMuqHQH1HajcD74WyabzjNxjJW53xtBpnHUwgQv",
+      "zkbtcMint": "CDqY9mTzbWma7GzCULTJMMZzyVothKEXtr7AnXdpD6v8",
+      "usdcMint": "Acxjj3uzWGLYZX4XiBU8HFjvjgLptvhwTN4PzHY2Qzey",
+      "usdtMint": "CxyroE8Eio1H1YRDgiLsCPxWJjrWXSNKDkUqN5utm5uS",
       "wsolMint": "So11111111111111111111111111111111111111112",
-      "jupusdMint": "2Z82qqmoJsb5gtVzpHBYJrsmLPpV83VRG1aCqp2onG7t"
+      "jupusdMint": "HLerNRsEu7HCkjkYQdHD2gLh79TWYFJW9ehCzsdGhcLG"
     },
     "bitcoin": {
       "network": "testnet4",
-      "poolAddress": "tb1p99y96qcldtg6krzv5uvrhmmvh88zmy2dp0kgmjzz56tz7r7vxd3qqn2q95",
-      "groupPubkey": "29485d031f6ad1ab0c4ca7183bef6cb9ce2d914d0bec8dc842a6962f0fcc3362",
+      "poolAddress": "",
+      "groupPubkey": "",
       "explorerUrl": "https://mempool.space/testnet4"
     },
     "backend": {
-      "url": "https://api-aegis.amidoggy.xyz"
+      "url": "http://localhost:3001"
     }
   },
   "testnet": {
