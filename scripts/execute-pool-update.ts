@@ -5,6 +5,7 @@
  */
 
 import { TransactionInstruction } from "@solana/web3.js";
+import { buildExecutePoolUpdateInstructionData } from "@aegis/sdk";
 import { setupScript, sendTx } from "./lib/common.ts";
 
 async function main() {
@@ -22,10 +23,12 @@ async function main() {
     process.exit(1);
   }
 
+  const ixData = buildExecutePoolUpdateInstructionData();
+
   const sig = await sendTx(conn, authority, new TransactionInstruction({
     programId,
     keys: [{ pubkey: poolState, isSigner: false, isWritable: true }],
-    data: Buffer.from([22]), // EXECUTE_POOL_UPDATE
+    data: Buffer.from(ixData),
   }));
   console.log("Executed!", sig);
 

@@ -12,15 +12,14 @@ import {
   createStealthDepositWithKeys,
   decodeStealthMetaAddress,
   computeTokenId,
+  buildShieldInstructionData,
 } from "@aegis/sdk";
 import {
   PublicKey,
   SystemProgram,
-  Keypair,
   Transaction,
   TransactionInstruction,
   sendAndConfirmTransaction,
-  LAMPORTS_PER_SOL,
 } from "@solana/web3.js";
 import {
   TOKEN_2022_PROGRAM_ID,
@@ -48,6 +47,41 @@ async function readTokenId(mint: PublicKey): Promise<bigint> {
 }
 
 /**
+ * Build shield instruction keys (same for Token and Token-2022).
+ */
+function shieldKeys(
+  userAta: PublicKey, vault: PublicKey, tokenConfig: PublicKey, tokenProgram: PublicKey,
+) {
+  const [poolState] = pda(["pool_state"]);
+  const [commitmentTree] = pda(["commitment_tree"]);
+  return [
+    { pubkey: authority.publicKey, isSigner: true, isWritable: true },
+    { pubkey: userAta, isSigner: false, isWritable: true },
+    { pubkey: poolState, isSigner: false, isWritable: false },
+    { pubkey: tokenConfig, isSigner: false, isWritable: true },
+    { pubkey: vault, isSigner: false, isWritable: true },
+    { pubkey: commitmentTree, isSigner: false, isWritable: true },
+    { pubkey: tokenProgram, isSigner: false, isWritable: false },
+  ];
+}
+
+/**
+ * Build shield instruction data using SDK.
+ */
+function buildShieldData(stealth: { stealthPubKeyX: bigint; ephemeralPub: Uint8Array }, amount: bigint): Buffer {
+  const npkBytes = Buffer.alloc(32);
+  let npk = stealth.stealthPubKeyX;
+  for (let i = 31; i >= 0; i--) { npkBytes[i] = Number(npk & 0xffn); npk >>= 8n; }
+
+  const data = buildShieldInstructionData({
+    amount,
+    npk: npkBytes,
+    ephemeralPub: stealth.ephemeralPub,
+  });
+  return Buffer.from(data);
+}
+
+/**
  * Shield Token-2022 SPL tokens to a stealth address.
  */
 async function shieldToken2022(
@@ -56,32 +90,13 @@ async function shieldToken2022(
   amount: bigint, label: string,
 ) {
   const stealth = await createStealthDepositWithKeys(meta, amount, tokenId);
-  const [poolState] = pda(["pool_state"]);
-  const [commitmentTree] = pda(["commitment_tree"]);
   const [tokenConfig] = pda(["token_config", mint.toBuffer()]);
   const userAta = getAssociatedTokenAddressSync(mint, authority.publicKey, false, TOKEN_2022_PROGRAM_ID);
 
-  const data = Buffer.alloc(73);
-  data[0] = 12; // shield discriminator
-  data.writeBigUInt64LE(amount, 1);
-  const npkBytes = Buffer.alloc(32);
-  let npk = stealth.stealthPubKeyX;
-  for (let i = 31; i >= 0; i--) { npkBytes[i] = Number(npk & 0xffn); npk >>= 8n; }
-  npkBytes.copy(data, 9);
-  Buffer.from(stealth.ephemeralPub).copy(data, 41);
-
   const ix = new TransactionInstruction({
-    keys: [
-      { pubkey: authority.publicKey, isSigner: true, isWritable: true },
-      { pubkey: userAta, isSigner: false, isWritable: true },
-      { pubkey: poolState, isSigner: false, isWritable: false },
-      { pubkey: tokenConfig, isSigner: false, isWritable: true },
-      { pubkey: vault, isSigner: false, isWritable: true },
-      { pubkey: commitmentTree, isSigner: false, isWritable: true },
-      { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
-    ],
+    keys: shieldKeys(userAta, vault, tokenConfig, TOKEN_2022_PROGRAM_ID),
     programId: AEGIS,
-    data,
+    data: buildShieldData(stealth, amount),
   });
 
   const tx = new Transaction().add(ix);
@@ -101,19 +116,8 @@ async function shieldNativeSOL(
   amount: bigint, label: string,
 ) {
   const stealth = await createStealthDepositWithKeys(meta, amount, tokenId);
-  const [poolState] = pda(["pool_state"]);
-  const [commitmentTree] = pda(["commitment_tree"]);
   const [tokenConfig] = pda(["token_config", NATIVE_MINT.toBuffer()]);
   const wsolAta = getAssociatedTokenAddressSync(NATIVE_MINT, authority.publicKey, false, TOKEN_PROGRAM_ID);
-
-  const data = Buffer.alloc(73);
-  data[0] = 29;
-  data.writeBigUInt64LE(amount, 1);
-  const npkBytes = Buffer.alloc(32);
-  let npk = stealth.stealthPubKeyX;
-  for (let i = 31; i >= 0; i--) { npkBytes[i] = Number(npk & 0xffn); npk >>= 8n; }
-  npkBytes.copy(data, 9);
-  Buffer.from(stealth.ephemeralPub).copy(data, 41);
 
   const tx = new Transaction();
 
@@ -132,19 +136,11 @@ async function shieldNativeSOL(
   // 3. Sync native
   tx.add(createSyncNativeInstruction(wsolAta, TOKEN_PROGRAM_ID));
 
-  // 4. Shield instruction (legacy Token program)
+  // 4. Shield instruction (same disc=12, just legacy Token program)
   tx.add(new TransactionInstruction({
-    keys: [
-      { pubkey: authority.publicKey, isSigner: true, isWritable: true },
-      { pubkey: wsolAta, isSigner: false, isWritable: true },
-      { pubkey: poolState, isSigner: false, isWritable: false },
-      { pubkey: tokenConfig, isSigner: false, isWritable: true },
-      { pubkey: vault, isSigner: false, isWritable: true },
-      { pubkey: commitmentTree, isSigner: false, isWritable: true },
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-    ],
+    keys: shieldKeys(wsolAta, vault, tokenConfig, TOKEN_PROGRAM_ID),
     programId: AEGIS,
-    data,
+    data: buildShieldData(stealth, amount),
   }));
 
   // 5. Close wSOL account

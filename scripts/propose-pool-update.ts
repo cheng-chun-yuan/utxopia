@@ -5,6 +5,7 @@
  */
 
 import { TransactionInstruction } from "@solana/web3.js";
+import { buildProposePoolUpdateInstructionData } from "@aegis/sdk";
 import { setupScript, sendTx } from "./lib/common.ts";
 
 const args = process.argv.slice(2);
@@ -27,12 +28,9 @@ async function main() {
   const newFeeBps = parseInt(getArg("--fee-bps", "30"), 10);
   console.log("Proposed fee_base:", newFeeBase.toString(), "fee_bps:", newFeeBps);
 
-  const ixData = Buffer.alloc(27);
-  ixData[0] = 21; // PROPOSE_POOL_UPDATE
-  ixData.writeBigUInt64LE(currentMinDeposit, 1);
-  ixData.writeBigUInt64LE(currentMaxDeposit, 9);
-  ixData.writeBigUInt64LE(newFeeBase, 17);
-  ixData.writeUInt16LE(newFeeBps, 25);
+  const ixData = buildProposePoolUpdateInstructionData(
+    currentMinDeposit, currentMaxDeposit, newFeeBase, newFeeBps,
+  );
 
   const sig = await sendTx(conn, authority, new TransactionInstruction({
     programId,
@@ -40,7 +38,7 @@ async function main() {
       { pubkey: poolState, isSigner: false, isWritable: true },
       { pubkey: authority.publicKey, isSigner: true, isWritable: true },
     ],
-    data: ixData,
+    data: Buffer.from(ixData),
   }));
   console.log("Proposal submitted!", sig);
   console.log("Run `bun run scripts/execute-pool-update.ts` after 48h.");
