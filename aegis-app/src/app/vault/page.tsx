@@ -528,10 +528,7 @@ export default function VaultPage() {
                       const rawBalance = Number(balancesByToken?.[token.shieldedSymbol] ?? 0n);
                       const balanceNum = rawBalance / 10 ** token.decimals;
                       const hasBalance = rawBalance > 0;
-                      const balanceRaw = balanceNum < 0.01 && balanceNum > 0
-                        ? balanceNum.toFixed(token.decimals)
-                        : balanceNum.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: token.decimals > 2 ? token.decimals : 2 });
-                      const balance = balanceRaw.replace(/(\.\d{2,}?)0+$/, "$1");
+                      const balance = balanceNum.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                       const price = tokenPrices[token.priceKey];
                       const usdValue = price ? (rawBalance / 10 ** token.decimals) * price : 0;
                       return (
