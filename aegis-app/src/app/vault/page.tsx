@@ -424,8 +424,8 @@ export default function VaultPage() {
                 {[
                   { icon: <ArrowDownToLine className="w-5 h-5" />, label: "Deposit", href: "/vault/deposit", color: "text-green-400" },
                   { icon: <Send className="w-5 h-5" />, label: "Send", href: "/vault/pay", color: "text-privacy" },
-                  { icon: <Wallet className="w-5 h-5" />, label: "Notes", href: "/vault/activity", color: "text-privacy" },
-                ].filter((a) => !isViewOnly || a.label === "Notes")
+                  { icon: <Wallet className="w-5 h-5" />, label: "Activities", href: "/vault/activity", color: "text-privacy" },
+                ].filter((a) => !isViewOnly || a.label === "Activities")
                   .map((action) => (
                   <Link
                     key={action.label}

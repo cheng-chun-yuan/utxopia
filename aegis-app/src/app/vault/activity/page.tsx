@@ -1,27 +1,19 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
 import { useState, useMemo, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import {
-  Wallet,
   ArrowDownToLine,
   ArrowUp,
   ArrowDown,
   ArrowLeft,
   Shield,
-  Inbox,
-  Link2,
-  ChevronDown,
+  ExternalLink,
+  Copy,
+  Check,
   RefreshCw,
-  Eye,
-  EyeOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-// formatBtc removed — per-token formatting used instead
-import { SiteHeader } from "@/components/site-header";
-import { SiteFooter } from "@/components/site-footer";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { useAegisKeys, useStealthInbox } from "@/hooks/use-aegis";
 import { usePasskey } from "@/hooks/use-passkey";
@@ -29,70 +21,11 @@ import { useAegisStore } from "@/stores/aegis-store";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { AuthModal } from "@/components/auth-modal";
-import { InboxItem, EmptyInbox } from "@/components/stealth-inbox";
+import { EmptyInbox } from "@/components/stealth-inbox";
 
-type TabType = "activity" | "notes";
-
-const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
-  { id: "activity", label: "Activity", icon: <ArrowDownToLine className="w-4 h-4" /> },
-  { id: "notes", label: "My Funds", icon: <Inbox className="w-4 h-4" /> },
-];
-
-function TabBar({
-  activeTab,
-  onTabChange,
-  counts,
-}: {
-  activeTab: TabType;
-  onTabChange: (tab: TabType) => void;
-  counts: Record<TabType, number>;
-}) {
-  return (
-    <div className="flex gap-1 p-1 bg-muted border border-gray/15 rounded-[12px]">
-      {tabs.map((tab) => (
-        <button
-          key={tab.id}
-          onClick={() => onTabChange(tab.id)}
-          className={cn(
-            "flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-[10px] text-sm transition-colors",
-            activeTab === tab.id
-              ? "bg-privacy/10 text-privacy border border-privacy/20"
-              : "text-gray hover:text-gray-light hover:bg-gray/10"
-          )}
-        >
-          {tab.icon}
-          <span>{tab.label}</span>
-          {counts[tab.id] > 0 && (
-            <span className={cn(
-              "min-w-[18px] h-[18px] px-1.5 flex items-center justify-center text-[11px] rounded-full font-medium",
-              activeTab === tab.id
-                ? "bg-privacy/20 text-privacy"
-                : "bg-gray/15 text-gray"
-            )}>
-              {counts[tab.id]}
-            </span>
-          )}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-import { VAULT_TOKENS, SUPPORTED_TOKENS, type SupportedToken } from "@/lib/supported-tokens";
+import { SUPPORTED_TOKENS, type SupportedToken } from "@/lib/supported-tokens";
 import { useTokenPrices } from "@/hooks/use-btc-price";
 import type { InboxNote } from "@/stores/aegis-store";
-
-function timeAgo(ts: number): string {
-  const diff = Date.now() - ts;
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(ts).toLocaleDateString();
-}
 
 function getToken(sym: string): SupportedToken {
   return SUPPORTED_TOKENS.find(t => t.shieldedSymbol === sym || t.symbol === sym) || SUPPORTED_TOKENS[0];
@@ -107,9 +40,159 @@ function formatDateKey(ts: number): string {
   return new Date(ts).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 }
 
+function formatFullDate(ts: number): string {
+  return new Date(ts).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }) + " \u00B7 " + new Date(ts).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function timeAgo(ts: number): string {
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(ts).toLocaleDateString();
+}
+
+function ActivityRow({ note }: { note: InboxNote }) {
+  const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const tokenPrices = useTokenPrices();
+  const token = getToken(note.tokenSymbol);
+  const price = tokenPrices[token.priceKey];
+  const usdValue = price ? (Number(note.amount) / 10 ** token.decimals) * price : 0;
+  const isReceived = !note.isSpent;
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    await navigator.clipboard.writeText(note.commitmentHex);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <div>
+      {/* Collapsed row */}
+      <div
+        onClick={() => setExpanded(!expanded)}
+        className={cn(
+          "flex items-center gap-2.5 px-4 py-3 transition-colors cursor-pointer",
+          expanded ? "bg-muted/50" : "hover:bg-muted/40"
+        )}
+      >
+        {/* Arrow indicator */}
+        <div className={cn(
+          "w-6 h-6 rounded-full flex items-center justify-center shrink-0",
+          isReceived ? "bg-privacy/10" : "bg-gray/10"
+        )}>
+          {isReceived
+            ? <ArrowDown className="w-3.5 h-3.5 text-privacy" />
+            : <ArrowUp className="w-3.5 h-3.5 text-gray" />
+          }
+        </div>
+
+        {/* Label + time */}
+        <div className="flex-1 min-w-0">
+          <span className="text-sm text-foreground font-medium">
+            {isReceived ? "Received" : "Sent"}
+          </span>
+          <p className="text-[11px] text-gray/40">{timeAgo(note.createdAt)}</p>
+        </div>
+
+        {/* Amount + token */}
+        <div className="text-right shrink-0">
+          <p className={cn(
+            "text-sm font-semibold font-mono tabular-nums",
+            isReceived ? "text-privacy" : "text-gray"
+          )}>
+            {isReceived ? "+" : "-"}{formatAmt(note.amount, token)}{" "}
+            <span className="text-xs font-medium">{token.shieldedSymbol}</span>
+          </p>
+          {usdValue > 0 && (
+            <p className="text-[11px] text-gray/45 font-mono tabular-nums">
+              ${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Expanded detail */}
+      {expanded && (
+        <div className="px-4 pb-3 bg-muted/30">
+          <div className="border-t border-gray/10 pt-2.5 space-y-2">
+            {/* Detail rows */}
+            <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
+              <span className="text-gray/40">Type</span>
+              <span className="text-foreground font-medium">
+                {isReceived ? "Shielded Deposit" : "Private Transfer"}
+              </span>
+
+              <span className="text-gray/40">Token</span>
+              <div className="flex items-center gap-1.5">
+                <img src={token.shieldedLogo} alt={token.shieldedSymbol} className="w-4 h-4 rounded-full" />
+                <span className="text-foreground">{token.shieldedSymbol}</span>
+                <span className="text-gray/40">({token.name})</span>
+              </div>
+
+              <span className="text-gray/40">Amount</span>
+              <span className={cn("font-mono tabular-nums", isReceived ? "text-privacy" : "text-gray")}>
+                {formatAmt(note.amount, token)} {token.shieldedSymbol}
+                {usdValue > 0 && <span className="text-gray/40 ml-1.5">(${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>}
+              </span>
+
+              <span className="text-gray/40">Time</span>
+              <span className="text-gray/60">{formatFullDate(note.createdAt)}</span>
+
+              <span className="text-gray/40">Leaf</span>
+              <span className="text-gray/60 font-mono">#{note.leafIndex}</span>
+
+              <span className="text-gray/40">Commitment</span>
+              <div className="flex items-center gap-1 min-w-0">
+                <code className="text-[10px] font-mono text-gray/50 truncate">
+                  {note.commitmentHex.slice(0, 12)}...{note.commitmentHex.slice(-8)}
+                </code>
+                <button
+                  onClick={handleCopy}
+                  className="p-0.5 rounded hover:bg-gray/10 transition-colors shrink-0"
+                >
+                  {copied
+                    ? <Check className="w-2.5 h-2.5 text-privacy" />
+                    : <Copy className="w-2.5 h-2.5 text-gray/40" />
+                  }
+                </button>
+              </div>
+            </div>
+
+            {/* Explorer link */}
+            <div className="pt-1">
+              <Link
+                href={`/explorer`}
+                className="inline-flex items-center gap-1 text-[11px] text-privacy hover:text-privacy/80 transition-colors"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ExternalLink className="w-3 h-3" />
+                View in Explorer
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ActivityFeed() {
   const { notes, isLoading, refresh } = useStealthInbox();
-  const tokenPrices = useTokenPrices();
 
   // Sort by createdAt descending, then group by date
   const grouped = useMemo(() => {
@@ -158,47 +241,9 @@ function ActivityFeed() {
         <div key={date}>
           <p className="text-xs text-gray/50 font-medium px-1 mb-1.5">{date}</p>
           <div className="rounded-[12px] border border-gray/10 overflow-hidden divide-y divide-gray/8">
-            {groupNotes.map((note) => {
-              const token = getToken(note.tokenSymbol);
-              const price = tokenPrices[token.priceKey];
-              const usdValue = price ? (Number(note.amount) / 10 ** token.decimals) * price : 0;
-              const isReceived = !note.isSpent;
-              return (
-                <div key={note.id} className="flex items-center gap-2.5 px-4 py-3 hover:bg-muted/40 transition-colors">
-                  {/* Arrow indicator */}
-                  <div className={cn(
-                    "w-6 h-6 rounded-full flex items-center justify-center shrink-0",
-                    isReceived ? "bg-privacy/10" : "bg-gray/10"
-                  )}>
-                    {isReceived
-                      ? <ArrowDown className="w-3.5 h-3.5 text-privacy" />
-                      : <ArrowUp className="w-3.5 h-3.5 text-gray" />
-                    }
-                  </div>
-
-                  {/* Label */}
-                  <span className="text-sm text-foreground font-medium flex-1">
-                    {isReceived ? "Received" : "Sent"}
-                  </span>
-
-                  {/* Amount + token */}
-                  <div className="text-right shrink-0">
-                    <p className={cn(
-                      "text-sm font-semibold font-mono tabular-nums",
-                      isReceived ? "text-privacy" : "text-gray"
-                    )}>
-                      {isReceived ? "+" : "-"}{formatAmt(note.amount, token)}{" "}
-                      <span className="text-xs font-medium">{token.shieldedSymbol}</span>
-                    </p>
-                    {usdValue > 0 && (
-                      <p className="text-[11px] text-gray/45 font-mono tabular-nums">
-                        ${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+            {groupNotes.map((note) => (
+              <ActivityRow key={note.id} note={note} />
+            ))}
           </div>
         </div>
       ))}
@@ -206,171 +251,7 @@ function ActivityFeed() {
   );
 }
 
-function TokenList() {
-  const { hasKeys } = useAegisKeys();
-  const { notes, balancesByToken, isLoading, error, refresh } = useStealthInbox();
-  const tokenPrices = useTokenPrices();
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [showSpent, setShowSpent] = useState(false);
-
-  // Group notes by tokenSymbol, sort tokens with balance first
-  const notesByToken = useMemo(() => {
-    const map = new Map<string, typeof notes>();
-    for (const note of notes) {
-      const sym = note.tokenSymbol || "zkBTC";
-      if (!map.has(sym)) map.set(sym, []);
-      map.get(sym)!.push(note);
-    }
-    return map;
-  }, [notes]);
-
-  // Build token rows: only tokens with balance
-  const tokenRows = useMemo(() => {
-    return VAULT_TOKENS.map((token) => {
-      const tokenNotes = notesByToken.get(token.shieldedSymbol) || [];
-      const spendable = tokenNotes.filter((n) => !n.isSpent);
-      const spent = tokenNotes.filter((n) => n.isSpent);
-      const rawBalance = Number(balancesByToken?.[token.shieldedSymbol] ?? 0n);
-      const balanceNum = rawBalance / 10 ** token.decimals;
-      const raw = balanceNum < 0.01 && balanceNum > 0
-        ? balanceNum.toFixed(token.decimals)
-        : balanceNum.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: token.decimals > 2 ? token.decimals : 2 });
-      const balance = raw.replace(/(\.\d{2,}?)0+$/, "$1");
-      const price = tokenPrices[token.priceKey];
-      const usdValue = price ? (rawBalance / 10 ** token.decimals) * price : 0;
-      return { token, tokenNotes, spendable, spent, rawBalance, balance, usdValue };
-    }).filter((r) => r.rawBalance > 0)
-      .sort((a, b) => b.usdValue - a.usdValue);
-  }, [notesByToken, balancesByToken]);
-
-  return (
-    <div className="space-y-4">
-      {/* Token list header */}
-      <div className="flex items-center justify-between px-1">
-        <p className="text-caption text-gray uppercase tracking-wider">Token</p>
-        <div className="flex items-center gap-4">
-          <p className="text-caption text-gray uppercase tracking-wider">Balance</p>
-          <button
-            onClick={refresh}
-            disabled={isLoading}
-            className="flex items-center gap-1 px-2 py-1 rounded-[6px] text-caption text-gray hover:text-gray-light hover:bg-gray/10 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw className={cn("w-3.5 h-3.5", isLoading && "animate-spin")} />
-          </button>
-        </div>
-      </div>
-
-      {/* Token rows */}
-      <div className="rounded-[12px] border border-gray/15 overflow-hidden">
-        {tokenRows.length === 0 && !isLoading && (
-          <div className="px-4 py-8 text-center text-caption text-gray/50">No tokens with balance</div>
-        )}
-        {tokenRows.map(({ token, spendable, spent, balance, usdValue }, i) => {
-          const isExpanded = expanded === token.shieldedSymbol;
-          const displayedNotes = showSpent ? [...spendable, ...spent] : spendable;
-
-          return (
-            <div key={token.shieldedSymbol}>
-              <button
-                onClick={() => setExpanded(isExpanded ? null : token.shieldedSymbol)}
-                className={cn(
-                  "w-full flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-muted/50 cursor-pointer",
-                  i > 0 && "border-t border-gray/10"
-                )}
-              >
-                <Image src={token.shieldedLogo} alt={token.shieldedSymbol} width={32} height={32} className="rounded-full" />
-                <div className="flex-1 min-w-0 text-left">
-                  <p className="text-body2-semibold text-foreground">{token.shieldedSymbol}</p>
-                  <p className="text-caption text-gray">{token.name}</p>
-                </div>
-                <div className="text-right mr-2 min-w-[100px] tabular-nums">
-                  <p className="text-body2-semibold text-foreground font-mono">{balance}</p>
-                  {usdValue > 0 ? (
-                    <p className="text-caption text-gray font-mono">
-                      ${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                  ) : (
-                    <p className="text-caption text-gray">
-                      {spendable.length} note{spendable.length !== 1 ? "s" : ""}
-                    </p>
-                  )}
-                </div>
-                <ChevronDown className={cn("w-4 h-4 text-gray transition-transform", isExpanded && "rotate-180")} />
-              </button>
-
-              {isExpanded && (
-                <div className="border-t border-gray/10 bg-muted/30 px-4 py-3 space-y-3">
-                  {spent.length > 0 && (
-                    <div className="flex items-center justify-end">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setShowSpent(!showSpent); }}
-                        className={cn(
-                          "flex items-center gap-1 px-2 py-1 rounded-[6px] text-caption transition-colors",
-                          showSpent ? "text-gray-light bg-gray/10" : "text-gray hover:text-gray-light hover:bg-gray/10"
-                        )}
-                      >
-                        {showSpent ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                        {spent.length} Spent
-                      </button>
-                    </div>
-                  )}
-                  {displayedNotes.map((note) => (
-                    <InboxItem key={note.id} note={note} onClaimed={refresh} />
-                  ))}
-                  {spendable.length === 0 && !showSpent && spent.length > 0 && (
-                    <div className="text-center py-4">
-                      <p className="text-body2 text-gray mb-2">No spendable notes</p>
-                      <button onClick={() => setShowSpent(true)} className="text-caption text-purple hover:text-purple/80 transition-colors">
-                        Show {spent.length} spent
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Error state */}
-      {error && (
-        <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
-          {error}
-        </div>
-      )}
-
-      {/* Claim with Link button */}
-      {hasKeys && (
-        <Link
-          href="/claim"
-          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-[12px] bg-sol/10 border border-sol/20 text-sol hover:bg-sol/20 transition-colors"
-        >
-          <Link2 className="w-4 h-4" />
-          Claim with Link
-        </Link>
-      )}
-
-      {/* Privacy info */}
-      <div className="p-3 bg-privacy/5 border border-privacy/15 rounded-[12px]">
-        <div className="flex items-center gap-2 mb-1">
-          <Shield className="w-4 h-4 text-privacy" />
-          <span className="text-caption text-privacy">Privacy Protected</span>
-        </div>
-        <p className="text-caption text-gray">
-          Only you can see deposits addressed to your stealth address. Scanning happens
-          locally using your viewing key.
-        </p>
-      </div>
-    </div>
-  );
-}
-
 function ActivityContent() {
-  const searchParams = useSearchParams();
-  const tabParam = searchParams.get("tab") as TabType | null;
-  const initialTab: TabType = tabParam === "notes" ? "notes" : "activity";
-  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
-  const { notes } = useStealthInbox();
   const { hasKeys, isLoading: keysLoading, deriveKeys } = useAegisKeys();
 
   // Auth modal state
@@ -411,36 +292,8 @@ function ActivityContent() {
     }
   }, [hasKeys]);
 
-  // Badge counts
-  const notesCount = notes.filter((n) => !n.isSpent).length;
-  const activityCount = notes.length;
-
-  // Update URL when tab changes
-  const handleTabChange = (tab: TabType) => {
-    setActiveTab(tab);
-    const url = new URL(window.location.href);
-    url.searchParams.set("tab", tab);
-    window.history.replaceState({}, "", url.toString());
-  };
-
-  // Sync with URL on mount
-  useEffect(() => {
-    if (tabParam && tabs.some((t) => t.id === tabParam)) {
-      setActiveTab(tabParam);
-    }
-  }, [tabParam]);
-
   return (
     <>
-      {/* Tab Bar */}
-      <div className="mb-4">
-        <TabBar
-          activeTab={activeTab}
-          onTabChange={handleTabChange}
-          counts={{ activity: activityCount, notes: notesCount }}
-        />
-      </div>
-
       {/* Show unlock screen when no keys */}
       {!hasKeys && (
         <>
@@ -462,11 +315,10 @@ function ActivityContent() {
         </>
       )}
 
-      {/* Tab Content — only when keys available */}
+      {/* Activity feed — only when keys available */}
       {hasKeys && (
         <ErrorBoundary>
-          {activeTab === "activity" && <ActivityFeed />}
-          {activeTab === "notes" && <TokenList />}
+          <ActivityFeed />
         </ErrorBoundary>
       )}
     </>
@@ -476,7 +328,7 @@ function ActivityContent() {
 export default function ActivityPage() {
   return (
     <main className="min-h-screen bg-background hacker-bg noise-overlay flex flex-col items-center py-8 px-4 sm:py-12">
-      {/* Header — Back + Badges (matches /vault layout) */}
+      {/* Header — Back + Badges */}
       <div className="w-full mb-4 flex items-center justify-between relative z-10" style={{ maxWidth: "480px" }}>
         <Link
           href="/vault"
@@ -508,17 +360,17 @@ export default function ActivityPage() {
           {/* Title */}
           <div className="flex items-center gap-3 mb-4 pb-4 border-b border-gray/15">
             <div className="p-2 rounded-[10px] bg-privacy/10 border border-privacy/20">
-              <Wallet className="w-5 h-5 text-privacy" />
+              <ArrowDownToLine className="w-5 h-5 text-privacy" />
             </div>
             <div>
-              <h1 className="text-heading6 text-foreground">Your Notes</h1>
+              <h1 className="text-heading6 text-foreground">Activity</h1>
               <p className="text-caption text-gray">
-                View and spend your shielded tokens
+                Your shielded transaction history
               </p>
             </div>
           </div>
 
-          {/* Content with Suspense for searchParams */}
+          {/* Content with Suspense */}
           <Suspense fallback={<div className="flex items-center justify-center py-8"><div className="w-6 h-6 border-2 border-privacy border-t-transparent rounded-full animate-spin" /></div>}>
             <ActivityContent />
           </Suspense>
