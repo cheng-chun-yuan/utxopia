@@ -16,6 +16,7 @@
  */
 
 import {
+  Connection,
   Keypair,
   PublicKey,
   SystemProgram,
@@ -29,7 +30,6 @@ import * as path from "path";
 import { fileURLToPath } from "url";
 import { INSTRUCTION_DISCRIMINATORS } from "@aegis/sdk";
 import { loadKeypair, getStateFilePath, detectNetwork, sendTx, TOKEN_2022, ATA_PROGRAM } from "./lib/common.ts";
-import { Connection } from "@solana/web3.js";
 
 const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
