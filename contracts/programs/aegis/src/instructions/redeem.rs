@@ -54,8 +54,8 @@ use crate::state::{
 };
 use crate::utils::groth16::GROTH16_PROOF_SIZE;
 use crate::utils::{
-    create_pda_account, validate_account_writable, validate_program_owner,
-    validate_system_program,
+    create_pda_account, validate_account_writable, validate_active_tree_pda,
+    validate_program_owner, validate_system_program,
 };
 
 /// Maximum supported N + M
@@ -256,13 +256,14 @@ pub fn process_redeem(
         tc.token_id
     };
 
-    // Validate pool is not paused, read state
+    // Validate pool is not paused, validate active tree, read state
     let (pending_redemptions, total_shielded) = {
         let pool_data = pool_state_info.try_borrow_data()?;
         let pool = PoolState::from_bytes(&pool_data)?;
         if pool.is_paused() {
             return Err(AegisError::PoolPaused.into());
         }
+        validate_active_tree_pda(commitment_tree_info, program_id, pool.active_tree_index())?;
         (pool.pending_redemptions(), pool.total_shielded())
     };
 

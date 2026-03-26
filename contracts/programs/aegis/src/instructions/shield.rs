@@ -24,7 +24,7 @@ use crate::utils::{
     crypto::compute_commitment,
     events::{emit_stealth_announcement, emit_shield_meta, ANNOUNCEMENT_TYPE_DEPOSIT},
     transfer_token_user,
-    validate_account_writable, validate_program_owner,
+    validate_account_writable, validate_active_tree_pda, validate_program_owner,
     validate_token_owner, validate_any_token_program_key,
 };
 
@@ -73,13 +73,14 @@ pub fn process_shield(
     validate_account_writable(vault)?;
     validate_account_writable(commitment_tree_info)?;
 
-    // Read pool state — check paused, read deposit_fee_bps
+    // Read pool state — check paused, validate active tree, read deposit_fee_bps
     let deposit_fee_bps = {
         let pool_data = pool_state_info.try_borrow_data()?;
         let pool = PoolState::from_bytes(&pool_data)?;
         if pool.is_paused() {
             return Err(AegisError::PoolPaused.into());
         }
+        validate_active_tree_pda(commitment_tree_info, program_id, pool.active_tree_index())?;
         pool.deposit_fee_bps()
     };
 

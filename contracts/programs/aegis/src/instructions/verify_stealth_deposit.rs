@@ -44,8 +44,9 @@ use crate::utils::crypto::compute_commitment;
 use crate::utils::bitcoin::{compute_tx_hash, DepositOpReturn, ParsedTransaction};
 use crate::utils::chadbuffer::read_transaction_from_buffer;
 use crate::utils::{
-    create_pda_account, mint_zkbtc, validate_program_owner, validate_system_program,
-    validate_token_owner, validate_any_token_program_key, validate_account_writable,
+    create_pda_account, mint_zkbtc, validate_active_tree_pda, validate_program_owner,
+    validate_system_program, validate_token_owner, validate_any_token_program_key,
+    validate_account_writable,
 };
 
 /// Required confirmations for deposits
@@ -189,6 +190,7 @@ pub fn process_verify_stealth_deposit(
             return Err(AegisError::Unauthorized.into());
         }
 
+        validate_active_tree_pda(commitment_tree_info, program_id, pool.active_tree_index())?;
         (pool.bump, pool.min_deposit(), pool.max_deposit(), pool.deposit_fee_bps())
     };
 

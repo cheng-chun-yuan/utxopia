@@ -48,8 +48,9 @@ use crate::state::{
 };
 use crate::utils::groth16::GROTH16_PROOF_SIZE;
 use crate::utils::{
-    create_pda_account, validate_account_writable, validate_program_owner,
-    validate_system_program, validate_token_owner, validate_any_token_program_key,
+    create_pda_account, validate_account_writable, validate_active_tree_pda,
+    validate_program_owner, validate_system_program, validate_token_owner,
+    validate_any_token_program_key,
 };
 use crate::utils::token::transfer_zkbtc;
 
@@ -227,13 +228,14 @@ pub fn process_unshield(
         }
     }
 
-    // Read pool state — check paused, get withdrawal_fee_bps
+    // Read pool state — check paused, validate active tree, get withdrawal_fee_bps
     let withdrawal_fee_bps = {
         let pool_data = pool_state_info.try_borrow_data()?;
         let pool = PoolState::from_bytes(&pool_data)?;
         if pool.is_paused() {
             return Err(AegisError::PoolPaused.into());
         }
+        validate_active_tree_pda(commitment_tree_info, program_id, pool.active_tree_index())?;
         pool.withdrawal_fee_bps()
     };
 

@@ -310,6 +310,81 @@ pub fn close_account_securely(
     Ok(())
 }
 
+/// Validate that a commitment tree account matches the active tree index.
+///
+/// Supports backward compatibility: tree index 0 may use the legacy seed
+/// `"commitment_tree"` (without index suffix).
+pub fn validate_active_tree_pda(
+    tree_account: &AccountInfo,
+    program_id: &Pubkey,
+    active_index: u32,
+) -> Result<(), ProgramError> {
+    use pinocchio::pubkey::find_program_address;
+    use crate::state::CommitmentTree;
+
+    let index_bytes = active_index.to_le_bytes();
+    let indexed_seeds: &[&[u8]] = &[CommitmentTree::SEED_PREFIX, &index_bytes];
+    let (expected_pda, _) = find_program_address(indexed_seeds, program_id);
+
+    if tree_account.key() == &expected_pda {
+        return Ok(());
+    }
+
+    // Backward compat: tree index 0 accepts legacy seed without index
+    if active_index == 0 {
+        let legacy_seeds: &[&[u8]] = &[CommitmentTree::SEED];
+        let (legacy_pda, _) = find_program_address(legacy_seeds, program_id);
+        if tree_account.key() == &legacy_pda {
+            return Ok(());
+        }
+    }
+
+    Err(ProgramError::InvalidSeeds)
+}
+
+/// Validate that a frozen (historical) tree account is a valid commitment tree PDA
+/// with an index less than the active index.
+///
+/// Returns the tree's current_root for root verification.
+pub fn validate_frozen_tree(
+    tree_account: &AccountInfo,
+    program_id: &Pubkey,
+    active_index: u32,
+    expected_root: &[u8; 32],
+) -> Result<bool, ProgramError> {
+    use pinocchio::pubkey::find_program_address;
+    use crate::state::{CommitmentTree, COMMITMENT_TREE_DISCRIMINATOR};
+
+    validate_program_owner(tree_account, program_id)?;
+
+    let tree_data = tree_account.try_borrow_data()?;
+    if tree_data.is_empty() || tree_data[0] != COMMITMENT_TREE_DISCRIMINATOR {
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    let tree = CommitmentTree::from_bytes(&tree_data)?;
+
+    // Verify PDA matches some index < active_index
+    for idx in 0..active_index {
+        let idx_bytes = idx.to_le_bytes();
+        let seeds: &[&[u8]] = &[CommitmentTree::SEED_PREFIX, &idx_bytes];
+        let (pda, _) = find_program_address(seeds, program_id);
+        if tree_account.key() == &pda {
+            return Ok(tree.current_root == *expected_root);
+        }
+        // Also check legacy seed for index 0
+        if idx == 0 {
+            let legacy_seeds: &[&[u8]] = &[CommitmentTree::SEED];
+            let (legacy_pda, _) = find_program_address(legacy_seeds, program_id);
+            if tree_account.key() == &legacy_pda {
+                return Ok(tree.current_root == *expected_root);
+            }
+        }
+    }
+
+    Err(ProgramError::InvalidSeeds)
+}
+
 #[cfg(test)]
 mod tests {
     // Tests would go here with mock AccountInfo

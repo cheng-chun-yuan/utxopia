@@ -23,7 +23,7 @@ use pinocchio::{
 };
 
 use crate::error::AegisError;
-use crate::state::{CommitmentTree, PoolState, COMMITMENT_TREE_DISCRIMINATOR, POOL_STATE_DISCRIMINATOR};
+use crate::state::{CommitmentTree, PoolState};
 use crate::utils::{
     create_pda_account, validate_account_writable, validate_program_owner,
     validate_system_program,
