@@ -333,14 +333,6 @@ const SHIELD_TYPE_CONFIG: Record<string, ShieldTypeConfig> = {
   },
 };
 
-const SHIELDED = { icon: "shield", label: "Shielded" };
-const FLOW_ICONS: Record<string, { from: { icon: string; label: string }; to: { icon: string; label: string } }> = {
-  btc: { from: { icon: "/tokens/btc.png", label: "BTC" }, to: SHIELDED },
-  sol: { from: { icon: "/tokens/sol.png", label: "SOL" }, to: SHIELDED },
-  usdc: { from: { icon: "/tokens/usdc.png", label: "USDC" }, to: SHIELDED },
-  usdt: { from: { icon: "/tokens/usdt.png", label: "USDT" }, to: SHIELDED },
-  spl: { from: { icon: "/tokens/sol.png", label: "SPL" }, to: SHIELDED },
-};
 
 export function DepositRow({
   deposit,
@@ -396,7 +388,10 @@ export function DepositRow({
           <TypeBadge kind="shield" />
         </Td>
         <Td>
-          <FlowCell {...(FLOW_ICONS[shieldType] ?? FLOW_ICONS.btc)} />
+          <FlowCell
+            from={{ icon: config.from.logo, label: config.from.label }}
+            to={{ icon: "shield", label: "Shielded" }}
+          />
         </Td>
         <Td>
           <span className="text-body2 text-foreground font-mono">
