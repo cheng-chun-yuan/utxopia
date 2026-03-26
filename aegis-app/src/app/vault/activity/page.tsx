@@ -259,7 +259,7 @@ function TokenList() {
                   <p className="text-body2-semibold text-foreground">{token.shieldedSymbol}</p>
                   <p className="text-caption text-gray">{token.name}</p>
                 </div>
-                <div className="text-right mr-2">
+                <div className="text-right mr-2 min-w-[100px] tabular-nums">
                   <p className="text-body2-semibold text-foreground font-mono">{balance}</p>
                   {usdValue > 0 ? (
                     <p className="text-caption text-gray font-mono">
