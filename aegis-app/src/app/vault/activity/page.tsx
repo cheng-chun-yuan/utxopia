@@ -126,58 +126,69 @@ function ActivityRow({ note }: { note: InboxNote }) {
         </div>
       </div>
 
-      {/* Expanded detail */}
+      {/* Expanded detail — explorer-style card */}
       {expanded && (
-        <div className="px-4 pb-3 bg-muted/30">
-          <div className="border-t border-gray/10 pt-2.5 space-y-2">
-            {/* Detail rows */}
-            <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
-              <span className="text-gray/40">Type</span>
-              <span className="text-foreground font-medium">
-                {isReceived ? "Shielded Deposit" : "Private Transfer"}
-              </span>
-
-              <span className="text-gray/40">Token</span>
-              <div className="flex items-center gap-1.5">
-                <img src={token.shieldedLogo} alt={token.shieldedSymbol} className="w-4 h-4 rounded-full" />
-                <span className="text-foreground">{token.shieldedSymbol}</span>
-                <span className="text-gray/40">({token.name})</span>
-              </div>
-
-              <span className="text-gray/40">Amount</span>
-              <span className={cn("font-mono tabular-nums", isReceived ? "text-privacy" : "text-gray")}>
-                {formatAmt(note.amount, token)} {token.shieldedSymbol}
-                {usdValue > 0 && <span className="text-gray/40 ml-1.5">(${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>}
-              </span>
-
-              <span className="text-gray/40">Time</span>
-              <span className="text-gray/60">{formatFullDate(note.createdAt)}</span>
-
-              <span className="text-gray/40">Leaf</span>
-              <span className="text-gray/60 font-mono">#{note.leafIndex}</span>
-
-              <span className="text-gray/40">Commitment</span>
-              <div className="flex items-center gap-1 min-w-0">
-                <code className="text-[10px] font-mono text-gray/50 truncate">
-                  {note.commitmentHex.slice(0, 12)}...{note.commitmentHex.slice(-8)}
-                </code>
-                <button
-                  onClick={handleCopy}
-                  className="p-0.5 rounded hover:bg-gray/10 transition-colors shrink-0"
-                >
-                  {copied
-                    ? <Check className="w-2.5 h-2.5 text-privacy" />
-                    : <Copy className="w-2.5 h-2.5 text-gray/40" />
-                  }
-                </button>
+        <div className="mx-4 mb-3">
+          <div className="rounded-[10px] bg-linear-to-b from-gray/6 to-transparent border border-gray/10 overflow-hidden">
+            {/* Amount header */}
+            <div className={cn(
+              "px-3.5 py-2.5 border-b border-gray/8",
+              isReceived ? "bg-privacy/4" : "bg-gray/4"
+            )}>
+              <div className="flex items-center gap-2">
+                <img src={token.shieldedLogo} alt={token.shieldedSymbol} className="w-5 h-5 rounded-full" />
+                <span className={cn(
+                  "text-sm font-semibold font-mono tabular-nums",
+                  isReceived ? "text-privacy" : "text-gray"
+                )}>
+                  {formatAmt(note.amount, token)} {token.shieldedSymbol}
+                </span>
+                {usdValue > 0 && (
+                  <span className="text-[11px] text-gray/40 font-mono ml-auto">
+                    ${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                )}
               </div>
             </div>
 
-            {/* Explorer link */}
-            <div className="pt-1">
+            {/* Info rows */}
+            <div className="px-3.5 py-2 space-y-1.5 text-xs">
+              <div className="flex justify-between">
+                <span className="text-gray/40">Type</span>
+                <span className="text-foreground/80">{isReceived ? "Shielded Deposit" : "Private Transfer"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray/40">Time</span>
+                <span className="text-gray/60">{formatFullDate(note.createdAt)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray/40">Leaf Index</span>
+                <span className="text-gray/60 font-mono">#{note.leafIndex}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-gray/40 shrink-0">Commitment</span>
+                <div className="flex items-center gap-1 min-w-0">
+                  <code className="text-[10px] font-mono text-foreground/60 truncate">
+                    {note.commitmentHex.slice(0, 10)}...{note.commitmentHex.slice(-6)}
+                  </code>
+                  <button
+                    onClick={handleCopy}
+                    className="p-0.5 rounded hover:bg-gray/10 transition-colors shrink-0"
+                  >
+                    {copied
+                      ? <Check className="w-2.5 h-2.5 text-privacy" />
+                      : <Copy className="w-2.5 h-2.5 text-gray/40" />
+                    }
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer — explorer link */}
+            <div className="px-3.5 py-2 border-t border-gray/8">
               <Link
-                href={`/explorer`}
-                className="inline-flex items-center gap-1 text-[11px] text-privacy hover:text-privacy/80 transition-colors"
+                href="/explorer"
+                className="inline-flex items-center gap-1.5 text-[11px] text-privacy hover:text-privacy/80 transition-colors"
                 onClick={(e) => e.stopPropagation()}
               >
                 <ExternalLink className="w-3 h-3" />
