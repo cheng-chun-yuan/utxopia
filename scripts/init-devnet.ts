@@ -114,8 +114,10 @@ async function main() {
   console.log("Frost Vault:", frostVault.toBase58());
 
   // 3. Initialize Pool
-  const initData = Buffer.alloc(3);
+  const initData = Buffer.alloc(7);
   initData[0] = INSTRUCTION_DISCRIMINATORS.INITIALIZE; initData[1] = poolBump; initData[2] = treeBump;
+  initData.writeUInt16LE(20, 3);  // deposit_fee_bps = 20 (0.2%)
+  initData.writeUInt16LE(20, 5);  // withdrawal_fee_bps = 20 (0.2%)
   await sendTx(conn, authority, new TransactionInstruction({
     programId, data: initData,
     keys: [
