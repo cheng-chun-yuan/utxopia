@@ -7,6 +7,8 @@ import Image from "next/image";
 import {
   Wallet,
   ArrowDownToLine,
+  ArrowUp,
+  ArrowDown,
   ArrowLeft,
   Shield,
   Inbox,
@@ -101,20 +103,34 @@ function formatAmt(amount: bigint | number, token: SupportedToken): string {
   return num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function formatDateKey(ts: number): string {
+  return new Date(ts).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+}
+
 function ActivityFeed() {
   const { notes, isLoading, refresh } = useStealthInbox();
   const tokenPrices = useTokenPrices();
 
-  // Sort by createdAt descending (newest first)
-  const sorted = useMemo(() =>
-    [...notes].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
-    [notes]
-  );
+  // Sort by createdAt descending, then group by date
+  const grouped = useMemo(() => {
+    const sorted = [...notes].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    const groups: { date: string; notes: typeof sorted }[] = [];
+    for (const note of sorted) {
+      const dateKey = formatDateKey(note.createdAt);
+      const last = groups[groups.length - 1];
+      if (last && last.date === dateKey) {
+        last.notes.push(note);
+      } else {
+        groups.push({ date: dateKey, notes: [note] });
+      }
+    }
+    return groups;
+  }, [notes]);
 
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between px-1">
-        <span className="text-caption text-gray/50">{sorted.length} transaction{sorted.length !== 1 ? "s" : ""}</span>
+        <span className="text-caption text-gray/50">{notes.length} transaction{notes.length !== 1 ? "s" : ""}</span>
         <button
           onClick={refresh}
           disabled={isLoading}
@@ -124,13 +140,13 @@ function ActivityFeed() {
         </button>
       </div>
 
-      {isLoading && sorted.length === 0 && (
+      {isLoading && notes.length === 0 && (
         <div className="flex items-center justify-center py-6">
           <div className="w-6 h-6 border-2 border-privacy border-t-transparent rounded-full animate-spin" />
         </div>
       )}
 
-      {sorted.length === 0 && !isLoading && (
+      {notes.length === 0 && !isLoading && (
         <div className="text-center py-6">
           <Shield className="w-8 h-8 text-gray/20 mx-auto mb-2" />
           <p className="text-sm text-gray/50">No activity yet</p>
@@ -138,46 +154,54 @@ function ActivityFeed() {
         </div>
       )}
 
-      {sorted.length > 0 && (
-        <div className="rounded-[12px] border border-gray/10 overflow-hidden divide-y divide-gray/8">
-          {sorted.map((note) => {
-            const token = getToken(note.tokenSymbol);
-            const price = tokenPrices[token.priceKey];
-            const usdValue = price ? (Number(note.amount) / 10 ** token.decimals) * price : 0;
-            return (
-              <div key={note.id} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors">
-                <img src={token.shieldedLogo} alt={token.shieldedSymbol} className="w-8 h-8 rounded-full shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-medium text-foreground">
-                      {note.isSpent ? "Sent" : "Received"}
-                    </span>
-                    <span className="text-xs text-gray/40">{token.shieldedSymbol}</span>
-                  </div>
-                  <p className="text-[11px] text-gray/40">{timeAgo(note.createdAt)}</p>
-                </div>
-                <div className="text-right">
-                  <p className={cn(
-                    "text-sm font-semibold font-mono tabular-nums",
-                    note.isSpent ? "text-gray" : "text-foreground"
+      {grouped.map(({ date, notes: groupNotes }) => (
+        <div key={date}>
+          <p className="text-xs text-gray/50 font-medium px-1 mb-1.5">{date}</p>
+          <div className="rounded-[12px] border border-gray/10 overflow-hidden divide-y divide-gray/8">
+            {groupNotes.map((note) => {
+              const token = getToken(note.tokenSymbol);
+              const price = tokenPrices[token.priceKey];
+              const usdValue = price ? (Number(note.amount) / 10 ** token.decimals) * price : 0;
+              const isReceived = !note.isSpent;
+              return (
+                <div key={note.id} className="flex items-center gap-2.5 px-4 py-3 hover:bg-muted/40 transition-colors">
+                  {/* Arrow indicator */}
+                  <div className={cn(
+                    "w-6 h-6 rounded-full flex items-center justify-center shrink-0",
+                    isReceived ? "bg-privacy/10" : "bg-gray/10"
                   )}>
-                    {note.isSpent ? "-" : "+"}{formatAmt(note.amount, token)}
-                  </p>
-                  {usdValue > 0 && (
-                    <p className="text-caption text-gray/45 font-mono tabular-nums">
-                      ${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {isReceived
+                      ? <ArrowDown className="w-3.5 h-3.5 text-privacy" />
+                      : <ArrowUp className="w-3.5 h-3.5 text-gray" />
+                    }
+                  </div>
+
+                  {/* Label */}
+                  <span className="text-sm text-foreground font-medium flex-1">
+                    {isReceived ? "Received" : "Sent"}
+                  </span>
+
+                  {/* Amount + token */}
+                  <div className="text-right shrink-0">
+                    <p className={cn(
+                      "text-sm font-semibold font-mono tabular-nums",
+                      isReceived ? "text-privacy" : "text-gray"
+                    )}>
+                      {isReceived ? "+" : "-"}{formatAmt(note.amount, token)}{" "}
+                      <span className="text-xs font-medium">{token.shieldedSymbol}</span>
                     </p>
-                  )}
+                    {usdValue > 0 && (
+                      <p className="text-[11px] text-gray/45 font-mono tabular-nums">
+                        ${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <div className={cn(
-                  "w-2 h-2 rounded-full shrink-0",
-                  note.isSpent ? "bg-gray/30" : "bg-success"
-                )} />
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      )}
+      ))}
     </div>
   );
 }

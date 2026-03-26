@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Clock, Shield, Bitcoin } from "lucide-react";
+import { ArrowDown, Copy, Check, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { InboxNote } from "@/hooks/use-aegis";
 import { SUPPORTED_TOKENS, type SupportedToken } from "@/lib/supported-tokens";
@@ -46,16 +47,27 @@ function formatRelativeTime(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString();
 }
 
+function formatFullDate(timestamp: number): string {
+  return new Date(timestamp).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  }) + " \u00B7 " + new Date(timestamp).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 export function InboxItem({ note }: InboxItemProps) {
   const router = useRouter();
+  const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
   const token = getTokenForNote(note);
   const tokenPrices = useTokenPrices();
   const price = tokenPrices[token.priceKey];
   const usdValue = price ? (Number(note.amount) / 10 ** token.decimals) * price : 0;
 
-  // Click entire card to navigate to pay page
-  const handleClick = () => {
-    if (note.isSpent) return;
+  const handleSend = () => {
     const params = new URLSearchParams({
       commitment: note.commitmentHex,
       leafIndex: note.leafIndex.toString(),
@@ -64,45 +76,96 @@ export function InboxItem({ note }: InboxItemProps) {
     router.push(`/vault/pay?${params.toString()}`);
   };
 
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    await navigator.clipboard.writeText(note.commitmentHex);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
   return (
     <div
-      onClick={handleClick}
+      onClick={() => setExpanded(!expanded)}
       className={cn(
-        "px-3 py-2.5 rounded-[10px] border border-gray/15 bg-muted transition-colors",
-        !note.isSpent && "hover:border-privacy/40 cursor-pointer"
+        "rounded-[10px] border border-gray/15 bg-muted transition-colors cursor-pointer",
+        expanded && "border-gray/25",
+        !note.isSpent && "hover:border-privacy/30"
       )}
     >
-      {/* Single-row: icon + time | amount */}
-      <div className="flex items-center gap-2">
-        {/* Left: icon + time + commitment */}
-        <div className="p-1 rounded-[5px] bg-privacy/10">
-          <Shield className="w-3.5 h-3.5 text-privacy" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <span className="text-[10px] text-gray flex items-center gap-0.5">
-            <Clock className="w-2.5 h-2.5" />
-            {formatRelativeTime(note.createdAt)}
-          </span>
-          <code className="text-[10px] font-mono text-gray/60 block truncate">
-            {note.commitmentHex.slice(0, 10)}...{note.commitmentHex.slice(-8)}
-          </code>
+      {/* Collapsed row */}
+      <div className="flex items-center gap-2.5 px-3 py-2.5">
+        {/* Arrow indicator */}
+        <div className={cn(
+          "w-5 h-5 rounded-full flex items-center justify-center shrink-0",
+          note.isSpent ? "bg-gray/10" : "bg-privacy/10"
+        )}>
+          <ArrowDown className={cn(
+            "w-3 h-3",
+            note.isSpent ? "text-gray" : "text-privacy"
+          )} />
         </div>
 
-        {/* Right: amount styled like parent token row */}
-        <div className="text-right shrink-0">
-          <p className={cn(
-            "text-sm font-semibold font-mono leading-tight tabular-nums",
-            note.isSpent ? "text-gray" : "text-privacy"
-          )}>
-            {formatNoteAmount(note.amount, token)}
-          </p>
-          {usdValue > 0 && (
-            <p className="text-caption text-gray font-mono tabular-nums">
-              ${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-          )}
-        </div>
+        {/* Time */}
+        <span className="text-xs text-gray/60 flex-1">
+          {formatRelativeTime(note.createdAt)}
+        </span>
+
+        {/* Amount */}
+        <p className={cn(
+          "text-sm font-semibold font-mono tabular-nums shrink-0",
+          note.isSpent ? "text-gray" : "text-privacy"
+        )}>
+          {formatNoteAmount(note.amount, token)}
+        </p>
       </div>
+
+      {/* Expanded detail panel */}
+      {expanded && (
+        <div className="px-3 pb-3 pt-0">
+          <div className="border-t border-gray/10 pt-2.5 space-y-1.5">
+            {/* USD value */}
+            {usdValue > 0 && (
+              <p className="text-xs text-gray/60 font-mono tabular-nums">
+                ${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+            )}
+
+            {/* Timestamp */}
+            <p className="text-xs text-gray/50">
+              {formatFullDate(note.createdAt)}
+            </p>
+
+            {/* Commitment + Copy + Send */}
+            <div className="flex items-center gap-2">
+              <code className="text-[10px] font-mono text-gray/50 truncate flex-1">
+                {note.commitmentHex.slice(0, 12)}...{note.commitmentHex.slice(-8)}
+              </code>
+              <button
+                onClick={handleCopy}
+                className="p-1 rounded hover:bg-gray/10 transition-colors shrink-0"
+              >
+                {copied
+                  ? <Check className="w-3 h-3 text-privacy" />
+                  : <Copy className="w-3 h-3 text-gray/50" />
+                }
+              </button>
+              {!note.isSpent && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleSend(); }}
+                  className="flex items-center gap-1 px-2 py-1 rounded-[6px] bg-privacy/10 text-privacy text-xs font-medium hover:bg-privacy/20 transition-colors shrink-0"
+                >
+                  Send <ArrowRight className="w-3 h-3" />
+                </button>
+              )}
+              {note.isSpent && (
+                <span className="text-[10px] text-gray/40 px-1.5 py-0.5 rounded-full bg-gray/8">
+                  Spent
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
