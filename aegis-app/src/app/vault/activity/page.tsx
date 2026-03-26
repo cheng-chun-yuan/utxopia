@@ -156,15 +156,15 @@ function ActivityFeed() {
                   </div>
                   <p className="text-[11px] text-gray/40">{timeAgo(note.createdAt)}</p>
                 </div>
-                <div className="text-right tabular-nums min-w-[100px]">
+                <div className="text-right">
                   <p className={cn(
-                    "text-sm font-semibold font-mono",
+                    "text-sm font-semibold font-mono tabular-nums",
                     note.isSpent ? "text-gray" : "text-foreground"
                   )}>
                     {note.isSpent ? "-" : "+"}{formatAmt(note.amount, token)}
                   </p>
                   {usdValue > 0 && (
-                    <p className="text-[11px] text-gray/40 font-mono">
+                    <p className="text-caption text-gray/45 font-mono tabular-nums">
                       ${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                   )}

@@ -72,44 +72,34 @@ export function InboxItem({ note }: InboxItemProps) {
         !note.isSpent && "hover:border-privacy/40 cursor-pointer"
       )}
     >
-      {/* Single-row: icon + label + time | amount + badge */}
+      {/* Single-row: icon + time | amount */}
       <div className="flex items-center gap-2">
-        {/* Left: icon + label + time */}
+        {/* Left: icon + time + commitment */}
         <div className="p-1 rounded-[5px] bg-privacy/10">
           <Shield className="w-3.5 h-3.5 text-privacy" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className="text-caption text-foreground font-medium">Stealth Deposit</span>
-            <span className="text-[10px] text-gray flex items-center gap-0.5">
-              <Clock className="w-2.5 h-2.5" />
-              {formatRelativeTime(note.createdAt)}
-            </span>
-          </div>
+          <span className="text-[10px] text-gray flex items-center gap-0.5">
+            <Clock className="w-2.5 h-2.5" />
+            {formatRelativeTime(note.createdAt)}
+          </span>
           <code className="text-[10px] font-mono text-gray/60 block truncate">
             {note.commitmentHex.slice(0, 10)}...{note.commitmentHex.slice(-8)}
           </code>
         </div>
 
-        {/* Right: amount + badge */}
+        {/* Right: amount styled like parent token row */}
         <div className="text-right shrink-0">
           <p className={cn(
-            "text-body2-semibold font-mono leading-tight",
+            "text-sm font-semibold font-mono leading-tight tabular-nums",
             note.isSpent ? "text-gray" : "text-privacy"
           )}>
             {formatNoteAmount(note.amount, token)}
           </p>
-          {usdValue > 0 ? (
-            <p className="text-[10px] text-gray font-mono">
+          {usdValue > 0 && (
+            <p className="text-caption text-gray font-mono tabular-nums">
               ${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
-          ) : (
-            <span className={cn(
-              "text-[10px] px-1.5 py-0.5 rounded-full inline-block",
-              note.isSpent ? "bg-gray/10 text-gray" : "bg-privacy/10 text-privacy"
-            )}>
-              {note.isSpent ? "Spent" : "Spendable"}
-            </span>
           )}
         </div>
       </div>
