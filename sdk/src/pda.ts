@@ -75,13 +75,29 @@ export async function derivePoolStatePDA(
 
 /**
  * Derive Commitment Tree PDA
+ *
+ * @param treeIndex - Tree rotation index (default 0). When undefined or 0,
+ *   uses the legacy seed for backward compatibility.
  */
 export async function deriveCommitmentTreePDA(
-  programId: Address = AEGIS_PROGRAM_ID
+  programId: Address = AEGIS_PROGRAM_ID,
+  treeIndex?: number,
 ): Promise<[Address, number]> {
+  // Legacy seed for tree 0 (backward compat with existing deployments)
+  if (treeIndex === undefined || treeIndex === 0) {
+    const result = await getProgramDerivedAddress({
+      programAddress: programId,
+      seeds: [new TextEncoder().encode(PDA_SEEDS.COMMITMENT_TREE)],
+    });
+    return [result[0], result[1]];
+  }
+
+  // Indexed seed for rotated trees
+  const indexBytes = new Uint8Array(4);
+  new DataView(indexBytes.buffer).setUint32(0, treeIndex, true);
   const result = await getProgramDerivedAddress({
     programAddress: programId,
-    seeds: [new TextEncoder().encode(PDA_SEEDS.COMMITMENT_TREE)],
+    seeds: [new TextEncoder().encode(PDA_SEEDS.COMMITMENT_TREE), indexBytes],
   });
   return [result[0], result[1]];
 }

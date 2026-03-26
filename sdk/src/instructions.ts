@@ -1152,6 +1152,54 @@ export function buildCancelPoolUpdateInstruction(options: CancelPoolUpdateOption
 }
 
 // =============================================================================
+// Rotate Tree Instruction Builder (disc=20)
+// =============================================================================
+
+/** Rotate tree instruction options */
+export interface RotateTreeOptions {
+  accounts: {
+    poolState: Address;
+    currentTree: Address;
+    newTree: Address;
+    authority: Address;
+    systemProgram: Address;
+  };
+}
+
+/**
+ * Build rotate_tree instruction data (disc=20, no payload)
+ */
+export function buildRotateTreeInstructionData(): Uint8Array {
+  return new Uint8Array([INSTRUCTION.ROTATE_TREE]);
+}
+
+/**
+ * Build a complete rotate_tree instruction
+ *
+ * Accounts:
+ * 0. pool_state    (writable)
+ * 1. current_tree  (writable) — must be full
+ * 2. new_tree      (writable) — to be created
+ * 3. authority     (signer)
+ * 4. system_program
+ */
+export function buildRotateTreeInstruction(options: RotateTreeOptions): Instruction {
+  const config = getConfig();
+
+  return {
+    programAddress: config.aegisProgramId,
+    accounts: [
+      { address: options.accounts.poolState, role: AccountRole.WRITABLE },
+      { address: options.accounts.currentTree, role: AccountRole.WRITABLE },
+      { address: options.accounts.newTree, role: AccountRole.WRITABLE },
+      { address: options.accounts.authority, role: AccountRole.WRITABLE_SIGNER },
+      { address: options.accounts.systemProgram, role: AccountRole.READONLY },
+    ],
+    data: buildRotateTreeInstructionData(),
+  };
+}
+
+// =============================================================================
 // Redemption Request PDA Derivation
 // =============================================================================
 

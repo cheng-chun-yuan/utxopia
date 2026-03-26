@@ -551,6 +551,10 @@ export {
   buildExecutePoolUpdateInstruction,
   buildCancelPoolUpdateInstructionData,
   buildCancelPoolUpdateInstruction,
+  // Rotate tree
+  buildRotateTreeInstructionData,
+  buildRotateTreeInstruction,
+  type RotateTreeOptions,
   // Verify instruction data builders
   buildVerifyTransactionInstructionData,
   buildVerifyStealthDepositInstructionData,

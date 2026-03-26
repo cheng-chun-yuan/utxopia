@@ -41,6 +41,9 @@ interface PoolStateData {
   pendingMaxDeposit: string;
   pendingServiceFee: string;
   pendingExecuteAfter: number;
+  depositFeeBps: number;
+  withdrawalFeeBps: number;
+  activeTreeIndex: number;
 }
 
 /**
@@ -101,6 +104,9 @@ export async function GET() {
       pendingServiceFee: readU64LE(data, 228).toString(),
       pendingExecuteAfter: Number(readU64LE(data, 236)),
       serviceFeeBps: data[244] | (data[245] << 8),
+      depositFeeBps: data[244] | (data[245] << 8),
+      withdrawalFeeBps: data[246] | (data[247] << 8),
+      activeTreeIndex: data[258] | (data[259] << 8) | (data[260] << 16) | (data[261] << 24),
     };
 
     return NextResponse.json({
