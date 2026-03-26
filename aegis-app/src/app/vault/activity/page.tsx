@@ -98,8 +98,7 @@ function getToken(sym: string): SupportedToken {
 
 function formatAmt(amount: bigint | number, token: SupportedToken): string {
   const num = Number(amount) / 10 ** token.decimals;
-  const s = num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: token.decimals > 2 ? token.decimals : 2 });
-  return s.replace(/(\.\d{2,}?)0+$/, "$1");
+  return num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function ActivityFeed() {
@@ -157,7 +156,7 @@ function ActivityFeed() {
                   </div>
                   <p className="text-[11px] text-gray/40">{timeAgo(note.createdAt)}</p>
                 </div>
-                <div className="text-right">
+                <div className="text-right tabular-nums min-w-[100px]">
                   <p className={cn(
                     "text-sm font-semibold font-mono",
                     note.isSpent ? "text-gray" : "text-foreground"
