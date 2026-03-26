@@ -45,6 +45,8 @@ export interface SupportedToken {
   explorerSubtitle: string;
   /** Secondary logo for explorer filter (e.g. zkBTC logo next to BTC) */
   explorerSecondLogo?: string;
+  /** Relayer fee in native smallest units (lamports, micro-USDC, sats) */
+  relayerFee: number;
 }
 
 /** Native wSOL mint (legacy Token program) */
@@ -84,6 +86,7 @@ export const SUPPORTED_TOKENS: SupportedToken[] = [
     explorerLabel: "BTC / zkBTC",
     explorerSubtitle: "Shielded Bitcoin",
     explorerSecondLogo: "/tokens/zkbtc.png",
+    relayerFee: 2000,       // 0.00002 BTC ≈ $1.70
   },
   {
     symbol: "zkBTC",
@@ -107,6 +110,7 @@ export const SUPPORTED_TOKENS: SupportedToken[] = [
     explorerLabel: "BTC / zkBTC",
     explorerSubtitle: "Shielded Bitcoin",
     explorerSecondLogo: "/tokens/zkbtc.png",
+    relayerFee: 2000,       // 0.00002 BTC
   },
   {
     symbol: "SOL",
@@ -129,6 +133,7 @@ export const SUPPORTED_TOKENS: SupportedToken[] = [
     },
     explorerLabel: "SOL",
     explorerSubtitle: "Solana",
+    relayerFee: 100_000,    // 0.0001 SOL ≈ $0.01
   },
   {
     symbol: "USDC",
@@ -151,6 +156,7 @@ export const SUPPORTED_TOKENS: SupportedToken[] = [
     },
     explorerLabel: "USDC",
     explorerSubtitle: "SPL Token",
+    relayerFee: 5000,       // 0.005 USDC
   },
   {
     symbol: "USDT",
@@ -173,6 +179,7 @@ export const SUPPORTED_TOKENS: SupportedToken[] = [
     },
     explorerLabel: "USDT",
     explorerSubtitle: "SPL Token",
+    relayerFee: 5000,       // 0.005 USDT
   },
   {
     symbol: "jupUSD",
@@ -195,6 +202,7 @@ export const SUPPORTED_TOKENS: SupportedToken[] = [
     },
     explorerLabel: "jupUSD",
     explorerSubtitle: "Jupiter Stablecoin",
+    relayerFee: 5_000_000,  // 0.005 jupUSD (9 decimals)
   },
 ];
 

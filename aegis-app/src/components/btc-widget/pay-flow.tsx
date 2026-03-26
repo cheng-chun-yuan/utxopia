@@ -204,9 +204,13 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   ]);
 
   const isPurePrivateSend = !outputs.some(o => o.mode === "btc" || o.mode === "public");
-  // Use 0 until relayer meta is fetched to avoid flash from default → actual value
+  // Per-token relayer fee (from token config), overridden by backend if available
   const relayerMetaLoaded = relayerMeta !== null;
-  const effectiveRelayerFee = relayerMeta?.relayerFeeSats ?? 0;
+  const effectiveRelayerFee = relayerMetaLoaded
+    ? (relayerMeta.relayerFeeSats > 0 && selectedToken.isBtcNative
+        ? relayerMeta.relayerFeeSats   // Backend fee for BTC
+        : selectedToken.relayerFee)     // Per-token fee for all others
+    : 0;
   const effectiveServiceFee = relayerMeta?.serviceFeeSats ?? 0;
   const effectiveServiceFeeBps = relayerMeta?.serviceFeeBps ?? 0;
 
