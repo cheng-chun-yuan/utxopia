@@ -324,22 +324,23 @@ async fn handle_relayer_meta(
         min_withdrawal: u64,
     }
 
+    use crate::constants::*;
+
     let relayer_fee_sats: u64 = std::env::var("RELAYER_FEE_SATS")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(500);
+        .unwrap_or(DEFAULT_RELAYER_FEE_BTC);
 
     // Per-token relayer fees (env override or sensible defaults)
+    let parse_env = |key: &str, default: u64| -> u64 {
+        std::env::var(key).ok().and_then(|v| v.parse().ok()).unwrap_or(default)
+    };
     let mut relayer_fees = std::collections::HashMap::new();
     relayer_fees.insert("zkBTC".to_string(), relayer_fee_sats);
-    relayer_fees.insert("zkSOL".to_string(),
-        std::env::var("RELAYER_FEE_SOL").ok().and_then(|v| v.parse().ok()).unwrap_or(100_000)); // 0.0001 SOL
-    relayer_fees.insert("zkUSDC".to_string(),
-        std::env::var("RELAYER_FEE_USDC").ok().and_then(|v| v.parse().ok()).unwrap_or(5_000)); // 0.005 USDC
-    relayer_fees.insert("zkUSDT".to_string(),
-        std::env::var("RELAYER_FEE_USDT").ok().and_then(|v| v.parse().ok()).unwrap_or(5_000)); // 0.005 USDT
-    relayer_fees.insert("zkJupUSD".to_string(),
-        std::env::var("RELAYER_FEE_JUPUSD").ok().and_then(|v| v.parse().ok()).unwrap_or(5_000_000)); // 0.005 jupUSD (9 dec)
+    relayer_fees.insert("zkSOL".to_string(), parse_env("RELAYER_FEE_SOL", DEFAULT_RELAYER_FEE_SOL));
+    relayer_fees.insert("zkUSDC".to_string(), parse_env("RELAYER_FEE_USDC", DEFAULT_RELAYER_FEE_USDC));
+    relayer_fees.insert("zkUSDT".to_string(), parse_env("RELAYER_FEE_USDT", DEFAULT_RELAYER_FEE_USDT));
+    relayer_fees.insert("zkJupUSD".to_string(), parse_env("RELAYER_FEE_JUPUSD", DEFAULT_RELAYER_FEE_JUPUSD));
 
     // Read fee + limit config from on-chain PoolState (refreshed each tick)
     let (service_fee_bps, service_fee_base, min_withdrawal) = {

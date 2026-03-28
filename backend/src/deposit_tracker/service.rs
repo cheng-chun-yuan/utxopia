@@ -205,13 +205,22 @@ impl DepositTrackerService {
 
     /// Get all deposits
     pub fn get_all_deposits(&self) -> Vec<DepositRecord> {
-        self.db.get_all().unwrap_or_default()
+        self.db.get_all().unwrap_or_else(|e| {
+            eprintln!("[tracker] Failed to get deposits: {}", e);
+            Vec::new()
+        })
     }
 
     /// Get statistics
     pub fn stats(&self) -> TrackerStats {
-        let counts = self.db.count_by_status().unwrap_or_default();
-        let total_sats = self.db.total_sats_received().unwrap_or(0);
+        let counts = self.db.count_by_status().unwrap_or_else(|e| {
+            eprintln!("[tracker] Failed to count by status: {}", e);
+            std::collections::HashMap::new()
+        });
+        let total_sats = self.db.total_sats_received().unwrap_or_else(|e| {
+            eprintln!("[tracker] Failed to get total sats: {}", e);
+            0
+        });
 
         TrackerStats {
             total_deposits: counts.values().sum(),
@@ -532,8 +541,16 @@ impl DepositTrackerService {
             total_detected += detected;
 
             self.last_scanned_height.store(height, Ordering::Relaxed);
-            // Persist to DB so restarts don't re-scan from tip-10
-            let _ = self.db.set_metadata("last_scanned_height", &height.to_string());
+            // Persist to DB every 10 blocks to reduce write overhead
+            if height % 10 == 0 || height == tip_height {
+                let _ = self.db.set_metadata("last_scanned_height", &height.to_string());
+            }
+        }
+
+        // Always persist final height
+        let final_height = self.last_scanned_height.load(Ordering::Relaxed);
+        if final_height >= scan_from {
+            let _ = self.db.set_metadata("last_scanned_height", &final_height.to_string());
         }
 
         if total_detected > 0 {

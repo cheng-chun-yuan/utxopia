@@ -25,14 +25,16 @@ impl TrackingStore {
 
         // Ensure parent directory exists
         if let Some(parent) = db_path.parent() {
-            std::fs::create_dir_all(parent).ok();
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                eprintln!("[tracking] Failed to create directory {:?}: {}", parent, e);
+            }
         }
 
         let manager = SqliteConnectionManager::file(db_path);
         let pool = Pool::builder()
             .max_size(5)
             .build(manager)
-            .expect("Failed to create tracking DB pool");
+            .unwrap_or_else(|e| panic!("[tracking] DB pool creation failed for {:?}: {}", db_path, e));
 
         let store = Self { pool };
         store.run_migrations();
@@ -57,7 +59,9 @@ impl TrackingStore {
     }
 
     fn conn(&self) -> PooledConnection<SqliteConnectionManager> {
-        self.pool.get().expect("Failed to get tracking DB connection")
+        self.pool.get().unwrap_or_else(|e| {
+            panic!("[tracking] DB connection pool exhausted (max_size=5): {}", e)
+        })
     }
 
     fn run_migrations(&self) {

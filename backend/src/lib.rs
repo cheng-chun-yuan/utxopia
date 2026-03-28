@@ -21,6 +21,7 @@
 //! - `event_indexer/` - On-chain event indexing
 //! - `stealth/` - Stealth deposit service
 
+pub mod constants;
 pub mod common;
 pub mod bitcoin;
 pub mod solana;

@@ -18,7 +18,7 @@ fn dust_threshold() -> u64 {
     std::env::var("DUST_THRESHOLD_SATS")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(330)
+        .unwrap_or(crate::constants::BTC_DUST_THRESHOLD)
 }
 
 /// Builds unsigned BTC transactions
@@ -72,7 +72,7 @@ impl TxBuilder {
 
     /// Compute total service fee for a given amount
     fn compute_service_fee(&self, amount: u64) -> u64 {
-        let pct_fee = (amount as u128 * self.service_fee_bps as u128 / 10_000) as u64;
+        let pct_fee = (amount as u128 * self.service_fee_bps as u128 / crate::constants::BPS_DENOMINATOR as u128) as u64;
         pct_fee.saturating_add(self.service_fee_base)
     }
 

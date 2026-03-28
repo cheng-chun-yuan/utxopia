@@ -273,11 +273,12 @@ impl SolClient {
         if data.len() < 268 {
             return Err(SolError::RpcError("pool_state data too short".into()));
         }
+        use crate::constants::pool_offsets as po;
         Ok(OnChainPoolConfig {
-            min_deposit: u64::from_le_bytes(data[172..180].try_into().unwrap()),
-            max_deposit: u64::from_le_bytes(data[180..188].try_into().unwrap()),
-            service_fee_base: u64::from_le_bytes(data[196..204].try_into().unwrap()),
-            service_fee_bps: u16::from_le_bytes(data[244..246].try_into().unwrap()),
+            min_deposit: u64::from_le_bytes(data[po::MIN_DEPOSIT..po::MIN_DEPOSIT + 8].try_into().unwrap()),
+            max_deposit: u64::from_le_bytes(data[po::MAX_DEPOSIT..po::MAX_DEPOSIT + 8].try_into().unwrap()),
+            service_fee_base: u64::from_le_bytes(data[po::SERVICE_FEE_BASE..po::SERVICE_FEE_BASE + 8].try_into().unwrap()),
+            service_fee_bps: u16::from_le_bytes(data[po::DEPOSIT_FEE_BPS..po::DEPOSIT_FEE_BPS + 2].try_into().unwrap()),
         })
     }
 
