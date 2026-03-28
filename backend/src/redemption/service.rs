@@ -349,199 +349,176 @@ impl RedemptionService {
     pub async fn tick(&self) -> Result<TickResult, ServiceError> {
         let mut result = TickResult::default();
 
-        // Phase 0a: Refresh pool config from on-chain PoolState (fees, limits)
+        // Phase 0: Refresh on-chain config + UTXOs
+        self.refresh_state().await;
+
+        // Phase 1: Scan PDAs + reconcile tracking
+        let scan = self
+            .scanner
+            .scan()
+            .map_err(|e| ServiceError::WatcherError(e.to_string()))?;
+        result.pending_pdas = scan.pending.len();
+        self.tracking.reconcile(&scan.all_addresses()).await;
+
+        // Phase 2: Process pending redemptions
+        result.withdrawals_processed += self.process_pending_pdas(&scan.pending).await;
+
+        // Phase 3: Complete processing redemptions
+        let (processed, completed) = self.complete_processing_pdas(&scan.processing).await;
+        result.withdrawals_processed += processed;
+        result.withdrawals_completed += completed;
+
+        Ok(result)
+    }
+
+    /// Phase 0: Refresh pool config and UTXOs.
+    async fn refresh_state(&self) {
         match self.sol_client.fetch_pool_config() {
             Ok(pool_cfg) => {
                 self.builder.write().await.set_service_fee_model(
                     pool_cfg.service_fee_bps,
                     pool_cfg.service_fee_base,
                 );
-                // min/max are in self.config which is not mutable here;
-                // they were set at startup and rarely change
             }
-            Err(e) => {
-                eprintln!("[tick] Warning: failed to refresh on-chain pool config: {:?}", e);
-            }
+            Err(e) => eprintln!("[tick] Warning: failed to refresh pool config: {:?}", e),
         }
-
-        // Phase 0b: Refresh pool UTXOs from Esplora
         if let Err(e) = self.refresh_pool_utxos().await {
             eprintln!("[tick] Warning: failed to refresh UTXOs: {}", e);
         }
+    }
 
-        // Phase 1: Scan all RedemptionRequest PDAs
-        let scan = self
-            .scanner
-            .scan()
-            .map_err(|e| ServiceError::WatcherError(e.to_string()))?;
-
-        result.pending_pdas = scan.pending.len();
-
-        // Reconcile tracking store — remove entries for PDAs that no longer exist on-chain
-        let active_addrs = scan.all_addresses();
-        self.tracking.reconcile(&active_addrs).await;
-
-        // Phase 2: Process new Pending PDAs (or retry previously failed ones)
-        for pda in &scan.pending {
+    /// Phase 2: Process new Pending PDAs (or retry previously failed ones).
+    async fn process_pending_pdas(&self, pending: &[ParsedRedemption]) -> usize {
+        let mut count = 0;
+        for pda in pending {
             if let Some(entry) = self.tracking.get(&pda.pda_address).await {
                 if entry.local_status != LocalRedemptionStatus::Failed {
-                    continue; // already being handled
+                    continue;
                 }
-                // Failed entries can be retried — remove stale tracking
                 self.tracking.remove(&pda.pda_address).await;
             }
             match self.process_new_redemption(pda).await {
-                Ok(_) => result.withdrawals_processed += 1,
-                Err(e) => {
-                    eprintln!(
-                        "[tick] Error processing PDA {}: {}",
-                        &pda.pda_address[..8],
-                        e
-                    );
-                }
+                Ok(_) => count += 1,
+                Err(e) => eprintln!("[tick] Error processing PDA {}: {}", &pda.pda_address[..8], e),
             }
         }
+        count
+    }
 
-        // Phase 3: Try to complete Processing PDAs that have a btc_txid in tracking,
-        //          or retry BTC tx build for Processing PDAs that failed locally.
-        for pda in &scan.processing {
-            // Check if this Processing PDA failed locally (no btc_txid) — retry BTC build
+    /// Phase 3: Complete Processing PDAs — await BTC confirmations, submit SPV proofs.
+    async fn complete_processing_pdas(&self, processing: &[ParsedRedemption]) -> (usize, usize) {
+        let mut processed = 0;
+        let mut completed = 0;
+
+        for pda in processing {
             if let Some(entry) = self.tracking.get(&pda.pda_address).await {
+                // Retry failed builds (no btc_txid yet)
                 if entry.local_status == LocalRedemptionStatus::Failed && entry.btc_txid.is_none() {
                     self.tracking.remove(&pda.pda_address).await;
                     match self.build_sign_broadcast(pda).await {
-                        Ok(_) => result.withdrawals_processed += 1,
-                        Err(e) => {
-                            eprintln!(
-                                "[tick] Retry failed for Processing PDA {}: {}",
-                                &pda.pda_address[..8],
-                                e
-                            );
-                        }
+                        Ok(_) => processed += 1,
+                        Err(e) => eprintln!("[tick] Retry failed for PDA {}: {}", &pda.pda_address[..8], e),
                     }
                     continue;
                 }
             } else {
-                // Processing on-chain but not tracked locally (e.g., after redeploy).
-                // Try to recover an existing BTC tx before re-signing.
-                let btc_address = match script_to_address(&pda.btc_script, bitcoin::Network::Testnet) {
-                    Ok(addr) => addr,
-                    Err(e) => {
-                        eprintln!("[tick] Cannot parse btc_script for PDA {}: {}", &pda.pda_address[..8], e);
-                        continue;
-                    }
-                };
-
-                // Untracked Processing PDA — try to recover a valid existing BTC tx,
-                // but verify amount and that it hasn't been used for a completion.
-                let expected_send = pda.amount_sats.saturating_sub(pda.service_fee);
-                let mut recovered = false;
-
-                if let Ok(txids) = self.esplora.get_address_txids_with_status(&btc_address).await {
-                    for (txid, is_confirmed) in &txids {
-                        // Check if this txid already has a completion receipt on-chain
-                        // (means it was used for a previous redemption — skip)
-                        let mut txid_bytes = [0u8; 32];
-                        if let Ok(decoded) = hex::decode(txid) {
-                            if decoded.len() == 32 {
-                                txid_bytes.copy_from_slice(&decoded);
-                                txid_bytes.reverse(); // display hex → internal byte order
-                            }
-                        }
-                        let receipt_seeds: &[&[u8]] = &[b"completion_receipt", &txid_bytes];
-                        let (receipt_pda, _) = solana_sdk::pubkey::Pubkey::find_program_address(
-                            receipt_seeds,
-                            self.sol_client.program_id(),
-                        );
-                        if self.sol_client.rpc().get_account(&receipt_pda).is_ok() {
-                            println!(
-                                "[tick] BTC tx {} already completed on-chain, skipping",
-                                &txid[..12]
-                            );
-                            continue;
-                        }
-
-                        // Fetch tx detail and verify output amount
-                        let tx_detail = match self.esplora.get_tx(txid).await {
-                            Ok(d) => d,
-                            Err(_) => continue,
-                        };
-
-                        // Check if any output pays the exact expected amount
-                        let has_matching_output = tx_detail.vout.iter().any(|o| {
-                            o.value == expected_send
-                        });
-
-                        if !has_matching_output {
-                            println!(
-                                "[tick] BTC tx {} amount mismatch for PDA {} (expected ~{} sats, skipping)",
-                                &txid[..12], &pda.pda_address[..8], expected_send
-                            );
-                            continue;
-                        }
-
-                        println!(
-                            "[tick] Recovered existing BTC tx {} (confirmed={}) for untracked PDA {} (dest: {})",
-                            &txid[..12], *is_confirmed, &pda.pda_address[..8], &btc_address
-                        );
-                        let entry = RedemptionTracking {
-                            pda_address: pda.pda_address.clone(),
-                            btc_txid: Some(txid.clone()),
-                            local_status: LocalRedemptionStatus::AwaitingConfirmation,
-                            retry_count: 0,
-                            created_at: now_secs(),
-                            last_updated: now_secs(),
-                            error: None,
-                            verified_tx_pda: None,
-                            buffer_pubkey: None,
-                            tx_size: None,
-                            requester: Some(pda.requester.clone()),
-                            amount_sats: Some(pda.amount_sats),
-                            btc_script: Some(hex::encode(&pda.btc_script)),
-                            request_id: Some(pda.request_id),
-                            simulated: false,
-                            consumed_utxo_pdas: vec![],
-                            pool_script_hex: None,
-                        };
-                        self.tracking.upsert(entry).await;
-                        recovered = true;
-                        break;
-                    }
-                }
-
-                if !recovered {
-                    println!(
-                        "[tick] No valid BTC tx for untracked PDA {}, FROST signing fresh (send: {} sats)",
-                        &pda.pda_address[..8], expected_send
-                    );
-                    match self.build_sign_broadcast(pda).await {
-                        Ok(_) => result.withdrawals_processed += 1,
-                        Err(e) => {
-                            eprintln!(
-                                "[tick] Error building tx for untracked Processing PDA {}: {}",
-                                &pda.pda_address[..8],
-                                e
-                            );
+                // Untracked Processing PDA — try to recover existing BTC tx
+                match self.try_recover_untracked_pda(pda).await {
+                    Ok(true) => continue,  // Recovered — will complete next tick
+                    Ok(false) => {
+                        // No recoverable tx — sign fresh
+                        match self.build_sign_broadcast(pda).await {
+                            Ok(_) => processed += 1,
+                            Err(e) => eprintln!("[tick] Error building tx for untracked PDA {}: {}", &pda.pda_address[..8], e),
                         }
                     }
+                    Err(e) => eprintln!("[tick] Recovery failed for PDA {}: {}", &pda.pda_address[..8], e),
                 }
                 continue;
             }
 
             match self.try_complete_redemption(pda).await {
-                Ok(true) => result.withdrawals_completed += 1,
-                Ok(false) => {} // not ready yet
-                Err(e) => {
-                    eprintln!(
-                        "[tick] Error completing PDA {}: {}",
-                        &pda.pda_address[..8],
-                        e
-                    );
-                }
+                Ok(true) => completed += 1,
+                Ok(false) => {}
+                Err(e) => eprintln!("[tick] Error completing PDA {}: {}", &pda.pda_address[..8], e),
             }
         }
 
-        Ok(result)
+        (processed, completed)
+    }
+
+    /// Try to recover an existing BTC tx for an untracked Processing PDA.
+    /// Returns Ok(true) if recovered, Ok(false) if no valid tx found.
+    async fn try_recover_untracked_pda(&self, pda: &ParsedRedemption) -> Result<bool, ServiceError> {
+        let btc_address = script_to_address(&pda.btc_script, bitcoin::Network::Testnet)
+            .map_err(|e| ServiceError::BuildError(format!("cannot parse btc_script: {}", e)))?;
+
+        let expected_send = pda.amount_sats.saturating_sub(pda.service_fee);
+
+        let txids = match self.esplora.get_address_txids_with_status(&btc_address).await {
+            Ok(t) => t,
+            Err(_) => return Ok(false),
+        };
+
+        for (txid, is_confirmed) in &txids {
+            // Skip txids already completed on-chain
+            let mut txid_bytes = [0u8; 32];
+            if let Ok(decoded) = hex::decode(txid) {
+                if decoded.len() == 32 {
+                    txid_bytes.copy_from_slice(&decoded);
+                    txid_bytes.reverse();
+                }
+            }
+            let receipt_seeds: &[&[u8]] = &[b"completion_receipt", &txid_bytes];
+            let (receipt_pda, _) = solana_sdk::pubkey::Pubkey::find_program_address(
+                receipt_seeds,
+                self.sol_client.program_id(),
+            );
+            if self.sol_client.rpc().get_account(&receipt_pda).is_ok() {
+                continue;
+            }
+
+            // Verify output amount matches
+            let tx_detail = match self.esplora.get_tx(txid).await {
+                Ok(d) => d,
+                Err(_) => continue,
+            };
+            if !tx_detail.vout.iter().any(|o| o.value == expected_send) {
+                continue;
+            }
+
+            println!(
+                "[tick] Recovered BTC tx {} (confirmed={}) for PDA {} (dest: {})",
+                &txid[..12], *is_confirmed, &pda.pda_address[..8], &btc_address
+            );
+            let entry = RedemptionTracking {
+                pda_address: pda.pda_address.clone(),
+                btc_txid: Some(txid.clone()),
+                local_status: LocalRedemptionStatus::AwaitingConfirmation,
+                retry_count: 0,
+                created_at: now_secs(),
+                last_updated: now_secs(),
+                error: None,
+                verified_tx_pda: None,
+                buffer_pubkey: None,
+                tx_size: None,
+                requester: Some(pda.requester.clone()),
+                amount_sats: Some(pda.amount_sats),
+                btc_script: Some(hex::encode(&pda.btc_script)),
+                request_id: Some(pda.request_id),
+                simulated: false,
+                consumed_utxo_pdas: vec![],
+                pool_script_hex: None,
+            };
+            self.tracking.upsert(entry).await;
+            return Ok(true);
+        }
+
+        println!(
+            "[tick] No valid BTC tx for untracked PDA {}, signing fresh (send: {} sats)",
+            &pda.pda_address[..8], expected_send
+        );
+        Ok(false)
     }
 
     /// Phase 2: Process a newly-discovered Pending PDA.
