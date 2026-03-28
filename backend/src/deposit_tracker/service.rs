@@ -917,26 +917,21 @@ impl DepositTrackerService {
             eprintln!("[OP_RETURN] Detection error: {}", e);
         }
 
-        // Get all active deposits from database
+        // Get all active deposits from database — single query
         let deposits = self.db.get_active()?;
 
         for record in deposits {
-            if let Err(e) = self.process_deposit(&record.taproot_address).await {
+            let address = record.taproot_address.clone();
+            if let Err(e) = self.process_deposit(&address, &record).await {
                 eprintln!("Error processing deposit {}: {}", record.id, e);
 
-                // Mark as failed for certain errors
-                if let Some(mut record) = self.db.get_by_address(&record.taproot_address)? {
-                    if !matches!(
-                        record.status,
-                        DepositStatus::Claimed | DepositStatus::Failed
-                    ) {
-                        match &e {
-                            TrackerError::Sweeper(_) | TrackerError::Verifier(_) => {
-                                record.mark_failed(e.to_string());
-                                self.db.update(&record)?;
-                                self.publish_update(&record).await;
-                            }
-                            _ => {}
+                // Mark as failed for certain errors (re-fetch for fresh state)
+                if !matches!(record.status, DepositStatus::Claimed | DepositStatus::Failed) {
+                    if let TrackerError::Sweeper(_) | TrackerError::Verifier(_) = &e {
+                        if let Some(mut fresh) = self.db.get_by_address(&address)? {
+                            fresh.mark_failed(e.to_string());
+                            self.db.update(&fresh)?;
+                            self.publish_update(&fresh).await;
                         }
                     }
                 }
@@ -946,10 +941,8 @@ impl DepositTrackerService {
         Ok(())
     }
 
-    /// Process a single deposit
-    async fn process_deposit(&self, address: &str) -> Result<(), TrackerError> {
-        let record = self.fetch_record(address)?;
-
+    /// Process a single deposit (uses pre-fetched record to avoid N+1)
+    async fn process_deposit(&self, address: &str, record: &DepositRecord) -> Result<(), TrackerError> {
         match record.status {
             DepositStatus::Pending | DepositStatus::Detected | DepositStatus::Confirming => {
                 self.check_and_update_confirmations(address).await?;
