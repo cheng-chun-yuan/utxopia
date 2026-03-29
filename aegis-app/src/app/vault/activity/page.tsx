@@ -33,7 +33,8 @@ function getToken(sym: string): SupportedToken {
 
 function formatAmt(amount: bigint | number, token: SupportedToken): string {
   const num = Number(amount) / 10 ** token.decimals;
-  return num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const maxDec = Math.min(token.decimals, 6);
+  return num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: maxDec });
 }
 
 function formatDateKey(ts: number): string {
