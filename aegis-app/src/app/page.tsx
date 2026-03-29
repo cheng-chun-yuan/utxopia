@@ -327,14 +327,13 @@ export default function Home() {
                 ) : (
                   <div className="flex items-center justify-center gap-8">
                     {[
-                      { label: "Transactions", value: txCount ?? 0, decimals: 0, color: "text-privacy", icon: <Shield className="w-4 h-4 text-privacy privacy-glow" /> },
-                      { label: "Commitments", value: stats?.totalCommitments ?? 0, decimals: 0, color: "text-foreground", icon: null },
-                    ].map(({ label, value, decimals, color, icon }, i) => (
+                      { label: "Transactions", value: txCount ?? 0, decimals: 0, color: "text-privacy" },
+                      { label: "Commitments", value: stats?.totalCommitments ?? 0, decimals: 0, color: "text-foreground" },
+                    ].map(({ label, value, decimals, color }, i) => (
                       <React.Fragment key={label}>
                         {i > 0 && <div className="w-px h-8 bg-gradient-to-b from-transparent via-gray/20 to-transparent" />}
                         <div className="text-center">
                           <div className="flex items-center justify-center gap-1.5">
-                            {icon}
                             <AnimatedCounter value={value} decimals={decimals} className={`text-2xl font-semibold tracking-tight ${color}`} />
                           </div>
                           <div className="text-xs text-gray">{label}</div>
@@ -347,7 +346,6 @@ export default function Home() {
                         <div className="w-px h-8 bg-gradient-to-b from-transparent via-gray/20 to-transparent" />
                         <div className="text-center min-w-0">
                           <div className="flex items-center justify-center gap-1.5">
-                            <Lock className="w-4 h-4 text-privacy" />
                             {(() => {
                               const usd = tvlToUsd(stats!.tokenTVL, prices);
                               if (usd > 0) {

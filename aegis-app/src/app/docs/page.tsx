@@ -323,7 +323,7 @@ export default function DocsPage() {
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 xl:px-12">
 
             {/* ── Hero ── */}
-            <section className="pt-20 sm:pt-24 lg:pt-28 pb-10 sm:pb-12">
+            <section className="pt-8 sm:pt-10 lg:pt-12 pb-8 sm:pb-10">
               <div className="space-y-3 sm:space-y-4">
                 <div className="flex">
                   <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray/15 bg-muted/20">
