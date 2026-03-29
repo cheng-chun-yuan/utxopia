@@ -422,8 +422,11 @@ impl DepositTrackerService {
             .as_secs();
 
         for mut record in retryable {
+            // Exponential backoff: base_delay * 2^retry_count (capped at 1 hour)
+            let backoff = self.config.retry_delay_secs * (1u64 << record.retry_count.min(6));
+            let cooldown = backoff.min(3600);
             if let Some(last_retry) = record.last_retry_at {
-                if now - last_retry < self.config.retry_delay_secs {
+                if now - last_retry < cooldown {
                     continue;
                 }
             }
