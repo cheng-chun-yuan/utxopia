@@ -197,47 +197,44 @@ pub fn event_indexer_router_with_deposits(
     deposit_store: Option<Arc<SqliteDepositStore>>,
     reconciler_status: Arc<RwLock<Option<ReconciliationResult>>>,
 ) -> Router {
+    use crate::api::middleware::api_key_auth_middleware;
+
     let state = IndexerAppState { store, tree_cache, program_id, deposit_store, reconciler_status };
 
-    Router::new()
-        // Tree
+    // Public routes — no auth required, consumed by frontend + SDK
+    let public = Router::new()
         .route("/api/tree/status", get(get_status))
         .route("/api/tree/proof", get(get_proof))
-        .route("/api/tree/sync", post(post_sync))
-        .route("/api/tree/reset", post(post_reset))
-        // Nullifiers
         .route("/api/nullifiers", get(get_all_nullifiers))
-        .route("/api/nullifiers/status", get(get_nullifiers_status))
-        // Announcements
         .route("/api/announcements", get(get_announcements))
-        .route("/api/announcements/status", get(get_announcements_status))
-        // Transfers (grouped announcements + nullifier inputs)
         .route("/api/transfers", get(get_transfers))
-        // Unified explorer: all tx types (shield + transfer + unshield + withdraw)
         .route("/api/explorer/transactions", get(get_explorer_transactions))
-        // Redemption tracking (reads from SQLite tracking database)
-        .route("/api/redemption/tracking", get(get_redemption_tracking))
-        // Completed redemptions (from on-chain events, backend-independent)
-        .route("/api/redemption/completed", get(get_completed_redemptions))
-        // Requested redemptions (from on-chain events 0x08)
-        .route("/api/redemption/requested", get(get_requested_redemptions))
-        // Processing redemptions (from on-chain events 0x0A)
-        .route("/api/redemption/processing", get(get_processing_redemptions))
-        // Consolidated: all redemption data in one response
         .route("/api/redemption/all", get(get_all_redemptions))
-        // Reconciliation
-        .route("/api/reconciliation/status", get(get_reconciliation_status))
-        // Pool stats (cached, for frontend landing page)
         .route("/api/pool/stats", get(get_pool_stats))
-        // Unified indexer status (announcements + nullifiers + transfers)
-        .route("/api/indexer/status", get(get_indexer_status))
-        // Global
-        .route("/api/sync", post(post_sync_all))
-        .route("/api/reset", post(post_reset_all))
         // WebSocket
         .route("/ws/events", get(ws_events_handler))
         .route("/ws/tree", get(ws_tree_handler))
-        .route("/ws/announcements", get(ws_announcements_handler))
+        .route("/ws/announcements", get(ws_announcements_handler));
+
+    // Admin routes — require X-API-Key header (debug, status, destructive ops)
+    let admin = Router::new()
+        .route("/api/tree/sync", post(post_sync))
+        .route("/api/tree/reset", post(post_reset))
+        .route("/api/sync", post(post_sync_all))
+        .route("/api/reset", post(post_reset_all))
+        .route("/api/nullifiers/status", get(get_nullifiers_status))
+        .route("/api/announcements/status", get(get_announcements_status))
+        .route("/api/indexer/status", get(get_indexer_status))
+        .route("/api/reconciliation/status", get(get_reconciliation_status))
+        .route("/api/redemption/tracking", get(get_redemption_tracking))
+        .route("/api/redemption/completed", get(get_completed_redemptions))
+        .route("/api/redemption/requested", get(get_requested_redemptions))
+        .route("/api/redemption/processing", get(get_processing_redemptions))
+        .layer(axum::middleware::from_fn(api_key_auth_middleware));
+
+    Router::new()
+        .merge(public)
+        .merge(admin)
         .with_state(state)
 }
 

@@ -87,10 +87,13 @@ pub struct AnnouncementRow {
     pub encrypted_amount: String, // hex
     pub commitment: String,       // hex
     pub tx_signature: String,
+    #[serde(skip_serializing)]
     pub slot: i64,
     /// Block time from getTransaction RPC (Unix timestamp)
+    #[serde(skip_serializing)]
     pub block_time: i64,
     /// Whether this deposit was SPV-verified (real BTC deposit vs demo)
+    #[serde(skip_serializing)]
     pub is_verified: bool,
     /// BTC deposit txid (display hex, only for verified deposits)
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -62,21 +62,20 @@ pub fn create_deposit_router(tracker: DepositTrackerService) -> Router {
     let authed = Router::new()
         .route("/api/deposits", post(handle_register_deposit))
         .route("/api/tracker/retry/{id}", post(handle_retry_deposit))
+        .route("/api/tracker/stats", get(handle_tracker_stats))
+        .route("/api/tracker/pending", get(handle_pending_deposits))
+        .route("/api/tracker/failed", get(handle_failed_deposits))
+        .route("/api/pool/info", get(handle_pool_info))
         .layer(axum::middleware::from_fn(api_key_auth_middleware))
         .with_state(state.clone());
 
     let public = Router::new()
         .route("/api/deposits", get(handle_list_deposits))
-        .route("/api/deposits/verified", get(handle_verified_deposits))
         .route("/api/deposits/{id}", get(handle_get_deposit))
         .route("/api/deposits/by-address/{address}", get(handle_get_by_address))
+        .route("/api/tracker/health", get(handle_health))
         .route("/ws/deposits/{id}", get(ws_deposit_handler_wrapper))
         .route("/ws/deposits", get(ws_all_deposits_handler_wrapper))
-        .route("/api/pool/info", get(handle_pool_info))
-        .route("/api/tracker/health", get(handle_health))
-        .route("/api/tracker/stats", get(handle_tracker_stats))
-        .route("/api/tracker/pending", get(handle_pending_deposits))
-        .route("/api/tracker/failed", get(handle_failed_deposits))
         .with_state(state);
 
     Router::new()
