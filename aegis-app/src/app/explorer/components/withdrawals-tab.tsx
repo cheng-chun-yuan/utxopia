@@ -178,8 +178,7 @@ const WITHDRAWAL_STATUS_ORDER: Record<string, number> = {
  * Derive effective status: prefer localStatus, but if backend says Completed
  * without on-chain completion tx, fall back to on-chain status.
  *
- * TODO(backward-compat): remove fallback chain once backend always populates
- * localStatus correctly and completeTxSignature is guaranteed on completion.
+ * Falls back to on-chain status when localStatus is inconsistent.
  */
 function getEffectiveStatus(r: RedemptionRecord): string {
   const local = r.localStatus;
@@ -476,7 +475,7 @@ export function WithdrawalRow({
 }
 
 // =============================================================================
-// Withdrawals Tab (standalone, kept for backward compat)
+// Withdrawals Tab (standalone)
 // =============================================================================
 
 export function WithdrawalsTab() {

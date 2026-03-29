@@ -210,7 +210,7 @@ export function TransferRow({
 }
 
 // =============================================================================
-// Transfers Tab (standalone, kept for backward compat)
+// Transfers Tab (standalone)
 // =============================================================================
 
 export function TransfersTab() {

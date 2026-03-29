@@ -1,7 +1,7 @@
 /**
  * Mempool.space API helpers for SPV verification
  *
- * Re-exports SDK's MempoolClient with backward-compatible function wrappers.
+ * Re-exports SDK's MempoolClient with convenience function wrappers.
  */
 
 import {

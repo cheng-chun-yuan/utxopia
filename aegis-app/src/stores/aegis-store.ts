@@ -26,7 +26,7 @@ import {
 } from "@aegis/sdk";
 import { fetchSpentNullifierPDAs, nullifierHashToPDA } from "@/lib/nullifier-utils";
 import { getActiveTokenId } from "@/lib/token-context";
-import { VAULT_TOKENS, NATIVE_MINT_2022_ADDRESS } from "@/lib/supported-tokens";
+import { VAULT_TOKENS } from "@/lib/supported-tokens";
 import { getBackendUrl } from "@/lib/api/constants";
 
 // ============================================================================

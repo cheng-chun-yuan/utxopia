@@ -283,7 +283,7 @@ function DepositTimeline({ deposit: d }: { deposit: DepositRecord }) {
 
 /**
  * Determine shield type from instruction discriminator.
- * TODO: Once on-chain events include tokenMint (Issue 1B), replace heuristic with mint lookup.
+ * Determines shield type from instruction discriminator (heuristic until tokenMint in events).
  */
 export function getShieldType(d: DepositRecord): "btc" | "sol" | "usdc" | "usdt" | "spl" {
   // Use resolved token symbol if available (from backend token_id mapping)
@@ -426,7 +426,7 @@ export function DepositRow({
 }
 
 // =============================================================================
-// Deposits Tab (standalone, kept for backward compat)
+// Deposits Tab (standalone)
 // =============================================================================
 
 export function DepositsTab() {

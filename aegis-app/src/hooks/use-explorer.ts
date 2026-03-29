@@ -87,25 +87,6 @@ export interface ExplorerTransaction {
   btcMeta?: any;
 }
 
-/** @deprecated Use ExplorerTransaction instead */
-export interface GroupedTransfer {
-  txSignature: string;
-  timestamp: number;
-  status: "confirmed" | "processing";
-  inputCount: number;
-  nullifierPdas: string[];
-  outputs: TransferOutput[];
-  operationType: number;
-  instructionDisc?: number;
-  unshieldAmount?: number;
-  unshieldRecipient?: string;
-  tokenId?: string;
-  tokenSymbol?: string;
-  transferType?: string;
-  unshieldFee?: number;
-  unshieldPayout?: number;
-}
-
 export interface RedemptionRecord {
   pubkey: string;
   requestId: string;
@@ -236,7 +217,6 @@ const SWR_OPTIONS = {
   errorRetryCount: 3,
 };
 
-/** @deprecated Use useExplorer() instead */
 export function useDeposits() {
   const { data, error, isLoading, mutate } = useSWR<{ deposits: DepositRecord[]; transactions: ExplorerTransaction[] }>(
     "explorer-deposits",

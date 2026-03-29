@@ -18,8 +18,8 @@
  * - DepositCard: full deposit card with expandable timeline
  * - RetryButton: retry failed deposits
  *
- * TODO(backward-compat): Method 2 fallback (explorer + inbox notes join by commitment)
- * can be removed once all deposits flow through the backend tracker with npk matching.
+ * Method 2 fallback: joins explorer deposits with inbox notes by commitment hash
+ * when backend tracker doesn't have npk matching for a deposit.
  */
 
 import React, { useState, useEffect, useCallback, useMemo, memo } from "react";

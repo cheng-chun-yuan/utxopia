@@ -63,8 +63,8 @@ export function isValidSolanaAddress(address: string): boolean {
  * Match on-chain reduce_to_field: if bytes >= BN254 modulus, mask first byte.
  * This ensures the commitment computed off-chain matches the on-chain verification.
  *
- * TODO(backward-compat): this mirrors the on-chain mask approach (result[0] &= 0x2F).
- * If on-chain changes to proper modular reduction, update here too.
+ * Mirrors on-chain mask approach (result[0] &= 0x2F). Must stay in sync with
+ * contracts/programs/aegis/src/utils/crypto.rs reduce_to_field().
  */
 export function reduceToFieldOnChain(bytes: Uint8Array): bigint {
   let isGe = true;

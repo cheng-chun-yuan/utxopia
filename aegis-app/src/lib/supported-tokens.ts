@@ -52,8 +52,6 @@ export interface SupportedToken {
 /** Native wSOL mint (legacy Token program) */
 export const NATIVE_WSOL_MINT = "So11111111111111111111111111111111111111112";
 
-/** @deprecated Use NATIVE_WSOL_MINT instead */
-export const NATIVE_MINT_2022_ADDRESS = NATIVE_WSOL_MINT;
 
 /** Resolve mint addresses from network config (single source of truth) */
 import { getNetworkConfig } from "./network-config";
