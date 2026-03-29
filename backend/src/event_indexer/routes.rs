@@ -828,6 +828,62 @@ async fn get_explorer_transactions(
         }
     }
 
+    // 3. Include pending BTC deposits from tracker (not yet on-chain)
+    if let Some(ref deposit_store) = state.deposit_store {
+        if let Ok(deposits) = deposit_store.get_all() {
+            // Collect on-chain btc txids to avoid duplicates
+            let on_chain_btc_txids: std::collections::HashSet<String> = transactions.iter()
+                .filter_map(|t| t["inputs"][0]["btcDepositTxid"].as_str().map(|s| s.to_string()))
+                .collect();
+
+            use crate::deposit_tracker::DepositStatus;
+
+            for dep in &deposits {
+                // Skip if already represented on-chain
+                if let Some(ref txid) = dep.deposit_txid {
+                    if on_chain_btc_txids.contains(txid) {
+                        continue;
+                    }
+                }
+                // Skip completed deposits (already in announcements above)
+                if matches!(dep.status, DepositStatus::Claimed | DepositStatus::Ready) {
+                    continue;
+                }
+
+                let status_str = match dep.status {
+                    DepositStatus::Detected | DepositStatus::Pending => "detected",
+                    DepositStatus::Confirming => "confirming",
+                    DepositStatus::Confirmed | DepositStatus::Sweeping | DepositStatus::SweepConfirming => "sweeping",
+                    DepositStatus::Verifying => "processing",
+                    DepositStatus::Failed => "failed",
+                    _ => "pending",
+                };
+
+                transactions.push(serde_json::json!({
+                    "txSignature": serde_json::Value::Null,
+                    "type": "shield",
+                    "tokenId": serde_json::Value::Null,
+                    "timestamp": dep.updated_at,
+                    "status": status_str,
+                    "inputs": [{
+                        "grossAmount": dep.amount_sats,
+                        "fee": serde_json::Value::Null,
+                        "netAmount": serde_json::Value::Null,
+                        "btcDepositTxid": dep.deposit_txid,
+                    }],
+                    "outputs": [],
+                    "btcMeta": {
+                        "depositTxid": dep.deposit_txid,
+                        "confirmations": dep.confirmations,
+                        "sweepTxid": dep.sweep_txid,
+                        "sweepConfirmations": dep.sweep_confirmations,
+                        "taprootAddress": dep.taproot_address,
+                    },
+                }));
+            }
+        }
+    }
+
     // Sort by timestamp desc
     transactions.sort_by(|a, b| {
         let ta = a["timestamp"].as_i64().unwrap_or(0);
