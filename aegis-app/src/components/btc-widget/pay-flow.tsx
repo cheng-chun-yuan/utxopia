@@ -28,6 +28,7 @@ import {
 import { cn } from "@/lib/utils";
 import { parseSats } from "@/lib/utils/validation";
 import { formatBtc, formatAmount, truncateMiddle } from "@/lib/utils/formatting";
+import { BTC_DUST_LIMIT, BTC_MINER_FEE_ESTIMATE, TOKEN_2022_PROGRAM_ID_STR } from "@/lib/btc-constants";
 import { useAegis, type InboxNote } from "@/hooks/use-aegis";
 import { usePasskey } from "@/hooks/use-passkey";
 import { useAegisStore } from "@/stores/aegis-store";
@@ -418,8 +419,8 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         break;
       }
       // BTC withdrawal must cover service fee + dust + estimated miner fee
-      if (o.mode === "btc" && sats <= effectiveServiceFee + 546 + 1000) {
-        errors.push(`BTC withdrawal must be at least ${fmt(effectiveServiceFee + 546 + 1000)} ${selectedToken.shieldedSymbol} (fee + dust + miner fee)`);
+      if (o.mode === "btc" && sats <= effectiveServiceFee + BTC_DUST_LIMIT + BTC_MINER_FEE_ESTIMATE) {
+        errors.push(`BTC withdrawal must be at least ${fmt(effectiveServiceFee + BTC_DUST_LIMIT + BTC_MINER_FEE_ESTIMATE)} ${selectedToken.shieldedSymbol} (fee + dust + miner fee)`);
         break;
       }
     }
@@ -1053,7 +1054,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         const { getAssociatedTokenAddressSync } = await import("@solana/spl-token");
         const recipientPubkey = new PublicKey(publicOutput!.solanaAddress);
         const zkbtcMint = new PublicKey(getConfig().zkbtcMint);
-        const TOKEN_2022_PID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+        const TOKEN_2022_PID = new PublicKey(TOKEN_2022_PROGRAM_ID_STR);
         const recipientTokenAccount = getAssociatedTokenAddressSync(
           zkbtcMint, recipientPubkey, false, TOKEN_2022_PID
         );

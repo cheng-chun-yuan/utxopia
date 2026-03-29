@@ -44,8 +44,9 @@ import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 import { notifyError } from "@/lib/notifications";
 import { MobileWalletGuidance } from "@/components/bitcoin-wallet-selector";
 import { useIsMobileWithoutWallet } from "@/hooks/use-mobile-wallet-detect";
+import { BTC_DUST_LIMIT, BTC_MINER_FEE_ESTIMATE, TOKEN_2022_PROGRAM_ID_STR, BN254_FIELD_MODULUS } from "@/lib/btc-constants";
 
-const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
+const TOKEN_2022_PROGRAM_ID = new PublicKey(TOKEN_2022_PROGRAM_ID_STR);
 
 interface ShieldFlowProps {
   className?: string;
@@ -155,7 +156,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
   const handleMax = useCallback(() => {
     if (selectedToken.isBtcNative && btcWallet.balance !== null) {
       // Reserve ~1000 sats for fees
-      const maxSats = Math.max(0, btcWallet.balance - 1000);
+      const maxSats = Math.max(0, btcWallet.balance - BTC_MINER_FEE_ESTIMATE);
       setBtcAmount((maxSats / 1e8).toFixed(8));
     } else if (selectedToken.isSOL && solBalance !== null) {
       // Reserve ~0.01 SOL for tx fees
@@ -182,7 +183,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
   const buildTxPreview = useCallback(async () => {
     if (!resolvedMeta || !btcWallet.connected) return;
     const amountSats = Math.floor(parseFloat(btcAmount || "0") * 1e8);
-    if (!amountSats || amountSats < 546) { notifyError("Amount must be at least 546 sats"); return; }
+    if (!amountSats || amountSats < BTC_DUST_LIMIT) { notifyError(`Amount must be at least ${BTC_DUST_LIMIT} sats`); return; }
 
     setBuildingPreview(true);
     setError(null);
@@ -312,8 +313,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
       for (const b of hash) {
         stealthScalar = (stealthScalar << 8n) | BigInt(b);
       }
-      const BN254_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
-      stealthScalar = stealthScalar % BN254_FIELD;
+      stealthScalar = stealthScalar % BN254_FIELD_MODULUS;
 
       const npk = computeNPKSync(mpk, stealthScalar);
 
@@ -857,7 +857,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
         {btcWallet.connected ? (
           <button
             onClick={buildTxPreview}
-            disabled={!canSubmitBtc || buildingPreview || btcAmountSats < 546 || (btcWallet.balance !== null && btcAmountSats > btcWallet.balance)}
+            disabled={!canSubmitBtc || buildingPreview || btcAmountSats < BTC_DUST_LIMIT || (btcWallet.balance !== null && btcAmountSats > btcWallet.balance)}
             className={cn(
               "w-full flex items-center justify-center gap-2 py-3.5 rounded-[12px]",
               "text-body2 font-semibold transition-all cursor-pointer",

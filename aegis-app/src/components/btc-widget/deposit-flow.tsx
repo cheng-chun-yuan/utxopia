@@ -21,6 +21,7 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { BTC_DUST_LIMIT, DEFAULT_DEPOSIT_SATS } from "@/lib/btc-constants";
 import confetti from "canvas-confetti";
 import {
   Check, AlertCircle, Wallet,
@@ -59,7 +60,7 @@ export function DepositFlow() {
   const [resolvedMeta, setResolvedMeta] = useState<StealthMetaAddress | null>(null);
 
   // Wallet deposit state (PSBT flow)
-  const [walletDepositAmount, setWalletDepositAmount] = useState("10000");
+  const [walletDepositAmount, setWalletDepositAmount] = useState(String(DEFAULT_DEPOSIT_SATS));
   const [walletDepositing, setWalletDepositing] = useState(false);
   const [walletDepositResult, setWalletDepositResult] = useState<{
     txid: string;
@@ -100,8 +101,8 @@ export function DepositFlow() {
     if (!resolvedMeta || !btcWallet.connected) return;
 
     const amountSats = parseInt(walletDepositAmount);
-    if (!amountSats || amountSats < 546) {
-      notifyError("Amount must be at least 546 sats");
+    if (!amountSats || amountSats < BTC_DUST_LIMIT) {
+      notifyError(`Amount must be at least ${BTC_DUST_LIMIT} sats`);
       return;
     }
 
@@ -274,7 +275,7 @@ export function DepositFlow() {
                         value={walletDepositAmount}
                         onChange={(e) => setWalletDepositAmount(e.target.value)}
                         placeholder="10000"
-                        min="546"
+                        min={String(BTC_DUST_LIMIT)}
                         className={cn(
                           "w-full p-3 bg-muted border border-gray/15 rounded-[12px] mb-1",
                           "text-body2 font-mono text-foreground placeholder:text-gray",
@@ -296,7 +297,7 @@ export function DepositFlow() {
 
                       <button
                         onClick={buildTxPreview}
-                        disabled={buildingPreview || !walletDepositAmount || parseInt(walletDepositAmount) < 546 || (btcWallet.balance !== null && parseInt(walletDepositAmount) > btcWallet.balance)}
+                        disabled={buildingPreview || !walletDepositAmount || parseInt(walletDepositAmount) < BTC_DUST_LIMIT || (btcWallet.balance !== null && parseInt(walletDepositAmount) > btcWallet.balance)}
                         className={cn(
                           "w-full py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2",
                           "bg-btc hover:bg-btc/90 text-background",
