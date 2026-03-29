@@ -27,7 +27,6 @@ use crate::redemption::signer::{SingleKeySigner, TxSigner};
 use crate::redemption::tracking::TrackingStore;
 use crate::redemption::types::*;
 use crate::redemption::watcher::RedemptionScanner;
-use crate::redemption::ws_redemption::RedemptionWsListener;
 use crate::solana::client::SolClient;
 
 /// Get current Unix timestamp in seconds.
@@ -1198,17 +1197,25 @@ impl RedemptionService {
         println!();
 
         // Spawn WebSocket listener for real-time PDA change notifications
+        // WebSocket event stream notifies on PDA changes (triggers immediate tick)
         let ws_notify = self.ws_notify.clone();
         let ws_url = self
             .config
             .solana_rpc
             .replace("https://", "wss://")
             .replace("http://", "ws://");
-        let program_id = self.sol_client.program_id_str();
 
+        let program_id_pubkey = *self.sol_client.program_id();
         tokio::spawn(async move {
-            let listener = RedemptionWsListener::new(ws_url, program_id, ws_notify);
-            listener.run().await;
+            use crate::redemption::events::websocket::WebSocketStream;
+            use crate::redemption::events::AccountUpdateStream;
+
+            let stream = WebSocketStream::new(&ws_url, &program_id_pubkey);
+            let notify = ws_notify;
+            let _ = stream.start(Box::new(move |_update| {
+                // Any PDA change triggers an immediate tick
+                notify.notify_one();
+            })).await;
         });
 
         loop {

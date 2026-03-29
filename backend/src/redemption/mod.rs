@@ -57,16 +57,17 @@
 //! ```
 
 pub mod builder;
+pub mod events;
 pub mod queue;
 pub mod service;
 pub mod signer;
 pub mod tracking;
 pub mod types;
 pub mod watcher;
-pub mod ws_redemption;
 
 // Re-exports
 pub use builder::{BuilderError, TxBuilder, UnsignedTx};
+pub use events::{AccountUpdate, AccountUpdateStream, StreamError};
 pub use queue::{QueueError, QueueStats, WithdrawalQueue};
 pub use service::{ProcessResult, RedemptionService, ServiceError, TickResult};
 pub use signer::{MpcSigner, SignerError, SingleKeySigner, TxSigner};
@@ -75,4 +76,3 @@ pub use types::{
 };
 pub use tracking::TrackingStore;
 pub use watcher::{RedemptionScanner, ScanResult, ScannerError};
-pub use ws_redemption::RedemptionWsListener;
