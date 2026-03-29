@@ -221,7 +221,7 @@ export async function GET(request: Request) {
       }
     }
 
-    // Fallback: direct RPC (legacy PDA + event scanning)
+    // Fallback: direct RPC event scanning (when backend unavailable)
     const data = await getAnnouncementsWithCache(forceRefresh);
 
     return NextResponse.json({

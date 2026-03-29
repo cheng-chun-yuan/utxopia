@@ -50,7 +50,6 @@ function PayFlowWithParams() {
   const amount = searchParams.get("amount");
 
   // Read note from hash fragment (#note=) — never sent to server
-  // Fall back to query param (?note=) for backward compatibility
   const [noteParam, setNoteParam] = useState<string | null>(null);
 
   useEffect(() => {
@@ -59,13 +58,9 @@ function PayFlowWithParams() {
       const match = hash.match(/note=([^&#]+)/);
       if (match) {
         setNoteParam(decodeURIComponent(match[1]));
-        return;
       }
     }
-    // Legacy fallback
-    const qp = searchParams.get("note");
-    if (qp) setNoteParam(qp);
-  }, [searchParams]);
+  }, []);
 
   return (
     <PayFlow

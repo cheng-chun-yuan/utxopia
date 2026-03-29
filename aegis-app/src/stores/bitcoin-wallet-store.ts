@@ -369,7 +369,7 @@ export const useBitcoinWalletStore = create<BitcoinWalletState>((set, get) => ({
   clearError: () => set({ error: null }),
 }));
 
-// Hook for backwards compatibility
+// Convenience hook
 export function useBitcoinWallet() {
   return useBitcoinWalletStore();
 }

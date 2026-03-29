@@ -107,7 +107,7 @@ export function useSnsName(): UseSnsNameReturn {
             setHasRegisteredSnsName(true);
             setRegisteredSubdomainKey(account.pubkey);
 
-            // Detect if record needs update (legacy format, zero mpk, or stale mpk)
+            // Detect if record needs update (old version, zero mpk, or stale mpk)
             const mpkAllZero = parsed.mpk.every((b: number) => b === 0);
             const isOldVersion = parsed.version !== STEALTH_DATA_VERSION;
             const ourMpk = Buffer.from(stealthAddress.mpk).toString("hex");

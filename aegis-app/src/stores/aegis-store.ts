@@ -677,7 +677,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
 }));
 
 // ============================================================================
-// Convenience Hooks (backwards compatible)
+// Convenience Hooks
 // ============================================================================
 
 export function useAegis() {

@@ -358,5 +358,5 @@ export function useExplorer() {
   };
 }
 
-// Re-export for backwards compatibility — SDK callers that need IndexerLeaf[]
+// Re-export for SDK callers that need IndexerLeaf[]
 export { fetchAnnouncements, toIndexerLeaves };

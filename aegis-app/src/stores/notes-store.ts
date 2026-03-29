@@ -84,7 +84,7 @@ export const useNotesStore = create<NotesState>()(
   )
 );
 
-// Backwards compatible hook
+// Convenience hook
 export function useNoteStorage() {
   return useNotesStore();
 }

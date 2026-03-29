@@ -82,9 +82,7 @@ export function useAegis() {
   };
 }
 
-/**
- * Just keys (backwards compatible)
- */
+/** Keys-only subset of useAegis() */
 export function useAegisKeys() {
   const ctx = useAegis();
   return {
@@ -101,9 +99,7 @@ export function useAegisKeys() {
   };
 }
 
-/**
- * Just inbox (backwards compatible)
- */
+/** Inbox-only subset of useAegis() */
 export function useStealthInbox() {
   const ctx = useAegis();
   return {

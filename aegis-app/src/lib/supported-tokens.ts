@@ -49,7 +49,7 @@ export interface SupportedToken {
   relayerFee: number;
 }
 
-/** Native wSOL mint (legacy Token program) */
+/** Native wSOL mint (Token program, not Token-2022) */
 export const NATIVE_WSOL_MINT = "So11111111111111111111111111111111111111112";
 
 

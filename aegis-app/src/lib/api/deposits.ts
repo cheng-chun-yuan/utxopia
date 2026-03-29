@@ -51,7 +51,7 @@ export interface DepositStatusResponse {
   taproot_address: string;
   amount_sats: number;
   confirmations: number;
-  /** @deprecated No claim step — deposits are auto-minted */
+  /** Always false — deposits are auto-minted, no claim step */
   can_claim: boolean;
   btc_txid?: string;
   sweep_txid?: string;

@@ -101,7 +101,7 @@ function transformTransfer(t: any, tokenMap: Map<string, string>): ExplorerTrans
       });
     }
   } else if (t.unshield_amount != null && (type === "unshield" || type === "withdraw")) {
-    // Fallback: single-output from flat fields (legacy or no per-output data)
+    // Single-output from flat fields (older indexed data without per-output breakdown)
     outputs.push({
       type: type === "withdraw" ? "withdraw" : "unshield",
       amount: t.unshield_amount,

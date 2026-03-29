@@ -5,7 +5,7 @@
  * Uses server-side API key (not exposed to client).
  *
  * Use getRpc() for pure reads (modern, efficient).
- * Use getHeliusConnection() for transaction signing (legacy compatibility).
+ * Use getHeliusConnection() for transaction signing (wallet-adapter requires web3.js Connection).
  */
 
 import { createSolanaRpc, type Rpc, type SolanaRpcApi } from "@solana/kit";
