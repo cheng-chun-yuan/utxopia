@@ -58,7 +58,21 @@ impl AccountUpdateStream for WebSocketStream {
         );
 
         // Reconnect loop — handles dropped connections
+        // On reconnect, fire callback with empty update to trigger a full re-sync
+        let mut first_connect = true;
         while self.running.load(Ordering::Relaxed) {
+            if !first_connect {
+                // After reconnect, trigger a sync to catch anything missed
+                println!("[ws-stream] Reconnected — triggering re-sync");
+                callback(AccountUpdate {
+                    pubkey: "reconnect".to_string(),
+                    data: Vec::new(),
+                    data_len: 0,
+                    slot: 0,
+                });
+            }
+            first_connect = false;
+
             match self.subscribe_loop(&callback).await {
                 Ok(()) => {
                     if self.running.load(Ordering::Relaxed) {

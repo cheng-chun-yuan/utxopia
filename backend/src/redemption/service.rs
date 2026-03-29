@@ -1196,8 +1196,14 @@ impl RedemptionService {
         println!("Pool public key: {}", self.signer.public_key());
         println!();
 
-        // Spawn WebSocket listener for real-time PDA change notifications
-        // WebSocket event stream notifies on PDA changes (triggers immediate tick)
+        // Phase 1: Initial full sync via polling (get all current PDA state)
+        println!("[redemption] Phase 1: Initial full sync...");
+        match self.tick().await {
+            Ok(result) => println!("[redemption] Initial sync complete: {}", result),
+            Err(e) => eprintln!("[redemption] Initial sync error (will retry): {}", e),
+        }
+
+        // Phase 2: Start WebSocket for live PDA change notifications
         let ws_notify = self.ws_notify.clone();
         let ws_url = self
             .config
@@ -1206,18 +1212,19 @@ impl RedemptionService {
             .replace("http://", "ws://");
 
         let program_id_pubkey = *self.sol_client.program_id();
+        let ws_notify_clone = ws_notify.clone();
         tokio::spawn(async move {
             use crate::redemption::events::websocket::WebSocketStream;
             use crate::redemption::events::AccountUpdateStream;
 
             let stream = WebSocketStream::new(&ws_url, &program_id_pubkey);
-            let notify = ws_notify;
+            // On any PDA change (or reconnect), trigger immediate tick
             let _ = stream.start(Box::new(move |_update| {
-                // Any PDA change triggers an immediate tick
-                notify.notify_one();
+                ws_notify_clone.notify_one();
             })).await;
         });
 
+        // Phase 3: Main loop — react to WS events, poll as fallback
         loop {
             {
                 let running = self.running.read().await;
