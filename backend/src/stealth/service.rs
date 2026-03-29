@@ -140,55 +140,6 @@ impl StealthDepositService {
         self.deposits.get(id)
     }
 
-    pub fn get_deposit_by_address(&self, address: &str) -> Option<&StealthDepositRecord> {
-        self.deposits_by_address
-            .get(address)
-            .and_then(|id| self.deposits.get(id))
-    }
-
-    pub fn get_pending_deposits(&self) -> Vec<&StealthDepositRecord> {
-        self.deposits
-            .values()
-            .filter(|d| {
-                d.mode == StealthMode::Relay
-                    && matches!(
-                        d.status,
-                        StealthDepositStatus::Pending
-                            | StealthDepositStatus::Detected
-                            | StealthDepositStatus::Confirming
-                            | StealthDepositStatus::Confirmed
-                    )
-            })
-            .collect()
-    }
-
-    pub fn update_deposit<F>(&mut self, id: &str, f: F) -> Option<()>
-    where
-        F: FnOnce(&mut StealthDepositRecord),
-    {
-        if let Some(record) = self.deposits.get_mut(id) {
-            f(record);
-            Some(())
-        } else {
-            None
-        }
-    }
-
-    pub fn expire_old_deposits(&mut self) {
-        let expired_ids: Vec<String> = self
-            .deposits
-            .iter()
-            .filter(|(_, d)| d.is_expired())
-            .map(|(id, _)| id.clone())
-            .collect();
-
-        for id in expired_ids {
-            if let Some(record) = self.deposits.get_mut(&id) {
-                record.mark_expired();
-            }
-        }
-    }
-
     fn generate_stealth_keys(
         &self,
         recipient_stealth_address: &str,

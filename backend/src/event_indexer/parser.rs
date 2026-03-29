@@ -286,102 +286,56 @@ pub fn parse_program_events(logs: &[String]) -> Vec<ProgramEvent> {
     events
 }
 
-/// Parse nullifier spent: disc(1) + hash(32) + op_type(1) + ix_disc(1)
+/// Parse nullifier event(s) from either single or batch format.
+///
+/// Single: disc(1) + hash(32) + op_type(1) + [ix_disc(1)]
+/// Batch flat: disc(1) + count(1) + op_type(1) + ix_disc(1) + [hash(32)] x N
+/// Batch segments: [disc, count, op_type, [ix_disc], hash1, hash2, ...]
 fn parse_nullifier_spent(segments: &[Vec<u8>]) -> Option<NullifierSpentEvent> {
-    if segments.len() < 3 {
+    if segments.len() < 3 || segments[1].len() != 32 || segments[2].len() != 1 {
         return None;
     }
-    if segments[1].len() != 32 || segments[2].len() != 1 {
-        return None;
-    }
-
     let mut nullifier_hash = [0u8; 32];
     nullifier_hash.copy_from_slice(&segments[1]);
-
-    // ix_disc is optional (backward compat with old contract)
-    let instruction_disc = if segments.len() >= 4 && segments[3].len() == 1 {
-        segments[3][0]
-    } else {
-        0
-    };
-
-    Some(NullifierSpentEvent {
-        nullifier_hash,
-        operation_type: segments[2][0],
-        instruction_disc,
-    })
+    let instruction_disc = segments.get(3)
+        .filter(|s| s.len() == 1)
+        .map(|s| s[0])
+        .unwrap_or(0);
+    Some(NullifierSpentEvent { nullifier_hash, operation_type: segments[2][0], instruction_disc })
 }
 
-/// Parse batched nullifiers from multi-segment sol_log_data.
-///
-/// On-chain emits: sol_log_data(&[disc, count, op_type, ix_disc, hash1, hash2, ...])
-/// The runtime may drop the ix_disc segment, producing only:
-///   [disc, count, op_type, hash1, hash2, ...]
-/// We detect both formats by checking whether segment[3] is 1 byte (ix_disc) or 32 bytes (hash).
-fn parse_nullifiers_batch_segments(segments: &[Vec<u8>]) -> Vec<NullifierSpentEvent> {
-    // Need at least disc + count + op_type + 1 hash = 4 segments minimum
-    if segments.len() < 4 {
-        return Vec::new();
-    }
-    if segments[1].len() != 1 || segments[2].len() != 1 {
-        return Vec::new();
-    }
-
-    let count = segments[1][0] as usize;
-    let op_type = segments[2][0];
-
-    // Detect format: if segment[3] is 1 byte, it's ix_disc; if 32 bytes, hashes start here
-    let (ix_disc, hash_start) = if segments.len() > 3 && segments[3].len() == 1 {
-        (segments[3][0], 4)
-    } else {
-        (0, 3) // ix_disc dropped by runtime, hashes start at segment[3]
-    };
-
-    let mut events = Vec::with_capacity(count);
-    for i in 0..count {
-        let idx = hash_start + i;
-        if idx >= segments.len() || segments[idx].len() != 32 {
-            break;
-        }
-        let mut nullifier_hash = [0u8; 32];
-        nullifier_hash.copy_from_slice(&segments[idx]);
-        events.push(NullifierSpentEvent {
-            nullifier_hash,
-            operation_type: op_type,
-            instruction_disc: ix_disc,
-        });
-    }
-
-    events
-}
-
-/// Parse batched nullifiers from single flat segment: disc(1) + count(1) + op_type(1) + ix_disc(1) + [hash(32)] x N
+/// Parse nullifier batch — handles both flat (single segment) and multi-segment formats.
 fn parse_nullifiers_batch(data: &[u8]) -> Vec<NullifierSpentEvent> {
-    if data.len() < 4 {
-        return Vec::new();
-    }
-
+    if data.len() < 4 { return Vec::new(); }
     let count = data[1] as usize;
     let op_type = data[2];
     let ix_disc = data[3];
-    let expected_len = 4 + count * 32;
-    if data.len() < expected_len {
-        return Vec::new();
-    }
-
-    let mut events = Vec::with_capacity(count);
-    for i in 0..count {
+    if data.len() < 4 + count * 32 { return Vec::new(); }
+    (0..count).map(|i| {
         let offset = 4 + i * 32;
-        let mut nullifier_hash = [0u8; 32];
-        nullifier_hash.copy_from_slice(&data[offset..offset + 32]);
-        events.push(NullifierSpentEvent {
-            nullifier_hash,
-            operation_type: op_type,
-            instruction_disc: ix_disc,
-        });
-    }
+        let mut h = [0u8; 32];
+        h.copy_from_slice(&data[offset..offset + 32]);
+        NullifierSpentEvent { nullifier_hash: h, operation_type: op_type, instruction_disc: ix_disc }
+    }).collect()
+}
 
-    events
+fn parse_nullifiers_batch_segments(segments: &[Vec<u8>]) -> Vec<NullifierSpentEvent> {
+    if segments.len() < 4 || segments[1].len() != 1 || segments[2].len() != 1 { return Vec::new(); }
+    let count = segments[1][0] as usize;
+    let op_type = segments[2][0];
+    let (ix_disc, hash_start) = if segments.get(3).map(|s| s.len()) == Some(1) {
+        (segments[3][0], 4)
+    } else {
+        (0, 3)
+    };
+    (0..count).filter_map(|i| {
+        let idx = hash_start + i;
+        let seg = segments.get(idx)?;
+        if seg.len() != 32 { return None; }
+        let mut h = [0u8; 32];
+        h.copy_from_slice(seg);
+        Some(NullifierSpentEvent { nullifier_hash: h, operation_type: op_type, instruction_disc: ix_disc })
+    }).collect()
 }
 
 /// Parse batched announcements (v2): disc(1) + count(1) + [type(1) + ephemeral(32) + amount(8) + commitment(32) + leaf_index(4) + token_id(32)] x N
