@@ -123,19 +123,19 @@ export async function GET() {
         return [];
       }),
       fetch(`${BACKEND_URL}/api/redemption/all`).catch(() => null),
-      fetch(`${process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"}/api/solana/pool-state`).catch(() => null),
+      fetch(`${BACKEND_URL}/api/relayer/meta`).catch(() => null),
       fetch(`${BACKEND_URL}/api/transfers`).catch(() => null),
     ]);
 
-    // Parse pool state for fee config
+    // Parse fee config from backend relayer meta
     let feeConfig = { bps: 30, base: 2000 }; // defaults
     if (poolStateResp?.ok) {
       try {
-        const poolData = await poolStateResp.json();
-        if (poolData.success && poolData.state) {
+        const metaData = await poolStateResp.json();
+        if (metaData) {
           feeConfig = {
-            bps: poolData.state.serviceFeeBps ?? 30,
-            base: Number(poolData.state.serviceFeeBase ?? "2000"),
+            bps: metaData.service_fee_bps ?? 30,
+            base: metaData.service_fee_base ?? 2000,
           };
         }
       } catch { /* use defaults */ }

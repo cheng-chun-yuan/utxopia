@@ -182,21 +182,18 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   } | null>(null);
 
   useEffect(() => {
-    // Fetch service fees directly from on-chain pool state (no backend dependency)
-    // and relayer config from backend in parallel
-    Promise.all([
-      fetch("/api/solana/pool-state").then(r => r.ok ? r.json() : null).catch(() => null),
-      fetch("/api/relayer/meta").then(r => r.ok ? r.json() : null).catch(() => null),
-    ]).then(([poolData, relayerData]) => {
-      const state = poolData?.state;
-      setRelayerMeta({
-        stealthMeta: relayerData?.stealth_meta || null,
-        relayerFeeSats: relayerData?.relayer_fee_sats ?? RELAYER_FEE_SATS,
-        relayerFees: relayerData?.relayer_fees ?? {},
-        serviceFeeSats: state ? Number(state.serviceFeeBase) : SERVICE_FEE_SATS,
-        serviceFeeBps: state?.serviceFeeBps ?? 0,
+    // Fetch all fee config from backend (reads on-chain pool state internally)
+    fetch("/api/relayer/meta").then(r => r.ok ? r.json() : null).catch(() => null)
+      .then((data) => {
+        if (!data) return;
+        setRelayerMeta({
+          stealthMeta: data.stealth_meta || null,
+          relayerFeeSats: data.relayer_fee_sats ?? RELAYER_FEE_SATS,
+          relayerFees: data.relayer_fees ?? {},
+          serviceFeeSats: data.service_fee_base ?? SERVICE_FEE_SATS,
+          serviceFeeBps: data.service_fee_bps ?? 0,
+        });
       });
-    });
   }, []);
 
   // Output rows state — default first output based on initialMode
