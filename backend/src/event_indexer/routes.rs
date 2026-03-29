@@ -60,6 +60,12 @@ pub struct StatusResponse {
     pub root: String,
     pub next_index: u64,
     pub size: u64,
+    /// Number of indexed announcements (deposits + transfers)
+    pub announcements: i64,
+    /// Number of indexed nullifiers (spent notes)
+    pub nullifiers: i64,
+    /// Whether tree is synced (announcements == leaves)
+    pub synced: bool,
 }
 
 /// Response for GET /api/tree/proof
@@ -263,10 +269,16 @@ fn derive_nullifier_pdas(hashes: &[String], program_id: &Pubkey) -> Vec<String> 
 
 async fn get_status(State(state): State<IndexerAppState>) -> Json<StatusResponse> {
     let status = state.tree_cache.get_status().await;
+    let announcements = state.store.get_announcement_count().unwrap_or(0);
+    let nullifiers = state.store.get_nullifier_count().unwrap_or(0);
+    let synced = announcements == status.size as i64;
     Json(StatusResponse {
         root: status.root,
         next_index: status.next_index,
         size: status.size,
+        announcements,
+        nullifiers,
+        synced,
     })
 }
 

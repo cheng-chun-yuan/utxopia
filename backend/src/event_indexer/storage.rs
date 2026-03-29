@@ -90,7 +90,6 @@ pub struct AnnouncementRow {
     #[serde(skip_serializing)]
     pub slot: i64,
     /// Block time from getTransaction RPC (Unix timestamp)
-    #[serde(skip_serializing)]
     pub block_time: i64,
     /// Whether this deposit was SPV-verified (real BTC deposit vs demo)
     #[serde(skip_serializing)]
