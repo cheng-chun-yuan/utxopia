@@ -573,9 +573,17 @@ async fn run_tracker_service(args: &[String]) {
     // Unified API server
     spawn_api_server(api_port, api_tracker, indexer_router, redemption_api, stealth);
 
-    // Run the deposit tracker (blocks until shutdown)
-    if let Err(e) = service.run().await {
-        eprintln!("Error: {}", e);
+    // Run deposit tracker with graceful shutdown on SIGINT/SIGTERM
+    let shutdown = tokio::signal::ctrl_c();
+    tokio::select! {
+        result = service.run() => {
+            if let Err(e) = result {
+                eprintln!("Deposit tracker error: {}", e);
+            }
+        }
+        _ = shutdown => {
+            println!("\n=== Shutting down gracefully ===");
+        }
     }
 }
 
