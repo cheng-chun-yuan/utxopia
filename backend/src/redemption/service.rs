@@ -135,6 +135,9 @@ pub struct RedemptionService {
 
     /// Header relayer for on-demand block header sync (optional, shared with deposit tracker)
     header_relayer: Option<Arc<HeaderRelayer>>,
+
+    /// Last time pool config was refreshed (seconds since epoch)
+    last_config_refresh: std::sync::atomic::AtomicU64,
 }
 
 impl RedemptionService {
@@ -184,6 +187,7 @@ impl RedemptionService {
             stats: Arc::new(RwLock::new(RedemptionStats::default())),
             running: Arc::new(RwLock::new(false)),
             header_relayer,
+            last_config_refresh: std::sync::atomic::AtomicU64::new(0),
             config,
         }
     }
@@ -371,17 +375,27 @@ impl RedemptionService {
         Ok(result)
     }
 
-    /// Phase 0: Refresh pool config and UTXOs.
+    /// Phase 0: Refresh pool config (5-min cache) and UTXOs.
     async fn refresh_state(&self) {
-        match self.sol_client.fetch_pool_config() {
-            Ok(pool_cfg) => {
-                self.builder.write().await.set_service_fee_model(
-                    pool_cfg.service_fee_bps,
-                    pool_cfg.service_fee_base,
-                );
+        use std::sync::atomic::Ordering;
+
+        const CONFIG_CACHE_SECS: u64 = 300; // 5 minutes
+        let now = now_secs();
+        let last = self.last_config_refresh.load(Ordering::Relaxed);
+
+        if now.saturating_sub(last) >= CONFIG_CACHE_SECS {
+            match self.sol_client.fetch_pool_config() {
+                Ok(pool_cfg) => {
+                    self.builder.write().await.set_service_fee_model(
+                        pool_cfg.service_fee_bps,
+                        pool_cfg.service_fee_base,
+                    );
+                    self.last_config_refresh.store(now, Ordering::Relaxed);
+                }
+                Err(e) => eprintln!("[tick] Warning: failed to refresh pool config: {:?}", e),
             }
-            Err(e) => eprintln!("[tick] Warning: failed to refresh pool config: {:?}", e),
         }
+
         if let Err(e) = self.refresh_pool_utxos().await {
             eprintln!("[tick] Warning: failed to refresh UTXOs: {}", e);
         }

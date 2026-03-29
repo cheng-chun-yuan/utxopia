@@ -155,7 +155,9 @@ impl EventIndexerService {
             }
 
             // Track pagination
-            before = Some(signatures.last().unwrap().signature.clone());
+            if let Some(last) = signatures.last() {
+                before = Some(last.signature.clone());
+            }
 
             // Save checkpoint
             if let Some(first) = signatures.first() {

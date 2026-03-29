@@ -209,7 +209,7 @@ async fn handle_stealth_prepare(
                     expires_at: Some(record.expires_at),
                     message: None,
                 };
-                (StatusCode::OK, Json(serde_json::to_value(response).unwrap())).into_response()
+                (StatusCode::OK, Json(serde_json::json!(response))).into_response()
             }
             StealthMode::SelfCustody => {
                 let stealth_data = service.create_stealth_data(&record);
@@ -220,7 +220,7 @@ async fn handle_stealth_prepare(
                     stealth_data: Some(stealth_data.encode()),
                     message: None,
                 };
-                (StatusCode::OK, Json(serde_json::to_value(response).unwrap())).into_response()
+                (StatusCode::OK, Json(serde_json::json!(response))).into_response()
             }
         },
         Err(e) => {
@@ -234,7 +234,7 @@ async fn handle_stealth_prepare(
             };
             (
                 StatusCode::BAD_REQUEST,
-                Json(serde_json::to_value(response).unwrap()),
+                Json(serde_json::json!(response)),
             )
                 .into_response()
         }
