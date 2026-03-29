@@ -335,10 +335,10 @@ export function RefreshButton({ onClick }: { onClick: () => void }) {
 
 // --- Stat Card ---
 
-export function StatCard({ label, value, icon, color }: { label: string; value: string | number; icon: React.ReactNode; color: string }) {
+export function StatCard({ label, value, icon, color }: { label: string; value: string | number; icon?: React.ReactNode; color: string }) {
   return (
     <div className={cn("flex items-center gap-3 px-4 py-3 rounded-[12px] border backdrop-blur-sm", color)}>
-      <div className="shrink-0">{icon}</div>
+      {icon && <div className="shrink-0">{icon}</div>}
       <div>
         <p className="text-heading6 text-foreground font-mono">{value}</p>
         <p className="text-caption text-gray">{label}</p>

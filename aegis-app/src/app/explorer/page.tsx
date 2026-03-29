@@ -119,30 +119,10 @@ function ExplorerContent() {
     <>
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <StatCard
-          label="Shield"
-          value={counts.shield}
-          icon={<ArrowDownToLine className="w-4 h-4 text-gray" />}
-          color="bg-muted/30 border-gray/15"
-        />
-        <StatCard
-          label="Transfer"
-          value={counts.transfer}
-          icon={<ArrowUpDown className="w-4 h-4 text-gray" />}
-          color="bg-muted/30 border-gray/15"
-        />
-        <StatCard
-          label="Unshield"
-          value={counts.unshield}
-          icon={<ArrowUpFromLine className="w-4 h-4 text-gray" />}
-          color="bg-muted/30 border-gray/15"
-        />
-        <StatCard
-          label="Total Shielded"
-          value={totalShieldedDisplay}
-          icon={<Shield className="w-4 h-4 text-gray" />}
-          color="bg-muted/30 border-gray/15"
-        />
+        <StatCard label="Shield" value={counts.shield} color="bg-muted/30 border-gray/15" />
+        <StatCard label="Transfer" value={counts.transfer} color="bg-muted/30 border-gray/15" />
+        <StatCard label="Unshield" value={counts.unshield} color="bg-muted/30 border-gray/15" />
+        <StatCard label="Total Shielded" value={totalShieldedDisplay} color="bg-muted/30 border-gray/15" />
       </div>
 
       {/* Filter Bar */}
