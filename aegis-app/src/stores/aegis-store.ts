@@ -3,22 +3,14 @@
 import { create } from "zustand";
 import { PublicKey, type Connection } from "@solana/web3.js";
 import {
-  initPoseidon,
-  setupKeysFromWallet,
-  setupKeysFromSeed,
-  recreateStealthAddress,
-  scanUnifiedNotes,
+  AegisClient,
   hexToBytes,
   bytesToHex,
-  serializeKeysForStorage,
   deserializeKeysFromStorage,
-  computeNullifierHashForNote,
-  computeNullifierBytes,
-  decodeViewOnlyKeys,
+  scanUnifiedNotes,
   scanAnnouncementsViewOnly,
-  computeTokenId,
+  decodeViewOnlyKeys,
   EventClient,
-  getConfig,
   type AegisKeys,
   type StealthMetaAddress,
   type ViewOnlyKeys,
@@ -26,7 +18,6 @@ import {
   type ViewOnlyScannedNote,
 } from "@aegis/sdk";
 import { fetchSpentNullifierPDAs, nullifierHashToPDA } from "@/lib/nullifier-utils";
-import { getActiveTokenId } from "@/lib/token-context";
 import { VAULT_TOKENS } from "@/lib/supported-tokens";
 import { getBackendUrl, getSolanaRpcUrl } from "@/lib/api/constants";
 
@@ -79,9 +70,11 @@ async function decryptData(key: CryptoKey, encrypted: string): Promise<string> {
   return new TextDecoder().decode(plaintext);
 }
 
-async function persistKeys(walletPubkey: string, keys: AegisKeys): Promise<void> {
+async function persistKeys(walletPubkey: string, _keys: AegisKeys): Promise<void> {
   try {
-    const data = serializeKeysForStorage(keys);
+    const client = AegisClient.instance();
+    const data = client.serializeKeys();
+    if (!data) return;
     const storageKey = await deriveStorageKey(walletPubkey);
     const encrypted = await encryptData(storageKey, JSON.stringify(data));
     localStorage.setItem(KEYS_STORAGE_PREFIX + walletPubkey, encrypted);
@@ -131,8 +124,8 @@ export function getEventClient(): EventClient {
       backendUrl,
       backendWsUrl: wsUrl,
       solanaRpcUrl: getSolanaRpcUrl(),
-      programId: getConfig().aegisProgramId,
-      commitmentTreeAddress: getConfig().commitmentTreePda,
+      programId: AegisClient.instance().config.aegisProgramId,
+      commitmentTreeAddress: AegisClient.instance().config.commitmentTreePda,
     });
   }
   return eventClient;
@@ -243,10 +236,12 @@ export const useAegisStore = create<AegisState>((set, get) => ({
 
   initPoseidon: async () => {
     try {
-      await initPoseidon();
+      if (!AegisClient.isInitialized) {
+        await AegisClient.init();
+      }
       set({ isPoseidonReady: true });
     } catch (err) {
-      console.error("[Aegis] Failed to init Poseidon:", err);
+      console.error("[Aegis] Failed to init:", err);
     }
   },
 
@@ -254,8 +249,9 @@ export const useAegisStore = create<AegisState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
+      const client = AegisClient.instance();
       const { keys: derivedKeys, stealthAddress: meta, stealthAddressEncoded: encoded } =
-        await setupKeysFromWallet({
+        await client.loginWithWallet({
           publicKey: wallet.publicKey,
           signMessage: wallet.signMessage,
         });
@@ -298,13 +294,27 @@ export const useAegisStore = create<AegisState>((set, get) => ({
     const restored = await loadKeys(pubkeyStr, walletPubkey.toBytes());
     if (!restored) return false;
 
-    const { stealthAddress: meta, stealthAddressEncoded: encoded } =
-      recreateStealthAddress(restored);
+    // Sync the AegisClient singleton with the restored keys
+    const client = AegisClient.instance();
+    const serialized = client.serializeKeys();
+    // restoreKeys needs serialized form — re-serialize via loadKeys result
+    // Since loadKeys already deserialized, we re-read raw from localStorage
+    try {
+      const raw = localStorage.getItem(KEYS_STORAGE_PREFIX + pubkeyStr);
+      if (raw) {
+        const storageKey = await deriveStorageKey(pubkeyStr);
+        const decrypted = await decryptData(storageKey, raw);
+        const data = JSON.parse(decrypted);
+        client.restoreKeys(data, walletPubkey.toBytes());
+      }
+    } catch {
+      // Client sync failed — store still has the keys, just client won't be synced
+    }
 
     set({
       keys: restored,
-      stealthAddress: meta,
-      stealthAddressEncoded: encoded,
+      stealthAddress: client.stealthAddress ?? null,
+      stealthAddressEncoded: client.stealthAddressEncoded ?? null,
       hasKeys: true,
     });
     return true;
@@ -313,8 +323,9 @@ export const useAegisStore = create<AegisState>((set, get) => ({
   deriveKeysFromPasskeySeed: async (seed: Uint8Array) => {
     set({ isLoading: true, error: null });
     try {
+      const client = AegisClient.instance();
       const { keys: derivedKeys, stealthAddress: meta, stealthAddressEncoded: encoded } =
-        await setupKeysFromSeed(seed);
+        await client.loginWithSeed(seed);
 
       // Persist with "passkey:" prefix
       const credentialId = typeof window !== "undefined"
@@ -344,16 +355,28 @@ export const useAegisStore = create<AegisState>((set, get) => ({
         : null;
       if (!credentialId) return false;
 
-      const restored = await loadKeys("passkey:" + credentialId, new Uint8Array(32));
+      const storageId = "passkey:" + credentialId;
+      const restored = await loadKeys(storageId, new Uint8Array(32));
       if (!restored) return false;
 
-      const { stealthAddress: meta, stealthAddressEncoded: encoded } =
-        recreateStealthAddress(restored);
+      // Sync the AegisClient singleton with the restored keys
+      const client = AegisClient.instance();
+      try {
+        const raw = localStorage.getItem(KEYS_STORAGE_PREFIX + storageId);
+        if (raw) {
+          const storageKey = await deriveStorageKey(storageId);
+          const decrypted = await decryptData(storageKey, raw);
+          const data = JSON.parse(decrypted);
+          client.restoreKeys(data, new Uint8Array(32));
+        }
+      } catch {
+        // Client sync failed — store still has the keys
+      }
 
       set({
         keys: restored,
-        stealthAddress: meta,
-        stealthAddressEncoded: encoded,
+        stealthAddress: client.stealthAddress ?? null,
+        stealthAddressEncoded: client.stealthAddressEncoded ?? null,
         hasKeys: true,
       });
       return true;
@@ -365,6 +388,9 @@ export const useAegisStore = create<AegisState>((set, get) => ({
   loadViewOnlyKeys: (encoded: string) => {
     try {
       const voKeys = decodeViewOnlyKeys(encoded);
+      // Sync with AegisClient so computeNullifier works in view-only mode
+      const client = AegisClient.instance();
+      client.loginViewOnly(voKeys);
       set({
         keys: null,
         viewOnlyKeys: voKeys,
@@ -383,6 +409,10 @@ export const useAegisStore = create<AegisState>((set, get) => ({
   clearKeys: (walletPubkey?: string) => {
     if (walletPubkey) {
       removeKeys(walletPubkey);
+    }
+    // Clear AegisClient state
+    if (AegisClient.isInitialized) {
+      AegisClient.instance().logout();
     }
     set({
       keys: null,
@@ -434,15 +464,15 @@ export const useAegisStore = create<AegisState>((set, get) => ({
         lastAnnouncementCount = announcements.length;
 
         // Build token list with computed tokenIds for multi-token scanning
-        const config = getConfig();
+        const aegisClient = AegisClient.instance();
+        const config = aegisClient.config;
         const tokensToScan: { symbol: string; tokenId: bigint }[] = [];
         for (const token of VAULT_TOKENS) {
           try {
             let mintAddr = token.mint;
             if (!mintAddr && token.symbol === "zkBTC") mintAddr = config.zkbtcMint;
             if (!mintAddr) continue; // skip tokens without mint addresses
-            const mintBytes = new PublicKey(mintAddr).toBytes();
-            tokensToScan.push({ symbol: token.shieldedSymbol, tokenId: computeTokenId(mintBytes) });
+            tokensToScan.push({ symbol: token.shieldedSymbol, tokenId: aegisClient.getTokenId(mintAddr) });
           } catch { /* skip invalid mints */ }
         }
 
@@ -483,15 +513,9 @@ export const useAegisStore = create<AegisState>((set, get) => ({
         // Check which notes are spent via backend batch nullifier API (use proxy)
         const backendUrl = "";
 
-        const nullifyingKey = isViewOnly && viewOnlyKeys
-          ? viewOnlyKeys.nullifyingKey
-          : keys!.nullifyingKey;
-
-        // Compute nullifier hashes (hex) for each note
+        // Compute nullifier hashes (hex) for each note via AegisClient
         const nullifierData = scanned.map((note) => {
-          const hashBytes = isViewOnly
-            ? computeNullifierBytes(nullifyingKey, note.leafIndex)
-            : computeNullifierHashForNote(keys!, note as ScannedNote);
+          const hashBytes = aegisClient.computeNullifier(note);
           const hashHex = Buffer.from(hashBytes).toString("hex");
           return { note, hashHex };
         });
@@ -598,7 +622,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
           method: "getTokenAccountsByOwner",
           params: [
             walletPubkey.toBase58(),
-            { mint: getConfig().zkbtcMint },
+            { mint: AegisClient.instance().config.zkbtcMint },
             { encoding: "jsonParsed", commitment: "confirmed" },
           ],
         }),
