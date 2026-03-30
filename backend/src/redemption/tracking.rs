@@ -60,7 +60,11 @@ impl TrackingStore {
 
     fn conn(&self) -> PooledConnection<SqliteConnectionManager> {
         self.pool.get().unwrap_or_else(|e| {
-            panic!("[tracking] DB connection pool exhausted (max_size=5): {}", e)
+            eprintln!("[tracking] DB pool exhausted (max_size=5): {}. Retrying in 100ms...", e);
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            self.pool.get().unwrap_or_else(|e2| {
+                panic!("[tracking] DB pool exhausted after retry: {}", e2)
+            })
         })
     }
 
