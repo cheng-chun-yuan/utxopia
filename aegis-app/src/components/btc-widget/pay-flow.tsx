@@ -1484,17 +1484,21 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                 output={output}
                 index={index}
                 canRemove={outputs.length > 1}
-                onUpdate={(update) => updateOutput(output.id, update)}
-                onRemove={() => removeOutput(output.id)}
-                defaultAddress={keys?.solanaPublicKey.some(b => b !== 0) ? (publicKey?.toBase58() || "") : ""}
-                disablePublic={outputs.some(o => o.id !== output.id && o.mode === "btc")}
-                disableBtc={outputs.some(o => o.id !== output.id && o.mode === "public")}
-                selfMeta={stealthAddress ?? null}
-                maxAmount={Math.max(0, totalInputSats - outputs.reduce((sum, o, j) => j === index ? sum : sum + (parseSats(o.amount) ?? 0), 0) - effectiveRelayerFee)}
-                serviceFeeSats={effectiveServiceFee}
-                serviceFeeBps={effectiveServiceFeeBps}
-                tokenUnit={selectedToken.unit}
-                tokenSymbol={selectedToken.shieldedSymbol}
+                handlers={{
+                  onUpdate: (update) => updateOutput(output.id, update),
+                  onRemove: () => removeOutput(output.id),
+                }}
+                config={{
+                  defaultAddress: keys?.solanaPublicKey.some(b => b !== 0) ? (publicKey?.toBase58() || "") : "",
+                  disablePublic: outputs.some(o => o.id !== output.id && o.mode === "btc"),
+                  disableBtc: outputs.some(o => o.id !== output.id && o.mode === "public"),
+                  selfMeta: stealthAddress ?? null,
+                  maxAmount: Math.max(0, totalInputSats - outputs.reduce((sum, o, j) => j === index ? sum : sum + (parseSats(o.amount) ?? 0), 0) - effectiveRelayerFee),
+                  serviceFeeSats: effectiveServiceFee,
+                  serviceFeeBps: effectiveServiceFeeBps,
+                  tokenUnit: selectedToken.unit,
+                  tokenSymbol: selectedToken.shieldedSymbol,
+                }}
               />
             ))}
           </div>

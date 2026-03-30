@@ -19,12 +19,12 @@ import type { OutputRow } from "./helpers";
 import { isValidSolanaAddress } from "./helpers";
 import { NoteLinkPreview } from "./note-links";
 
-export interface OutputRowCardProps {
-  output: OutputRow;
-  index: number;
-  canRemove: boolean;
+export interface OutputRowHandlers {
   onUpdate: (update: Partial<OutputRow>) => void;
   onRemove: () => void;
+}
+
+export interface OutputRowConfig {
   defaultAddress: string;
   disablePublic?: boolean;
   disableBtc?: boolean;
@@ -36,6 +36,14 @@ export interface OutputRowCardProps {
   tokenSymbol?: string;
 }
 
+export interface OutputRowCardProps {
+  output: OutputRow;
+  index: number;
+  canRemove: boolean;
+  handlers: OutputRowHandlers;
+  config: OutputRowConfig;
+}
+
 const MODE_OPTIONS = [
   { mode: "stealth" as const, label: "Stealth", icon: Shield, color: "text-purple", private: true },
   { mode: "note" as const, label: "Link", icon: Link2, color: "text-btc", private: true },
@@ -43,22 +51,19 @@ const MODE_OPTIONS = [
   { mode: "btc" as const, label: "Bitcoin", icon: Bitcoin, color: "text-btc", private: false },
 ] as const;
 
-export function OutputRowCard({
-  output,
-  index,
-  canRemove,
-  onUpdate,
-  onRemove,
-  defaultAddress,
-  disablePublic = false,
-  disableBtc = false,
-  selfMeta,
-  maxAmount,
-  serviceFeeSats = 0,
-  serviceFeeBps = 0,
-  tokenUnit = "sats",
-  tokenSymbol = "zkBTC",
-}: OutputRowCardProps) {
+export function OutputRowCard({ output, index, canRemove, handlers, config }: OutputRowCardProps) {
+  const { onUpdate, onRemove } = handlers;
+  const {
+    defaultAddress,
+    disablePublic = false,
+    disableBtc = false,
+    selfMeta,
+    maxAmount,
+    serviceFeeSats = 0,
+    serviceFeeBps = 0,
+    tokenUnit = "sats",
+    tokenSymbol = "zkBTC",
+  } = config;
   const currentMode = MODE_OPTIONS.find((m) => m.mode === output.mode) ?? MODE_OPTIONS[0];
 
   return (
