@@ -22,7 +22,7 @@ export function useRelayerConfig(selectedToken: PayToken) {
     // Fetch all fee config from backend (reads on-chain pool state internally)
     fetch("/api/relayer/meta")
       .then((r) => (r.ok ? r.json() : null))
-      .catch(() => null)
+      .catch((err) => { console.error("[RelayerConfig] fetch error:", err); return null; })
       .then((data) => {
         if (!data) return;
         setRelayerMeta({

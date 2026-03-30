@@ -28,7 +28,7 @@ export function useTokenBalance(
     let cancelled = false;
     connection.getBalance(publicKey).then((bal) => {
       if (!cancelled) setSolBalance(bal);
-    }).catch(() => {});
+    }).catch((err) => console.error("[TokenBalance] SOL balance fetch error:", err));
     return () => { cancelled = true; };
   }, [publicKey, selectedToken.isSOL, connection]);
 
@@ -50,7 +50,7 @@ export function useTokenBalance(
       const data = accounts.value[0].account.data;
       const view = new DataView(data.buffer, data.byteOffset + 64, 8);
       setSplBalance(Number(view.getBigUint64(0, true)));
-    }).catch(() => { if (!cancelled) setSplBalance(0); });
+    }).catch((err) => { console.error("[TokenBalance] SPL balance fetch error:", err); if (!cancelled) setSplBalance(0); });
     return () => { cancelled = true; };
   }, [publicKey, selectedToken, connection]);
 

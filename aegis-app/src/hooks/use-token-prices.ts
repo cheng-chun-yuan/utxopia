@@ -29,14 +29,14 @@ function readCache(): Cache | null {
     if (!raw) return null;
     const c: Cache = JSON.parse(raw);
     if (Date.now() - c.ts < STALE_MS) return c;
-  } catch {}
+  } catch (err) { console.error("[TokenPrices] cache read error:", err); }
   return null;
 }
 
 function writeCache(prices: TokenPrices) {
   try {
     sessionStorage.setItem(CACHE_KEY, JSON.stringify({ prices, ts: Date.now() }));
-  } catch {}
+  } catch (err) { console.error("[TokenPrices] cache write error:", err); }
 }
 
 /** Try Binance first (faster, no rate limit), fall back to CoinGecko */
@@ -52,7 +52,8 @@ async function fetchFromBinance(): Promise<TokenPrices | null> {
       usdc: map["USDCUSDT"] ?? null,
       usdt: 1.0, // USDT is the quote currency
     };
-  } catch {
+  } catch (err) {
+    console.error("[TokenPrices] Binance fetch error:", err);
     return null;
   }
 }
@@ -68,7 +69,8 @@ async function fetchFromCoinGecko(): Promise<TokenPrices | null> {
       usdc: data?.["usd-coin"]?.usd ?? null,
       usdt: data?.tether?.usd ?? null,
     };
-  } catch {
+  } catch (err) {
+    console.error("[TokenPrices] CoinGecko fetch error:", err);
     return null;
   }
 }

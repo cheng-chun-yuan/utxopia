@@ -65,10 +65,10 @@ export async function buildTokenIdMap(): Promise<Map<string, string>> {
         const tokenId = computeTokenId(mintBytes);
         const hex = tokenId.toString(16).padStart(64, "0");
         if (!map.has(hex)) map.set(hex, token.symbol);
-      } catch { /* skip */ }
+      } catch (err) { console.error("[TokenMap] tokenId computation failed for:", token.symbol, err); }
     }
-  } catch {
-    // Poseidon failed — precomputed fallback already loaded
+  } catch (err) {
+    console.error("[TokenMap] Poseidon init failed, using precomputed fallback:", err);
   }
 
   if (map.size > 0) cachedMap = map;

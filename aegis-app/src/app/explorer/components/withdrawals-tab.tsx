@@ -52,7 +52,7 @@ function BtcConfirmationStatus({ txid, onMinerFee }: { txid: string; onMinerFee?
         const [txResp, tipResp, relayResp] = await Promise.all([
           fetch(`${getEsploraApiUrl()}/tx/${txid}`),
           fetch(`${getEsploraApiUrl()}/blocks/tip/height`),
-          fetch("/api/relayer/meta").catch(() => null),
+          fetch("/api/relayer/meta").catch((err) => { console.error("[BtcConfirmationStatus] relayer meta fetch error:", err); return null; }),
         ]);
         if (cancelled) return;
 
@@ -63,7 +63,7 @@ function BtcConfirmationStatus({ txid, onMinerFee }: { txid: string; onMinerFee?
           try {
             const relay = await relayResp.json();
             if (relay.tip_height) setRelayedHeight(relay.tip_height);
-          } catch { /* ignore */ }
+          } catch (err) { console.error("[BtcConfirmationStatus] relay meta parse error:", err); }
         }
 
         // Compute miner fee from tx data
@@ -78,7 +78,7 @@ function BtcConfirmationStatus({ txid, onMinerFee }: { txid: string; onMinerFee?
         } else {
           setConfirmations(0);
         }
-      } catch { /* ignore */ }
+      } catch (err) { console.error("[BtcConfirmationStatus] fetch error:", err); }
     }
     fetchStatus();
     const interval = setInterval(fetchStatus, 30_000);

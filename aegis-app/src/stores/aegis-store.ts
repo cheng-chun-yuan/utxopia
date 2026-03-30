@@ -473,7 +473,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
             if (!mintAddr && token.symbol === "zkBTC") mintAddr = config.zkbtcMint;
             if (!mintAddr) continue; // skip tokens without mint addresses
             tokensToScan.push({ symbol: token.shieldedSymbol, tokenId: aegisClient.getTokenId(mintAddr) });
-          } catch { /* skip invalid mints */ }
+          } catch (err) { console.error("[AegisStore] invalid mint for token:", token.symbol, err); }
         }
 
         // Scan locally for privacy (server doesn't know which are ours)
