@@ -27,7 +27,7 @@ import {
 import { fetchSpentNullifierPDAs, nullifierHashToPDA } from "@/lib/nullifier-utils";
 import { getActiveTokenId } from "@/lib/token-context";
 import { VAULT_TOKENS } from "@/lib/supported-tokens";
-import { getBackendUrl } from "@/lib/api/constants";
+import { getBackendUrl, getSolanaRpcUrl } from "@/lib/api/constants";
 
 // ============================================================================
 // localStorage Key Persistence (AES-256-GCM encrypted)
@@ -163,7 +163,7 @@ export function getEventClient(): EventClient {
     eventClient = new EventClient({
       backendUrl,
       backendWsUrl: wsUrl,
-      solanaRpcUrl: process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com",
+      solanaRpcUrl: getSolanaRpcUrl(),
       programId: getConfig().aegisProgramId,
       commitmentTreeAddress: getConfig().commitmentTreePda,
     });
@@ -623,7 +623,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
       return;
     }
     try {
-      const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com";
+      const rpcUrl = getSolanaRpcUrl();
       // Fetch token accounts for the zkBTC mint under Token-2022
       const response = await fetch(rpcUrl, {
         method: "POST",

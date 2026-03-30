@@ -16,6 +16,7 @@ import {
   type ConnectionAdapter,
 } from "@aegis/sdk";
 import { HELIUS_RPC_DEVNET } from "@/lib/helius";
+import { getSolanaRpcUrl } from "@/lib/api/constants";
 
 // Re-export ConnectionAdapter type
 export type { ConnectionAdapter };
@@ -28,7 +29,7 @@ export type { ConnectionAdapter };
  * Get the configured RPC URL.
  */
 export function getRpcUrl(): string {
-  return HELIUS_RPC_DEVNET || process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com";
+  return HELIUS_RPC_DEVNET || getSolanaRpcUrl();
 }
 
 // =============================================================================

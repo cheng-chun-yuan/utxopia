@@ -6,6 +6,7 @@
  */
 
 import { getNetworkConfig } from "../network-config";
+import { SOLANA_RPC_FALLBACK_URL } from "./constants";
 const AEGIS_PROGRAM_ID = getNetworkConfig().solana.aegisProgramId;
 const COMMITMENT_TREE_PDA = "CbaDvGVVQqskcu4cz6Fsu3i2q8eWG8GjeqpZiKgPiCaW";
 
@@ -42,7 +43,7 @@ function getRpcUrl(): string {
   return (
     process.env.NEXT_PUBLIC_SOLANA_RPC_URL ||
     process.env.SOLANA_RPC_URL ||
-    "https://api.devnet.solana.com"
+    SOLANA_RPC_FALLBACK_URL
   );
 }
 

@@ -22,6 +22,18 @@ import { getNetworkConfig } from "../network-config";
 
 export const DEFAULT_API_URL = "http://localhost:3001";
 
+/** Default Solana RPC URL used when no env var or Helius key is configured */
+export const SOLANA_RPC_FALLBACK_URL = "https://api.devnet.solana.com";
+
+/**
+ * Get the Solana RPC URL.
+ *
+ * Priority: NEXT_PUBLIC_SOLANA_RPC_URL env var > devnet fallback
+ */
+export function getSolanaRpcUrl(): string {
+  return process.env.NEXT_PUBLIC_SOLANA_RPC_URL || SOLANA_RPC_FALLBACK_URL;
+}
+
 /**
  * Get the backend API URL.
  *

@@ -1,5 +1,6 @@
 import { PublicKey } from "@solana/web3.js";
 import { PDA_SEEDS, getConfig } from "@aegis/sdk";
+import { getSolanaRpcUrl } from "@/lib/api/constants";
 
 /** Derive nullifier PDA address (base58) from nullifier hash hex */
 export function nullifierHashToPDA(hashHex: string): string {
@@ -32,7 +33,7 @@ export async function fetchSpentNullifierPDAs(backendUrl: string): Promise<Set<s
   } catch {
     // Fallback: on-chain getProgramAccounts(dataSize: 1)
     try {
-      const rpcUrl = process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com";
+      const rpcUrl = getSolanaRpcUrl();
       const resp = await fetch(rpcUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

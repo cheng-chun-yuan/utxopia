@@ -64,6 +64,7 @@ import {
 import {
   buildMerkleProofPath,
 } from "@/lib/spv/verify";
+import { getHeliusRpcUrl } from "@/lib/helius-server";
 export const dynamic = "force-dynamic";
 
 // =============================================================================
@@ -353,7 +354,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
     }
 
     const connection = new Connection(
-      process.env.NEXT_PUBLIC_SOLANA_RPC || "https://api.devnet.solana.com",
+      getHeliusRpcUrl(),
       "confirmed"
     );
     const network = (process.env.NEXT_PUBLIC_BTC_NETWORK || "testnet") as "mainnet" | "testnet" | "testnet4" | "signet" | "regtest";

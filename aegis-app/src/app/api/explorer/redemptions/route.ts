@@ -12,10 +12,9 @@ import type { RpcClient } from "@aegis/sdk";
 const getAegisSDK = () => import("@aegis/sdk");
 const getSolanaKit = () => import("@solana/kit");
 
-const RPC_URL =
-  process.env.NEXT_PUBLIC_SOLANA_RPC_URL ||
-  process.env.SOLANA_RPC_URL ||
-  "https://api.devnet.solana.com";
+import { getHeliusRpcUrl } from "@/lib/helius-server";
+
+const RPC_URL = getHeliusRpcUrl();
 
 import { getBackendUrl } from "@/lib/api/constants";
 export const dynamic = "force-dynamic";

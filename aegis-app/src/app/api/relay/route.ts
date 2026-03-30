@@ -47,6 +47,7 @@ import {
 } from "@/lib/solana/pdas";
 
 import { getRelayerKeypair as getRelayerKeypairShared } from "@/lib/server/relayer";
+import { getHeliusRpcUrl } from "@/lib/helius-server";
 export const dynamic = "force-dynamic";
 
 // =============================================================================
@@ -265,7 +266,7 @@ export async function POST(request: NextRequest) {
 
     const relayer = getRelayerKeypair();
     const connection = new Connection(
-      process.env.NEXT_PUBLIC_SOLANA_RPC || "https://api.devnet.solana.com",
+      getHeliusRpcUrl(),
       "confirmed"
     );
 

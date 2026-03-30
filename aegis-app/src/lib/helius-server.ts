@@ -10,6 +10,7 @@
 
 import { createSolanaRpc, type Rpc, type SolanaRpcApi } from "@solana/kit";
 import { Connection } from "@solana/web3.js";
+import { SOLANA_RPC_FALLBACK_URL } from "@/lib/api/constants";
 
 // Server-side Helius API key (more secure than client-side)
 const HELIUS_API_KEY = process.env.HELIUS_API_KEY || process.env.NEXT_PUBLIC_HELIUS_API_KEY || "";
@@ -29,7 +30,7 @@ export function getHeliusRpcUrl(network: "devnet" | "mainnet" = "devnet"): strin
   // Fallback to public RPC
   return network === "mainnet"
     ? "https://api.mainnet-beta.solana.com"
-    : process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com";
+    : process.env.NEXT_PUBLIC_SOLANA_RPC_URL || SOLANA_RPC_FALLBACK_URL;
 }
 
 /** Check if Helius is configured */

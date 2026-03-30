@@ -7,10 +7,10 @@
  */
 
 import { NextResponse } from "next/server";
-import { getNetworkConfig } from "@/lib/network-config";
+import { getBackendUrl } from "@/lib/api/constants";
 export const dynamic = "force-dynamic";
 
-const BACKEND_URL = getNetworkConfig().backend.url || "http://localhost:3001";
+const BACKEND_URL = getBackendUrl();
 
 interface ExplorerTx {
   txSignature?: string;
