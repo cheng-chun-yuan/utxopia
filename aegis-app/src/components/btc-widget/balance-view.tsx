@@ -39,30 +39,25 @@ import {
 } from "@/lib/api/deposits";
 import { formatBtc, formatSats, truncateMiddle } from "@/lib/utils/formatting";
 import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
-import { SUPPORTED_TOKENS, type SupportedToken } from "@/lib/supported-tokens";
+import { SUPPORTED_TOKENS, getTokenBySymbol, type SupportedToken } from "@/lib/supported-tokens";
+import { DEPOSIT_STATUS_ORDER } from "@/lib/deposit-status";
 
 /** Resolve token config from deposit data */
 function getDepositToken(deposit: { token_symbol?: string; instruction_disc?: number }): SupportedToken {
   const sym = deposit.token_symbol;
   if (sym) {
-    const found = SUPPORTED_TOKENS.find((t) => t.symbol === sym || t.shieldedSymbol === sym);
+    const found = getTokenBySymbol(sym);
     if (found) return found;
   }
   return SUPPORTED_TOKENS[0]; // default: BTC
 }
 
-/** Format amount using token decimals, trim trailing zeros */
-function formatTokenAmt(rawAmount: number, token: SupportedToken): string {
-  const num = rawAmount / 10 ** token.decimals;
-  if (num < 0.01 && num > 0) return num.toFixed(token.decimals).replace(/(\.\d{2,}?)0+$/, "$1");
-  const s = num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: token.decimals > 2 ? token.decimals : 2 });
-  return s.replace(/(\.\d{2,}?)0+$/, "$1");
-}
+import { formatAmount } from "@/lib/utils/formatting";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 import { useBackendDeposits } from "@/hooks/use-backend-deposits";
-import { useDeposits } from "@/hooks/use-explorer";
+import { useExplorer, toDepositRecord } from "@/hooks/use-explorer";
 import { useAegisStore, type InboxNote } from "@/stores";
 import { isDepositForViewer, hexToBytes, bytesToBigint } from "@aegis/sdk";
 
@@ -141,10 +136,6 @@ const OpReturnData = memo(({ ephemeralPub, npk }: { ephemeralPub?: string; npk?:
 });
 OpReturnData.displayName = "OpReturnData";
 
-const STATUS_ORDER: Record<string, number> = {
-  pending: 0, detected: 1, confirming: 1, confirmed: 2,
-  sweeping: 3, sweep_confirming: 3, verifying: 4, ready: 5, claimed: 5,
-};
 
 // =============================================================================
 // Unified deposit card (DepositCard style)
@@ -236,7 +227,7 @@ TxLink.displayName = "TxLink";
 const DepositCard = memo(({ deposit }: { deposit: TrackerDepositStatus & { token_symbol?: string; instruction_disc?: number } }) => {
   const { copied, copy } = useCopyToClipboard();
   const status = deposit.status;
-  const stepOrder = STATUS_ORDER[status] ?? 0;
+  const stepOrder = DEPOSIT_STATUS_ORDER[status] ?? 0;
   const [expanded, setExpanded] = useState(false);
   const token = getDepositToken(deposit);
   const isBtcNative = token.isBtcNative;
@@ -291,7 +282,7 @@ const DepositCard = memo(({ deposit }: { deposit: TrackerDepositStatus & { token
                 <span className="text-xs text-gray">{token.symbol} shielded</span>
               </div>
               <span className="flex items-center gap-1.5">
-                <span className="text-base font-semibold text-white font-mono">{formatTokenAmt(deposit.amount_sats, token)}</span>
+                <span className="text-base font-semibold text-white font-mono">{formatAmount(deposit.amount_sats, token.decimals)}</span>
                 <span className="text-xs text-purple">{token.shieldedSymbol}</span>
               </span>
             </div>
@@ -428,7 +419,8 @@ RetryButton.displayName = "RetryButton";
 
 export function BalanceView() {
   const { deposits: backendDeposits, isLoading: backendLoading } = useBackendDeposits();
-  const { deposits: explorerDeposits, isLoading: explorerLoading } = useDeposits();
+  const { transactions: explorerTxs, isLoading: explorerLoading } = useExplorer();
+  const explorerDeposits = explorerTxs.filter(t => t.type === "shield").map(toDepositRecord);
   const keys = useAegisStore((s) => s.keys);
   const inboxNotes = useAegisStore((s) => s.inboxNotes);
 
@@ -697,7 +689,8 @@ export function BalanceView() {
 
 export function useMyDepositCount(): number {
   const { deposits: backendDeposits } = useBackendDeposits();
-  const { deposits: explorerDeposits } = useDeposits();
+  const { transactions: expTxs } = useExplorer();
+  const explorerDeposits = expTxs.filter(t => t.type === "shield").map(toDepositRecord);
   const keys = useAegisStore((s) => s.keys);
   const inboxNotes = useAegisStore((s) => s.inboxNotes);
 

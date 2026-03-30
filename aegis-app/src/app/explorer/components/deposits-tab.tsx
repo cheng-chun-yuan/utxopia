@@ -19,7 +19,7 @@ import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
 import { getSolanaExplorerAddressUrl } from "@/lib/solana-network";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "@/components/ui/copy-button";
-import { useDeposits } from "@/hooks/use-explorer";
+import { useExplorer, toDepositRecord } from "@/hooks/use-explorer";
 import type { DepositRecord } from "@/hooks/use-explorer";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
@@ -27,26 +27,14 @@ import Image from "next/image";
 import { truncate, timeAgo } from "./helpers";
 import { Th, Td, SolanaLink, TypeBadge, StatusDot, FlowCell, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
 import type { StatusDotVariant } from "./shared";
-import { SUPPORTED_TOKENS, formatTokenAmount, type SupportedToken } from "@/lib/supported-tokens";
-import { getTokenBySymbol } from "@/lib/supported-tokens";
+import { SUPPORTED_TOKENS, formatTokenAmount, getTokenBySymbol, type SupportedToken } from "@/lib/supported-tokens";
 import { resolveTokenSymbolSync } from "@/lib/token-map";
+
+import { DEPOSIT_STATUS_CONFIG, DEPOSIT_STATUS_ORDER } from "@/lib/deposit-status";
 
 // =============================================================================
 // Deposit Status
 // =============================================================================
-
-const DEPOSIT_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; spinning?: boolean }> = {
-  pending: { label: "Awaiting BTC", color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-500/20" },
-  detected: { label: "Detected", color: "text-purple-400", bg: "bg-purple-500/10 border-purple-500/20", spinning: true },
-  confirming: { label: "Confirming", color: "text-purple-400", bg: "bg-purple-500/10 border-purple-500/20", spinning: true },
-  confirmed: { label: "Confirmed", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20" },
-  sweeping: { label: "Sweeping", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20", spinning: true },
-  sweep_confirming: { label: "Sweep Confirming", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20", spinning: true },
-  verifying: { label: "Verifying", color: "text-sol", bg: "bg-sol/10 border-sol/20", spinning: true },
-  ready: { label: "Minted", color: "text-green-400", bg: "bg-green-500/10 border-green-500/20" },
-  claimed: { label: "Minted", color: "text-green-400", bg: "bg-green-500/10 border-green-500/20" },
-  failed: { label: "Failed", color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" },
-};
 
 function getDepositStatusDot(status: string | null): { variant: StatusDotVariant; label: string } {
   const resolved = status ?? "claimed";
@@ -59,11 +47,6 @@ function getDepositStatusDot(status: string | null): { variant: StatusDotVariant
 // =============================================================================
 // Deposit Details (expandable row)
 // =============================================================================
-
-const DEPOSIT_STATUS_ORDER: Record<string, number> = {
-  pending: 0, detected: 1, confirming: 1, confirmed: 2,
-  sweeping: 3, sweep_confirming: 3, verifying: 4, ready: 5, claimed: 5,
-};
 
 function DepositDetails({ deposit, config, isBtc }: { deposit: DepositRecord; config: ShieldTypeConfig; isBtc: boolean }) {
   const d = deposit;
@@ -316,10 +299,10 @@ function buildShieldConfig(token: SupportedToken): ShieldTypeConfig {
   };
 }
 
-const btcToken = SUPPORTED_TOKENS.find(t => t.symbol === "BTC")!;
-const solToken = SUPPORTED_TOKENS.find(t => t.symbol === "SOL")!;
-const usdcToken = SUPPORTED_TOKENS.find(t => t.symbol === "USDC")!;
-const usdtToken = SUPPORTED_TOKENS.find(t => t.symbol === "USDT")!;
+const btcToken = getTokenBySymbol("BTC")!;
+const solToken = getTokenBySymbol("SOL")!;
+const usdcToken = getTokenBySymbol("USDC")!;
+const usdtToken = getTokenBySymbol("USDT")!;
 
 const SHIELD_TYPE_CONFIG: Record<string, ShieldTypeConfig> = {
   btc: buildShieldConfig(btcToken),
@@ -430,7 +413,8 @@ export function DepositRow({
 // =============================================================================
 
 export function DepositsTab() {
-  const { deposits, isLoading, error, refresh } = useDeposits();
+  const { transactions, isLoading, error, refresh } = useExplorer();
+  const deposits = transactions.filter(t => t.type === "shield").map(toDepositRecord);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const toggle = useCallback((sig: string) => {

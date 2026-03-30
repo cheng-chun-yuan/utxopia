@@ -5,15 +5,13 @@ import { useRouter } from "next/navigation";
 import { ArrowDown, Copy, Check, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { InboxNote } from "@/hooks/use-aegis";
-import { SUPPORTED_TOKENS, type SupportedToken } from "@/lib/supported-tokens";
-import { useTokenPrices } from "@/hooks/use-btc-price";
+import { SUPPORTED_TOKENS, getTokenBySymbol, type SupportedToken } from "@/lib/supported-tokens";
+import { useTokenPrices } from "@/hooks/use-token-prices";
 
 function getTokenForNote(note: InboxNote): SupportedToken {
   const sym = note.tokenSymbol;
   if (sym) {
-    const found = SUPPORTED_TOKENS.find(
-      (t) => t.shieldedSymbol === sym || t.symbol === sym
-    );
+    const found = getTokenBySymbol(sym);
     if (found) return found;
   }
   return SUPPORTED_TOKENS[0]; // default: BTC

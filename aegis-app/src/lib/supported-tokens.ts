@@ -228,7 +228,7 @@ export function getTokenByFilter(filterId: TokenFilterId): SupportedToken | unde
 
 /** Look up token config by symbol */
 export function getTokenBySymbol(symbol: string): SupportedToken | undefined {
-  return SUPPORTED_TOKENS.find((t) => t.symbol === symbol);
+  return SUPPORTED_TOKENS.find((t) => t.symbol === symbol || t.shieldedSymbol === symbol);
 }
 
 /**

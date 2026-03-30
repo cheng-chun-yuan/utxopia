@@ -23,12 +23,12 @@ import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { AuthModal } from "@/components/auth-modal";
 import { EmptyInbox } from "@/components/stealth-inbox";
 
-import { SUPPORTED_TOKENS, type SupportedToken } from "@/lib/supported-tokens";
-import { useTokenPrices } from "@/hooks/use-btc-price";
+import { SUPPORTED_TOKENS, getTokenBySymbol, type SupportedToken } from "@/lib/supported-tokens";
+import { useTokenPrices } from "@/hooks/use-token-prices";
 import type { InboxNote } from "@/stores/aegis-store";
 
 function getToken(sym: string): SupportedToken {
-  return SUPPORTED_TOKENS.find(t => t.shieldedSymbol === sym || t.symbol === sym) || SUPPORTED_TOKENS[0];
+  return getTokenBySymbol(sym) || SUPPORTED_TOKENS[0];
 }
 
 function formatAmt(amount: bigint | number, token: SupportedToken): string {
