@@ -1003,3 +1003,21 @@ export function isDepositForViewer(
   }
 }
 
+/**
+ * Check if a deposit belongs to this viewer — accepts hex string inputs.
+ * Convenience wrapper around isDepositForViewer for frontend use.
+ */
+export function isDepositForViewerHex(
+  keys: { viewingPrivKey: Uint8Array; spendingPubKey: { x: bigint; y: bigint }; nullifyingKey: bigint },
+  ephemeralPubHex: string,
+  npkHex: string,
+): boolean {
+  try {
+    const ephPub = hexToBytes(ephemeralPubHex);
+    const npk = bytesToBigint(hexToBytes(npkHex));
+    return isDepositForViewer(keys.viewingPrivKey, keys.spendingPubKey, keys.nullifyingKey, ephPub, npk);
+  } catch {
+    return false;
+  }
+}
+

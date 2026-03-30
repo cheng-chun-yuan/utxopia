@@ -59,7 +59,7 @@ import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 import { useBackendDeposits } from "@/hooks/use-backend-deposits";
 import { useExplorer, toDepositRecord } from "@/hooks/use-explorer";
 import { useAegisStore, type InboxNote } from "@/stores";
-import { isDepositForViewer, hexToBytes, bytesToBigint } from "@aegis/sdk";
+import { isDepositForViewerHex } from "@aegis/sdk";
 
 // =============================================================================
 // Status badge — maps backend DepositStatus to UI
@@ -462,13 +462,7 @@ export function BalanceView() {
     // Method 1: tracker deposits with npk matching
     const fromTracker = backendDeposits.filter((d) => {
       if (!d.ephemeral_pub || !d.npk) return false;
-      try {
-        const ephPub = hexToBytes(d.ephemeral_pub);
-        const npk = bytesToBigint(hexToBytes(d.npk));
-        return isDepositForViewer(
-          keys.viewingPrivKey, keys.spendingPubKey, keys.nullifyingKey, ephPub, npk,
-        );
-      } catch { return false; }
+      return isDepositForViewerHex(keys, d.ephemeral_pub, d.npk);
     });
 
     if (fromTracker.length > 0) return fromTracker;
@@ -700,11 +694,7 @@ export function useMyDepositCount(): number {
     // Method 1: tracker deposits
     const fromTracker = backendDeposits.filter((d) => {
       if (!d.ephemeral_pub || !d.npk) return false;
-      try {
-        const ephPub = hexToBytes(d.ephemeral_pub);
-        const npk = bytesToBigint(hexToBytes(d.npk));
-        return isDepositForViewer(keys.viewingPrivKey, keys.spendingPubKey, keys.nullifyingKey, ephPub, npk);
-      } catch { return false; }
+      return isDepositForViewerHex(keys, d.ephemeral_pub, d.npk);
     });
     if (fromTracker.length > 0) return fromTracker.length;
 

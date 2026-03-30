@@ -373,6 +373,7 @@ export {
   decryptAmount,
   computeNullifierHashForNote,
   isDepositForViewer,
+  isDepositForViewerHex,
   ANNOUNCEMENT_TYPE_DEPOSIT,
   ANNOUNCEMENT_TYPE_TRANSFER,
   type StealthDeposit,

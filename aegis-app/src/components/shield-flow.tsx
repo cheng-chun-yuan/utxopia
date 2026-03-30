@@ -19,9 +19,8 @@ import {
   TOKEN_PROGRAM_ID as SPL_TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID as SPL_TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
-import { getConfig, computeNPKSync, computeMPKSync, sha256Hash } from "@aegis/sdk";
+import { getConfig, createStealthOutputWithKeys, bigintToBytes, computeTokenId } from "@aegis/sdk";
 import { useAegis } from "@/hooks/use-aegis";
-import { ed25519GenerateKeyPair, x25519Ecdh, ed25519PubToX25519 } from "@aegis/sdk";
 import { Shield, ChevronDown, Loader2, ExternalLink, CheckCircle2, AlertCircle, LogOut, Wallet, Copy, Check, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StealthRecipientInput } from "@/components/ui/stealth-recipient-input";
@@ -32,7 +31,7 @@ import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 
 import { MobileWalletGuidance } from "@/components/bitcoin-wallet-selector";
 import { useIsMobileWithoutWallet } from "@/hooks/use-mobile-wallet-detect";
-import { BTC_DUST_LIMIT, TOKEN_2022_PROGRAM_ID_STR, BN254_FIELD_MODULUS } from "@/lib/btc-constants";
+import { BTC_DUST_LIMIT, TOKEN_2022_PROGRAM_ID_STR } from "@/lib/btc-constants";
 import { useTokenBalance } from "@/hooks/use-token-balance";
 import { useBtcDeposit } from "@/hooks/use-btc-deposit";
 
@@ -111,37 +110,16 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
       const config = getConfig();
       const amountRaw = BigInt(Math.floor(parseFloat(amount) * (10 ** selectedToken.decimals)));
 
-      const ephemeral = ed25519GenerateKeyPair();
-      const mpk = computeMPKSync(keys.spendingPubKey.x, keys.spendingPubKey.y, keys.nullifyingKey);
-      const viewingPubX25519 = ed25519PubToX25519(keys.viewingPubKey);
-      const sharedSecret = x25519Ecdh(ephemeral.privKey, viewingPubX25519);
-
-      const domain = new TextEncoder().encode("Aegis-stealth-v1");
-      const secretBuf = new Uint8Array(sharedSecret.length + domain.length);
-      secretBuf.set(sharedSecret);
-      secretBuf.set(domain, sharedSecret.length);
-      const hash = sha256Hash(secretBuf);
-      let stealthScalar = 0n;
-      for (const b of hash) {
-        stealthScalar = (stealthScalar << 8n) | BigInt(b);
-      }
-      stealthScalar = stealthScalar % BN254_FIELD_MODULUS;
-
-      const npk = computeNPKSync(mpk, stealthScalar);
-
-      const npkBytes = new Uint8Array(32);
-      let n = npk;
-      for (let i = 31; i >= 0; i--) {
-        npkBytes[i] = Number(n & 0xffn);
-        n >>= 8n;
-      }
-
       // Determine mint: SOL uses native wSOL, others use their configured mint
       const mintPubkey = selectedToken.isSOL
         ? NATIVE_MINT
         : selectedToken.mint
           ? new PublicKey(selectedToken.mint)
           : new PublicKey(config.zkbtcMint);
+
+      const tokenIdBigint = computeTokenId(mintPubkey.toBuffer());
+      const stealthOutput = await createStealthOutputWithKeys(keys, amountRaw, tokenIdBigint);
+      const npkBytes = bigintToBytes(stealthOutput.stealthPubKeyX);
 
       const programId = new PublicKey(config.aegisProgramId);
 
@@ -212,7 +190,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
         const dataView = new DataView(ixData.buffer);
         dataView.setBigUint64(1, amountRaw, true);
         ixData.set(npkBytes, 9);
-        ixData.set(ephemeral.pubKey, 41);
+        ixData.set(stealthOutput.ephemeralPub, 41);
 
         tx.add(new TransactionInstruction({
           programId,
@@ -258,7 +236,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
         const dataView = new DataView(ixData.buffer);
         dataView.setBigUint64(1, amountRaw, true);
         ixData.set(npkBytes, 9);
-        ixData.set(ephemeral.pubKey, 41);
+        ixData.set(stealthOutput.ephemeralPub, 41);
 
         tx.add(new TransactionInstruction({
           programId,
