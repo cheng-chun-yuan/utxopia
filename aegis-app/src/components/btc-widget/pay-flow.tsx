@@ -43,6 +43,7 @@ import {
   deriveMasterKey,
   deriveKeysFromSeedCircuit,
   createStealthMetaAddress,
+  AegisClient,
   type StealthMetaAddress,
   type ScannedNote,
   type JoinSplitProofInputs,
@@ -425,8 +426,8 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       await initPoseidon();
 
       const { computeJoinSplitCommitmentSync, createStealthDepositWithKeys,
-              eddsaPoseidonSign, computeBoundParamsHash,
-              createUnshieldBoundParams, poseidonHashSync,
+              computeBoundParamsHash,
+              createUnshieldBoundParams,
               getCommitmentIndex: getCommitmentIndexSdk,
               parseAnnouncementsFromHex,
               decodeStealthMetaAddress } = await import("@aegis/sdk");
@@ -498,22 +499,22 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         // Standard inbox notes path
         setProofStatus("Verifying your funds...");
 
-        const merkleResults = await Promise.all(
-          selectedNotes.map(async (note) => {
-            const resp = await fetch(`/api/merkle/proof?commitment=${note.commitmentHex}`);
-            const data = await resp.json();
-            if (!data.success) {
-              throw new Error(`Note ${note.commitmentHex.slice(0, 16)}... not found on-chain`);
-            }
-            return { note, merkle: data };
-          })
+        const aegisClient = AegisClient.isInitialized
+          ? AegisClient.instance()
+          : await AegisClient.init();
+        const merkleProofs = await aegisClient.fetchMerkleProofs(
+          selectedNotes.map((n) => n.commitmentHex),
         );
-
-        // Validate all proofs share the same merkle root
-        const roots = merkleResults.map((r) => r.merkle.root);
-        if (new Set(roots).size > 1) {
-          throw new Error("Input notes have different Merkle roots — tree may have changed");
-        }
+        // Re-join proofs with their notes for downstream processing
+        const merkleResults = selectedNotes.map((note, i) => ({
+          note,
+          merkle: {
+            success: true,
+            root: merkleProofs[i].root.toString(16).padStart(64, "0"),
+            siblings: merkleProofs[i].pathElements.map((e) => e.toString(16).padStart(64, "0")),
+            indices: merkleProofs[i].pathIndices,
+          },
+        }));
 
         // Prepare claim inputs for each input note
         setProofStatus("Preparing private transfer...");
@@ -735,21 +736,25 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 
       const allNullifiers = inputsData.map((d) => d.claimInputs.nullifier);
       const msgHashInputs = [merkleRoot, boundParamsHash, ...allNullifiers, ...outCommitments];
-      const msgHash = poseidonHashSync(msgHashInputs);
 
       // Use phrase-derived keys for imported notes, wallet-derived keys for inbox notes
       let sigR8x: bigint, sigR8y: bigint, sigS: bigint;
       let proofPublicKey: [bigint, bigint];
       let proofNullifyingKey: bigint;
 
+      const txClient = AegisClient.isInitialized
+        ? AegisClient.instance()
+        : await AegisClient.init();
+
       if (hasImportedNotes && inputsData[0].importedKeys) {
         const ik = inputsData[0].importedKeys;
-        // Use circomlibjs EdDSA signing (keys from deriveKeysFromSeedCircuit are circuit-compatible)
-        [sigR8x, sigR8y, sigS] = await eddsaPoseidonSign(ik.eddsaSeed, msgHash);
+        const sig = await txClient.signTransaction(msgHashInputs, ik.eddsaSeed);
+        sigR8x = sig.sigR8x; sigR8y = sig.sigR8y; sigS = sig.sigS;
         proofPublicKey = [ik.spendingPubKey.x, ik.spendingPubKey.y];
         proofNullifyingKey = ik.nullifyingKey;
       } else {
-        [sigR8x, sigR8y, sigS] = await eddsaPoseidonSign(keys!.eddsaSeed, msgHash);
+        const sig = await txClient.signTransaction(msgHashInputs, keys!.eddsaSeed);
+        sigR8x = sig.sigR8x; sigR8y = sig.sigR8y; sigS = sig.sigS;
         proofPublicKey = [keys!.spendingPubKey.x, keys!.spendingPubKey.y];
         proofNullifyingKey = inputsData[0].claimInputs.nullifyingKey;
       }
@@ -823,7 +828,9 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       nullifierHexes.forEach((h, i) => { if (h !== clientNullifierHexes[i]) console.warn(`[Pay] MISMATCH nullifier[${i}]:`, { snarkjs: h, client: clientNullifierHexes[i] }); });
       commitmentHexes.forEach((h, i) => { if (h !== clientCommitmentHexes[i]) console.warn(`[Pay] MISMATCH commitment[${i}]:`, { snarkjs: h, client: clientCommitmentHexes[i] }); });
 
-      let relayResult: { success: boolean; signature?: string; error?: string };
+      const relayClient = AegisClient.isInitialized
+        ? AegisClient.instance()
+        : await AegisClient.init();
 
       // Common fields for all modes
       const commonFields = {
@@ -836,28 +843,22 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         commitmentsOut: commitmentHexes,
       };
 
+      let relayResult: { success: boolean; signature?: string; error?: string };
+
       if (isBtcRedeem && btcOutput) {
-        // BTC Redeem: disc=15 atomic JoinSplit + RedemptionRequest (multi-output)
         const redeemAmountSats = BigInt(parseSats(btcOutput.amount) ?? 0);
         const requestNonce = BigInt(Date.now());
         const treeStealthData = stealthDataArrays.slice(0, -1);
 
-        const redeemResponse = await fetch("/api/relay", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...commonFields,
-            mode: "redeem",
-            stealthData: treeStealthData.map((sd) => bytesToHex(sd)),
-            redeemAmounts: [redeemAmountSats.toString()],
-            btcScripts: [bytesToHex(btcOutput.btcScriptPubKey!)],
-            requestNonces: [requestNonce.toString()],
-          }),
+        relayResult = await relayClient.submitToRelay({
+          ...commonFields,
+          mode: "redeem",
+          stealthData: treeStealthData.map((sd) => bytesToHex(sd)),
+          redeemAmounts: [redeemAmountSats.toString()],
+          btcScripts: [bytesToHex(btcOutput.btcScriptPubKey!)],
+          requestNonces: [requestNonce.toString()],
         });
-
-        relayResult = await redeemResponse.json();
       } else if (isPublicUnshield && unshieldRecipientAddress) {
-        // Public unshield: disc=14 (multi-output)
         const unshieldAmount = parseSats(publicOutput!.amount) ?? 0;
         const { getAssociatedTokenAddressSync } = await import("@solana/spl-token");
         const recipientPubkey = new PublicKey(publicOutput!.solanaAddress);
@@ -868,34 +869,21 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         );
         const treeStealthData = stealthDataArrays.slice(0, -1);
 
-        const relayResponse = await fetch("/api/relay", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...commonFields,
-            mode: "unshield",
-            stealthData: treeStealthData.map((sd) => bytesToHex(sd)),
-            unshieldAmounts: [unshieldAmount.toString()],
-            recipientAddresses: [recipientPubkey.toBase58()],
-            recipientTokenAccounts: [recipientTokenAccount.toBase58()],
-          }),
+        relayResult = await relayClient.submitToRelay({
+          ...commonFields,
+          mode: "unshield",
+          stealthData: treeStealthData.map((sd) => bytesToHex(sd)),
+          unshieldAmounts: [unshieldAmount.toString()],
+          recipientAddresses: [recipientPubkey.toBase58()],
+          recipientTokenAccounts: [recipientTokenAccount.toBase58()],
         });
-
-        relayResult = await relayResponse.json();
       } else {
-        // Private transfer: disc=13
-        const relayResponse = await fetch("/api/relay", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...commonFields,
-            mode: "transfer",
-            stealthData: stealthDataArrays.map((sd) => bytesToHex(sd)),
-            relayerFeeOutputIndex,
-          }),
+        relayResult = await relayClient.submitToRelay({
+          ...commonFields,
+          mode: "transfer",
+          stealthData: stealthDataArrays.map((sd) => bytesToHex(sd)),
+          relayerFeeOutputIndex,
         });
-
-        relayResult = await relayResponse.json();
       }
 
       if (!relayResult.success) {

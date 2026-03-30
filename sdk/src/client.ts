@@ -17,9 +17,11 @@
  * Phase 3: Transfer + relay (future)
  */
 
-import { initPoseidon } from "./poseidon";
+import { initPoseidon, poseidonHashSync } from "./poseidon";
 import { computeTokenId, reduceToField } from "./poseidon";
 import { initConfig, getConfig, type NetworkConfig, type NetworkId } from "./config";
+import { parseMerkleProofResponse } from "./merkle";
+import { eddsaPoseidonSign } from "./keys";
 import {
   setupKeysFromWallet,
   setupKeysFromSeed,
@@ -407,6 +409,112 @@ export class AegisClient {
     const tokenId = this.getTokenId(opts.mintAddress);
     const output = await createStealthOutputWithKeys(keys, opts.amount, tokenId);
     return { ...output, tokenId };
+  }
+
+  // ─── Phase 3: Transfer + Relay ─────────────────────────────────
+
+  /**
+   * Fetch merkle proofs for multiple commitments.
+   * Used before proof generation to get the on-chain tree state.
+   *
+   * @param commitmentHexes - Array of commitment hex strings
+   * @param apiBaseUrl - Base URL for the merkle proof API (default: "" for same-origin)
+   */
+  async fetchMerkleProofs(
+    commitmentHexes: string[],
+    apiBaseUrl = "",
+  ): Promise<
+    Array<{
+      commitmentHex: string;
+      root: bigint;
+      pathElements: bigint[];
+      pathIndices: number[];
+    }>
+  > {
+    const results = await Promise.all(
+      commitmentHexes.map(async (hex) => {
+        const resp = await fetch(
+          `${apiBaseUrl}/api/merkle/proof?commitment=${hex}`,
+        );
+        const data = await resp.json();
+        if (!data.success) {
+          throw new Error(`Note ${hex.slice(0, 16)}... not found on-chain`);
+        }
+        const parsed = parseMerkleProofResponse(data);
+        return { commitmentHex: hex, ...parsed };
+      }),
+    );
+
+    // Validate all proofs share the same root
+    const roots = results.map((r) => r.root);
+    if (new Set(roots.map((r) => r.toString())).size > 1) {
+      throw new Error(
+        "Input notes have different Merkle roots — tree may have changed",
+      );
+    }
+
+    return results;
+  }
+
+  /**
+   * Hash transaction inputs and sign with EdDSA-Poseidon.
+   *
+   * @param msgHashInputs - Array of bigints to hash (merkleRoot, boundParamsHash, nullifiers, commitments)
+   * @param eddsaSeed - The EdDSA seed bytes (from AegisKeys.eddsaSeed)
+   */
+  async signTransaction(
+    msgHashInputs: bigint[],
+    eddsaSeed: Uint8Array,
+  ): Promise<{
+    sigR8x: bigint;
+    sigR8y: bigint;
+    sigS: bigint;
+    msgHash: bigint;
+  }> {
+    const msgHash = poseidonHashSync(msgHashInputs);
+    const [sigR8x, sigR8y, sigS] = await eddsaPoseidonSign(
+      eddsaSeed,
+      msgHash,
+    );
+    return { sigR8x, sigR8y, sigS, msgHash };
+  }
+
+  /**
+   * Submit a JoinSplit transaction to the relay backend.
+   *
+   * @param payload - Transaction data including proof, nullifiers, commitments, and mode-specific fields
+   * @param relayUrl - URL for the relay endpoint (default: "/api/relay")
+   */
+  async submitToRelay(
+    payload: {
+      mode: "transfer" | "unshield" | "redeem";
+      nInputs: number;
+      nOutputs: number;
+      proof: string;
+      merkleRoot: string;
+      boundParamsHash: string;
+      nullifiers: string[];
+      commitmentsOut: string[];
+      stealthData: string[];
+      // Transfer-specific
+      relayerFeeOutputIndex?: number;
+      // Unshield-specific
+      unshieldAmounts?: string[];
+      recipientAddresses?: string[];
+      recipientTokenAccounts?: string[];
+      // Redeem-specific
+      redeemAmounts?: string[];
+      btcScripts?: string[];
+      requestNonces?: string[];
+    },
+    relayUrl = "/api/relay",
+  ): Promise<{ success: boolean; signature?: string; error?: string }> {
+    const resp = await fetch(relayUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return resp.json();
   }
 
   // ─── Private helpers ────────────────────────────────────────────
