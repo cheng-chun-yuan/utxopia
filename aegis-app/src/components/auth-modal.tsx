@@ -5,9 +5,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { Fingerprint, Wallet, X, Shield, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface AuthModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+export interface AuthState {
   passkeySupported: boolean;
   hasPasskeyCredential: boolean;
   passkeyLoading: boolean;
@@ -21,21 +19,19 @@ interface AuthModalProps {
   onViewOnlyLogin?: (viewingKey: string) => void;
 }
 
-export function AuthModal({
-  open,
-  onOpenChange,
-  passkeySupported,
-  hasPasskeyCredential,
-  passkeyLoading,
-  walletLoading,
-  walletConnected,
-  error,
-  onPasskeyRegister,
-  onPasskeyAuthenticate,
-  onWalletConnect,
-  onWalletDeriveKeys,
-  onViewOnlyLogin,
-}: AuthModalProps) {
+interface AuthModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  auth: AuthState;
+}
+
+export function AuthModal({ open, onOpenChange, auth }: AuthModalProps) {
+  const {
+    passkeySupported, hasPasskeyCredential, passkeyLoading,
+    walletLoading, walletConnected, error,
+    onPasskeyRegister, onPasskeyAuthenticate,
+    onWalletConnect, onWalletDeriveKeys, onViewOnlyLogin,
+  } = auth;
   const isLoading = passkeyLoading || walletLoading;
   const [showViewOnly, setShowViewOnly] = useState(false);
   const [viewingKeyInput, setViewingKeyInput] = useState("");

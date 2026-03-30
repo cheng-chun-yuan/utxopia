@@ -1172,16 +1172,18 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
           <AuthModal
             open={authModalOpen}
             onOpenChange={setAuthModalOpen}
-            passkeySupported={passkeySupported}
-            hasPasskeyCredential={hasPasskeyCredential}
-            passkeyLoading={passkeyLoading}
-            walletLoading={keysLoading}
-            walletConnected={connected}
-            error={passkeyError}
-            onPasskeyRegister={handlePasskeyRegister}
-            onPasskeyAuthenticate={handlePasskeyAuthenticate}
-            onWalletConnect={() => { setAuthModalOpen(false); setWalletModalVisible(true); }}
-            onWalletDeriveKeys={async () => { await deriveKeys(); setAuthModalOpen(false); }}
+            auth={{
+              passkeySupported,
+              hasPasskeyCredential,
+              passkeyLoading,
+              walletLoading: keysLoading,
+              walletConnected: connected,
+              error: passkeyError,
+              onPasskeyRegister: handlePasskeyRegister,
+              onPasskeyAuthenticate: handlePasskeyAuthenticate,
+              onWalletConnect: () => { setAuthModalOpen(false); setWalletModalVisible(true); },
+              onWalletDeriveKeys: async () => { await deriveKeys(); setAuthModalOpen(false); },
+            }}
           />
         </>
       );

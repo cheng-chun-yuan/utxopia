@@ -51,7 +51,7 @@ import { useSnsName } from "@/hooks/use-sns-name";
 import { useStealthInbox } from "@/hooks/use-aegis";
 import { getConfig, exportViewOnlyKeys, encodeViewOnlyKeys } from "@aegis/sdk";
 import { notifyCopied } from "@/lib/notifications";
-import { useTokenPrices } from "@/hooks/use-btc-price";
+import { useTokenPrices } from "@/hooks/use-token-prices";
 import { VAULT_TOKENS } from "@/lib/supported-tokens";
 import { OnboardingModal } from "@/components/onboarding-modal";
 import { AuthModal } from "@/components/auth-modal";
@@ -604,17 +604,19 @@ export default function VaultPage() {
       <AuthModal
         open={authModalOpen}
         onOpenChange={setAuthModalOpen}
-        passkeySupported={passkeySupported}
-        hasPasskeyCredential={hasPasskeyCredential}
-        passkeyLoading={passkeyLoading}
-        walletLoading={isLoading}
-        walletConnected={wallet.connected}
-        error={error || passkeyError}
-        onPasskeyRegister={handlePasskeyRegister}
-        onPasskeyAuthenticate={handlePasskeyAuthenticate}
-        onWalletConnect={() => { setAuthModalOpen(false); setVisible(true); }}
-        onWalletDeriveKeys={async () => { await deriveKeys(); setAuthModalOpen(false); }}
-        onViewOnlyLogin={(viewingKey) => { loadViewOnlyKeys(viewingKey); setAuthModalOpen(false); }}
+        auth={{
+          passkeySupported,
+          hasPasskeyCredential,
+          passkeyLoading,
+          walletLoading: isLoading,
+          walletConnected: wallet.connected,
+          error: error || passkeyError,
+          onPasskeyRegister: handlePasskeyRegister,
+          onPasskeyAuthenticate: handlePasskeyAuthenticate,
+          onWalletConnect: () => { setAuthModalOpen(false); setVisible(true); },
+          onWalletDeriveKeys: async () => { await deriveKeys(); setAuthModalOpen(false); },
+          onViewOnlyLogin: (viewingKey) => { loadViewOnlyKeys(viewingKey); setAuthModalOpen(false); },
+        }}
       />
 
       {/* Export Viewing Key modal */}
