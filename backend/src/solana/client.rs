@@ -25,6 +25,34 @@ use crate::config::AEGISConfig;
 use crate::redemption::types::ParsedRedemption;
 
 // ============================================================================
+// Parameter Structs
+// ============================================================================
+
+/// Parameters for verifying a BTC deposit via SPV proof.
+pub struct VerifyDepositParams<'a> {
+    pub txid: &'a [u8; 32],
+    pub merkle_proof: &'a SpvMerkleProof,
+    pub block_hash: &'a [u8; 32],
+    pub block_height: u64,
+    pub amount_sats: u64,
+    pub expected_pubkey: &'a [u8; 32],
+    pub vout: u32,
+    pub commitment: &'a [u8; 32],
+}
+
+/// Parameters for completing a redemption on-chain.
+pub struct CompleteRedemptionParams<'a> {
+    pub redemption_pda: &'a Pubkey,
+    pub btc_txid: &'a [u8; 32],
+    pub verified_tx_pda: &'a Pubkey,
+    pub tx_buffer: &'a Pubkey,
+    pub tx_size: u32,
+    pub pool_script: &'a [u8],
+    pub consumed_utxo_pdas: &'a [Pubkey],
+    pub change_utxo_pda: Option<&'a Pubkey>,
+}
+
+// ============================================================================
 // Constants
 // ============================================================================
 
@@ -521,14 +549,7 @@ impl SolClient {
     /// Verify a Bitcoin deposit via SPV proof
     pub async fn verify_btc_deposit(
         &self,
-        txid: &[u8; 32],
-        merkle_proof: &SpvMerkleProof,
-        block_hash: &[u8; 32],
-        block_height: u64,
-        amount_sats: u64,
-        expected_pubkey: &[u8; 32],
-        vout: u32,
-        commitment: &[u8; 32],
+        params: &VerifyDepositParams<'_>,
     ) -> Result<String, SolError> {
         let payer = self.payer.as_ref().ok_or(SolError::NoPayerSet)?;
 
@@ -539,12 +560,12 @@ impl SolClient {
         );
 
         let (block_header, _) = Pubkey::find_program_address(
-            &[b"block", block_hash],
+            &[b"block", params.block_hash],
             &self.program_id,
         );
 
         let (deposit_record, _) = Pubkey::find_program_address(
-            &[b"deposit", txid],
+            &[b"deposit", params.txid],
             &self.program_id,
         );
 
@@ -555,32 +576,32 @@ impl SolClient {
 
         let mut data = Vec::new();
         data.extend_from_slice(&discriminator);
-        data.extend_from_slice(txid);
+        data.extend_from_slice(params.txid);
 
         // Serialize merkle proof
-        data.extend_from_slice(merkle_proof.txid.as_slice());
+        data.extend_from_slice(params.merkle_proof.txid.as_slice());
         // Number of siblings (u32)
-        data.extend_from_slice(&(merkle_proof.siblings.len() as u32).to_le_bytes());
-        for sibling in &merkle_proof.siblings {
+        data.extend_from_slice(&(params.merkle_proof.siblings.len() as u32).to_le_bytes());
+        for sibling in &params.merkle_proof.siblings {
             data.extend_from_slice(sibling);
         }
         // Path indices
-        data.extend_from_slice(&(merkle_proof.path.len() as u32).to_le_bytes());
-        for is_right in &merkle_proof.path {
+        data.extend_from_slice(&(params.merkle_proof.path.len() as u32).to_le_bytes());
+        for is_right in &params.merkle_proof.path {
             data.push(if *is_right { 1 } else { 0 });
         }
-        data.extend_from_slice(&merkle_proof.tx_index.to_le_bytes());
+        data.extend_from_slice(&params.merkle_proof.tx_index.to_le_bytes());
 
         // Block height
-        data.extend_from_slice(&block_height.to_le_bytes());
+        data.extend_from_slice(&params.block_height.to_le_bytes());
 
         // Transaction output
-        data.extend_from_slice(&amount_sats.to_le_bytes());
-        data.extend_from_slice(expected_pubkey);
-        data.extend_from_slice(&vout.to_le_bytes());
+        data.extend_from_slice(&params.amount_sats.to_le_bytes());
+        data.extend_from_slice(params.expected_pubkey);
+        data.extend_from_slice(&params.vout.to_le_bytes());
 
         // Commitment
-        data.extend_from_slice(commitment);
+        data.extend_from_slice(params.commitment);
 
         let accounts = vec![
             AccountMeta::new(self.pool_state, false),
@@ -825,25 +846,18 @@ impl SolClient {
     ///   Pass None if no change expected; program will skip if no matching output found.
     pub async fn send_complete_redemption(
         &self,
-        redemption_pda: &Pubkey,
-        btc_txid: &[u8; 32],
-        verified_tx_pda: &Pubkey,
-        tx_buffer: &Pubkey,
-        tx_size: u32,
-        pool_script: &[u8],
-        consumed_utxo_pdas: &[Pubkey],
-        change_utxo_pda: Option<&Pubkey>,
+        params: &CompleteRedemptionParams<'_>,
     ) -> Result<String, SolError> {
         let payer = self.payer.as_ref().ok_or(SolError::NoPayerSet)?;
 
         // Data: disc(1) + btc_txid(32) + tx_size(4) + pool_script_len(1) + pool_script(0-34) + consumed_utxo_count(1)
-        let mut data = Vec::with_capacity(1 + 32 + 4 + 1 + pool_script.len() + 1);
+        let mut data = Vec::with_capacity(1 + 32 + 4 + 1 + params.pool_script.len() + 1);
         data.push(0x06u8);
-        data.extend_from_slice(btc_txid);
-        data.extend_from_slice(&tx_size.to_le_bytes());
-        data.push(pool_script.len() as u8);
-        data.extend_from_slice(pool_script);
-        data.push(consumed_utxo_pdas.len() as u8);
+        data.extend_from_slice(params.btc_txid);
+        data.extend_from_slice(&params.tx_size.to_le_bytes());
+        data.push(params.pool_script.len() as u8);
+        data.extend_from_slice(params.pool_script);
+        data.push(params.consumed_utxo_pdas.len() as u8);
 
         // Derive light_client PDA under BTC_LIGHT_CLIENT_PROGRAM_ID
         let (light_client_pda, _) = Pubkey::find_program_address(
@@ -861,18 +875,18 @@ impl SolClient {
 
         // Derive completion_receipt PDA: seeds = ["completion_receipt", btc_txid]
         let (completion_receipt_pda, _) = Pubkey::find_program_address(
-            &[b"completion_receipt", btc_txid],
+            &[b"completion_receipt", params.btc_txid],
             &self.program_id,
         );
 
         let mut accounts = vec![
             AccountMeta::new(self.pool_state, false),                   // 0: pool_state (writable)
-            AccountMeta::new(*redemption_pda, false),                   // 1: redemption_pda (writable)
+            AccountMeta::new(*params.redemption_pda, false),            // 1: redemption_pda (writable)
             AccountMeta::new(payer.pubkey(), true),                     // 2: payer/authority (signer)
             AccountMeta::new_readonly(payer.pubkey(), false),           // 3: payer (rent recipient)
-            AccountMeta::new_readonly(*verified_tx_pda, false),        // 4: verified_tx_pda
+            AccountMeta::new_readonly(*params.verified_tx_pda, false),  // 4: verified_tx_pda
             AccountMeta::new_readonly(light_client_pda, false),        // 5: light_client PDA
-            AccountMeta::new_readonly(*tx_buffer, false),              // 6: tx_buffer
+            AccountMeta::new_readonly(*params.tx_buffer, false),       // 6: tx_buffer
             AccountMeta::new(self.zkbtc_mint, false),                  // 7: zkbtc_mint (writable)
             AccountMeta::new(pool_vault, false),                       // 8: pool_vault (writable)
             AccountMeta::new_readonly(TOKEN_2022_PROGRAM_ID, false),   // 9: TOKEN_2022
@@ -888,8 +902,8 @@ impl SolClient {
         accounts.push(AccountMeta::new_readonly(pool_config_pda, false));
 
         // Account 13: change UTXO PDA (writable if provided, else system program placeholder)
-        if !pool_script.is_empty() {
-            if let Some(change_pda) = change_utxo_pda {
+        if !params.pool_script.is_empty() {
+            if let Some(change_pda) = params.change_utxo_pda {
                 accounts.push(AccountMeta::new(*change_pda, false));
             } else {
                 // Placeholder — program won't find a matching change output
@@ -898,7 +912,7 @@ impl SolClient {
         }
 
         // Consumed UTXO PDAs (writable, for closing)
-        for utxo_pda in consumed_utxo_pdas {
+        for utxo_pda in params.consumed_utxo_pdas {
             accounts.push(AccountMeta::new(*utxo_pda, false));
         }
 

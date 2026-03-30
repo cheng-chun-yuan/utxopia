@@ -198,7 +198,18 @@ impl SolanaWsSubscriber {
             }
 
             // Insert announcement (is_verified=false from WS; poll service upgrades it later)
-            if let Ok(inserted) = self.store.insert_announcement(ann, signature, slot, 0, false, None, None, None, None, None) {
+            if let Ok(inserted) = self.store.insert_announcement(&super::storage::InsertAnnouncementParams {
+                event: ann,
+                tx_signature: signature,
+                slot,
+                block_time: 0,
+                is_verified: false,
+                btc_deposit_txid: None,
+                btc_sweep_txid: None,
+                btc_deposit_amount_sats: None,
+                deposit_gross_amount: None,
+                deposit_fee: None,
+            }) {
                 if inserted {
                     self.tree_cache.broadcast_announcement(ann);
                     tracing::debug!(leaf_index = ann.leaf_index, "Real-time stealth announcement indexed");
@@ -208,7 +219,21 @@ impl SolanaWsSubscriber {
 
         // Handle nullifiers
         for null in &nullifiers {
-            if let Ok(inserted) = self.store.insert_nullifier(null, signature, slot, 0, None, None, None, None, None, None, None, None, None) {
+            if let Ok(inserted) = self.store.insert_nullifier(&super::storage::InsertNullifierParams {
+                event: null,
+                tx_signature: signature,
+                slot,
+                block_time: 0,
+                instruction_disc: None,
+                unshield_amount: None,
+                unshield_recipient: None,
+                transfer_type: None,
+                token_id: None,
+                unshield_fee: None,
+                unshield_payout: None,
+                unshield_output_count: None,
+                unshield_outputs_json: None,
+            }) {
                 if inserted {
                     self.tree_cache.broadcast_nullifier(&hex::encode(null.nullifier_hash), slot);
                 }

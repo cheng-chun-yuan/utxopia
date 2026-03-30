@@ -1145,16 +1145,16 @@ impl RedemptionService {
 
         // Call complete_redemption on-chain
         match self.sol_client
-            .send_complete_redemption(
-                &pda_pubkey,
-                &txid_internal,
-                &verified_tx_pda,
-                &buffer_pubkey,
+            .send_complete_redemption(&crate::solana::client::CompleteRedemptionParams {
+                redemption_pda: &pda_pubkey,
+                btc_txid: &txid_internal,
+                verified_tx_pda: &verified_tx_pda,
+                tx_buffer: &buffer_pubkey,
                 tx_size,
-                &pool_script,
-                &consumed_utxo_pdas,
-                change_utxo_pda.as_ref(),
-            )
+                pool_script: &pool_script,
+                consumed_utxo_pdas: &consumed_utxo_pdas,
+                change_utxo_pda: change_utxo_pda.as_ref(),
+            })
             .await
         {
             Ok(_) => {

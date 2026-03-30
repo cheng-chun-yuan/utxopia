@@ -96,25 +96,25 @@ impl StealthDepositService {
             taproot_address,
         ) = self.generate_stealth_keys(&recipient_stealth_address, amount_sats)?;
 
-        let record = StealthDepositRecord::new(
+        let record = StealthDepositRecord::new(super::types::NewStealthDepositParams {
             mode,
             recipient_stealth_address,
             amount_sats,
-            taproot_address.clone(),
-            if mode == StealthMode::Relay {
+            taproot_address: taproot_address.clone(),
+            ephemeral_view_priv: if mode == StealthMode::Relay {
                 Some(ephemeral_view_priv.clone())
             } else {
                 None
             },
-            ephemeral_view_pub.clone(),
-            if mode == StealthMode::Relay {
+            ephemeral_view_pub: ephemeral_view_pub.clone(),
+            ephemeral_spend_priv: if mode == StealthMode::Relay {
                 Some(ephemeral_spend_priv.clone())
             } else {
                 None
             },
-            ephemeral_spend_pub.clone(),
-            commitment.clone(),
-        );
+            ephemeral_spend_pub: ephemeral_spend_pub.clone(),
+            commitment: commitment.clone(),
+        });
 
         if mode == StealthMode::Relay {
             self.deposits_by_address

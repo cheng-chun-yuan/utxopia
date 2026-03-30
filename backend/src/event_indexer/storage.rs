@@ -12,6 +12,37 @@ use std::path::Path;
 
 use super::parser::{NullifierSpentEvent, RedemptionCompletedEvent, RedemptionProcessingEvent, RedemptionRequestedEvent, StealthAnnouncementEvent};
 
+/// Parameters for inserting a nullifier event.
+pub struct InsertNullifierParams<'a> {
+    pub event: &'a NullifierSpentEvent,
+    pub tx_signature: &'a str,
+    pub slot: i64,
+    pub block_time: i64,
+    pub instruction_disc: Option<u8>,
+    pub unshield_amount: Option<i64>,
+    pub unshield_recipient: Option<&'a str>,
+    pub transfer_type: Option<&'a str>,
+    pub token_id: Option<&'a str>,
+    pub unshield_fee: Option<i64>,
+    pub unshield_payout: Option<i64>,
+    pub unshield_output_count: Option<i64>,
+    pub unshield_outputs_json: Option<&'a str>,
+}
+
+/// Parameters for inserting a stealth announcement.
+pub struct InsertAnnouncementParams<'a> {
+    pub event: &'a StealthAnnouncementEvent,
+    pub tx_signature: &'a str,
+    pub slot: i64,
+    pub block_time: i64,
+    pub is_verified: bool,
+    pub btc_deposit_txid: Option<&'a str>,
+    pub btc_sweep_txid: Option<&'a str>,
+    pub btc_deposit_amount_sats: Option<i64>,
+    pub deposit_gross_amount: Option<i64>,
+    pub deposit_fee: Option<i64>,
+}
+
 /// SQLite-backed event store
 pub struct EventStore {
     pool: Pool<SqliteConnectionManager>,
@@ -475,22 +506,7 @@ impl EventStore {
     }
 
     /// Insert a nullifier event. Returns true if inserted, false if duplicate.
-    pub fn insert_nullifier(
-        &self,
-        event: &NullifierSpentEvent,
-        tx_signature: &str,
-        slot: i64,
-        block_time: i64,
-        instruction_disc: Option<u8>,
-        unshield_amount: Option<i64>,
-        unshield_recipient: Option<&str>,
-        transfer_type: Option<&str>,
-        token_id: Option<&str>,
-        unshield_fee: Option<i64>,
-        unshield_payout: Option<i64>,
-        unshield_output_count: Option<i64>,
-        unshield_outputs_json: Option<&str>,
-    ) -> Result<bool, String> {
+    pub fn insert_nullifier(&self, params: &InsertNullifierParams) -> Result<bool, String> {
         let conn = self.conn()?;
         let result = conn.execute(
             "INSERT INTO nullifier_events (nullifier_hash, operation_type, spent_at, spent_by, tx_signature, slot, block_time, instruction_disc, unshield_amount, unshield_recipient, transfer_type, token_id, unshield_fee, unshield_payout, unshield_output_count, unshield_outputs)
@@ -508,22 +524,22 @@ impl EventStore {
                 unshield_output_count = COALESCE(excluded.unshield_output_count, nullifier_events.unshield_output_count),
                 unshield_outputs = COALESCE(excluded.unshield_outputs, nullifier_events.unshield_outputs)",
             params![
-                event.nullifier_hash.as_slice(),
-                event.operation_type as i64,
-                block_time,
-                tx_signature,
-                tx_signature,
-                slot,
-                block_time,
-                instruction_disc.map(|d| d as i64),
-                unshield_amount,
-                unshield_recipient,
-                transfer_type,
-                token_id,
-                unshield_fee,
-                unshield_payout,
-                unshield_output_count,
-                unshield_outputs_json,
+                params.event.nullifier_hash.as_slice(),
+                params.event.operation_type as i64,
+                params.block_time,
+                params.tx_signature,
+                params.tx_signature,
+                params.slot,
+                params.block_time,
+                params.instruction_disc.map(|d| d as i64),
+                params.unshield_amount,
+                params.unshield_recipient,
+                params.transfer_type,
+                params.token_id,
+                params.unshield_fee,
+                params.unshield_payout,
+                params.unshield_output_count,
+                params.unshield_outputs_json,
             ],
         );
         match result {
@@ -851,19 +867,7 @@ impl EventStore {
         Ok(())
     }
 
-    pub fn insert_announcement(
-        &self,
-        event: &StealthAnnouncementEvent,
-        tx_signature: &str,
-        slot: i64,
-        block_time: i64,
-        is_verified: bool,
-        btc_deposit_txid: Option<&str>,
-        btc_sweep_txid: Option<&str>,
-        btc_deposit_amount_sats: Option<i64>,
-        deposit_gross_amount: Option<i64>,
-        deposit_fee: Option<i64>,
-    ) -> Result<bool, String> {
+    pub fn insert_announcement(&self, params: &InsertAnnouncementParams) -> Result<bool, String> {
         let conn = self.conn()?;
         // Use ON CONFLICT to upgrade is_verified from false→true (never downgrade).
         // This handles the case where WS inserts first (is_verified=false) and
@@ -883,21 +887,21 @@ impl EventStore {
                 deposit_gross_amount = COALESCE(excluded.deposit_gross_amount, stealth_announcements.deposit_gross_amount),
                 deposit_fee = COALESCE(excluded.deposit_fee, stealth_announcements.deposit_fee)",
             params![
-                event.leaf_index as i64,
-                event.announcement_type as i64,
-                event.ephemeral_pub.as_slice(),
-                event.encrypted_amount.as_slice(),
-                event.commitment.as_slice(),
-                tx_signature,
-                slot,
-                block_time,
-                is_verified as i64,
-                btc_deposit_txid,
-                btc_sweep_txid,
-                btc_deposit_amount_sats,
-                event.token_id.as_slice(),
-                deposit_gross_amount,
-                deposit_fee,
+                params.event.leaf_index as i64,
+                params.event.announcement_type as i64,
+                params.event.ephemeral_pub.as_slice(),
+                params.event.encrypted_amount.as_slice(),
+                params.event.commitment.as_slice(),
+                params.tx_signature,
+                params.slot,
+                params.block_time,
+                params.is_verified as i64,
+                params.btc_deposit_txid,
+                params.btc_sweep_txid,
+                params.btc_deposit_amount_sats,
+                params.event.token_id.as_slice(),
+                params.deposit_gross_amount,
+                params.deposit_fee,
             ],
         );
         match result {
@@ -1355,10 +1359,32 @@ mod tests {
             leaf_index: 5,
             token_id: [0xCC; 32],
         };
-        assert!(store.insert_announcement(&event, "sig1", 100, 1700000000, false, None, None, None, None, None).unwrap());
+        assert!(store.insert_announcement(&InsertAnnouncementParams {
+            event: &event,
+            tx_signature: "sig1",
+            slot: 100,
+            block_time: 1700000000,
+            is_verified: false,
+            btc_deposit_txid: None,
+            btc_sweep_txid: None,
+            btc_deposit_amount_sats: None,
+            deposit_gross_amount: None,
+            deposit_fee: None,
+        }).unwrap());
         // Second insert with same leaf_index uses ON CONFLICT DO UPDATE (returns rows_affected > 0)
         // but no new row is created
-        let _ = store.insert_announcement(&event, "sig1", 100, 1700000000, false, None, None, None, None, None).unwrap();
+        let _ = store.insert_announcement(&InsertAnnouncementParams {
+            event: &event,
+            tx_signature: "sig1",
+            slot: 100,
+            block_time: 1700000000,
+            is_verified: false,
+            btc_deposit_txid: None,
+            btc_sweep_txid: None,
+            btc_deposit_amount_sats: None,
+            deposit_gross_amount: None,
+            deposit_fee: None,
+        }).unwrap();
 
         let rows = store.get_announcements(None).unwrap();
         assert_eq!(rows.len(), 1);
@@ -1382,7 +1408,21 @@ mod tests {
             instruction_disc: 14,
         };
 
-        assert!(store.insert_nullifier(&event, "sig2", 101, 1700000001, Some(14), None, None, Some("private_transfer"), None, None, None, None, None).unwrap());
+        assert!(store.insert_nullifier(&InsertNullifierParams {
+            event: &event,
+            tx_signature: "sig2",
+            slot: 101,
+            block_time: 1700000001,
+            instruction_disc: Some(14),
+            unshield_amount: None,
+            unshield_recipient: None,
+            transfer_type: Some("private_transfer"),
+            token_id: None,
+            unshield_fee: None,
+            unshield_payout: None,
+            unshield_output_count: None,
+            unshield_outputs_json: None,
+        }).unwrap());
 
         let hash_hex = hex::encode([0xCD; 32]);
         let result = store.get_nullifier(&hash_hex).unwrap();

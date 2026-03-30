@@ -10,6 +10,19 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Parameters for creating a new stealth deposit record.
+pub struct NewStealthDepositParams {
+    pub mode: StealthMode,
+    pub recipient_stealth_address: String,
+    pub amount_sats: u64,
+    pub taproot_address: String,
+    pub ephemeral_view_priv: Option<String>,
+    pub ephemeral_view_pub: String,
+    pub ephemeral_spend_priv: Option<String>,
+    pub ephemeral_spend_pub: String,
+    pub commitment: String,
+}
+
 /// Stealth deposit mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -142,17 +155,7 @@ pub struct StealthDepositRecord {
 
 impl StealthDepositRecord {
     /// Create a new stealth deposit record
-    pub fn new(
-        mode: StealthMode,
-        recipient_stealth_address: String,
-        amount_sats: u64,
-        taproot_address: String,
-        ephemeral_view_priv: Option<String>,
-        ephemeral_view_pub: String,
-        ephemeral_spend_priv: Option<String>,
-        ephemeral_spend_pub: String,
-        commitment: String,
-    ) -> Self {
+    pub fn new(params: NewStealthDepositParams) -> Self {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -163,17 +166,17 @@ impl StealthDepositRecord {
 
         Self {
             id,
-            mode,
-            recipient_stealth_address,
-            amount_sats,
-            taproot_address,
+            mode: params.mode,
+            recipient_stealth_address: params.recipient_stealth_address,
+            amount_sats: params.amount_sats,
+            taproot_address: params.taproot_address,
             status: StealthDepositStatus::Pending,
             confirmations: 0,
-            ephemeral_view_priv,
-            ephemeral_view_pub,
-            ephemeral_spend_priv,
-            ephemeral_spend_pub,
-            commitment,
+            ephemeral_view_priv: params.ephemeral_view_priv,
+            ephemeral_view_pub: params.ephemeral_view_pub,
+            ephemeral_spend_priv: params.ephemeral_spend_priv,
+            ephemeral_spend_pub: params.ephemeral_spend_pub,
+            commitment: params.commitment,
             btc_txid: None,
             block_height: None,
             solana_tx: None,
@@ -444,17 +447,17 @@ mod tests {
 
     #[test]
     fn test_stealth_deposit_lifecycle() {
-        let mut record = StealthDepositRecord::new(
-            StealthMode::Relay,
-            "d".repeat(130),
-            100_000,
-            "tb1p123...".to_string(),
-            Some("priv_view".to_string()),
-            "pub_view".to_string(),
-            Some("priv_spend".to_string()),
-            "pub_spend".to_string(),
-            "c".repeat(64),
-        );
+        let mut record = StealthDepositRecord::new(NewStealthDepositParams {
+            mode: StealthMode::Relay,
+            recipient_stealth_address: "d".repeat(130),
+            amount_sats: 100_000,
+            taproot_address: "tb1p123...".to_string(),
+            ephemeral_view_priv: Some("priv_view".to_string()),
+            ephemeral_view_pub: "pub_view".to_string(),
+            ephemeral_spend_priv: Some("priv_spend".to_string()),
+            ephemeral_spend_pub: "pub_spend".to_string(),
+            commitment: "c".repeat(64),
+        });
 
         assert_eq!(record.status, StealthDepositStatus::Pending);
         assert!(!record.is_expired());

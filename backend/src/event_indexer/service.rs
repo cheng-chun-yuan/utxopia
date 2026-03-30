@@ -387,13 +387,18 @@ impl EventIndexerService {
             tracing::debug!(leaf_index, inserted, "Indexed leaf");
 
             // Insert announcement (with is_verified flag + BTC txids + deposit amount for real deposits)
-            let inserted = self.store.insert_announcement(
-                ann, signature, slot, block_time, is_verified,
-                btc_deposit_txid.as_deref(), btc_sweep_txid.as_deref(),
+            let inserted = self.store.insert_announcement(&super::storage::InsertAnnouncementParams {
+                event: ann,
+                tx_signature: signature,
+                slot,
+                block_time,
+                is_verified,
+                btc_deposit_txid: btc_deposit_txid.as_deref(),
+                btc_sweep_txid: btc_sweep_txid.as_deref(),
                 btc_deposit_amount_sats,
-                shield_meta.as_ref().map(|sm| sm.gross_amount as i64),
-                shield_meta.as_ref().map(|sm| sm.fee as i64),
-            )?;
+                deposit_gross_amount: shield_meta.as_ref().map(|sm| sm.gross_amount as i64),
+                deposit_fee: shield_meta.as_ref().map(|sm| sm.fee as i64),
+            })?;
             if inserted {
                 if let Some(ref cache) = self.tree_cache {
                     cache.broadcast_announcement(ann);
@@ -441,16 +446,21 @@ impl EventIndexerService {
             } else {
                 None
             };
-            let inserted = self.store.insert_nullifier(
-                null, signature, slot, block_time, disc,
-                null_amount, null_recipient.as_deref(),
-                Some(transfer_type),
-                unshield_token_id.as_deref(),
-                null_fee,
-                null_payout,
-                output_count,
-                outputs_json.as_deref(),
-            )?;
+            let inserted = self.store.insert_nullifier(&super::storage::InsertNullifierParams {
+                event: null,
+                tx_signature: signature,
+                slot,
+                block_time,
+                instruction_disc: disc,
+                unshield_amount: null_amount,
+                unshield_recipient: null_recipient.as_deref(),
+                transfer_type: Some(transfer_type),
+                token_id: unshield_token_id.as_deref(),
+                unshield_fee: null_fee,
+                unshield_payout: null_payout,
+                unshield_output_count: output_count,
+                unshield_outputs_json: outputs_json.as_deref(),
+            })?;
             if inserted {
                 if let Some(ref cache) = self.tree_cache {
                     cache.broadcast_nullifier(&hex::encode(null.nullifier_hash), slot);
