@@ -45,6 +45,10 @@ export {
   deriveKeysFromWallet,
   deriveKeysFromSeed,
   deriveKeysFromSeedCircuit,
+  // Key setup (combined derivation + stealth address)
+  setupKeysFromWallet,
+  setupKeysFromSeed,
+  recreateStealthAddress,
   // EdDSA signing (used by pay-flow for JoinSplit proof)
   eddsaPoseidonSign,
   // Stealth meta address
@@ -60,6 +64,7 @@ export {
   deserializeKeysFromStorage,
   // Types
   type AegisKeys,
+  type KeySetupResult,
   type SerializedKeysForStorage,
   type StealthMetaAddress,
   type WalletSignerAdapter,

@@ -804,6 +804,59 @@ export function deserializeKeysFromStorage(
   };
 }
 
+// ========== High-Level Key Setup ==========
+
+/**
+ * Result of a complete key setup operation (derivation + stealth address creation).
+ */
+export interface KeySetupResult {
+  keys: AegisKeys;
+  stealthAddress: StealthMetaAddress;
+  stealthAddressEncoded: string;
+}
+
+/**
+ * Derive keys from wallet signature and create stealth address in one step.
+ *
+ * Combines deriveKeysFromWallet + createStealthMetaAddress + encodeStealthMetaAddress.
+ */
+export async function setupKeysFromWallet(
+  wallet: WalletSignerAdapter,
+): Promise<KeySetupResult> {
+  const keys = await deriveKeysFromWallet(wallet);
+  const stealthAddress = createStealthMetaAddress(keys);
+  const stealthAddressEncoded = encodeStealthMetaAddress(stealthAddress);
+  return { keys, stealthAddress, stealthAddressEncoded };
+}
+
+/**
+ * Derive keys from seed (passkey PRF or secret phrase) and create stealth address in one step.
+ *
+ * Combines deriveKeysFromSeedCircuit + createStealthMetaAddress + encodeStealthMetaAddress.
+ */
+export async function setupKeysFromSeed(
+  seed: Uint8Array,
+): Promise<KeySetupResult> {
+  const keys = await deriveKeysFromSeedCircuit(seed);
+  const stealthAddress = createStealthMetaAddress(keys);
+  const stealthAddressEncoded = encodeStealthMetaAddress(stealthAddress);
+  return { keys, stealthAddress, stealthAddressEncoded };
+}
+
+/**
+ * Recreate stealth address from existing keys (for hydration from storage).
+ *
+ * Use this when keys are already deserialized and you just need the stealth address.
+ */
+export function recreateStealthAddress(keys: AegisKeys): {
+  stealthAddress: StealthMetaAddress;
+  stealthAddressEncoded: string;
+} {
+  const stealthAddress = createStealthMetaAddress(keys);
+  const stealthAddressEncoded = encodeStealthMetaAddress(stealthAddress);
+  return { stealthAddress, stealthAddressEncoded };
+}
+
 // ========== Utilities ==========
 
 function concatBytes(...arrays: Uint8Array[]): Uint8Array {

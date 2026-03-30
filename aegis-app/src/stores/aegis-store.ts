@@ -4,10 +4,9 @@ import { create } from "zustand";
 import { PublicKey, type Connection } from "@solana/web3.js";
 import {
   initPoseidon,
-  deriveKeysFromWallet,
-  deriveKeysFromSeedCircuit,
-  createStealthMetaAddress,
-  encodeStealthMetaAddress,
+  setupKeysFromWallet,
+  setupKeysFromSeed,
+  recreateStealthAddress,
   scanUnifiedNotes,
   hexToBytes,
   bytesToHex,
@@ -255,13 +254,11 @@ export const useAegisStore = create<AegisState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const derivedKeys = await deriveKeysFromWallet({
-        publicKey: wallet.publicKey,
-        signMessage: wallet.signMessage,
-      });
-
-      const meta = createStealthMetaAddress(derivedKeys);
-      const encoded = encodeStealthMetaAddress(meta);
+      const { keys: derivedKeys, stealthAddress: meta, stealthAddressEncoded: encoded } =
+        await setupKeysFromWallet({
+          publicKey: wallet.publicKey,
+          signMessage: wallet.signMessage,
+        });
 
       // Persist to localStorage for session hydration
       persistKeys(wallet.publicKey.toBase58(), derivedKeys);
@@ -301,8 +298,8 @@ export const useAegisStore = create<AegisState>((set, get) => ({
     const restored = await loadKeys(pubkeyStr, walletPubkey.toBytes());
     if (!restored) return false;
 
-    const meta = createStealthMetaAddress(restored);
-    const encoded = encodeStealthMetaAddress(meta);
+    const { stealthAddress: meta, stealthAddressEncoded: encoded } =
+      recreateStealthAddress(restored);
 
     set({
       keys: restored,
@@ -316,9 +313,8 @@ export const useAegisStore = create<AegisState>((set, get) => ({
   deriveKeysFromPasskeySeed: async (seed: Uint8Array) => {
     set({ isLoading: true, error: null });
     try {
-      const derivedKeys = await deriveKeysFromSeedCircuit(seed);
-      const meta = createStealthMetaAddress(derivedKeys);
-      const encoded = encodeStealthMetaAddress(meta);
+      const { keys: derivedKeys, stealthAddress: meta, stealthAddressEncoded: encoded } =
+        await setupKeysFromSeed(seed);
 
       // Persist with "passkey:" prefix
       const credentialId = typeof window !== "undefined"
@@ -351,8 +347,8 @@ export const useAegisStore = create<AegisState>((set, get) => ({
       const restored = await loadKeys("passkey:" + credentialId, new Uint8Array(32));
       if (!restored) return false;
 
-      const meta = createStealthMetaAddress(restored);
-      const encoded = encodeStealthMetaAddress(meta);
+      const { stealthAddress: meta, stealthAddressEncoded: encoded } =
+        recreateStealthAddress(restored);
 
       set({
         keys: restored,
