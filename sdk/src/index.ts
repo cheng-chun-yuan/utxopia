@@ -589,3 +589,13 @@ export {
   type NullifierPdasResponse,
 } from "./event-client";
 
+// ==========================================================================
+// High-Level Client (Phase 1: init + auth + balance)
+// ==========================================================================
+
+export {
+  AegisClient,
+  type AegisClientConfig,
+  type TokenDefinition,
+  type InboxNote as ClientInboxNote,
+} from "./client";
