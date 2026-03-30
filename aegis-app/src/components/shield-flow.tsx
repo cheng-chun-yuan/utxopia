@@ -19,33 +19,22 @@ import {
   TOKEN_PROGRAM_ID as SPL_TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID as SPL_TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
-import { getConfig, computeTokenId, computeNPKSync, computeMPKSync } from "@aegis/sdk";
+import { getConfig, computeNPKSync, computeMPKSync } from "@aegis/sdk";
 import { useAegis } from "@/hooks/use-aegis";
-import { getRegisteredTokens, type TokenInfo } from "@/lib/token-context";
 import { ed25519GenerateKeyPair, x25519Ecdh, ed25519PubToX25519 } from "@aegis/sdk";
 import { Shield, ChevronDown, Loader2, ExternalLink, CheckCircle2, AlertCircle, LogOut, Wallet, Copy, Check, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StealthRecipientInput } from "@/components/ui/stealth-recipient-input";
 import type { StealthMetaAddress } from "@aegis/sdk";
-import {
-  bytesToHex,
-  hexToBytes,
-  createNonInteractiveDeposit,
-  buildDepositPsbt,
-  selectUtxos,
-} from "@aegis/sdk";
 import { SHIELD_TOKENS } from "@/lib/supported-tokens";
-import { useBitcoinWalletStore, type WalletUtxo } from "@/stores/bitcoin-wallet-store";
-import { useNotesStore } from "@/stores/notes-store";
-import { registerDeposit } from "@/lib/api/deposits";
-import { getBtcSignerNetwork, getMempoolExplorerUrl } from "@/lib/btc-network";
+import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 
-import { notifyError } from "@/lib/notifications";
 import { MobileWalletGuidance } from "@/components/bitcoin-wallet-selector";
 import { useIsMobileWithoutWallet } from "@/hooks/use-mobile-wallet-detect";
 import { BTC_DUST_LIMIT, TOKEN_2022_PROGRAM_ID_STR, BN254_FIELD_MODULUS } from "@/lib/btc-constants";
 import { useTokenBalance } from "@/hooks/use-token-balance";
+import { useBtcDeposit } from "@/hooks/use-btc-deposit";
 
 const TOKEN_2022_PROGRAM_ID = new PublicKey(TOKEN_2022_PROGRAM_ID_STR);
 
@@ -78,28 +67,16 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
   const [copiedAddr, setCopiedAddr] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // ── BTC-specific state ──
-  const btcWallet = useBitcoinWalletStore();
+  // ── BTC-specific state (extracted to hook) ──
+  const btcDeposit = useBtcDeposit({
+    stealthAddress,
+    resolvedMeta,
+    onStatusChange: (s) => setStatus(s),
+    onError: (msg) => setError(msg || null),
+  });
+  const { btcWallet } = btcDeposit;
   const { solBalance, splBalance, handleMax } = useTokenBalance(selectedToken, publicKey, connection, btcWallet.balance);
   const isMobileNoWallet = useIsMobileWithoutWallet();
-  const [btcAmount, setBtcAmount] = useState("");
-  const [walletDepositing, setWalletDepositing] = useState(false);
-  const [walletDepositResult, setWalletDepositResult] = useState<{ txid: string; depositAddress: string; opReturnHex: string } | null>(null);
-  const [depositPreview, setDepositPreview] = useState<{
-    depositAddress: string;
-    depositAmountSats: number;
-    opReturnHex: string;
-    opReturnPayload: Uint8Array;
-    cachedUtxos: WalletUtxo[];
-  } | null>(null);
-  const [buildingPreview, setBuildingPreview] = useState(false);
-  const [selectedUtxoKeys, setSelectedUtxoKeys] = useState<Set<string>>(new Set());
-  const [showUtxoList, setShowUtxoList] = useState(false);
-  const [editingUtxos, setEditingUtxos] = useState(false);
-  const [showOpReturn, setShowOpReturn] = useState(false);
-  const [copiedBtcAddr, setCopiedBtcAddr] = useState(false);
-  const [showWalletPicker, setShowWalletPicker] = useState(false);
-  const walletPickerRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -107,8 +84,8 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
       }
-      if (walletPickerRef.current && !walletPickerRef.current.contains(e.target as Node)) {
-        setShowWalletPicker(false);
+      if (btcDeposit.walletPickerRef.current && !btcDeposit.walletPickerRef.current.contains(e.target as Node)) {
+        btcDeposit.setShowWalletPicker(false);
       }
     }
     document.addEventListener("mousedown", handleClick);
@@ -120,127 +97,9 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
 
   const onMax = useCallback(() => {
     const max = handleMax();
-    if (selectedToken.isBtcNative) setBtcAmount(max);
+    if (selectedToken.isBtcNative) btcDeposit.setBtcAmount(max);
     else setAmount(max);
-  }, [handleMax, selectedToken.isBtcNative]);
-
-  // ── BTC: Reset flow ──
-  const resetBtcFlow = useCallback(() => {
-    setError(null);
-    setResolvedMeta(stealthAddress ?? null);
-    setBtcAmount("");
-    setWalletDepositResult(null);
-    setDepositPreview(null);
-  }, [stealthAddress]);
-
-  // ── BTC: Build PSBT preview ──
-  const buildTxPreview = useCallback(async () => {
-    if (!resolvedMeta || !btcWallet.connected) return;
-    const amountSats = Math.floor(parseFloat(btcAmount || "0") * 1e8);
-    if (!amountSats || amountSats < BTC_DUST_LIMIT) { notifyError(`Amount must be at least ${BTC_DUST_LIMIT} sats`); return; }
-
-    setBuildingPreview(true);
-    setError(null);
-    setDepositPreview(null);
-
-    try {
-      const config = getConfig();
-      const groupPubKey = hexToBytes(config.groupPubKey);
-
-      const [deposit, utxos] = await Promise.all([
-        createNonInteractiveDeposit(resolvedMeta, groupPubKey, getBtcSignerNetwork()),
-        btcWallet.getPaymentUtxos(),
-      ]);
-
-      if (utxos.length === 0) throw new Error("No confirmed UTXOs available in wallet");
-
-      const autoSelected = selectUtxos(
-        utxos.map((u) => ({ txid: u.txid, vout: u.vout, value: u.value, scriptPubkeyHex: u.scriptPubkeyHex })),
-        amountSats,
-        2,
-      );
-      setSelectedUtxoKeys(new Set(autoSelected.map((u) => `${u.txid}:${u.vout}`)));
-      setShowUtxoList(false);
-      setEditingUtxos(false);
-
-      setDepositPreview({
-        depositAddress: deposit.btcAddress,
-        depositAmountSats: amountSats,
-        opReturnHex: bytesToHex(deposit.opReturnPayload),
-        opReturnPayload: deposit.opReturnPayload,
-        cachedUtxos: utxos,
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to generate deposit");
-    } finally {
-      setBuildingPreview(false);
-    }
-  }, [resolvedMeta, btcAmount, btcWallet]);
-
-  // ── BTC: Confirm & sign PSBT ──
-  const confirmAndSign = useCallback(async () => {
-    if (!depositPreview) return;
-    setWalletDepositing(true);
-    setError(null);
-
-    try {
-      const selected = depositPreview.cachedUtxos
-        .filter((u) => selectedUtxoKeys.has(`${u.txid}:${u.vout}`))
-        .map((u) => ({ txid: u.txid, vout: u.vout, value: u.value, scriptPubkeyHex: u.scriptPubkeyHex }));
-      if (selected.length === 0) throw new Error("No UTXOs selected");
-
-      const totalSelected = selected.reduce((sum, u) => sum + u.value, 0);
-      if (totalSelected < depositPreview.depositAmountSats)
-        throw new Error(`Selected UTXOs (${totalSelected} sats) insufficient for deposit (${depositPreview.depositAmountSats} sats)`);
-
-      const psbtResult = buildDepositPsbt({
-        senderUtxos: selected,
-        depositAddress: depositPreview.depositAddress,
-        depositAmountSats: depositPreview.depositAmountSats,
-        opReturnPayload: depositPreview.opReturnPayload,
-        changeAddress: btcWallet.address!,
-        feeRate: 2,
-        network: getBtcSignerNetwork(),
-      });
-
-      const { txid } = await btcWallet.signAndBroadcastPsbt(psbtResult.psbtBase64);
-
-      const opReturnHex = depositPreview.opReturnHex;
-      useNotesStore.getState().saveNote({
-        commitment: opReturnHex,
-        noteExport: txid,
-        amountSats: depositPreview.depositAmountSats,
-        taprootAddress: depositPreview.depositAddress,
-        expiresAt: Math.floor(Date.now() / 1000) + 86400 * 30,
-      });
-
-      // Register with backend (fire-and-forget with retry)
-      const ephemeralPubHex = opReturnHex.slice(0, 64);
-      const npkHex = opReturnHex.slice(64);
-      (async () => {
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            const res = await registerDeposit(depositPreview.depositAddress, npkHex, depositPreview.depositAmountSats, ephemeralPubHex);
-            if (res.deposit_id) useNotesStore.getState().updateNote(opReturnHex, { depositId: res.deposit_id });
-            return;
-          } catch (err) {
-            if (attempt < 2) await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
-            else notifyError("Failed to register deposit with backend. Your deposit may not be tracked automatically.");
-          }
-        }
-      })();
-
-      setWalletDepositResult({ txid, depositAddress: depositPreview.depositAddress, opReturnHex });
-      setDepositPreview(null);
-      btcWallet.refreshBalance();
-      setStatus("done");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Wallet deposit failed");
-      setStatus("error");
-    } finally {
-      setWalletDepositing(false);
-    }
-  }, [depositPreview, selectedUtxoKeys, btcWallet]);
+  }, [handleMax, selectedToken.isBtcNative, btcDeposit]);
 
   const handleShield = useCallback(async () => {
     if (!publicKey || !keys || !amount || !resolvedMeta) return;
@@ -436,9 +295,9 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
     const resetDone = () => {
       setStatus("idle");
       setAmount("");
-      setBtcAmount("");
+      btcDeposit.setBtcAmount("");
       setTxSig(null);
-      setWalletDepositResult(null);
+      btcDeposit.setWalletDepositResult(null);
     };
 
     return (
@@ -450,7 +309,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
           {isBtc ? "BTC Shielded!" : "Tokens Shielded!"}
         </h3>
         <p className="text-caption text-gray">
-          {isBtc && walletDepositResult
+          {isBtc && btcDeposit.walletDepositResult
             ? "Your BTC deposit has been broadcast. The backend will automatically detect, sweep, and verify it."
             : `Your ${selectedToken.symbol} tokens are now private commitments.`}
         </p>
@@ -466,9 +325,9 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
           </a>
         )}
         {/* BTC tx link */}
-        {walletDepositResult?.txid && (
+        {btcDeposit.walletDepositResult?.txid && (
           <a
-            href={`${getMempoolExplorerUrl()}/tx/${walletDepositResult.txid}`}
+            href={`${getMempoolExplorerUrl()}/tx/${btcDeposit.walletDepositResult.txid}`}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1.5 text-caption text-btc hover:text-btc/80 transition-colors"
@@ -527,15 +386,16 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
 
   // BTC native deposit flow — unified layout matching SPL flow
   if (selectedToken.isBtcNative) {
-    const btcAmountSats = Math.floor(parseFloat(btcAmount || "0") * 1e8);
+    const btcAmountSats = Math.floor(parseFloat(btcDeposit.btcAmount || "0") * 1e8);
     const canSubmitBtc = btcAmountSats > 0 && !!resolvedMeta && !!keys;
 
     // PSBT preview active — show transaction details
-    if (depositPreview) {
+    if (btcDeposit.depositPreview) {
+      const depositPreview = btcDeposit.depositPreview;
       const totalInput = depositPreview.cachedUtxos
-        .filter((u) => selectedUtxoKeys.has(`${u.txid}:${u.vout}`))
+        .filter((u) => btcDeposit.selectedUtxoKeys.has(`${u.txid}:${u.vout}`))
         .reduce((sum, u) => sum + u.value, 0);
-      const estimatedVsize = selectedUtxoKeys.size * 68 + 78 + 43 + 43 + 12;
+      const estimatedVsize = btcDeposit.selectedUtxoKeys.size * 68 + 78 + 43 + 43 + 12;
       const estimatedFee = estimatedVsize * 2;
       const changeAmount = totalInput - depositPreview.depositAmountSats - estimatedFee;
       const insufficientFunds = totalInput < depositPreview.depositAmountSats + estimatedFee;
@@ -546,30 +406,30 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
           <div className="p-3 bg-muted border border-gray/15 rounded-[12px]">
             <div className="flex items-center justify-between">
               <p className="text-caption text-gray">
-                Inputs ({selectedUtxoKeys.size} UTXO{selectedUtxoKeys.size !== 1 ? "s" : ""})
+                Inputs ({btcDeposit.selectedUtxoKeys.size} UTXO{btcDeposit.selectedUtxoKeys.size !== 1 ? "s" : ""})
                 <span className="text-foreground ml-1">{(totalInput / 1e8).toFixed(8)} BTC</span>
               </p>
               <div className="flex items-center gap-2">
-                {showUtxoList && (
-                  <button onClick={() => setEditingUtxos(!editingUtxos)} className={cn("text-[10px] transition-colors cursor-pointer", editingUtxos ? "text-warning hover:text-warning/80" : "text-sol hover:text-sol-light")}>
-                    {editingUtxos ? "Done" : "Edit"}
+                {btcDeposit.showUtxoList && (
+                  <button onClick={() => btcDeposit.setEditingUtxos(!btcDeposit.editingUtxos)} className={cn("text-[10px] transition-colors cursor-pointer", btcDeposit.editingUtxos ? "text-warning hover:text-warning/80" : "text-sol hover:text-sol-light")}>
+                    {btcDeposit.editingUtxos ? "Done" : "Edit"}
                   </button>
                 )}
-                <button onClick={() => { setShowUtxoList(!showUtxoList); if (showUtxoList) setEditingUtxos(false); }} className="text-[10px] text-gray hover:text-gray-light transition-colors cursor-pointer">
-                  {showUtxoList ? "Hide" : "Show UTXOs"}
+                <button onClick={() => { btcDeposit.setShowUtxoList(!btcDeposit.showUtxoList); if (btcDeposit.showUtxoList) btcDeposit.setEditingUtxos(false); }} className="text-[10px] text-gray hover:text-gray-light transition-colors cursor-pointer">
+                  {btcDeposit.showUtxoList ? "Hide" : "Show UTXOs"}
                 </button>
               </div>
             </div>
-            {showUtxoList && (
+            {btcDeposit.showUtxoList && (
               <div className="space-y-1.5 max-h-36 overflow-y-auto mt-2">
                 {depositPreview.cachedUtxos.map((utxo) => {
                   const key = `${utxo.txid}:${utxo.vout}`;
-                  const isSelected = selectedUtxoKeys.has(key);
-                  if (!editingUtxos && !isSelected) return null;
+                  const isSelected = btcDeposit.selectedUtxoKeys.has(key);
+                  if (!btcDeposit.editingUtxos && !isSelected) return null;
                   return (
-                    <div key={key} className={cn("flex items-center gap-2 p-2 rounded-[8px] transition-colors", editingUtxos ? "cursor-pointer" : "", isSelected ? "bg-btc/10 border border-btc/20" : "bg-background border border-gray/10 hover:border-gray/25")}
-                      onClick={editingUtxos ? () => setSelectedUtxoKeys((prev) => { const next = new Set(prev); if (next.has(key)) next.delete(key); else next.add(key); return next; }) : undefined}>
-                      {editingUtxos && <input type="checkbox" checked={isSelected} readOnly className="accent-btc w-3.5 h-3.5 pointer-events-none" />}
+                    <div key={key} className={cn("flex items-center gap-2 p-2 rounded-[8px] transition-colors", btcDeposit.editingUtxos ? "cursor-pointer" : "", isSelected ? "bg-btc/10 border border-btc/20" : "bg-background border border-gray/10 hover:border-gray/25")}
+                      onClick={btcDeposit.editingUtxos ? () => btcDeposit.setSelectedUtxoKeys((prev) => { const next = new Set(prev); if (next.has(key)) next.delete(key); else next.add(key); return next; }) : undefined}>
+                      {btcDeposit.editingUtxos && <input type="checkbox" checked={isSelected} readOnly className="accent-btc w-3.5 h-3.5 pointer-events-none" />}
                       <div className="flex-1 min-w-0"><code className="text-[10px] font-mono text-gray-light block truncate">{utxo.txid.slice(0, 8)}...:{utxo.vout}</code></div>
                       <span className="text-[11px] font-mono text-btc whitespace-nowrap">{(utxo.value / 1e8).toFixed(8)}</span>
                     </div>
@@ -604,15 +464,15 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
 
           {/* ZK Metadata (OP_RETURN) */}
           <div className="p-3 bg-privacy/5 border border-privacy/20 rounded-[12px]">
-            <button onClick={() => setShowOpReturn(!showOpReturn)} className="w-full flex items-center justify-between cursor-pointer">
+            <button onClick={() => btcDeposit.setShowOpReturn(!btcDeposit.showOpReturn)} className="w-full flex items-center justify-between cursor-pointer">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-full bg-privacy/15 flex items-center justify-center"><Shield className="w-3 h-3 text-privacy" /></div>
                 <span className="text-caption font-semibold text-privacy">ZK Metadata</span>
                 <span className="text-[10px] text-privacy/50">64 bytes</span>
               </div>
-              <ChevronDown className={cn("w-3.5 h-3.5 text-gray transition-transform duration-200", showOpReturn && "rotate-180")} />
+              <ChevronDown className={cn("w-3.5 h-3.5 text-gray transition-transform duration-200", btcDeposit.showOpReturn && "rotate-180")} />
             </button>
-            {showOpReturn && (
+            {btcDeposit.showOpReturn && (
               <div className="mt-2 pt-2 border-t border-privacy/10 space-y-1.5">
                 <div><p className="text-[10px] text-gray mb-0.5">Ephemeral Public Key</p><code className="block text-[9px] font-mono text-privacy/50 break-all leading-relaxed">{depositPreview.opReturnHex.slice(0, 64)}</code></div>
                 <div><p className="text-[10px] text-gray mb-0.5">Note Public Key</p><code className="block text-[9px] font-mono text-privacy/50 break-all leading-relaxed">{depositPreview.opReturnHex.slice(64)}</code></div>
@@ -673,14 +533,14 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
 
           {/* Action buttons */}
           <div className="flex gap-2">
-            <button onClick={() => setDepositPreview(null)} disabled={walletDepositing}
+            <button onClick={() => btcDeposit.setDepositPreview(null)} disabled={btcDeposit.walletDepositing}
               className="flex-1 py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2 bg-muted hover:bg-gray/20 text-foreground border border-gray/20 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">
               Back
             </button>
-            <button onClick={confirmAndSign} disabled={walletDepositing || insufficientFunds || selectedUtxoKeys.size === 0}
+            <button onClick={btcDeposit.confirmAndSign} disabled={btcDeposit.walletDepositing || insufficientFunds || btcDeposit.selectedUtxoKeys.size === 0}
               className={cn("flex-[2] py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2 cursor-pointer",
                 "bg-btc hover:bg-btc/90 text-background disabled:bg-gray/20 disabled:text-gray disabled:cursor-not-allowed")}>
-              {walletDepositing ? (<><Loader2 className="w-4 h-4 animate-spin" />Signing...</>) : (<><Wallet className="w-4 h-4" />Confirm &amp; Sign</>)}
+              {btcDeposit.walletDepositing ? (<><Loader2 className="w-4 h-4 animate-spin" />Signing...</>) : (<><Wallet className="w-4 h-4" />Confirm &amp; Sign</>)}
             </button>
           </div>
         </div>
@@ -699,34 +559,34 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
                 {btcWallet.address?.slice(0, 6)}...{btcWallet.address?.slice(-4)}
               </code>
               <button
-                onClick={() => { navigator.clipboard.writeText(btcWallet.address!); setCopiedBtcAddr(true); setTimeout(() => setCopiedBtcAddr(false), 1500); }}
+                onClick={() => { navigator.clipboard.writeText(btcWallet.address!); btcDeposit.setCopiedBtcAddr(true); setTimeout(() => btcDeposit.setCopiedBtcAddr(false), 1500); }}
                 className="p-0.5 text-gray/30 hover:text-gray transition-colors cursor-pointer shrink-0" title="Copy address"
               >
-                {copiedBtcAddr ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
+                {btcDeposit.copiedBtcAddr ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
               </button>
               <button onClick={() => btcWallet.disconnect()} className="p-0.5 text-gray/30 hover:text-red-400 transition-colors cursor-pointer shrink-0" title="Disconnect">
                 <LogOut className="w-3 h-3" />
               </button>
             </div>
           ) : (
-            <div className="relative flex-1 min-w-0" ref={walletPickerRef}>
+            <div className="relative flex-1 min-w-0" ref={btcDeposit.walletPickerRef}>
               {isMobileNoWallet ? (
                 <MobileWalletGuidance />
               ) : (
                 <>
                   <button
-                    onClick={() => setShowWalletPicker(!showWalletPicker)}
+                    onClick={() => btcDeposit.setShowWalletPicker(!btcDeposit.showWalletPicker)}
                     disabled={btcWallet.connecting}
                     className="w-full py-2.5 rounded-[10px] font-semibold transition-all flex items-center justify-center gap-2 bg-btc/10 hover:bg-btc/20 text-btc border border-btc/25 disabled:opacity-50 cursor-pointer text-[13px]"
                   >
                     {btcWallet.connecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wallet className="w-3.5 h-3.5" />}
                     Connect BTC Wallet
-                    <ChevronDown className={cn("w-3 h-3 transition-transform", showWalletPicker && "rotate-180")} />
+                    <ChevronDown className={cn("w-3 h-3 transition-transform", btcDeposit.showWalletPicker && "rotate-180")} />
                   </button>
-                  {showWalletPicker && (
+                  {btcDeposit.showWalletPicker && (
                     <div className="absolute left-0 right-0 top-full mt-1.5 bg-card border border-gray/20 rounded-[12px] shadow-xl z-50 overflow-hidden">
                       <button
-                        onClick={() => { btcWallet.connect("sats-connect"); setShowWalletPicker(false); }}
+                        onClick={() => { btcWallet.connect("sats-connect"); btcDeposit.setShowWalletPicker(false); }}
                         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-btc/5 transition-colors cursor-pointer border-b border-gray/10"
                       >
                         <div className="w-8 h-8 rounded-full bg-btc/10 flex items-center justify-center">
@@ -738,7 +598,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
                         </div>
                       </button>
                       <button
-                        onClick={() => { btcWallet.connect("unisat"); setShowWalletPicker(false); }}
+                        onClick={() => { btcWallet.connect("unisat"); btcDeposit.setShowWalletPicker(false); }}
                         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-btc/5 transition-colors cursor-pointer"
                       >
                         <div className="w-8 h-8 rounded-full bg-btc/10 flex items-center justify-center">
@@ -770,8 +630,8 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
           <div className="flex items-center gap-2 p-3 bg-muted border border-gray/15 rounded-[12px] focus-within:border-btc/30 transition-colors">
             <input
               type="number"
-              value={btcAmount}
-              onChange={(e) => setBtcAmount(e.target.value)}
+              value={btcDeposit.btcAmount}
+              onChange={(e) => btcDeposit.setBtcAmount(e.target.value)}
               placeholder="0.00000000"
               step="0.00000001"
               className="flex-1 bg-transparent text-lg font-mono text-foreground placeholder:text-gray/30 outline-none min-w-0"
@@ -782,7 +642,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
             </button>
             {tokenSelector}
           </div>
-          {btcAmount && (
+          {btcDeposit.btcAmount && (
             <p className="text-[10px] text-gray/50 pl-1">
               {btcAmountSats.toLocaleString()} sats
             </p>
@@ -810,17 +670,17 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
         {/* Shield / Preview button */}
         {btcWallet.connected ? (
           <button
-            onClick={buildTxPreview}
-            disabled={!canSubmitBtc || buildingPreview || btcAmountSats < BTC_DUST_LIMIT || (btcWallet.balance !== null && btcAmountSats > btcWallet.balance)}
+            onClick={btcDeposit.buildTxPreview}
+            disabled={!canSubmitBtc || btcDeposit.buildingPreview || btcAmountSats < BTC_DUST_LIMIT || (btcWallet.balance !== null && btcAmountSats > btcWallet.balance)}
             className={cn(
               "w-full flex items-center justify-center gap-2 py-3.5 rounded-[12px]",
               "text-body2 font-semibold transition-all cursor-pointer",
-              canSubmitBtc && !buildingPreview
+              canSubmitBtc && !btcDeposit.buildingPreview
                 ? "btn-privacy shadow-[0_0_20px_rgba(20,241,149,0.15)] hover:shadow-[0_0_30px_rgba(20,241,149,0.25)]"
                 : "bg-gray/20 text-gray/50 cursor-not-allowed"
             )}
           >
-            {buildingPreview ? (<><Loader2 className="w-4 h-4 animate-spin" />Generating...</>) : (<><Shield className="w-4 h-4" />Shield BTC</>)}
+            {btcDeposit.buildingPreview ? (<><Loader2 className="w-4 h-4 animate-spin" />Generating...</>) : (<><Shield className="w-4 h-4" />Shield BTC</>)}
           </button>
         ) : (
           <button
