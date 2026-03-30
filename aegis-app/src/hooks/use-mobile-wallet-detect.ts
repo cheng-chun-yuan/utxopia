@@ -16,9 +16,10 @@ export function useIsMobileWithoutWallet(): boolean {
       return;
     }
 
-    const hasXverse = !!(window as any).XverseProviders?.BitcoinProvider;
-    const hasUnisat = !!(window as any).unisat;
-    const hasLeather = !!(window as any).LeatherProvider;
+    const win = window as Window & { XverseProviders?: { BitcoinProvider?: unknown }; LeatherProvider?: unknown };
+    const hasXverse = !!win.XverseProviders?.BitcoinProvider;
+    const hasUnisat = !!window.unisat;
+    const hasLeather = !!win.LeatherProvider;
 
     setResult(!hasXverse && !hasUnisat && !hasLeather);
   }, []);

@@ -59,7 +59,7 @@ const _netCfg = getNetworkConfig();
 const ENV_USDC_MINT = _netCfg.tokens.usdcMint || process.env.NEXT_PUBLIC_USDC_MINT || "";
 const ENV_USDT_MINT = _netCfg.tokens.usdtMint || process.env.NEXT_PUBLIC_USDT_MINT || "";
 const ENV_WSOL_MINT = _netCfg.tokens.wsolMint || process.env.NEXT_PUBLIC_WSOL_MINT || "";
-const ENV_JUPUSD_MINT = (_netCfg.tokens as any).jupusdMint || process.env.NEXT_PUBLIC_JUPUSD_MINT || "";
+const ENV_JUPUSD_MINT = (_netCfg.tokens as Record<string, string>).jupusdMint || process.env.NEXT_PUBLIC_JUPUSD_MINT || "";
 
 export const SUPPORTED_TOKENS: SupportedToken[] = [
   {

@@ -25,7 +25,7 @@ declare global {
       getPublicKey(): Promise<string>;
       switchNetwork(network: string): Promise<void>;
       switchChain(chain: string): Promise<void>;
-      signPsbt(psbtHex: string, options?: any): Promise<string>;
+      signPsbt(psbtHex: string, options?: { autoFinalized?: boolean }): Promise<string>;
       getNetwork(): Promise<string>;
       getChain(): Promise<{ enum: string; name: string; network: string }>;
     };
@@ -266,7 +266,7 @@ export const useBitcoinWalletStore = create<BitcoinWalletState>((set, get) => ({
     // Filter to confirmed only, then fetch scriptPubkey for each tx
     const confirmed = utxos.filter((u) => u.status.confirmed);
     const txidSet = new Set(confirmed.map((u) => u.txid));
-    const txCache = new Map<string, any>();
+    const txCache = new Map<string, { vout?: Array<{ scriptpubkey?: string }> }>();
 
     await Promise.all(
       [...txidSet].map(async (txid) => {
@@ -354,9 +354,9 @@ export const useBitcoinWalletStore = create<BitcoinWalletState>((set, get) => ({
               },
             ],
           },
-          onFinish: (response: any) => {
-            // With broadcast: true, response contains txid
-            resolve(typeof response === "string" ? response : response.txid || response);
+          onFinish: (response) => {
+            // With broadcast: true, response contains txId
+            resolve(typeof response === "string" ? response : response.txId ?? response.psbtBase64);
           },
           onCancel: () => reject(new Error("PSBT signing cancelled by user")),
         });

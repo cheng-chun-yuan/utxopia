@@ -112,7 +112,23 @@ function parseAnnouncementsFromLogs(logs: string[]): RpcAnnouncement[] {
   return announcements;
 }
 
-function extractNullifierPdas(result: any): string[] {
+interface RpcTransactionResult {
+  transaction?: {
+    message?: {
+      accountKeys?: Array<string | { pubkey: string }>;
+      instructions?: Array<{ programIdIndex: number; data?: string }>;
+    };
+  };
+  meta?: {
+    preBalances?: number[];
+    postBalances?: number[];
+    logMessages?: string[];
+  };
+  slot?: number;
+  blockTime?: number;
+}
+
+function extractNullifierPdas(result: RpcTransactionResult): string[] {
   const accountKeys: string[] = (
     result.transaction?.message?.accountKeys ?? []
   ).map((k: string | { pubkey: string }) =>
@@ -134,7 +150,7 @@ function extractNullifierPdas(result: any): string[] {
 }
 
 /** Extract the first Aegis instruction discriminator from a transaction */
-function extractInstructionDisc(result: any): number | null {
+function extractInstructionDisc(result: RpcTransactionResult): number | null {
   try {
     const message = result.transaction?.message;
     const accountKeys: string[] = (message?.accountKeys ?? []).map(
@@ -227,7 +243,7 @@ export async function fetchAnnouncementsFromRpc(
     });
 
     const txResultsRaw = await txResp.json();
-    const txResults: any[] = Array.isArray(txResultsRaw) ? txResultsRaw : [txResultsRaw];
+    const txResults: Array<{ id: number; result?: RpcTransactionResult }> = Array.isArray(txResultsRaw) ? txResultsRaw : [txResultsRaw];
     // Sort by id to match batch order
     txResults.sort((a, b) => a.id - b.id);
 

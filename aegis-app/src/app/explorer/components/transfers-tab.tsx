@@ -20,7 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { CopyButton } from "@/components/ui/copy-button";
 import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
-import { useTransfers, type ExplorerTransaction, type RedemptionRecord } from "@/hooks/use-explorer";
+import { useExplorer, type ExplorerTransaction, type RedemptionRecord } from "@/hooks/use-explorer";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { getSolanaExplorerTxUrl, getSolanaExplorerAddressUrl } from "@/lib/solana-network";
 import { truncate, timeAgo } from "./helpers";
@@ -214,7 +214,8 @@ export function TransferRow({
 // =============================================================================
 
 export function TransfersTab() {
-  const { transfers, isLoading, error, refresh } = useTransfers();
+  const { transactions, isLoading, error, refresh } = useExplorer();
+  const transfers = transactions.filter(t => t.type !== "shield");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const toggle = useCallback((sig: string) => {
@@ -472,7 +473,7 @@ function ShieldDetails({ tx }: { tx: TransferTx }) {
   const netAmount = tx.inputs?.[0]?.netAmount ?? tx.outputs?.[0]?.amount ?? grossAmount;
   const fee = tx.inputs?.[0]?.fee ?? 0;
   const hasFee = fee > 0 && grossAmount !== netAmount;
-  const btcMeta = tx.btcMeta as any;
+  const btcMeta = tx.btcMeta;
 
   return (
     <div className="mx-4 my-3 rounded-[10px] bg-linear-to-b from-gray/6 to-transparent border border-gray/10 overflow-hidden">

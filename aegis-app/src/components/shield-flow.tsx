@@ -281,8 +281,8 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
 
       setTxSig(sig);
       setStatus("done");
-    } catch (err: any) {
-      setError(err.message || "Shield failed");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Shield failed");
       setStatus("error");
     }
   }, [publicKey, keys, selectedToken, amount, resolvedMeta, connection, sendTransaction]);

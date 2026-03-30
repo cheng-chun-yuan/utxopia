@@ -113,7 +113,7 @@ export function StealthRecipientInput({
       }
 
       const connectionAdapter = getConnectionAdapter();
-      const result = await resolveSnsName(connectionAdapter as any, subdomain);
+      const result = await resolveSnsName(connectionAdapter as Parameters<typeof resolveSnsName>[0], subdomain);
       if (!result) {
         const displayName = subdomain.length > 20
           ? `${subdomain.slice(0, 10)}...${subdomain.slice(-6)}`

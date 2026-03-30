@@ -12,7 +12,15 @@ export const dynamic = "force-dynamic";
 
 const BACKEND_URL = getNetworkConfig().backend.url || "http://localhost:3001";
 
-async function fetchFromBackendUnified(): Promise<any[] | null> {
+interface ExplorerTx {
+  txSignature?: string;
+  tokenId?: string;
+  tokenSymbol?: string | null;
+  timestamp?: number;
+  [key: string]: unknown;
+}
+
+async function fetchFromBackendUnified(): Promise<ExplorerTx[] | null> {
   try {
     const resp = await fetch(`${BACKEND_URL}/api/explorer/transactions`, { cache: "no-store" });
     if (!resp.ok) return null;
@@ -25,16 +33,16 @@ async function fetchFromBackendUnified(): Promise<any[] | null> {
 }
 
 /** Fallback: combine deposits + transfers from separate endpoints */
-async function fetchCombined(origin: string): Promise<any[]> {
+async function fetchCombined(origin: string): Promise<ExplorerTx[]> {
   const [depositsResp, transfersResp] = await Promise.all([
     fetch(`${origin}/api/explorer/deposits`, { cache: "no-store" }).catch(() => null),
     fetch(`${origin}/api/transfers`, { cache: "no-store" }).catch(() => null),
   ]);
 
-  const deposits: any[] = depositsResp?.ok
+  const deposits: ExplorerTx[] = depositsResp?.ok
     ? ((await depositsResp.json()).transactions ?? [])
     : [];
-  const transfers: any[] = transfersResp?.ok
+  const transfers: ExplorerTx[] = transfersResp?.ok
     ? ((await transfersResp.json()).transactions ?? [])
     : [];
 

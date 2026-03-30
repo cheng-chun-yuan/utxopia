@@ -57,7 +57,26 @@ export interface ExplorerTransaction {
 // Transform backend flat response → typed structure
 // =============================================================================
 
-function transformTransfer(t: any, tokenMap: Map<string, string>): ExplorerTransaction {
+interface BackendTransfer {
+  token_symbol?: string;
+  token_id?: string;
+  transfer_type?: string;
+  nullifier_hashes?: string[];
+  nullifier_pdas?: string[];
+  commitments?: string[];
+  leaf_indices?: number[];
+  unshield_outputs?: Array<{ type?: string; amount?: number; fee?: number; payout?: number; recipient?: string }>;
+  unshield_amount?: number;
+  unshield_fee?: number;
+  unshield_payout?: number;
+  unshield_recipient?: string;
+  tx_signature: string;
+  timestamp: number;
+  status?: string;
+  instruction_disc?: number;
+}
+
+function transformTransfer(t: BackendTransfer, tokenMap: Map<string, string>): ExplorerTransaction {
   const tokenSymbol = t.token_symbol
     ?? (t.token_id ? (tokenMap.get(t.token_id) ?? tokenMap.get(t.token_id?.toLowerCase()) ?? null) : null);
 
@@ -89,7 +108,7 @@ function transformTransfer(t: any, tokenMap: Map<string, string>): ExplorerTrans
   }
 
   // 2. Unshield/withdraw outputs from per-output JSON array (multi-output support)
-  const perOutputs: any[] = t.unshield_outputs ?? [];
+  const perOutputs = t.unshield_outputs ?? [];
   if (perOutputs.length > 0) {
     for (const o of perOutputs) {
       outputs.push({
@@ -147,7 +166,7 @@ export async function GET() {
     } catch { /* fallback: no symbols */ }
 
     // Enrich missing token_ids from announcements
-    const missingTokenIds = data.transfers.some((t: any) => !t.token_id && t.instruction_disc === 15);
+    const missingTokenIds = data.transfers.some((t: BackendTransfer) => !t.token_id && t.instruction_disc === 15);
     if (missingTokenIds) {
       try {
         const annResp = await fetch(`${BACKEND_URL}/api/announcements`, { cache: "no-store" });
@@ -175,7 +194,7 @@ export async function GET() {
     }
 
     const transactions: ExplorerTransaction[] = data.transfers.map(
-      (t: any) => transformTransfer(t, tokenMap),
+      (t: BackendTransfer) => transformTransfer(t, tokenMap),
     );
 
     // Enrich withdraw outputs with redemption data (btcTxid, completion status)
@@ -183,13 +202,13 @@ export async function GET() {
       const redemptionResp = await fetch(`${BACKEND_URL}/api/redemption/all`, { cache: "no-store" });
       if (redemptionResp.ok) {
         const rData = await redemptionResp.json();
-        const trackingByReqTx = new Map<string, any>();
-        for (const t of rData.tracking ?? []) {
+        const trackingByReqTx = new Map<string, { btc_txid?: string; local_status?: string; amount_sats?: number }>();
+        for (const t of (rData.tracking ?? []) as Array<{ request_id?: string; pda_address: string; btc_txid?: string; local_status?: string; amount_sats?: number }>) {
           if (t.request_id) trackingByReqTx.set(t.pda_address, t);
         }
-        const completedByReqId = new Map<string, any>();
-        for (const c of rData.completed ?? []) {
-          completedByReqId.set(c.request_id?.toString(), c);
+        const completedByReqId = new Map<string, { request_id?: number }>();
+        for (const c of (rData.completed ?? []) as Array<{ request_id?: number }>) {
+          completedByReqId.set(c.request_id?.toString() ?? "", c);
         }
 
         // For each withdraw tx, enrich outputs with tracking/completion data

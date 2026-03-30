@@ -84,7 +84,7 @@ export interface ExplorerTransaction {
   inputs: TxInput[];
   outputs: TxOutput[];
   /** BTC deposit lifecycle (shield only) */
-  btcMeta?: any;
+  btcMeta?: BtcDepositMeta;
 }
 
 export interface RedemptionRecord {
@@ -121,28 +121,6 @@ export interface RedemptionRecord {
   inputCount: number;
   /** JoinSplit output count (commitments created + redeem) */
   outputCount: number;
-}
-
-// Backend transfer row from /api/transfers
-interface BackendTransferRow {
-  tx_signature: string;
-  commitments: string[];
-  leaf_indices: number[];
-  nullifier_hashes: string[];
-  nullifier_pdas: string[];
-  output_count: number;
-  input_count: number;
-  timestamp: number;
-  status: string;
-  operation_type: number;
-  instruction_disc?: number;
-  unshield_amount?: number;
-  unshield_recipient?: string;
-  token_id?: string;
-  token_symbol?: string;
-  transfer_type?: string;
-  unshield_fee?: number;
-  unshield_payout?: number;
 }
 
 // Backend announcement row from /api/announcements
@@ -217,110 +195,6 @@ const SWR_OPTIONS = {
   errorRetryCount: 3,
 };
 
-export function useDeposits() {
-  const { data, error, isLoading, mutate } = useSWR<{ deposits: DepositRecord[]; transactions: ExplorerTransaction[] }>(
-    "explorer-deposits",
-    async () => {
-      const resp = await fetch("/api/explorer/deposits");
-      if (!resp.ok) return { deposits: [], transactions: [] };
-      const json = await resp.json();
-      const deposits = (json.deposits ?? []).map(
-        (d: any): DepositRecord => ({ ...d, amountBtc: (d.amountSats / 1e8).toFixed(8) }),
-      );
-      const transactions = (json.transactions ?? []) as ExplorerTransaction[];
-      return { deposits, transactions };
-    },
-    SWR_OPTIONS,
-  );
-  return {
-    deposits: data?.deposits ?? [],
-    shieldTransactions: data?.transactions ?? [],
-    isLoading,
-    error: error ? (error instanceof Error ? error.message : "Failed to fetch deposits") : null,
-    refresh: () => mutate(),
-  };
-}
-
-export function useTransfers() {
-  const { data, error, isLoading, mutate } = useSWR<ExplorerTransaction[]>(
-    "explorer-transfers",
-    async () => {
-      const resp = await fetch("/api/transfers");
-      if (!resp.ok) return [];
-      const json = await resp.json();
-      // New format: json.transactions (typed outputs)
-      if (json.transactions) return json.transactions as ExplorerTransaction[];
-      // Legacy fallback: json.transfers (flat)
-      if (json.transfers) {
-        return json.transfers.map((t: any) => ({
-          txSignature: t.tx_signature ?? t.txSignature,
-          type: t.transfer_type === "redeem" ? "withdraw" : t.transfer_type === "unshield" ? "unshield" : "transfer",
-          tokenId: t.token_id ?? t.tokenId ?? null,
-          tokenSymbol: t.token_symbol ?? t.tokenSymbol ?? null,
-          timestamp: t.timestamp,
-          status: t.status ?? "confirmed",
-          inputs: (t.nullifier_hashes ?? []).map((h: string, i: number) => ({
-            nullifierHash: h,
-            nullifierPda: (t.nullifier_pdas ?? [])[i],
-          })),
-          outputs: [
-            ...(t.commitments ?? []).map((c: string, i: number) => ({
-              type: "commitment" as const,
-              commitment: c,
-              leafIndex: (t.leaf_indices ?? [])[i],
-            })),
-            ...(t.unshield_amount != null ? [{
-              type: (t.transfer_type === "redeem" ? "withdraw" : "unshield") as "withdraw" | "unshield",
-              amount: t.unshield_amount,
-              fee: t.unshield_fee,
-              payout: t.unshield_payout,
-              recipient: t.unshield_recipient,
-            }] : []),
-          ],
-        }));
-      }
-      return [];
-    },
-    {
-      ...SWR_OPTIONS,
-      refreshInterval: (data?: ExplorerTransaction[]) => {
-        if (!data) return SWR_OPTIONS.refreshInterval;
-        const hasProcessing = data.some((t) => t.status === "processing");
-        return hasProcessing ? 5_000 : SWR_OPTIONS.refreshInterval;
-      },
-    },
-  );
-  return {
-    transfers: data ?? [],
-    isLoading,
-    error: error ? (error instanceof Error ? error.message : "Failed to fetch transfers") : null,
-    refresh: () => mutate(),
-  };
-}
-
-export function useRedemptions() {
-  const { data, error, isLoading, mutate } = useSWR<RedemptionRecord[]>(
-    "explorer-redemptions",
-    async () => {
-      const resp = await fetch("/api/explorer/redemptions");
-      if (!resp.ok) return []; // graceful fallback
-      const json = await resp.json();
-      return json.redemptions ?? [];
-    },
-    SWR_OPTIONS,
-  );
-  return {
-    redemptions: data ?? [],
-    isLoading,
-    error: error
-      ? error instanceof Error
-        ? error.message
-        : "Failed to fetch redemptions"
-      : null,
-    refresh: () => mutate(),
-  };
-}
-
 // =============================================================================
 // Unified hook — single source for all explorer transactions
 // =============================================================================
@@ -355,6 +229,30 @@ export function useExplorer() {
     isLoading,
     error: error ? (error instanceof Error ? error.message : "Failed to fetch explorer data") : null,
     refresh: () => mutate(),
+  };
+}
+
+// =============================================================================
+// Helpers — convert ExplorerTransaction (shield) → DepositRecord
+// =============================================================================
+
+/** Convert a shield ExplorerTransaction back to DepositRecord shape for deposit UI components */
+export function toDepositRecord(tx: ExplorerTransaction): DepositRecord {
+  const input = tx.inputs[0] ?? {};
+  const output = tx.outputs[0] ?? {};
+  return {
+    txSignature: tx.txSignature,
+    commitment: output.commitment ?? "",
+    amountSats: output.amount ?? input.netAmount ?? 0,
+    leafIndex: output.leafIndex ?? -1,
+    timestamp: tx.timestamp,
+    status: tx.status,
+    instructionDisc: tx.btcMeta ? 1 : (tx.tokenId ? 29 : 1),
+    tokenSymbol: tx.tokenSymbol,
+    tokenId: tx.tokenId,
+    grossAmount: input.grossAmount ?? null,
+    fee: input.fee ?? null,
+    btcMeta: tx.btcMeta ?? null,
   };
 }
 

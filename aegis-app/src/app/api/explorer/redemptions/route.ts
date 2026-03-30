@@ -79,7 +79,7 @@ async function createServerRpc(): Promise<RpcClient> {
   const rpc = createSolanaRpc(RPC_URL);
   return {
     async getProgramAccounts(programId, config) {
-      const filters: any[] = [];
+      const filters: unknown[] = [];
       if (config?.filters) {
         for (const f of config.filters) {
           if ("dataSize" in f) {
@@ -96,12 +96,12 @@ async function createServerRpc(): Promise<RpcClient> {
         }
       }
       const accounts = await rpc
-        .getProgramAccounts(programId as any, {
-          encoding: "base64",
-          filters,
-        })
+        .getProgramAccounts(
+          programId as Parameters<typeof rpc.getProgramAccounts>[0],
+          { encoding: "base64", filters } as Parameters<typeof rpc.getProgramAccounts>[1],
+        )
         .send();
-      return (accounts as any[]).map((acc: any) => ({
+      return (accounts as Array<{ pubkey: string; account: { data: string } }>).map((acc) => ({
         pubkey: String(acc.pubkey),
         account: { data: acc.account.data },
       }));
@@ -328,10 +328,10 @@ export async function GET() {
         if (!poolTxCache) {
           const resp = await fetch(`${ESPLORA}/address/${POOL_ADDRESS}/txs`, { signal: AbortSignal.timeout(5000) });
           if (!resp.ok) return null;
-          const txs: any[] = await resp.json();
-          poolTxCache = txs.map((tx: any) => ({
+          const txs: Array<{ txid: string; vout: Array<{ scriptpubkey: string; value: number }> }> = await resp.json();
+          poolTxCache = txs.map((tx) => ({
             txid: tx.txid,
-            outputs: tx.vout.map((o: any) => ({ script: o.scriptpubkey, value: o.value })),
+            outputs: tx.vout.map((o) => ({ script: o.scriptpubkey, value: o.value })),
           }));
         }
         for (const tx of poolTxCache) {
@@ -345,7 +345,7 @@ export async function GET() {
 
     const knownRequestIds = new Set(serialized.map((r) => r.requestId));
     const onChainPdaRequestIds = new Set(
-      (redemptions as any[]).map((r: any) => r.requestId?.toString()).filter(Boolean)
+      redemptions.map((r) => r.requestId?.toString()).filter(Boolean)
     );
 
     for (const req of requestedEntries) {
