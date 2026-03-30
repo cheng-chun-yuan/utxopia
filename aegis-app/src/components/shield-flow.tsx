@@ -19,7 +19,7 @@ import {
   TOKEN_PROGRAM_ID as SPL_TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID as SPL_TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
-import { getConfig, createStealthOutputWithKeys, bigintToBytes, computeTokenId } from "@aegis/sdk";
+import { getConfig, createStealthOutputWithKeys, computeTokenId } from "@aegis/sdk";
 import { useAegis } from "@/hooks/use-aegis";
 import { Shield, ChevronDown, Loader2, ExternalLink, CheckCircle2, AlertCircle, LogOut, Wallet, Copy, Check, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -119,7 +119,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
 
       const tokenIdBigint = computeTokenId(mintPubkey.toBuffer());
       const stealthOutput = await createStealthOutputWithKeys(keys, amountRaw, tokenIdBigint);
-      const npkBytes = bigintToBytes(stealthOutput.stealthPubKeyX);
+      const { npkBytes } = stealthOutput;
 
       const programId = new PublicKey(config.aegisProgramId);
 

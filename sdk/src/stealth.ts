@@ -288,6 +288,8 @@ export async function createStealthDeposit(
  */
 export interface StealthOutputWithKeys extends StealthOutputData {
   stealthPubKeyX: bigint;
+  /** npk as 32-byte LE Uint8Array — ready for on-chain instruction data */
+  npkBytes: Uint8Array;
 }
 
 /**
@@ -316,7 +318,8 @@ export async function createStealthDepositWithKeys(
     ephemeralPub: new Uint8Array(ephemeral.pubKey),
     encryptedAmount,
     commitment,
-    stealthPubKeyX: npk, // npk is the note public key for circuit
+    stealthPubKeyX: npk,
+    npkBytes: bigintToBytes(npk),
   };
 }
 
@@ -951,6 +954,7 @@ export async function createStealthOutputWithKeys(
     encryptedAmount,
     commitment,
     stealthPubKeyX: npk,
+    npkBytes: bigintToBytes(npk),
   };
 }
 
