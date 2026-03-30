@@ -65,7 +65,7 @@ import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 
 // Extracted sub-components
 import {
-  MIN_PAY_SATS, ZKBTC_TOKEN_ID, MAX_OUTPUTS, SERVICE_FEE_SATS, RELAYER_FEE_SATS,
+  MIN_PAY_SATS, ZKBTC_TOKEN_ID, MAX_OUTPUTS,
   SOLANA_MAX_TX_SIZE, AVAILABLE_CIRCUITS, PAY_TOKENS,
   isValidSolanaAddress, reduceToFieldOnChain, estimateTransactionSize,
   autoSelectNotes, createOutputRow,
@@ -74,6 +74,7 @@ import {
 import { ProvingSubSteps } from "./pay-flow/proving-steps";
 import { NoteClaimLink } from "./pay-flow/note-links";
 import { OutputRowCard } from "./pay-flow/output-row-card";
+import { useRelayerConfig } from "@/hooks/use-relayer-config";
 
 interface PayFlowProps {
   initialMode?: "public" | "stealth" | "btc_withdraw";
@@ -174,28 +175,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   const importAutoTriggered = useRef(false);
 
   // Relayer config (stealth meta + relayer fee from backend, service fees from on-chain)
-  const [relayerMeta, setRelayerMeta] = useState<{
-    stealthMeta: string | null;
-    relayerFeeSats: number;
-    relayerFees: Record<string, number>;
-    serviceFeeSats: number;
-    serviceFeeBps: number;
-  } | null>(null);
-
-  useEffect(() => {
-    // Fetch all fee config from backend (reads on-chain pool state internally)
-    fetch("/api/relayer/meta").then(r => r.ok ? r.json() : null).catch(() => null)
-      .then((data) => {
-        if (!data) return;
-        setRelayerMeta({
-          stealthMeta: data.stealth_meta || null,
-          relayerFeeSats: data.relayer_fee_sats ?? RELAYER_FEE_SATS,
-          relayerFees: data.relayer_fees ?? {},
-          serviceFeeSats: data.service_fee_base ?? SERVICE_FEE_SATS,
-          serviceFeeBps: data.service_fee_bps ?? 0,
-        });
-      });
-  }, []);
+  const { relayerMeta, relayerMetaLoaded, effectiveRelayerFee, effectiveServiceFee, effectiveServiceFeeBps } = useRelayerConfig(selectedToken);
 
   // Output rows state — default first output based on initialMode
   const defaultOutputMode: OutputMode = initialMode === "btc_withdraw" ? "btc" : (initialMode === "public" ? "public" : "stealth");
@@ -204,14 +184,6 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   ]);
 
   const isPurePrivateSend = !outputs.some(o => o.mode === "btc" || o.mode === "public");
-  // Per-token relayer fee: backend relayer_fees map > token config fallback
-  const relayerMetaLoaded = relayerMeta !== null;
-  const effectiveRelayerFee = relayerMetaLoaded
-    ? (relayerMeta.relayerFees[selectedToken.shieldedSymbol]
-        ?? selectedToken.relayerFee)
-    : 0;
-  const effectiveServiceFee = relayerMeta?.serviceFeeSats ?? 0;
-  const effectiveServiceFeeBps = relayerMeta?.serviceFeeBps ?? 0;
 
   // Token-aware amount formatter (replaces hardcoded BTC formatting)
   const fmt = (raw: number): string => formatAmount(raw, selectedToken.decimals);
