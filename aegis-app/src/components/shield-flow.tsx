@@ -44,7 +44,8 @@ import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 import { notifyError } from "@/lib/notifications";
 import { MobileWalletGuidance } from "@/components/bitcoin-wallet-selector";
 import { useIsMobileWithoutWallet } from "@/hooks/use-mobile-wallet-detect";
-import { BTC_DUST_LIMIT, BTC_MINER_FEE_ESTIMATE, TOKEN_2022_PROGRAM_ID_STR, BN254_FIELD_MODULUS } from "@/lib/btc-constants";
+import { BTC_DUST_LIMIT, TOKEN_2022_PROGRAM_ID_STR, BN254_FIELD_MODULUS } from "@/lib/btc-constants";
+import { useTokenBalance } from "@/hooks/use-token-balance";
 
 const TOKEN_2022_PROGRAM_ID = new PublicKey(TOKEN_2022_PROGRAM_ID_STR);
 
@@ -74,13 +75,12 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
   const [status, setStatus] = useState<ShieldStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [txSig, setTxSig] = useState<string | null>(null);
-  const [solBalance, setSolBalance] = useState<number | null>(null);
-  const [splBalance, setSplBalance] = useState<number | null>(null);
   const [copiedAddr, setCopiedAddr] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // ── BTC-specific state ──
   const btcWallet = useBitcoinWalletStore();
+  const { solBalance, splBalance, handleMax } = useTokenBalance(selectedToken, publicKey, connection, btcWallet.balance);
   const isMobileNoWallet = useIsMobileWithoutWallet();
   const [btcAmount, setBtcAmount] = useState("");
   const [walletDepositing, setWalletDepositing] = useState(false);
@@ -118,57 +118,11 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
   // No auto-resolve — user clicks the Self button or types a recipient.
   // This avoids resolvedMeta getting out of sync with the input value.
 
-  // Fetch SOL balance when SOL is selected
-  useEffect(() => {
-    if (!publicKey || !selectedToken.isSOL) {
-      setSolBalance(null);
-      return;
-    }
-    let cancelled = false;
-    connection.getBalance(publicKey).then((bal) => {
-      if (!cancelled) setSolBalance(bal);
-    }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [publicKey, selectedToken.isSOL, connection]);
-
-  // Fetch SPL token balance for non-SOL, non-BTC tokens (USDC, USDT, zkBTC)
-  useEffect(() => {
-    if (!publicKey || selectedToken.isSOL || selectedToken.isBtcNative || !selectedToken.mint) {
-      setSplBalance(null);
-      return;
-    }
-    let cancelled = false;
-    const mintPubkey = new PublicKey(selectedToken.mint || getConfig().zkbtcMint);
-    connection.getTokenAccountsByOwner(publicKey, {
-      mint: mintPubkey,
-      programId: TOKEN_2022_PROGRAM_ID,
-    }).then((accounts) => {
-      if (cancelled) return;
-      if (accounts.value.length === 0) { setSplBalance(0); return; }
-      // Parse token amount from account data (offset 64, 8 bytes LE u64)
-      const data = accounts.value[0].account.data;
-      const view = new DataView(data.buffer, data.byteOffset + 64, 8);
-      setSplBalance(Number(view.getBigUint64(0, true)));
-    }).catch(() => { if (!cancelled) setSplBalance(0); });
-    return () => { cancelled = true; };
-  }, [publicKey, selectedToken, connection]);
-
-  const handleMax = useCallback(() => {
-    if (selectedToken.isBtcNative && btcWallet.balance !== null) {
-      // Reserve ~1000 sats for fees
-      const maxSats = Math.max(0, btcWallet.balance - BTC_MINER_FEE_ESTIMATE);
-      setBtcAmount((maxSats / 1e8).toFixed(8));
-    } else if (selectedToken.isSOL && solBalance !== null) {
-      // Reserve ~0.01 SOL for tx fees
-      const maxLamports = Math.max(0, solBalance - 0.01 * LAMPORTS_PER_SOL);
-      setAmount((maxLamports / LAMPORTS_PER_SOL).toFixed(9));
-    } else if (!selectedToken.isSOL && !selectedToken.isBtcNative && splBalance !== null) {
-      const value = splBalance / (10 ** selectedToken.decimals);
-      setAmount(value.toFixed(selectedToken.decimals));
-    } else {
-      setAmount("0");
-    }
-  }, [selectedToken, solBalance, splBalance, btcWallet.balance]);
+  const onMax = useCallback(() => {
+    const max = handleMax();
+    if (selectedToken.isBtcNative) setBtcAmount(max);
+    else setAmount(max);
+  }, [handleMax, selectedToken.isBtcNative]);
 
   // ── BTC: Reset flow ──
   const resetBtcFlow = useCallback(() => {
@@ -822,7 +776,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
               step="0.00000001"
               className="flex-1 bg-transparent text-lg font-mono text-foreground placeholder:text-gray/30 outline-none min-w-0"
             />
-            <button onClick={handleMax}
+            <button onClick={onMax}
               className="px-2 py-1 rounded-[6px] bg-btc/10 border border-btc/20 text-[10px] font-semibold text-btc hover:bg-btc/20 transition-colors cursor-pointer uppercase tracking-wider">
               Max
             </button>
@@ -974,7 +928,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
             className="flex-1 bg-transparent text-lg font-mono text-foreground placeholder:text-gray/30 outline-none min-w-0"
           />
           <button
-            onClick={handleMax}
+            onClick={onMax}
             className="px-2 py-1 rounded-[6px] bg-privacy/10 border border-privacy/20 text-[10px] font-semibold text-privacy hover:bg-privacy/20 transition-colors cursor-pointer uppercase tracking-wider"
           >
             Max
