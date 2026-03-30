@@ -12,10 +12,13 @@ use tokio::sync::broadcast;
 ///
 /// Optionally filters messages before sending. Handles close frames and
 /// errors automatically. Returns when either the send or receive side closes.
+/// Type alias for optional WebSocket message filter.
+pub type WsFilter<T> = Option<Box<dyn Fn(&T) -> bool + Send>>;
+
 pub async fn run_broadcast_ws<T: Serialize + Clone + Send + 'static>(
     socket: WebSocket,
     mut rx: broadcast::Receiver<T>,
-    filter: Option<Box<dyn Fn(&T) -> bool + Send>>,
+    filter: WsFilter<T>,
     label: &str,
 ) {
     let (mut sender, mut receiver) = socket.split();

@@ -142,11 +142,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             solana_rpc_url,
             aegis_program_id,
         } => {
-            run_server(
-                bind, id, key_file, password, esplora_url, pool_address,
-                max_amount, max_fee, require_context, audit_log, network,
-                solana_rpc_url, aegis_program_id,
-            )
+            run_server(ServerParams {
+                bind,
+                signer_id: id,
+                key_file,
+                password,
+                esplora_url,
+                pool_address,
+                max_amount,
+                max_fee,
+                require_context,
+                audit_log_path: audit_log,
+                network_str: network,
+                solana_rpc_url,
+                aegis_program_id,
+            })
             .await?;
         }
         Commands::DkgCoordinator {
@@ -170,8 +180,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Run the signer server
-async fn run_server(
+/// Parameters for running the signer server
+struct ServerParams {
     bind: String,
     signer_id: u16,
     key_file: Option<String>,
@@ -185,7 +195,26 @@ async fn run_server(
     network_str: String,
     solana_rpc_url: Option<String>,
     aegis_program_id: Option<String>,
-) -> Result<(), Box<dyn std::error::Error>> {
+}
+
+/// Run the signer server
+async fn run_server(params: ServerParams) -> Result<(), Box<dyn std::error::Error>> {
+    let ServerParams {
+        bind,
+        signer_id,
+        key_file,
+        password,
+        esplora_url,
+        pool_address,
+        max_amount,
+        max_fee,
+        require_context,
+        audit_log_path,
+        network_str,
+        solana_rpc_url,
+        aegis_program_id,
+    } = params;
+
     let key_path = key_file.unwrap_or_else(|| format!("config/signer{}.key.enc", signer_id));
 
     let network = match network_str.as_str() {
@@ -504,7 +533,7 @@ fn generate_test_keys(
 
     tracing::warn!("Generating test keys with trusted dealer - FOR DEVELOPMENT ONLY!");
 
-    let mut rng = OsRng;
+    let rng = OsRng;
     let (shares, pubkey_package) =
         frost::keys::generate_with_dealer(total, threshold, frost::keys::IdentifierList::Default, rng)?;
 

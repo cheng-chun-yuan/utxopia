@@ -34,7 +34,7 @@ pub mod solana_verifier;
 pub mod types;
 pub mod utils;
 
-pub use audit::AuditLog;
+pub use audit::{AuditLog, PolicyLogParams};
 pub use dkg::{DkgError, DkgParticipant};
 pub use keystore::{Keystore, KeystoreError};
 pub use policy::{DuplicateTracker, PolicyError, SigningPolicy};

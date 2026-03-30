@@ -331,7 +331,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut sighash_cache = SighashCache::new(&tx);
     let sighash = sighash_cache.taproot_key_spend_signature_hash(
         0,
-        &Prevouts::All(&[prevout.clone()]),
+        &Prevouts::All(std::slice::from_ref(&prevout)),
         TapSighashType::Default,
     )?;
 

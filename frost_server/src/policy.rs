@@ -344,45 +344,41 @@ impl SigningPolicy {
 
         // 6c. Verify BTC tx inputs match on-chain Reserved UtxoRecord PDAs (withdrawal only)
         //     Prevents signing transactions that spend UTXOs not tracked by the Solana program.
-        if let (Some(ref verifier), Some(ref verification)) = (&self.solana_verifier, &request.solana_verification) {
-            if let SolanaVerification::Withdrawal { ref utxo_inputs, .. } = verification {
-                if utxo_inputs.is_empty() {
-                    return Err(PolicyError::UtxoInputsMissing);
-                }
-                let total_verified = verifier.verify_utxo_inputs(utxo_inputs).await.map_err(|e| {
-                    use crate::solana_verifier::SolanaVerifyError;
-                    match e {
-                        SolanaVerifyError::AccountNotFound(msg) => {
-                            // Extract txid:vout from error message if possible
-                            PolicyError::UtxoPdaMismatch(format!("UTXO PDA not found: {}", msg))
-                        }
-                        SolanaVerifyError::AmountMismatch { on_chain, expected } => {
-                            PolicyError::UtxoPdaMismatch(format!(
-                                "UTXO amount mismatch: on-chain {} != claimed {}",
-                                on_chain, expected
-                            ))
-                        }
-                        _ => PolicyError::UtxoPdaMismatch(format!("UTXO verification failed: {}", e)),
-                    }
-                })?;
-                tracing::info!(
-                    utxo_count = utxo_inputs.len(),
-                    total_verified_sats = total_verified,
-                    "UTXO inputs verified against on-chain Reserved PDAs"
-                );
+        if let (Some(ref verifier), Some(SolanaVerification::Withdrawal { ref utxo_inputs, .. })) = (&self.solana_verifier, &request.solana_verification) {
+            if utxo_inputs.is_empty() {
+                return Err(PolicyError::UtxoInputsMissing);
             }
+            let total_verified = verifier.verify_utxo_inputs(utxo_inputs).await.map_err(|e| {
+                use crate::solana_verifier::SolanaVerifyError;
+                match e {
+                    SolanaVerifyError::AccountNotFound(msg) => {
+                        // Extract txid:vout from error message if possible
+                        PolicyError::UtxoPdaMismatch(format!("UTXO PDA not found: {}", msg))
+                    }
+                    SolanaVerifyError::AmountMismatch { on_chain, expected } => {
+                        PolicyError::UtxoPdaMismatch(format!(
+                            "UTXO amount mismatch: on-chain {} != claimed {}",
+                            on_chain, expected
+                        ))
+                    }
+                    _ => PolicyError::UtxoPdaMismatch(format!("UTXO verification failed: {}", e)),
+                }
+            })?;
+            tracing::info!(
+                utxo_count = utxo_inputs.len(),
+                total_verified_sats = total_verified,
+                "UTXO inputs verified against on-chain Reserved PDAs"
+            );
         }
 
         // 7. Duplicate signing prevention (withdrawal only)
-        if let Some(ref verification) = request.solana_verification {
-            if let SolanaVerification::Withdrawal { ref requester, nonce, .. } = verification {
-                if let Some(ref tracker) = self.duplicate_tracker {
-                    if tracker.is_signed(requester, *nonce) {
-                        return Err(PolicyError::DuplicateSigning {
-                            requester: requester.clone(),
-                            nonce: *nonce,
-                        });
-                    }
+        if let Some(SolanaVerification::Withdrawal { ref requester, nonce, .. }) = request.solana_verification {
+            if let Some(ref tracker) = self.duplicate_tracker {
+                if tracker.is_signed(requester, nonce) {
+                    return Err(PolicyError::DuplicateSigning {
+                        requester: requester.clone(),
+                        nonce,
+                    });
                 }
             }
         }
@@ -426,23 +422,21 @@ impl SigningPolicy {
 
         // 9. Mempool/previous tx check — warn if destination already received payment
         //    (downgraded from hard reject to warning to support retries with corrected amounts)
-        if let Some(ref verification) = request.solana_verification {
-            if let SolanaVerification::Withdrawal { ref expected_btc_address, .. } = verification {
-                if let Some(ref base_url) = self.esplora_url {
-                    match self.check_destination_not_already_paid(
-                        base_url,
-                        expected_btc_address,
-                    ).await {
-                        Ok(()) => {}
-                        Err(PolicyError::AlreadyPaid { ref address, tx_count }) => {
-                            tracing::warn!(
-                                address = %address,
-                                tx_count = tx_count,
-                                "destination already has transactions — allowing retry (on-chain PDA still valid)"
-                            );
-                        }
-                        Err(e) => return Err(e),
+        if let Some(SolanaVerification::Withdrawal { ref expected_btc_address, .. }) = request.solana_verification {
+            if let Some(ref base_url) = self.esplora_url {
+                match self.check_destination_not_already_paid(
+                    base_url,
+                    expected_btc_address,
+                ).await {
+                    Ok(()) => {}
+                    Err(PolicyError::AlreadyPaid { ref address, tx_count }) => {
+                        tracing::warn!(
+                            address = %address,
+                            tx_count = tx_count,
+                            "destination already has transactions — allowing retry (on-chain PDA still valid)"
+                        );
                     }
+                    Err(e) => return Err(e),
                 }
             }
         }

@@ -53,6 +53,17 @@ pub struct AuditEntry {
     pub redemption_nonce: Option<u64>,
 }
 
+/// Parameters for logging a policy decision
+pub struct PolicyLogParams<'a> {
+    pub session_id: &'a str,
+    pub sighash: &'a str,
+    pub result: &'a str,
+    pub reason: Option<&'a str>,
+    pub destinations: Option<Vec<String>>,
+    pub amount_sats: Option<u64>,
+    pub fee_sats: Option<u64>,
+}
+
 impl AuditLog {
     /// Create a new audit logger
     ///
@@ -92,26 +103,17 @@ impl AuditLog {
     }
 
     /// Log a policy decision
-    pub fn log_policy(
-        &self,
-        session_id: &str,
-        sighash: &str,
-        result: &str,
-        reason: Option<&str>,
-        destinations: Option<Vec<String>>,
-        amount_sats: Option<u64>,
-        fee_sats: Option<u64>,
-    ) {
+    pub fn log_policy(&self, params: PolicyLogParams<'_>) {
         self.log(&AuditEntry {
             ts: chrono_now(),
-            session_id: session_id.to_string(),
+            session_id: params.session_id.to_string(),
             action: "policy_check".to_string(),
-            sighash: Some(sighash.chars().take(16).collect()),
-            result: result.to_string(),
-            reason: reason.map(|s| s.to_string()),
-            destinations,
-            amount_sats,
-            fee_sats,
+            sighash: Some(params.sighash.chars().take(16).collect()),
+            result: params.result.to_string(),
+            reason: params.reason.map(|s| s.to_string()),
+            destinations: params.destinations,
+            amount_sats: params.amount_sats,
+            fee_sats: params.fee_sats,
             signer_id: None,
             requester: None,
             redemption_nonce: None,
@@ -257,7 +259,15 @@ mod tests {
     fn test_audit_log_disabled() {
         let log = AuditLog::new(None);
         // Should not panic
-        log.log_policy("sess1", "aabb", "allow", None, None, None, None);
+        log.log_policy(PolicyLogParams {
+            session_id: "sess1",
+            sighash: "aabb",
+            result: "allow",
+            reason: None,
+            destinations: None,
+            amount_sats: None,
+            fee_sats: None,
+        });
         log.log_signing("sess1", "round1", 1, "ok", None);
     }
 
@@ -267,15 +277,15 @@ mod tests {
         let path = dir.path().join("audit.jsonl");
         let log = AuditLog::new(Some(path.clone()));
 
-        log.log_policy(
-            "sess1",
-            "aabbccdd",
-            "allow",
-            None,
-            Some(vec!["tb1p...".to_string()]),
-            Some(10000),
-            Some(200),
-        );
+        log.log_policy(PolicyLogParams {
+            session_id: "sess1",
+            sighash: "aabbccdd",
+            result: "allow",
+            reason: None,
+            destinations: Some(vec!["tb1p...".to_string()]),
+            amount_sats: Some(10000),
+            fee_sats: Some(200),
+        });
         log.log_signing("sess1", "round1", 1, "ok", None);
 
         let contents = std::fs::read_to_string(&path).unwrap();

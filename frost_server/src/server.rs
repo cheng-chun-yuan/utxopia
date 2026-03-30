@@ -2,7 +2,7 @@
 //!
 //! Exposes signing and DKG endpoints for threshold operations.
 
-use crate::audit::AuditLog;
+use crate::audit::{AuditLog, PolicyLogParams};
 use crate::dkg::{DkgError, DkgParticipant};
 use crate::keystore::Keystore;
 use crate::policy::{DuplicateTracker, SigningPolicy};
@@ -284,15 +284,15 @@ async fn round1_handler(
         let session_id = request.session_id.to_string();
         match policy.verify(&request).await {
             Ok(info) => {
-                state.audit.log_policy(
-                    &session_id,
-                    &request.sighash,
-                    "allow",
-                    None,
-                    if info.destinations.is_empty() { None } else { Some(info.destinations) },
-                    Some(info.total_output_sats),
-                    Some(info.fee_sats),
-                );
+                state.audit.log_policy(PolicyLogParams {
+                    session_id: &session_id,
+                    sighash: &request.sighash,
+                    result: "allow",
+                    reason: None,
+                    destinations: if info.destinations.is_empty() { None } else { Some(info.destinations) },
+                    amount_sats: Some(info.total_output_sats),
+                    fee_sats: Some(info.fee_sats),
+                });
                 tracing::info!(
                     session = %session_id,
                     output_sats = info.total_output_sats,
@@ -301,24 +301,22 @@ async fn round1_handler(
                 );
 
                 // Store verification data for duplicate tracking after round2
-                if let Some(ref verification) = request.solana_verification {
-                    if let SolanaVerification::Withdrawal { ref requester, nonce, .. } = verification {
-                        state.session_verifications.write().await
-                            .insert(request.session_id, (requester.clone(), *nonce, Instant::now()));
-                    }
+                if let Some(SolanaVerification::Withdrawal { ref requester, nonce, .. }) = request.solana_verification {
+                    state.session_verifications.write().await
+                        .insert(request.session_id, (requester.clone(), nonce, Instant::now()));
                 }
             }
             Err(e) => {
                 let reason = e.to_string();
-                state.audit.log_policy(
-                    &session_id,
-                    &request.sighash,
-                    "deny",
-                    Some(&reason),
-                    None,
-                    None,
-                    None,
-                );
+                state.audit.log_policy(PolicyLogParams {
+                    session_id: &session_id,
+                    sighash: &request.sighash,
+                    result: "deny",
+                    reason: Some(&reason),
+                    destinations: None,
+                    amount_sats: None,
+                    fee_sats: None,
+                });
                 tracing::warn!(
                     session = %session_id,
                     error = %reason,

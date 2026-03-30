@@ -182,11 +182,13 @@ impl DkgParticipant {
         }
 
         // Store round 2 secret
-        self.ceremonies
+        if let Some(c) = self.ceremonies
             .write()
             .unwrap_or_else(recover_write)
             .get_mut(&request.ceremony_id)
-            .map(|c| c.round2_secret = Some(round2_secret));
+        {
+            c.round2_secret = Some(round2_secret);
+        }
 
         tracing::info!(
             signer_id = self.signer_id,
