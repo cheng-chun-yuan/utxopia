@@ -5,24 +5,40 @@ import {
   ArrowDownToLine,
   ArrowUpDown,
   ArrowUpFromLine,
+  Loader2,
   Shield,
 } from "lucide-react";
+import useSWR from "swr";
 import { useExplorer } from "@/hooks/use-explorer";
 import type { ExplorerTransaction } from "@/hooks/use-explorer";
 import { usePoolStats } from "@/hooks/use-pool-stats";
-import { useTokenPrices, type TokenPrices } from "@/hooks/use-btc-price";
+import { useTokenPrices } from "@/hooks/use-token-prices";
+import { getBackendUrl } from "@/lib/api/constants";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 
 import { TypeFilterBar, LoadingState, StatCard, Th, RefreshButton, EmptyState } from "./components/shared";
 import type { FilterType, TokenFilter } from "./components/shared";
 import { TransferRow, getTransferKind } from "./components/transfers-tab";
-import { getTokenByFilter, formatTokenAmount, type TokenFilterId } from "@/lib/supported-tokens";
+import { getTokenByFilter, formatTokenAmount, tvlToUsd, type TokenFilterId } from "@/lib/supported-tokens";
 
 // =============================================================================
-// Filter type maps directly to ExplorerTransaction.type
-// "all" shows everything, others filter by tx.type
-// "unshield" filter also includes "withdraw" type
+// Sync status — shows when backend indexer is catching up
+// =============================================================================
+
+function useSyncStatus() {
+  const { data } = useSWR<{ synced: boolean }>(
+    "tree-sync-status",
+    async () => {
+      const resp = await fetch(`${getBackendUrl()}/api/tree/status`);
+      if (!resp.ok) return { synced: true };
+      const json = await resp.json();
+      return { synced: json.synced ?? true };
+    },
+    { refreshInterval: 15_000, revalidateOnFocus: false },
+  );
+  return data?.synced ?? true;
+}
 
 // =============================================================================
 // Explorer Content
@@ -98,19 +114,7 @@ function ExplorerContent() {
 
   const totalShieldedDisplay = useMemo(() => {
     if (!stats?.tokenTVL?.length) return "—";
-    const priceMap: Record<string, number | null> = {
-      BTC: prices.btc, zkBTC: prices.btc,
-      SOL: prices.sol, zkSOL: prices.sol,
-      USDC: prices.usdc, zkUSDC: prices.usdc,
-      USDT: prices.usdt, zkUSDT: prices.usdt,
-    };
-    let total = 0;
-    for (const t of stats.tokenTVL) {
-      const price = priceMap[t.symbol] ?? priceMap[t.symbol.replace("zk", "")];
-      if (price) {
-        total += (Number(t.totalShielded) / (10 ** t.decimals)) * price;
-      }
-    }
+    const total = tvlToUsd(stats.tokenTVL, prices);
     if (total === 0) return "—";
     return `$${total.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
   }, [stats, prices]);
@@ -191,6 +195,7 @@ function ExplorerContent() {
 // =============================================================================
 
 export default function ExplorerPage() {
+  const synced = useSyncStatus();
   return (
     <main className="min-h-screen bg-background hacker-bg noise-overlay overflow-x-hidden flex flex-col">
       <SiteHeader />
@@ -215,6 +220,12 @@ export default function ExplorerPage() {
                 <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
                 <span className="text-[10px] font-mono text-gray/50">Devnet</span>
               </div>
+              {!synced && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-500/5 border border-orange-500/15">
+                  <Loader2 className="w-3 h-3 text-orange-400 animate-spin" />
+                  <span className="text-[10px] font-mono text-orange-400/70">Syncing…</span>
+                </div>
+              )}
             </div>
           </div>
         </div>

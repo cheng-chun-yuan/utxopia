@@ -246,3 +246,22 @@ export function formatTokenAmount(
   const value = rawAmount / (10 ** token.decimals);
   return `${value.toLocaleString(undefined, { maximumFractionDigits: token.decimals })} ${token.unit}`;
 }
+
+/**
+ * Compute total USD value across all token TVL entries using live prices.
+ * Uses each token's `priceKey` from the SUPPORTED_TOKENS registry.
+ */
+export function tvlToUsd(
+  tokenTVL: { symbol: string; totalShielded: bigint; decimals: number }[],
+  prices: Partial<Record<PriceKey, number | null>>,
+): number {
+  let total = 0;
+  for (const t of tokenTVL) {
+    const token = getTokenBySymbol(t.symbol);
+    const price = token ? (prices[token.priceKey] ?? null) : null;
+    if (price) {
+      total += (Number(t.totalShielded) / (10 ** t.decimals)) * price;
+    }
+  }
+  return total;
+}

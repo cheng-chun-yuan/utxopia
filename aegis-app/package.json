@@ -7,9 +7,7 @@
     "build": "cd ../sdk && bun run build && cd ../aegis-app && next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest",
-    "test:ui": "vitest --ui",
-    "test:coverage": "vitest --coverage",
+    "test": "bun test",
     "copy-circuits": "mkdir -p public/circuits/groth16 && for c in ../sdk/circuits/joinsplit_*; do n=$(basename $c); mkdir -p public/circuits/groth16/$n/${n}_js && cp $c/${n}_js/${n}.wasm public/circuits/groth16/$n/${n}_js/ && cp $c/${n}.zkey public/circuits/groth16/$n/; done"
   },
   "dependencies": {
@@ -55,13 +53,12 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
+    "happy-dom": "^20.8.9",
     "jsdom": "^27.4.0",
     "tailwindcss": "^4",
-    "typescript": "^5",
-    "vitest": "^2.1.8"
+    "typescript": "^5"
   },
   "ignoreScripts": [
     "sharp",

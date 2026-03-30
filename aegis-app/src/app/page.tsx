@@ -5,8 +5,9 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Bitcoin, Shield, Zap, Lock, ArrowRight, EyeOff, Fingerprint, ShieldCheck, Loader2, ChevronRight, Layers, Rocket } from "lucide-react";
 import { usePoolStats } from "@/hooks/use-pool-stats";
-import { useTokenPrices, type TokenPrices } from "@/hooks/use-btc-price";
-import { useDeposits, useTransfers, useRedemptions } from "@/hooks/use-explorer";
+import { useTokenPrices } from "@/hooks/use-token-prices";
+import { tvlToUsd } from "@/lib/supported-tokens";
+import { useExplorer } from "@/hooks/use-explorer";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { ScrollReveal } from "@/components/ui/scroll-reveal";
@@ -209,31 +210,12 @@ function FeatureCarousel() {
 }
 
 /* ── Main Page ── */
-/** Map token symbol to price key */
-function tvlToUsd(tokenTVL: { symbol: string; totalShielded: bigint; decimals: number }[], prices: TokenPrices): number {
-  const priceMap: Record<string, number | null> = {
-    BTC: prices.btc, zkBTC: prices.btc,
-    SOL: prices.sol, zkSOL: prices.sol,
-    USDC: prices.usdc, zkUSDC: prices.usdc,
-    USDT: prices.usdt, zkUSDT: prices.usdt,
-  };
-  let total = 0;
-  for (const t of tokenTVL) {
-    const price = priceMap[t.symbol] ?? priceMap[t.symbol.replace("zk", "")];
-    if (price) {
-      total += (Number(t.totalShielded) / (10 ** t.decimals)) * price;
-    }
-  }
-  return total;
-}
 
 export default function Home() {
   const { stats, isLoading } = usePoolStats();
   const prices = useTokenPrices();
-  const { deposits } = useDeposits();
-  const { transfers } = useTransfers();
-  const { redemptions } = useRedemptions();
-  const txCount = deposits.length + transfers.length + redemptions.length;
+  const { transactions } = useExplorer();
+  const txCount = transactions.length;
 
   return (
     <main className="min-h-screen bg-background hacker-bg noise-overlay overflow-x-hidden">
