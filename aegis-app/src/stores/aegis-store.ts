@@ -12,10 +12,9 @@ import {
   hexToBytes,
   bytesToHex,
   computeNullifierHashForNote,
+  computeNullifierBytes,
   decodeViewOnlyKeys,
   scanAnnouncementsViewOnly,
-  computeJoinSplitNullifierSync,
-  bigintToBytes,
   computeTokenId,
   EventClient,
   getConfig,
@@ -514,7 +513,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
         // Compute nullifier hashes (hex) for each note
         const nullifierData = scanned.map((note) => {
           const hashBytes = isViewOnly
-            ? bigintToBytes(computeJoinSplitNullifierSync(nullifyingKey, BigInt(note.leafIndex)))
+            ? computeNullifierBytes(nullifyingKey, note.leafIndex)
             : computeNullifierHashForNote(keys!, note as ScannedNote);
           const hashHex = Buffer.from(hashBytes).toString("hex");
           return { note, hashHex };

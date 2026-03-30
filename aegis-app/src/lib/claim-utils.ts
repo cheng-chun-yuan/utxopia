@@ -6,7 +6,7 @@ import {
   deriveKeysFromSeedCircuit,
   computeJoinSplitNullifierSync,
   scanUnifiedNotes,
-  hexToBytes,
+  parseAnnouncementsFromHex,
   type AegisKeys,
 } from "@aegis/sdk";
 import { fetchSpentNullifierPDAs, nullifierHashToPDA } from "@/lib/nullifier-utils";
@@ -48,19 +48,7 @@ export async function scanSecretPhrase(
   const announcementsData = await announcementsResp.json();
 
   // Parse announcements into the format scanUnifiedNotes expects
-  const announcements = (announcementsData.announcements || []).map((ann: {
-    announcement_type: number;
-    ephemeral_pub: string;
-    encrypted_amount: string;
-    commitment: string;
-    leaf_index: number;
-  }) => ({
-    announcementType: ann.announcement_type,
-    ephemeralPub: hexToBytes(ann.ephemeral_pub),
-    encryptedAmount: hexToBytes(ann.encrypted_amount),
-    commitment: hexToBytes(ann.commitment),
-    leafIndex: ann.leaf_index,
-  }));
+  const announcements = parseAnnouncementsFromHex(announcementsData.announcements || []);
 
   const { getActiveTokenId } = await import("@/lib/token-context");
   const scannedNotes = await scanUnifiedNotes(keys, announcements, getActiveTokenId());

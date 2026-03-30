@@ -74,6 +74,7 @@ import {
   computeJoinSplitCommitmentSync,
   computeJoinSplitNullifierSync,
 } from "./poseidon";
+import { getConfig } from "./config";
 
 // ========== Amount Encryption Helpers ==========
 
@@ -447,6 +448,19 @@ export async function createNonInteractiveDeposit(
     npk,
     ephemeralPub,
   };
+}
+
+/**
+ * Create a non-interactive deposit using the current SDK config.
+ * Reads groupPubKey from config, no need to pass raw bytes.
+ */
+export async function createDepositFromConfig(
+  recipientMeta: StealthMetaAddress,
+  network: "mainnet" | "testnet" | "regtest" = "testnet",
+): Promise<NonInteractiveDepositResult> {
+  const config = getConfig();
+  const groupPubKey = hexToBytes(config.groupPubKey);
+  return createNonInteractiveDeposit(recipientMeta, groupPubKey, network);
 }
 
 // ========== Recipient Scanning (Viewing Key Only) ==========
@@ -973,6 +987,42 @@ export function computeNullifierHashForNote(
   // No extra hash layer — the nullifier IS the public output
   const nullifier = computeJoinSplitNullifierSync(keys.nullifyingKey, BigInt(note.leafIndex));
   return bigintToBytes(nullifier);
+}
+
+/**
+ * Compute nullifier hash for a note and return as raw bytes.
+ * Convenience wrapper — avoids importing computeJoinSplitNullifierSync + bigintToBytes in consumers.
+ */
+export function computeNullifierBytes(nullifyingKey: bigint, leafIndex: number): Uint8Array {
+  const nullifier = computeJoinSplitNullifierSync(nullifyingKey, BigInt(leafIndex));
+  return bigintToBytes(nullifier);
+}
+
+// ========== Announcement Parsing ==========
+
+/**
+ * Parse backend announcement rows (hex strings) into the format scanUnifiedNotes expects.
+ */
+export function parseAnnouncementsFromHex(rows: Array<{
+  announcement_type: number;
+  ephemeral_pub: string;
+  encrypted_amount: string;
+  commitment: string;
+  leaf_index: number;
+}>): Array<{
+  announcementType: number;
+  ephemeralPub: Uint8Array;
+  encryptedAmount: Uint8Array;
+  commitment: Uint8Array;
+  leafIndex: number;
+}> {
+  return rows.map((r) => ({
+    announcementType: r.announcement_type,
+    ephemeralPub: hexToBytes(r.ephemeral_pub),
+    encryptedAmount: hexToBytes(r.encrypted_amount),
+    commitment: hexToBytes(r.commitment),
+    leafIndex: r.leaf_index,
+  }));
 }
 
 // ========== Deposit Ownership Check ==========

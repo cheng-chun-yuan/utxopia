@@ -3,11 +3,9 @@
 import { useState, useCallback, useRef } from "react";
 import {
   bytesToHex,
-  hexToBytes,
-  createNonInteractiveDeposit,
+  createDepositFromConfig,
   buildDepositPsbt,
   selectUtxos,
-  getConfig,
 } from "@aegis/sdk";
 import type { StealthMetaAddress } from "@aegis/sdk";
 import { useBitcoinWalletStore, type WalletUtxo } from "@/stores/bitcoin-wallet-store";
@@ -81,11 +79,8 @@ export function useBtcDeposit({
     setDepositPreview(null);
 
     try {
-      const config = getConfig();
-      const groupPubKey = hexToBytes(config.groupPubKey);
-
       const [deposit, utxos] = await Promise.all([
-        createNonInteractiveDeposit(resolvedMeta, groupPubKey, getBtcSignerNetwork()),
+        createDepositFromConfig(resolvedMeta, getBtcSignerNetwork()),
         btcWallet.getPaymentUtxos(),
       ]);
 
