@@ -30,8 +30,7 @@ import { parseSats } from "@/lib/utils/validation";
 import { formatBtc, formatAmount, truncateMiddle } from "@/lib/utils/formatting";
 import { BTC_DUST_LIMIT, BTC_MINER_FEE_ESTIMATE, TOKEN_2022_PROGRAM_ID_STR } from "@/lib/btc-constants";
 import { useAegis, type InboxNote } from "@/hooks/use-aegis";
-import { usePasskey } from "@/hooks/use-passkey";
-import { useAegisStore } from "@/stores/aegis-store";
+import { usePayFlowAuth } from "@/hooks/use-pay-flow-auth";
 import { AuthModal } from "@/components/auth-modal";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useProver } from "@/hooks/use-prover";
@@ -106,41 +105,11 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 
   // Auth modal (passkey + wallet)
   const {
-    isSupported: passkeySupported,
-    hasCredential: hasPasskeyCredential,
-    isLoading: passkeyLoading,
-    error: passkeyError,
-    register: registerPasskey,
-    authenticate: authenticatePasskey,
-  } = usePasskey();
-  const deriveKeysFromPasskeySeed = useAegisStore((s) => s.deriveKeysFromPasskeySeed);
-  const [authModalOpen, setAuthModalOpen] = useState(false);
-
-  const handlePasskeyRegister = async () => {
-    const seed = await registerPasskey();
-    if (seed) {
-      await deriveKeysFromPasskeySeed(seed);
-      setAuthModalOpen(false);
-    }
-  };
-
-  const handlePasskeyAuthenticate = async () => {
-    const seed = await authenticatePasskey();
-    if (seed) {
-      await deriveKeysFromPasskeySeed(seed);
-      setAuthModalOpen(false);
-    }
-  };
-
-  // Auto-open auth modal when no keys
-  const authAutoOpenedRef = useRef(false);
-  useEffect(() => {
-    if (!hasKeys && !authAutoOpenedRef.current) {
-      authAutoOpenedRef.current = true;
-      setAuthModalOpen(true);
-    }
-    if (hasKeys) authAutoOpenedRef.current = false;
-  }, [hasKeys]);
+    authModalOpen, setAuthModalOpen,
+    passkeySupported, hasPasskeyCredential,
+    passkeyLoading, passkeyError,
+    handlePasskeyRegister, handlePasskeyAuthenticate,
+  } = usePayFlowAuth(hasKeys);
 
   const [step, setStep] = useState<PayStep>("connect");
   const [error, setError] = useState<string | null>(null);
