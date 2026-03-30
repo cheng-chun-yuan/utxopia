@@ -350,6 +350,7 @@ impl RedemptionService {
 
     /// Run one tick of the 3-phase pipeline.
     pub async fn tick(&self) -> Result<TickResult, ServiceError> {
+        let tick_start = std::time::Instant::now();
         let mut result = TickResult::default();
 
         // Phase 0: Refresh on-chain config + UTXOs
@@ -370,6 +371,15 @@ impl RedemptionService {
         let (processed, completed) = self.complete_processing_pdas(&scan.processing).await;
         result.withdrawals_processed += processed;
         result.withdrawals_completed += completed;
+
+        tracing::info!(
+            operation = "redemption_tick",
+            pending_pdas = result.pending_pdas,
+            withdrawals_processed = result.withdrawals_processed,
+            withdrawals_completed = result.withdrawals_completed,
+            duration_ms = tick_start.elapsed().as_millis() as u64,
+            "redemption tick completed"
+        );
 
         Ok(result)
     }
@@ -699,11 +709,19 @@ impl RedemptionService {
         }
 
         // Sign
+        let sign_start = std::time::Instant::now();
         let signed_tx = self
             .signer
             .sign(&unsigned)
             .await
             .map_err(|e| ServiceError::SignError(e.to_string()))?;
+        tracing::info!(
+            operation = "redemption_sign",
+            pda = %&pda.pda_address[..8],
+            amount_sats = pda.amount_sats,
+            duration_ms = sign_start.elapsed().as_millis() as u64,
+            "signing completed"
+        );
 
         let tx_hex = bitcoin::consensus::encode::serialize_hex(&signed_tx);
         let txid = signed_tx.compute_txid().to_string();

@@ -170,6 +170,7 @@ impl EventIndexerService {
     /// Poll for new transactions since the last known signature.
     /// If no checkpoint exists (e.g. after a reset), triggers a full backfill.
     async fn poll_new_transactions(&mut self) -> Result<(), String> {
+        let poll_start = std::time::Instant::now();
         let last_sig = self.store.get_last_signature()?;
 
         // No checkpoint = fresh state (after reset). Do a full backfill instead of
@@ -210,7 +211,12 @@ impl EventIndexerService {
         // Update checkpoint to newest
         self.store.set_last_signature(&new_sigs[0].signature)?;
 
-        tracing::debug!(count = new_sigs.len(), "Processed new transactions");
+        tracing::info!(
+            operation = "event_indexer_poll",
+            events_processed = new_sigs.len(),
+            duration_ms = poll_start.elapsed().as_millis() as u64,
+            "indexer poll cycle completed"
+        );
         Ok(())
     }
 

@@ -91,6 +91,8 @@ async fn handle_redeem(
 ) -> impl IntoResponse {
     use crate::api::middleware::{validate_btc_address, validate_solana_address, validate_amount_sats};
 
+    let start = std::time::Instant::now();
+
     // Validate inputs
     let btc_val = validate_btc_address(&req.btc_address);
     let sol_val = validate_solana_address(&req.solana_address);
@@ -104,6 +106,12 @@ async fn handle_redeem(
             request_id: None,
             message: Some(errors.join("; ")),
         };
+        tracing::info!(
+            operation = "api_redeem",
+            status = "validation_failed",
+            duration_ms = start.elapsed().as_millis() as u64,
+            "redeem request rejected"
+        );
         return (StatusCode::BAD_REQUEST, Json(response));
     }
 
@@ -120,6 +128,13 @@ async fn handle_redeem(
         .await
     {
         Ok(request_id) => {
+            tracing::info!(
+                operation = "api_redeem",
+                status = "success",
+                amount_sats = req.amount_sats,
+                duration_ms = start.elapsed().as_millis() as u64,
+                "redeem request accepted"
+            );
             let response = RedeemResponse {
                 success: true,
                 request_id: Some(request_id),
@@ -128,7 +143,14 @@ async fn handle_redeem(
             (StatusCode::OK, Json(response))
         }
         Err(e) => {
-            tracing::warn!(error = %e, "Redeem request failed");
+            tracing::warn!(
+                operation = "api_redeem",
+                status = "failed",
+                error = %e,
+                amount_sats = req.amount_sats,
+                duration_ms = start.elapsed().as_millis() as u64,
+                "redeem request failed"
+            );
             let response = RedeemResponse {
                 success: false,
                 request_id: None,

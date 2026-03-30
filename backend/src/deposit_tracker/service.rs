@@ -915,6 +915,8 @@ impl DepositTrackerService {
 
     /// Run a single processing cycle
     pub async fn process_cycle(&self) -> Result<(), TrackerError> {
+        let cycle_start = std::time::Instant::now();
+
         // Scan for new OP_RETURN deposits before processing existing ones
         if let Err(e) = self.detect_op_return_deposits().await {
             eprintln!("[OP_RETURN] Detection error: {}", e);
@@ -922,6 +924,7 @@ impl DepositTrackerService {
 
         // Get all active deposits from database — single query
         let deposits = self.db.get_active()?;
+        let deposit_count = deposits.len();
 
         for record in deposits {
             let address = record.taproot_address.clone();
@@ -941,11 +944,20 @@ impl DepositTrackerService {
             }
         }
 
+        tracing::info!(
+            operation = "deposit_process_cycle",
+            active_deposits = deposit_count,
+            duration_ms = cycle_start.elapsed().as_millis() as u64,
+            "deposit cycle completed"
+        );
+
         Ok(())
     }
 
     /// Process a single deposit (uses pre-fetched record to avoid N+1)
     async fn process_deposit(&self, address: &str, record: &DepositRecord) -> Result<(), TrackerError> {
+        let start = std::time::Instant::now();
+        let initial_status = format!("{:?}", record.status);
         match record.status {
             DepositStatus::Pending | DepositStatus::Detected | DepositStatus::Confirming => {
                 self.check_and_update_confirmations(address).await?;
@@ -969,6 +981,16 @@ impl DepositTrackerService {
 
         // Publish update after processing
         if let Some(record) = self.db.get_by_address(address)? {
+            let new_status = format!("{:?}", record.status);
+            if initial_status != new_status {
+                tracing::info!(
+                    deposit_id = %record.id,
+                    status = %new_status,
+                    previous_status = %initial_status,
+                    duration_ms = start.elapsed().as_millis() as u64,
+                    "deposit processed"
+                );
+            }
             self.publish_update(&record).await;
         }
 
