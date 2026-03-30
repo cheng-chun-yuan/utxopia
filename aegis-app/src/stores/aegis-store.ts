@@ -10,6 +10,7 @@ import {
   encodeStealthMetaAddress,
   scanUnifiedNotes,
   hexToBytes,
+  bytesToHex,
   computeNullifierHashForNote,
   decodeViewOnlyKeys,
   scanAnnouncementsViewOnly,
@@ -34,19 +35,6 @@ import { getBackendUrl, getSolanaRpcUrl } from "@/lib/api/constants";
 // ============================================================================
 
 const KEYS_STORAGE_PREFIX = "aegis:keys:";
-
-function bytesToHexLocal(bytes: Uint8Array): string {
-  return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
-function hexToBytesLocal(hex: string): Uint8Array {
-  const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
-  const bytes = new Uint8Array(clean.length / 2);
-  for (let i = 0; i < clean.length; i += 2) {
-    bytes[i / 2] = parseInt(clean.substring(i, i + 2), 16);
-  }
-  return bytes;
-}
 
 async function deriveStorageKey(walletPubkey: string): Promise<CryptoKey> {
   const enc = new TextEncoder();
@@ -75,14 +63,14 @@ async function encryptData(key: CryptoKey, plaintext: string): Promise<string> {
     enc.encode(plaintext),
   );
   // Store as iv(24 hex) + ciphertext(hex)
-  return bytesToHexLocal(iv) + bytesToHexLocal(new Uint8Array(ciphertext));
+  return bytesToHex(iv) + bytesToHex(new Uint8Array(ciphertext));
 }
 
 async function decryptData(key: CryptoKey, encrypted: string): Promise<string> {
   const ivHex = encrypted.slice(0, 24);
   const ctHex = encrypted.slice(24);
-  const iv = hexToBytesLocal(ivHex);
-  const ciphertext = hexToBytesLocal(ctHex);
+  const iv = hexToBytes(ivHex);
+  const ciphertext = hexToBytes(ctHex);
   const plaintext = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv: iv as BufferSource },
     key,
@@ -94,11 +82,11 @@ async function decryptData(key: CryptoKey, encrypted: string): Promise<string> {
 async function persistKeys(walletPubkey: string, keys: AegisKeys): Promise<void> {
   try {
     const data = {
-      eddsaSeedHex: bytesToHexLocal(keys.eddsaSeed),
+      eddsaSeedHex: bytesToHex(keys.eddsaSeed),
       spendingPrivKeyHex: keys.spendingPrivKey.toString(16),
       nullifyingKeyHex: keys.nullifyingKey.toString(16),
-      viewingPrivKeyHex: bytesToHexLocal(keys.viewingPrivKey),
-      viewingPubKeyHex: bytesToHexLocal(keys.viewingPubKey),
+      viewingPrivKeyHex: bytesToHex(keys.viewingPrivKey),
+      viewingPubKeyHex: bytesToHex(keys.viewingPubKey),
       spendingPubKeyX: keys.spendingPubKey.x.toString(),
       spendingPubKeyY: keys.spendingPubKey.y.toString(),
     };
@@ -129,9 +117,9 @@ async function loadKeys(walletPubkey: string, solanaPublicKey: Uint8Array): Prom
       spendingPrivKey: BigInt("0x" + data.spendingPrivKeyHex),
       spendingPubKey,
       nullifyingKey: BigInt("0x" + data.nullifyingKeyHex),
-      viewingPrivKey: hexToBytesLocal(data.viewingPrivKeyHex),
-      viewingPubKey: hexToBytesLocal(data.viewingPubKeyHex),
-      eddsaSeed: hexToBytesLocal(data.eddsaSeedHex),
+      viewingPrivKey: hexToBytes(data.viewingPrivKeyHex),
+      viewingPubKey: hexToBytes(data.viewingPubKeyHex),
+      eddsaSeed: hexToBytes(data.eddsaSeedHex),
     };
   } catch {
     return null;
@@ -490,7 +478,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
 
         if (announcementsUnchanged) {
           scanned = currentNotes.map(n => ({
-              commitment: hexToBytesLocal(n.commitmentHex),
+              commitment: hexToBytes(n.commitmentHex),
               amount: n.amount,
               leafIndex: n.leafIndex,
               ephemeralPub: n.ephemeralPub ?? new Uint8Array(32),

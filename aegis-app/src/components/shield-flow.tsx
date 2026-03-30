@@ -19,7 +19,7 @@ import {
   TOKEN_PROGRAM_ID as SPL_TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID as SPL_TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
-import { getConfig, computeNPKSync, computeMPKSync } from "@aegis/sdk";
+import { getConfig, computeNPKSync, computeMPKSync, sha256Hash } from "@aegis/sdk";
 import { useAegis } from "@/hooks/use-aegis";
 import { ed25519GenerateKeyPair, x25519Ecdh, ed25519PubToX25519 } from "@aegis/sdk";
 import { Shield, ChevronDown, Loader2, ExternalLink, CheckCircle2, AlertCircle, LogOut, Wallet, Copy, Check, ArrowRight } from "lucide-react";
@@ -116,12 +116,11 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
       const viewingPubX25519 = ed25519PubToX25519(keys.viewingPubKey);
       const sharedSecret = x25519Ecdh(ephemeral.privKey, viewingPubX25519);
 
-      const { sha256 } = await import("@noble/hashes/sha2.js");
       const domain = new TextEncoder().encode("Aegis-stealth-v1");
       const secretBuf = new Uint8Array(sharedSecret.length + domain.length);
       secretBuf.set(sharedSecret);
       secretBuf.set(domain, sharedSecret.length);
-      const hash = sha256(secretBuf);
+      const hash = sha256Hash(secretBuf);
       let stealthScalar = 0n;
       for (const b of hash) {
         stealthScalar = (stealthScalar << 8n) | BigInt(b);
