@@ -46,7 +46,6 @@ async function ensurePoseidonInit(): Promise<void> {
 
   poseidonInitPromise = initPoseidon().then(() => {
     poseidonInitialized = true;
-    console.log("[CommitmentIndex] Poseidon initialized");
   });
 
   return poseidonInitPromise;
@@ -64,9 +63,6 @@ export function getServerCommitmentIndex(): CommitmentTreeIndex {
       if (existsSync(INDEX_FILE)) {
         const stored = readFileSync(INDEX_FILE, "utf-8");
         serverIndex.import(JSON.parse(stored));
-        console.log(
-          `[CommitmentIndex] Loaded ${serverIndex.size()} commitments from ${INDEX_FILE}`
-        );
       }
     } catch (e) {
       console.warn("[CommitmentIndex] Failed to load from file:", e);
@@ -89,9 +85,6 @@ export function saveServerCommitmentIndex(): void {
 
     const data = serverIndex.export();
     writeFileSync(INDEX_FILE, JSON.stringify(data, null, 2));
-    console.log(
-      `[CommitmentIndex] Saved ${serverIndex.size()} commitments to ${INDEX_FILE}`
-    );
   } catch (e) {
     console.error("[CommitmentIndex] Failed to save to file:", e);
     throw e;
@@ -216,8 +209,6 @@ export async function syncFromOnChain(): Promise<{
 
   const connection = getHeliusConnection("devnet");
 
-  console.log("[CommitmentIndex] Fetching commitments from transaction events...");
-
   // Fetch tree state to get nextIndex
   let treeNextIndex = Number.MAX_SAFE_INTEGER;
   try {
@@ -226,7 +217,6 @@ export async function syncFromOnChain(): Promise<{
     if (treeAccount) {
       const treeState = parseCommitmentTreeData(new Uint8Array(treeAccount.data));
       treeNextIndex = Number(treeState.nextIndex);
-      console.log(`[CommitmentIndex] Tree nextIndex: ${treeNextIndex}`);
     }
   } catch (e) {
     console.warn("[CommitmentIndex] Failed to fetch tree state:", e);
@@ -254,7 +244,6 @@ export async function syncFromOnChain(): Promise<{
         });
       }
       fromBackend = true;
-      console.log(`[CommitmentIndex] Fetched ${commitments.length} commitments from backend`);
     }
   } catch {
     console.warn("[CommitmentIndex] Backend unavailable, falling back to RPC event scanning");
@@ -263,7 +252,6 @@ export async function syncFromOnChain(): Promise<{
   // Fallback: scan transaction logs directly
   if (!fromBackend) {
     const signatures = await connection.getSignaturesForAddress(getAegisProgramId(), { limit: 1000 }, "confirmed");
-    console.log(`[CommitmentIndex] Scanning ${signatures.length} transactions for events...`);
 
     const BATCH_SIZE = 20;
     for (let i = 0; i < signatures.length; i += BATCH_SIZE) {
@@ -310,8 +298,6 @@ export async function syncFromOnChain(): Promise<{
     }
   }
 
-  console.log(`[CommitmentIndex] ${deduped.length} valid commitments after dedup`);
-
   // Reset and rebuild index
   serverIndex = new CommitmentTreeIndex();
   let synced = 0;
@@ -337,7 +323,6 @@ export async function syncFromOnChain(): Promise<{
   saveServerCommitmentIndex();
 
   const root = serverIndex.getRoot().toString(16).padStart(64, "0");
-  console.log(`[CommitmentIndex] Synced ${synced} commitments, root: ${root.slice(0, 16)}...`);
 
   return { synced, skipped, root };
 }

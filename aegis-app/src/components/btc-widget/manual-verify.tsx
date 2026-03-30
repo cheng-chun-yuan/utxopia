@@ -134,8 +134,6 @@ export function ManualVerify() {
   // Core function to fetch all verification data
   const fetchVerificationData = async (transactionId: string) => {
     try {
-      console.log("[Verify] Fetching data for txid:", transactionId);
-
       // Get transaction info
       const btcNetwork = getConfig().bitcoinNetwork;
       const txInfo = await getTransactionInfo(transactionId, btcNetwork);
@@ -163,11 +161,6 @@ export function ManualVerify() {
         confirmations,
       });
 
-      console.log("[Verify] Data fetched:", {
-        blockHeight: blockHeader.height,
-        confirmations,
-        merkleProofLength: merkleProof.merkleProof.length,
-      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch verification data");
     }
@@ -192,14 +185,10 @@ export function ManualVerify() {
 
     try {
       const header = verificationData.blockHeader;
-      console.log("[Header] Checking block header on-chain...");
-      console.log("[Header] Height:", header.height);
-
       const result = await zkBTCApi.getHeaderStatus(header.height);
 
       if (result.exists) {
         setHeaderSubmitted(true);
-        console.log("[Header] Block header found on-chain");
       } else {
         throw new Error("Block header not yet relayed on-chain. The header-relayer service submits headers automatically — please wait and retry.");
       }

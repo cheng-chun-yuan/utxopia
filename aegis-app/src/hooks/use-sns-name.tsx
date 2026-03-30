@@ -364,8 +364,6 @@ export function useSnsName(): UseSnsNameReturn {
         preflightCommitment: "confirmed",
       });
       await connection.confirmTransaction({ signature: txid, blockhash, lastValidBlockHeight }, "confirmed");
-      console.log(`[SNS] Subdomain registered with stealth data (tx: ${txid})`);
-
       setRegisteredSnsName(subdomain);
       setHasRegisteredSnsName(true);
       return true;
@@ -447,8 +445,6 @@ export function useSnsName(): UseSnsNameReturn {
         preflightCommitment: "confirmed",
       });
       await connection.confirmTransaction({ signature: txid, blockhash, lastValidBlockHeight }, "confirmed");
-      console.log(`[SNS] Stealth data updated to v2 format (tx: ${txid})`);
-
       setNeedsUpdate(false);
       return true;
     } catch (err) {
