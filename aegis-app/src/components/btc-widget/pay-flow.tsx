@@ -1656,8 +1656,8 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
                 Save these note links securely. They cannot be recovered if lost.
               </p>
             </div>
-            {noteOutputPhrases.map((np, i) => (
-              <NoteClaimLink key={i} phrase={np.phrase} amount={np.amount} tokenSymbol={selectedToken.shieldedSymbol} />
+            {noteOutputPhrases.map((np) => (
+              <NoteClaimLink key={np.phrase} phrase={np.phrase} amount={np.amount} tokenSymbol={selectedToken.shieldedSymbol} />
             ))}
           </div>
         )}

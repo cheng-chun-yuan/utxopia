@@ -38,7 +38,7 @@ export function UnshieldDetails({ tx }: { tx: TransferTx }) {
           </div>
           {/* Unshield/withdraw outputs — each separate */}
           {unshieldOutputs.map((out, i) => (
-            <div key={i} className="px-3 py-2.5 rounded-[8px] bg-purple-500/4 border border-purple-500/10 space-y-2">
+            <div key={out.recipient ?? i} className="px-3 py-2.5 rounded-[8px] bg-purple-500/4 border border-purple-500/10 space-y-2">
               {out.amount ? (
                 <UnshieldAmountDisplay
                   grossAmount={out.amount}
