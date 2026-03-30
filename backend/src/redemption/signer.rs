@@ -86,7 +86,7 @@ impl TxSigner for SingleKeySigner {
             .iter()
             .map(|utxo| {
                 let script_pubkey = hex::decode(&utxo.script_pubkey)
-                    .map(|bytes| bitcoin::ScriptBuf::from_bytes(bytes))
+                    .map(bitcoin::ScriptBuf::from_bytes)
                     .unwrap_or_else(|_| bitcoin::ScriptBuf::new());
 
                 TxOut {
@@ -176,7 +176,7 @@ impl TxSigner for MpcSigner {
             .iter()
             .map(|utxo| {
                 let script_pubkey = hex::decode(&utxo.script_pubkey)
-                    .map(|bytes| bitcoin::ScriptBuf::from_bytes(bytes))
+                    .map(bitcoin::ScriptBuf::from_bytes)
                     .unwrap_or_else(|_| bitcoin::ScriptBuf::new());
 
                 TxOut {

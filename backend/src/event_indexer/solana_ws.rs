@@ -76,7 +76,7 @@ impl SolanaWsSubscriber {
         });
 
         write
-            .send(Message::Text(subscribe_msg.to_string().into()))
+            .send(Message::Text(subscribe_msg.to_string()))
             .await
             .map_err(|e| format!("WS send error: {}", e))?;
 

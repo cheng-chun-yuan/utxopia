@@ -595,9 +595,9 @@ pub fn derive_frost_taproot_address(
     };
 
     let mut hasher = Sha256::new();
-    hasher.update(&tag_hash);
-    hasher.update(&tag_hash);
-    hasher.update(&group_pubkey.serialize());
+    hasher.update(tag_hash);
+    hasher.update(tag_hash);
+    hasher.update(group_pubkey.serialize());
     hasher.update(commitment);
     let tweak_bytes: [u8; 32] = hasher.finalize().into();
 

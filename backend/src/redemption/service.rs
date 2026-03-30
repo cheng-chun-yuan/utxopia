@@ -551,7 +551,7 @@ impl RedemptionService {
 
         // Step 1: Build the BTC tx to know which UTXOs are selected
         let btc_address = script_to_address(&pda.btc_script, bitcoin::Network::Testnet)
-            .map_err(|e| ServiceError::InvalidAddress(e))?;
+            .map_err(ServiceError::InvalidAddress)?;
 
         let mut request = WithdrawalRequest::new(
             String::new(),
@@ -611,7 +611,7 @@ impl RedemptionService {
     ) -> Result<ProcessResult, ServiceError> {
         // Convert PDA data to a WithdrawalRequest
         let btc_address = script_to_address(&pda.btc_script, bitcoin::Network::Testnet)
-            .map_err(|e| ServiceError::InvalidAddress(e))?;
+            .map_err(ServiceError::InvalidAddress)?;
 
         let mut request = WithdrawalRequest::new(
             String::new(),

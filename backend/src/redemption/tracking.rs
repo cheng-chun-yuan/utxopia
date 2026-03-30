@@ -208,7 +208,7 @@ impl TrackingStore {
         conn.query_row(
             "SELECT * FROM redemption_tracking WHERE pda_address = ?1",
             params![pda_address],
-            |row| row_to_tracking(row),
+            row_to_tracking,
         )
         .optional()
         .ok()
@@ -230,7 +230,7 @@ impl TrackingStore {
             Ok(s) => s,
             Err(_) => return Vec::new(),
         };
-        stmt.query_map([], |row| row_to_tracking(row))
+        stmt.query_map([], row_to_tracking)
             .ok()
             .map(|rows| rows.filter_map(|r| r.ok()).collect())
             .unwrap_or_default()
@@ -254,7 +254,7 @@ impl TrackingStore {
         conn.query_row(
             "SELECT * FROM redemption_tracking WHERE request_id = ?1",
             params![request_id as i64],
-            |row| row_to_tracking(row),
+            row_to_tracking,
         )
         .optional()
         .ok()
@@ -283,7 +283,7 @@ impl TrackingStore {
             Ok(s) => s,
             Err(_) => return Vec::new(),
         };
-        stmt.query_map(params![status_str], |row| row_to_tracking(row))
+        stmt.query_map(params![status_str], row_to_tracking)
             .ok()
             .map(|rows| rows.filter_map(|r| r.ok()).collect())
             .unwrap_or_default()

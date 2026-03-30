@@ -205,10 +205,12 @@ pub fn validate_btc_address(address: &str) -> ValidationResult {
     let valid_chars = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
     if address.starts_with("bc1") || address.starts_with("tb1") || address.starts_with("bcrt1") {
         // Bech32 uses lowercase only after prefix
-        let suffix = if address.starts_with("bcrt1") {
-            &address[5..]
-        } else if address.starts_with("bc1") || address.starts_with("tb1") {
-            &address[4..]
+        let suffix = if let Some(s) = address.strip_prefix("bcrt1") {
+            s
+        } else if let Some(s) = address.strip_prefix("bc1") {
+            s
+        } else if let Some(s) = address.strip_prefix("tb1") {
+            s
         } else {
             address
         };

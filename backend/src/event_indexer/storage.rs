@@ -1207,6 +1207,7 @@ impl EventStore {
     /// but NO type=1 stealth announcements. These are either:
     ///   - Unshield (disc=15/30): shielded -> SPL token (show amount/recipient)
     ///   - Private transfer (disc=14): JoinSplit whose announcements are in another tx
+    ///
     /// Excludes request_redemption (disc=5) and redeem (disc=16) which belong in Withdrawals.
     fn get_orphan_nullifier_transfers(&self) -> Result<Vec<TransferRow>, String> {
         let conn = self.conn()?;
@@ -1256,7 +1257,7 @@ impl EventStore {
             let ts = if block_time > 0 { block_time } else { spent_at };
 
             // Use actual disc/transfer_type from DB; disc=14(unshield), 15(redeem/old unshield), 30(legacy)
-            let actual_disc = disc.map(|d| d as i64);
+            let actual_disc = disc;
             let is_unshield = matches!(actual_disc, Some(14) | Some(15) | Some(30))
                 || ttype.as_deref() == Some("unshield") || ttype.as_deref() == Some("redeem");
             let transfer_type = ttype.unwrap_or_else(|| {
@@ -1273,7 +1274,7 @@ impl EventStore {
                 timestamp: ts,
                 status: if ts > 0 { "confirmed".to_string() } else { "processing".to_string() },
                 operation_type: op_type,
-                instruction_disc: actual_disc.map(|d| d as i64),
+                instruction_disc: actual_disc,
                 unshield_amount: if is_unshield { unshield_amount } else { None },
                 unshield_recipient: if is_unshield { unshield_recipient } else { None },
                 token_id: tid,

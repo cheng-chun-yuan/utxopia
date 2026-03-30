@@ -116,6 +116,12 @@ pub struct MerkleTree {
     next_index: u64,
 }
 
+impl Default for MerkleTree {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MerkleTree {
     /// Create an empty tree
     pub fn new() -> Self {
@@ -150,11 +156,11 @@ impl MerkleTree {
         let mut current_hash = commitment;
         let mut current_index = leaf_index as usize;
 
-        for level in 0..TREE_DEPTH {
-            if current_index % 2 == 0 {
+        for (level, zero_hash) in ZERO_HASHES.iter().enumerate().take(TREE_DEPTH) {
+            if current_index.is_multiple_of(2) {
                 // Left child: save to frontier, pair with zero hash
                 self.frontier[level] = current_hash;
-                current_hash = poseidon2_hash(&current_hash, &ZERO_HASHES[level])?;
+                current_hash = poseidon2_hash(&current_hash, zero_hash)?;
             } else {
                 // Right child: pair with frontier (left sibling)
                 current_hash = poseidon2_hash(&self.frontier[level], &current_hash)?;
@@ -210,7 +216,7 @@ impl MerkleTree {
             indices.push((idx & 1) as u8);
 
             // Build next level (parent nodes)
-            let num_pairs = (current_level.len() + 1) / 2;
+            let num_pairs = current_level.len().div_ceil(2);
             let mut next_level = Vec::with_capacity(num_pairs);
             for i in 0..num_pairs {
                 let left = current_level.get(i * 2).copied().unwrap_or(ZERO_HASHES[level]);

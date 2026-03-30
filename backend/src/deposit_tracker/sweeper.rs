@@ -557,9 +557,9 @@ pub(crate) fn compute_tweak(internal_key: &XOnlyPublicKey, commitment: &[u8; 32]
     let tag_hash = sha256(b"TapTweak");
 
     let mut hasher = Sha256::new();
-    hasher.update(&tag_hash);
-    hasher.update(&tag_hash);
-    hasher.update(&internal_key.serialize());
+    hasher.update(tag_hash);
+    hasher.update(tag_hash);
+    hasher.update(internal_key.serialize());
     hasher.update(commitment);
     hasher.finalize().into()
 }
@@ -593,16 +593,16 @@ pub fn build_refund_script(npk: &[u8; 32], user_pubkey: &[u8; 32]) -> Vec<u8> {
 pub fn compute_tapleaf_hash(script: &[u8]) -> [u8; 32] {
     let tag_hash = sha256(b"TapLeaf");
     let mut hasher = Sha256::new();
-    hasher.update(&tag_hash);
-    hasher.update(&tag_hash);
+    hasher.update(tag_hash);
+    hasher.update(tag_hash);
     // leafVersion = 0xc0
-    hasher.update(&[0xc0u8]);
+    hasher.update([0xc0u8]);
     // compactSize encoding of script length
     if script.len() < 253 {
-        hasher.update(&[script.len() as u8]);
+        hasher.update([script.len() as u8]);
     } else {
-        hasher.update(&[0xfdu8]);
-        hasher.update(&(script.len() as u16).to_le_bytes());
+        hasher.update([0xfdu8]);
+        hasher.update((script.len() as u16).to_le_bytes());
     }
     hasher.update(script);
     hasher.finalize().into()

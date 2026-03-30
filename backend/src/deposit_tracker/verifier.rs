@@ -739,7 +739,7 @@ impl SpvVerifier {
         data.extend_from_slice(txid);
         data.extend_from_slice(&merkle_proof.pos.to_le_bytes());
         data.push(merkle_proof.merkle.len() as u8);
-        data.extend_from_slice(&(merkle_proof.pos as u32).to_le_bytes());
+        data.extend_from_slice(&merkle_proof.pos.to_le_bytes());
 
         for sibling_hex in &merkle_proof.merkle {
             let sibling_bytes = hex::decode(sibling_hex)

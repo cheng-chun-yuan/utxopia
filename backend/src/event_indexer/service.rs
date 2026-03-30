@@ -24,8 +24,6 @@ use super::tree_cache::TreeCache;
 
 /// BTC Light Client program ID — used to detect real vs demo deposits.
 /// Transactions that reference this account are SPV-verified BTC deposits.
-
-
 /// Configuration for the event indexer
 #[derive(Debug, Clone)]
 pub struct EventIndexerConfig {
@@ -841,8 +839,8 @@ impl EventIndexerService {
         for &v in &values {
             let b = chk >> 25;
             chk = ((chk & 0x1ffffff) << 5) ^ v as u32;
-            for i in 0..5 {
-                if (b >> i) & 1 != 0 { chk ^= gen[i]; }
+            for (i, &g) in gen.iter().enumerate() {
+                if (b >> i) & 1 != 0 { chk ^= g; }
             }
         }
         let pm = chk ^ check_const;

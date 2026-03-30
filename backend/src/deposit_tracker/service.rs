@@ -177,7 +177,7 @@ impl DepositTrackerService {
         // commitment field is the npk for npk-based deposits
         record.npk = Some(commitment);
 
-        let inserted = self.db.insert(&record).map_err(|e| TrackerError::Database(e))?;
+        let inserted = self.db.insert(&record).map_err(TrackerError::Database)?;
         if !inserted {
             // Conflict on taproot_address — return existing record
             if let Some(existing) = self.db.get_by_address(&taproot_address)? {

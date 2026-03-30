@@ -120,6 +120,7 @@ async fn handle_get_deposit(
 ///
 /// List only verified deposits (status=ready or claimed) with npk/ephemeral_pub.
 /// Used by frontend to match deposits to user's viewing key.
+#[allow(dead_code)]
 async fn handle_verified_deposits(State(state): State<SharedAppState>) -> impl IntoResponse {
     let tracker = state.tracker.read().await;
 

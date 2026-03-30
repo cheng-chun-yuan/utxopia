@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use super::types::{StealthData, StealthDepositRecord, StealthDepositStatus, StealthMode};
+use super::types::{StealthData, StealthDepositRecord, StealthMode};
 
 pub type SharedStealthService = Arc<RwLock<StealthDepositService>>;
 
@@ -186,7 +186,7 @@ impl StealthDepositService {
 
         let mut hasher = Sha256::new();
         hasher.update(&ephemeral_spend_pub);
-        hasher.update(&amount_sats.to_le_bytes());
+        hasher.update(amount_sats.to_le_bytes());
         let commitment: [u8; 32] = hasher.finalize().into();
 
         let taproot_address = self.derive_taproot_address(&commitment)?;

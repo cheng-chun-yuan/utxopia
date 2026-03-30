@@ -313,7 +313,7 @@ impl SqliteDepositStore {
         let record = conn.query_row(
             "SELECT * FROM deposits WHERE id = ?1",
             params![id],
-            |row| Self::row_to_record(row),
+            Self::row_to_record,
         ).optional()?;
 
         Ok(record)
@@ -326,7 +326,7 @@ impl SqliteDepositStore {
         let record = conn.query_row(
             "SELECT * FROM deposits WHERE taproot_address = ?1",
             params![address],
-            |row| Self::row_to_record(row),
+            Self::row_to_record,
         ).optional()?;
 
         Ok(record)
@@ -339,7 +339,7 @@ impl SqliteDepositStore {
         let record = conn.query_row(
             "SELECT * FROM deposits WHERE deposit_txid = ?1",
             params![txid],
-            |row| Self::row_to_record(row),
+            Self::row_to_record,
         ).optional()?;
 
         Ok(record)
@@ -373,7 +373,7 @@ impl SqliteDepositStore {
             "#
         )?;
 
-        let records = stmt.query_map([], |row| Self::row_to_record(row))?
+        let records = stmt.query_map([], Self::row_to_record)?
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(records)
@@ -405,7 +405,7 @@ impl SqliteDepositStore {
 
         let mut stmt = conn.prepare("SELECT * FROM deposits ORDER BY created_at DESC")?;
 
-        let records = stmt.query_map([], |row| Self::row_to_record(row))?
+        let records = stmt.query_map([], Self::row_to_record)?
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(records)

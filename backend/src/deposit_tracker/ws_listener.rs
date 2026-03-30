@@ -82,7 +82,7 @@ impl MempoolWsListener {
         // Subscribe to new blocks only (deposits are detected via block scanning)
         write
             .send(Message::Text(
-                serde_json::json!({"action": "want", "data": ["blocks"]}).to_string().into(),
+                serde_json::json!({"action": "want", "data": ["blocks"]}).to_string(),
             ))
             .await
             .map_err(|e| format!("send want blocks: {}", e))?;

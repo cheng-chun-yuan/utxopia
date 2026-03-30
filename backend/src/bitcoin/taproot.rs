@@ -209,9 +209,9 @@ fn compute_tweak(internal_key: &XOnlyPublicKey, commitment: &[u8; 32]) -> [u8; 3
     let tag_hash = sha256(b"TapTweak");
 
     let mut hasher = Sha256::new();
-    hasher.update(&tag_hash);
-    hasher.update(&tag_hash);
-    hasher.update(&internal_key.serialize());
+    hasher.update(tag_hash);
+    hasher.update(tag_hash);
+    hasher.update(internal_key.serialize());
     hasher.update(commitment);
     hasher.finalize().into()
 }
@@ -505,9 +505,9 @@ fn compute_commitment_tweak(output_key: &XOnlyPublicKey, commitment: &[u8; 32]) 
     let tag_hash = sha256(b"Aegis/CommitmentTweak");
 
     let mut hasher = Sha256::new();
-    hasher.update(&tag_hash);
-    hasher.update(&tag_hash);
-    hasher.update(&output_key.serialize());
+    hasher.update(tag_hash);
+    hasher.update(tag_hash);
+    hasher.update(output_key.serialize());
     hasher.update(commitment);
     hasher.finalize().into()
 }
@@ -518,18 +518,18 @@ fn compute_tapleaf_hash(script: &ScriptBuf) -> [u8; 32] {
     let tag_hash = sha256(b"TapLeaf");
 
     let mut hasher = Sha256::new();
-    hasher.update(&tag_hash);
-    hasher.update(&tag_hash);
+    hasher.update(tag_hash);
+    hasher.update(tag_hash);
     // Leaf version (0xc0 for TapScript)
-    hasher.update(&[0xc0]);
+    hasher.update([0xc0]);
     // Script length as compact size
     let script_bytes = script.as_bytes();
     if script_bytes.len() < 253 {
-        hasher.update(&[script_bytes.len() as u8]);
+        hasher.update([script_bytes.len() as u8]);
     } else {
         // Compact size encoding for larger scripts
-        hasher.update(&[253]);
-        hasher.update(&(script_bytes.len() as u16).to_le_bytes());
+        hasher.update([253]);
+        hasher.update((script_bytes.len() as u16).to_le_bytes());
     }
     hasher.update(script_bytes);
     hasher.finalize().into()

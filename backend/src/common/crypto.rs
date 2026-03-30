@@ -17,7 +17,7 @@ pub fn sha256(data: &[u8]) -> [u8; 32] {
 /// Used for Bitcoin block header hashing and transaction ID computation
 pub fn double_sha256(data: &[u8]) -> [u8; 32] {
     let first = Sha256::digest(data);
-    Sha256::digest(&first).into()
+    Sha256::digest(first).into()
 }
 
 /// Compute double SHA-256 of a concatenated pair of 32-byte hashes
