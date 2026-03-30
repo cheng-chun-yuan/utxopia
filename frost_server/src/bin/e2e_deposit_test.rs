@@ -144,12 +144,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .timeout(std::time::Duration::from_secs(30))
         .build()?;
 
-    println!("{}",
-        r#"
+    println!("
 ╔════════════════════════════════════════════════════════════════════╗
 ║      Aegis E2E Deposit Test - FROST + SPV Verification            ║
 ╚════════════════════════════════════════════════════════════════════╝
-"#);
+");
 
     // Step 1: Get or generate user keypair
     let (_user_secret, user_pubkey) = if args.generate_keypair {
@@ -224,7 +223,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\nDeposit Address: {}", deposit_address);
     println!("FROST Group Key: {}", FROST_GROUP_PUBKEY);
-    println!("Commitment: {}", hex::encode(&commitment));
+    println!("Commitment: {}", hex::encode(commitment));
     println!("\nSpending Paths:");
     println!("  1. KEY PATH: FROST 2-of-3 can sweep immediately");
     println!("  2. SCRIPT PATH: User can refund after {} blocks (~1 hour)", TIMELOCK_BLOCKS);
@@ -337,7 +336,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     let sighash_bytes: [u8; 32] = sighash.to_byte_array();
-    let sighash_hex = hex::encode(&sighash_bytes);
+    let sighash_hex = hex::encode(sighash_bytes);
 
     println!("Sighash: {}", sighash_hex);
 
@@ -369,7 +368,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Calculate the full tweak that transforms frost_pubkey to final_output_key
     // This includes: BIP-341 taptweak + commitment tweak
     let full_tweak = compute_full_tweak(&frost_pubkey, merkle_root.as_ref(), &commitment);
-    let tweak_hex = Some(hex::encode(&full_tweak));
+    let tweak_hex = Some(hex::encode(full_tweak));
 
     // Round 1: Collect commitments
     println!("\nRound 1: Collecting commitments...");
@@ -480,12 +479,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("{}", signed_tx_hex);
     }
 
-    println!("\n{}",
-        r#"
+    println!("\n
 ╔════════════════════════════════════════════════════════════════════╗
 ║                     E2E Test Complete                              ║
 ╚════════════════════════════════════════════════════════════════════╝
-"#);
+");
 
     Ok(())
 }
@@ -495,9 +493,9 @@ fn compute_commitment_tweak(output_key: &XOnlyPublicKey, commitment: &[u8; 32]) 
     let tag_hash = Sha256::digest(b"Aegis/CommitmentTweak");
 
     let mut hasher = Sha256::new();
-    hasher.update(&tag_hash);
-    hasher.update(&tag_hash);
-    hasher.update(&output_key.serialize());
+    hasher.update(tag_hash);
+    hasher.update(tag_hash);
+    hasher.update(output_key.serialize());
     hasher.update(commitment);
     hasher.finalize().into()
 }
@@ -512,9 +510,9 @@ fn compute_full_tweak(
     let tap_tag = Sha256::digest(b"TapTweak");
 
     let mut tap_hasher = Sha256::new();
-    tap_hasher.update(&tap_tag);
-    tap_hasher.update(&tap_tag);
-    tap_hasher.update(&internal_key.serialize());
+    tap_hasher.update(tap_tag);
+    tap_hasher.update(tap_tag);
+    tap_hasher.update(internal_key.serialize());
     if let Some(root) = merkle_root {
         use bitcoin::hashes::Hash;
         tap_hasher.update(root.to_byte_array());
@@ -533,9 +531,9 @@ fn compute_full_tweak(
     let commit_tag = Sha256::digest(b"Aegis/CommitmentTweak");
 
     let mut commit_hasher = Sha256::new();
-    commit_hasher.update(&commit_tag);
-    commit_hasher.update(&commit_tag);
-    commit_hasher.update(&output_key.serialize());
+    commit_hasher.update(commit_tag);
+    commit_hasher.update(commit_tag);
+    commit_hasher.update(output_key.serialize());
     commit_hasher.update(commitment);
     let commitment_tweak: [u8; 32] = commit_hasher.finalize().into();
 
@@ -548,9 +546,9 @@ fn compute_full_tweak(
     let commit_scalar = Scalar::from_be_bytes(commitment_tweak).expect("Invalid commit scalar");
 
     // Add the two scalars
-    let combined = add_scalars(&tap_scalar, &commit_scalar);
+    
 
-    combined
+    add_scalars(&tap_scalar, &commit_scalar)
 }
 
 /// Add two secp256k1 scalars (mod n)

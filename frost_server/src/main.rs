@@ -506,7 +506,7 @@ fn generate_test_keys(
 
     let mut rng = OsRng;
     let (shares, pubkey_package) =
-        frost::keys::generate_with_dealer(total, threshold, frost::keys::IdentifierList::Default, &mut rng)?;
+        frost::keys::generate_with_dealer(total, threshold, frost::keys::IdentifierList::Default, rng)?;
 
     // Create output directory
     std::fs::create_dir_all(&output_dir)?;

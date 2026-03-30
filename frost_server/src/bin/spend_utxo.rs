@@ -280,7 +280,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     let sighash_bytes: [u8; 32] = sighash.to_byte_array();
-    let sighash_hex = hex::encode(&sighash_bytes);
+    let sighash_hex = hex::encode(sighash_bytes);
 
     println!("Sighash: {}", sighash_hex);
 

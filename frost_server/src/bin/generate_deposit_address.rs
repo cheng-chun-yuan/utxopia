@@ -102,7 +102,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  Network: {:?}", network);
     println!("  FROST Group Key: {}", FROST_GROUP_PUBKEY);
     println!("  User Pubkey: {}", args.user_pubkey);
-    println!("  Commitment: {}", hex::encode(&commitment));
+    println!("  Commitment: {}", hex::encode(commitment));
     println!("  Timelock: {} blocks", timelock);
 
     // Build the refund script: <user_pubkey> OP_CHECKSIGVERIFY <timelock> OP_CSV
@@ -171,7 +171,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  Merkle Root: {}", hex::encode(taproot_spend_info.merkle_root().unwrap().to_byte_array()));
     println!("  Control Block: {}", hex::encode(control_block.serialize()));
     println!("  Refund Script: {}", hex::encode(refund_script.as_bytes()));
-    println!("  Commitment: {}", hex::encode(&commitment));
+    println!("  Commitment: {}", hex::encode(commitment));
 
     Ok(())
 }
@@ -181,9 +181,9 @@ fn compute_commitment_tweak(output_key: &XOnlyPublicKey, commitment: &[u8; 32]) 
     let tag_hash = Sha256::digest(b"Aegis/CommitmentTweak");
 
     let mut hasher = Sha256::new();
-    hasher.update(&tag_hash);
-    hasher.update(&tag_hash);
-    hasher.update(&output_key.serialize());
+    hasher.update(tag_hash);
+    hasher.update(tag_hash);
+    hasher.update(output_key.serialize());
     hasher.update(commitment);
     hasher.finalize().into()
 }
