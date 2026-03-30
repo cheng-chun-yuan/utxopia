@@ -55,8 +55,12 @@ export {
   decodeStealthMetaAddress,
   // Key lifecycle
   clearAegisKeys,
+  // Key serialization
+  serializeKeysForStorage,
+  deserializeKeysFromStorage,
   // Types
   type AegisKeys,
+  type SerializedKeysForStorage,
   type StealthMetaAddress,
   type WalletSignerAdapter,
 } from "./keys";

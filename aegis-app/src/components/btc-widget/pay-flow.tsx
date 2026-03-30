@@ -427,7 +427,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
               eddsaPoseidonSign, computeBoundParamsHash,
               createUnshieldBoundParams, poseidonHashSync,
               getCommitmentIndex: getCommitmentIndexSdk,
-              hexToBytes: sdkHexToBytes,
+              parseAnnouncementsFromHex,
               decodeStealthMetaAddress } = await import("@aegis/sdk");
 
       // Build input data: either from imported note or from inbox notes
@@ -455,13 +455,6 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         const announcementsData = await announcementsResp.json();
         const allAnns = announcementsData.announcements || [];
 
-        const hexToBytes = (hex: string) => {
-          const h = hex.startsWith("0x") ? hex.slice(2) : hex;
-          const b = new Uint8Array(h.length / 2);
-          for (let i = 0; i < b.length; i++) b[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
-          return b;
-        };
-
         const { scanUnifiedNotes: scanNotes } = await import("@aegis/sdk");
 
         inputsData = await Promise.all(activeImportedNotes.map(async (impNote) => {
@@ -478,13 +471,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
             throw new Error(`Stealth announcement not found for note ${impNote.commitment.slice(0, 16)}...`);
           }
 
-          const parsedAnns = [{
-            announcementType: matchingAnn.announcement_type,
-            ephemeralPub: hexToBytes(matchingAnn.ephemeral_pub),
-            encryptedAmount: hexToBytes(matchingAnn.encrypted_amount),
-            commitment: hexToBytes(matchingAnn.commitment),
-            leafIndex: matchingAnn.leaf_index,
-          }];
+          const parsedAnns = parseAnnouncementsFromHex([matchingAnn]);
 
           const scanned = await scanNotes(impNote.keys, parsedAnns, ZKBTC_TOKEN_ID());
           if (scanned.length === 0) {

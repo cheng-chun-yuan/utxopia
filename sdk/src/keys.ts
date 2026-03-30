@@ -42,6 +42,8 @@ import { pbkdf2 } from "@noble/hashes/pbkdf2";
 import {
   scalarFromBytes,
   bigintToBytes,
+  bytesToHex,
+  hexToBytes,
   babyJubMul,
   BABYJUB_BASE8,
   babyJubCompress,
@@ -751,6 +753,57 @@ export function extractViewOnlyBundle(keys: AegisKeys): {
   };
 }
 
+// ========== Key Serialization ==========
+
+/**
+ * Serialized key storage format (all values are hex strings or string-encoded bigints).
+ */
+export interface SerializedKeysForStorage {
+  eddsaSeedHex: string;
+  spendingPrivKeyHex: string;
+  spendingPubKey: { x: string; y: string };
+  nullifyingKey: string;
+  viewingPrivKeyHex: string;
+  viewingPubKeyHex: string;
+}
+
+/**
+ * Serialize AegisKeys to a plain object with hex strings (for encrypted storage).
+ *
+ * The result is JSON-safe. Use `deserializeKeysFromStorage` to reconstruct.
+ */
+export function serializeKeysForStorage(keys: AegisKeys): SerializedKeysForStorage {
+  return {
+    eddsaSeedHex: bytesToHex(keys.eddsaSeed),
+    spendingPrivKeyHex: keys.spendingPrivKey.toString(16),
+    spendingPubKey: { x: keys.spendingPubKey.x.toString(), y: keys.spendingPubKey.y.toString() },
+    nullifyingKey: keys.nullifyingKey.toString(16),
+    viewingPrivKeyHex: bytesToHex(keys.viewingPrivKey),
+    viewingPubKeyHex: bytesToHex(keys.viewingPubKey),
+  };
+}
+
+/**
+ * Deserialize AegisKeys from a storage object (reverse of serializeKeysForStorage).
+ *
+ * Requires `solanaPublicKey` to be provided separately since it is not stored
+ * in the serialized format (it comes from the connected wallet).
+ */
+export function deserializeKeysFromStorage(
+  data: SerializedKeysForStorage,
+  solanaPublicKey: Uint8Array,
+): AegisKeys {
+  return {
+    solanaPublicKey,
+    spendingPrivKey: BigInt("0x" + data.spendingPrivKeyHex),
+    spendingPubKey: { x: BigInt(data.spendingPubKey.x), y: BigInt(data.spendingPubKey.y) },
+    nullifyingKey: BigInt("0x" + data.nullifyingKey),
+    viewingPrivKey: hexToBytes(data.viewingPrivKeyHex),
+    viewingPubKey: hexToBytes(data.viewingPubKeyHex),
+    eddsaSeed: hexToBytes(data.eddsaSeedHex),
+  };
+}
+
 // ========== Utilities ==========
 
 function concatBytes(...arrays: Uint8Array[]): Uint8Array {
@@ -762,19 +815,4 @@ function concatBytes(...arrays: Uint8Array[]): Uint8Array {
     offset += arr.length;
   }
   return result;
-}
-
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function hexToBytes(hex: string): Uint8Array {
-  const cleanHex = hex.startsWith("0x") ? hex.slice(2) : hex;
-  const bytes = new Uint8Array(cleanHex.length / 2);
-  for (let i = 0; i < cleanHex.length; i += 2) {
-    bytes[i / 2] = parseInt(cleanHex.substr(i, 2), 16);
-  }
-  return bytes;
 }

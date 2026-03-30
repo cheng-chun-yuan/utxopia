@@ -11,6 +11,8 @@ import {
   scanUnifiedNotes,
   hexToBytes,
   bytesToHex,
+  serializeKeysForStorage,
+  deserializeKeysFromStorage,
   computeNullifierHashForNote,
   computeNullifierBytes,
   decodeViewOnlyKeys,
@@ -80,15 +82,7 @@ async function decryptData(key: CryptoKey, encrypted: string): Promise<string> {
 
 async function persistKeys(walletPubkey: string, keys: AegisKeys): Promise<void> {
   try {
-    const data = {
-      eddsaSeedHex: bytesToHex(keys.eddsaSeed),
-      spendingPrivKeyHex: keys.spendingPrivKey.toString(16),
-      nullifyingKeyHex: keys.nullifyingKey.toString(16),
-      viewingPrivKeyHex: bytesToHex(keys.viewingPrivKey),
-      viewingPubKeyHex: bytesToHex(keys.viewingPubKey),
-      spendingPubKeyX: keys.spendingPubKey.x.toString(),
-      spendingPubKeyY: keys.spendingPubKey.y.toString(),
-    };
+    const data = serializeKeysForStorage(keys);
     const storageKey = await deriveStorageKey(walletPubkey);
     const encrypted = await encryptData(storageKey, JSON.stringify(data));
     localStorage.setItem(KEYS_STORAGE_PREFIX + walletPubkey, encrypted);
@@ -106,20 +100,7 @@ async function loadKeys(walletPubkey: string, solanaPublicKey: Uint8Array): Prom
     const decrypted = await decryptData(storageKey, raw);
     const data = JSON.parse(decrypted);
 
-    const spendingPubKey = {
-      x: BigInt(data.spendingPubKeyX),
-      y: BigInt(data.spendingPubKeyY),
-    };
-
-    return {
-      solanaPublicKey,
-      spendingPrivKey: BigInt("0x" + data.spendingPrivKeyHex),
-      spendingPubKey,
-      nullifyingKey: BigInt("0x" + data.nullifyingKeyHex),
-      viewingPrivKey: hexToBytes(data.viewingPrivKeyHex),
-      viewingPubKey: hexToBytes(data.viewingPubKeyHex),
-      eddsaSeed: hexToBytes(data.eddsaSeedHex),
-    };
+    return deserializeKeysFromStorage(data, solanaPublicKey);
   } catch {
     return null;
   }
