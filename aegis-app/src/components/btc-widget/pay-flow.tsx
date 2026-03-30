@@ -29,7 +29,8 @@ import { cn } from "@/lib/utils";
 import { parseSats } from "@/lib/utils/validation";
 import { formatBtc, formatAmount, truncateMiddle } from "@/lib/utils/formatting";
 import { BTC_DUST_LIMIT, BTC_MINER_FEE_ESTIMATE, TOKEN_2022_PROGRAM_ID_STR } from "@/lib/btc-constants";
-import { useAegis, type InboxNote } from "@/hooks/use-aegis";
+import { useAegis } from "@/hooks/use-aegis";
+import { usePayFlowNotes } from "@/hooks/use-pay-flow-notes";
 import { usePayFlowAuth } from "@/hooks/use-pay-flow-auth";
 import { AuthModal } from "@/components/auth-modal";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
@@ -57,7 +58,6 @@ import {
   deriveTokenConfigPDA,
   getTokenAccountAddress,
 } from "@/lib/solana/pdas";
-import { scanSecretPhrase, type ScannedSecretNote } from "@/lib/claim-utils";
 import { setActiveToken } from "@/lib/token-context";
 import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 
@@ -67,7 +67,7 @@ import {
   MIN_PAY_SATS, ZKBTC_TOKEN_ID, MAX_OUTPUTS,
   SOLANA_MAX_TX_SIZE, AVAILABLE_CIRCUITS, PAY_TOKENS,
   isValidSolanaAddress, reduceToFieldOnChain, estimateTransactionSize,
-  autoSelectNotes, createOutputRow,
+  createOutputRow,
   type PayStep, type OutputMode, type OutputRow, type PayToken,
 } from "./pay-flow/helpers";
 import { ProvingSubSteps } from "./pay-flow/proving-steps";
@@ -94,9 +94,6 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
     deriveKeys,
     isLoading: keysLoading,
     stealthAddress,
-    inboxNotes,
-    inboxLoading,
-    refreshInbox,
     publicZkbtcBalance,
     refreshPublicBalance,
   } = useAegis();
@@ -118,11 +115,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   const [changeAmountSats, setChangeAmountSats] = useState<number>(0);
   const [proofStatus, setProofStatus] = useState<string>("");
 
-  // Input notes state
-  const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
-  const [showNoteSelector, setShowNoteSelector] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const notePreselectedRef = useRef(false);
 
   // Token selector
   const [selectedToken, setSelectedToken] = useState<PayToken>(PAY_TOKENS[0]);
@@ -134,14 +127,6 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       setActiveToken(selectedToken.mint);
     }
   }, [selectedToken.mint]);
-
-  // Imported note from secret phrase
-  const [showImportInput, setShowImportInput] = useState(!!initialSecretPhrase);
-  const [importPhrase, setImportPhrase] = useState(initialSecretPhrase || "");
-  const [importedNotes, setImportedNotes] = useState<ScannedSecretNote[]>([]);
-  const [importLoading, setImportLoading] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
-  const importAutoTriggered = useRef(false);
 
   // Relayer config (stealth meta + relayer fee from backend, service fees from on-chain)
   const { relayerMeta, relayerMetaLoaded, effectiveRelayerFee, effectiveServiceFee, effectiveServiceFeeBps } = useRelayerConfig(selectedToken);
@@ -157,28 +142,6 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
   // Token-aware amount formatter (replaces hardcoded BTC formatting)
   const fmt = (raw: number): string => formatAmount(raw, selectedToken.decimals);
 
-  // Available unspent notes — filtered by selected token
-  const availableNotes = useMemo(() => {
-    return inboxNotes.filter((n) => n.amount > 0n && !n.isSpent && n.tokenSymbol === selectedToken.shieldedSymbol);
-  }, [inboxNotes, selectedToken.shieldedSymbol]);
-
-  // Selected notes
-  const selectedNotes = useMemo(() => {
-    return availableNotes.filter((n) => selectedNoteIds.has(n.id));
-  }, [availableNotes, selectedNoteIds]);
-
-  // Active unspent imported notes
-  const activeImportedNotes = useMemo(() =>
-    importedNotes.filter(n => !n.isSpent),
-  [importedNotes]);
-  const hasImportedNotes = activeImportedNotes.length > 0;
-
-  // Total input sats (imported notes replace inbox notes when active)
-  const totalInputSats = useMemo(() => {
-    if (hasImportedNotes) return activeImportedNotes.reduce((sum, n) => sum + n.amount, 0);
-    return selectedNotes.reduce((sum, n) => sum + Number(n.amount), 0);
-  }, [selectedNotes, activeImportedNotes, hasImportedNotes]);
-
   // Total output sats (sum of all output amounts + relayer fee when enabled)
   const totalOutputSats = useMemo(() => {
     const userOutputs = outputs.reduce((sum, o) => {
@@ -188,6 +151,20 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
     // Relayer fee is an extra output note — must be included in total for ALL modes
     return userOutputs + effectiveRelayerFee;
   }, [outputs, effectiveRelayerFee]);
+
+  // Note selection, import, and auto-selection
+  const onPreselected = useCallback(() => {
+    if (hasKeys) setStep("compose");
+  }, [hasKeys]);
+
+  const {
+    inboxNotes, inboxLoading, refreshInbox,
+    availableNotes, selectedNotes, activeImportedNotes, hasImportedNotes, totalInputSats,
+    selectedNoteIds, setSelectedNoteIds, showNoteSelector, setShowNoteSelector, toggleNoteSelection,
+    showImportInput, setShowImportInput, importPhrase, setImportPhrase,
+    importLoading, importError, setImportError, handleImportScan, clearImportedNote,
+    handleRefresh,
+  } = usePayFlowNotes(selectedToken, totalOutputSats, hasKeys, initialSecretPhrase, preselectedNote, onPreselected);
 
   // Change = input - output
   const changeSats = totalInputSats - totalOutputSats;
@@ -215,29 +192,6 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
     }
   }, [publicKey]);
 
-  // Pre-select note from props
-  useEffect(() => {
-    if (notePreselectedRef.current || inboxLoading || !preselectedNote) return;
-    const matchingNote = availableNotes.find(
-      (n) => n.commitmentHex === preselectedNote.commitment
-    );
-    if (matchingNote) {
-      setSelectedNoteIds(new Set([matchingNote.id]));
-      notePreselectedRef.current = true;
-      if (hasKeys) {
-        setStep("compose");
-      }
-    }
-  }, [preselectedNote, availableNotes, inboxLoading, hasKeys]);
-
-  // Auto-select notes when total output changes
-  useEffect(() => {
-    if (notePreselectedRef.current) return; // Don't auto-select if user pre-selected
-    if (totalOutputSats > 0 && availableNotes.length > 0) {
-      setSelectedNoteIds(autoSelectNotes(availableNotes, totalOutputSats));
-    }
-  }, [totalOutputSats, availableNotes]);
-
   // Step transitions
   useEffect(() => {
     if (hasKeys && step === "connect") {
@@ -246,59 +200,6 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       setStep("connect");
     }
   }, [hasKeys, step]);
-
-  // Auto-import note from ?note= URL param
-  useEffect(() => {
-    if (!initialSecretPhrase || importAutoTriggered.current || !hasKeys) return;
-    importAutoTriggered.current = true;
-    handleImportScan(initialSecretPhrase);
-  }, [initialSecretPhrase, hasKeys]);
-
-  // Import scan handler
-  const handleImportScan = useCallback(async (phrase?: string) => {
-    const p = (phrase || importPhrase).trim();
-    if (p.length < 8) {
-      setImportError("Secret phrase must be at least 8 characters");
-      return;
-    }
-    setImportLoading(true);
-    setImportError(null);
-    try {
-      const results = await scanSecretPhrase(p);
-      setImportedNotes(results);
-      // When imported notes are active, clear inbox note selection
-      setSelectedNoteIds(new Set());
-      notePreselectedRef.current = true; // prevent auto-select from overriding
-    } catch (err) {
-      setImportError(err instanceof Error ? err.message : "Failed to scan phrase");
-    } finally {
-      setImportLoading(false);
-    }
-  }, [importPhrase]);
-
-  // Clear imported notes
-  const clearImportedNote = useCallback(() => {
-    setImportedNotes([]);
-    setImportPhrase("");
-    setImportError(null);
-    setShowImportInput(false);
-    notePreselectedRef.current = false;
-  }, []);
-
-  // Unified refresh: inbox + imported notes nullifier check
-  const handleRefresh = useCallback(async () => {
-    // Refresh wallet inbox
-    refreshInbox();
-    // Re-scan imported notes (re-fetches announcements + re-checks nullifiers)
-    if (importPhrase.trim().length >= 8) {
-      try {
-        const results = await scanSecretPhrase(importPhrase.trim());
-        setImportedNotes(results);
-      } catch {
-        // Keep existing imported notes on error
-      }
-    }
-  }, [refreshInbox, importPhrase]);
 
   // ===== Output row handlers =====
 
@@ -326,20 +227,6 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
     },
     [outputs.length]
   );
-
-  // ===== Note selection handlers =====
-
-  const toggleNoteSelection = useCallback((noteId: string) => {
-    setSelectedNoteIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(noteId)) {
-        next.delete(noteId);
-      } else {
-        next.add(noteId);
-      }
-      return next;
-    });
-  }, []);
 
   // ===== Validation =====
 
