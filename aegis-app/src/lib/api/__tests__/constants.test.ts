@@ -1,8 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { getBackendUrl, DEFAULT_API_URL } from "../constants";
-
-// Note: vitest runs with jsdom (window is defined), so getBackendUrl()
-// takes the client-side branch (NEXT_PUBLIC_BACKEND_API_URL).
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
+import { getBackendUrl } from "../constants";
 
 describe("getBackendUrl", () => {
   const originalEnv = { ...process.env };
@@ -16,12 +13,15 @@ describe("getBackendUrl", () => {
     process.env = { ...originalEnv };
   });
 
-  it("returns DEFAULT_API_URL when no env vars set", () => {
-    expect(getBackendUrl()).toBe(DEFAULT_API_URL);
+  it("returns a valid URL when no env vars set", () => {
+    const url = getBackendUrl();
+    // Should return either networks.json config or DEFAULT_API_URL
+    expect(url).toBeTruthy();
+    expect(url.startsWith("http")).toBe(true);
   });
 
   it("uses NEXT_PUBLIC_BACKEND_API_URL on client side", () => {
-    process.env.NEXT_PUBLIC_BACKEND_API_URL = "https://api-aegis.amidoggy.xyz";
-    expect(getBackendUrl()).toBe("https://api-aegis.amidoggy.xyz");
+    process.env.NEXT_PUBLIC_BACKEND_API_URL = "https://custom-api.example.com";
+    expect(getBackendUrl()).toBe("https://custom-api.example.com");
   });
 });

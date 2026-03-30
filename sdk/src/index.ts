@@ -27,54 +27,13 @@
 // ==========================================================================
 
 export {
-  // Field constants
-  BN254_FIELD_PRIME,
-  // Baby Jubjub constants
-  BABYJUB_FIELD_PRIME,
-  BABYJUB_A,
-  BABYJUB_D,
-  BABYJUB_ORDER,
-  BABYJUB_BASE8,
-  BABYJUB_IDENTITY,
-  // Byte conversion
-  randomFieldElement,
+  // Byte conversion (encoding utilities)
   bigintToBytes,
   bytesToBigint,
   hexToBytes,
   bytesToHex,
   // Hashing
   sha256Hash,
-  doubleSha256,
-  taggedHash,
-  // Baby Jubjub curve operations (spending keys)
-  babyJubAdd,
-  babyJubDouble,
-  babyJubMul,
-  babyJubNegate,
-  isOnBabyJubCurve,
-  isIdentity,
-  babyJubCompress,
-  babyJubDecompress,
-  generateBabyJubKeyPair,
-  deriveBabyJubKeyFromSeed,
-  babyJubScalarFromBytes,
-  babyJubScalarToBytes,
-  // Scalar utilities
-  scalarFromBytes,
-  scalarToBytes,
-  // Ed25519/X25519 (viewing keys)
-  ed25519GenerateKeyPair,
-  ed25519GetPublicKey,
-  ed25519DeriveKeyFromSeed,
-  ed25519PubToX25519,
-  x25519Ecdh,
-  deriveAmountKey,
-  encryptAmountEd25519,
-  decryptAmountEd25519,
-  encryptNoteData,
-  decryptNoteData,
-  // Types
-  type BabyJubPoint,
 } from "./crypto";
 
 // ==========================================================================
@@ -82,36 +41,23 @@ export {
 // ==========================================================================
 
 export {
+  // Key derivation (high-level)
   deriveKeysFromWallet,
-  deriveKeysFromSignature,
   deriveKeysFromSeed,
   deriveKeysFromSeedCircuit,
-  eddsaPoseidonSignWithScalar,
-  eddsaGetPubKey,
-  eddsaGetPrivScalar,
+  // EdDSA signing (used by pay-flow for JoinSplit proof)
   eddsaPoseidonSign,
-  SPENDING_KEY_DERIVATION_MESSAGE,
+  // Stealth meta address
   createStealthMetaAddress,
   serializeStealthMetaAddress,
   deserializeStealthMetaAddress,
-  parseStealthMetaAddress,
   encodeStealthMetaAddress,
   decodeStealthMetaAddress,
-  createDelegatedViewKey,
-  serializeDelegatedViewKey,
-  deserializeDelegatedViewKey,
-  isDelegatedKeyValid,
-  hasPermission,
-  ViewPermissions,
-  constantTimeCompare,
-  clearKey,
+  // Key lifecycle
   clearAegisKeys,
-  clearDelegatedViewKey,
-  extractViewOnlyBundle,
+  // Types
   type AegisKeys,
   type StealthMetaAddress,
-  type SerializedStealthMetaAddress,
-  type DelegatedViewKey,
   type WalletSignerAdapter,
 } from "./keys";
 
@@ -120,24 +66,10 @@ export {
 // ==========================================================================
 
 export {
-  poseidonHash,
-  poseidonHashSync,
   initPoseidon,
-  computeUnifiedCommitment,
-  computeNullifier,
-  hashNullifier,
-  computeUnifiedCommitmentSync,
-  computeNullifierSync,
-  hashNullifierSync,
-  BN254_SCALAR_FIELD,
-  // JoinSplit primitives
-  computeMPK,
-  computeMPKSync,
-  computeNPK,
-  computeNPKSync,
-  computeJoinSplitCommitment,
+  poseidonHashSync,
+  // Sync commitment/nullifier (used by claim-utils, aegis-store, pay-flow)
   computeJoinSplitCommitmentSync,
-  computeJoinSplitNullifier,
   computeJoinSplitNullifierSync,
   // Multi-token
   computeTokenId,

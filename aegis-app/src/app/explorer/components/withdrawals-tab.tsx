@@ -19,8 +19,9 @@ import { cn } from "@/lib/utils";
 import { CopyButton } from "@/components/ui/copy-button";
 import Image from "next/image";
 import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
-import { useRedemptions } from "@/hooks/use-explorer";
 import type { RedemptionRecord } from "@/hooks/use-explorer";
+import { formatAmount } from "@/lib/utils/formatting";
+import useSWR from "swr";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { truncate, timeAgo, scriptToAddress } from "./helpers";
 import { getEsploraApiUrl } from "@/lib/btc-network";
@@ -28,13 +29,8 @@ import { getSolanaExplorerTxUrl, getSolanaExplorerAddressUrl } from "@/lib/solan
 import { Th, Td, TypeBadge, StatusDot, FlowCell, SolanaLink, LoadingState, ErrorState, EmptyState, RefreshButton } from "./shared";
 import type { StatusDotVariant } from "./shared";
 
-/** Format raw sats as BTC string, trimming trailing zeros (keep at least 1 decimal) */
-const fmtBtc = (sats: number) => {
-  const full = (sats / 1e8).toFixed(8);
-  // Trim trailing zeros but keep at least "0.0"
-  const trimmed = full.replace(/\.?0+$/, "");
-  return trimmed.includes(".") ? trimmed : trimmed + ".0";
-};
+/** Format raw sats as trimmed BTC string */
+const fmtBtc = (sats: number) => formatAmount(sats, 8);
 
 // =============================================================================
 // BTC Confirmation Status — fetches live confirmation count from mempool.space
@@ -142,17 +138,7 @@ function BtcConfirmationStatus({ txid, onMinerFee }: { txid: string; onMinerFee?
 // Withdrawal Status
 // =============================================================================
 
-const WITHDRAWAL_STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; spinning?: boolean }> = {
-  Pending: { label: "Pending", color: "text-orange-400", bg: "bg-orange-500/10 border-orange-500/20" },
-  Detected: { label: "Detected", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20", spinning: true },
-  Processing: { label: "Processing", color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20", spinning: true },
-  Signing: { label: "Signing", color: "text-purple-400", bg: "bg-purple-500/10 border-purple-500/20", spinning: true },
-  AwaitingConfirmation: { label: "Confirming", color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-500/20", spinning: true },
-  SpvVerified: { label: "Verified", color: "text-cyan-400", bg: "bg-cyan-500/10 border-cyan-500/20", spinning: true },
-  Completed: { label: "Completed", color: "text-green-400", bg: "bg-green-500/10 border-green-500/20" },
-  Cancelled: { label: "Cancelled", color: "text-gray", bg: "bg-gray/10 border-gray/20" },
-  Failed: { label: "Failed", color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" },
-};
+import { WITHDRAWAL_STATUS_CONFIG, WITHDRAWAL_STATUS_ORDER } from "@/lib/deposit-status";
 
 function getWithdrawalStatusDot(status: string): { variant: StatusDotVariant; label: string } {
   if (status === "Completed") return { variant: "confirmed", label: "Confirmed" };
@@ -165,14 +151,6 @@ function getWithdrawalStatusDot(status: string): { variant: StatusDotVariant; la
 // Status helpers
 // =============================================================================
 
-const WITHDRAWAL_STATUS_ORDER: Record<string, number> = {
-  Pending: 0, pending: 0,
-  Detected: 1, processing: 1, Processing: 1,
-  Signing: 2, sending: 2,
-  AwaitingConfirmation: 3, sent: 3, confirming: 3, SpvVerified: 3,
-  completed: 4, Completed: 4,
-  Cancelled: -1, Failed: -1, failed: -1,
-};
 
 /**
  * Derive effective status: prefer localStatus, but if backend says Completed
@@ -479,7 +457,19 @@ export function WithdrawalRow({
 // =============================================================================
 
 export function WithdrawalsTab() {
-  const { redemptions, isLoading, error, refresh } = useRedemptions();
+  const { data, error: swrError, isLoading, mutate } = useSWR<RedemptionRecord[]>(
+    "explorer-redemptions",
+    async () => {
+      const resp = await fetch("/api/explorer/redemptions");
+      if (!resp.ok) return [];
+      const json = await resp.json();
+      return json.redemptions ?? [];
+    },
+    { refreshInterval: 30_000, dedupingInterval: 5_000, revalidateOnFocus: false, errorRetryCount: 3 },
+  );
+  const redemptions = data ?? [];
+  const error = swrError ? (swrError instanceof Error ? swrError.message : "Failed to fetch redemptions") : null;
+  const refresh = () => mutate();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const toggle = useCallback((key: string) => {

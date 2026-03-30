@@ -1,7 +1,7 @@
 /**
  * @happy-dom
  */
-import { describe, it, expect, beforeEach, afterEach, mock, spyOn } from "bun:test";
+import { describe, it, expect, beforeEach, mock, spyOn } from "bun:test";
 import { renderHook, act } from "@testing-library/react";
 import { useCopyToClipboard } from "../use-copy-to-clipboard";
 

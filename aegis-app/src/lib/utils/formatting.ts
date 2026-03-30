@@ -49,9 +49,32 @@ export function formatUsd(amount: number): string {
 }
 
 /**
- * Truncate a string in the middle, keeping start and end characters
+ * Truncate a string in the middle with asymmetric start/end lengths.
+ * Used throughout explorer for tx signatures, addresses, commitments.
+ */
+export function truncate(str: string, start = 6, end = 4): string {
+  if (!str || str.length <= start + end + 3) return str;
+  return `${str.slice(0, start)}...${str.slice(-end)}`;
+}
+
+/**
+ * Truncate a string symmetrically (same chars from each side).
+ * Convenience wrapper around truncate.
  */
 export function truncateMiddle(str: string, visibleChars: number = 6): string {
-  if (!str || str.length <= visibleChars * 2) return str;
-  return `${str.slice(0, visibleChars)}...${str.slice(-visibleChars)}`;
+  return truncate(str, visibleChars, visibleChars);
+}
+
+/**
+ * Format a unix timestamp into a human-readable relative time string.
+ */
+export function timeAgo(timestamp: number): string {
+  if (timestamp === 0) return "—";
+  const now = Date.now() / 1000;
+  const diff = now - timestamp;
+  if (diff < 60) return "Just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+  return new Date(timestamp * 1000).toLocaleDateString();
 }

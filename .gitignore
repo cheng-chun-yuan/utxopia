@@ -50,3 +50,6 @@ sdk/circuits/
 contracts/programs/chadbuffer/
 .gstack/
 backend/data/*.db
+
+# Superpowers design docs (generated, not tracked)
+docs/superpowers/

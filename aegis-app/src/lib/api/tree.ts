@@ -23,6 +23,9 @@ export interface TreeStatusResponse {
   root: string;
   next_index: number;
   size: number;
+  announcements?: number;
+  nullifiers?: number;
+  synced?: boolean;
 }
 
 /**

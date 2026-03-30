@@ -8,10 +8,8 @@
  */
 
 import useSWR from "swr";
-import { PublicKey } from "@solana/web3.js";
-import { computeTokenId, initPoseidon } from "@aegis/sdk";
-import { SUPPORTED_TOKENS, type SupportedToken } from "@/lib/supported-tokens";
-import { getConfig } from "@aegis/sdk";
+import { getTokenBySymbol } from "@/lib/supported-tokens";
+import { buildTokenIdMap } from "@/lib/token-map";
 
 /** Per-token TVL info */
 export interface TokenTVL {
@@ -27,34 +25,6 @@ export interface PoolStats {
   totalCommitments: number;
   volume: bigint;
   tokenTVL: TokenTVL[];
-}
-
-/** Cached token ID hex → token metadata map (built once) */
-let tokenIdMap: Map<string, SupportedToken> | null = null;
-
-async function buildTokenIdMap(): Promise<Map<string, SupportedToken>> {
-  if (tokenIdMap) return tokenIdMap;
-
-  await initPoseidon();
-  const config = getConfig();
-  const map = new Map<string, SupportedToken>();
-
-  for (const token of SUPPORTED_TOKENS) {
-    try {
-      let mintAddr = token.mint;
-      if (!mintAddr && token.symbol === "zkBTC") mintAddr = config.zkbtcMint;
-      if (!mintAddr || token.isBtcNative) continue;
-
-      const mintBytes = new PublicKey(mintAddr).toBytes();
-      const tokenId = computeTokenId(mintBytes);
-      // Convert to uppercase hex to match backend hex() output
-      const hex = tokenId.toString(16).toUpperCase().padStart(64, "0");
-      map.set(hex, token);
-    } catch { /* skip invalid mints */ }
-  }
-
-  tokenIdMap = map;
-  return map;
 }
 
 async function fetchPoolStats(): Promise<PoolStats> {
@@ -84,9 +54,10 @@ async function fetchPoolStats(): Promise<PoolStats> {
   if (backendTVL.length > 0) {
     const idMap = await buildTokenIdMap();
     for (const entry of backendTVL) {
-      // Backend returns tokenId as hex from SQLite hex() — uppercase, no 0x prefix
-      const hex = entry.tokenId.toUpperCase().padStart(64, "0");
-      const token = idMap.get(hex);
+      // Backend returns tokenId as hex from SQLite hex() — try both cases
+      const hex = entry.tokenId.toLowerCase().padStart(64, "0");
+      const symbol = idMap.get(hex) ?? idMap.get(entry.tokenId.toUpperCase().padStart(64, "0"));
+      const token = symbol ? getTokenBySymbol(symbol) : null;
       if (token && entry.totalShielded > 0) {
         tokenTVL.push({
           symbol: token.symbol,
