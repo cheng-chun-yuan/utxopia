@@ -38,6 +38,7 @@ import { useProver } from "@/hooks/use-prover";
 import {
   initPoseidon,
   prepareClaimInputs,
+  parseMerkleProofResponse,
   getConfig,
   deriveMasterKey,
   deriveKeysFromSeedCircuit,
@@ -479,11 +480,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
           }
 
           const scannedNote: ScannedNote = scanned[0];
-          const realMerkleProof = {
-            root: BigInt("0x" + merkle.root),
-            pathElements: (merkle.siblings as string[]).map((s: string) => BigInt("0x" + s)),
-            pathIndices: merkle.indices as number[],
-          };
+          const realMerkleProof = parseMerkleProofResponse(merkle);
 
           const claimInputs = await prepareClaimInputs(impNote.keys, scannedNote, realMerkleProof);
 
@@ -534,11 +531,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
               commitment: note.commitment,
             };
 
-            const realMerkleProof = {
-              root: BigInt("0x" + merkle.root),
-              pathElements: (merkle.siblings as string[]).map((s: string) => BigInt("0x" + s)),
-              pathIndices: merkle.indices as number[],
-            };
+            const realMerkleProof = parseMerkleProofResponse(merkle);
 
             const claimInputs = await prepareClaimInputs(keys!, scannedNote, realMerkleProof);
 

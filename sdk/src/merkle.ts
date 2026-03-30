@@ -161,6 +161,22 @@ export function createEmptyMerkleProof(): MerkleProof {
 }
 
 /**
+ * Parse a merkle proof response (hex strings) into BigInt format for circuit input.
+ * Accepts the response from /api/merkle/proof or /api/tree/proof.
+ */
+export function parseMerkleProofResponse(response: {
+  root: string;
+  siblings: string[];
+  indices: number[];
+}): { root: bigint; pathElements: bigint[]; pathIndices: number[] } {
+  return {
+    root: BigInt("0x" + response.root),
+    pathElements: response.siblings.map((s) => BigInt("0x" + s)),
+    pathIndices: response.indices,
+  };
+}
+
+/**
  * Validate Merkle proof structure
  */
 export function validateMerkleProofStructure(proof: MerkleProof): boolean {

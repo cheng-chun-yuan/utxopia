@@ -155,6 +155,7 @@ export {
   leafIndexToPathIndices,
   pathIndicesToLeafIndex,
   validateMerkleProofStructure,
+  parseMerkleProofResponse,
   TREE_DEPTH,
   ROOT_HISTORY_SIZE,
   MAX_LEAVES,
