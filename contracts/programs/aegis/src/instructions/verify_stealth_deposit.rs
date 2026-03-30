@@ -151,9 +151,7 @@ pub fn process_verify_stealth_deposit(
     // Validate account owners
     validate_program_owner(pool_state_info, program_id)?;
     // VerifiedTransaction and Light client are owned by btc-light-client program
-    let btc_lc_id: &Pubkey = unsafe {
-        &*(&crate::constants::BTC_LIGHT_CLIENT_PROGRAM_ID as *const [u8; 32] as *const Pubkey)
-    };
+    let btc_lc_id: &Pubkey = &crate::constants::BTC_LIGHT_CLIENT_PROGRAM_ID;
     validate_program_owner(verified_tx_info, btc_lc_id)?;
     validate_program_owner(light_client_info, btc_lc_id)?;
     validate_program_owner(commitment_tree_info, program_id)?;

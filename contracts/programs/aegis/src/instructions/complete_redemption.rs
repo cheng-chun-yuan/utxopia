@@ -155,9 +155,7 @@ pub fn process_complete_redemption(
     validate_program_owner(pool_state_info, program_id)?;
     validate_program_owner(redemption_info, program_id)?;
     validate_account_writable(completion_receipt_info)?;
-    let btc_lc_id: &Pubkey = unsafe {
-        &*(&crate::constants::BTC_LIGHT_CLIENT_PROGRAM_ID as *const [u8; 32] as *const Pubkey)
-    };
+    let btc_lc_id: &Pubkey = &crate::constants::BTC_LIGHT_CLIENT_PROGRAM_ID;
     validate_program_owner(verified_tx_info, btc_lc_id)?;
     validate_program_owner(light_client_info, btc_lc_id)?;
     validate_token_owner(zkbtc_mint)?;
