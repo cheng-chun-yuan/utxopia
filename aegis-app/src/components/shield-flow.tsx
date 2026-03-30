@@ -19,7 +19,8 @@ import {
   TOKEN_PROGRAM_ID as SPL_TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID as SPL_TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
-import { getConfig, createStealthOutputWithKeys, computeTokenId } from "@aegis/sdk";
+import { createStealthOutputWithKeys, computeTokenId } from "@aegis/sdk";
+import { getAegisProgramId, getZkbtcMint, derivePoolStatePDA, deriveCommitmentTreePDA, deriveTokenConfigPDA } from "@/lib/solana/pdas";
 import { useAegis } from "@/hooks/use-aegis";
 import { Shield, ChevronDown, Loader2, ExternalLink, CheckCircle2, AlertCircle, LogOut, Wallet, Copy, Check, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -107,7 +108,6 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
       setStatus("processing");
       setError(null);
 
-      const config = getConfig();
       const amountRaw = BigInt(Math.floor(parseFloat(amount) * (10 ** selectedToken.decimals)));
 
       // Determine mint: SOL uses native wSOL, others use their configured mint
@@ -115,26 +115,16 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
         ? NATIVE_MINT
         : selectedToken.mint
           ? new PublicKey(selectedToken.mint)
-          : new PublicKey(config.zkbtcMint);
+          : getZkbtcMint();
 
       const tokenIdBigint = computeTokenId(mintPubkey.toBuffer());
       const stealthOutput = await createStealthOutputWithKeys(keys, amountRaw, tokenIdBigint);
       const { npkBytes } = stealthOutput;
 
-      const programId = new PublicKey(config.aegisProgramId);
-
-      const [tokenConfigPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("token_config"), mintPubkey.toBuffer()],
-        programId,
-      );
-      const [poolStatePda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("pool_state")],
-        programId,
-      );
-      const [commitmentTreePda] = PublicKey.findProgramAddressSync(
-        [Buffer.from("commitment_tree")],
-        programId,
-      );
+      const programId = getAegisProgramId();
+      const [tokenConfigPda] = deriveTokenConfigPDA(mintPubkey);
+      const [poolStatePda] = derivePoolStatePDA();
+      const [commitmentTreePda] = deriveCommitmentTreePDA();
 
       const tx = new Transaction();
       let userTokenAccount: PublicKey;
