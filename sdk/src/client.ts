@@ -38,10 +38,15 @@ import {
   computeNullifierHashForNote,
   computeNullifierBytes,
   isDepositForViewerHex,
+  createDepositFromConfig,
+  createStealthOutputWithKeys,
   type ScannedNote,
   type ViewOnlyKeys,
   type ViewOnlyScannedNote,
+  type StealthOutputWithKeys,
+  type NonInteractiveDepositResult,
 } from "./stealth";
+import { selectUtxos, type UtxoDescriptor } from "./psbt";
 import { hexToBytes, bytesToHex, bigintToBytes } from "./crypto";
 import { EventClient } from "./event-client";
 
@@ -362,6 +367,46 @@ export class AegisClient {
       return computeNullifierHashForNote(this._keys, note as ScannedNote);
     }
     throw new Error("Not authenticated");
+  }
+
+  // ─── Phase 2: Deposit + Shield ─────────────────────────────────
+
+  /**
+   * Prepare a BTC deposit: generate stealth deposit address + OP_RETURN.
+   * Returns the deposit result (btcAddress, opReturnPayload) ready for PSBT building.
+   */
+  async prepareDeposit(opts: {
+    recipient?: StealthMetaAddress;
+    network?: "mainnet" | "testnet";
+  } = {}): Promise<NonInteractiveDepositResult> {
+    const meta = opts.recipient ?? this._stealthAddress;
+    if (!meta) throw new Error("No recipient stealth address (login first or provide recipient)");
+    const network = opts.network ?? (this.config.bitcoinNetwork === "mainnet" ? "mainnet" : "testnet");
+    return createDepositFromConfig(meta, network);
+  }
+
+  /**
+   * Select UTXOs for a deposit amount. Returns the selected UTXO set.
+   */
+  selectUtxos(utxos: UtxoDescriptor[], targetSats: number, feeRate = 2): UtxoDescriptor[] {
+    return selectUtxos(utxos, targetSats, feeRate);
+  }
+
+  /**
+   * Prepare a stealth output for shielding (SPL token → shielded commitment).
+   * Returns npkBytes, ephemeralPub, commitment, tokenId — everything needed
+   * for the on-chain shield instruction.
+   */
+  async prepareShieldOutput(opts: {
+    amount: bigint;
+    mintAddress: string;
+    recipient?: AegisKeys;
+  }): Promise<StealthOutputWithKeys & { tokenId: bigint }> {
+    const keys = opts.recipient ?? this._keys;
+    if (!keys) throw new Error("No keys (login first or provide recipient)");
+    const tokenId = this.getTokenId(opts.mintAddress);
+    const output = await createStealthOutputWithKeys(keys, opts.amount, tokenId);
+    return { ...output, tokenId };
   }
 
   // ─── Private helpers ────────────────────────────────────────────

@@ -3,9 +3,8 @@
 import { useState, useCallback, useRef } from "react";
 import {
   bytesToHex,
-  createDepositFromConfig,
   buildDepositPsbt,
-  selectUtxos,
+  AegisClient,
 } from "@aegis/sdk";
 import type { StealthMetaAddress } from "@aegis/sdk";
 import { useBitcoinWalletStore, type WalletUtxo } from "@/stores/bitcoin-wallet-store";
@@ -79,14 +78,15 @@ export function useBtcDeposit({
     setDepositPreview(null);
 
     try {
+      const client = AegisClient.instance();
       const [deposit, utxos] = await Promise.all([
-        createDepositFromConfig(resolvedMeta, getBtcSignerNetwork()),
+        client.prepareDeposit({ recipient: resolvedMeta }),
         btcWallet.getPaymentUtxos(),
       ]);
 
       if (utxos.length === 0) throw new Error("No confirmed UTXOs available in wallet");
 
-      const autoSelected = selectUtxos(
+      const autoSelected = client.selectUtxos(
         utxos.map((u) => ({ txid: u.txid, vout: u.vout, value: u.value, scriptPubkeyHex: u.scriptPubkeyHex })),
         amountSats,
         2,

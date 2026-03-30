@@ -19,7 +19,7 @@ import {
   TOKEN_PROGRAM_ID as SPL_TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID as SPL_TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
-import { createStealthOutputWithKeys, computeTokenId } from "@aegis/sdk";
+import { AegisClient } from "@aegis/sdk";
 import { getAegisProgramId, getZkbtcMint, derivePoolStatePDA, deriveCommitmentTreePDA, deriveTokenConfigPDA } from "@/lib/solana/pdas";
 import { useAegis } from "@/hooks/use-aegis";
 import { Shield, ChevronDown, Loader2, ExternalLink, CheckCircle2, AlertCircle, LogOut, Wallet, Copy, Check, ArrowRight } from "lucide-react";
@@ -117,9 +117,10 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
           ? new PublicKey(selectedToken.mint)
           : getZkbtcMint();
 
-      const tokenIdBigint = computeTokenId(mintPubkey.toBuffer());
-      const stealthOutput = await createStealthOutputWithKeys(keys, amountRaw, tokenIdBigint);
-      const { npkBytes } = stealthOutput;
+      const client = AegisClient.instance();
+      const mintAddr = mintPubkey.toBase58();
+      const shieldOutput = await client.prepareShieldOutput({ amount: amountRaw, mintAddress: mintAddr });
+      const { npkBytes, tokenId: tokenIdBigint } = shieldOutput;
 
       const programId = getAegisProgramId();
       const [tokenConfigPda] = deriveTokenConfigPDA(mintPubkey);
@@ -180,7 +181,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
         const dataView = new DataView(ixData.buffer);
         dataView.setBigUint64(1, amountRaw, true);
         ixData.set(npkBytes, 9);
-        ixData.set(stealthOutput.ephemeralPub, 41);
+        ixData.set(shieldOutput.ephemeralPub, 41);
 
         tx.add(new TransactionInstruction({
           programId,
@@ -226,7 +227,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
         const dataView = new DataView(ixData.buffer);
         dataView.setBigUint64(1, amountRaw, true);
         ixData.set(npkBytes, 9);
-        ixData.set(stealthOutput.ephemeralPub, 41);
+        ixData.set(shieldOutput.ephemeralPub, 41);
 
         tx.add(new TransactionInstruction({
           programId,
