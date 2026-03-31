@@ -34,6 +34,9 @@ export {
   bytesToHex,
   // Hashing
   sha256Hash,
+  // Low-level crypto (needed by E2E test scripts + contract deploy scripts)
+  randomFieldElement,
+  BN254_FIELD_PRIME,
 } from "./crypto";
 
 // ==========================================================================
@@ -49,8 +52,11 @@ export {
   setupKeysFromWallet,
   setupKeysFromSeed,
   recreateStealthAddress,
-  // EdDSA signing (used by pay-flow for JoinSplit proof)
+  // EdDSA signing
   eddsaPoseidonSign,
+  eddsaPoseidonSignWithScalar,
+  eddsaGetPrivScalar,
+  eddsaGetPubKey,
   // Stealth meta address
   createStealthMetaAddress,
   serializeStealthMetaAddress,
@@ -77,7 +83,9 @@ export {
 export {
   initPoseidon,
   poseidonHashSync,
-  // Sync commitment/nullifier (used by claim-utils, aegis-store, pay-flow)
+  // JoinSplit primitives (used by E2E scripts + pay-flow)
+  computeMPKSync,
+  computeNPKSync,
   computeJoinSplitCommitmentSync,
   computeJoinSplitNullifierSync,
   // Multi-token
