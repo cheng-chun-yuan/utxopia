@@ -65,7 +65,7 @@ echo "Starting Docker containers..."
 cd "$PROJECT_ROOT"
 
 # Start esplora first (FROST signers depend on it)
-docker compose -f docker-compose.localnet.yml up -d esplora
+docker compose -f docker-compose.regtest.yml up -d esplora
 
 # Wait for esplora
 echo "Waiting for Esplora..."
@@ -76,10 +76,10 @@ echo "Esplora ready"
 
 # Copy key files into containers via docker cp
 # First, build the FROST image if needed
-docker compose -f docker-compose.localnet.yml build frost-signer-1 frost-signer-2 2>/dev/null || true
+docker compose -f docker-compose.regtest.yml build frost-signer-1 frost-signer-2 2>/dev/null || true
 
 # Start signers (they'll fail initially without keys)
-docker compose -f docker-compose.localnet.yml up -d frost-signer-1 frost-signer-2
+docker compose -f docker-compose.regtest.yml up -d frost-signer-1 frost-signer-2
 
 # Wait a moment then copy keys in
 sleep 2
@@ -87,7 +87,7 @@ docker cp "$KEY_DIR/signer1.key.enc" aegis-frost-1:/app/config/signer1.key.enc |
 docker cp "$KEY_DIR/signer2.key.enc" aegis-frost-2:/app/config/signer2.key.enc || true
 
 # Restart signers to pick up keys
-docker compose -f docker-compose.localnet.yml restart frost-signer-1 frost-signer-2
+docker compose -f docker-compose.regtest.yml restart frost-signer-1 frost-signer-2
 
 echo ""
 echo "Waiting for FROST signers to be healthy..."
