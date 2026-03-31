@@ -52,7 +52,8 @@ solana-keygen new -o ~/.config/solana/johnny.json
 ```bash
 # Build Solana programs
 cd contracts
-cargo build-sbf --features devnet
+cargo build-sbf --features localnet  # For localnet testing
+cargo build-sbf --features devnet    # For devnet deployment
 
 # Install SDK dependencies
 cd ../sdk
@@ -81,6 +82,20 @@ solana-test-validator \
   --clone-feature-set \
   --url devnet \
   --reset
+```
+
+### Step 2b: Start FROST + Bitcoin Regtest (Optional)
+
+For full BTC deposit/sweep testing with FROST threshold signing:
+
+```bash
+# Build FROST server
+cd frost_server && cargo build --release && cd ..
+
+# Start Esplora + 2 FROST signers in Docker
+./scripts/frost-localnet-setup.sh
+
+# This prints the FROST group pubkey — use it in localnet-state.json
 ```
 
 ### Step 3: Deploy Programs
@@ -395,7 +410,7 @@ bun install
 bun run dev       # Development (port 3000)
 bun run build     # Production build
 bun run lint      # ESLint
-bun run test      # Vitest tests
+bun run test      # bun test (was vitest)
 ```
 
 ---
@@ -452,6 +467,22 @@ bun run test      # Vitest tests
 ## 5. E2E Test Scripts
 
 Located in `sdk/scripts/`. All use shared helpers from `sdk/scripts/lib.ts`.
+
+### E2E Test Steps
+
+| Step | Name | What it tests |
+|------|------|---------------|
+| 1 | Infrastructure | Validator + regtest + deploy programs |
+| 2 | Tokens | Register additional test tokens |
+| 3 | BTC Deposit | Single-key deposit + SPV verify |
+| 3b | FROST Sweep | FROST threshold signing (optional, needs frost-server) |
+| 4 | BTC Deposit 2 | Second deposit for JoinSplit inputs |
+| ... | ... | ... |
+
+```bash
+bun run scripts/e2e/run-all.ts              # Full E2E (14 steps)
+bun run scripts/e2e/step3b-frost-sweep.ts   # FROST sweep only
+```
 
 ### Mock SPV (Self-Contained, No Bitcoin Needed)
 

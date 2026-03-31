@@ -15,7 +15,7 @@ Aegis is a privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proo
 bun run dev          # Start dev server (port 3000)
 bun run build        # Production build (builds SDK first)
 bun run lint         # ESLint
-bun run test         # Vitest tests
+bun run test         # bun test (was vitest)
 ```
 
 ### SDK - `/sdk`
@@ -28,7 +28,8 @@ bun run e2e:devnet   # E2E tests on devnet
 
 ### Contracts (Pinocchio) - `/contracts`
 ```bash
-cargo build-sbf --features devnet   # Build programs for SBF
+cargo build-sbf --features devnet    # Build programs for SBF (devnet)
+cargo build-sbf --features localnet  # Build for localnet (regtest BTC LC ID)
 cargo test                           # Run tests
 bun run test                         # TypeScript tests
 ```
@@ -46,6 +47,19 @@ cargo test                         # Run tests
 ```bash
 cargo run                # Start API server
 cargo test               # Run tests
+```
+
+### FROST Localnet (Docker)
+```bash
+./scripts/frost-localnet-setup.sh    # Start Esplora + 2 FROST signers
+docker compose -f docker-compose.regtest.yml up -d   # Start infrastructure
+docker compose -f docker-compose.regtest.yml down     # Stop all
+```
+
+### E2E Tests (localnet + regtest)
+```bash
+bun run scripts/e2e/run-all.ts       # Full E2E (14 steps)
+bun run scripts/e2e/step3b-frost-sweep.ts  # FROST sweep only
 ```
 
 ### circom Circuits - `/circuits`
@@ -170,6 +184,17 @@ Spending Key (Baby Jubjub) ─► Signs JoinSplit transactions (EdDSA-Poseidon)
 | 23 | `cancel_pool_update` | Authority cancels pending proposal |
 
 ## SDK Usage (@aegis/sdk)
+
+```typescript
+import { AegisClient } from '@aegis/sdk';
+
+// High-level client (recommended)
+const client = await AegisClient.init({ network: "devnet" });
+await client.loginWithSeed(seed);
+const notes = await client.getNotes(tokens);
+```
+
+Lower-level imports are also available:
 
 ```typescript
 import {
