@@ -530,12 +530,21 @@ async fn aggregate_handler(
         None => None,
     };
 
-    // Aggregate signatures (with optional Taproot tweak)
-    let signature = crate::signing::aggregate_signatures_with_tweak(
+    // Aggregate signatures using tweaked public key package.
+    // Signers already applied the tweak during round1/round2, so we use
+    // regular `aggregate` with the tweaked pubkey — NOT `aggregate_with_tweak`
+    // which would double-tweak.
+    let effective_pubkey_pkg = match &merkle_root_bytes {
+        Some(mr) => {
+            use frost_secp256k1_tr::keys::Tweak;
+            signer.public_key_package.clone().tweak(Some(mr.as_slice()))
+        }
+        None => signer.public_key_package.clone(),
+    };
+    let signature = crate::signing::aggregate_signatures(
         &signing_package,
         &frost_shares,
-        &signer.public_key_package,
-        merkle_root_bytes.as_deref(),
+        &effective_pubkey_pkg,
     ).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
