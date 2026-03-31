@@ -54,6 +54,7 @@ const SIGNER2_PORT = 19102;
 const SIGNER1_URL = `http://localhost:${SIGNER1_PORT}`;
 const SIGNER2_URL = `http://localhost:${SIGNER2_PORT}`;
 const KEY_PASSWORD = "e2e_test_password";
+const FROST_API_KEY = "e2e_test_api_key_12345";
 
 stepHeader("3b", "FROST Sweep (threshold signing)");
 
@@ -327,7 +328,7 @@ async function frostRound1(
 ): Promise<Round1Response> {
   const resp = await fetch(`${url}/round1`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-API-Key": FROST_API_KEY },
     body: JSON.stringify({
       session_id: sessionId,
       sighash: sighashHex,
@@ -351,7 +352,7 @@ async function frostVerifyCommitments(
 ): Promise<VerifyCommitmentsResponse> {
   const resp = await fetch(`${url}/verify-commitments`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-API-Key": FROST_API_KEY },
     body: JSON.stringify({
       session_id: sessionId,
       commitments,
@@ -376,7 +377,7 @@ async function frostRound2(
 ): Promise<Round2Response> {
   const resp = await fetch(`${url}/round2`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-API-Key": FROST_API_KEY },
     body: JSON.stringify({
       session_id: sessionId,
       sighash: sighashHex,
@@ -403,7 +404,7 @@ async function frostAggregate(
 ): Promise<AggregateResponse> {
   const resp = await fetch(`${url}/aggregate`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-API-Key": FROST_API_KEY },
     body: JSON.stringify({
       commitments,
       identifier_map: identifierMap,
@@ -549,7 +550,7 @@ async function main() {
         ],
         {
           stdio: ["ignore", "pipe", "pipe"],
-          env: { ...process.env, RUST_LOG: "warn" },
+          env: { ...process.env, RUST_LOG: "warn", FROST_API_KEY },
         }
       );
       signerProcesses.push(proc);
