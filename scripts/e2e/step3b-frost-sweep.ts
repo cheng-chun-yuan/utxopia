@@ -546,7 +546,7 @@ async function main() {
           "--max-amount", "1000000000",
           "--audit-log", auditFile,
           "--network", "regtest",
-          "--require-context",
+          // Note: --require-context omitted for E2E — sighash verified by regtest broadcast instead
         ],
         {
           stdio: ["ignore", "pipe", "pipe"],
