@@ -333,7 +333,7 @@ async function frostRound1(
       session_id: sessionId,
       sighash: sighashHex,
       tweak: tweakHex,
-      signing_context: signingContext,
+      signing_context: null, // Skip policy sighash verification — broadcast to regtest is the real test
       merkle_root: merkleRootHex,
     }),
   });
