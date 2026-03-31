@@ -62,10 +62,16 @@ stepHeader("3b", "FROST Sweep (threshold signing)");
 // =============================================================================
 
 function findFrostBinary(): string {
-  const releasePath = path.join(PROJECT_ROOT, "frost_server/target/release/frost-server");
-  const debugPath = path.join(PROJECT_ROOT, "frost_server/target/debug/frost-server");
-  if (fs.existsSync(releasePath)) return releasePath;
-  if (fs.existsSync(debugPath)) return debugPath;
+  // Workspace builds to root target/, standalone to frost_server/target/
+  const paths = [
+    path.join(PROJECT_ROOT, "target/release/frost-server"),
+    path.join(PROJECT_ROOT, "target/debug/frost-server"),
+    path.join(PROJECT_ROOT, "frost_server/target/release/frost-server"),
+    path.join(PROJECT_ROOT, "frost_server/target/debug/frost-server"),
+  ];
+  for (const p of paths) {
+    if (fs.existsSync(p)) return p;
+  }
   throw new Error(
     "frost-server binary not found. Build it first: cd frost_server && cargo build --release"
   );

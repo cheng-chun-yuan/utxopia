@@ -22,9 +22,13 @@ const steps = [
   { file: "step3-btc-deposit.ts", label: "BTC Deposit (real)" },
   // Optional: FROST sweep test — only included if frost-server binary exists
   ...((() => {
-    const frostBinary = path.join(__dirname, "../../frost_server/target/release/frost-server");
-    const frostBinaryDebug = path.join(__dirname, "../../frost_server/target/debug/frost-server");
-    if (fs.existsSync(frostBinary) || fs.existsSync(frostBinaryDebug)) {
+    const frostPaths = [
+      path.join(__dirname, "../../target/release/frost-server"),
+      path.join(__dirname, "../../target/debug/frost-server"),
+      path.join(__dirname, "../../frost_server/target/release/frost-server"),
+      path.join(__dirname, "../../frost_server/target/debug/frost-server"),
+    ];
+    if (frostPaths.some(p => fs.existsSync(p))) {
       return [{ file: "step3b-frost-sweep.ts", label: "FROST Sweep (threshold signing)" }];
     }
     console.log("  [skip] step3b-frost-sweep.ts — frost-server binary not found");
