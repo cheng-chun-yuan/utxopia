@@ -18,7 +18,7 @@ interface BtcAddressInputProps {
  * Validate a Bitcoin testnet4/testnet address (bech32/bech32m).
  * Returns the scriptPubKey bytes if valid.
  */
-function validateBtcAddress(addr: string): { valid: boolean; scriptPubKey: Uint8Array | null; error?: string } {
+export function validateBtcAddress(addr: string): { valid: boolean; scriptPubKey: Uint8Array | null; error?: string } {
   const trimmed = addr.trim();
   if (!trimmed) {
     return { valid: false, scriptPubKey: null, error: "Please enter a Bitcoin address" };

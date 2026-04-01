@@ -48,13 +48,33 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 
-// FROST signer config
-const SIGNER1_PORT = 19101;
-const SIGNER2_PORT = 19102;
-const SIGNER1_URL = `http://localhost:${SIGNER1_PORT}`;
-const SIGNER2_URL = `http://localhost:${SIGNER2_PORT}`;
-const KEY_PASSWORD = "e2e_test_password";
-const FROST_API_KEY = "e2e_test_api_key_12345";
+// FROST signer config — Docker signers vs local signers
+const DOCKER_SIGNER1_PORT = 19101;
+const DOCKER_SIGNER2_PORT = 19102;
+const DOCKER_KEY_DIR = path.join(PROJECT_ROOT, ".frost-localnet-keys");
+
+/** Read Docker FROST API key from root .env or fall back to default */
+function getDockerApiKey(): string {
+  const envFile = path.join(PROJECT_ROOT, ".env");
+  if (fs.existsSync(envFile)) {
+    const content = fs.readFileSync(envFile, "utf-8");
+    const match = content.match(/^FROST_API_KEY=(.+)$/m);
+    if (match) return match[1].trim();
+  }
+  return "localnet_test_key"; // default from docker-compose.regtest.yml
+}
+
+// Local signer fallback ports (when Docker is not running)
+const LOCAL_SIGNER1_PORT = 19201;
+const LOCAL_SIGNER2_PORT = 19202;
+const LOCAL_KEY_PASSWORD = "e2e_test_password";
+const LOCAL_API_KEY = "e2e_test_api_key_12345";
+
+// Will be set based on whether Docker signers are detected
+let SIGNER1_URL: string;
+let SIGNER2_URL: string;
+let FROST_API_KEY: string;
+let useDockerSigners = false;
 
 stepHeader("3b", "FROST Sweep (threshold signing)");
 
@@ -222,11 +242,10 @@ function computeTapSighash(
   const sequenceBuf = rawTx.subarray(42, 46);
   const sha256Sequences = sha256(sequenceBuf);
 
-  // sha256(outputs) - all outputs from the raw tx
-  // Parse outputs: after input section
-  const numOutputs = rawTx[46]; // varint for output count
-  // Everything from output count to before locktime is the outputs section
-  const outputsSection = rawTx.subarray(46, rawTx.length - 4);
+  // sha256(outputs) - serialized outputs (WITHOUT the varint output count)
+  // Parse outputs: after input section, skip the varint output count
+  // BIP-341: sha256_outputs = SHA256(ser(outputs))
+  const outputsSection = rawTx.subarray(47, rawTx.length - 4);
   const sha256Outputs = sha256(outputsSection);
 
   // Build SigMsg
@@ -333,7 +352,7 @@ async function frostRound1(
       session_id: sessionId,
       sighash: sighashHex,
       tweak: tweakHex,
-      signing_context: null, // Skip policy sighash verification — broadcast to regtest is the real test
+      signing_context: signingContext, // Docker signers require context; local signers accept null
       merkle_root: merkleRootHex,
     }),
   });
@@ -424,36 +443,84 @@ async function frostAggregate(
 // Main
 // =============================================================================
 
+/** Check if Docker FROST signers are already running and healthy */
+async function detectDockerSigners(): Promise<boolean> {
+  try {
+    const [r1, r2] = await Promise.all([
+      fetch(`http://localhost:${DOCKER_SIGNER1_PORT}/health`, { signal: AbortSignal.timeout(2000) }),
+      fetch(`http://localhost:${DOCKER_SIGNER2_PORT}/health`, { signal: AbortSignal.timeout(2000) }),
+    ]);
+    if (r1.ok && r2.ok) {
+      const b1 = (await r1.json()) as { key_loaded: boolean };
+      const b2 = (await r2.json()) as { key_loaded: boolean };
+      return b1.key_loaded && b2.key_loaded;
+    }
+  } catch {
+    // not running
+  }
+  return false;
+}
+
 async function main() {
   const frostBin = findFrostBinary();
   log(`Using frost-server binary: ${frostBin}`);
 
   // Create temp directory for test keys and audit log
   const tmpDir = path.join(PROJECT_ROOT, "scripts/e2e/.frost-test-keys");
-  if (fs.existsSync(tmpDir)) {
-    fs.rmSync(tmpDir, { recursive: true });
-  }
-  fs.mkdirSync(tmpDir, { recursive: true });
 
   const signerProcesses: ChildProcess[] = [];
 
-  try {
-    // =========================================================================
-    // Step 1: Generate test keys (2-of-3 threshold)
-    // =========================================================================
-    log("Generating 2-of-3 FROST test keys...");
-    execSync(
-      `${frostBin} generate-test-keys ` +
-        `--password ${KEY_PASSWORD} ` +
-        `--threshold 2 --total 3 ` +
-        `--output-dir ${tmpDir}`,
-      { stdio: "pipe", timeout: 30_000 }
-    );
+  // Detect Docker FROST signers
+  useDockerSigners = await detectDockerSigners();
 
-    const groupPubkeyHex = fs
-      .readFileSync(path.join(tmpDir, "group_pubkey.txt"), "utf-8")
-      .trim();
-    log(`Group pubkey: ${groupPubkeyHex}`);
+  let groupPubkeyHex: string;
+
+  try {
+    if (useDockerSigners) {
+      // =========================================================================
+      // Use Docker FROST signers (already running on 19101/19102)
+      // =========================================================================
+      log("Detected Docker FROST signers — using them instead of local signers");
+      SIGNER1_URL = `http://localhost:${DOCKER_SIGNER1_PORT}`;
+      SIGNER2_URL = `http://localhost:${DOCKER_SIGNER2_PORT}`;
+      FROST_API_KEY = getDockerApiKey();
+
+      // Read group pubkey from Docker key directory
+      const dockerPubkeyFile = path.join(DOCKER_KEY_DIR, "group_pubkey.txt");
+      if (!fs.existsSync(dockerPubkeyFile)) {
+        throw new Error(`Docker group_pubkey.txt not found at ${dockerPubkeyFile}`);
+      }
+      groupPubkeyHex = fs.readFileSync(dockerPubkeyFile, "utf-8").trim();
+      log(`Group pubkey (Docker): ${groupPubkeyHex}`);
+    } else {
+      // =========================================================================
+      // Start local FROST signers (ports 19201/19202)
+      // =========================================================================
+      log("No Docker signers detected — starting local FROST signers");
+      SIGNER1_URL = `http://localhost:${LOCAL_SIGNER1_PORT}`;
+      SIGNER2_URL = `http://localhost:${LOCAL_SIGNER2_PORT}`;
+      FROST_API_KEY = LOCAL_API_KEY;
+
+      if (fs.existsSync(tmpDir)) {
+        fs.rmSync(tmpDir, { recursive: true });
+      }
+      fs.mkdirSync(tmpDir, { recursive: true });
+
+      // Generate test keys
+      log("Generating 2-of-3 FROST test keys...");
+      execSync(
+        `${frostBin} generate-test-keys ` +
+          `--password ${LOCAL_KEY_PASSWORD} ` +
+          `--threshold 2 --total 3 ` +
+          `--output-dir ${tmpDir}`,
+        { stdio: "pipe", timeout: 30_000 }
+      );
+
+      groupPubkeyHex = fs
+        .readFileSync(path.join(tmpDir, "group_pubkey.txt"), "utf-8")
+        .trim();
+      log(`Group pubkey: ${groupPubkeyHex}`);
+    }
 
     // =========================================================================
     // Step 2: Generate deposit address using SDK's deriveTaprootAddress
@@ -518,49 +585,53 @@ async function main() {
     log(`Deposit output: txid=${fundTxid.slice(0, 16)}... vout=${depositVout} amount=${depositAmountSats} sats`);
 
     // =========================================================================
-    // Step 4: Start 2 FROST signers
+    // Step 4: Start FROST signers (only if not using Docker)
     // =========================================================================
-    log("Starting 2 FROST signers...");
 
     // Get a pool address (where swept funds go)
     const poolAddr = getNewAddress("bech32m");
     log(`Pool receive address: ${poolAddr}`);
 
-    const auditFile = path.join(tmpDir, "audit.jsonl");
+    if (!useDockerSigners) {
+      log("Starting 2 local FROST signers...");
 
-    for (const [id, port] of [
-      [1, SIGNER1_PORT],
-      [2, SIGNER2_PORT],
-    ] as const) {
-      const keyFile = path.join(tmpDir, `signer${id}.key.enc`);
-      const proc = spawn(
-        frostBin,
-        [
-          "run",
-          "--id", String(id),
-          "--password", KEY_PASSWORD,
-          "--key-file", keyFile,
-          "--bind", `0.0.0.0:${port}`,
-          "--pool-address", poolAddr,
-          "--max-fee", "50000",
-          "--max-amount", "1000000000",
-          "--audit-log", auditFile,
-          "--network", "regtest",
-          // Note: --require-context omitted for E2E — sighash verified by regtest broadcast instead
-        ],
-        {
-          stdio: ["ignore", "pipe", "pipe"],
-          env: { ...process.env, RUST_LOG: "warn", FROST_API_KEY },
-        }
-      );
-      signerProcesses.push(proc);
-      log(`  Signer ${id} started (pid=${proc.pid}, port=${port})`);
+      const auditFile = path.join(tmpDir, "audit.jsonl");
+
+      for (const [id, port] of [
+        [1, LOCAL_SIGNER1_PORT],
+        [2, LOCAL_SIGNER2_PORT],
+      ] as const) {
+        const keyFile = path.join(tmpDir, `signer${id}.key.enc`);
+        const proc = spawn(
+          frostBin,
+          [
+            "run",
+            "--id", String(id),
+            "--password", LOCAL_KEY_PASSWORD,
+            "--key-file", keyFile,
+            "--bind", `0.0.0.0:${port}`,
+            "--pool-address", poolAddr,
+            "--max-fee", "50000",
+            "--max-amount", "1000000000",
+            "--audit-log", auditFile,
+            "--network", "regtest",
+          ],
+          {
+            stdio: ["ignore", "pipe", "pipe"],
+            env: { ...process.env, RUST_LOG: "warn", FROST_API_KEY: LOCAL_API_KEY },
+          }
+        );
+        signerProcesses.push(proc);
+        log(`  Signer ${id} started (pid=${proc.pid}, port=${port})`);
+      }
+
+      // Wait for both signers to be healthy
+      await waitForHealth(SIGNER1_URL);
+      await waitForHealth(SIGNER2_URL);
+      log("Both signers are healthy and keys loaded");
+    } else {
+      log("Using Docker signers (already healthy)");
     }
-
-    // Wait for both signers to be healthy
-    await waitForHealth(SIGNER1_URL);
-    await waitForHealth(SIGNER2_URL);
-    log("Both signers are healthy and keys loaded");
 
     // =========================================================================
     // Step 5: Build unsigned sweep TX
@@ -727,10 +798,13 @@ async function main() {
       throw new Error("Pool address did not receive funds in sweep TX");
     }
 
-    // Check audit log was written
-    if (fs.existsSync(auditFile)) {
-      const auditLines = fs.readFileSync(auditFile, "utf-8").trim().split("\n");
-      log(`  Audit log: ${auditLines.length} entries written`);
+    // Check audit log was written (only for local signers)
+    if (!useDockerSigners) {
+      const auditFile = path.join(tmpDir, "audit.jsonl");
+      if (fs.existsSync(auditFile)) {
+        const auditLines = fs.readFileSync(auditFile, "utf-8").trim().split("\n");
+        log(`  Audit log: ${auditLines.length} entries written`);
+      }
     }
 
     console.log("\nStep 3b: FROST Sweep (threshold signing) ...... PASS");
@@ -749,8 +823,8 @@ async function main() {
       }
     }
 
-    // Clean up temp directory
-    if (fs.existsSync(tmpDir)) {
+    // Clean up temp directory (only for local signers)
+    if (!useDockerSigners && fs.existsSync(tmpDir)) {
       fs.rmSync(tmpDir, { recursive: true });
     }
   }

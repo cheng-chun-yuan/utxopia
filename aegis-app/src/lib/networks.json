@@ -68,5 +68,29 @@
     "backend": {
       "url": ""
     }
+  },
+  "localnet": {
+    "solana": {
+      "rpcUrl": "https://api.devnet.solana.com",
+      "aegisProgramId": "G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy",
+      "btcLightClientId": "C8JoSKzondM7X1ESwrBSodGMrXWtEWNmawXyjh9zEWJZ",
+      "chadbufferId": "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF"
+    },
+    "tokens": {
+      "zkbtcMint": "7hu1toTT38b7arySjvZWpACjy2XaboWNZMufRWr5xvtB",
+      "usdcMint": "Ee27V46LrSQsewhd8hMyicp64971r6xHyfQM6jDTYoCQ",
+      "usdtMint": "",
+      "wsolMint": "",
+      "jupusdMint": ""
+    },
+    "bitcoin": {
+      "network": "testnet4",
+      "poolAddress": "bcrt1pj4296w5uurzzl28sp860x52sgh8mfad925k3k04y7dfcsf32rl4s85qtj3",
+      "groupPubkey": "",
+      "explorerUrl": "http://localhost:3002/regtest"
+    },
+    "backend": {
+      "url": "http://localhost:3001"
+    }
   }
 }

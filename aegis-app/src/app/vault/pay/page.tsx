@@ -2,7 +2,7 @@
 
 import { Component, Suspense, useState, useEffect, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
-import { Send, AlertTriangle } from "lucide-react";
+import { Send, AlertTriangle, ArrowUpFromLine, Repeat, Bitcoin } from "lucide-react";
 import { FlowPageLayout } from "@/components/ui/flow-page-layout";
 import { PayFlow } from "@/components/btc-widget/pay-flow";
 
@@ -75,7 +75,42 @@ function PayFlowWithParams() {
   );
 }
 
-export default function PayPage() {
+const MODE_CONFIG = {
+  stealth: {
+    icon: <Repeat className="w-full h-full" />,
+    label: "Transfer",
+    color: "purple" as const,
+    title: "Private Transfer",
+    description: "Send shielded tokens to a stealth address",
+  },
+  public: {
+    icon: <ArrowUpFromLine className="w-full h-full" />,
+    label: "Unshield",
+    color: "privacy" as const,
+    title: "Unshield",
+    description: "Withdraw shielded tokens to your Solana wallet",
+  },
+  btc_withdraw: {
+    icon: <Bitcoin className="w-full h-full" />,
+    label: "Withdraw",
+    color: "btc" as const,
+    title: "BTC Withdraw",
+    description: "Withdraw shielded BTC to a Bitcoin address",
+  },
+  default: {
+    icon: <Send className="w-full h-full" />,
+    label: "Pay",
+    color: "purple" as const,
+    title: "Private Transfer",
+    description: "Send shielded tokens privately",
+  },
+};
+
+function PayPageInner() {
+  const searchParams = useSearchParams();
+  const mode = searchParams.get("mode") as keyof typeof MODE_CONFIG | null;
+  const config = MODE_CONFIG[mode || "default"] || MODE_CONFIG.default;
+
   return (
     <FlowPageLayout
       backHref="/vault"
@@ -83,14 +118,14 @@ export default function PayPage() {
       width={520}
       badges={[
         {
-          icon: <Send className="w-full h-full" />,
-          label: "Pay",
-          color: "purple",
+          icon: config.icon,
+          label: config.label,
+          color: config.color,
         },
       ]}
-      titleIcon={<Send className="w-full h-full" />}
-      title="Private Transfer"
-      description="Send shielded tokens privately"
+      titleIcon={config.icon}
+      title={config.title}
+      description={config.description}
     >
       <PayFlowErrorBoundary>
         <Suspense fallback={<div className="flex items-center justify-center py-8"><div className="w-8 h-8 border-2 border-purple border-t-transparent rounded-full animate-spin" /></div>}>
@@ -98,5 +133,13 @@ export default function PayPage() {
         </Suspense>
       </PayFlowErrorBoundary>
     </FlowPageLayout>
+  );
+}
+
+export default function PayPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-8 min-h-screen"><div className="w-8 h-8 border-2 border-purple border-t-transparent rounded-full animate-spin" /></div>}>
+      <PayPageInner />
+    </Suspense>
   );
 }

@@ -67,13 +67,13 @@ export function AuthModal({ open, onOpenChange, auth }: AuthModalProps) {
               <Shield className="w-6 h-6 text-privacy" />
             </div>
             <Dialog.Title className="text-[20px] font-bold text-foreground mb-1">
-              Unlock Your Vault
+              Sign In
             </Dialog.Title>
             <Dialog.Description
               id="auth-modal-description"
               className="text-body2 text-gray"
             >
-              Choose how to securely access your private Bitcoin
+              Choose how to access your wallet
             </Dialog.Description>
           </div>
 

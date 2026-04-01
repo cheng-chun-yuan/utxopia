@@ -2,7 +2,7 @@
 
 import { useState, useSyncExternalStore, useCallback } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Shield, Key, Eye, ArrowRight, X } from "lucide-react";
+import { Shield, ArrowDownToLine, Send, ArrowRight, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ONBOARDING_STORAGE_KEY = "aegis-onboarding-completed";
@@ -31,22 +31,16 @@ interface OnboardingStep {
 
 const steps: OnboardingStep[] = [
   {
-    title: "Welcome to Privacy Coin",
+    title: "Send tokens privately",
     description:
-      "Privacy Coin is a privacy layer for Solana tokens. Shield any SPL token into private commitments that can be transferred without revealing your identity or amounts.",
+      "Your transactions stay hidden. No one can see who sent what, how much, or to whom.",
     icon: <Shield className="w-8 h-8" />,
   },
   {
-    title: "Privacy First",
+    title: "How it works",
     description:
-      "Using zero-knowledge proofs and stealth addresses, Privacy Coin ensures your deposits and transfers cannot be linked. Shield BTC, USDC, SOL, or any token — your financial activity remains private.",
-    icon: <Eye className="w-8 h-8" />,
-  },
-  {
-    title: "Save Your Secrets",
-    description:
-      "When you create a deposit, you'll receive a secret note. This is the only way to claim your funds. Save it securely - if you lose it, your funds cannot be recovered.",
-    icon: <Key className="w-8 h-8" />,
+      "Deposit any token. Send it privately to anyone. Cash out to your wallet or Bitcoin address anytime.",
+    icon: <Send className="w-8 h-8" />,
   },
 ];
 

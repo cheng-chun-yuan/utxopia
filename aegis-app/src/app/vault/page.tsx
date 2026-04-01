@@ -23,7 +23,8 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   ArrowDownToLine,
-  ArrowLeft,
+  ArrowRight,
+  ArrowUpFromLine,
   Wallet,
   Shield,
   Key,
@@ -32,7 +33,6 @@ import {
   Send,
   Loader2,
   LogOut,
-  Search,
   Globe,
   RefreshCw,
   Eye,
@@ -354,9 +354,9 @@ export default function VaultPage() {
               <div className="w-16 h-16 rounded-2xl bg-privacy/10 border border-privacy/20 flex items-center justify-center mb-4">
                 <Shield className="w-7 h-7 text-privacy" />
               </div>
-              <h1 className="text-[22px] font-bold text-foreground mb-1">Private Wallet</h1>
+              <h1 className="text-[22px] font-bold text-foreground mb-1">Your Wallet</h1>
               <p className="text-caption text-gray/60 mb-6">
-                Shield, transfer &amp; unshield tokens with ZK proofs
+                Send any token privately. No one sees your activity.
               </p>
               <button
                 onClick={() => setAuthModalOpen(true)}
@@ -369,7 +369,7 @@ export default function VaultPage() {
                 )}
               >
                 <Key className="w-4 h-4" />
-                Connect &amp; Unlock
+                Get Started
               </button>
             </div>
           ) : (
@@ -423,9 +423,9 @@ export default function VaultPage() {
               <div className="flex items-center justify-center gap-5 sm:gap-8 mb-6">
                 {[
                   { icon: <ArrowDownToLine className="w-5 h-5" />, label: "Deposit", href: "/vault/deposit", color: "text-green-400" },
-                  { icon: <Send className="w-5 h-5" />, label: "Send", href: "/vault/pay", color: "text-privacy" },
-                  { icon: <Wallet className="w-5 h-5" />, label: "Activities", href: "/vault/activity", color: "text-privacy" },
-                ].filter((a) => !isViewOnly || a.label === "Activities")
+                  { icon: <Send className="w-5 h-5" />, label: "Send", href: "/vault/pay/transfer", color: "text-purple-400" },
+                  { icon: <ArrowUpFromLine className="w-5 h-5" />, label: "Cash Out", href: "/vault/pay/cashout", color: "text-btc" },
+                ].filter((a) => !isViewOnly || a.label === "Cash Out")
                   .map((action) => (
                   <Link
                     key={action.label}
@@ -453,6 +453,18 @@ export default function VaultPage() {
                 ))}
               </div>
 
+              {/* History link */}
+              {depositCount > 0 && (
+                <div className="flex justify-center mb-5">
+                  <Link
+                    href="/vault/activity"
+                    className="flex items-center gap-1 text-[11px] text-gray/40 hover:text-gray/60 transition-colors cursor-pointer"
+                  >
+                    View History <ChevronRight className="w-3 h-3" />
+                  </Link>
+                </div>
+              )}
+
               {/* ═══ Token List ═══ */}
               <div className="mb-5">
                 <div className="flex items-center justify-between px-1 mb-2">
@@ -474,41 +486,24 @@ export default function VaultPage() {
                       (token) => Number(balancesByToken?.[token.shieldedSymbol] ?? 0n) > 0
                     );
 
-                    // When all balances are empty, show only zkBTC with a top-up prompt
+                    // Empty state — guided first deposit
                     if (!hasAnyBalance && !isLoadingInbox) {
-                      const zkbtc = VAULT_TOKENS.find((t) => t.shieldedSymbol === "zkBTC");
                       return (
-                        <div className="flex items-center gap-3 px-4 h-[60px]">
-                          <motion.img
-                            src={zkbtc?.shieldedLogo || "/tokens/zkbtc.png"}
-                            alt="zkBTC"
-                            className="w-9 h-9 rounded-full"
-                            animate={{ y: [0, -2, 0] }}
-                            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-body2-semibold text-foreground">zkBTC</p>
-                            <p className="text-[11px] text-gray/50">Shielded Bitcoin</p>
+                        <div className="flex flex-col items-center py-8 px-4">
+                          <div className="w-12 h-12 rounded-full bg-privacy/10 border border-privacy/20 flex items-center justify-center mb-3">
+                            <ArrowDownToLine className="w-5 h-5 text-privacy" />
                           </div>
-                          <motion.div
-                            animate={{
-                              boxShadow: [
-                                "0 0 0 rgba(20,241,149,0)",
-                                "0 0 12px rgba(20,241,149,0.2)",
-                                "0 0 0 rgba(20,241,149,0)",
-                              ],
-                            }}
-                            transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
-                            className="rounded-full"
+                          <p className="text-sm font-medium text-foreground mb-1">Ready to go private?</p>
+                          <p className="text-xs text-gray/50 text-center mb-4">
+                            Deposit BTC or any Solana token to start.
+                          </p>
+                          <Link
+                            href="/vault/deposit"
+                            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-privacy hover:bg-privacy/85 text-background text-sm font-medium transition-all duration-200 cursor-pointer active:scale-[0.98]"
                           >
-                            <Link
-                              href="/vault/deposit"
-                              className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-privacy/10 hover:bg-privacy/20 border border-privacy/20 text-[11px] font-semibold text-privacy transition-colors cursor-pointer"
-                            >
-                              <ArrowDownToLine className="w-3 h-3" />
-                              Top Up
-                            </Link>
-                          </motion.div>
+                            Make Your First Deposit
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </Link>
                         </div>
                       );
                     }
@@ -566,9 +561,9 @@ export default function VaultPage() {
           <div className="px-3 py-3 bg-muted/30 rounded-[10px] mb-4">
             <div className="flex items-center gap-4">
               {[
-                { step: "1", label: "Shield" },
-                { step: "2", label: "Prove" },
-                { step: "3", label: "Use" },
+                { step: "1", label: "Deposit" },
+                { step: "2", label: "Send" },
+                { step: "3", label: "Cash Out" },
               ].map((s, i) => (
                 <Fragment key={s.step}>
                   <div className="flex items-center gap-1.5">
