@@ -13,7 +13,8 @@ import { Connection } from "@solana/web3.js";
 import { SOLANA_RPC_FALLBACK_URL } from "@/lib/api/constants";
 
 // Server-side Helius API key (more secure than client-side)
-const HELIUS_API_KEY = process.env.HELIUS_API_KEY || process.env.NEXT_PUBLIC_HELIUS_API_KEY || "";
+// Server-only: never use NEXT_PUBLIC_ for API keys
+const HELIUS_API_KEY = process.env.HELIUS_API_KEY || "";
 
 // =============================================================================
 // RPC URL Configuration

@@ -50,6 +50,7 @@ import {
 } from "@/lib/solana/pdas";
 
 import { getRelayerKeypair } from "@/lib/server/relayer";
+import { checkRateLimit, getClientIp } from "@/lib/server/rate-limit";
 
 import {
   getBlockHeaderByHeight,
@@ -328,6 +329,16 @@ async function closeBuffer(
 // =============================================================================
 
 export async function POST(request: NextRequest): Promise<NextResponse<VerifyResponse>> {
+  // Rate limit: 5 verify requests per minute per IP (each costs SOL)
+  const ip = getClientIp(request.headers);
+  const rl = checkRateLimit(ip, "verify", { maxTokens: 5, windowMs: 60_000 });
+  if (rl.limited) {
+    return NextResponse.json(
+      { success: false, error: "Too many requests" } as VerifyResponse,
+      { status: 429, headers: { "Retry-After": String(Math.ceil((rl.retryAfterMs ?? 12000) / 1000)) } }
+    );
+  }
+
   const startTime = Date.now();
   const { hexToBytes } = await getAegisSDK();
   const spvHexToBytes = hexToBytes;

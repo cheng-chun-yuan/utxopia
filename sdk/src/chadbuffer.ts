@@ -33,6 +33,7 @@ import {
 } from "@solana/kit";
 import { getCreateAccountInstruction } from "@solana-program/system";
 import { address } from "./config";
+import { debug } from "./logger";
 
 /** Instruction type for v2 */
 interface Instruction {
@@ -209,9 +210,7 @@ export async function uploadTransactionToBuffer(
     await sendAndConfirm(await signTransactionMessageWithSigners(tx) as any, { commitment: "confirmed" });
   }
 
-  console.log(`Buffer created: ${bufferKeypair.address}`);
-  console.log(`Transaction size: ${rawTx.length} bytes`);
-  console.log(`Chunks uploaded: ${chunks.length}`);
+  debug("chadbuffer", `Buffer created, tx ${rawTx.length}B, ${chunks.length} chunks`);
 
   return bufferKeypair.address;
 }
@@ -485,23 +484,23 @@ export async function prepareVerifyDeposit(
   txIndex: number;
   txidBytes: Uint8Array;
 }> {
-  console.log(`Preparing verification for txid: ${txid}`);
+  debug("chadbuffer", `Preparing verification for txid: ${txid.slice(0, 12)}...`);
 
   // Fetch raw transaction
-  console.log("Fetching raw transaction...");
+  debug("chadbuffer", "Fetching raw transaction...");
   const rawTx = await fetchRawTransaction(txid, network);
-  console.log(`Raw tx size: ${rawTx.length} bytes`);
+  debug("chadbuffer", `Raw tx size: ${rawTx.length} bytes`);
 
   // Fetch merkle proof
-  console.log("Fetching merkle proof...");
+  debug("chadbuffer", "Fetching merkle proof...");
   const { blockHeight, merkleProof, txIndex } = await fetchMerkleProof(
     txid,
     network
   );
-  console.log(`Block height: ${blockHeight}, tx index: ${txIndex}`);
+  debug("chadbuffer", `Block height: ${blockHeight}, tx index: ${txIndex}`);
 
   // Upload to ChadBuffer
-  console.log("Uploading to ChadBuffer...");
+  debug("chadbuffer", "Uploading to ChadBuffer...");
   const bufferAddress = await uploadTransactionToBuffer(
     rpc,
     rpcSubscriptions,

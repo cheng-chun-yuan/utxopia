@@ -11,7 +11,11 @@ const ALLOWED_ORIGINS = (
 
 function isAllowedOrigin(origin: string | null): boolean {
   if (!origin) return true; // Same-origin requests have no Origin header
-  if (ALLOWED_ORIGINS.length === 0) return true; // No constraint configured
+  if (ALLOWED_ORIGINS.length === 0) {
+    // In production, reject cross-origin if no allowlist is configured
+    if (process.env.NODE_ENV === "production") return false;
+    return true; // Allow in development
+  }
   return ALLOWED_ORIGINS.some(
     (allowed) => origin === allowed || origin === allowed.replace(/\/$/, "")
   );
@@ -66,6 +70,18 @@ function addSecurityHeaders(response: NextResponse) {
   response.headers.set(
     "Permissions-Policy",
     "camera=(), microphone=(), geolocation=()"
+  );
+  response.headers.set(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      "script-src 'self' 'wasm-unsafe-eval'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: https:",
+      "font-src 'self' data:",
+      "connect-src 'self' https://*.helius-rpc.com https://api.devnet.solana.com https://api.mainnet-beta.solana.com https://mempool.space wss://mempool.space https://*.amidoggy.xyz",
+      "frame-ancestors 'none'",
+    ].join("; ")
   );
   if (process.env.NODE_ENV === "production") {
     response.headers.set(

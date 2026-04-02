@@ -48,6 +48,7 @@ import {
 
 import { getRelayerKeypair as getRelayerKeypairShared } from "@/lib/server/relayer";
 import { getHeliusRpcUrl } from "@/lib/helius-server";
+import { checkRateLimit, getClientIp } from "@/lib/server/rate-limit";
 export const dynamic = "force-dynamic";
 
 // =============================================================================
@@ -225,6 +226,16 @@ async function closeBuffer(
 // =============================================================================
 
 export async function POST(request: NextRequest) {
+  // Rate limit: 10 relay requests per minute per IP
+  const ip = getClientIp(request.headers);
+  const rl = checkRateLimit(ip, "relay", { maxTokens: 10, windowMs: 60_000 });
+  if (rl.limited) {
+    return NextResponse.json(
+      { success: false, error: "Too many requests" },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((rl.retryAfterMs ?? 6000) / 1000)) } }
+    );
+  }
+
   const startTime = Date.now();
 
   try {

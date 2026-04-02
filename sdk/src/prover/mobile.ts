@@ -15,6 +15,10 @@ export type {
 } from "./web";
 
 import type { ProofData, CircuitType, JoinSplitProofInputs } from "./web";
+import {
+  computeJoinSplitNullifierSync,
+  computeJoinSplitCommitmentSync,
+} from "../poseidon";
 
 // ---------------------------------------------------------------------------
 // Module state
@@ -195,20 +199,19 @@ function formatCircuitInputs(
   flat["npkOut"] = typed.outputs.map((o) => o.npk.toString());
   flat["valueOut"] = typed.outputs.map((o) => o.value.toString());
 
-  // Nullifiers (computed on-chain, but circuit needs them)
-  // TODO: compute nullifiers here once poseidon is available in mobile context
-  if ((typed as any).nullifiers) {
-    flat["nullifiers"] = (typed as any).nullifiers.map((n: bigint) =>
-      n.toString(),
-    );
+  // Compute nullifiers: Poseidon(nullifyingKey, leafIndex)
+  const nullifiers: bigint[] = [];
+  for (const inp of typed.inputs) {
+    nullifiers.push(computeJoinSplitNullifierSync(typed.nullifyingKey, inp.leafIndex));
   }
+  flat["nullifiers"] = nullifiers.map((n) => n.toString());
 
-  // Commitments out
-  if ((typed as any).commitmentsOut) {
-    flat["commitmentsOut"] = (typed as any).commitmentsOut.map((c: bigint) =>
-      c.toString(),
-    );
+  // Compute output commitments: Poseidon(npk, token, value)
+  const commitmentsOut: bigint[] = [];
+  for (const out of typed.outputs) {
+    commitmentsOut.push(computeJoinSplitCommitmentSync(out.npk, typed.token, out.value));
   }
+  flat["commitmentsOut"] = commitmentsOut.map((c) => c.toString());
 
   // Merkle proof paths — flatten 2D arrays
   // pathElements[i][j] and pathIndices[i][j] where i = input index, j = tree level

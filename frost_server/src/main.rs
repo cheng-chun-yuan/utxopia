@@ -302,7 +302,12 @@ async fn run_server(params: ServerParams) -> Result<(), Box<dyn std::error::Erro
         }
         Some(p)
     } else {
-        tracing::warn!("No signing policy configured — blind signing is allowed (dev mode)");
+        let require_policy = env::var("AEGIS_REQUIRE_POLICY").unwrap_or_default() == "1";
+        if require_policy {
+            tracing::error!("AEGIS_REQUIRE_POLICY=1 but no policy is configured — refusing to start");
+            std::process::exit(1);
+        }
+        tracing::warn!("No signing policy configured — blind signing is allowed (dev mode only)");
         None
     };
 

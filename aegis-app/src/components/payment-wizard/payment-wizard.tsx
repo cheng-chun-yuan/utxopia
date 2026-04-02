@@ -223,6 +223,10 @@ export function PaymentWizard({ config }: { config: FlowConfig }) {
     }
   }, [recipient, config.mode]);
 
+  // BTC fee breakdown (must be before validation)
+  const serviceFee = config.computeServiceFee ? config.computeServiceFee(amountSats) : 0;
+  const btcReceiveAmount = amountSats > 0 ? amountSats - serviceFee - BTC_MINER_FEE_ESTIMATE : 0;
+
   // Validation
   const amountValid = amountSats >= MIN_PAY_SATS
     && totalNeeded <= noteSelector.totalAvailable
@@ -240,10 +244,6 @@ export function PaymentWizard({ config }: { config: FlowConfig }) {
   const nOutputs = 1 + (changeSats > 0 ? 1 : 0) + (effectiveRelayerFee > 0 ? 1 : 0);
   const circuitKey = `${nInputs}x${nOutputs}`;
   const circuitAvailable = nInputs > 0 && AVAILABLE_CIRCUITS.has(circuitKey);
-
-  // BTC fee breakdown
-  const serviceFee = config.computeServiceFee ? config.computeServiceFee(amountSats) : 0;
-  const btcReceiveAmount = amountSats > 0 ? amountSats - serviceFee - BTC_MINER_FEE_ESTIMATE : 0;
 
   // Submit handler
   const handleConfirm = useCallback(async () => {

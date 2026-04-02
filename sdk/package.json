@@ -85,14 +85,14 @@
     "e2e": "bun run scripts/e2e-mock-spv.ts"
   },
   "dependencies": {
-    "@noble/curves": "^2.0.1",
-    "@noble/hashes": "^1.8.0",
-    "@scure/base": "^2.0.0",
-    "@scure/btc-signer": "^2.0.1",
+    "@noble/curves": "2.0.1",
+    "@noble/hashes": "1.8.0",
+    "@scure/base": "2.0.0",
+    "@scure/btc-signer": "2.0.1",
     "@solana-program/system": "^0.10.0",
     "@solana/kit": "^5.5.0",
     "bech32": "^2.0.0",
-    "poseidon-lite": "^0.3.0"
+    "poseidon-lite": "0.3.0"
   },
   "devDependencies": {
     "@solana/web3.js": "^1.98.4",

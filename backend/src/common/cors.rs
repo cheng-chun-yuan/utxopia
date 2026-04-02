@@ -25,10 +25,11 @@ pub fn cors_from_env() -> CorsLayer {
             tracing::warn!(
                 "ALLOWED_ORIGIN not set — defaulting to localhost:3000 (set ALLOWED_ORIGIN for production)"
             );
+            let origin = "http://localhost:3000"
+                .parse()
+                .expect("static localhost origin is always valid");
             CorsLayer::new()
-                .allow_origin(AllowOrigin::list(vec![
-                    "http://localhost:3000".parse().unwrap(),
-                ]))
+                .allow_origin(AllowOrigin::list(vec![origin]))
                 .allow_methods(Any)
                 .allow_headers(Any)
         }

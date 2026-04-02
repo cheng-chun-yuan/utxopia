@@ -132,7 +132,7 @@ AEGIS_FROST_PARTICIPANTS=3
 AEGIS_FROST_SIGNER_URLS=http://localhost:9001,http://localhost:9002,http://localhost:9003
 AEGIS_FROST_KEY_SHARE=placeholder
 AEGIS_FROST_GROUP_PUBKEY=$GROUP_PUBKEY
-AEGIS_FROST_API_KEY=29372dc836a25d7bdcdbd2fa63fbfcc0d00f06ca710a3aa935b61cf5d6426912
+AEGIS_FROST_API_KEY=\${AEGIS_FROST_API_KEY:?Set AEGIS_FROST_API_KEY env var}
 
 # ─── Tracker & Indexer ───────────────────────────────────────────────────────
 TRACKER_API_PORT=3001
@@ -143,7 +143,7 @@ AEGIS_DEMO_MODE=1
 
 # ─── Keypairs ────────────────────────────────────────────────────────────────
 VERIFIER_KEYPAIR=verifier-keypair.json
-RELAYER_KEYPAIR=[50,128,114,217,238,93,48,208,84,69,168,140,72,35,173,128,57,239,14,139,145,69,241,221,89,52,36,156,104,238,166,101,13,98,59,211,107,90,137,69,248,31,168,162,72,104,198,209,65,164,43,83,227,202,213,91,45,163,238,203,91,107,68,170]
+RELAYER_KEYPAIR=\${RELAYER_KEYPAIR:?Set RELAYER_KEYPAIR env var}
 
 # ─── WebSocket & Header Relay ────────────────────────────────────────────────
 MEMPOOL_WS_ENABLED=$MEMPOOL_WS
@@ -156,7 +156,7 @@ RELAYER_FEE_SATS=500
 AEGIS_BROADCAST_MODE=real
 
 # ─── API Auth ────────────────────────────────────────────────────────────────
-BACKEND_API_KEY=aegis-backend-2026
+BACKEND_API_KEY=\${BACKEND_API_KEY:?Set BACKEND_API_KEY env var}
 
 # ─── Allowed Origins ─────────────────────────────────────────────────────────
 ALLOWED_ORIGIN=http://localhost:3000

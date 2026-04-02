@@ -9,6 +9,7 @@
  */
 
 import { poseidonHashSync, initPoseidon } from "./poseidon";
+import { debug, warn } from "./logger";
 
 // Re-export initPoseidon for tree initialization
 export { initPoseidon };
@@ -523,12 +524,10 @@ export function getCommitmentIndex(): CommitmentTreeIndex {
         const stored = localStorage.getItem("aegis_commitment_index");
         if (stored) {
           globalIndex.import(JSON.parse(stored));
-          console.log(
-            `[CommitmentIndex] Loaded ${globalIndex.size()} commitments from storage`
-          );
+          debug("tree", `Loaded ${globalIndex.size()} commitments from storage`);
         }
       } catch (e) {
-        console.warn("[CommitmentIndex] Failed to load from storage:", e);
+        warn("tree", "Failed to load from storage:", e);
       }
     }
   }
@@ -545,9 +544,9 @@ export function saveCommitmentIndex(): void {
     try {
       const data = globalIndex.export();
       localStorage.setItem("aegis_commitment_index", JSON.stringify(data));
-      console.log(`[CommitmentIndex] Saved ${globalIndex.size()} commitments`);
+      debug("tree", `Saved ${globalIndex.size()} commitments`);
     } catch (e) {
-      console.warn("[CommitmentIndex] Failed to save to storage:", e);
+      warn("tree", "Failed to save to storage:", e);
     }
   }
 }
@@ -627,7 +626,7 @@ export async function buildCommitmentTreeFromChain(
     tree.addCommitment(commitment, 0n);
   }
 
-  console.log(`[CommitmentTree] Built tree with ${tree.size()} leaves, root: ${tree.getRoot().toString(16).slice(0, 16)}...`);
+  debug("tree", `Built tree with ${tree.size()} leaves`);
   return tree;
 }
 
@@ -697,7 +696,7 @@ export async function fetchMerkleProofForCommitment(
   const proof = tree.getMerkleProof(commitment);
 
   if (!proof) {
-    console.warn(`[CommitmentTree] Commitment not found in tree: ${commitment.toString(16).slice(0, 16)}...`);
+    warn("tree", "Commitment not found in tree");
     return null;
   }
 

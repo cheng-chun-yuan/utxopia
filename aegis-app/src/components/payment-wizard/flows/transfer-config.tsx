@@ -3,14 +3,10 @@ import type { FlowConfig } from "../payment-wizard";
 
 async function resolveStealthRecipient(address: string) {
   try {
-    const { AegisClient, decodeStealthMetaAddress } = await import("@aegis/sdk");
-    const client = AegisClient.isInitialized ? AegisClient.instance() : await AegisClient.init();
+    const { decodeStealthMetaAddress } = await import("@aegis/sdk");
 
-    // Try SNS resolution first
-    if (address.includes(".sol") || !address.startsWith("aegis:")) {
-      const meta = await client.resolveStealthAddress(address);
-      if (meta) return meta;
-    }
+    // TODO: SNS resolution requires a ConnectionAdapter — implement when SNS is live
+    // For now, only support direct aegis: stealth addresses
 
     // Direct stealth meta address
     if (address.startsWith("aegis:")) {

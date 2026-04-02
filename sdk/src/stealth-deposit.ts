@@ -69,6 +69,7 @@ export const STEALTH_OP_RETURN_SIZE = 32;
 export const VERIFY_STEALTH_DEPOSIT_DISCRIMINATOR = 11;
 
 import { AEGIS_PROGRAM_ID } from "./pda";
+import { debug } from "./logger";
 const SYSTEM_PROGRAM_ID: Address = address(
   "11111111111111111111111111111111"
 );
@@ -211,9 +212,7 @@ export async function verifyStealthDeposit(
   network: "mainnet" | "testnet" = "testnet",
   programId: Address = AEGIS_PROGRAM_ID
 ): Promise<string> {
-  console.log("=== Verify Stealth Deposit ===");
-  console.log(`Txid: ${btcTxid}`);
-  console.log(`Expected value: ${expectedValue} sats`);
+  debug("stealth", "Verify Stealth Deposit", { txid: btcTxid.slice(0, 12) + "...", sats: expectedValue });
 
   if (ephemeralPub.length !== 32) {
     throw new Error("ephemeralPub must be 32 bytes (Ed25519)");
@@ -235,11 +234,7 @@ export async function verifyStealthDeposit(
   const [lightClient] = await deriveLightClientPDA(BTC_LIGHT_CLIENT_PROGRAM_ID);
   const [commitmentTree] = await deriveCommitmentTreePDA(programId);
 
-  console.log("PDAs derived:");
-  console.log(`  Pool: ${poolState}`);
-  console.log(`  VerifiedTx: ${verifiedTransactionPda}`);
-  console.log(`  Light Client: ${lightClient}`);
-  console.log(`  Commitment Tree: ${commitmentTree}`);
+  debug("stealth", "PDAs derived", { pool: String(poolState).slice(0, 8), tree: String(commitmentTree).slice(0, 8) });
 
   const instructionData = buildVerifyStealthDepositData({
     txid: txidBytes,
@@ -284,7 +279,7 @@ export async function verifyStealthDeposit(
   await sendAndConfirm(signedTx as any, { commitment: "confirmed" });
 
   const signature = getSignatureFromTransaction(signedTx);
-  console.log(`Transaction confirmed: ${signature}`);
+  debug("stealth", "Transaction confirmed", signature.slice(0, 12));
   return signature;
 }
 

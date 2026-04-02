@@ -631,7 +631,7 @@ export async function deserializeDelegatedViewKey(
   const passwordBytes = new TextEncoder().encode(password);
 
   if (obj.version === 1) {
-    const iterations = 150_000;
+    const iterations = 600_000;
     const encryptionKey = pbkdf2(sha256, passwordBytes, salt, { c: iterations, dkLen: 32 });
 
     const keyBuffer = encryptionKey.buffer.slice(
