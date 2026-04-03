@@ -43,9 +43,9 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
-import { useAegisKeys } from "@/hooks/use-privacy-coin";
+import { usePrivacyCoinKeys } from "@/hooks/use-privacy-coin";
 import { usePasskey } from "@/hooks/use-passkey";
-import { useAegisStore } from "@/stores";
+import { usePrivacyCoinStore } from "@/stores";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useSnsName } from "@/hooks/use-sns-name";
 import { useStealthInbox } from "@/hooks/use-privacy-coin";
@@ -68,7 +68,7 @@ export default function VaultPage() {
     error,
     deriveKeys,
     clearKeys,
-  } = useAegisKeys();
+  } = usePrivacyCoinKeys();
   const { copied: snsCopied, copy: copySns } = useCopyToClipboard();
   const { copied: stealthCopied, copy: copyStealth } = useCopyToClipboard();
   const { copied: viewKeyCopied, copy: copyViewKey } = useCopyToClipboard();
@@ -103,8 +103,8 @@ export default function VaultPage() {
   const tokenPrices = useTokenPrices();
   const btcPrice = tokenPrices.btc;
 
-  const deriveKeysFromPasskeySeed = useAegisStore((s) => s.deriveKeysFromPasskeySeed);
-  const loadViewOnlyKeys = useAegisStore((s) => s.loadViewOnlyKeys);
+  const deriveKeysFromPasskeySeed = usePrivacyCoinStore((s) => s.deriveKeysFromPasskeySeed);
+  const loadViewOnlyKeys = usePrivacyCoinStore((s) => s.loadViewOnlyKeys);
 
   const handlePasskeyRegister = async () => {
     const seed = await registerPasskey();
@@ -125,7 +125,7 @@ export default function VaultPage() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [viewKeyModalOpen, setViewKeyModalOpen] = useState(false);
 
-  const isPasskeyUser = keys && keys.solanaPublicKey.every(b => b === 0);
+  const isPasskeyUser = keys && keys.solanaPublicKey.every((b: number) => b === 0);
 
   const snsConfig = getConfig();
   const parentDomain = snsConfig.snsParentDomain || "btcpro";

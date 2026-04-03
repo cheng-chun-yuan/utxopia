@@ -36,13 +36,13 @@ import { useBitcoinWalletStore } from "@/stores/bitcoin-wallet-store";
 
 import { MobileWalletGuidance } from "@/components/bitcoin-wallet-selector";
 import { useIsMobileWithoutWallet } from "@/hooks/use-mobile-wallet-detect";
-import { usePrivacy Coin } from "@/hooks/use-privacy-coin";
+import { usePrivacyCoin } from "@/hooks/use-privacy-coin";
 import { useDepositFlow } from "@/hooks/use-deposit-flow";
 import { StealthRecipientInput } from "@/components/ui/stealth-recipient-input";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 
 export function DepositFlow() {
-  const { stealthAddress } = useAegis();
+  const { stealthAddress } = usePrivacyCoin();
   const btcWallet = useBitcoinWalletStore();
   const isMobileNoWallet = useIsMobileWithoutWallet();
 

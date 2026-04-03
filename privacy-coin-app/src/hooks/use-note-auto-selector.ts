@@ -7,11 +7,11 @@
  */
 
 import { useMemo } from "react";
-import { usePrivacy Coin } from "@/hooks/use-privacy-coin";
+import { usePrivacyCoin } from "@/hooks/use-privacy-coin";
 import { autoSelectNotes } from "@/components/btc-widget/pay-flow/helpers";
 
 export function useNoteAutoSelector(tokenSymbol: string, amountSats: number) {
-  const { inboxNotes, inboxLoading, refreshInbox } = useAegis();
+  const { inboxNotes, inboxLoading, refreshInbox } = usePrivacyCoin();
 
   const availableNotes = useMemo(
     () => inboxNotes.filter((n) => n.amount > 0n && !n.isSpent && n.tokenSymbol === tokenSymbol),

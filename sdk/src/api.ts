@@ -130,7 +130,7 @@ export async function depositToNote(
   );
 
   // Encode nullifier+secret as claim link
-  const claimLink = `${baseUrl || "https://aegis.app"}/claim#note=${encodeClaimLink(
+  const claimLink = `${baseUrl || "https://privacy-coin.app"}/claim#note=${encodeClaimLink(
     `${note.nullifier.toString(16)}.${note.secret.toString(16)}`
   )}`;
 
@@ -156,4 +156,4 @@ export {
 export type { Note } from "./note";
 export type { MerkleProof } from "./merkle";
 export type { StealthDeposit, ScannedNote, ClaimInputs } from "./stealth";
-export type { StealthMetaAddress, AegisKeys } from "./keys";
+export type { StealthMetaAddress, PrivacyCoinKeys } from "./keys";

@@ -28,8 +28,8 @@ import {
   recreateStealthAddress,
   serializeKeysForStorage,
   deserializeKeysFromStorage,
-  clearAegisKeys,
-  type AegisKeys,
+  clearPrivacyCoinKeys,
+  type PrivacyCoinKeys,
   type StealthMetaAddress,
   type WalletSignerAdapter,
   type KeySetupResult,
@@ -84,7 +84,7 @@ export interface InboxNote {
 let _instance: PrivacyCoinClient | null = null;
 
 export class PrivacyCoinClient {
-  private _keys: AegisKeys | null = null;
+  private _keys: PrivacyCoinKeys | null = null;
   private _viewOnlyKeys: ViewOnlyKeys | null = null;
   private _isViewOnly = false;
   private _stealthAddress: StealthMetaAddress | null = null;
@@ -204,7 +204,7 @@ export class PrivacyCoinClient {
    */
   logout(): void {
     if (this._keys) {
-      clearAegisKeys(this._keys);
+      clearPrivacyCoinKeys(this._keys);
     }
     this._keys = null;
     this._viewOnlyKeys = null;
@@ -223,7 +223,7 @@ export class PrivacyCoinClient {
 
   // ─── Getters ────────────────────────────────────────────────────
 
-  get keys(): AegisKeys | null { return this._keys; }
+  get keys(): PrivacyCoinKeys | null { return this._keys; }
   get stealthAddress(): StealthMetaAddress | null { return this._stealthAddress; }
   get stealthAddressEncoded(): string | null { return this._stealthAddressEncoded; }
   get isAuthenticated(): boolean { return this._keys !== null || this._viewOnlyKeys !== null; }
@@ -402,7 +402,7 @@ export class PrivacyCoinClient {
   async prepareShieldOutput(opts: {
     amount: bigint;
     mintAddress: string;
-    recipient?: AegisKeys;
+    recipient?: PrivacyCoinKeys;
   }): Promise<StealthOutputWithKeys & { tokenId: bigint }> {
     const keys = opts.recipient ?? this._keys;
     if (!keys) throw new Error("No keys (login first or provide recipient)");
@@ -460,7 +460,7 @@ export class PrivacyCoinClient {
    * Hash transaction inputs and sign with EdDSA-Poseidon.
    *
    * @param msgHashInputs - Array of bigints to hash (merkleRoot, boundParamsHash, nullifiers, commitments)
-   * @param eddsaSeed - The EdDSA seed bytes (from AegisKeys.eddsaSeed)
+   * @param eddsaSeed - The EdDSA seed bytes (from PrivacyCoinKeys.eddsaSeed)
    */
   async signTransaction(
     msgHashInputs: bigint[],

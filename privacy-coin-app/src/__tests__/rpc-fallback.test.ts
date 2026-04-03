@@ -125,7 +125,7 @@ describe("RPC fallback: instruction discriminator extraction", () => {
     expect(extractInstructionDisc(result)).toBe(29);
   });
 
-  it("returns null for non-Privacy Coin transaction", () => {
+  it("returns null for non-PrivacyCoin transaction", () => {
     const result = {
       transaction: {
         message: {

@@ -7,9 +7,9 @@ export {
 } from "./bitcoin-wallet-store";
 
 export {
-  useAegisStore,
-  useAegis,
-  useAegisKeys,
+  usePrivacyCoinStore,
+  usePrivacyCoin,
+  usePrivacyCoinKeys,
   useStealthInbox,
   type InboxNote,
 } from "./privacy-coin-store";

@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 import { parseSats } from "@/lib/utils/validation";
 import { formatBtc, formatAmount, truncateMiddle } from "@/lib/utils/formatting";
 import { BTC_DUST_LIMIT, BTC_MINER_FEE_ESTIMATE, TOKEN_2022_PROGRAM_ID_STR } from "@/lib/btc-constants";
-import { usePrivacy Coin } from "@/hooks/use-privacy-coin";
+import { usePrivacyCoin } from "@/hooks/use-privacy-coin";
 import { usePayFlowNotes } from "@/hooks/use-pay-flow-notes";
 import { usePayFlowAuth } from "@/hooks/use-pay-flow-auth";
 import { AuthModal } from "@/components/auth-modal";
@@ -98,7 +98,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
     stealthAddress,
     publicZkbtcBalance,
     refreshPublicBalance,
-  } = useAegis();
+  } = usePrivacyCoin();
   const prover = useProver();
   const { setVisible: setWalletModalVisible } = useWalletModal();
 
@@ -444,8 +444,8 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
           merklePath: bigint[];
           merkleIndices: number[];
         };
-        // For imported notes: phrase-derived AegisKeys
-        importedKeys?: import("@privacy-coin/sdk").AegisKeys;
+        // For imported notes: phrase-derived PrivacyCoinKeys
+        importedKeys?: import("@privacy-coin/sdk").PrivacyCoinKeys;
       }[];
 
       if (hasImportedNotes) {
@@ -607,7 +607,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
             stealthPubKeyX: addrReduced,
           } as Awaited<ReturnType<typeof createStealthDepositWithKeys>>);
         } else if (output.mode === "note") {
-          // Note output: derive full AegisKeys from phrase, create proper stealth deposit
+          // Note output: derive full PrivacyCoinKeys from phrase, create proper stealth deposit
           // Must use deriveKeysFromSeedCircuit so spendingPubKey matches circomlibjs EdDSA
           // (sync-derived keys produce a different pubkey that fails EdDSAPoseidonVerifier)
           const masterKey = deriveMasterKey(output.secretPhrase.trim());

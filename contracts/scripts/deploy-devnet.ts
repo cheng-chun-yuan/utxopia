@@ -70,7 +70,7 @@ const CONFIG_PATH = path.join(CONTRACTS_DIR, "config.json");
 const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
 
 // Seeds for Privacy Coin PDAs
-const PRIVACY_COINSeeds = {
+const PC_Seeds = {
   POOL_STATE: "pool_state",
   COMMITMENT_TREE: "commitment_tree",
 };
@@ -81,7 +81,7 @@ const BTCLCSeeds = {
 };
 
 // Instruction discriminators
-const PRIVACY_COINInstruction = {
+const PC_Instruction = {
   INITIALIZE: 0,
   ADD_DEMO_STEALTH: 13,
 };
@@ -265,14 +265,14 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
 
 function derivePoolStatePDA(programId: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from(PRIVACY_COINSeeds.POOL_STATE)],
+    [Buffer.from(PC_Seeds.POOL_STATE)],
     programId
   );
 }
 
 function deriveCommitmentTreePDA(programId: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from(PRIVACY_COINSeeds.COMMITMENT_TREE)],
+    [Buffer.from(PC_Seeds.COMMITMENT_TREE)],
     programId
   );
 }
@@ -335,7 +335,7 @@ function buildBTCLCInitializeIx(
   });
 }
 
-function buildPRIVACY_COINInitializeIx(
+function buildPrivacyCoinInitializeIx(
   poolState: PublicKey,
   commitmentTree: PublicKey,
   zkbtcMint: PublicKey,
@@ -347,7 +347,7 @@ function buildPRIVACY_COINInitializeIx(
   treeBump: number
 ): TransactionInstruction {
   const data = Buffer.alloc(3);
-  data[0] = PRIVACY_COINInstruction.INITIALIZE;
+  data[0] = PC_Instruction.INITIALIZE;
   data[1] = poolBump;
   data[2] = treeBump;
 
@@ -560,7 +560,7 @@ async function initializePRIVACY_COIN(
 
   // Initialize Aegis
   log("Initializing Privacy Coin pool...");
-  const ix = buildPRIVACY_COINInitializeIx(
+  const ix = buildPrivacyCoinInitializeIx(
     poolStatePda,
     commitmentTreePda,
     zkbtcMint,

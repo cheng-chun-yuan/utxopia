@@ -11,7 +11,7 @@ import {
   scanAnnouncementsViewOnly,
   decodeViewOnlyKeys,
   EventClient,
-  type AegisKeys,
+  type PrivacyCoinKeys,
   type StealthMetaAddress,
   type ViewOnlyKeys,
   type ScannedNote,
@@ -70,7 +70,7 @@ async function decryptData(key: CryptoKey, encrypted: string): Promise<string> {
   return new TextDecoder().decode(plaintext);
 }
 
-async function persistKeys(walletPubkey: string, _keys: AegisKeys): Promise<void> {
+async function persistKeys(walletPubkey: string, _keys: PrivacyCoinKeys): Promise<void> {
   try {
     const client = PrivacyCoinClient.instance();
     const data = client.serializeKeys();
@@ -83,7 +83,7 @@ async function persistKeys(walletPubkey: string, _keys: AegisKeys): Promise<void
   }
 }
 
-async function loadKeys(walletPubkey: string, solanaPublicKey: Uint8Array): Promise<AegisKeys | null> {
+async function loadKeys(walletPubkey: string, solanaPublicKey: Uint8Array): Promise<PrivacyCoinKeys | null> {
   try {
     const raw = localStorage.getItem(KEYS_STORAGE_PREFIX + walletPubkey);
     if (!raw) return null;
@@ -163,12 +163,12 @@ export interface ActiveWithdrawal {
   updatedAt: number;
 }
 
-interface AegisState {
+interface PrivacyCoinState {
   // Poseidon
   isPoseidonReady: boolean;
 
   // Keys
-  keys: AegisKeys | null;
+  keys: PrivacyCoinKeys | null;
   viewOnlyKeys: ViewOnlyKeys | null;
   isViewOnly: boolean;
   stealthAddress: StealthMetaAddress | null;
@@ -214,7 +214,7 @@ interface AegisState {
 // Store
 // ============================================================================
 
-export const useAegisStore = create<AegisState>((set, get) => ({
+export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
   // Initial state
   isPoseidonReady: false,
   keys: null,
@@ -473,7 +473,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
             if (!mintAddr && token.symbol === "zkBTC") mintAddr = config.zkbtcMint;
             if (!mintAddr) continue; // skip tokens without mint addresses
             tokensToScan.push({ symbol: token.shieldedSymbol, tokenId: aegisClient.getTokenId(mintAddr) });
-          } catch (err) { console.error("[AegisStore] invalid mint for token:", token.symbol, err); }
+          } catch (err) { console.error("[PrivacyCoinStore] invalid mint for token:", token.symbol, err); }
         }
 
         // Scan locally for privacy (server doesn't know which are ours)
@@ -668,12 +668,12 @@ export const useAegisStore = create<AegisState>((set, get) => ({
 // Convenience Hooks
 // ============================================================================
 
-export function useAegis() {
-  return useAegisStore();
+export function usePrivacyCoin() {
+  return usePrivacyCoinStore();
 }
 
-export function useAegisKeys() {
-  const store = useAegisStore();
+export function usePrivacyCoinKeys() {
+  const store = usePrivacyCoinStore();
   return {
     keys: store.keys,
     stealthAddress: store.stealthAddress,
@@ -687,7 +687,7 @@ export function useAegisKeys() {
 }
 
 export function useStealthInbox() {
-  const store = useAegisStore();
+  const store = usePrivacyCoinStore();
   return {
     notes: store.inboxNotes,
     totalAmountSats: store.inboxTotalSats,

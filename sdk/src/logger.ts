@@ -1,7 +1,7 @@
 /**
  * Conditional debug logger for PRIVACY_COIN SDK.
  *
- * Set `PRIVACY_COIN_DEBUG=1` (Node.js) or `localStorage.aegisDebug = "1"` (browser)
+ * Set `PRIVACY_COIN_DEBUG=1` (Node.js) or `localStorage.privacyCoinDebug = "1"` (browser)
  * to enable debug output. All logs are suppressed by default.
  */
 
@@ -18,7 +18,7 @@ function isEnabled(): boolean {
   } catch { /* not Node */ }
   try {
     // Browser
-    if (typeof localStorage !== "undefined" && localStorage.getItem("aegisDebug") === "1") {
+    if (typeof localStorage !== "undefined" && localStorage.getItem("privacyCoinDebug") === "1") {
       _enabled = true;
       return true;
     }

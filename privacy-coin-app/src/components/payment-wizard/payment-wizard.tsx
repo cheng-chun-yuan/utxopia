@@ -18,7 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { parseSats } from "@/lib/utils/validation";
 import { formatAmount } from "@/lib/utils/formatting";
-import { useAegis, useAegisKeys } from "@/hooks/use-privacy-coin";
+import { usePrivacyCoin, usePrivacyCoinKeys } from "@/hooks/use-privacy-coin";
 import { useNoteAutoSelector } from "@/hooks/use-note-auto-selector";
 import { useJoinSplitSubmit } from "@/hooks/use-joinsplit-submit";
 import { buildTransferParams, type TransferMode } from "@/hooks/use-build-transfer-params";
@@ -123,8 +123,8 @@ function StepDots({ current, total }: { current: number; total: number }) {
 export function PaymentWizard({ config }: { config: FlowConfig }) {
   const { publicKey, connected } = useWallet();
   const { setVisible: setWalletModalVisible } = useWalletModal();
-  const { keys, hasKeys, deriveKeys, isLoading: keysLoading, stealthAddress } = useAegisKeys();
-  const { refreshInbox, refreshPublicBalance } = useAegis();
+  const { keys, hasKeys, deriveKeys, isLoading: keysLoading, stealthAddress } = usePrivacyCoinKeys();
+  const { refreshInbox, refreshPublicBalance } = usePrivacyCoin();
 
   const {
     authModalOpen, setAuthModalOpen,

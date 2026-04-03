@@ -61,7 +61,7 @@ import {
   prepareClaimInputs,
   bytesToBigint,
   type ClaimInputs,
-  type AegisKeys,
+  type PrivacyCoinKeys,
   type StealthMetaAddress,
   type ScannedNote,
 } from "@privacy-coin/sdk";
@@ -633,7 +633,7 @@ async function main() {
 
   // Generate deterministic keys from a seed (simulating wallet signature derivation)
   const testSeed = randomFieldElement();
-  const keys: AegisKeys = await deriveKeysFromSeed(bigintToBytes32(testSeed));
+  const keys: PrivacyCoinKeys = await deriveKeysFromSeed(bigintToBytes32(testSeed));
 
   // Create stealth meta address (spending + viewing public keys)
   const stealthMetaAddress: StealthMetaAddress = createStealthMetaAddress(keys);

@@ -33,7 +33,7 @@ describe("DEPOSIT", () => {
 
     expect(result.note.amount).toBe(100_000n);
     expect(result.taprootAddress).toMatch(/^tb1p/);
-    expect(result.claimLink).toContain("aegis.app/claim");
+    expect(result.claimLink).toContain("privacy-coin.app/claim");
     expect(result.displayAmount).toBe("0.00100000 BTC");
   });
 

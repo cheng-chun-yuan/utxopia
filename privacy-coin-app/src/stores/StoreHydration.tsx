@@ -3,7 +3,7 @@
 import { useEffect, useRef, useCallback, type JSX } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useBitcoinWalletStore } from "./bitcoin-wallet-store";
-import { useAegisStore } from "./privacy-coin-store";
+import { usePrivacyCoinStore } from "./privacy-coin-store";
 
 /**
  * Component to hydrate Zustand stores on mount.
@@ -12,18 +12,18 @@ import { useAegisStore } from "./privacy-coin-store";
  */
 export function StoreHydration(): JSX.Element {
   const hydrateBtcWallet = useBitcoinWalletStore((s) => s._hydrate);
-  const initPoseidon = useAegisStore((s) => s.initPoseidon);
-  const keys = useAegisStore((s) => s.keys);
-  const viewOnlyKeys = useAegisStore((s) => s.viewOnlyKeys);
+  const initPoseidon = usePrivacyCoinStore((s) => s.initPoseidon);
+  const keys = usePrivacyCoinStore((s) => s.keys);
+  const viewOnlyKeys = usePrivacyCoinStore((s) => s.viewOnlyKeys);
   const hasAnyKeys = !!(keys || viewOnlyKeys);
-  const isPoseidonReady = useAegisStore((s) => s.isPoseidonReady);
-  const hydrateKeys = useAegisStore((s) => s.hydrateKeys);
-  const hydratePasskeyKeys = useAegisStore((s) => s.hydratePasskeyKeys);
-  const inboxLoading = useAegisStore((s) => s.inboxLoading);
-  const inboxNotesLength = useAegisStore((s) => s.inboxNotes.length);
-  const refreshInbox = useAegisStore((s) => s.refreshInbox);
+  const isPoseidonReady = usePrivacyCoinStore((s) => s.isPoseidonReady);
+  const hydrateKeys = usePrivacyCoinStore((s) => s.hydrateKeys);
+  const hydratePasskeyKeys = usePrivacyCoinStore((s) => s.hydratePasskeyKeys);
+  const inboxLoading = usePrivacyCoinStore((s) => s.inboxLoading);
+  const inboxNotesLength = usePrivacyCoinStore((s) => s.inboxNotes.length);
+  const refreshInbox = usePrivacyCoinStore((s) => s.refreshInbox);
 
-  const refreshPublicBalance = useAegisStore((s) => s.refreshPublicBalance);
+  const refreshPublicBalance = usePrivacyCoinStore((s) => s.refreshPublicBalance);
   const { publicKey: walletPubkey } = useWallet();
 
   // Track if we've already triggered a refresh

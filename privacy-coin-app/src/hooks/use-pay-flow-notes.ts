@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useAegis, type InboxNote } from "@/hooks/use-privacy-coin";
+import { usePrivacyCoin, type InboxNote } from "@/hooks/use-privacy-coin";
 import { autoSelectNotes, type PayToken } from "@/components/btc-widget/pay-flow/helpers";
 import { scanSecretPhrase, type ScannedSecretNote } from "@/lib/claim-utils";
 
@@ -24,7 +24,7 @@ export function usePayFlowNotes(
     inboxNotes,
     inboxLoading,
     refreshInbox,
-  } = useAegis();
+  } = usePrivacyCoin();
 
   // Input notes state
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());
@@ -150,7 +150,7 @@ export function usePayFlowNotes(
   }, []);
 
   return {
-    // Inbox state (pass-through from useAegis)
+    // Inbox state (pass-through from usePrivacyCoin)
     inboxNotes,
     inboxLoading,
     refreshInbox,

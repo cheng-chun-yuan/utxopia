@@ -64,12 +64,12 @@ export {
   encodeStealthMetaAddress,
   decodeStealthMetaAddress,
   // Key lifecycle
-  clearAegisKeys,
+  clearPrivacyCoinKeys,
   // Key serialization
   serializeKeysForStorage,
   deserializeKeysFromStorage,
   // Types
-  type AegisKeys,
+  type PrivacyCoinKeys,
   type KeySetupResult,
   type SerializedKeysForStorage,
   type StealthMetaAddress,

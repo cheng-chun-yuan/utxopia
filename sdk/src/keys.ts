@@ -66,7 +66,7 @@ type Eddsa = any;
  *
  * Uses Baby Jubjub for spending keys and Ed25519 for viewing keys.
  */
-export interface AegisKeys {
+export interface PrivacyCoinKeys {
   /** Solana public key (32 bytes) - user identity */
   solanaPublicKey: Uint8Array;
 
@@ -316,7 +316,7 @@ export interface WalletSignerAdapter {
  */
 export async function deriveKeysFromWallet(
   wallet: WalletSignerAdapter
-): Promise<AegisKeys> {
+): Promise<PrivacyCoinKeys> {
   if (!wallet.publicKey) {
     throw new Error("Wallet not connected");
   }
@@ -350,7 +350,7 @@ export async function deriveKeysFromWallet(
 export function deriveKeysFromSignature(
   signature: Uint8Array,
   solanaPublicKey: Uint8Array
-): AegisKeys {
+): PrivacyCoinKeys {
   if (signature.length !== 64) {
     throw new Error("Signature must be 64 bytes");
   }
@@ -398,7 +398,7 @@ export function deriveKeysFromSignature(
 /**
  * Derive keys from a seed phrase (sync — for scanning/non-circuit use)
  */
-export function deriveKeysFromSeed(seed: Uint8Array): AegisKeys {
+export function deriveKeysFromSeed(seed: Uint8Array): PrivacyCoinKeys {
   const fakeSig = new Uint8Array(64);
   const hash1 = sha256(seed);
   const hash2 = sha256(concatBytes(seed, new Uint8Array([1])));
@@ -415,7 +415,7 @@ export function deriveKeysFromSeed(seed: Uint8Array): AegisKeys {
  * The sync `deriveKeysFromSeed` uses a different scalar derivation that doesn't
  * match circomlibjs's internal BLAKE-512 derivation used by `eddsaPoseidonSign`.
  */
-export async function deriveKeysFromSeedCircuit(seed: Uint8Array): Promise<AegisKeys> {
+export async function deriveKeysFromSeedCircuit(seed: Uint8Array): Promise<PrivacyCoinKeys> {
   const baseKeys = deriveKeysFromSeed(seed);
 
   // Override spending keys with circomlibjs-derived versions (same as deriveKeysFromWallet)
@@ -436,7 +436,7 @@ export async function deriveKeysFromSeedCircuit(seed: Uint8Array): Promise<Aegis
  *
  * Size: 96 bytes (32 BJJ compressed + 32 Ed25519 + 32 MPK)
  */
-export function createStealthMetaAddress(keys: AegisKeys): StealthMetaAddress {
+export function createStealthMetaAddress(keys: PrivacyCoinKeys): StealthMetaAddress {
   const mpk = computeMPKSync(
     keys.spendingPubKey.x,
     keys.spendingPubKey.y,
@@ -521,7 +521,7 @@ export function decodeStealthMetaAddress(encoded: string): StealthMetaAddress {
  * Create a delegated viewing key for auditors/compliance
  */
 export function createDelegatedViewKey(
-  keys: AegisKeys,
+  keys: PrivacyCoinKeys,
   permissions: ViewPermissions = ViewPermissions.FULL,
   options: { expiresAt?: number; label?: string } = {}
 ): DelegatedViewKey {
@@ -719,9 +719,9 @@ export function clearKey(key: Uint8Array): void {
 }
 
 /**
- * Securely clear all sensitive keys from an AegisKeys object
+ * Securely clear all sensitive keys from an PrivacyCoinKeys object
  */
-export function clearAegisKeys(keys: AegisKeys): void {
+export function clearPrivacyCoinKeys(keys: PrivacyCoinKeys): void {
   (keys as { spendingPrivKey: bigint }).spendingPrivKey = 0n;
   (keys as { nullifyingKey: bigint }).nullifyingKey = 0n;
   clearKey(keys.viewingPrivKey);
@@ -739,7 +739,7 @@ export function clearDelegatedViewKey(key: DelegatedViewKey): void {
  * Derive a view-only key bundle (no spending key)
  * Safe to export/backup separately from spending key
  */
-export function extractViewOnlyBundle(keys: AegisKeys): {
+export function extractViewOnlyBundle(keys: PrivacyCoinKeys): {
   solanaPublicKey: Uint8Array;
   spendingPubKey: Uint8Array;
   viewingPrivKey: Uint8Array;
@@ -768,11 +768,11 @@ export interface SerializedKeysForStorage {
 }
 
 /**
- * Serialize AegisKeys to a plain object with hex strings (for encrypted storage).
+ * Serialize PrivacyCoinKeys to a plain object with hex strings (for encrypted storage).
  *
  * The result is JSON-safe. Use `deserializeKeysFromStorage` to reconstruct.
  */
-export function serializeKeysForStorage(keys: AegisKeys): SerializedKeysForStorage {
+export function serializeKeysForStorage(keys: PrivacyCoinKeys): SerializedKeysForStorage {
   return {
     eddsaSeedHex: bytesToHex(keys.eddsaSeed),
     spendingPrivKeyHex: keys.spendingPrivKey.toString(16),
@@ -784,7 +784,7 @@ export function serializeKeysForStorage(keys: AegisKeys): SerializedKeysForStora
 }
 
 /**
- * Deserialize AegisKeys from a storage object (reverse of serializeKeysForStorage).
+ * Deserialize PrivacyCoinKeys from a storage object (reverse of serializeKeysForStorage).
  *
  * Requires `solanaPublicKey` to be provided separately since it is not stored
  * in the serialized format (it comes from the connected wallet).
@@ -792,7 +792,7 @@ export function serializeKeysForStorage(keys: AegisKeys): SerializedKeysForStora
 export function deserializeKeysFromStorage(
   data: SerializedKeysForStorage,
   solanaPublicKey: Uint8Array,
-): AegisKeys {
+): PrivacyCoinKeys {
   return {
     solanaPublicKey,
     spendingPrivKey: BigInt("0x" + data.spendingPrivKeyHex),
@@ -810,7 +810,7 @@ export function deserializeKeysFromStorage(
  * Result of a complete key setup operation (derivation + stealth address creation).
  */
 export interface KeySetupResult {
-  keys: AegisKeys;
+  keys: PrivacyCoinKeys;
   stealthAddress: StealthMetaAddress;
   stealthAddressEncoded: string;
 }
@@ -848,7 +848,7 @@ export async function setupKeysFromSeed(
  *
  * Use this when keys are already deserialized and you just need the stealth address.
  */
-export function recreateStealthAddress(keys: AegisKeys): {
+export function recreateStealthAddress(keys: PrivacyCoinKeys): {
   stealthAddress: StealthMetaAddress;
   stealthAddressEncoded: string;
 } {

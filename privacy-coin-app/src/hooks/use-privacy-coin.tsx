@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useConnection } from "@solana/wallet-adapter-react";
-import { useAegisStore, type InboxNote } from "@/stores";
+import { usePrivacyCoinStore, type InboxNote } from "@/stores";
 
 // Re-export types
 export type { InboxNote };
@@ -14,10 +14,10 @@ export type { InboxNote };
  * NOTE: Auto-refresh of inbox is handled in StoreHydration (renders once).
  * This hook just provides wallet-aware wrappers for store actions.
  */
-export function useAegis() {
+export function usePrivacyCoin() {
   const wallet = useWallet();
   const { connection } = useConnection();
-  const store = useAegisStore();
+  const store = usePrivacyCoinStore();
 
   // Wrap deriveKeys to automatically use wallet
   const deriveKeys = useCallback(async () => {
@@ -82,9 +82,9 @@ export function useAegis() {
   };
 }
 
-/** Keys-only subset of useAegis() */
-export function useAegisKeys() {
-  const ctx = useAegis();
+/** Keys-only subset of usePrivacyCoin() */
+export function usePrivacyCoinKeys() {
+  const ctx = usePrivacyCoin();
   return {
     keys: ctx.keys,
     isViewOnly: ctx.isViewOnly,
@@ -99,9 +99,9 @@ export function useAegisKeys() {
   };
 }
 
-/** Inbox-only subset of useAegis() */
+/** Inbox-only subset of usePrivacyCoin() */
 export function useStealthInbox() {
-  const ctx = useAegis();
+  const ctx = usePrivacyCoin();
   return {
     notes: ctx.inboxNotes,
     totalAmountSats: ctx.inboxTotalSats,
@@ -122,7 +122,7 @@ export function useStealthInbox() {
  * @param tokenSymbol - The shielded token symbol (e.g. "zkBTC", "zkSOL", "zkUSDC")
  */
 export function useTokenNotes(tokenSymbol: string) {
-  const { inboxNotes, inboxLoading } = useAegis();
+  const { inboxNotes, inboxLoading } = usePrivacyCoin();
 
   const availableNotes = useMemo(() => {
     return inboxNotes.filter(

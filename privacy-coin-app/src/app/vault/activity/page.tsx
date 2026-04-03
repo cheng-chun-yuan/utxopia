@@ -15,9 +15,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { useAegisKeys, useStealthInbox } from "@/hooks/use-privacy-coin";
+import { usePrivacyCoinKeys, useStealthInbox } from "@/hooks/use-privacy-coin";
 import { usePasskey } from "@/hooks/use-passkey";
-import { useAegisStore } from "@/stores/privacy-coin-store";
+import { usePrivacyCoinStore } from "@/stores/privacy-coin-store";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { AuthModal } from "@/components/auth-modal";
@@ -264,7 +264,7 @@ function ActivityFeed() {
 }
 
 function ActivityContent() {
-  const { hasKeys, isLoading: keysLoading, deriveKeys } = useAegisKeys();
+  const { hasKeys, isLoading: keysLoading, deriveKeys } = usePrivacyCoinKeys();
 
   // Auth modal state
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -278,7 +278,7 @@ function ActivityContent() {
     register: passkeyRegister,
     authenticate: passkeyAuthenticate,
   } = usePasskey();
-  const deriveKeysFromPasskeySeed = useAegisStore((s) => s.deriveKeysFromPasskeySeed);
+  const deriveKeysFromPasskeySeed = usePrivacyCoinStore((s) => s.deriveKeysFromPasskeySeed);
 
   const handlePasskeyRegister = async () => {
     const seed = await passkeyRegister();

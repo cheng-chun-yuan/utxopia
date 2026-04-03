@@ -9,7 +9,7 @@
 
 import { PublicKey } from "@solana/web3.js";
 import type { InboxNote } from "@/hooks/use-privacy-coin";
-import type { JoinSplitProofInputs, AegisKeys, StealthMetaAddress, ScannedNote } from "@privacy-coin/sdk";
+import type { JoinSplitProofInputs, PrivacyCoinKeys, StealthMetaAddress, ScannedNote } from "@privacy-coin/sdk";
 import { ZKBTC_TOKEN_ID, reduceToFieldOnChain } from "@/components/btc-widget/pay-flow/helpers";
 
 export type TransferMode = "stealth" | "public" | "btc";
@@ -20,7 +20,7 @@ export interface TransferUserInputs {
   /** Selected notes from inbox */
   selectedNotes: InboxNote[];
   /** User's aegis keys */
-  keys: AegisKeys;
+  keys: PrivacyCoinKeys;
   /** User's stealth meta address (for change output) */
   selfMeta: StealthMetaAddress;
   /** Relayer stealth meta (for fee output) */

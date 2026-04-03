@@ -1,6 +1,6 @@
 "use client";
 
-import { useAegisKeys } from "@/hooks/use-privacy-coin";
+import { usePrivacyCoinKeys } from "@/hooks/use-privacy-coin";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { Key, Shield } from "lucide-react";
@@ -21,7 +21,7 @@ export function StealthAddressCard({ onUnlock }: { onUnlock?: () => void }) {
     stealthAddressEncoded,
     isLoading,
     error,
-  } = useAegisKeys();
+  } = usePrivacyCoinKeys();
   const { copy, copied } = useCopyToClipboard();
 
   // Not connected
@@ -106,7 +106,7 @@ export function StealthAddressCard({ onUnlock }: { onUnlock?: () => void }) {
  * Compact version for header/nav
  */
 export function StealthAddressBadge({ onUnlock }: { onUnlock?: () => void }) {
-  const { keys, stealthAddressEncoded, isLoading } = useAegisKeys();
+  const { keys, stealthAddressEncoded, isLoading } = usePrivacyCoinKeys();
   const { copy, copied } = useCopyToClipboard();
 
   if (!keys) {

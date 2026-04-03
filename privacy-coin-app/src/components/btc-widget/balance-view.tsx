@@ -58,7 +58,7 @@ import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 import { useBackendDeposits } from "@/hooks/use-backend-deposits";
 import { useExplorer, toDepositRecord } from "@/hooks/use-explorer";
-import { useAegisStore, type InboxNote } from "@/stores";
+import { usePrivacyCoinStore, type InboxNote } from "@/stores";
 import { isDepositForViewerHex } from "@privacy-coin/sdk";
 
 // =============================================================================
@@ -421,8 +421,8 @@ export function BalanceView() {
   const { deposits: backendDeposits, isLoading: backendLoading } = useBackendDeposits();
   const { transactions: explorerTxs, isLoading: explorerLoading } = useExplorer();
   const explorerDeposits = explorerTxs.filter(t => t.type === "shield").map(toDepositRecord);
-  const keys = useAegisStore((s) => s.keys);
-  const inboxNotes = useAegisStore((s) => s.inboxNotes);
+  const keys = usePrivacyCoinStore((s) => s.keys);
+  const inboxNotes = usePrivacyCoinStore((s) => s.inboxNotes);
 
   const [mounted, setMounted] = useState(false);
 
@@ -685,8 +685,8 @@ export function useMyDepositCount(): number {
   const { deposits: backendDeposits } = useBackendDeposits();
   const { transactions: expTxs } = useExplorer();
   const explorerDeposits = expTxs.filter(t => t.type === "shield").map(toDepositRecord);
-  const keys = useAegisStore((s) => s.keys);
-  const inboxNotes = useAegisStore((s) => s.inboxNotes);
+  const keys = usePrivacyCoinStore((s) => s.keys);
+  const inboxNotes = usePrivacyCoinStore((s) => s.inboxNotes);
 
   return useMemo(() => {
     if (!keys) return 0;

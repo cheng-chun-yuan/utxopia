@@ -21,7 +21,7 @@ import {
 } from "@solana/spl-token";
 import { PrivacyCoinClient } from "@privacy-coin/sdk";
 import { getAegisProgramId, getZkbtcMint, derivePoolStatePDA, deriveCommitmentTreePDA, deriveTokenConfigPDA } from "@/lib/solana/pdas";
-import { usePrivacy Coin } from "@/hooks/use-privacy-coin";
+import { usePrivacyCoin } from "@/hooks/use-privacy-coin";
 import { Shield, ChevronDown, Loader2, ExternalLink, CheckCircle2, AlertCircle, LogOut, Wallet, Copy, Check, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StealthRecipientInput } from "@/components/ui/stealth-recipient-input";
@@ -49,7 +49,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
   const { publicKey, sendTransaction } = wallet;
   const { connection } = useConnection();
   const { setVisible: openWalletModal } = useWalletModal();
-  const { keys, stealthAddress, stealthAddressEncoded } = useAegis();
+  const { keys, stealthAddress, stealthAddressEncoded } = usePrivacyCoin();
 
   // Passkey users have keys but no Solana wallet — need to connect wallet for SPL shielding
   const isPasskeyOnly = !!keys && !publicKey;
