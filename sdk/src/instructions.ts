@@ -357,6 +357,8 @@ export interface CompleteRedemptionInstructionOptions {
     poolConfig: Address;
     /** Change UTXO PDA (system program if no change tracking) */
     changeUtxo: Address;
+    /** Token program for zkBTC mint (TOKEN_2022_PROGRAM_ID or TOKEN_PROGRAM_ID). Defaults to Token-2022. */
+    tokenProgram?: Address;
     /** Consumed UTXO PDAs to close */
     consumedUtxos?: Address[];
   };
@@ -440,7 +442,7 @@ export function buildCompleteRedemptionInstruction(
     { address: options.accounts.txBuffer, role: AccountRole.READONLY },
     { address: options.accounts.zkbtcMint, role: AccountRole.WRITABLE },
     { address: options.accounts.poolVault, role: AccountRole.WRITABLE },
-    { address: TOKEN_2022_PROGRAM_ID, role: AccountRole.READONLY },
+    { address: options.accounts.tokenProgram ?? TOKEN_2022_PROGRAM_ID, role: AccountRole.READONLY },
     { address: options.accounts.completionReceipt, role: AccountRole.WRITABLE },
     { address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY },
     { address: options.accounts.poolConfig, role: AccountRole.READONLY },
@@ -822,6 +824,8 @@ export interface UnshieldInstructionOptions {
     user: Address;
     tokenConfig: Address;
     vault: Address;
+    /** Token program for the mint (TOKEN_2022_PROGRAM_ID or TOKEN_PROGRAM_ID). Defaults to Token-2022. */
+    tokenProgram?: Address;
     /** Recipient token accounts (one per public output) */
     recipientTokenAccounts: Address[];
     /** Nullifier record PDAs (one per input) */
@@ -984,7 +988,7 @@ export function buildUnshieldInstruction(options: UnshieldInstructionOptions): I
     { address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY },
     { address: options.accounts.tokenConfig, role: AccountRole.WRITABLE },
     { address: options.accounts.vault, role: AccountRole.WRITABLE },
-    { address: TOKEN_2022_PROGRAM_ID, role: AccountRole.READONLY },
+    { address: options.accounts.tokenProgram ?? TOKEN_2022_PROGRAM_ID, role: AccountRole.READONLY },
   ];
 
   // Recipient token accounts (one per public output)

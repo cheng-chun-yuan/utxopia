@@ -161,6 +161,11 @@ export interface NetworkConfig {
 // Program IDs (Constants)
 // =============================================================================
 
+/** Legacy Token Program ID */
+export const TOKEN_PROGRAM_ID: Address = address(
+  "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+);
+
 /** Token-2022 Program ID */
 export const TOKEN_2022_PROGRAM_ID: Address = address(
   "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
@@ -170,6 +175,18 @@ export const TOKEN_2022_PROGRAM_ID: Address = address(
 export const ATA_PROGRAM_ID: Address = address(
   "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
 );
+
+/**
+ * Determine the token program for a mint by checking its account owner.
+ * Returns TOKEN_2022_PROGRAM_ID or TOKEN_PROGRAM_ID.
+ *
+ * @param rpcOrOwner - Either an RPC fetch function, or the mint account owner address string
+ */
+export function getTokenProgramForMint(ownerAddress: string): Address {
+  return ownerAddress === (TOKEN_2022_PROGRAM_ID as string)
+    ? TOKEN_2022_PROGRAM_ID
+    : TOKEN_PROGRAM_ID;
+}
 
 /** ChadBuffer Program ID (deployed to devnet 2025-01-30) */
 export const CHADBUFFER_PROGRAM_ID: Address = address(
