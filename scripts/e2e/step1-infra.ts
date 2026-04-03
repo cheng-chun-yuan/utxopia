@@ -57,6 +57,43 @@ import {
 
 stepHeader(1, "Infrastructure");
 
+function getPidsListeningOnPort(port: number): number[] {
+  try {
+    const out = execSync(`lsof -tiTCP:${port} -sTCP:LISTEN`, {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    if (!out) return [];
+    return out
+      .split("\n")
+      .map((line) => Number.parseInt(line.trim(), 10))
+      .filter((pid) => Number.isFinite(pid));
+  } catch {
+    return [];
+  }
+}
+
+async function ensurePortCleared(port: number, label: string) {
+  for (let i = 0; i < 10; i++) {
+    const pids = getPidsListeningOnPort(port);
+    if (pids.length === 0) return;
+    if (i === 0) {
+      log(`${label} still listening on :${port}; force-stopping stale process(es) ${pids.join(", ")}`);
+    }
+    for (const pid of pids) {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {}
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
+  const remaining = getPidsListeningOnPort(port);
+  if (remaining.length > 0) {
+    throw new Error(`${label} still listening on :${port} after cleanup: ${remaining.join(", ")}`);
+  }
+}
+
 // =============================================================================
 // VK Hash Computation
 // =============================================================================
@@ -102,6 +139,7 @@ async function main() {
   try { execSync("pkill -f surfpool", { stdio: "ignore" }); } catch {}
   try { execSync("pkill -f solana-test-validator", { stdio: "ignore" }); } catch {}
   await new Promise(r => setTimeout(r, 2000));
+  await ensurePortCleared(8899, "Surfpool/validator");
 
   // 2. Get program keypairs for IDs
   const targetDir = path.join(CONTRACTS_DIR, "target/deploy");
