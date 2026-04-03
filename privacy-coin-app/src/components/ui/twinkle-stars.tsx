@@ -23,10 +23,10 @@ export function TwinkleStars({
 }) {
   const stars = useMemo<Star[]>(() => {
     const colors = [
-      "rgba(20, 241, 149, 0.8)",  // privacy green
-      "rgba(247, 147, 26, 0.7)",  // btc orange
-      "rgba(153, 69, 255, 0.7)",  // sol purple
-      "rgba(20, 241, 149, 0.6)",  // green (lighter)
+      "rgba(20, 241, 149, 0.4)",  // privacy green
+      "rgba(247, 147, 26, 0.35)", // btc orange
+      "rgba(153, 69, 255, 0.35)", // sol purple
+      "rgba(20, 241, 149, 0.3)",  // green (lighter)
     ];
     return Array.from({ length: count }, (_, i) => ({
       top: `${5 + Math.random() * 85}%`,
@@ -49,7 +49,7 @@ export function TwinkleStars({
             width: `${star.size}px`,
             height: `${star.size}px`,
             backgroundColor: star.color,
-            boxShadow: `0 0 ${star.size * 4}px ${star.color}`,
+            boxShadow: `0 0 ${star.size * 2}px ${star.color}`,
             animationDelay: star.delay,
             animationDuration: `${3 + Math.random() * 3}s`,
           }}

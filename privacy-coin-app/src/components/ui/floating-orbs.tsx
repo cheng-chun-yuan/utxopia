@@ -11,9 +11,9 @@ export function FloatingOrbs({ className = "" }: { className?: string }) {
     <div className={`absolute inset-0 overflow-hidden pointer-events-none ${className}`}>
       {/* Privacy Green orb — dominant, top-left */}
       <motion.div
-        className="absolute w-[500px] h-[500px] rounded-full opacity-20"
+        className="absolute w-[500px] h-[500px] rounded-full opacity-10"
         style={{
-          background: "radial-gradient(circle, rgba(20,241,149,0.4) 0%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(20,241,149,0.3) 0%, transparent 70%)",
           filter: "blur(80px)",
           top: "-10%",
           left: "10%",
@@ -31,9 +31,9 @@ export function FloatingOrbs({ className = "" }: { className?: string }) {
       />
       {/* Bitcoin Orange orb — center-right */}
       <motion.div
-        className="absolute w-[400px] h-[400px] rounded-full opacity-15"
+        className="absolute w-[400px] h-[400px] rounded-full opacity-8"
         style={{
-          background: "radial-gradient(circle, rgba(247,147,26,0.35) 0%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(247,147,26,0.25) 0%, transparent 70%)",
           filter: "blur(80px)",
           top: "20%",
           right: "5%",
@@ -51,9 +51,9 @@ export function FloatingOrbs({ className = "" }: { className?: string }) {
       />
       {/* Solana Purple orb — bottom-center */}
       <motion.div
-        className="absolute w-[350px] h-[350px] rounded-full opacity-15"
+        className="absolute w-[350px] h-[350px] rounded-full opacity-8"
         style={{
-          background: "radial-gradient(circle, rgba(153,69,255,0.35) 0%, transparent 70%)",
+          background: "radial-gradient(circle, rgba(153,69,255,0.25) 0%, transparent 70%)",
           filter: "blur(80px)",
           bottom: "5%",
           left: "40%",

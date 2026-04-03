@@ -1,0 +1,181 @@
+/* Primary — Zeus gradient */
+.btn-primary {
+  background: linear-gradient(
+    314.6deg,
+    #fff4ab 2.43%,
+    #ffebd4 24.82%,
+    #ffd4fd 59.61%,
+    #ceabff 97.04%
+  );
+  box-shadow:
+    0px 4px 12px 0px #ffffff80 inset,
+    0px 4px 4px 0px #ffffff40 inset;
+  color: black;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-primary:hover:not(:disabled) {
+  box-shadow:
+    inset 0px 4px 4px rgba(255, 255, 255, 0.25),
+    inset 0px 4px 16px rgba(255, 255, 255, 1);
+}
+
+.btn-primary:disabled {
+  color: #8b8a9e;
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Secondary */
+.btn-secondary {
+  background: #2c2c36;
+  box-shadow: 0px 0px 16px 0px #ff674633 inset;
+  color: #f1f0f3;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Tertiary */
+.btn-tertiary {
+  color: #c7c5d1;
+  background-color: #202027;
+  box-shadow: 0px 4px 12px 0px #8b8a9e26 inset;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-tertiary:hover {
+  background-color: #16161b;
+  color: #f1f0f3;
+}
+
+/* Bitcoin orange */
+.btn-bitcoin {
+  background: linear-gradient(135deg, #f7931a 0%, #ffa940 50%, #f7931a 100%);
+  box-shadow:
+    0px 4px 8px 0px rgba(247, 147, 26, 0.25),
+    0px 2px 4px 0px rgba(247, 147, 26, 0.15) inset;
+  color: white;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-bitcoin:hover:not(:disabled) {
+  box-shadow:
+    0px 6px 12px 0px rgba(247, 147, 26, 0.35),
+    0px 2px 6px 0px rgba(255, 255, 255, 0.2) inset;
+  transform: translateY(-1px);
+}
+
+.btn-bitcoin:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Privacy green */
+.btn-privacy {
+  background: linear-gradient(135deg, #14f195 0%, #10b981 50%, #14f195 100%);
+  box-shadow:
+    0px 4px 8px 0px rgba(20, 241, 149, 0.25),
+    0px 2px 4px 0px rgba(20, 241, 149, 0.15) inset;
+  color: var(--background);
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-privacy:hover:not(:disabled) {
+  box-shadow:
+    0px 6px 12px 0px rgba(20, 241, 149, 0.35),
+    0px 2px 6px 0px rgba(255, 255, 255, 0.2) inset;
+  transform: translateY(-1px);
+}
+
+.btn-privacy:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Pill shape modifier */
+.btn-pill {
+  border-radius: 9999px !important;
+}
+
+/* Shimmer hover effect */
+.btn-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transform: translateX(-100%);
+  transition: none;
+}
+
+.btn-shimmer:hover::after {
+  animation: btn-shimmer-sweep 0.8s ease forwards;
+}
+
+/* Moving border */
+.btn-moving-border {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.btn-moving-border::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 2px;
+  border-radius: inherit;
+  background: conic-gradient(from var(--border-angle, 0deg), #14f195, #f7931a, #9945ff, #14f195);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: border-spin 3s linear infinite;
+}

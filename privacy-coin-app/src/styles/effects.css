@@ -1,0 +1,179 @@
+/* Icon glows — toned down */
+.btc-glow {
+  filter: drop-shadow(0 0 4px rgba(247, 147, 26, 0.4));
+}
+
+.privacy-glow {
+  filter: drop-shadow(0 0 4px rgba(20, 241, 149, 0.4));
+}
+
+/* Pulsing glow — toned down */
+.pulse-glow {
+  animation: pulse-glow-anim 2s ease-in-out infinite;
+}
+
+/* Hover glow — toned down */
+.hover-glow {
+  transition: box-shadow 0.3s ease, filter 0.3s ease;
+}
+
+.hover-glow:hover {
+  box-shadow: 0 0 10px currentColor, 0 0 20px currentColor;
+  filter: brightness(1.1);
+}
+
+/* Neon text — toned down to 2 layers */
+.neon-privacy {
+  text-shadow: 0 0 5px #14f195, 0 0 10px #14f195;
+}
+
+/* Neon border pulse — toned down */
+.neon-border-pulse {
+  animation: neon-pulse 2s ease-in-out infinite;
+}
+
+/* CRT scanlines — subtler */
+.crt-scanlines {
+  position: relative;
+}
+
+.crt-scanlines::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: repeating-linear-gradient(
+    transparent 0 2px,
+    rgba(0, 0, 0, 0.05) 2px 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Terminal text */
+.terminal-text {
+  font-family: "Courier New", monospace;
+  color: #14f195;
+  text-shadow: 0 0 3px rgba(20, 241, 149, 0.3);
+}
+
+/* Blinking cursor */
+.cursor-blink::after {
+  content: "_";
+  animation: blink 1s step-end infinite;
+}
+
+/* Text shimmer */
+.text-shimmer {
+  background: linear-gradient(
+    110deg,
+    #14f195 0%,
+    #f7931a 35%,
+    #14f195 50%,
+    #9945ff 65%,
+    #14f195 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer-slide 4s ease-in-out infinite;
+}
+
+/* 3D perspective reveal */
+.reveal-3d {
+  opacity: 0;
+  transform: perspective(1000px) rotateX(15deg) translateY(50px) scale(0.95);
+  transform-style: preserve-3d;
+  transition: all 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform, opacity;
+}
+
+.reveal-3d.active {
+  opacity: 1;
+  transform: perspective(1000px) rotateX(0deg) translateY(0) scale(1);
+}
+
+/* Glowing border — toned down */
+.glow-border {
+  position: relative;
+}
+
+.glow-border::before {
+  content: "";
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  border-radius: inherit;
+  background: linear-gradient(45deg, #f7931a, #14f195, #9945ff, #f7931a);
+  background-size: 400% 400%;
+  animation: glow-rotate 6s ease infinite;
+  z-index: -1;
+  opacity: 0.25;
+  filter: blur(4px);
+}
+
+/* Gradient line */
+.gradient-line {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #14f195, #f7931a, #9945ff, transparent);
+  background-size: 200% 100%;
+  animation: gradient-line-move 4s ease-in-out infinite;
+}
+
+/* Pulse ring — status indicators */
+.pulse-ring {
+  position: relative;
+}
+
+.pulse-ring::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  animation: pulse-ring-anim 2s ease-out infinite;
+}
+
+/* Ambient background blob */
+.ambient-blob {
+  animation: ambient-pulse 8s ease-in-out infinite;
+}
+
+/* Status ping dot */
+.status-ping {
+  position: relative;
+  display: inline-flex;
+  width: 8px;
+  height: 8px;
+}
+
+.status-ping::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #14f195;
+  animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.status-ping::after {
+  content: "";
+  position: relative;
+  display: inline-flex;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #14f195;
+}
+
+/* Twinkle stars */
+.twinkle-star {
+  position: absolute;
+  border-radius: 50%;
+  animation: twinkle 4s ease-in-out infinite;
+}

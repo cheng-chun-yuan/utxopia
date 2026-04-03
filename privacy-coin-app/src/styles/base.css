@@ -1,0 +1,126 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0f0f12;
+  --foreground: #f1f0f3;
+  --card: #202027;
+  --card-foreground: #f1f0f3;
+  --primary: #f7931a;
+  --primary-foreground: #0a0a0a;
+  --secondary: #2c2c36;
+  --secondary-foreground: #f1f0f3;
+  --muted: #16161b;
+  --muted-foreground: #8b8a9e;
+  --accent: #ffabfe;
+  --accent-foreground: #0a0a0a;
+  --destructive: #ef4444;
+  --destructive-foreground: #ededed;
+  --border: #8b8a9e33;
+  --input: #16161b;
+  --ring: #ffabfe;
+  --radius: 0.75rem;
+
+  /* Brand colors */
+  --zeus-purple: #ffabfe;
+  --zeus-purple-bg: #fd82ff1a;
+  --zeus-gray: #8b8a9e;
+  --zeus-gray-light: #c7c5d1;
+  --zeus-warning: #ffb546;
+  --zeus-warning-bg: #ffb5461a;
+  --zeus-success: #4ade80;
+  --default-transition-timing-function: ease;
+  --default-transition-duration: 300ms;
+
+  /* Bitcoin orange */
+  --btc-orange: #f7931a;
+  --btc-orange-light: #ffa940;
+  --btc-orange-dark: #e8850f;
+  --btc-orange-bg: #f7931a1a;
+  --btc-orange-bg-hover: #f7931a33;
+
+  /* Privacy colors */
+  --privacy-purple: #9945ff;
+  --privacy-teal: #14f195;
+  --privacy-bg: #14f1951a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-display);
+
+  /* Semantic text colors */
+  --color-gray: #8b8a9e;
+  --color-gray-light: #c7c5d1;
+  --color-gray-dark: #6b6a7e;
+
+  /* Bitcoin colors */
+  --color-btc: #f7931a;
+  --color-btc-light: #ffa940;
+  --color-btc-dark: #e8850f;
+
+  /* Privacy/Solana colors */
+  --color-privacy: #14f195;
+  --color-sol: #9945ff;
+  --color-sol-dark: #8b3de8;
+  --color-purple: #ffabfe;
+
+  /* Status colors */
+  --color-success: #4ade80;
+  --color-warning: #ffb546;
+  --color-warning-alt: #ffa726;
+  --color-error: #ef4444;
+
+  /* Cyber colors */
+  --color-cyan: #00ffff;
+
+  /* Disabled state */
+  --color-disabled: #8b8a9e;
+  --color-disabled-bg: rgb(139 138 158 / 0.2);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+* {
+  border-color: var(--border);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}

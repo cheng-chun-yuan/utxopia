@@ -1,0 +1,238 @@
+/* Glass card — refined, neutral tint */
+.glass-card {
+  backdrop-filter: blur(40px);
+  background: rgba(15, 15, 18, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 0 60px rgba(0, 0, 0, 0.2);
+}
+
+.glass-card-strong {
+  backdrop-filter: blur(48px);
+  background: rgba(15, 15, 18, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 0 80px rgba(0, 0, 0, 0.25);
+}
+
+/* Spotlight card */
+.spotlight-card {
+  backdrop-filter: blur(40px);
+  background: rgba(15, 15, 18, 0.75);
+  border: 1px solid rgba(20, 241, 149, 0.08);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.spotlight-card:hover {
+  border-color: rgba(20, 241, 149, 0.15);
+  box-shadow: 0 0 20px rgba(20, 241, 149, 0.04), 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+/* Gradient border card */
+.gradient-border-card {
+  position: relative;
+  padding: 1px;
+  border-radius: 16px;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.1), transparent);
+  transition: all 0.5s ease;
+}
+
+.gradient-border-card:hover {
+  background: linear-gradient(to bottom, rgba(20, 241, 149, 0.3), rgba(153, 69, 255, 0.15));
+  transform: translateY(-4px);
+  box-shadow: 0 0 16px rgba(20, 241, 149, 0.08);
+}
+
+.gradient-border-card > .card-inner {
+  background: #080810;
+  border-radius: 15px;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.gradient-border-card > .card-inner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(20, 241, 149, 0.05), transparent);
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.gradient-border-card:hover > .card-inner::before {
+  opacity: 1;
+}
+
+/* Zeus gradient backgrounds */
+.gradient-bg-primary {
+  background: linear-gradient(
+    314.6deg,
+    #fff4ab 2.43%,
+    #ffebd4 24.82%,
+    #ffd4fd 59.61%,
+    #ceabff 97.04%
+  );
+  box-shadow:
+    0px 4px 12px 0px #ffffff80 inset,
+    0px 4px 4px 0px #ffffff40 inset;
+  color: black;
+}
+
+.gradient-bg-primary:enabled:hover {
+  box-shadow:
+    inset 0px 4px 4px rgba(255, 255, 255, 0.25),
+    inset 0px 4px 16px rgba(255, 255, 255, 1);
+}
+
+.gradient-bg-primary:disabled {
+  color: #8b8a9e;
+  opacity: 0.4;
+}
+
+/* Secondary background */
+.secondary-bg {
+  background: #2c2c36;
+  box-shadow: 0px 0px 16px 0px #ff674633 inset;
+  color: #f1f0f3;
+}
+
+/* Tertiary background */
+.tertiary-bg {
+  color: #c7c5d1;
+  background-color: #202027;
+  box-shadow: 0px 4px 12px 0px #8b8a9e26 inset;
+}
+
+.tertiary-bg:hover {
+  background-color: #16161b;
+  color: #f1f0f3;
+  box-shadow:
+    0px -4px 12px 0px #8b8a9e26 inset,
+    0px 4px 12px 0px #8b8a9e26 inset;
+}
+
+/* Gradient card — multi-layer pseudo-element */
+.gradient-bg-card {
+  position: relative;
+}
+
+.gradient-bg-card > * {
+  z-index: 1;
+  position: relative;
+}
+
+.gradient-bg-card::before {
+  content: "";
+  position: absolute;
+  top: 0px;
+  left: 0px;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(178, 131, 255, 0.25) 0.28%,
+      rgba(253, 131, 255, 0.25) 21.32%,
+      rgba(255, 191, 131, 0.25) 32.42%,
+      rgba(15, 15, 18, 0.25) 49.79%,
+      rgba(255, 103, 70, 0.25) 100%
+    ),
+    linear-gradient(0deg, rgba(139, 138, 158, 0.2), rgba(139, 138, 158, 0.2));
+  pointer-events: none;
+}
+
+.gradient-bg-card::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: calc(100% - 2px);
+  height: calc(100% - 2px);
+  border-radius: inherit;
+  background:
+    linear-gradient(
+      90.83deg,
+      rgba(253, 131, 255, 0.08) 0%,
+      rgba(178, 131, 255, 0.08) 10%,
+      rgba(123, 92, 175, 0.0711953) 22.46%,
+      rgba(15, 15, 18, 0.0540223) 41.2%,
+      rgba(15, 15, 18, 0) 56.08%,
+      rgba(255, 103, 70, 0.0500765) 81.52%,
+      rgba(255, 103, 70, 0.08) 100%
+    ),
+    linear-gradient(#16161b, #16161b);
+  pointer-events: none;
+}
+
+/* Bitcoin gradient card */
+.gradient-bg-bitcoin {
+  position: relative;
+}
+
+.gradient-bg-bitcoin > * {
+  z-index: 1;
+  position: relative;
+}
+
+.gradient-bg-bitcoin::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(247, 147, 26, 0.2) 0%,
+    rgba(255, 169, 64, 0.15) 50%,
+    rgba(247, 147, 26, 0.1) 100%
+  );
+  pointer-events: none;
+}
+
+.gradient-bg-bitcoin::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: calc(100% - 2px);
+  height: calc(100% - 2px);
+  border-radius: inherit;
+  background: linear-gradient(135deg, #1a1a1f 0%, #16161b 100%);
+  pointer-events: none;
+}
+
+/* Privacy gradient card */
+.gradient-bg-privacy {
+  position: relative;
+  overflow: hidden;
+}
+
+.gradient-bg-privacy::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(20, 241, 149, 0.05) 0%,
+    rgba(153, 69, 255, 0.03) 40%,
+    transparent 70%
+  );
+  animation: privacy-pulse 8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* BTC/Privacy hybrid gradient */
+.gradient-btc-privacy {
+  background: linear-gradient(
+    135deg,
+    rgba(247, 147, 26, 0.15) 0%,
+    rgba(255, 171, 254, 0.1) 35%,
+    rgba(153, 69, 255, 0.1) 65%,
+    rgba(20, 241, 149, 0.15) 100%
+  );
+}

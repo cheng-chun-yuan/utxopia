@@ -1,0 +1,55 @@
+/* Warning box */
+.warning-box {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  color: #ffb546;
+  background: #ffb5461a;
+  border: 1px solid #ffb54633;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* Success box */
+.success-box {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.1);
+  border: 1px solid rgba(74, 222, 128, 0.2);
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* Bitcoin context box */
+.bitcoin-box {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  color: #f7931a;
+  background: rgba(247, 147, 26, 0.1);
+  border: 1px solid rgba(247, 147, 26, 0.25);
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+/* Privacy context box */
+.privacy-box {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  color: #14f195;
+  background: linear-gradient(135deg, rgba(20, 241, 149, 0.1) 0%, rgba(153, 69, 255, 0.1) 100%);
+  border: 1px solid rgba(20, 241, 149, 0.25);
+  border-radius: 12px;
+  font-size: 14px;
+}

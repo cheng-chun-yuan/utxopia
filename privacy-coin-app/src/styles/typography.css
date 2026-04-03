@@ -1,0 +1,89 @@
+.text-body1 {
+  font-family: var(--font-rethink-sans), "Rethink Sans", sans-serif;
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.text-body2 {
+  font-family: var(--font-rethink-sans), "Rethink Sans", sans-serif;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.text-body2-semibold {
+  font-family: var(--font-rethink-sans), "Rethink Sans", sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.text-heading5 {
+  font-family: var(--font-rethink-sans), "Rethink Sans", sans-serif;
+  font-weight: 600;
+  font-size: 20px;
+  line-height: 28px;
+}
+
+.text-heading6 {
+  font-family: var(--font-rethink-sans), "Rethink Sans", sans-serif;
+  font-weight: 600;
+  font-size: 18px;
+  line-height: 26px;
+}
+
+.text-caption {
+  font-family: var(--font-rethink-sans), "Rethink Sans", sans-serif;
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 150%;
+}
+
+/* Display typography */
+.hero-title {
+  font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+  font-size: clamp(2.25rem, 5vw + 1rem, 4.5rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  font-weight: 700;
+}
+
+.section-title {
+  font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+  letter-spacing: -0.025em;
+  font-weight: 600;
+}
+
+/* Gradient text */
+.text-gradient-brand {
+  background: linear-gradient(to right, #f1f0f3, #8b8a9e);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-privacy {
+  background: linear-gradient(to right, #14f195, #10b981, #2dd4bf);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Divider with text */
+.divider-text {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  width: 100%;
+  gap: 16px;
+}
+
+.divider-text::before,
+.divider-text::after {
+  content: "";
+  display: block;
+  flex: 1;
+  border-top: solid 1px;
+  border-color: #8b8a9e66;
+}
