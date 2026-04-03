@@ -1,6 +1,6 @@
 # FROST Server for Aegis
 
-FROST (Flexible Round-Optimized Schnorr Threshold) threshold signing server for secure Bitcoin operations in Aegis.
+FROST (Flexible Round-Optimized Schnorr Threshold) threshold signing server for secure Bitcoin operations in Privacy Coin.
 
 ## Overview
 
@@ -12,7 +12,7 @@ FROST (Flexible Round-Optimized Schnorr Threshold) threshold signing server for 
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        Aegis Backend                           │
+│                        Privacy Coin Backend                           │
 │           ┌─────────────────────┐                               │
 │           │  FrostClient        │  ← Coordinates FROST rounds   │
 │           │  (implements Signer)│  ← Aggregates signatures      │
@@ -61,7 +61,7 @@ FROST_KEY_PASSWORD=your-password cargo run -- run --id 3 --bind 0.0.0.0:9003
 export FROST_SIGNER_URLS=http://localhost:9001,http://localhost:9002,http://localhost:9003
 export FROST_GROUP_PUBKEY=$(cat frost_server/config/group_pubkey.txt)
 export FROST_THRESHOLD=2
-export AEGIS_SIGNING_MODE=frost
+export PRIVACY_COIN_SIGNING_MODE=frost
 ```
 
 ## Production DKG Ceremony
@@ -146,7 +146,7 @@ Address = P2TR(
 | `FROST_SIGNER_URLS` | Comma-separated signer URLs |
 | `FROST_GROUP_PUBKEY` | X-only group public key (hex) |
 | `FROST_THRESHOLD` | Signing threshold (default: 2) |
-| `AEGIS_SIGNING_MODE` | Set to `frost` for threshold signing |
+| `PRIVACY_COIN_SIGNING_MODE` | Set to `frost` for threshold signing |
 
 ## Testing
 

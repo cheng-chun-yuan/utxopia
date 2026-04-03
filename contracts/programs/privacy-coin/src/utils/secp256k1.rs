@@ -13,7 +13,7 @@
 
 use pinocchio::program_error::ProgramError;
 
-use crate::error::AegisError;
+use crate::error::PrivacyCoinError;
 
 /// secp256k1 curve order n (big-endian)
 const SECP256K1_N: [u8; 32] = [
@@ -187,12 +187,12 @@ pub fn verify_taproot_tweak(
 
     // Validate r < n (extremely rare for r >= n, but check for safety)
     if u256_gte(&r, &n) {
-        return Err(AegisError::TaprootVerificationFailed.into());
+        return Err(PrivacyCoinError::TaprootVerificationFailed.into());
     }
 
     // Validate tweak < n
     if u256_gte(&t, &n) {
-        return Err(AegisError::TaprootVerificationFailed.into());
+        return Err(PrivacyCoinError::TaprootVerificationFailed.into());
     }
 
     // 2. Compute hash = -(tweak * r) mod n = n - (tweak * r mod n)
@@ -227,7 +227,7 @@ pub fn verify_taproot_tweak(
             )
         };
         if rc != 0 {
-            return Err(AegisError::TaprootVerificationFailed.into());
+            return Err(PrivacyCoinError::TaprootVerificationFailed.into());
         }
     }
 
@@ -246,7 +246,7 @@ pub fn verify_taproot_tweak(
 
     // 5. Compare recovered x-coordinate with expected output key
     if recovered[0..32] != *expected_output_key {
-        return Err(AegisError::TaprootVerificationFailed.into());
+        return Err(PrivacyCoinError::TaprootVerificationFailed.into());
     }
 
     Ok(())

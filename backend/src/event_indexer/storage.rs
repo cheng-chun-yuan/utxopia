@@ -92,7 +92,7 @@ pub struct TransferRow {
     pub status: String,
     /// NullifierOperationType: 0=FullWithdrawal (unshield/redeem), 1=PartialWithdrawal, 2=PrivateTransfer
     pub operation_type: i64,
-    /// Aegis instruction discriminator: 14=transact, 15=unshield, 5=request_redemption, 16=redeem
+    /// Privacy Coin instruction discriminator: 14=transact, 15=unshield, 5=request_redemption, 16=redeem
     pub instruction_disc: Option<i64>,
     /// Token transfer amount in sats (unshield txs only) — gross amount before fee
     pub unshield_amount: Option<i64>,
@@ -408,7 +408,7 @@ impl EventStore {
             )",
         );
 
-        // Add instruction_disc column to nullifier_events (Aegis instruction discriminator)
+        // Add instruction_disc column to nullifier_events (Privacy Coin instruction discriminator)
         let _ = conn.execute_batch(
             "ALTER TABLE nullifier_events ADD COLUMN instruction_disc INTEGER",
         );

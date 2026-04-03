@@ -3,8 +3,8 @@
  * Top up a stealth address with all registered tokens.
  *
  * Usage:
- *   AEGIS_NETWORK=devnet bun run scripts/topup-all.ts aegis:<address>
- *   bun run scripts/topup-all.ts aegis:<address>   # defaults to localnet
+ *   PRIVACY_COIN_NETWORK=devnet bun run scripts/topup-all.ts pcoin:<address>
+ *   bun run scripts/topup-all.ts pcoin:<address>   # defaults to localnet
  */
 
 import {
@@ -14,7 +14,7 @@ import {
   computeTokenId,
   buildShieldInstructionData,
   bigintTo32Bytes,
-} from "@aegis/sdk";
+} from "@privacy-coin/sdk";
 import {
   PublicKey,
   SystemProgram,
@@ -34,15 +34,15 @@ import {
 } from "@solana/spl-token";
 import { setupScript } from "./lib/common.ts";
 
-const network = (process.env.AEGIS_NETWORK || "localnet") as "localnet" | "devnet";
-const { conn, authority, programId: AEGIS, state } = setupScript(network);
+const network = (process.env.PRIVACY_COIN_NETWORK || "localnet") as "localnet" | "devnet";
+const { conn, authority, programId: PRIVACY_COIN, state } = setupScript(network);
 
 // Derive constant PDAs once
-const [poolState] = PublicKey.findProgramAddressSync([Buffer.from("pool_state")], AEGIS);
-const [commitmentTree] = PublicKey.findProgramAddressSync([Buffer.from("commitment_tree")], AEGIS);
+const [poolState] = PublicKey.findProgramAddressSync([Buffer.from("pool_state")], PRIVACY_COIN);
+const [commitmentTree] = PublicKey.findProgramAddressSync([Buffer.from("commitment_tree")], PRIVACY_COIN);
 
 function tokenConfigPDA(mint: PublicKey) {
-  return PublicKey.findProgramAddressSync([Buffer.from("token_config"), mint.toBuffer()], AEGIS)[0];
+  return PublicKey.findProgramAddressSync([Buffer.from("token_config"), mint.toBuffer()], PRIVACY_COIN)[0];
 }
 
 function shieldKeys(userAta: PublicKey, vault: PublicKey, mint: PublicKey, tokenProgram: PublicKey) {
@@ -74,7 +74,7 @@ async function shieldToken2022(
   const userAta = getAssociatedTokenAddressSync(mint, authority.publicKey, false, TOKEN_2022_PROGRAM_ID);
   const tx = new Transaction().add(new TransactionInstruction({
     keys: shieldKeys(userAta, vault, mint, TOKEN_2022_PROGRAM_ID),
-    programId: AEGIS,
+    programId: PRIVACY_COIN,
     data: buildShieldData(stealth, amount),
   }));
   tx.feePayer = authority.publicKey;
@@ -97,7 +97,7 @@ async function shieldNativeSOL(
     createSyncNativeInstruction(wsolAta, TOKEN_PROGRAM_ID),
     new TransactionInstruction({
       keys: shieldKeys(wsolAta, vault, NATIVE_MINT, TOKEN_PROGRAM_ID),
-      programId: AEGIS,
+      programId: PRIVACY_COIN,
       data: buildShieldData(stealth, amount),
     }),
     createCloseAccountInstruction(wsolAta, authority.publicKey, authority.publicKey, [], TOKEN_PROGRAM_ID),
@@ -122,8 +122,8 @@ async function mintTokens(mint: PublicKey, amount: number, label: string) {
 
 async function main() {
   const addr = process.argv[2];
-  if (!addr?.startsWith("aegis:")) {
-    console.error("Usage: bun run scripts/topup-all.ts aegis:<stealth_address>");
+  if (!addr?.startsWith("pcoin:")) {
+    console.error("Usage: bun run scripts/topup-all.ts pcoin:<stealth_address>");
     process.exit(1);
   }
 
@@ -132,7 +132,7 @@ async function main() {
 
   console.log(`=== Top-up All Tokens (${network}) ===`);
   console.log("Recipient:", addr.slice(0, 30) + "...");
-  console.log("Program:", AEGIS.toBase58());
+  console.log("Program:", PRIVACY_COIN.toBase58());
   console.log("Authority:", authority.publicKey.toBase58());
   console.log();
 

@@ -19,7 +19,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::error::AegisError;
+use crate::error::PrivacyCoinError;
 use crate::state::{PoolState, TokenConfig};
 use crate::utils::{
     create_pda_account,
@@ -64,7 +64,7 @@ pub fn process_register_token(
         let pool_data = pool_state_info.try_borrow_data()?;
         let pool = PoolState::from_bytes(&pool_data)?;
         if authority.key().as_ref() != pool.authority {
-            return Err(AegisError::Unauthorized.into());
+            return Err(PrivacyCoinError::Unauthorized.into());
         }
     }
 
@@ -84,7 +84,7 @@ pub fn process_register_token(
     let tc_seeds: &[&[u8]] = &[TokenConfig::SEED, mint_info.key().as_ref()];
     let (expected_pda, tc_bump) = find_program_address(tc_seeds, program_id);
     if token_config_info.key() != &expected_pda {
-        return Err(AegisError::InvalidPDA.into());
+        return Err(PrivacyCoinError::InvalidPDA.into());
     }
 
     // Compute token_id = Poseidon(reduce_to_field(mint), 0)

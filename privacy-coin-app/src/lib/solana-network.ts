@@ -3,7 +3,7 @@
  * Maps SDK config to all network-dependent values.
  * This is the ONLY file that should contain Solana explorer URL logic.
  */
-import { getConfig } from "@aegis/sdk";
+import { getConfig } from "@privacy-coin/sdk";
 
 /** Solana explorer cluster query parameter */
 export function getSolanaCluster(): string {

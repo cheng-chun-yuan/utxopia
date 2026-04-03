@@ -1,6 +1,6 @@
 "use client";
 
-import { useAegisKeys } from "@/hooks/use-aegis";
+import { useAegisKeys } from "@/hooks/use-privacy-coin";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { Key, Shield } from "lucide-react";

@@ -11,7 +11,7 @@
  *
  * Prerequisites:
  *   - solana-test-validator running
- *   - Aegis and Groth16 verifier deployed
+ *   - Privacy Coin and Groth16 verifier deployed
  *
  * Run: bun run scripts/test-e2e-onchain.ts
  */
@@ -64,7 +64,7 @@ import {
   type AegisKeys,
   type StealthMetaAddress,
   type ScannedNote,
-} from "@aegis/sdk";
+} from "@privacy-coin/sdk";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -627,7 +627,7 @@ async function main() {
   log("✓ Prover initialized");
 
   // ==========================================================================
-  // Step 1: Generate AEGIS keys (proper stealth model)
+  // Step 1: Generate PRIVACY_COIN keys (proper stealth model)
   // ==========================================================================
   logSection("Step 1: Generate Stealth Keys");
 
@@ -742,7 +742,7 @@ async function main() {
 
   // Use scanAnnouncements to properly reconstruct the ScannedNote
   // This uses the SDK's internal stealth derivation logic (SHA256 domain separator)
-  const { scanAnnouncements } = await import("@aegis/sdk");
+  const { scanAnnouncements } = await import("@privacy-coin/sdk");
 
   // Format the deposit as an announcement for scanning
   const announcements = [{

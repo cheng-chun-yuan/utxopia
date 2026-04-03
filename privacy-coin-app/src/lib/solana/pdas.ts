@@ -2,9 +2,9 @@
  * Solana PDA Derivation & Config Helpers (web3.js)
  *
  * Thin wrapper that provides @solana/web3.js PublicKey constants and
- * synchronous PDA derivation using seed constants from @aegis/sdk.
+ * synchronous PDA derivation using seed constants from @privacy-coin/sdk.
  *
- * All instruction data building lives in @aegis/sdk — this file only
+ * All instruction data building lives in @privacy-coin/sdk — this file only
  * bridges SDK config → web3.js types for wallet-adapter compatibility.
  *
  * @module solana/pdas
@@ -12,14 +12,14 @@
 
 import { PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
-import { getConfig, PDA_SEEDS } from "@aegis/sdk";
+import { getConfig, PDA_SEEDS } from "@privacy-coin/sdk";
 
 // =============================================================================
 // Program IDs as web3.js PublicKeys (lazy, from SDK config)
 // =============================================================================
 
 export function getAegisProgramId(): PublicKey {
-  return new PublicKey(getConfig().aegisProgramId);
+  return new PublicKey(getConfig().privacyCoinProgramId);
 }
 
 export function getBtcLightClientProgramId(): PublicKey {

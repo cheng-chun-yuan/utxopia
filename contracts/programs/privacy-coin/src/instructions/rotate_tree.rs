@@ -22,7 +22,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::error::AegisError;
+use crate::error::PrivacyCoinError;
 use crate::state::{CommitmentTree, PoolState};
 use crate::utils::{
     create_pda_account, validate_account_writable, validate_program_owner,
@@ -60,7 +60,7 @@ pub fn process_rotate_tree(
         let pool = PoolState::from_bytes(&pool_data)?;
 
         if authority.key().as_ref() != pool.authority {
-            return Err(AegisError::Unauthorized.into());
+            return Err(PrivacyCoinError::Unauthorized.into());
         }
 
         pool.active_tree_index()

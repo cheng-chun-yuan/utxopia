@@ -18,7 +18,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::error::AegisError;
+use crate::error::PrivacyCoinError;
 use crate::state::{CommitmentTree, PoolState, TokenConfig};
 use crate::utils::{
     crypto::compute_commitment,
@@ -78,7 +78,7 @@ pub fn process_shield(
         let pool_data = pool_state_info.try_borrow_data()?;
         let pool = PoolState::from_bytes(&pool_data)?;
         if pool.is_paused() {
-            return Err(AegisError::PoolPaused.into());
+            return Err(PrivacyCoinError::PoolPaused.into());
         }
         validate_active_tree_pda(commitment_tree_info, program_id, pool.active_tree_index())?;
         pool.deposit_fee_bps()
@@ -90,12 +90,12 @@ pub fn process_shield(
         let tc = TokenConfig::from_bytes(&tc_data)?;
 
         if !tc.is_enabled() {
-            return Err(AegisError::TokenDisabled.into());
+            return Err(PrivacyCoinError::TokenDisabled.into());
         }
 
         // Validate vault matches
         if vault.key().as_ref() != tc.vault {
-            return Err(AegisError::InvalidVault.into());
+            return Err(PrivacyCoinError::InvalidVault.into());
         }
 
         // Validate user token account mint matches token_config mint
@@ -105,13 +105,13 @@ pub fn process_shield(
                 return Err(ProgramError::InvalidAccountData);
             }
             if uta_data[0..32] != tc.mint {
-                return Err(AegisError::InvalidMint.into());
+                return Err(PrivacyCoinError::InvalidMint.into());
             }
         }
 
         // Validate amount limits
         if amount < tc.min_deposit() || amount > tc.max_deposit() {
-            return Err(AegisError::AmountOutOfRange.into());
+            return Err(PrivacyCoinError::AmountOutOfRange.into());
         }
 
         // Compute fee
@@ -127,7 +127,7 @@ pub fn process_shield(
             .ok_or(ProgramError::ArithmeticOverflow)?
             > tc.deposit_cap()
         {
-            return Err(AegisError::DepositCapExceeded.into());
+            return Err(PrivacyCoinError::DepositCapExceeded.into());
         }
 
         let mut tid = [0u8; 32];

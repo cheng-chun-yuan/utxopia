@@ -1,4 +1,4 @@
-//! Event parser for Aegis sol_log_data events
+//! Event parser for Privacy Coin sol_log_data events
 //!
 //! Matches discriminators from contracts/programs/aegis/src/utils/events.rs:
 //! - 0x02 = NullifierSpent (nullifier_hash + op_type + ix_disc)

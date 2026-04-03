@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 import { parseSats } from "@/lib/utils/validation";
 import { formatBtc, formatAmount, truncateMiddle } from "@/lib/utils/formatting";
 import { BTC_DUST_LIMIT, BTC_MINER_FEE_ESTIMATE, TOKEN_2022_PROGRAM_ID_STR } from "@/lib/btc-constants";
-import { useAegis } from "@/hooks/use-aegis";
+import { usePrivacy Coin } from "@/hooks/use-privacy-coin";
 import { usePayFlowNotes } from "@/hooks/use-pay-flow-notes";
 import { usePayFlowAuth } from "@/hooks/use-pay-flow-auth";
 import { AuthModal } from "@/components/auth-modal";
@@ -43,12 +43,12 @@ import {
   deriveMasterKey,
   deriveKeysFromSeedCircuit,
   createStealthMetaAddress,
-  AegisClient,
+  PrivacyCoinClient,
   type StealthMetaAddress,
   type ScannedNote,
   type JoinSplitProofInputs,
-} from "@aegis/sdk";
-import { bytesToHex } from "@aegis/sdk";
+} from "@privacy-coin/sdk";
+import { bytesToHex } from "@privacy-coin/sdk";
 import {
   getAegisProgramId,
   getToken2022ProgramId,
@@ -356,7 +356,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
 
         setProofStatus("Building public redeem transaction...");
         // Public redeem removed in multi-token version — use request_redemption
-        const { buildRedemptionRequestInstructionData } = await import("@aegis/sdk");
+        const { buildRedemptionRequestInstructionData } = await import("@privacy-coin/sdk");
 
         const [poolState] = derivePoolStatePDA();
         const [commitmentTree] = deriveCommitmentTreePDA();
@@ -430,7 +430,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
               createUnshieldBoundParams,
               getCommitmentIndex: getCommitmentIndexSdk,
               parseAnnouncementsFromHex,
-              decodeStealthMetaAddress } = await import("@aegis/sdk");
+              decodeStealthMetaAddress } = await import("@privacy-coin/sdk");
 
       // Build input data: either from imported note or from inbox notes
       let inputsData: {
@@ -445,7 +445,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
           merkleIndices: number[];
         };
         // For imported notes: phrase-derived AegisKeys
-        importedKeys?: import("@aegis/sdk").AegisKeys;
+        importedKeys?: import("@privacy-coin/sdk").AegisKeys;
       }[];
 
       if (hasImportedNotes) {
@@ -457,7 +457,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         const announcementsData = await announcementsResp.json();
         const allAnns = announcementsData.announcements || [];
 
-        const { scanUnifiedNotes: scanNotes } = await import("@aegis/sdk");
+        const { scanUnifiedNotes: scanNotes } = await import("@privacy-coin/sdk");
 
         inputsData = await Promise.all(activeImportedNotes.map(async (impNote) => {
           const resp = await fetch(`/api/merkle/proof?commitment=${impNote.commitment}`);
@@ -499,9 +499,9 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
         // Standard inbox notes path
         setProofStatus("Verifying your funds...");
 
-        const aegisClient = AegisClient.isInitialized
-          ? AegisClient.instance()
-          : await AegisClient.init();
+        const aegisClient = PrivacyCoinClient.isInitialized
+          ? PrivacyCoinClient.instance()
+          : await PrivacyCoinClient.init();
         const merkleProofs = await aegisClient.fetchMerkleProofs(
           selectedNotes.map((n) => n.commitmentHex),
         );
@@ -706,7 +706,7 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       let boundParamsHash: bigint;
       let unshieldRecipientAddress: Uint8Array | null = null;
 
-      const { createRedeemBoundParams, computeStealthDataHash, createTransferBoundParams } = await import("@aegis/sdk");
+      const { createRedeemBoundParams, computeStealthDataHash, createTransferBoundParams } = await import("@privacy-coin/sdk");
 
       // Compute stealth data hash — binds change output metadata to the proof,
       // preventing a relayer from corrupting ephemeralPub/encryptedAmount.
@@ -742,9 +742,9 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       let proofPublicKey: [bigint, bigint];
       let proofNullifyingKey: bigint;
 
-      const txClient = AegisClient.isInitialized
-        ? AegisClient.instance()
-        : await AegisClient.init();
+      const txClient = PrivacyCoinClient.isInitialized
+        ? PrivacyCoinClient.instance()
+        : await PrivacyCoinClient.init();
 
       if (hasImportedNotes && inputsData[0].importedKeys) {
         const ik = inputsData[0].importedKeys;
@@ -828,9 +828,9 @@ export function PayFlow({ initialMode, preselectedNote, initialSecretPhrase }: P
       nullifierHexes.forEach((h, i) => { if (h !== clientNullifierHexes[i]) console.warn(`[Pay] MISMATCH nullifier[${i}]:`, { snarkjs: h, client: clientNullifierHexes[i] }); });
       commitmentHexes.forEach((h, i) => { if (h !== clientCommitmentHexes[i]) console.warn(`[Pay] MISMATCH commitment[${i}]:`, { snarkjs: h, client: clientCommitmentHexes[i] }); });
 
-      const relayClient = AegisClient.isInitialized
-        ? AegisClient.instance()
-        : await AegisClient.init();
+      const relayClient = PrivacyCoinClient.isInitialized
+        ? PrivacyCoinClient.instance()
+        : await PrivacyCoinClient.init();
 
       // Common fields for all modes
       const commonFields = {

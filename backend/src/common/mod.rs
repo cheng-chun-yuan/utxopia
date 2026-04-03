@@ -1,6 +1,6 @@
 //! Common Infrastructure Module
 //!
-//! Shared utilities for the Aegis backend.
+//! Shared utilities for the Privacy Coin backend.
 //!
 //! This module contains:
 //! - Structured logging setup
@@ -19,8 +19,8 @@ pub mod reconnect;
 pub mod ws;
 
 // Re-export config types from crate::config for convenience
-pub use crate::config::{ConfigError, Network, SigningMode, AEGISConfig};
-pub use error::{Result, AegisError};
+pub use crate::config::{ConfigError, Network, SigningMode, PRIVACY_COINConfig};
+pub use error::{Result, PrivacyCoinError};
 pub use logging::{
     generate_correlation_id, init_from_config, init_logging, log_api_request, log_api_response,
     log_deposit_event, log_security_event, log_withdrawal_event, ErrorDetails, EventCategory,

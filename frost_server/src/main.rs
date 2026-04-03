@@ -70,8 +70,8 @@ enum Commands {
         #[arg(long, env = "FROST_SOLANA_RPC_URL")]
         solana_rpc_url: Option<String>,
 
-        /// Aegis program ID for PDA derivation (base58)
-        #[arg(long, env = "FROST_AEGIS_PROGRAM_ID")]
+        /// Privacy Coin program ID for PDA derivation (base58)
+        #[arg(long, env = "FROST_PRIVACY_COIN_PROGRAM_ID")]
         aegis_program_id: Option<String>,
     },
 
@@ -302,9 +302,9 @@ async fn run_server(params: ServerParams) -> Result<(), Box<dyn std::error::Erro
         }
         Some(p)
     } else {
-        let require_policy = env::var("AEGIS_REQUIRE_POLICY").unwrap_or_default() == "1";
+        let require_policy = env::var("PRIVACY_COIN_REQUIRE_POLICY").unwrap_or_default() == "1";
         if require_policy {
-            tracing::error!("AEGIS_REQUIRE_POLICY=1 but no policy is configured — refusing to start");
+            tracing::error!("PRIVACY_COIN_REQUIRE_POLICY=1 but no policy is configured — refusing to start");
             std::process::exit(1);
         }
         tracing::warn!("No signing policy configured — blind signing is allowed (dev mode only)");

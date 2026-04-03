@@ -370,7 +370,7 @@ function generateSystemOverview() {
     })
   );
 
-  // Aegis Program outer box
+  // Privacy Coin Program outer box
   els.push(
     rect(440, 330, 900, 210, {
       backgroundColor: "#e1bee7",
@@ -379,7 +379,7 @@ function generateSystemOverview() {
     })
   );
   els.push(
-    text(460, 335, "Aegis Program (Pinocchio)", {
+    text(460, 335, "Privacy Coin Program (Pinocchio)", {
       fontSize: 18,
       strokeColor: "#6a1b9a",
       textAlign: "left",
@@ -419,7 +419,7 @@ function generateSystemOverview() {
 
   // SDK box
   els.push(
-    ...labeledRect(400, 670, 600, 60, "@aegis/sdk\n(Note Mgmt | Proofs | Stealth | Taproot)", {
+    ...labeledRect(400, 670, 600, 60, "@privacy-coin/sdk\n(Note Mgmt | Proofs | Stealth | Taproot)", {
       backgroundColor: "#90caf9",
       fontSize: 14,
     })

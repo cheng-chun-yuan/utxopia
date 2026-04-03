@@ -1,12 +1,12 @@
 [package]
-name = "aegis-pinocchio"
+name = "privacy-coin"
 version = "0.1.0"
-description = "Aegis - Privacy-preserving BTC to Solana bridge (Pinocchio)"
+description = "Privacy Coin - Privacy-preserving BTC to Solana bridge (Pinocchio)"
 edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "lib"]
-name = "aegis_pinocchio"
+name = "privacy_coin"
 
 [features]
 default = []

@@ -1,5 +1,5 @@
 /**
- * Event parser for Aegis sol_log_data events
+ * Event parser for Privacy Coin sol_log_data events
  *
  * Events are emitted by the on-chain program as base64-encoded log data.
  * Transaction logs contain lines like: "Program data: <base64>"

@@ -123,9 +123,9 @@ function serializeGroth16Proof(proof: any): Uint8Array {
 async function main() {
   const state = loadState();
   const authority = loadAuthority();
-  const AEGIS = new PublicKey(state.aegisProgramId);
-  const [poolState] = derivePoolStatePDA(AEGIS);
-  const [commitmentTree] = deriveCommitmentTreePDA(AEGIS);
+  const PRIVACY_COIN = new PublicKey(state.privacyCoinProgramId);
+  const [poolState] = derivePoolStatePDA(PRIVACY_COIN);
+  const [commitmentTree] = deriveCommitmentTreePDA(PRIVACY_COIN);
 
   if (!state.wsolNote || !state.tWsolMint) {
     throw new Error("wSOL note not found. Run step5 first.");
@@ -151,7 +151,7 @@ async function main() {
   // wSOL note uses NATIVE_MINT_2022 (step5 shieldSOL), not tWsolMint from step2
   const NATIVE_MINT_2022 = new PublicKey("9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP");
   const wsolMint = NATIVE_MINT_2022;
-  const [tokenConfig] = deriveTokenConfigPDA(AEGIS, wsolMint);
+  const [tokenConfig] = deriveTokenConfigPDA(PRIVACY_COIN, wsolMint);
   const tcInfo = await connection.getAccountInfo(tokenConfig);
   if (!tcInfo) throw new Error("wSOL TokenConfig not found");
   const tcData = parseTokenConfig(Buffer.from(tcInfo.data))!;
@@ -268,8 +268,8 @@ async function main() {
   // Accounts (disc=14, multi-output):
   // 0-7: fixed, 8-9: recipients (same ATA twice), 10: nullifier
   const nullifierBytes0 = bigintToBytes32BE(nullifier0);
-  const [nullifierPDA0] = deriveNullifierPDA(AEGIS, nullifierBytes0);
-  const [vkRegistry1x2] = deriveVkRegistryPDA(AEGIS, 1, 2);
+  const [nullifierPDA0] = deriveNullifierPDA(PRIVACY_COIN, nullifierBytes0);
+  const [vkRegistry1x2] = deriveVkRegistryPDA(PRIVACY_COIN, 1, 2);
 
   // Ensure user ATA exists for NATIVE_MINT_2022
   const { createAssociatedTokenAccountIdempotentInstruction } = await import("@solana/spl-token");
@@ -303,7 +303,7 @@ async function main() {
       // Nullifier
       { pubkey: nullifierPDA0, isSigner: false, isWritable: true },
     ],
-    programId: AEGIS,
+    programId: PRIVACY_COIN,
     data: txData,
   });
 

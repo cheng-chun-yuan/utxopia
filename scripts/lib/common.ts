@@ -1,5 +1,5 @@
 /**
- * Shared utilities for Aegis admin/deployment scripts.
+ * Shared utilities for Privacy Coin admin/deployment scripts.
  *
  * Goal-oriented: provides setupScript() to boot any script with
  * connection + authority + program IDs, plus state file access.
@@ -28,7 +28,7 @@ const PROJECT_ROOT = path.resolve(SCRIPTS_DIR, "..");
 export type Network = "localnet" | "devnet";
 
 export function detectNetwork(): Network {
-  const env = process.env.AEGIS_NETWORK;
+  const env = process.env.PRIVACY_COIN_NETWORK;
   if (env === "localnet" || env === "local") return "localnet";
   if (env === "devnet" || env === "dev") return "devnet";
   const rpc = process.env.RPC_URL || "";
@@ -48,7 +48,7 @@ function getRpcUrl(network?: Network): string {
 // =============================================================================
 
 export interface ScriptState {
-  aegisProgramId: string;
+  privacyCoinProgramId: string;
   btcLightClientId?: string;
   chadbufferId?: string;
   zkbtcMint: string;
@@ -122,15 +122,15 @@ export interface ScriptContext {
 
 /**
  * Boot a script: load state, connect, load keypair, derive pool PDA.
- * Accepts AEGIS_PROGRAM_ID env var override (for deploy-devnet.sh).
+ * Accepts PRIVACY_COIN_PROGRAM_ID env var override (for deploy-devnet.sh).
  */
 export function setupScript(network?: Network): ScriptContext {
   const state = loadState(network);
   const conn = new Connection(getRpcUrl(network), "confirmed");
   const authority = loadKeypair();
-  const pid = process.env.AEGIS_PROGRAM_ID
-    ? new PublicKey(process.env.AEGIS_PROGRAM_ID)
-    : new PublicKey(state.aegisProgramId);
+  const pid = process.env.PRIVACY_COIN_PROGRAM_ID
+    ? new PublicKey(process.env.PRIVACY_COIN_PROGRAM_ID)
+    : new PublicKey(state.privacyCoinProgramId);
   const [poolState, poolBump] = PublicKey.findProgramAddressSync(
     [Buffer.from("pool_state")], pid,
   );

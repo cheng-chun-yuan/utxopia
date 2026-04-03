@@ -1,5 +1,5 @@
 /**
- * Aegis Simplified API (JoinSplit Architecture)
+ * Privacy Coin Simplified API (JoinSplit Architecture)
  *
  * DEPOSIT (BTC -> zkBTC):
  * - depositToNote: Generate deposit credentials (taproot address + claim link)
@@ -68,7 +68,7 @@ export interface ApiClientConfig {
 // ============================================================================
 
 /** Default program ID (Solana Devnet) - imported from pda.ts */
-export { AEGIS_PROGRAM_ID as DEFAULT_PROGRAM_ID } from "./pda";
+export { PRIVACY_COIN_PROGRAM_ID as DEFAULT_PROGRAM_ID } from "./pda";
 
 /** Maximum BTC supply in satoshis (21 million BTC) */
 const MAX_SATS = 21_000_000n * 100_000_000n;

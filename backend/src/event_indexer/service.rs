@@ -1,6 +1,6 @@
 //! Event indexer service
 //!
-//! Polls Solana for new transactions targeting the Aegis program,
+//! Polls Solana for new transactions targeting the Privacy Coin program,
 //! parses sol_log_data events from transaction logs, and stores them in SQLite.
 //!
 //! Event discriminators parsed:
@@ -29,7 +29,7 @@ use super::tree_cache::TreeCache;
 pub struct EventIndexerConfig {
     /// Solana RPC URL
     pub rpc_url: String,
-    /// Aegis program ID (base58)
+    /// Privacy Coin program ID (base58)
     pub program_id: String,
     /// Poll interval in seconds
     pub poll_interval_secs: u64,
@@ -44,7 +44,7 @@ pub struct EventIndexerService {
     tree_cache: Option<Arc<TreeCache>>,
 }
 
-// Aegis program ID is read from config.program_id (set via AEGIS_PROGRAM_ID env var)
+// Privacy Coin program ID is read from config.program_id (set via PRIVACY_COIN_PROGRAM_ID env var)
 
 /// Data extracted from a getTransaction RPC response
 struct TransactionData {
@@ -58,7 +58,7 @@ struct TransactionData {
     btc_sweep_txid: Option<String>,
     /// Original BTC deposit amount in sats (fetched from mempool)
     btc_deposit_amount_sats: Option<i64>,
-    /// Aegis instruction discriminator (first byte of instruction data)
+    /// Privacy Coin instruction discriminator (first byte of instruction data)
     instruction_disc: Option<u8>,
 }
 
@@ -668,7 +668,7 @@ impl EventIndexerService {
             None
         };
 
-        // Extract Aegis instruction discriminator (first byte of instruction data)
+        // Extract Privacy Coin instruction discriminator (first byte of instruction data)
         let instruction_disc = Self::extract_aegis_instruction_disc(
             &json["result"]["transaction"]["message"]["instructions"],
             &account_keys,
@@ -787,8 +787,8 @@ impl EventIndexerService {
         None
     }
 
-    /// Extract the Aegis program instruction discriminator from transaction instructions.
-    /// Returns the first byte of instruction data for the Aegis program invocation.
+    /// Extract the Privacy Coin program instruction discriminator from transaction instructions.
+    /// Returns the first byte of instruction data for the Privacy Coin program invocation.
     fn extract_aegis_instruction_disc(
         instructions: &serde_json::Value,
         account_keys: &[&str],
@@ -814,7 +814,7 @@ impl EventIndexerService {
 
     /// Convert a scriptPubKey to a bech32/bech32m address.
     /// Handles P2TR (OP_1 + PUSH32 + 32 bytes) and P2WPKH/P2WSH.
-    /// Uses AEGIS_NETWORK env var to determine HRP (tb for testnet, bcrt for regtest, bc for mainnet).
+    /// Uses PRIVACY_COIN_NETWORK env var to determine HRP (tb for testnet, bcrt for regtest, bc for mainnet).
     fn script_to_testnet_address(script: &[u8]) -> Option<String> {
         if script.len() < 4 { return None; }
         let version = if script[0] == 0x00 { 0u8 } else if script[0] >= 0x51 && script[0] <= 0x60 { script[0] - 0x50 } else { return None };
@@ -838,7 +838,7 @@ impl EventIndexerService {
             data5.push(((acc << (5 - bits)) & 31) as u8);
         }
 
-        let hrp = match std::env::var("AEGIS_NETWORK").unwrap_or_default().as_str() {
+        let hrp = match std::env::var("PRIVACY_COIN_NETWORK").unwrap_or_default().as_str() {
             "mainnet" | "main" => "bc",
             "regtest" | "localnet" | "local" => "bcrt",
             _ => "tb",

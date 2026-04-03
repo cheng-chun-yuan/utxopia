@@ -7,7 +7,7 @@
 use reqwest::Client;
 use serde::Deserialize;
 
-use crate::config::{Network, AEGISConfig};
+use crate::config::{Network, PRIVACY_COINConfig};
 
 /// Esplora HTTP client
 #[derive(Debug, Clone)]
@@ -25,8 +25,8 @@ impl EsploraClient {
         }
     }
 
-    /// Create a client from AEGISConfig
-    pub fn from_config(config: &AEGISConfig) -> Self {
+    /// Create a client from PRIVACY_COINConfig
+    pub fn from_config(config: &PRIVACY_COINConfig) -> Self {
         Self::new(&config.bitcoin_api)
     }
 

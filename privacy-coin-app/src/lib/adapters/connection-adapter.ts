@@ -14,7 +14,7 @@ import {
   createFetchConnectionAdapter,
   createConnectionAdapterFromWeb3 as sdkCreateConnectionAdapterFromWeb3,
   type ConnectionAdapter,
-} from "@aegis/sdk";
+} from "@privacy-coin/sdk";
 import { HELIUS_RPC_DEVNET } from "@/lib/helius";
 import { getSolanaRpcUrl } from "@/lib/api/constants";
 
@@ -93,12 +93,12 @@ export function getConnection(): Connection {
 }
 
 // =============================================================================
-// SDK ConnectionAdapter (for @aegis/sdk compatibility)
+// SDK ConnectionAdapter (for @privacy-coin/sdk compatibility)
 // =============================================================================
 
 /**
  * Create a ConnectionAdapter that wraps @solana/kit Rpc
- * for use with @aegis/sdk functions.
+ * for use with @privacy-coin/sdk functions.
  */
 export function createConnectionAdapter(): ConnectionAdapter {
   return createFetchConnectionAdapter(getRpcUrl());

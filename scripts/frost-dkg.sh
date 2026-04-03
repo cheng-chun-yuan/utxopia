@@ -120,11 +120,11 @@ step "Setting group key on-chain (set_pool_config disc=27)"
 # Read program ID from localnet-state or env
 STATE_FILE="$PROJECT_ROOT/scripts/e2e/localnet-state.json"
 if [ -f "$STATE_FILE" ]; then
-  PROGRAM_ID=$(python3 -c "import json; print(json.load(open('$STATE_FILE'))['aegisProgramId'])")
-elif [ -n "${AEGIS_PROGRAM_ID:-}" ]; then
-  PROGRAM_ID="$AEGIS_PROGRAM_ID"
+  PROGRAM_ID=$(python3 -c "import json; print(json.load(open('$STATE_FILE'))['privacyCoinProgramId'])")
+elif [ -n "${PRIVACY_COIN_PROGRAM_ID:-}" ]; then
+  PROGRAM_ID="$PRIVACY_COIN_PROGRAM_ID"
 else
-  err "No AEGIS_PROGRAM_ID found. Set it in env or run E2E init first."
+  err "No PRIVACY_COIN_PROGRAM_ID found. Set it in env or run E2E init first."
   exit 1
 fi
 
@@ -137,7 +137,7 @@ const { Connection, Keypair, PublicKey, SystemProgram, TransactionInstruction, T
 const fs = require('fs');
 
 (async () => {
-  const rpc = '${AEGIS_SOLANA_RPC:-http://localhost:8899}';
+  const rpc = '${PRIVACY_COIN_SOLANA_RPC:-http://localhost:8899}';
   const conn = new Connection(rpc, 'confirmed');
   const programId = new PublicKey('$PROGRAM_ID');
 
@@ -216,7 +216,7 @@ log "DKG state:        $DKG_STATE"
 log "On-chain:         PoolConfig PDA updated with group_pub_key"
 log ""
 log "Backend config (already in .env after sync):"
-log "  AEGIS_SIGNING_MODE=frost"
-log "  AEGIS_FROST_THRESHOLD=$THRESHOLD"
-log "  AEGIS_FROST_PARTICIPANTS=3"
-log "  AEGIS_FROST_SIGNER_URLS=$SIGNER_URLS"
+log "  PRIVACY_COIN_SIGNING_MODE=frost"
+log "  PRIVACY_COIN_FROST_THRESHOLD=$THRESHOLD"
+log "  PRIVACY_COIN_FROST_PARTICIPANTS=3"
+log "  PRIVACY_COIN_FROST_SIGNER_URLS=$SIGNER_URLS"

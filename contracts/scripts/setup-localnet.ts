@@ -28,7 +28,7 @@ const RPC_URL = process.env.RPC_URL || "http://127.0.0.1:8899";
 
 async function main() {
   console.log("============================================================");
-  console.log("Aegis Localnet Setup (with Bitcoin regtest)");
+  console.log("Privacy Coin Localnet Setup (with Bitcoin regtest)");
   console.log("============================================================");
 
   // 1. Kill existing validator

@@ -34,7 +34,7 @@ use pinocchio::{
     sysvars::{clock::Clock, rent::Rent, Sysvar},
 };
 
-use crate::error::AegisError;
+use crate::error::PrivacyCoinError;
 use crate::state::{
     CommitmentTree, DepositIntent, DepositReceipt, PoolConfig, PoolState, TokenConfig,
     VerifiedTransactionView, light_client_tip_height,
@@ -177,11 +177,11 @@ pub fn process_verify_deposit_v2(
         let pool = PoolState::from_bytes(&pool_data)?;
 
         if pool.is_paused() {
-            return Err(AegisError::PoolPaused.into());
+            return Err(PrivacyCoinError::PoolPaused.into());
         }
 
         if authority.key().as_ref() != pool.authority {
-            return Err(AegisError::Unauthorized.into());
+            return Err(PrivacyCoinError::Unauthorized.into());
         }
 
         (pool.bump, pool.min_deposit(), pool.max_deposit())
@@ -206,7 +206,7 @@ pub fn process_verify_deposit_v2(
         {
             let receipt_data = deposit_receipt_info.try_borrow_data()?;
             if !receipt_data.is_empty() && receipt_data[0] == DEPOSIT_RECEIPT_DISCRIMINATOR {
-                return Err(AegisError::DuplicateDeposit.into());
+                return Err(PrivacyCoinError::DuplicateDeposit.into());
             }
         }
 
@@ -238,11 +238,11 @@ pub fn process_verify_deposit_v2(
         let vt = VerifiedTransactionView::from_bytes(&vt_data)?;
 
         if *vt.txid() != ix_data.sweep_txid {
-            return Err(AegisError::InvalidSpvProof.into());
+            return Err(PrivacyCoinError::InvalidSpvProof.into());
         }
 
         if vt.block_height() as u64 != ix_data.block_height {
-            return Err(AegisError::InvalidBlockHeader.into());
+            return Err(PrivacyCoinError::InvalidBlockHeader.into());
         }
     }
 
@@ -256,7 +256,7 @@ pub fn process_verify_deposit_v2(
             tip - ix_data.block_height + 1
         };
         if confirmations < DEMO_REQUIRED_CONFIRMATIONS {
-            return Err(AegisError::InsufficientConfirmations.into());
+            return Err(PrivacyCoinError::InsufficientConfirmations.into());
         }
     }
 
@@ -264,23 +264,23 @@ pub fn process_verify_deposit_v2(
     crate::utils::chadbuffer::validate_chadbuffer_owner(tx_buffer_info)?;
     let sweep_buffer_data = tx_buffer_info
         .try_borrow_data()
-        .map_err(|_| AegisError::InvalidBlockHeader)?;
+        .map_err(|_| PrivacyCoinError::InvalidBlockHeader)?;
 
     let sweep_raw_tx = read_transaction_from_buffer(&sweep_buffer_data, ix_data.sweep_tx_size as usize)?;
 
     // Verify sweep transaction hash matches sweep_txid
     let computed_sweep_hash = compute_tx_hash(sweep_raw_tx);
     if computed_sweep_hash != ix_data.sweep_txid {
-        return Err(AegisError::InvalidSpvProof.into());
+        return Err(PrivacyCoinError::InvalidSpvProof.into());
     }
 
     // Parse sweep TX and extract deposit amount
     let sweep_parsed = ParsedTransaction::parse(sweep_raw_tx)
-        .map_err(|_| AegisError::InvalidSpvProof)?;
+        .map_err(|_| PrivacyCoinError::InvalidSpvProof)?;
 
     // --- Verify sweep TX actually spends from deposit TX ---
     if !sweep_parsed.find_input_with_prev_txid(&ix_data.deposit_txid) {
-        return Err(AegisError::InvalidSpvProof.into());
+        return Err(PrivacyCoinError::InvalidSpvProof.into());
     }
 
     // --- Read npk + ephemeral_pub from DepositIntent PDA ---
@@ -326,7 +326,7 @@ pub fn process_verify_deposit_v2(
             crate::utils::chadbuffer::validate_chadbuffer_owner(deposit_tx_buffer_info)?;
             let deposit_buffer_data = deposit_tx_buffer_info
                 .try_borrow_data()
-                .map_err(|_| AegisError::InvalidSpvProof)?;
+                .map_err(|_| PrivacyCoinError::InvalidSpvProof)?;
             let deposit_raw_tx = read_transaction_from_buffer(
                 &deposit_buffer_data,
                 ix_data.deposit_tx_size as usize,
@@ -335,19 +335,19 @@ pub fn process_verify_deposit_v2(
             // Verify deposit TX hash matches deposit_txid
             let computed_deposit_hash = compute_tx_hash(deposit_raw_tx);
             if computed_deposit_hash != ix_data.deposit_txid {
-                return Err(AegisError::InvalidSpvProof.into());
+                return Err(PrivacyCoinError::InvalidSpvProof.into());
             }
 
             // Parse deposit TX and find P2TR output
             let deposit_parsed = ParsedTransaction::parse(deposit_raw_tx)
-                .map_err(|_| AegisError::InvalidSpvProof)?;
+                .map_err(|_| PrivacyCoinError::InvalidSpvProof)?;
 
             // Find the P2TR output that was spent by the sweep TX
             // Look for any P2TR output and extract its output key
             let deposit_output_key = deposit_parsed
                 .outputs()
                 .find_map(|output| extract_p2tr_output_key(output.script_pubkey))
-                .ok_or(AegisError::TaprootVerificationFailed)?;
+                .ok_or(PrivacyCoinError::TaprootVerificationFailed)?;
 
             // Verify: outputKey == groupPubKey + H_TapTweak(groupPubKey || npk) * G
             verify_taproot_output_key(&gpk, &npk, &deposit_output_key)?;
@@ -356,15 +356,15 @@ pub fn process_verify_deposit_v2(
 
     // Extract deposit amount from sweep TX's deposit output (largest P2TR output)
     let deposit_output = sweep_parsed.find_deposit_output()
-        .ok_or(AegisError::InvalidSpvProof)?;
+        .ok_or(PrivacyCoinError::InvalidSpvProof)?;
     let amount_sats = deposit_output.value;
 
     // Validate extracted amount is within bounds
     if amount_sats < min_deposit {
-        return Err(AegisError::AmountTooSmall.into());
+        return Err(PrivacyCoinError::AmountTooSmall.into());
     }
     if amount_sats > max_deposit {
-        return Err(AegisError::AmountTooLarge.into());
+        return Err(PrivacyCoinError::AmountTooLarge.into());
     }
 
     // Compute commitment ON-CHAIN: Poseidon(npk, token_id, amount)
@@ -376,7 +376,7 @@ pub fn process_verify_deposit_v2(
         let tree = CommitmentTree::from_bytes_mut(&mut tree_data)?;
 
         if !tree.has_capacity() {
-            return Err(AegisError::TreeFull.into());
+            return Err(PrivacyCoinError::TreeFull.into());
         }
 
         tree.insert_leaf(&commitment)?

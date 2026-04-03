@@ -1,4 +1,4 @@
-//! Shared constants for the Aegis backend.
+//! Shared constants for the Privacy Coin backend.
 
 // =============================================================================
 // Pool State Layout Offsets (matches contracts/programs/aegis/src/state/pool.rs)

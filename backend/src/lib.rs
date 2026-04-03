@@ -1,4 +1,4 @@
-//! Aegis Backend
+//! Privacy Coin Backend
 //!
 //! Server-side services for the privacy-preserving Bitcoin-to-Solana bridge.
 //!
@@ -35,7 +35,7 @@ pub mod redemption;
 pub mod stealth;
 
 // Re-exports: Configuration
-pub use config::{ConfigError, Network, SigningMode, AEGISConfig};
+pub use config::{ConfigError, Network, SigningMode, PRIVACY_COINConfig};
 
 // Re-exports: Middleware (from api module)
 pub use api::middleware::{

@@ -5,7 +5,7 @@
 
 import { Connection, Keypair, PublicKey, Transaction, sendAndConfirmTransaction } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID, createSetAuthorityInstruction, AuthorityType } from "@solana/spl-token";
-import { derivePoolStatePDA } from "@aegis/sdk";
+import { derivePoolStatePDA } from "@privacy-coin/sdk";
 import * as fs from "fs";
 
 const RPC_URL = "https://api.devnet.solana.com";

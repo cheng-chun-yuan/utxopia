@@ -4,7 +4,7 @@
  */
 
 import { PublicKey } from "@solana/web3.js";
-import type { InboxNote } from "@/hooks/use-aegis";
+import type { InboxNote } from "@/hooks/use-privacy-coin";
 
 // --- Constants ---
 
@@ -138,7 +138,7 @@ export interface OutputRow {
   mode: OutputMode;
   amount: string;
   secretPhrase: string;
-  resolvedMeta: import("@aegis/sdk").StealthMetaAddress | null;
+  resolvedMeta: import("@privacy-coin/sdk").StealthMetaAddress | null;
   resolvedName: string | null;
   stealthError: string | null;
   solanaAddress: string;

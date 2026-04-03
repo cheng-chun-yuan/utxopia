@@ -2,7 +2,7 @@
 /**
  * Full Localnet Test - Poseidon Migration Verification
  *
- * Tests the complete Aegis flow on localnet:
+ * Tests the complete Privacy Coin flow on localnet:
  * 1. Deploy programs
  * 2. Initialize pool and commitment tree
  * 3. Add demo deposit (commitment to tree)
@@ -30,7 +30,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 
-// SDK imports - all from main @aegis/sdk
+// SDK imports - all from main @privacy-coin/sdk
 import {
   initProver,
   setCircuitPath,
@@ -47,7 +47,7 @@ import {
   encryptAmount,
   buildAddDemoStealthData,
   type ClaimInputs,
-} from "@aegis/sdk";
+} from "@privacy-coin/sdk";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -555,7 +555,7 @@ async function testVerifyProofStructure(
 
 async function main() {
   console.log("============================================================");
-  console.log("Aegis Full Localnet Test - Poseidon Migration");
+  console.log("Privacy Coin Full Localnet Test - Poseidon Migration");
   console.log("============================================================");
 
   const results: { name: string; passed: boolean }[] = [];

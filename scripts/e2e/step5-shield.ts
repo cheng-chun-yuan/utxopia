@@ -56,7 +56,7 @@ stepHeader(5, "Shield SPL Tokens");
 
 async function shieldToken(
   authority: ReturnType<typeof loadAuthority>,
-  aegis: PublicKey,
+  pcoin: PublicKey,
   poolState: PublicKey,
   commitmentTree: PublicKey,
   mint: PublicKey,
@@ -141,7 +141,7 @@ async function shieldToken(
  */
 async function shieldSOL(
   authority: ReturnType<typeof loadAuthority>,
-  aegis: PublicKey,
+  pcoin: PublicKey,
   poolState: PublicKey,
   commitmentTree: PublicKey,
   lamports: bigint,
@@ -254,9 +254,9 @@ async function shieldSOL(
 async function main() {
   const state = loadState();
   const authority = loadAuthority();
-  const AEGIS = new PublicKey(state.aegisProgramId);
-  const [poolState] = derivePoolStatePDA(AEGIS);
-  const [commitmentTree] = deriveCommitmentTreePDA(AEGIS);
+  const PRIVACY_COIN = new PublicKey(state.privacyCoinProgramId);
+  const [poolState] = derivePoolStatePDA(PRIVACY_COIN);
+  const [commitmentTree] = deriveCommitmentTreePDA(PRIVACY_COIN);
 
   await initPoseidon();
   const poseidonHash = null; // passed to functions for backward compat, but SDK used internally
@@ -268,7 +268,7 @@ async function main() {
 
   // Shield 1000 tUSDC (6 decimals → 1_000_000_000)
   const usdcNote = await shieldToken(
-    authority, AEGIS, poolState, commitmentTree,
+    authority, PRIVACY_COIN, poolState, commitmentTree,
     new PublicKey(state.tUsdcMint), new PublicKey(state.tUsdcVault!),
     1_000_000_000n, poseidonHash, mpk, "tUSDC",
   );
@@ -278,7 +278,7 @@ async function main() {
   let wsolNote: NoteState;
   try {
     wsolNote = await shieldSOL(
-      authority, AEGIS, poolState, commitmentTree,
+      authority, PRIVACY_COIN, poolState, commitmentTree,
       100_000_000n, // 0.1 SOL
       poseidonHash, mpk,
     );
@@ -288,7 +288,7 @@ async function main() {
       log("wSOL: NATIVE_MINT_2022 not available — falling back to tWSOL");
       if (!state.tWsolMint) throw new Error("Neither wSOL nor tWSOL available");
       wsolNote = await shieldToken(
-        authority, AEGIS, poolState, commitmentTree,
+        authority, PRIVACY_COIN, poolState, commitmentTree,
         new PublicKey(state.tWsolMint), new PublicKey(state.tWsolVault!),
         5_000_000_000n, poseidonHash, mpk, "tWSOL (fallback)",
       );

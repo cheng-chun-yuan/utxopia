@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { PublicKey, type Connection } from "@solana/web3.js";
 import {
-  AegisClient,
+  PrivacyCoinClient,
   hexToBytes,
   bytesToHex,
   deserializeKeysFromStorage,
@@ -16,7 +16,7 @@ import {
   type ViewOnlyKeys,
   type ScannedNote,
   type ViewOnlyScannedNote,
-} from "@aegis/sdk";
+} from "@privacy-coin/sdk";
 import { fetchSpentNullifierPDAs, nullifierHashToPDA } from "@/lib/nullifier-utils";
 import { VAULT_TOKENS } from "@/lib/supported-tokens";
 import { getBackendUrl, getSolanaRpcUrl } from "@/lib/api/constants";
@@ -25,7 +25,7 @@ import { getBackendUrl, getSolanaRpcUrl } from "@/lib/api/constants";
 // localStorage Key Persistence (AES-256-GCM encrypted)
 // ============================================================================
 
-const KEYS_STORAGE_PREFIX = "aegis:keys:";
+const KEYS_STORAGE_PREFIX = "pcoin:keys:";
 
 async function deriveStorageKey(walletPubkey: string): Promise<CryptoKey> {
   const enc = new TextEncoder();
@@ -72,7 +72,7 @@ async function decryptData(key: CryptoKey, encrypted: string): Promise<string> {
 
 async function persistKeys(walletPubkey: string, _keys: AegisKeys): Promise<void> {
   try {
-    const client = AegisClient.instance();
+    const client = PrivacyCoinClient.instance();
     const data = client.serializeKeys();
     if (!data) return;
     const storageKey = await deriveStorageKey(walletPubkey);
@@ -124,8 +124,8 @@ export function getEventClient(): EventClient {
       backendUrl,
       backendWsUrl: wsUrl,
       solanaRpcUrl: getSolanaRpcUrl(),
-      programId: AegisClient.instance().config.aegisProgramId,
-      commitmentTreeAddress: AegisClient.instance().config.commitmentTreePda,
+      programId: PrivacyCoinClient.instance().config.privacyCoinProgramId,
+      commitmentTreeAddress: PrivacyCoinClient.instance().config.commitmentTreePda,
     });
   }
   return eventClient;
@@ -236,8 +236,8 @@ export const useAegisStore = create<AegisState>((set, get) => ({
 
   initPoseidon: async () => {
     try {
-      if (!AegisClient.isInitialized) {
-        await AegisClient.init();
+      if (!PrivacyCoinClient.isInitialized) {
+        await PrivacyCoinClient.init();
       }
       set({ isPoseidonReady: true });
     } catch (err) {
@@ -249,7 +249,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const client = AegisClient.instance();
+      const client = PrivacyCoinClient.instance();
       const { keys: derivedKeys, stealthAddress: meta, stealthAddressEncoded: encoded } =
         await client.loginWithWallet({
           publicKey: wallet.publicKey,
@@ -294,8 +294,8 @@ export const useAegisStore = create<AegisState>((set, get) => ({
     const restored = await loadKeys(pubkeyStr, walletPubkey.toBytes());
     if (!restored) return false;
 
-    // Sync the AegisClient singleton with the restored keys
-    const client = AegisClient.instance();
+    // Sync the PrivacyCoinClient singleton with the restored keys
+    const client = PrivacyCoinClient.instance();
     const serialized = client.serializeKeys();
     // restoreKeys needs serialized form — re-serialize via loadKeys result
     // Since loadKeys already deserialized, we re-read raw from localStorage
@@ -323,13 +323,13 @@ export const useAegisStore = create<AegisState>((set, get) => ({
   deriveKeysFromPasskeySeed: async (seed: Uint8Array) => {
     set({ isLoading: true, error: null });
     try {
-      const client = AegisClient.instance();
+      const client = PrivacyCoinClient.instance();
       const { keys: derivedKeys, stealthAddress: meta, stealthAddressEncoded: encoded } =
         await client.loginWithSeed(seed);
 
       // Persist with "passkey:" prefix
       const credentialId = typeof window !== "undefined"
-        ? localStorage.getItem("aegis:passkey_credential_id") || "default"
+        ? localStorage.getItem("pcoin:passkey_credential_id") || "default"
         : "default";
       persistKeys("passkey:" + credentialId, derivedKeys);
 
@@ -351,7 +351,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
   hydratePasskeyKeys: async () => {
     try {
       const credentialId = typeof window !== "undefined"
-        ? localStorage.getItem("aegis:passkey_credential_id")
+        ? localStorage.getItem("pcoin:passkey_credential_id")
         : null;
       if (!credentialId) return false;
 
@@ -359,8 +359,8 @@ export const useAegisStore = create<AegisState>((set, get) => ({
       const restored = await loadKeys(storageId, new Uint8Array(32));
       if (!restored) return false;
 
-      // Sync the AegisClient singleton with the restored keys
-      const client = AegisClient.instance();
+      // Sync the PrivacyCoinClient singleton with the restored keys
+      const client = PrivacyCoinClient.instance();
       try {
         const raw = localStorage.getItem(KEYS_STORAGE_PREFIX + storageId);
         if (raw) {
@@ -388,8 +388,8 @@ export const useAegisStore = create<AegisState>((set, get) => ({
   loadViewOnlyKeys: (encoded: string) => {
     try {
       const voKeys = decodeViewOnlyKeys(encoded);
-      // Sync with AegisClient so computeNullifier works in view-only mode
-      const client = AegisClient.instance();
+      // Sync with PrivacyCoinClient so computeNullifier works in view-only mode
+      const client = PrivacyCoinClient.instance();
       client.loginViewOnly(voKeys);
       set({
         keys: null,
@@ -410,9 +410,9 @@ export const useAegisStore = create<AegisState>((set, get) => ({
     if (walletPubkey) {
       removeKeys(walletPubkey);
     }
-    // Clear AegisClient state
-    if (AegisClient.isInitialized) {
-      AegisClient.instance().logout();
+    // Clear PrivacyCoinClient state
+    if (PrivacyCoinClient.isInitialized) {
+      PrivacyCoinClient.instance().logout();
     }
     set({
       keys: null,
@@ -464,7 +464,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
         lastAnnouncementCount = announcements.length;
 
         // Build token list with computed tokenIds for multi-token scanning
-        const aegisClient = AegisClient.instance();
+        const aegisClient = PrivacyCoinClient.instance();
         const config = aegisClient.config;
         const tokensToScan: { symbol: string; tokenId: bigint }[] = [];
         for (const token of VAULT_TOKENS) {
@@ -513,7 +513,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
         // Check which notes are spent via backend batch nullifier API (use proxy)
         const backendUrl = "";
 
-        // Compute nullifier hashes (hex) for each note via AegisClient
+        // Compute nullifier hashes (hex) for each note via PrivacyCoinClient
         const nullifierData = scanned.map((note) => {
           const hashBytes = aegisClient.computeNullifier(note);
           const hashHex = Buffer.from(hashBytes).toString("hex");
@@ -622,7 +622,7 @@ export const useAegisStore = create<AegisState>((set, get) => ({
           method: "getTokenAccountsByOwner",
           params: [
             walletPubkey.toBase58(),
-            { mint: AegisClient.instance().config.zkbtcMint },
+            { mint: PrivacyCoinClient.instance().config.zkbtcMint },
             { encoding: "jsonParsed", commitment: "confirmed" },
           ],
         }),

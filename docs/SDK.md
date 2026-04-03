@@ -1,4 +1,4 @@
-# Aegis SDK Reference
+# Privacy Coin SDK Reference
 
 TypeScript SDK for privacy-preserving BTC to Solana bridge.
 
@@ -7,7 +7,7 @@ TypeScript SDK for privacy-preserving BTC to Solana bridge.
 ## Installation
 
 ```bash
-bun add @aegis/sdk
+bun add @privacy-coin/sdk
 ```
 
 ---
@@ -22,7 +22,7 @@ import {
   createClaimLinkFromNote,
   sendPrivate,
   withdraw
-} from '@aegis/sdk';
+} from '@privacy-coin/sdk';
 
 // 1. Generate deposit credentials
 const result = await deposit(100_000n); // 0.001 BTC
@@ -61,7 +61,7 @@ await withdraw(config, myNote, 'tb1q...');
 ## Key Management
 
 ```typescript
-import { deriveKeysFromWallet, createStealthMetaAddress } from '@aegis/sdk';
+import { deriveKeysFromWallet, createStealthMetaAddress } from '@privacy-coin/sdk';
 
 // Derive keys from wallet signature
 const keys = await deriveKeysFromWallet(walletAdapter);
@@ -86,7 +86,7 @@ const meta = createStealthMetaAddress(keys);
 ## Stealth Address Operations
 
 ```typescript
-import { scanAnnouncements, lookupZkeyName } from '@aegis/sdk';
+import { scanAnnouncements, lookupZkeyName } from '@privacy-coin/sdk';
 
 // Scan for incoming transfers using viewing key
 const myNotes = await scanAnnouncements(keys, announcements);
@@ -103,7 +103,7 @@ await sendPrivate(config, myNote, entry.stealthMetaAddress);
 All proofs are generated client-side via snarkjs (Groth16, BN254 curve):
 
 ```typescript
-import { generateClaimProof, generateSpendSplitProof } from '@aegis/sdk';
+import { generateClaimProof, generateSpendSplitProof } from '@privacy-coin/sdk';
 
 // Claim proof
 const proof = await generateClaimProof({
@@ -130,7 +130,7 @@ interface BabyJubPoint {
   y: bigint;
 }
 
-// AEGIS keys (private)
+// PRIVACY_COIN keys (private)
 interface AegisKeys {
   spendingPrivKey: bigint;         // Baby Jubjub scalar
   spendingPubKey: BabyJubPoint;
@@ -162,7 +162,7 @@ interface ScannedNote {
 
 ```typescript
 // Program IDs (devnet)
-AEGIS_PROGRAM_ID = '4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1';
+PRIVACY_COIN_PROGRAM_ID = '4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1';
 CHADBUFFER_PROGRAM_ID = '6VrJmWbhN9WbEkg87JizunVMpL6CHKGVmzWCf3o3LRgy';
 
 // Merkle tree

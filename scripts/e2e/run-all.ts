@@ -48,7 +48,7 @@ const steps = [
 ];
 
 console.log("========================================");
-console.log("Aegis E2E Full Localnet Test");
+console.log("Privacy Coin E2E Full Localnet Test");
 console.log("========================================\n");
 
 const results: { label: string; passed: boolean; duration: number }[] = [];

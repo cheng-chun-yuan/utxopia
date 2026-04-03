@@ -2,7 +2,7 @@
  * E2E Test: Groth16 Claim Circuit Proof Generation & Verification
  *
  * ⚠️  DEPRECATED: This test uses the legacy 'claim' circuit.
- * The current Aegis implementation uses JoinSplit circuits instead.
+ * The current Privacy Coin implementation uses JoinSplit circuits instead.
  *
  * This file is kept for reference only and tests will be skipped.
  *

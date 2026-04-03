@@ -18,7 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { parseSats } from "@/lib/utils/validation";
 import { formatAmount } from "@/lib/utils/formatting";
-import { useAegis, useAegisKeys } from "@/hooks/use-aegis";
+import { useAegis, useAegisKeys } from "@/hooks/use-privacy-coin";
 import { useNoteAutoSelector } from "@/hooks/use-note-auto-selector";
 import { useJoinSplitSubmit } from "@/hooks/use-joinsplit-submit";
 import { buildTransferParams, type TransferMode } from "@/hooks/use-build-transfer-params";
@@ -31,7 +31,7 @@ import { BTC_DUST_LIMIT, BTC_MINER_FEE_ESTIMATE } from "@/lib/btc-constants";
 import { setActiveToken } from "@/lib/token-context";
 import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 import { validateBtcAddress as validateBtcAddressFn } from "@/components/ui/btc-address-input";
-import type { StealthMetaAddress } from "@aegis/sdk";
+import type { StealthMetaAddress } from "@privacy-coin/sdk";
 
 // ─── Flow Config ────────────────────────────────────────────────────
 
@@ -249,7 +249,7 @@ export function PaymentWizard({ config }: { config: FlowConfig }) {
   const handleConfirm = useCallback(async () => {
     if (!keys || !stealthAddress) return;
 
-    const { decodeStealthMetaAddress } = await import("@aegis/sdk");
+    const { decodeStealthMetaAddress } = await import("@privacy-coin/sdk");
 
     const params = await buildTransferParams({
       mode: config.mode,

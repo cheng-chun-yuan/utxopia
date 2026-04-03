@@ -42,7 +42,7 @@ async function createToken(
   decimals: number,
   label: string,
   poolState: PublicKey,
-  aegis: PublicKey,
+  pcoin: PublicKey,
 ): Promise<{ mint: PublicKey; vault: PublicKey; userAta: PublicKey }> {
   // Create mint
   const mintKp = Keypair.generate();
@@ -81,7 +81,7 @@ async function registerTokenConfig(
   poolState: PublicKey,
   mint: PublicKey,
   vault: PublicKey,
-  aegis: PublicKey,
+  pcoin: PublicKey,
   label: string,
   serviceFee: bigint = 0n,
 ) {
@@ -111,14 +111,14 @@ async function registerTokenConfig(
 async function main() {
   const state = loadState();
   const authority = loadAuthority();
-  const AEGIS = new PublicKey(state.aegisProgramId);
-  const [poolState] = derivePoolStatePDA(AEGIS);
+  const PRIVACY_COIN = new PublicKey(state.privacyCoinProgramId);
+  const [poolState] = derivePoolStatePDA(PRIVACY_COIN);
 
   // tUSDC (6 decimals)
   log("Creating tUSDC...");
-  const usdc = await createToken(authority, 6, "tUSDC", poolState, AEGIS);
+  const usdc = await createToken(authority, 6, "tUSDC", poolState, PRIVACY_COIN);
   // USDC: service_fee = 2_000_000 (= $2.00 at 6 decimals)
-  await registerTokenConfig(authority, poolState, usdc.mint, usdc.vault, AEGIS, "tUSDC", 2_000_000n);
+  await registerTokenConfig(authority, poolState, usdc.mint, usdc.vault, PRIVACY_COIN, "tUSDC", 2_000_000n);
 
   // Mint 1M tUSDC to user
   const mintUsdcIx = createMintToInstruction(
@@ -129,9 +129,9 @@ async function main() {
 
   // tWSOL (9 decimals)
   log("Creating tWSOL...");
-  const wsol = await createToken(authority, 9, "tWSOL", poolState, AEGIS);
+  const wsol = await createToken(authority, 9, "tWSOL", poolState, PRIVACY_COIN);
   // SOL: service_fee = 10_000_000 (= 0.01 SOL ≈ $2 at 9 decimals)
-  await registerTokenConfig(authority, poolState, wsol.mint, wsol.vault, AEGIS, "tWSOL", 10_000_000n);
+  await registerTokenConfig(authority, poolState, wsol.mint, wsol.vault, PRIVACY_COIN, "tWSOL", 10_000_000n);
 
   // Mint 100 tWSOL to user
   const mintWsolIx = createMintToInstruction(

@@ -3,7 +3,7 @@
 import { SATS_PER_BTC } from "@/lib/constants";
 
 // Re-export SDK formatting utilities for bigint amounts
-export { formatBtc as formatBtcBigint, parseBtc } from "@aegis/sdk";
+export { formatBtc as formatBtcBigint, parseBtc } from "@privacy-coin/sdk";
 
 /**
  * Format satoshis as BTC string with 8 decimal places

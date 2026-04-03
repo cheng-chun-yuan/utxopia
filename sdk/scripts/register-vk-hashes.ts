@@ -295,7 +295,7 @@ async function main() {
   });
 
   // Derive pool state PDA
-  const [poolStatePda] = await derivePoolStatePDA(config.aegisProgramId);
+  const [poolStatePda] = await derivePoolStatePDA(config.privacyCoinProgramId);
 
   // Register each variant
   for (const [n, m] of variants) {
@@ -309,7 +309,7 @@ async function main() {
     const [vkRegistryPda] = await deriveVkRegistryPDA(
       n,
       m,
-      config.aegisProgramId
+      config.privacyCoinProgramId
     );
     console.log(`  VK Registry PDA: ${vkRegistryPda}`);
 
@@ -331,7 +331,7 @@ async function main() {
     if (alreadyExists) {
       console.log(`  Exists — updating VK hash...`);
       ix = buildUpdateVkRegistryInstruction(
-        config.aegisProgramId,
+        config.privacyCoinProgramId,
         vkRegistryPda,
         authority,
         n,
@@ -340,7 +340,7 @@ async function main() {
       );
     } else {
       ix = buildInitVkRegistryInstruction(
-        config.aegisProgramId,
+        config.privacyCoinProgramId,
         poolStatePda,
         vkRegistryPda,
         authority,

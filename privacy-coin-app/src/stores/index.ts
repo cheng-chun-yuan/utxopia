@@ -12,7 +12,7 @@ export {
   useAegisKeys,
   useStealthInbox,
   type InboxNote,
-} from "./aegis-store";
+} from "./privacy-coin-store";
 
 export {
   useNotesStore,

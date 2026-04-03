@@ -1,5 +1,5 @@
 /**
- * Key Derivation for Aegis (Baby Jubjub + Ed25519)
+ * Key Derivation for Privacy Coin (Baby Jubjub + Ed25519)
  *
  * Dual-curve architecture (Railgun-style):
  * - Baby Jubjub spending key: SNARK-friendly, in-circuit verification via BabyPbk()
@@ -9,7 +9,7 @@
  * ```
  * Solana Wallet (Ed25519)
  *         │
- *         │ signs message: "Aegis key derivation v1"
+ *         │ signs message: "Privacy Coin key derivation v1"
  *         ▼
  *    Signature (64 bytes)
  *         │
@@ -62,7 +62,7 @@ type Eddsa = any;
 // ========== Types ==========
 
 /**
- * Complete Aegis key hierarchy derived from Solana wallet
+ * Complete Privacy Coin key hierarchy derived from Solana wallet
  *
  * Uses Baby Jubjub for spending keys and Ed25519 for viewing keys.
  */
@@ -159,7 +159,7 @@ export interface DelegatedViewKey {
 
 /** Message to sign for key derivation */
 export const SPENDING_KEY_DERIVATION_MESSAGE =
-  "Aegis key derivation v1";
+  "Privacy Coin key derivation v1";
 
 /** Domain separator for spending key derivation */
 const SPENDING_KEY_DOMAIN = "spend";
@@ -309,7 +309,7 @@ export interface WalletSignerAdapter {
 // ========== Key Derivation ==========
 
 /**
- * Derive Aegis keys from Solana wallet signature.
+ * Derive Privacy Coin keys from Solana wallet signature.
  *
  * Uses circomlibjs EdDSA for spendingPubKey derivation so keys are
  * compatible with the EdDSAPoseidonVerifier circuit.
@@ -342,7 +342,7 @@ export async function deriveKeysFromWallet(
 }
 
 /**
- * Derive Aegis keys from a signature
+ * Derive Privacy Coin keys from a signature
  *
  * Spending key: SHA256(sig || "spend") → reduce mod BJJ_ORDER → babyJubMul(scalar, BASE8)
  * Viewing key: SHA256(sig || "view") → Ed25519 private key → ed25519.getPublicKey()
@@ -432,7 +432,7 @@ export async function deriveKeysFromSeedCircuit(seed: Uint8Array): Promise<Aegis
 // ========== Stealth Meta-Address ==========
 
 /**
- * Create a stealth meta-address from Aegis keys
+ * Create a stealth meta-address from Privacy Coin keys
  *
  * Size: 96 bytes (32 BJJ compressed + 32 Ed25519 + 32 MPK)
  */
@@ -491,19 +491,19 @@ export function parseStealthMetaAddress(meta: StealthMetaAddress): {
 }
 
 /**
- * Encode stealth meta-address as a single string with aegis: prefix
- * Format: "aegis:" + hex(spendingPubKey (32) || viewingPubKey (32) || mpk (32))
+ * Encode stealth meta-address as a single string with pcoin: prefix
+ * Format: "pcoin:" + hex(spendingPubKey (32) || viewingPubKey (32) || mpk (32))
  */
 export function encodeStealthMetaAddress(meta: StealthMetaAddress): string {
   const combined = concatBytes(meta.spendingPubKey, meta.viewingPubKey, meta.mpk);
-  return "aegis:" + bytesToHex(combined);
+  return "pcoin:" + bytesToHex(combined);
 }
 
 /**
- * Decode stealth meta-address from a string (with or without aegis: prefix)
+ * Decode stealth meta-address from a string (with or without pcoin: prefix)
  */
 export function decodeStealthMetaAddress(encoded: string): StealthMetaAddress {
-  const hex = encoded.startsWith("aegis:") ? encoded.slice(6) : encoded;
+  const hex = encoded.startsWith("pcoin:") ? encoded.slice(6) : encoded;
   const bytes = hexToBytes(hex);
   if (bytes.length !== 96) {
     throw new Error("Invalid stealth meta-address length (expected 96 bytes)");

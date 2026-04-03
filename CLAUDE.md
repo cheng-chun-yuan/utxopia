@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Aegis is a privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs. Users deposit BTC, which becomes shielded commitments in a Merkle tree. All transfers use JoinSplit(N,M) proofs — no public tokens ever exist. Amount is revealed only at BTC withdrawal.
+Privacy Coin is a privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs. Users deposit BTC, which becomes shielded commitments in a Merkle tree. All transfers use JoinSplit(N,M) proofs — no public tokens ever exist. Amount is revealed only at BTC withdrawal.
 
 **Key Technologies**: Pinocchio (Solana), circom circuits (Groth16 JoinSplit proofs), Taproot (BTC deposits), Baby Jubjub + Ed25519 (stealth addresses), FROST (threshold signing)
 
 ## Commands
 
-### Frontend (Next.js) - `/aegis-app`
+### Frontend (Next.js) - `/privacy-coin-app`
 ```bash
 bun run dev          # Start dev server (port 3000)
 bun run build        # Production build (builds SDK first)
@@ -98,10 +98,10 @@ SOL/USDC/USDT → Shield (disc=29) ───┤──► Poseidon(npk, token_id,
 | `contracts/programs/aegis` | Main Solana program (14 instructions) | Rust (Pinocchio) |
 | `contracts/programs/btc-light-client` | Bitcoin header tracking (standalone program) | Rust (Pinocchio) |
 | `circuits` | JoinSplit Groth16 ZK circuits | circom |
-| `sdk` | TypeScript SDK (@aegis/sdk) | TypeScript |
+| `sdk` | TypeScript SDK (@privacy-coin/sdk) | TypeScript |
 | `frost_server` | FROST threshold signing + policy engine + audit log | Rust |
 | `backend` | API server + deposit tracker + redemption + header relayer | Rust + TypeScript |
-| `aegis-app` | Web interface | Next.js + React |
+| `privacy-coin-app` | Web interface | Next.js + React |
 
 ### JoinSplit Circuit Architecture
 
@@ -165,7 +165,7 @@ Spending Key (Baby Jubjub) ─► Signs JoinSplit transactions (EdDSA-Poseidon)
 
 ## Key Program IDs
 
-- **Aegis (devnet)**: `AjbX243s2JMFG2uhfTjKkadjPvQEPgcuyV3vfLJv36MT`
+- **Privacy Coin (devnet)**: `AjbX243s2JMFG2uhfTjKkadjPvQEPgcuyV3vfLJv36MT`
 - **BTC Light Client**: `859B7kw1xDyY8rzSXY6pAPNxaAsPWrsaAPJk3iivd43g`
 
 ## On-Chain Instructions
@@ -183,13 +183,13 @@ Spending Key (Baby Jubjub) ─► Signs JoinSplit transactions (EdDSA-Poseidon)
 | 22 | `execute_pool_update` | Permissionless execute after timelock expires |
 | 23 | `cancel_pool_update` | Authority cancels pending proposal |
 
-## SDK Usage (@aegis/sdk)
+## SDK Usage (@privacy-coin/sdk)
 
 ```typescript
-import { AegisClient } from '@aegis/sdk';
+import { PrivacyCoinClient } from '@privacy-coin/sdk';
 
 // High-level client (recommended)
-const client = await AegisClient.init({ network: "devnet" });
+const client = await PrivacyCoinClient.init({ network: "devnet" });
 await client.loginWithSeed(seed);
 const notes = await client.getNotes(tokens);
 ```
@@ -202,7 +202,7 @@ import {
   generateJoinSplitProof,
   buildTransactInstruction,
   scanUnifiedNotes,
-} from '@aegis/sdk';
+} from '@privacy-coin/sdk';
 
 // 1. DEPOSIT: Generate npk-based deposit (user sends any amount)
 const deposit = await createNonInteractiveDeposit(recipientMeta, groupPubKey);
@@ -246,13 +246,13 @@ State files are the single source of truth per network:
 `sync-env.sh` reads the state file and generates ALL config:
 ```bash
 ./scripts/sync-env.sh                           # defaults to localnet
-AEGIS_NETWORK=devnet ./scripts/sync-env.sh       # switch to devnet
+PRIVACY_COIN_NETWORK=devnet ./scripts/sync-env.sh       # switch to devnet
 ```
 
 Generated files:
 - `backend/.env.{network}` + symlink `backend/.env`
-- `aegis-app/.env.{network}` + symlink `aegis-app/.env.local`
-- `aegis-app/src/lib/networks.json` (frontend runtime config)
+- `privacy-coin-app/.env.{network}` + symlink `privacy-coin-app/.env.local`
+- `privacy-coin-app/src/lib/networks.json` (frontend runtime config)
 
 **After deploy or validator reset**: update the state JSON, then run `./scripts/sync-env.sh`.
 Never edit `networks.json` or `.env` files directly — they are generated.
@@ -271,8 +271,8 @@ cd backend && cargo run --bin zkbtc-api -- tracker
 
 ### Top up stealth address (all tokens)
 ```bash
-# From aegis-app/ dir (needs SDK):
-bun run scripts/topup-all.ts aegis:<stealth_address>
+# From privacy-coin-app/ dir (needs SDK):
+bun run scripts/topup-all.ts pcoin:<stealth_address>
 ```
 
 ## Development Notes
@@ -286,5 +286,5 @@ bun run scripts/topup-all.ts aegis:<stealth_address>
 - **Tree Depth**: 16 (65,536 leaves max)
 - **snarkjs + bun**: Use Node.js subprocess fallback for proof generation
 - **ECDH stealth**: Use `@noble/curves` (SDK) for Ed25519→X25519 conversion, NOT Node.js `crypto.convertKey` (produces different scalars)
-- **AEGIS_PROGRAM_ID**: Required env var — backend fails fast if missing (no hardcoded fallback)
+- **PRIVACY_COIN_PROGRAM_ID**: Required env var — backend fails fast if missing (no hardcoded fallback)
 - **Reconciler**: Seeds leaves from `localnet-state.json` when on localnet with empty DB (handles validator `--reset`)

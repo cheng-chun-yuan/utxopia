@@ -36,17 +36,17 @@ import {
   computeUnifiedCommitmentSync,
   computeNullifierSync,
   hashNullifierSync,
-  AEGIS_PROGRAM_ID,
+  PRIVACY_COIN_PROGRAM_ID,
   deriveCommitmentTreePDA,
   type ClaimInputs,
-} from "@aegis/sdk";
+} from "@privacy-coin/sdk";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Constants
 const RPC_URL = "https://api.devnet.solana.com";
-const PROGRAM_ID = new PublicKey(AEGIS_PROGRAM_ID);
+const PROGRAM_ID = new PublicKey(PRIVACY_COIN_PROGRAM_ID);
 const TREE_DEPTH = 20;
 
 // BN254 scalar field modulus

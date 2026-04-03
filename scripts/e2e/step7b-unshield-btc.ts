@@ -134,9 +134,9 @@ function serializeGroth16Proof(proof: any): Uint8Array {
 async function main() {
   const state = loadState();
   const authority = loadAuthority();
-  const AEGIS = new PublicKey(state.aegisProgramId);
-  const [poolState] = derivePoolStatePDA(AEGIS);
-  const [commitmentTree] = deriveCommitmentTreePDA(AEGIS);
+  const PRIVACY_COIN = new PublicKey(state.privacyCoinProgramId);
+  const [poolState] = derivePoolStatePDA(PRIVACY_COIN);
+  const [commitmentTree] = deriveCommitmentTreePDA(PRIVACY_COIN);
 
   if (!state.transferNotes?.change) {
     throw new Error("Transfer change note not found. Run step6 first.");
@@ -165,7 +165,7 @@ async function main() {
 
   // Get token config for zkBTC
   const zkbtcMint = new PublicKey(state.zkbtcMint);
-  const [tokenConfig] = deriveTokenConfigPDA(AEGIS, zkbtcMint);
+  const [tokenConfig] = deriveTokenConfigPDA(PRIVACY_COIN, zkbtcMint);
   const poolVault = deriveATA(zkbtcMint, poolState);
   const userAta = deriveATA(zkbtcMint, authority.publicKey);
 
@@ -273,8 +273,8 @@ async function main() {
   // 0. pool_state, 1. commitment_tree, 2. vk_registry, 3. user, 4. system_program,
   // 5. token_config, 6. vault, 7. token_program, 8..8+P recipients, 8+P+ nullifiers
   const nullifierBytes0 = bigintToBytes32BE(nullifier0);
-  const [nullifierPDA0] = deriveNullifierPDA(AEGIS, nullifierBytes0);
-  const [vkRegistry1x1] = deriveVkRegistryPDA(AEGIS, 1, 1);
+  const [nullifierPDA0] = deriveNullifierPDA(PRIVACY_COIN, nullifierBytes0);
+  const [vkRegistry1x1] = deriveVkRegistryPDA(PRIVACY_COIN, 1, 1);
 
   const ix = new TransactionInstruction({
     keys: [
@@ -289,7 +289,7 @@ async function main() {
       { pubkey: userAta, isSigner: false, isWritable: true }, // recipient
       { pubkey: nullifierPDA0, isSigner: false, isWritable: true },
     ],
-    programId: AEGIS,
+    programId: PRIVACY_COIN,
     data: txData,
   });
 

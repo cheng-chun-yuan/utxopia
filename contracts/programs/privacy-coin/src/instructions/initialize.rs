@@ -1,4 +1,4 @@
-//! Initialize instruction - sets up the Aegis pool
+//! Initialize instruction - sets up the Privacy Coin pool
 
 use pinocchio::{
     account_info::AccountInfo,
@@ -11,7 +11,7 @@ use pinocchio::{
 use crate::utils::{create_pda_account, validate_system_program, validate_token_owner};
 
 use crate::constants::{MAX_DEPOSIT_SATS, MIN_DEPOSIT_SATS};
-use crate::error::AegisError;
+use crate::error::PrivacyCoinError;
 use crate::state::{CommitmentTree, PoolState, POOL_STATE_DISCRIMINATOR};
 
 /// Initialize instruction data
@@ -90,7 +90,7 @@ impl<'a> InitializeAccounts<'a> {
     }
 }
 
-/// Initialize the Aegis pool
+/// Initialize the Privacy Coin pool
 pub fn process_initialize(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -129,7 +129,7 @@ pub fn process_initialize(
         // Account exists, check if initialized
         let pool_data = accounts.pool_state.try_borrow_data()?;
         if pool_data[0] == POOL_STATE_DISCRIMINATOR {
-            return Err(AegisError::AlreadyInitialized.into());
+            return Err(PrivacyCoinError::AlreadyInitialized.into());
         }
     } else {
         // Create pool_state PDA

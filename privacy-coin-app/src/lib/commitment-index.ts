@@ -14,14 +14,14 @@ import {
   parseProgramEvents,
   type StealthAnnouncementEvent,
   initPoseidon,
-} from "@aegis/sdk";
+} from "@privacy-coin/sdk";
 import { getBackendUrl } from "@/lib/api/constants";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { PublicKey } from "@solana/web3.js";
 import { getHeliusConnection } from "./helius-server";
 
-// Aegis Program ID from SDK
-const getAegisProgramId = () => new PublicKey(getConfig().aegisProgramId);
+// Privacy Coin Program ID from SDK
+const getAegisProgramId = () => new PublicKey(getConfig().privacyCoinProgramId);
 
 // Storage path for the commitment index
 const DATA_DIR = process.cwd() + "/data";

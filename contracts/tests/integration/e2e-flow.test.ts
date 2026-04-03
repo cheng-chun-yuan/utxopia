@@ -20,7 +20,7 @@ import {
   buildSplitCommitmentInstruction,
 } from "../helpers/instructions";
 
-describe("Aegis E2E Flow Simulation", function () {
+describe("Privacy Coin E2E Flow Simulation", function () {
   let authority: Keypair;
   let user: Keypair;
   let poseidon: Poseidon;

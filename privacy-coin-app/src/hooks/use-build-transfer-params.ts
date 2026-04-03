@@ -8,8 +8,8 @@
  */
 
 import { PublicKey } from "@solana/web3.js";
-import type { InboxNote } from "@/hooks/use-aegis";
-import type { JoinSplitProofInputs, AegisKeys, StealthMetaAddress, ScannedNote } from "@aegis/sdk";
+import type { InboxNote } from "@/hooks/use-privacy-coin";
+import type { JoinSplitProofInputs, AegisKeys, StealthMetaAddress, ScannedNote } from "@privacy-coin/sdk";
 import { ZKBTC_TOKEN_ID, reduceToFieldOnChain } from "@/components/btc-widget/pay-flow/helpers";
 
 export type TransferMode = "stealth" | "public" | "btc";
@@ -63,18 +63,18 @@ export async function buildTransferParams(inputs: TransferUserInputs): Promise<T
     createTransferBoundParams,
     computeStealthDataHash,
     decodeStealthMetaAddress,
-    AegisClient,
+    PrivacyCoinClient,
     bytesToHex,
-  } = await import("@aegis/sdk");
+  } = await import("@privacy-coin/sdk");
 
   await initPoseidon();
 
   const { mode, amountSats, selectedNotes, keys, selfMeta, relayerMeta, relayerFee, recipient } = inputs;
 
   // 1. Fetch merkle proofs and prepare claim inputs for each note
-  const aegisClient = AegisClient.isInitialized
-    ? AegisClient.instance()
-    : await AegisClient.init();
+  const aegisClient = PrivacyCoinClient.isInitialized
+    ? PrivacyCoinClient.instance()
+    : await PrivacyCoinClient.init();
 
   const merkleProofs = await aegisClient.fetchMerkleProofs(
     selectedNotes.map((n) => n.commitmentHex),

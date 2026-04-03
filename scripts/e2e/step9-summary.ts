@@ -26,9 +26,9 @@ stepHeader(9, "Summary");
 
 async function main() {
   const state = loadState();
-  const AEGIS = new PublicKey(state.aegisProgramId);
-  const [poolState] = derivePoolStatePDA(AEGIS);
-  const [commitmentTree] = deriveCommitmentTreePDA(AEGIS);
+  const PRIVACY_COIN = new PublicKey(state.privacyCoinProgramId);
+  const [poolState] = derivePoolStatePDA(PRIVACY_COIN);
+  const [commitmentTree] = deriveCommitmentTreePDA(PRIVACY_COIN);
   const zkbtcMint = new PublicKey(state.zkbtcMint);
 
   // Pool state
@@ -46,7 +46,7 @@ async function main() {
   }
 
   // zkBTC TokenConfig
-  const [zkbtcTc] = deriveTokenConfigPDA(AEGIS, zkbtcMint);
+  const [zkbtcTc] = deriveTokenConfigPDA(PRIVACY_COIN, zkbtcMint);
   const tcInfo = await connection.getAccountInfo(zkbtcTc);
   if (tcInfo) {
     const tc = parseTokenConfig(Buffer.from(tcInfo.data));
@@ -57,7 +57,7 @@ async function main() {
 
   // tUSDC TokenConfig
   if (state.tUsdcMint) {
-    const [usdcTc] = deriveTokenConfigPDA(AEGIS, new PublicKey(state.tUsdcMint));
+    const [usdcTc] = deriveTokenConfigPDA(PRIVACY_COIN, new PublicKey(state.tUsdcMint));
     const usdcInfo = await connection.getAccountInfo(usdcTc);
     if (usdcInfo) {
       const tc = parseTokenConfig(Buffer.from(usdcInfo.data));
@@ -69,7 +69,7 @@ async function main() {
 
   // tWSOL TokenConfig
   if (state.tWsolMint) {
-    const [wsolTc] = deriveTokenConfigPDA(AEGIS, new PublicKey(state.tWsolMint));
+    const [wsolTc] = deriveTokenConfigPDA(PRIVACY_COIN, new PublicKey(state.tWsolMint));
     const wsolInfo = await connection.getAccountInfo(wsolTc);
     if (wsolInfo) {
       const tc = parseTokenConfig(Buffer.from(wsolInfo.data));
@@ -122,7 +122,7 @@ async function main() {
     if (state.btcNote2?.sweepTxid) {
       const sweepBytes = Buffer.from(state.btcNote2.sweepTxid, "hex");
       sweepBytes.reverse();
-      const [consumedUtxo] = deriveUtxoPDA(AEGIS, sweepBytes, state.btcNote2.sweepVout ?? 0);
+      const [consumedUtxo] = deriveUtxoPDA(PRIVACY_COIN, sweepBytes, state.btcNote2.sweepVout ?? 0);
       const consumedInfo = await connection.getAccountInfo(consumedUtxo);
       if (consumedInfo === null) {
         log("Consumed UTXO: CLOSED (correct — deposit UTXO spent in withdrawal)");
@@ -135,7 +135,7 @@ async function main() {
     if (state.btcNote?.sweepTxid) {
       const sweepBytes1 = Buffer.from(state.btcNote.sweepTxid, "hex");
       sweepBytes1.reverse();
-      const [deposit1Utxo] = deriveUtxoPDA(AEGIS, sweepBytes1, state.btcNote.sweepVout ?? 0);
+      const [deposit1Utxo] = deriveUtxoPDA(PRIVACY_COIN, sweepBytes1, state.btcNote.sweepVout ?? 0);
       const deposit1Info = await connection.getAccountInfo(deposit1Utxo);
       if (deposit1Info && deposit1Info.data[0] === 0x09) {
         const status = deposit1Info.data[1] === 0 ? "Unspent" : "Reserved";

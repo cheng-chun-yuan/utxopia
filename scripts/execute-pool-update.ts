@@ -5,7 +5,7 @@
  */
 
 import { TransactionInstruction } from "@solana/web3.js";
-import { buildExecutePoolUpdateInstructionData } from "@aegis/sdk";
+import { buildExecutePoolUpdateInstructionData } from "@privacy-coin/sdk";
 import { setupScript, sendTx } from "./lib/common.ts";
 
 async function main() {

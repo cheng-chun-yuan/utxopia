@@ -2,7 +2,7 @@
 //!
 //! This library provides threshold Schnorr signatures using FROST
 //! (Flexible Round-Optimized Schnorr Threshold signatures) for
-//! secure Bitcoin operations in Aegis.
+//! secure Bitcoin operations in Privacy Coin.
 //!
 //! # Architecture
 //!

@@ -1,5 +1,5 @@
 /**
- * Comprehensive Aegis Test Suite
+ * Comprehensive Privacy Coin Test Suite
  *
  * Tests all instructions:
  * - INITIALIZE (0): Setup pool state and commitment tree
@@ -42,7 +42,7 @@ import {
   generateSplitProof,
   setCircuitPath,
   type SplitInputs,
-} from "@aegis/sdk/prover";
+} from "@privacy-coin/sdk/prover";
 
 // SDK imports for demo stealth instruction
 import {
@@ -55,7 +55,7 @@ import {
   babyJubMul,
   BABYJUB_BASE8,
   randomFieldElement,
-} from "@aegis/sdk";
+} from "@privacy-coin/sdk";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -853,7 +853,7 @@ async function testSplitProofGeneration(): Promise<TestResult> {
 
 async function main() {
   console.log("============================================================");
-  console.log("Aegis Comprehensive Test Suite");
+  console.log("Privacy Coin Comprehensive Test Suite");
   console.log("============================================================");
   console.log(`RPC: ${RPC_URL}`);
   console.log(`Program: ${PROGRAM_ID.toBase58()}`);

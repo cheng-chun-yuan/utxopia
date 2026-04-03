@@ -1,12 +1,12 @@
 #!/usr/bin/env bun
 /**
- * Deploy and Initialize Aegis on Localnet
+ * Deploy and Initialize Privacy Coin on Localnet
  *
  * This script:
- * 1. Deploys both Aegis and BTC Light Client programs
+ * 1. Deploys both Privacy Coin and BTC Light Client programs
  * 2. Initializes the BTC Light Client with a test block
  * 3. Creates the zkBTC Token-2022 mint
- * 4. Initializes the Aegis pool state and commitment tree
+ * 4. Initializes the Privacy Coin pool state and commitment tree
  * 5. Adds demo notes for testing
  *
  * Prerequisites:
@@ -60,7 +60,7 @@ import {
   babyJubMul,
   BABYJUB_BASE8,
   randomFieldElement,
-} from "@aegis/sdk";
+} from "@privacy-coin/sdk";
 import { execSync } from "child_process";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -78,8 +78,8 @@ const CONFIG_PATH = path.join(CONTRACTS_DIR, "config.json");
 // Load config to get program paths
 const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
 
-// Seeds for Aegis PDAs
-const AEGISSeeds = {
+// Seeds for Privacy Coin PDAs
+const PRIVACY_COINSeeds = {
   POOL_STATE: "pool_state",
   COMMITMENT_TREE: "commitment_tree",
 };
@@ -92,7 +92,7 @@ const BTCLCSeeds = {
 };
 
 // Instruction discriminators
-const AEGISInstruction = {
+const PRIVACY_COINInstruction = {
   INITIALIZE: 0,
   ADD_DEMO_STEALTH: 13,
 };
@@ -135,7 +135,7 @@ const TEST_BTC_BLOCK = {
 // =============================================================================
 
 interface DeployResult {
-  aegisProgramId: PublicKey;
+  privacyCoinProgramId: PublicKey;
   btcLightClientProgramId: PublicKey;
   chadbufferProgramId: PublicKey;
   groth16VerifierProgramId: PublicKey;
@@ -188,7 +188,7 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
   logSection("Program Deployment");
 
   // Get program IDs from keypairs
-  const aegisKeypairPath = path.join(TARGET_DIR, "aegis_pinocchio-keypair.json");
+  const aegisKeypairPath = path.join(TARGET_DIR, "privacy_coin-keypair.json");
   const btclcKeypairPath = path.join(TARGET_DIR, "btc_light_client-keypair.json");
   const chadbufferKeypairPath = path.join(CONTRACTS_DIR, "programs/chadbuffer/chadbuffer-keypair.json");
   const groth16KeypairPath = path.join(TARGET_DIR, "groth16_verifier-keypair.json");
@@ -220,19 +220,19 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
     groth16Keypair = Keypair.generate();
   }
 
-  const aegisProgramId = aegisKeypair.publicKey;
+  const privacyCoinProgramId = aegisKeypair.publicKey;
   const btcLightClientProgramId = btclcKeypair.publicKey;
   const chadbufferProgramId = chadbufferKeypair.publicKey;
   const groth16VerifierProgramId = groth16Keypair.publicKey;
 
-  log(`Aegis Program ID: ${aegisProgramId.toBase58()}`);
+  log(`Privacy Coin Program ID: ${privacyCoinProgramId.toBase58()}`);
   log(`BTC Light Client Program ID: ${btcLightClientProgramId.toBase58()}`);
   log(`ChadBuffer Program ID: ${chadbufferProgramId.toBase58()}`);
   log(`Groth16 Verifier Program ID: ${groth16VerifierProgramId.toBase58()}`);
 
   if (skipDeploy) {
     log("Skipping deployment (--skip-deploy flag)");
-    return { aegisProgramId, btcLightClientProgramId, chadbufferProgramId, groth16VerifierProgramId };
+    return { privacyCoinProgramId, btcLightClientProgramId, chadbufferProgramId, groth16VerifierProgramId };
   }
 
   // Deploy via surfnet_writeProgram RPC (no Solana CLI needed)
@@ -254,8 +254,8 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
   }
 
   // Deploy Aegis
-  log("Deploying Aegis program...");
-  await deployViaSurfpool(aegisProgramId.toBase58(), `${TARGET_DIR}/aegis_pinocchio.so`, "Aegis");
+  log("Deploying Privacy Coin program...");
+  await deployViaSurfpool(privacyCoinProgramId.toBase58(), `${TARGET_DIR}/privacy_coin.so`, "Privacy Coin");
 
   // Deploy BTC Light Client
   log("Deploying BTC Light Client program...");
@@ -290,7 +290,7 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
   log("Waiting for programs to be ready...");
   await sleep(3000);
 
-  return { aegisProgramId, btcLightClientProgramId, chadbufferProgramId, groth16VerifierProgramId };
+  return { privacyCoinProgramId, btcLightClientProgramId, chadbufferProgramId, groth16VerifierProgramId };
 }
 
 // =============================================================================
@@ -299,14 +299,14 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
 
 function derivePoolStatePDA(programId: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from(AEGISSeeds.POOL_STATE)],
+    [Buffer.from(PRIVACY_COINSeeds.POOL_STATE)],
     programId
   );
 }
 
 function deriveCommitmentTreePDA(programId: PublicKey): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
-    [Buffer.from(AEGISSeeds.COMMITMENT_TREE)],
+    [Buffer.from(PRIVACY_COINSeeds.COMMITMENT_TREE)],
     programId
   );
 }
@@ -368,7 +368,7 @@ function buildBTCLCInitializeIx(
   });
 }
 
-function buildAEGISInitializeIx(
+function buildPRIVACY_COINInitializeIx(
   poolState: PublicKey,
   commitmentTree: PublicKey,
   zkbtcMint: PublicKey,
@@ -380,7 +380,7 @@ function buildAEGISInitializeIx(
   treeBump: number
 ): TransactionInstruction {
   const data = Buffer.alloc(3);
-  data[0] = AEGISInstruction.INITIALIZE;
+  data[0] = PRIVACY_COINInstruction.INITIALIZE;
   data[1] = poolBump;
   data[2] = treeBump;
 
@@ -491,12 +491,12 @@ async function initializeBTCRelay(
   return lightClientPda;
 }
 
-async function initializeAEGIS(
+async function initializePRIVACY_COIN(
   connection: Connection,
   authority: Keypair,
   programId: PublicKey
 ): Promise<InitResult> {
-  logSection("Aegis Initialization");
+  logSection("Privacy Coin Initialization");
 
   const [poolStatePda, poolBump] = derivePoolStatePDA(programId);
   const [commitmentTreePda, treeBump] = deriveCommitmentTreePDA(programId);
@@ -507,7 +507,7 @@ async function initializeAEGIS(
   // Check if already initialized
   const poolAccount = await connection.getAccountInfo(poolStatePda);
   if (poolAccount && poolAccount.data[0] === Discriminators.POOL_STATE) {
-    log("Aegis already initialized, skipping...");
+    log("Privacy Coin already initialized, skipping...");
 
     // Parse existing pool state to get mint and vault info
     // Pool state layout: discriminator(1) + bump(1) + flags(1) + padding(1) + authority(32) + zkbtc_mint(32) + pool_vault(32) + ...
@@ -586,8 +586,8 @@ async function initializeAEGIS(
   log(`Frost Vault: ${frostVault.address.toBase58()}`);
 
   // Initialize Aegis
-  log("Initializing Aegis pool...");
-  const ix = buildAEGISInitializeIx(
+  log("Initializing Privacy Coin pool...");
+  const ix = buildPRIVACY_COINInitializeIx(
     poolStatePda,
     commitmentTreePda,
     zkbtcMint,
@@ -604,7 +604,7 @@ async function initializeAEGIS(
     commitment: "confirmed",
   });
 
-  log(`Aegis initialized: ${sig}`);
+  log(`Privacy Coin initialized: ${sig}`);
 
   return {
     poolStatePda,
@@ -710,7 +710,7 @@ function saveLocalnetConfig(
 
   // Update config.json with localnet values
   config.programs.localnet = {
-    Aegis: deployResult.aegisProgramId.toBase58(),
+    Aegis: deployResult.privacyCoinProgramId.toBase58(),
     btc_light_client: deployResult.btcLightClientProgramId.toBase58(),
     chadbuffer: deployResult.chadbufferProgramId.toBase58(),
     groth16_verifier: deployResult.groth16VerifierProgramId.toBase58(),
@@ -724,7 +724,7 @@ function saveLocalnetConfig(
     network: "localnet",
     rpcUrl: RPC_URL,
     programs: {
-      Aegis: deployResult.aegisProgramId.toBase58(),
+      Aegis: deployResult.privacyCoinProgramId.toBase58(),
       btcLightClient: deployResult.btcLightClientProgramId.toBase58(),
       chadbuffer: deployResult.chadbufferProgramId.toBase58(),
       groth16Verifier: deployResult.groth16VerifierProgramId.toBase58(),
@@ -759,7 +759,7 @@ async function main() {
   const skipDeploy = args.includes("--skip-deploy");
   const skipDemo = args.includes("--skip-demo");
 
-  logSection("Aegis Localnet Deploy & Initialize");
+  logSection("Privacy Coin Localnet Deploy & Initialize");
 
   log(`RPC URL: ${RPC_URL}`);
   log(`Skip Deploy: ${skipDeploy}`);
@@ -819,10 +819,10 @@ async function main() {
   );
 
   // Initialize Aegis
-  const initResult = await initializeAEGIS(
+  const initResult = await initializePRIVACY_COIN(
     connection,
     authority,
-    deployResult.aegisProgramId
+    deployResult.privacyCoinProgramId
   );
   initResult.btcLightClientPda = btcLightClientPda;
 
@@ -833,7 +833,7 @@ async function main() {
     await addDemoNotes(
       connection,
       authority,
-      deployResult.aegisProgramId,
+      deployResult.privacyCoinProgramId,
       initResult.poolStatePda,
       initResult.commitmentTreePda,
       initResult.zkbtcMint,
@@ -850,7 +850,7 @@ async function main() {
   logSection("Deployment Complete!");
 
   console.log("Summary:");
-  console.log(`  Aegis Program:       ${deployResult.aegisProgramId.toBase58()}`);
+  console.log(`  Privacy Coin Program:       ${deployResult.privacyCoinProgramId.toBase58()}`);
   console.log(`  BTC Light Client:     ${deployResult.btcLightClientProgramId.toBase58()}`);
   console.log(`  ChadBuffer:           ${deployResult.chadbufferProgramId.toBase58()}`);
   console.log(`  Groth16 Verifier:   ${deployResult.groth16VerifierProgramId.toBase58()}`);

@@ -1,5 +1,5 @@
 /**
- * Devnet Setup Script for Aegis (Poseidon2 version)
+ * Devnet Setup Script for Privacy Coin (Poseidon2 version)
  *
  * 1. Initialize pool state (if needed)
  * 2. Add demo commitments using Poseidon2
@@ -202,7 +202,7 @@ function buildAddDemoNoteIx(
 
 async function main() {
   console.log("\n" + "=".repeat(70));
-  console.log("         Aegis DEVNET SETUP (Poseidon2)");
+  console.log("         Privacy Coin DEVNET SETUP (Poseidon2)");
   console.log("=".repeat(70) + "\n");
 
   // Load wallet

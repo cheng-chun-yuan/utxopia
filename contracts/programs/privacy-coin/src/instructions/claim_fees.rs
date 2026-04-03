@@ -17,7 +17,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::error::AegisError;
+use crate::error::PrivacyCoinError;
 use crate::state::{PoolState, TokenConfig};
 use crate::utils::{
     validate_account_writable, validate_program_owner,
@@ -64,7 +64,7 @@ pub fn process_claim_fees(
         let pool_data = pool_state_info.try_borrow_data()?;
         let pool = PoolState::from_bytes(&pool_data)?;
         if authority.key().as_ref() != pool.authority {
-            return Err(AegisError::Unauthorized.into());
+            return Err(PrivacyCoinError::Unauthorized.into());
         }
         pool.bump
     };
@@ -83,11 +83,11 @@ pub fn process_claim_fees(
 
         // Validate vault matches
         if vault.key().as_ref() != tc.vault {
-            return Err(AegisError::InvalidVault.into());
+            return Err(PrivacyCoinError::InvalidVault.into());
         }
 
         if amount > tc.accumulated_fees() {
-            return Err(AegisError::InsufficientFees.into());
+            return Err(PrivacyCoinError::InsufficientFees.into());
         }
     }
 

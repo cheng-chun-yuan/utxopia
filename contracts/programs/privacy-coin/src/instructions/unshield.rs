@@ -41,7 +41,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::error::AegisError;
+use crate::error::PrivacyCoinError;
 use crate::state::{
     CommitmentTree, NullifierOperationType, NullifierRecord, PoolState, TokenConfig,
     VkRegistry, NULLIFIER_RECORD_DISCRIMINATOR,
@@ -224,7 +224,7 @@ pub fn process_unshield(
             &stealth_data_hash,
         );
         if *bound_params_hash != expected {
-            return Err(AegisError::InvalidBoundParams.into());
+            return Err(PrivacyCoinError::InvalidBoundParams.into());
         }
     }
 
@@ -233,7 +233,7 @@ pub fn process_unshield(
         let pool_data = pool_state_info.try_borrow_data()?;
         let pool = PoolState::from_bytes(&pool_data)?;
         if pool.is_paused() {
-            return Err(AegisError::PoolPaused.into());
+            return Err(PrivacyCoinError::PoolPaused.into());
         }
         validate_active_tree_pda(commitment_tree_info, program_id, pool.active_tree_index())?;
         pool.withdrawal_fee_bps()
@@ -245,12 +245,12 @@ pub fn process_unshield(
         let tc = TokenConfig::from_bytes(&tc_data)?;
 
         if !tc.is_enabled() {
-            return Err(AegisError::TokenDisabled.into());
+            return Err(PrivacyCoinError::TokenDisabled.into());
         }
 
         // Validate vault matches
         if vault.key().as_ref() != tc.vault {
-            return Err(AegisError::InvalidVault.into());
+            return Err(PrivacyCoinError::InvalidVault.into());
         }
 
         tc.token_id
@@ -269,7 +269,7 @@ pub fn process_unshield(
         let vk = VkRegistry::from_bytes(&vk_data)?;
 
         if vk.n_inputs != n_inputs as u8 || vk.n_outputs != n_outputs as u8 {
-            return Err(AegisError::InvalidVkRegistry.into());
+            return Err(PrivacyCoinError::InvalidVkRegistry.into());
         }
     }
 
@@ -278,7 +278,7 @@ pub fn process_unshield(
         let tree_data = commitment_tree_info.try_borrow_data()?;
         let tree = CommitmentTree::from_bytes(&tree_data)?;
         if !tree.is_valid_root(merkle_root) {
-            return Err(AegisError::InvalidMerkleProof.into());
+            return Err(PrivacyCoinError::InvalidMerkleProof.into());
         }
     }
 
@@ -313,7 +313,7 @@ pub fn process_unshield(
                 &zero_npk, &token_id, unshield_amounts[k],
             )?;
             if *commitments_out[idx] != expected_commitment {
-                return Err(AegisError::InvalidCommitment.into());
+                return Err(PrivacyCoinError::InvalidCommitment.into());
             }
         }
     }
@@ -337,7 +337,7 @@ pub fn process_unshield(
         {
             let nullifier_data = nullifier_info.try_borrow_data()?;
             if !nullifier_data.is_empty() && nullifier_data[0] == NULLIFIER_RECORD_DISCRIMINATOR {
-                return Err(AegisError::NullifierAlreadyUsed.into());
+                return Err(PrivacyCoinError::NullifierAlreadyUsed.into());
             }
         }
 

@@ -92,7 +92,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Use bitcoin-cli via docker to fund the address
     let fund_output = std::process::Command::new("docker")
         .args([
-            "exec", "aegis-esplora-regtest",
+            "exec", "privacy-coin-esplora-regtest",
             "/srv/explorer/bitcoin/bin/bitcoin-cli",
             "-regtest", "-datadir=/data/bitcoin", "-rpcwallet=test",
             "sendtoaddress", &deposit_addr_str, "0.0005",
@@ -108,7 +108,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Mine 1 block
     let mine_output = std::process::Command::new("docker")
         .args([
-            "exec", "aegis-esplora-regtest",
+            "exec", "privacy-coin-esplora-regtest",
             "/srv/explorer/bitcoin/bin/bitcoin-cli",
             "-regtest", "-datadir=/data/bitcoin", "-rpcwallet=test",
             "generatetoaddress", "1", POOL_RECEIVE_ADDRESS,
@@ -149,7 +149,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Mine another block to confirm the sweep
             let _ = std::process::Command::new("docker")
                 .args([
-                    "exec", "aegis-esplora-regtest",
+                    "exec", "privacy-coin-esplora-regtest",
                     "/srv/explorer/bitcoin/bin/bitcoin-cli",
                     "-regtest", "-datadir=/data/bitcoin", "-rpcwallet=test",
                     "generatetoaddress", "1", POOL_RECEIVE_ADDRESS,

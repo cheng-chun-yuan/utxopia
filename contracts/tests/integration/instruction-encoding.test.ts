@@ -25,7 +25,7 @@ import {
   POOL_STATE_SIZE,
 } from "../helpers/pda";
 
-describe("Aegis Instruction Encoding", function () {
+describe("Privacy Coin Instruction Encoding", function () {
   let authority: Keypair;
   let user: Keypair;
   let poolStatePda: PublicKey;

@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { parseSats } from "@/lib/utils/validation";
 import { StealthRecipientInput } from "@/components/ui/stealth-recipient-input";
 import { BtcAddressInput } from "@/components/ui/btc-address-input";
-import type { StealthMetaAddress } from "@aegis/sdk";
+import type { StealthMetaAddress } from "@privacy-coin/sdk";
 import type { OutputRow } from "./helpers";
 import { isValidSolanaAddress } from "./helpers";
 import { NoteLinkPreview } from "./note-links";

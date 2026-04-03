@@ -38,11 +38,11 @@ stepHeader(8, "BTC Withdrawal Request");
 async function main() {
   const state = loadState();
   const authority = loadAuthority();
-  const AEGIS = new PublicKey(state.aegisProgramId);
+  const PRIVACY_COIN = new PublicKey(state.privacyCoinProgramId);
   const zkbtcMint = new PublicKey(state.zkbtcMint);
-  const [poolState] = derivePoolStatePDA(AEGIS);
-  const [commitmentTree] = deriveCommitmentTreePDA(AEGIS);
-  const [zkbtcTokenConfig] = deriveTokenConfigPDA(AEGIS, zkbtcMint);
+  const [poolState] = derivePoolStatePDA(PRIVACY_COIN);
+  const [commitmentTree] = deriveCommitmentTreePDA(PRIVACY_COIN);
+  const [zkbtcTokenConfig] = deriveTokenConfigPDA(PRIVACY_COIN, zkbtcMint);
 
   if (!state.transferNotes) throw new Error("Transfer notes not found. Run step6 first.");
 
@@ -100,8 +100,8 @@ async function main() {
   data.writeBigUInt64LE(requestNonce, off); off += 8;
 
   // Accounts (7): poolState, commitmentTree, nullifier, redemption, user, system, tokenConfig
-  const [nullifierPDA] = deriveNullifierPDA(AEGIS, nullifierBytes);
-  const [redemptionPDA] = deriveRedemptionPDA(AEGIS, authority.publicKey, requestNonce);
+  const [nullifierPDA] = deriveNullifierPDA(PRIVACY_COIN, nullifierBytes);
+  const [redemptionPDA] = deriveRedemptionPDA(PRIVACY_COIN, authority.publicKey, requestNonce);
 
   const ix = new TransactionInstruction({
     keys: [
@@ -113,7 +113,7 @@ async function main() {
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       { pubkey: zkbtcTokenConfig, isSigner: false, isWritable: true },
     ],
-    programId: AEGIS,
+    programId: PRIVACY_COIN,
     data,
   });
 

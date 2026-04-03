@@ -105,7 +105,7 @@ async function main() {
 
   // 2. Get program keypairs for IDs
   const targetDir = path.join(CONTRACTS_DIR, "target/deploy");
-  const aegisKpPath = path.join(targetDir, "aegis_pinocchio-keypair.json");
+  const aegisKpPath = path.join(targetDir, "privacy_coin-keypair.json");
   const btclcKpPath = path.join(targetDir, "btc_light_client-keypair.json");
   const chadbufferKpPath = path.join(CONTRACTS_DIR, "programs/chadbuffer/chadbuffer-keypair.json");
   const chadbufferSoPath = path.join(CONTRACTS_DIR, "programs/chadbuffer/chadbuffer.so");
@@ -116,7 +116,7 @@ async function main() {
 
   const aegisKp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(aegisKpPath, "utf-8"))));
   const btclcKp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(btclcKpPath, "utf-8"))));
-  const AEGIS = aegisKp.publicKey;
+  const PRIVACY_COIN = aegisKp.publicKey;
   const BTC_LC = btclcKp.publicKey;
 
   let chadbufferId: PublicKey;
@@ -127,17 +127,17 @@ async function main() {
     chadbufferId = new PublicKey("C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF");
   }
 
-  log(`Aegis: ${AEGIS.toBase58()}`);
+  log(`Aegis: ${PRIVACY_COIN.toBase58()}`);
   log(`BTC LC: ${BTC_LC.toBase58()}`);
   log(`ChadBuffer: ${chadbufferId.toBase58()}`);
 
   // 3. Start Surfpool (replaces solana-test-validator)
   log("Starting Surfpool...");
-  const aegisSo = path.join(targetDir, "aegis_pinocchio.so");
+  const aegisSo = path.join(targetDir, "privacy_coin.so");
   const btclcSo = path.join(targetDir, "btc_light_client.so");
   const BTC_LC_EFFECTIVE = BTC_LC;
 
-  // ChadBuffer: deploy at devnet address (Aegis expects this)
+  // ChadBuffer: deploy at devnet address (Privacy Coin expects this)
   const CHADBUFFER_DEVNET = "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF";
   chadbufferId = new PublicKey(CHADBUFFER_DEVNET);
 
@@ -187,7 +187,7 @@ async function main() {
     log(`${label} loaded at ${programId}`);
   }
 
-  await loadProgram(AEGIS.toBase58(), aegisSo, "Aegis");
+  await loadProgram(PRIVACY_COIN.toBase58(), aegisSo, "Privacy Coin");
   await loadProgram(BTC_LC.toBase58(), btclcSo, "BTC Light Client");
   if (fs.existsSync(chadbufferSoPath)) {
     await loadProgram(CHADBUFFER_DEVNET, chadbufferSoPath, "ChadBuffer");
@@ -204,8 +204,8 @@ async function main() {
   log("Authority funded");
 
   // 6. Create zkBTC mint (mint authority = pool state PDA so program can mint)
-  const [poolState, poolBump] = derivePoolStatePDA(AEGIS);
-  const [commitmentTree, treeBump] = deriveCommitmentTreePDA(AEGIS);
+  const [poolState, poolBump] = derivePoolStatePDA(PRIVACY_COIN);
+  const [commitmentTree, treeBump] = deriveCommitmentTreePDA(PRIVACY_COIN);
 
   log("Creating zkBTC mint...");
   const mintKp = Keypair.generate();
@@ -239,7 +239,7 @@ async function main() {
   // 8. Initialize pool (disc=0)
   // Fees: deposit_fee_bps=20 (0.2%), withdrawal_fee_bps=20 (0.2%)
   // On-chain also hardcodes service_fee_base=2000 sats
-  log("Initializing Aegis pool (deposit fee: 0.2%, withdrawal fee: 2000 sats + 0.2%)...");
+  log("Initializing Privacy Coin pool (deposit fee: 0.2%, withdrawal fee: 2000 sats + 0.2%)...");
   const initData = Buffer.alloc(7); // disc(1) + pool_bump(1) + tree_bump(1) + deposit_bps(2) + withdrawal_bps(2)
   initData[0] = Disc.INITIALIZE;
   initData[1] = poolBump;
@@ -257,7 +257,7 @@ async function main() {
       { pubkey: authority.publicKey, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
-    programId: AEGIS,
+    programId: PRIVACY_COIN,
     data: initData,
   });
   await sendIx([initIx], [authority]);
@@ -265,7 +265,7 @@ async function main() {
 
   // 9. Register zkBTC TokenConfig (disc=28)
   log("Registering zkBTC TokenConfig...");
-  const [zkbtcTokenConfig] = deriveTokenConfigPDA(AEGIS, zkbtcMint);
+  const [zkbtcTokenConfig] = deriveTokenConfigPDA(PRIVACY_COIN, zkbtcMint);
   const regData = Buffer.alloc(1 + 32); // disc + service_fee(8) + min(8) + max(8) + cap(8)
   regData[0] = Disc.REGISTER_TOKEN;
   // service_fee = 2000 sats (~$2 at $100k BTC), min_deposit = 1000, max_deposit = 100 BTC, deposit_cap = 1000 BTC
@@ -284,7 +284,7 @@ async function main() {
       { pubkey: poolVaultAccount.address, isSigner: false, isWritable: false },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
-    programId: AEGIS,
+    programId: PRIVACY_COIN,
     data: Buffer.concat([Buffer.from([Disc.REGISTER_TOKEN]), regPayload]),
   });
   await sendIx([regIx], [authority]);
@@ -299,7 +299,7 @@ async function main() {
       const wsolVault = await getOrCreateAssociatedTokenAccount(
         connection, authority, NATIVE_MINT_2022, poolState, true, undefined, undefined, TOKEN_2022,
       );
-      const [wsolTokenConfig] = deriveTokenConfigPDA(AEGIS, NATIVE_MINT_2022);
+      const [wsolTokenConfig] = deriveTokenConfigPDA(PRIVACY_COIN, NATIVE_MINT_2022);
       const wsolRegPayload = Buffer.alloc(32);
       wsolRegPayload.writeBigUInt64LE(10_000_000n, 0);      // service_fee (~0.01 SOL ≈ $2)
       wsolRegPayload.writeBigUInt64LE(10_000_000n, 8);      // min_deposit (0.01 SOL)
@@ -314,7 +314,7 @@ async function main() {
           { pubkey: wsolVault.address, isSigner: false, isWritable: false },
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
-        programId: AEGIS,
+        programId: PRIVACY_COIN,
         data: Buffer.concat([Buffer.from([Disc.REGISTER_TOKEN]), wsolRegPayload]),
       });
       await sendIx([wsolRegIx], [authority]);
@@ -335,7 +335,7 @@ async function main() {
     }
     const vkJson = JSON.parse(fs.readFileSync(vkPath, "utf-8"));
     const vkHash = computeVkHash(vkJson);
-    const [vkRegistry] = deriveVkRegistryPDA(AEGIS, nIn, nOut);
+    const [vkRegistry] = deriveVkRegistryPDA(PRIVACY_COIN, nIn, nOut);
 
     const existing = await connection.getAccountInfo(vkRegistry);
     if (existing && existing.data[0] === 0x14) {
@@ -356,7 +356,7 @@ async function main() {
         { pubkey: authority.publicKey, isSigner: true, isWritable: true },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
-      programId: AEGIS,
+      programId: PRIVACY_COIN,
       data: vkData,
     });
     await sendIx([vkIx], [authority]);
@@ -393,7 +393,7 @@ async function main() {
 
   const btcCliPath = "/srv/explorer/bitcoin-27.2/bin/bitcoin-cli";
   const btcCmd = (cmd: string) =>
-    execSync(`docker exec aegis-esplora-regtest ${btcCliPath} -regtest -datadir=/data/bitcoin -rpcwallet=test ${cmd}`, { encoding: "utf8" }).trim();
+    execSync(`docker exec privacy-coin-esplora-regtest ${btcCliPath} -regtest -datadir=/data/bitcoin -rpcwallet=test ${cmd}`, { encoding: "utf8" }).trim();
 
   const poolBtcAddress = btcCmd("getnewaddress pool_receive bech32m");
   const poolAddrInfo = JSON.parse(btcCmd(`getaddressinfo ${poolBtcAddress}`));
@@ -405,7 +405,7 @@ async function main() {
 
   // 13. Write state
   const state: LocalnetState = {
-    aegisProgramId: AEGIS.toBase58(),
+    privacyCoinProgramId: PRIVACY_COIN.toBase58(),
     btcLightClientId: BTC_LC_EFFECTIVE.toBase58(),
     chadbufferId: chadbufferId.toBase58(),
     zkbtcMint: zkbtcMint.toBase58(),
@@ -437,9 +437,9 @@ async function main() {
     const { PublicKey: PK } = await import("@solana/web3.js");
     const [poolConfigPda] = PK.findProgramAddressSync(
       [Buffer.from("pool_config")],
-      AEGIS_ID,
+      PRIVACY_COIN_ID,
     );
-    const [poolStatePda] = derivePoolStatePDA(AEGIS_ID);
+    const [poolStatePda] = derivePoolStatePDA(PRIVACY_COIN_ID);
 
     // disc(27) + pool_script_len(1) + pool_script(34) + group_pub_key(32)
     const configData = Buffer.alloc(1 + 1 + poolScript.length + xOnlyBytes.length);
@@ -450,7 +450,7 @@ async function main() {
     xOnlyBytes.copy(configData, off);
 
     const configIx = new TransactionInstruction({
-      programId: AEGIS_ID,
+      programId: PRIVACY_COIN_ID,
       data: configData,
       keys: [
         { pubkey: poolStatePda, isSigner: false, isWritable: false },

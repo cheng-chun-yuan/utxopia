@@ -1,11 +1,11 @@
-# @aegis/sdk v3.0 (JoinSplit Architecture)
+# @privacy-coin/sdk v3.0 (JoinSplit Architecture)
 
 Privacy-preserving BTC to Solana bridge SDK using Groth16 JoinSplit proofs.
 
 ## Installation
 
 ```bash
-bun add @aegis/sdk
+bun add @privacy-coin/sdk
 ```
 
 ## Quick Start
@@ -17,7 +17,7 @@ import {
   buildTransactInstruction,
   scanUnifiedNotes,
   formatBtc,
-} from '@aegis/sdk';
+} from '@privacy-coin/sdk';
 
 // 1. DEPOSIT: Generate npk-based deposit (user sends any amount)
 const deposit = await createNonInteractiveDeposit(recipientMeta, groupPubKey);
@@ -105,7 +105,7 @@ Nullifier = Poseidon(nullifyingKey, leafIndex)
 
 ## Import Routes
 
-### Main Entry (`@aegis/sdk`)
+### Main Entry (`@privacy-coin/sdk`)
 
 ```typescript
 import {
@@ -156,7 +156,7 @@ import {
   type BoundParams,
   type NonInteractiveDepositResult,
   type ScannedNote,
-} from '@aegis/sdk';
+} from '@privacy-coin/sdk';
 ```
 
 ---
@@ -256,7 +256,7 @@ interface ScannedNote {
 The recommended deposit method. User can send **any amount** of BTC — the commitment is computed on-chain.
 
 ```typescript
-import { createNonInteractiveDeposit, createStealthMetaAddress, initPoseidon } from '@aegis/sdk';
+import { createNonInteractiveDeposit, createStealthMetaAddress, initPoseidon } from '@privacy-coin/sdk';
 
 await initPoseidon();
 
@@ -274,8 +274,8 @@ console.log('OP_RETURN payload (64 bytes):', deposit.opReturnPayload);
 ### 2. Scan for Incoming Deposits & Transfers
 
 ```typescript
-import { scanUnifiedNotes } from '@aegis/sdk';
-import { AnnouncementClient } from '@aegis/sdk';
+import { scanUnifiedNotes } from '@privacy-coin/sdk';
+import { AnnouncementClient } from '@privacy-coin/sdk';
 
 // Fetch stealth announcements from backend indexer (or fallback to RPC log scanning)
 const client = new AnnouncementClient({ backendUrl: 'http://localhost:8080' });
@@ -291,7 +291,7 @@ for (const note of myNotes) {
 ### 3. Legacy Deposit (with fixed amount)
 
 ```typescript
-import { depositToNote, initPoseidon } from '@aegis/sdk';
+import { depositToNote, initPoseidon } from '@privacy-coin/sdk';
 
 await initPoseidon();
 const deposit = await depositToNote(100_000n, 'testnet');
@@ -304,7 +304,7 @@ console.log('Display:', deposit.displayAmount); // "0.00100000 BTC"
 ### 4. JoinSplit Transfer
 
 ```typescript
-import { generateJoinSplitProof, buildTransactInstruction } from '@aegis/sdk';
+import { generateJoinSplitProof, buildTransactInstruction } from '@privacy-coin/sdk';
 
 // Generate proof (1 input → 2 outputs split)
 const proof = await generateJoinSplitProof({
@@ -335,7 +335,7 @@ const ix = buildTransactInstruction({ ... });
 ### 5. Stealth Transfer (in-protocol)
 
 ```typescript
-import { createStealthDeposit, scanAnnouncements } from '@aegis/sdk';
+import { createStealthDeposit, scanAnnouncements } from '@privacy-coin/sdk';
 
 // Sender: Create stealth deposit
 const deposit = await createStealthDeposit(recipientMeta, 50_000n);
@@ -357,7 +357,7 @@ for (const note of notes) {
 Stealth announcements are emitted as `sol_log_data` events (no on-chain PDAs). Both deposits and transfers emit the same event structure:
 
 ```typescript
-import { parseStealthAnnouncementEvent, parseProgramEvents } from '@aegis/sdk';
+import { parseStealthAnnouncementEvent, parseProgramEvents } from '@privacy-coin/sdk';
 
 // Parse events from transaction logs
 const events = parseProgramEvents(txLogMessages);
@@ -383,7 +383,7 @@ Events are indexed by the backend event indexer and served via REST/WebSocket.
 ## Network Configuration
 
 ```typescript
-import { setConfig } from '@aegis/sdk';
+import { setConfig } from '@privacy-coin/sdk';
 
 setConfig('devnet');  // or 'localnet', 'mainnet'
 ```

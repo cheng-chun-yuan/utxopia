@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Re-initialize Aegis on devnet with a fresh program.
+ * Re-initialize Privacy Coin on devnet with a fresh program.
  * Creates zkBTC mint, pool vault, frost vault, initializes pool,
  * and registers wSOL + USDC + USDT + jupUSD tokens.
  */
@@ -13,7 +13,7 @@ import {
   TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID,
   createMint, getOrCreateAssociatedTokenAccount,
 } from "@solana/spl-token";
-import { INSTRUCTION_DISCRIMINATORS } from "@aegis/sdk";
+import { INSTRUCTION_DISCRIMINATORS } from "@privacy-coin/sdk";
 import * as fs from "fs";
 import * as path from "path";
 import { setupScript, sendTx, type ScriptState } from "./lib/common.ts";
@@ -116,7 +116,7 @@ async function main() {
 
   // 4. Save state
   const state: ScriptState = {
-    aegisProgramId: programId.toBase58(),
+    privacyCoinProgramId: programId.toBase58(),
     btcLightClientId: existingState.btcLightClientId,
     zkbtcMint: zkbtcMint.toBase58(),
     poolState: poolState.toBase58(),

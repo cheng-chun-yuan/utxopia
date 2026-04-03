@@ -11,7 +11,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::error::AegisError;
+use crate::error::PrivacyCoinError;
 use crate::state::{CommitmentTree, PoolState, RedemptionRequest, RedemptionStatus};
 use crate::utils::crypto::compute_commitment;
 use crate::state::TokenConfig;
@@ -85,7 +85,7 @@ pub fn process_cancel_redemption(
 
         // Must be the original requester
         if user.key().as_ref() != redemption.requester {
-            return Err(AegisError::Unauthorized.into());
+            return Err(PrivacyCoinError::Unauthorized.into());
         }
 
         // Allow cancel if Pending, or if Processing and timed out
@@ -98,12 +98,12 @@ pub fn process_cancel_redemption(
                 let clock = Clock::get()?;
                 let processing_slot = redemption.processing_slot() as u64;
                 if clock.slot < processing_slot.saturating_add(crate::constants::REDEMPTION_TIMEOUT_SLOTS) {
-                    return Err(AegisError::RedemptionCancelNotAllowed.into());
+                    return Err(PrivacyCoinError::RedemptionCancelNotAllowed.into());
                 }
                 // Timed out — allow cancellation
             }
             _ => {
-                return Err(AegisError::RedemptionCancelNotAllowed.into());
+                return Err(PrivacyCoinError::RedemptionCancelNotAllowed.into());
             }
         }
 

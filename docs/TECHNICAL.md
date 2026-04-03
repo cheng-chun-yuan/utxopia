@@ -1,4 +1,4 @@
-# Aegis Technical Documentation
+# Privacy Coin Technical Documentation
 
 **Multi-Token Privacy Pool on Solana with Zero-Knowledge Proofs**
 
@@ -6,7 +6,7 @@
 
 ## Overview
 
-Aegis is a universal shielded pool on Solana that enables private transactions for **any token** — BTC (via SPV bridge), SOL, USDC, USDT, and any SPL token. All tokens exist only as cryptographic commitments inside a shared Merkle tree. No public balances, no transaction graphs.
+Privacy Coin is a universal shielded pool on Solana that enables private transactions for **any token** — BTC (via SPV bridge), SOL, USDC, USDT, and any SPL token. All tokens exist only as cryptographic commitments inside a shared Merkle tree. No public balances, no transaction graphs.
 
 ```
                           ┌─────────────────────────────────┐
@@ -68,7 +68,7 @@ Aegis is a universal shielded pool on Solana that enables private transactions f
 │                               SPV proof │                                       │
 │                                        ▼                                        │
 │   ┌────────────────────────────────────────────────────────────────────────┐    │
-│   │                    Aegis Program (Pinocchio)                          │    │
+│   │                    Privacy Coin Program (Pinocchio)                          │    │
 │   │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌───────────┐│    │
 │   │   │ Commitment   │  │  Nullifier   │  │   Stealth    │  │   Name    ││    │
 │   │   │    Tree      │  │  Registry    │  │Announcements │  │ Registry  ││    │
@@ -82,7 +82,7 @@ Aegis is a universal shielded pool on Solana that enables private transactions f
 ┌────────────────────────────────────────▼────────────────────────────────────────┐
 │                            CLIENT LAYER                                          │
 │   ┌──────────────────────────────────────────────────────────────────────────┐  │
-│   │                         @aegis/sdk                                       │  │
+│   │                         @privacy-coin/sdk                                       │  │
 │   │   Note Management │ Proof Generation │ Stealth ECDH │ Taproot Derivation │  │
 │   └──────────────────────────────────────────────────────────────────────────┘  │
 │              ┌─────────────────────────┼─────────────────────────┐              │
@@ -98,7 +98,7 @@ Aegis is a universal shielded pool on Solana that enables private transactions f
 | Component | Responsibility |
 |-----------|---------------|
 | **BTC Light Client** | Maintains Bitcoin header chain, validates SPV proofs |
-| **Aegis Program** | Manages commitments, nullifiers, stealth announcements, token configs |
+| **Privacy Coin Program** | Manages commitments, nullifiers, stealth announcements, token configs |
 | **Header Relayer** | Syncs Bitcoin headers to Solana (permissionless) |
 | **SDK** | Client-side proof generation, key derivation, stealth ECDH, transaction building |
 | **FROST Server** | BTC redemption signing (2-of-3 threshold) |
@@ -460,7 +460,7 @@ Frontend falls back to RPC log scanning when indexer is unavailable.
 
 | Program | Address |
 |---------|---------|
-| Aegis | `4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1` |
+| Privacy Coin | `4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1` |
 | BTC Light Client | `Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq` |
 | ChadBuffer | `6VrJmWbhN9WbEkg87JizunVMpL6CHKGVmzWCf3o3LRgy` |
 

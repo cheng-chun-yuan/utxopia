@@ -15,9 +15,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { useAegisKeys, useStealthInbox } from "@/hooks/use-aegis";
+import { useAegisKeys, useStealthInbox } from "@/hooks/use-privacy-coin";
 import { usePasskey } from "@/hooks/use-passkey";
-import { useAegisStore } from "@/stores/aegis-store";
+import { useAegisStore } from "@/stores/privacy-coin-store";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { AuthModal } from "@/components/auth-modal";
@@ -25,7 +25,7 @@ import { EmptyInbox } from "@/components/stealth-inbox";
 
 import { SUPPORTED_TOKENS, getTokenBySymbol, type SupportedToken } from "@/lib/supported-tokens";
 import { useTokenPrices } from "@/hooks/use-token-prices";
-import type { InboxNote } from "@/stores/aegis-store";
+import type { InboxNote } from "@/stores/privacy-coin-store";
 
 function getToken(sym: string): SupportedToken {
   return getTokenBySymbol(sym) || SUPPORTED_TOKENS[0];

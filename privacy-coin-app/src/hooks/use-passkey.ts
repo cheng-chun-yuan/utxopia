@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { sha256 } from "@noble/hashes/sha2.js";
-import { bytesToHex, hexToBytes } from "@aegis/sdk";
+import { bytesToHex, hexToBytes } from "@privacy-coin/sdk";
 import {
   startRegistration,
   startAuthentication,
@@ -14,8 +14,8 @@ import type {
   PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
 
-const CREDENTIAL_STORAGE_KEY = "aegis:passkey_credential_id";
-const SEED_STORAGE_KEY = "aegis:passkey_seed";
+const CREDENTIAL_STORAGE_KEY = "pcoin:passkey_credential_id";
+const SEED_STORAGE_KEY = "pcoin:passkey_seed";
 /** Derive per-user PRF salt by mixing domain separator with credential ID */
 function getPrfSalt(credentialId?: string | null): Uint8Array {
   const base = "aegis-passkey-prf-v1";

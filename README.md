@@ -121,7 +121,7 @@ privacy-coin/
 │   ├── circom/joinsplit.circom # Parameterized JoinSplit(N,M,16) template
 │   └── circom/lib/             # Shared (commitment, nullifier, merkle, mpk)
 ├── sdk/                        # TypeScript client SDK
-├── aegis-app/                 # Next.js web interface
+├── privacy-coin-app/                 # Next.js web interface
 ├── backend/                    # Rust API + deposit tracker + redemption
 ├── frost_server/               # FROST threshold signing (BTC redemption)
 └── docs/                       # Technical docs + operational guide
@@ -153,7 +153,7 @@ cd backend && cargo run --bin zkbtc-api -- api
 cd backend && cargo run --bin zkbtc-api -- tracker
 
 # 5. Start frontend (terminal 3)
-cd aegis-app && bun run dev
+cd privacy-coin-app && bun run dev
 ```
 
 ### SDK
@@ -199,7 +199,7 @@ bun run scripts/register-token.ts <MINT_ADDRESS> \
 
 ### 2. Add to frontend token list
 
-Edit `aegis-app/src/lib/supported-tokens.ts` — add a new entry to `SUPPORTED_TOKENS`:
+Edit `privacy-coin-app/src/lib/supported-tokens.ts` — add a new entry to `SUPPORTED_TOKENS`:
 
 ```typescript
 {
@@ -216,11 +216,11 @@ Edit `aegis-app/src/lib/supported-tokens.ts` — add a new entry to `SUPPORTED_T
 
 Add `NEXT_PUBLIC_<SYMBOL>_MINT=<address>` to:
 - Vercel environment variables (for production)
-- `aegis-app/.env.local` (for local dev)
+- `privacy-coin-app/.env.local` (for local dev)
 
 ### 4. Add token logo
 
-Place a PNG at `aegis-app/public/tokens/<symbol>.png`
+Place a PNG at `privacy-coin-app/public/tokens/<symbol>.png`
 
 That's it — the frontend resolves `tokenId → symbol` automatically using `supported-tokens.ts` + Poseidon hash. No backend changes needed.
 

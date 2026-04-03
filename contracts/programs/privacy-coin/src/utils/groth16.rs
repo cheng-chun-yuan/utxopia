@@ -5,7 +5,7 @@
 //!
 //! # Architecture
 //! ```text
-//! Browser/Mobile (snarkjs)         Aegis Program
+//! Browser/Mobile (snarkjs)         Privacy Coin Program
 //! ┌──────────────────────────┐    ┌──────────────────────────┐
 //! │ Generate Groth16         │    │                          │
 //! │ proof (~256 bytes)       │───>│ verify_groth16_*_proof() │

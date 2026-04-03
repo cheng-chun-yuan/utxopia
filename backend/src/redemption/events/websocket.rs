@@ -1,6 +1,6 @@
 //! WebSocket-based account update stream using Solana programSubscribe.
 //!
-//! Subscribes to all account changes for the Aegis program via
+//! Subscribes to all account changes for the Privacy Coin program via
 //! Solana's native WebSocket RPC. Free on devnet, low-latency (~200-400ms).
 //!
 //! For mainnet production, replace with GeyserStream (Yellowstone gRPC)

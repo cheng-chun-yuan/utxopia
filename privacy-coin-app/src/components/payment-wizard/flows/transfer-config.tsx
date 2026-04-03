@@ -3,13 +3,13 @@ import type { FlowConfig } from "../payment-wizard";
 
 async function resolveStealthRecipient(address: string) {
   try {
-    const { decodeStealthMetaAddress } = await import("@aegis/sdk");
+    const { decodeStealthMetaAddress } = await import("@privacy-coin/sdk");
 
     // TODO: SNS resolution requires a ConnectionAdapter — implement when SNS is live
-    // For now, only support direct aegis: stealth addresses
+    // For now, only support direct pcoin: stealth addresses
 
     // Direct stealth meta address
-    if (address.startsWith("aegis:")) {
+    if (address.startsWith("pcoin:")) {
       return decodeStealthMetaAddress(address);
     }
 
@@ -25,7 +25,7 @@ export const transferConfig: FlowConfig = {
   recipientLabel: "Recipient",
   recipientPlaceholder: "Stealth address or .btcpro.sol name",
   recipientIcon: <Shield className="w-full h-full" />,
-  validateRecipient: (addr) => addr.startsWith("aegis:") || addr.includes(".sol"),
+  validateRecipient: (addr) => addr.startsWith("pcoin:") || addr.includes(".sol"),
   resolveRecipient: resolveStealthRecipient,
   confirmLabel: "Send Privately",
 };

@@ -2,7 +2,7 @@
   "network": "devnet2",
   "rpcUrl": "https://api.devnet.solana.com",
   "programs": {
-    "Aegis": "3XsZdNitUi793MujUguGoX5bBs67Sm6BFBKXueP1Qy3y",
+    "Privacy Coin": "3XsZdNitUi793MujUguGoX5bBs67Sm6BFBKXueP1Qy3y",
     "btcLightClient": "Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq",
     "chadbuffer": "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF"
   },

@@ -7,7 +7,7 @@
  */
 
 import { useMemo } from "react";
-import { useAegis } from "@/hooks/use-aegis";
+import { usePrivacy Coin } from "@/hooks/use-privacy-coin";
 import { autoSelectNotes } from "@/components/btc-widget/pay-flow/helpers";
 
 export function useNoteAutoSelector(tokenSymbol: string, amountSats: number) {

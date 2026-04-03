@@ -26,7 +26,7 @@ export function useJoinSplitSubmit() {
     setTxSignature(null);
 
     try {
-      const { bytesToHex, AegisClient, getConfig } = await import("@aegis/sdk");
+      const { bytesToHex, PrivacyCoinClient, getConfig } = await import("@privacy-coin/sdk");
 
       // Initialize prover if needed
       if (!prover.isInitialized) {
@@ -55,9 +55,9 @@ export function useJoinSplitSubmit() {
         (s: string) => BigInt(s).toString(16).padStart(64, "0"),
       );
 
-      const relayClient = AegisClient.isInitialized
-        ? AegisClient.instance()
-        : await AegisClient.init();
+      const relayClient = PrivacyCoinClient.isInitialized
+        ? PrivacyCoinClient.instance()
+        : await PrivacyCoinClient.init();
 
       const commonFields = {
         nInputs,

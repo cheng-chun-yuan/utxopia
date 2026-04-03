@@ -1,13 +1,13 @@
-# @aegis/sdk
+# @privacy-coin/sdk
 
-TypeScript SDK for interacting with the Aegis protocol - a privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs.
+TypeScript SDK for interacting with the Privacy Coin protocol - a privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs.
 
 ## Installation
 
 ```bash
-bun add @aegis/sdk
+bun add @privacy-coin/sdk
 # or
-npm install @aegis/sdk
+npm install @privacy-coin/sdk
 ```
 
 ## Quick Start
@@ -18,7 +18,7 @@ import {
   createStealthDeposit,
   scanAnnouncements,
   resolveSnsName,
-} from '@aegis/sdk';
+} from '@privacy-coin/sdk';
 
 // 1. Derive keys from wallet
 const keys = await deriveKeysFromWallet(walletAdapter);
@@ -40,7 +40,7 @@ const notes = await scanAnnouncements(keys, announcements);
 Derive spending and viewing keys from a Solana wallet signature (RAILGUN-style):
 
 ```typescript
-import { deriveKeysFromWallet, type AegisKeys } from '@aegis/sdk';
+import { deriveKeysFromWallet, type AegisKeys } from '@privacy-coin/sdk';
 
 const keys: AegisKeys = await deriveKeysFromWallet(walletAdapter);
 // keys.spendingPubKey - for receiving funds
@@ -58,7 +58,7 @@ import {
   createStealthDeposit,
   scanAnnouncements,
   prepareClaimInputs,
-} from '@aegis/sdk';
+} from '@privacy-coin/sdk';
 
 // Sender: Create stealth deposit
 const deposit = await createStealthDeposit(recipientMeta, amountSats);
@@ -84,7 +84,7 @@ import {
   getPoolStatePDASeeds,
   getCommitmentTreePDASeeds,
   DEMO_INSTRUCTION,
-} from '@aegis/sdk';
+} from '@privacy-coin/sdk';
 
 // Build demo note instruction data
 const noteData = buildAddDemoNoteData(secret); // 32-byte secret
@@ -111,7 +111,7 @@ import {
   deriveNote,
   createClaimLink,
   parseClaimLink,
-} from '@aegis/sdk';
+} from '@privacy-coin/sdk';
 
 // Generate random note
 const note = generateNote(100000n);
@@ -131,7 +131,7 @@ const parsed = parseClaimLink(link);
 Generate BTC deposit addresses:
 
 ```typescript
-import { deriveTaprootAddress, verifyTaprootAddress } from '@aegis/sdk';
+import { deriveTaprootAddress, verifyTaprootAddress } from '@privacy-coin/sdk';
 
 // Derive taproot address from commitment
 const address = deriveTaprootAddress(commitment, 'testnet');
@@ -149,7 +149,7 @@ import {
   createMerkleProof,
   proofToNoirFormat,
   TREE_DEPTH,
-} from '@aegis/sdk';
+} from '@privacy-coin/sdk';
 
 const proof = createMerkleProof(leaves, leafIndex);
 const noirProof = proofToNoirFormat(proof);
@@ -193,7 +193,7 @@ const noirProof = proofToNoirFormat(proof);
 
 ```typescript
 // Program IDs
-AEGIS_PROGRAM_ID        // Main Aegis program (devnet)
+PRIVACY_COIN_PROGRAM_ID        // Main Privacy Coin program (devnet)
 CHADBUFFER_PROGRAM_ID    // ChadBuffer for SPV proofs
 
 // Merkle Tree

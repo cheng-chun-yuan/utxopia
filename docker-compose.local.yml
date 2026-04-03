@@ -27,7 +27,7 @@ x-frost-common: &frost-common
 services:
   frost-signer-1:
     <<: *frost-common
-    container_name: aegis-frost-1
+    container_name: privacy-coin-frost-1
     ports:
       - "9001:9001"
     command: >
@@ -37,7 +37,7 @@ services:
 
   frost-signer-2:
     <<: *frost-common
-    container_name: aegis-frost-2
+    container_name: privacy-coin-frost-2
     ports:
       - "9002:9002"
     command: >
@@ -47,7 +47,7 @@ services:
 
   frost-signer-3:
     <<: *frost-common
-    container_name: aegis-frost-3
+    container_name: privacy-coin-frost-3
     ports:
       - "9003:9003"
     command: >

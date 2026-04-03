@@ -23,7 +23,7 @@ use pinocchio::{
 };
 
 use crate::constants::TIMELOCK_DELAY_SECS;
-use crate::error::AegisError;
+use crate::error::PrivacyCoinError;
 use crate::state::PoolState;
 use crate::utils::{
     validate_account_writable, validate_program_owner,
@@ -86,7 +86,7 @@ pub fn process_propose_pool_update(
     let pool = PoolState::from_bytes_mut(&mut pool_data)?;
 
     if authority.key().as_ref() != pool.authority {
-        return Err(AegisError::Unauthorized.into());
+        return Err(PrivacyCoinError::Unauthorized.into());
     }
 
     pool.set_pending_min_deposit(min_deposit);
@@ -127,11 +127,11 @@ pub fn process_execute_pool_update(
     let pool = PoolState::from_bytes_mut(&mut pool_data)?;
 
     if !pool.has_pending_proposal() {
-        return Err(AegisError::NoPendingProposal.into());
+        return Err(PrivacyCoinError::NoPendingProposal.into());
     }
 
     if clock.unix_timestamp < pool.pending_execute_after() {
-        return Err(AegisError::TimelockNotElapsed.into());
+        return Err(PrivacyCoinError::TimelockNotElapsed.into());
     }
 
     // Apply pending values
@@ -170,11 +170,11 @@ pub fn process_cancel_pool_update(
     let pool = PoolState::from_bytes_mut(&mut pool_data)?;
 
     if authority.key().as_ref() != pool.authority {
-        return Err(AegisError::Unauthorized.into());
+        return Err(PrivacyCoinError::Unauthorized.into());
     }
 
     if !pool.has_pending_proposal() {
-        return Err(AegisError::NoPendingProposal.into());
+        return Err(PrivacyCoinError::NoPendingProposal.into());
     }
 
     pool.clear_pending_proposal();

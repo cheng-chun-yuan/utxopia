@@ -1,6 +1,6 @@
-# Aegis Backend Services
+# Privacy Coin Backend Services
 
-The Aegis backend consists of three main services that run as background processes.
+The Privacy Coin backend consists of three main services that run as background processes.
 
 ## Overview
 
@@ -380,7 +380,7 @@ All services use structured JSON logging:
 {
   "timestamp": "2024-01-01T00:00:00Z",
   "level": "INFO",
-  "target": "aegis::deposit_tracker",
+  "target": "pcoin::deposit_tracker",
   "message": "Deposit confirmed",
   "deposit_id": "dep_...",
   "confirmations": 3
@@ -432,7 +432,7 @@ Create service files for each component:
 ```ini
 # /etc/systemd/system/aegis-tracker.service
 [Unit]
-Description=Aegis Deposit Tracker
+Description=Privacy Coin Deposit Tracker
 After=network.target
 
 [Service]

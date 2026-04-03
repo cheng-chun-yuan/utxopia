@@ -1,24 +1,24 @@
 {
-  "name": "aegis",
+  "name": "privacy-coin",
   "private": true,
   "workspaces": [
     "sdk",
-    "aegis-app"
+    "privacy-coin-app"
   ],
   "scripts": {
     "build:sdk": "cd sdk && bun run build",
-    "build:frontend": "cd aegis-app && bun run build",
+    "build:frontend": "cd privacy-coin-app && bun run build",
     "build": "bun run build:sdk && bun run build:frontend",
-    "dev": "cd aegis-app && bun run dev",
+    "dev": "cd privacy-coin-app && bun run dev",
     "setup": "./scripts/setup.sh",
     "setup:local": "./scripts/setup.sh localnet",
     "setup:devnet": "./scripts/setup.sh devnet",
     "setup:mainnet": "./scripts/setup.sh mainnet",
     "setup:stop": "./scripts/setup.sh localnet --stop",
     "setup:seed": "./scripts/setup.sh localnet --seed-only",
-    "test": "bun test sdk/test/ && cd aegis-app && bun test src/",
+    "test": "bun test sdk/test/ && cd privacy-coin-app && bun test src/",
     "test:sdk": "bun test sdk/test/",
-    "test:app": "cd aegis-app && bun test src/",
+    "test:app": "cd privacy-coin-app && bun test src/",
     "vercel-build": "bun run build:sdk && bun run build:frontend"
   },
   "dependencies": {

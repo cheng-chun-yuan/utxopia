@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Check Aegis devnet status
+ * Check Privacy Coin devnet status
  */
 
 import { Connection, PublicKey } from "@solana/web3.js";
@@ -10,7 +10,7 @@ const RPC_URL = "https://api.devnet.solana.com";
 
 async function main() {
   console.log("=".repeat(60));
-  console.log("Aegis Devnet Status Check");
+  console.log("Privacy Coin Devnet Status Check");
   console.log("=".repeat(60));
 
   const connection = new Connection(RPC_URL, "confirmed");

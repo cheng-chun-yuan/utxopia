@@ -17,42 +17,42 @@
 ### New Files
 | File | Responsibility |
 |------|---------------|
-| `aegis-app/src/hooks/use-relayer-config.ts` | Fetch relayer meta + compute per-token fees |
-| `aegis-app/src/hooks/use-pay-flow-auth.ts` | Auth modal state + passkey handlers |
-| `aegis-app/src/hooks/use-pay-flow-notes.ts` | Note selection + secret phrase import |
-| `aegis-app/src/hooks/use-token-balance.ts` | SOL/SPL balance fetching for shield flow |
-| `aegis-app/src/hooks/use-btc-deposit.ts` | BTC deposit preview + sign flow |
+| `privacy-coin-app/src/hooks/use-relayer-config.ts` | Fetch relayer meta + compute per-token fees |
+| `privacy-coin-app/src/hooks/use-pay-flow-auth.ts` | Auth modal state + passkey handlers |
+| `privacy-coin-app/src/hooks/use-pay-flow-notes.ts` | Note selection + secret phrase import |
+| `privacy-coin-app/src/hooks/use-token-balance.ts` | SOL/SPL balance fetching for shield flow |
+| `privacy-coin-app/src/hooks/use-btc-deposit.ts` | BTC deposit preview + sign flow |
 
 ### Modified Files
 | File | Change |
 |------|--------|
-| `aegis-app/src/lib/supported-tokens.ts` | Enhance `getTokenBySymbol` to match shieldedSymbol; add `tvlToUsd` |
-| `aegis-app/src/app/explorer/components/deposits-tab.tsx` | Replace 4 inline `.find()` with `getTokenBySymbol()` |
-| `aegis-app/src/components/stealth-inbox/InboxItem.tsx` | Replace manual `.find()` with `getTokenBySymbol()` |
-| `aegis-app/src/components/btc-widget/balance-view.tsx` | Replace manual `.find()` with `getTokenBySymbol()` |
-| `aegis-app/src/app/vault/activity/page.tsx` | Replace manual `.find()` with `getTokenBySymbol()` |
-| `aegis-app/src/app/page.tsx` | Remove inline `tvlToUsd`, import from supported-tokens |
-| `aegis-app/src/app/explorer/page.tsx` | Import shared `tvlToUsd` |
-| `aegis-app/src/components/auth-modal.tsx` | Consolidate props into `auth` object |
-| `aegis-app/src/components/btc-widget/pay-flow/output-row-card.tsx` | Consolidate props into `handlers` + `config` |
-| `aegis-app/src/components/btc-widget/pay-flow.tsx` | Replace extracted state with hook calls |
-| `aegis-app/src/components/shield-flow.tsx` | Replace extracted state with hook calls |
-| `aegis-app/package.json` | Remove `@vitejs/plugin-react` devDep |
+| `privacy-coin-app/src/lib/supported-tokens.ts` | Enhance `getTokenBySymbol` to match shieldedSymbol; add `tvlToUsd` |
+| `privacy-coin-app/src/app/explorer/components/deposits-tab.tsx` | Replace 4 inline `.find()` with `getTokenBySymbol()` |
+| `privacy-coin-app/src/components/stealth-inbox/InboxItem.tsx` | Replace manual `.find()` with `getTokenBySymbol()` |
+| `privacy-coin-app/src/components/btc-widget/balance-view.tsx` | Replace manual `.find()` with `getTokenBySymbol()` |
+| `privacy-coin-app/src/app/vault/activity/page.tsx` | Replace manual `.find()` with `getTokenBySymbol()` |
+| `privacy-coin-app/src/app/page.tsx` | Remove inline `tvlToUsd`, import from supported-tokens |
+| `privacy-coin-app/src/app/explorer/page.tsx` | Import shared `tvlToUsd` |
+| `privacy-coin-app/src/components/auth-modal.tsx` | Consolidate props into `auth` object |
+| `privacy-coin-app/src/components/btc-widget/pay-flow/output-row-card.tsx` | Consolidate props into `handlers` + `config` |
+| `privacy-coin-app/src/components/btc-widget/pay-flow.tsx` | Replace extracted state with hook calls |
+| `privacy-coin-app/src/components/shield-flow.tsx` | Replace extracted state with hook calls |
+| `privacy-coin-app/package.json` | Remove `@vitejs/plugin-react` devDep |
 
 ---
 
 ## Task 1: Quick Wins — Token Lookup Consolidation
 
 **Files:**
-- Modify: `aegis-app/src/lib/supported-tokens.ts:229-232`
-- Modify: `aegis-app/src/app/explorer/components/deposits-tab.tsx:303-306`
-- Modify: `aegis-app/src/components/stealth-inbox/InboxItem.tsx:13-16`
-- Modify: `aegis-app/src/components/btc-widget/balance-view.tsx:47-51`
-- Modify: `aegis-app/src/app/vault/activity/page.tsx:30-32`
+- Modify: `privacy-coin-app/src/lib/supported-tokens.ts:229-232`
+- Modify: `privacy-coin-app/src/app/explorer/components/deposits-tab.tsx:303-306`
+- Modify: `privacy-coin-app/src/components/stealth-inbox/InboxItem.tsx:13-16`
+- Modify: `privacy-coin-app/src/components/btc-widget/balance-view.tsx:47-51`
+- Modify: `privacy-coin-app/src/app/vault/activity/page.tsx:30-32`
 
 - [ ] **Step 1: Enhance `getTokenBySymbol` to also match `shieldedSymbol`**
 
-In `aegis-app/src/lib/supported-tokens.ts`, update the existing function:
+In `privacy-coin-app/src/lib/supported-tokens.ts`, update the existing function:
 
 ```typescript
 /** Look up token config by symbol or shieldedSymbol */
@@ -134,14 +134,14 @@ git add -A && git commit -m "refactor: use getTokenBySymbol() consistently acros
 ## Task 2: Quick Wins — Extract tvlToUsd + Remove Leftover DevDep
 
 **Files:**
-- Modify: `aegis-app/src/lib/supported-tokens.ts`
-- Modify: `aegis-app/src/app/page.tsx:213-228`
-- Modify: `aegis-app/src/app/explorer/page.tsx`
-- Modify: `aegis-app/package.json`
+- Modify: `privacy-coin-app/src/lib/supported-tokens.ts`
+- Modify: `privacy-coin-app/src/app/page.tsx:213-228`
+- Modify: `privacy-coin-app/src/app/explorer/page.tsx`
+- Modify: `privacy-coin-app/package.json`
 
 - [ ] **Step 1: Add `tvlToUsd` to supported-tokens.ts**
 
-Append to `aegis-app/src/lib/supported-tokens.ts`:
+Append to `privacy-coin-app/src/lib/supported-tokens.ts`:
 
 ```typescript
 /** Calculate total TVL in USD across all tokens */
@@ -198,9 +198,9 @@ git add -A && git commit -m "refactor: extract tvlToUsd to shared module, remove
 ## Task 3: Prop Consolidation — AuthModal
 
 **Files:**
-- Modify: `aegis-app/src/components/auth-modal.tsx:8-38`
-- Modify: `aegis-app/src/components/btc-widget/pay-flow.tsx` (AuthModal call site)
-- Modify: `aegis-app/src/app/vault/page.tsx` (AuthModal call site)
+- Modify: `privacy-coin-app/src/components/auth-modal.tsx:8-38`
+- Modify: `privacy-coin-app/src/components/btc-widget/pay-flow.tsx` (AuthModal call site)
+- Modify: `privacy-coin-app/src/app/vault/page.tsx` (AuthModal call site)
 
 - [ ] **Step 1: Find all AuthModal consumers**
 
@@ -208,7 +208,7 @@ Search for `<AuthModal` across the codebase to find all call sites. Update the i
 
 - [ ] **Step 2: Update AuthModal interface**
 
-In `aegis-app/src/components/auth-modal.tsx`, replace the interface and destructuring:
+In `privacy-coin-app/src/components/auth-modal.tsx`, replace the interface and destructuring:
 
 ```typescript
 export interface AuthState {
@@ -281,8 +281,8 @@ git add -A && git commit -m "refactor: consolidate AuthModal props into auth obj
 ## Task 4: Prop Consolidation — OutputRowCard
 
 **Files:**
-- Modify: `aegis-app/src/components/btc-widget/pay-flow/output-row-card.tsx:22-37`
-- Modify: `aegis-app/src/components/btc-widget/pay-flow.tsx` (OutputRowCard call site)
+- Modify: `privacy-coin-app/src/components/btc-widget/pay-flow/output-row-card.tsx:22-37`
+- Modify: `privacy-coin-app/src/components/btc-widget/pay-flow.tsx` (OutputRowCard call site)
 
 - [ ] **Step 1: Update OutputRowCard interface**
 
@@ -368,12 +368,12 @@ git add -A && git commit -m "refactor: consolidate OutputRowCard props into hand
 ## Task 5: Extract `useRelayerConfig` Hook
 
 **Files:**
-- Create: `aegis-app/src/hooks/use-relayer-config.ts`
-- Modify: `aegis-app/src/components/btc-widget/pay-flow.tsx`
+- Create: `privacy-coin-app/src/hooks/use-relayer-config.ts`
+- Modify: `privacy-coin-app/src/components/btc-widget/pay-flow.tsx`
 
 - [ ] **Step 1: Create the hook**
 
-Create `aegis-app/src/hooks/use-relayer-config.ts`:
+Create `privacy-coin-app/src/hooks/use-relayer-config.ts`:
 
 ```typescript
 "use client";
@@ -444,19 +444,19 @@ git add -A && git commit -m "refactor: extract useRelayerConfig hook from PayFlo
 ## Task 6: Extract `usePayFlowAuth` Hook
 
 **Files:**
-- Create: `aegis-app/src/hooks/use-pay-flow-auth.ts`
-- Modify: `aegis-app/src/components/btc-widget/pay-flow.tsx`
+- Create: `privacy-coin-app/src/hooks/use-pay-flow-auth.ts`
+- Modify: `privacy-coin-app/src/components/btc-widget/pay-flow.tsx`
 
 - [ ] **Step 1: Create the hook**
 
-Create `aegis-app/src/hooks/use-pay-flow-auth.ts`:
+Create `privacy-coin-app/src/hooks/use-pay-flow-auth.ts`:
 
 ```typescript
 "use client";
 
 import { useState, useEffect, useRef } from "react";
 import { usePasskey } from "@/hooks/use-passkey";
-import { useAegisStore } from "@/stores/aegis-store";
+import { useAegisStore } from "@/stores/privacy-coin-store";
 
 export function usePayFlowAuth(hasKeys: boolean) {
   const {
@@ -540,18 +540,18 @@ git add -A && git commit -m "refactor: extract usePayFlowAuth hook from PayFlow"
 ## Task 7: Extract `usePayFlowNotes` Hook
 
 **Files:**
-- Create: `aegis-app/src/hooks/use-pay-flow-notes.ts`
-- Modify: `aegis-app/src/components/btc-widget/pay-flow.tsx`
+- Create: `privacy-coin-app/src/hooks/use-pay-flow-notes.ts`
+- Modify: `privacy-coin-app/src/components/btc-widget/pay-flow.tsx`
 
 - [ ] **Step 1: Create the hook**
 
-Create `aegis-app/src/hooks/use-pay-flow-notes.ts`:
+Create `privacy-coin-app/src/hooks/use-pay-flow-notes.ts`:
 
 ```typescript
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useAegis, type InboxNote } from "@/hooks/use-aegis";
+import { useAegis, type InboxNote } from "@/hooks/use-privacy-coin";
 import { scanSecretPhrase, type ScannedSecretNote } from "@/lib/claim-utils";
 import { autoSelectNotes, type PayToken } from "@/components/btc-widget/pay-flow/helpers";
 
@@ -718,7 +718,7 @@ const {
 });
 ```
 
-Remove the extracted useState calls, useMemo calls, useEffects, and useCallbacks from pay-flow.tsx. Keep `inboxNotes` and `refreshInbox` from useAegis only if still referenced directly — otherwise remove them from the destructuring too.
+Remove the extracted useState calls, useMemo calls, useEffects, and useCallbacks from pay-flow.tsx. Keep `inboxNotes` and `refreshInbox` from usePrivacy Coin only if still referenced directly — otherwise remove them from the destructuring too.
 
 - [ ] **Step 3: Verify**
 
@@ -735,12 +735,12 @@ git add -A && git commit -m "refactor: extract usePayFlowNotes hook from PayFlow
 ## Task 8: Extract `useTokenBalance` Hook
 
 **Files:**
-- Create: `aegis-app/src/hooks/use-token-balance.ts`
-- Modify: `aegis-app/src/components/shield-flow.tsx`
+- Create: `privacy-coin-app/src/hooks/use-token-balance.ts`
+- Modify: `privacy-coin-app/src/components/shield-flow.tsx`
 
 - [ ] **Step 1: Create the hook**
 
-Create `aegis-app/src/hooks/use-token-balance.ts`:
+Create `privacy-coin-app/src/hooks/use-token-balance.ts`:
 
 ```typescript
 "use client";
@@ -748,7 +748,7 @@ Create `aegis-app/src/hooks/use-token-balance.ts`:
 import { useState, useEffect, useCallback } from "react";
 import { PublicKey, LAMPORTS_PER_SOL, type Connection } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
-import { getConfig } from "@aegis/sdk";
+import { getConfig } from "@privacy-coin/sdk";
 import { BTC_MINER_FEE_ESTIMATE } from "@/lib/btc-constants";
 import type { SupportedToken } from "@/lib/supported-tokens";
 
@@ -849,12 +849,12 @@ git add -A && git commit -m "refactor: extract useTokenBalance hook from ShieldF
 ## Task 9: Extract `useBtcDeposit` Hook
 
 **Files:**
-- Create: `aegis-app/src/hooks/use-btc-deposit.ts`
-- Modify: `aegis-app/src/components/shield-flow.tsx`
+- Create: `privacy-coin-app/src/hooks/use-btc-deposit.ts`
+- Modify: `privacy-coin-app/src/components/shield-flow.tsx`
 
 - [ ] **Step 1: Create the hook**
 
-Create `aegis-app/src/hooks/use-btc-deposit.ts`. This is the largest extraction — contains all BTC-specific state and logic from ShieldFlow:
+Create `privacy-coin-app/src/hooks/use-btc-deposit.ts`. This is the largest extraction — contains all BTC-specific state and logic from ShieldFlow:
 
 ```typescript
 "use client";
@@ -867,8 +867,8 @@ import {
   buildDepositPsbt,
   selectUtxos,
   getConfig,
-} from "@aegis/sdk";
-import type { StealthMetaAddress } from "@aegis/sdk";
+} from "@privacy-coin/sdk";
+import type { StealthMetaAddress } from "@privacy-coin/sdk";
 import { useBitcoinWalletStore, type WalletUtxo } from "@/stores/bitcoin-wallet-store";
 import { useNotesStore } from "@/stores/notes-store";
 import { registerDeposit } from "@/lib/api/deposits";
@@ -1085,7 +1085,7 @@ Expected: 88 tests pass, 9 files pass.
 
 Verify the big components are smaller:
 ```bash
-wc -l aegis-app/src/components/btc-widget/pay-flow.tsx aegis-app/src/components/shield-flow.tsx
+wc -l privacy-coin-app/src/components/btc-widget/pay-flow.tsx privacy-coin-app/src/components/shield-flow.tsx
 ```
 Expected: pay-flow.tsx ~600 lines (was 1,851), shield-flow.tsx ~400 lines (was 1,035).
 

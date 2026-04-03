@@ -3,12 +3,12 @@
 import { useEffect, useRef, useCallback, type JSX } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useBitcoinWalletStore } from "./bitcoin-wallet-store";
-import { useAegisStore } from "./aegis-store";
+import { useAegisStore } from "./privacy-coin-store";
 
 /**
  * Component to hydrate Zustand stores on mount.
  * Handles localStorage restoration, Poseidon initialization,
- * and auto-hydration of Aegis keys from localStorage on wallet connect.
+ * and auto-hydration of Privacy Coin keys from localStorage on wallet connect.
  */
 export function StoreHydration(): JSX.Element {
   const hydrateBtcWallet = useBitcoinWalletStore((s) => s._hydrate);
@@ -38,7 +38,7 @@ export function StoreHydration(): JSX.Element {
     initPoseidon();
   }, [hydrateBtcWallet, initPoseidon]);
 
-  // Auto-hydrate Aegis keys from localStorage when wallet connects
+  // Auto-hydrate Privacy Coin keys from localStorage when wallet connects
   useEffect(() => {
     if (walletPubkey && isPoseidonReady && !keys && !hasHydratedRef.current) {
       hasHydratedRef.current = true;

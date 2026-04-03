@@ -1,7 +1,7 @@
 /**
  * PDA (Program Derived Address) Derivation Utilities
  *
- * Centralized module for all Aegis PDA derivations.
+ * Centralized module for all Privacy Coin PDA derivations.
  * Prevents code duplication across api.ts, aegis.ts, etc.
  *
  * NOTE: Program IDs are defined in config.ts and re-exported here
@@ -17,13 +17,13 @@ import {
 
 // Import program IDs from config for local use
 import {
-  AEGIS_PROGRAM_ID as _AEGIS_PROGRAM_ID,
+  PRIVACY_COIN_PROGRAM_ID as _PRIVACY_COIN_PROGRAM_ID,
   BTC_LIGHT_CLIENT_PROGRAM_ID as _BTC_LIGHT_CLIENT_PROGRAM_ID,
 } from "./config";
 
 // Re-export everything from config for backwards compatibility
 export {
-  AEGIS_PROGRAM_ID,
+  PRIVACY_COIN_PROGRAM_ID,
   BTC_LIGHT_CLIENT_PROGRAM_ID,
   getConfig,
   setConfig,
@@ -36,7 +36,7 @@ export {
 } from "./config";
 
 // Local aliases for use in this file
-const AEGIS_PROGRAM_ID = _AEGIS_PROGRAM_ID;
+const PRIVACY_COIN_PROGRAM_ID = _PRIVACY_COIN_PROGRAM_ID;
 const BTC_LIGHT_CLIENT_PROGRAM_ID = _BTC_LIGHT_CLIENT_PROGRAM_ID;
 
 // =============================================================================
@@ -57,14 +57,14 @@ export const PDA_SEEDS = {
 } as const;
 
 // =============================================================================
-// Core Aegis PDAs
+// Core Privacy Coin PDAs
 // =============================================================================
 
 /**
  * Derive Pool State PDA
  */
 export async function derivePoolStatePDA(
-  programId: Address = AEGIS_PROGRAM_ID
+  programId: Address = PRIVACY_COIN_PROGRAM_ID
 ): Promise<[Address, number]> {
   const result = await getProgramDerivedAddress({
     programAddress: programId,
@@ -80,7 +80,7 @@ export async function derivePoolStatePDA(
  *   uses the legacy seed for backward compatibility.
  */
 export async function deriveCommitmentTreePDA(
-  programId: Address = AEGIS_PROGRAM_ID,
+  programId: Address = PRIVACY_COIN_PROGRAM_ID,
   treeIndex?: number,
 ): Promise<[Address, number]> {
   // Legacy seed for tree 0 (backward compat with existing deployments)
@@ -108,7 +108,7 @@ export async function deriveCommitmentTreePDA(
  */
 export async function deriveTokenConfigPDA(
   mintPubkey: Uint8Array,
-  programId: Address = AEGIS_PROGRAM_ID
+  programId: Address = PRIVACY_COIN_PROGRAM_ID
 ): Promise<[Address, number]> {
   const result = await getProgramDerivedAddress({
     programAddress: programId,
@@ -122,7 +122,7 @@ export async function deriveTokenConfigPDA(
  */
 export async function deriveNullifierRecordPDA(
   nullifierHash: Uint8Array,
-  programId: Address = AEGIS_PROGRAM_ID
+  programId: Address = PRIVACY_COIN_PROGRAM_ID
 ): Promise<[Address, number]> {
   const result = await getProgramDerivedAddress({
     programAddress: programId,
@@ -213,7 +213,7 @@ export async function deriveVerifiedTransactionPDA(
 export async function deriveRedemptionRequestPDA(
   userPubkey: Uint8Array,
   nonce: bigint,
-  programId: Address = AEGIS_PROGRAM_ID
+  programId: Address = PRIVACY_COIN_PROGRAM_ID
 ): Promise<[Address, number]> {
   const nonceBytes = new Uint8Array(8);
   const view = new DataView(nonceBytes.buffer);
@@ -238,7 +238,7 @@ export async function deriveRedemptionRequestPDA(
 export async function deriveVkRegistryPDA(
   nInputs: number,
   nOutputs: number,
-  programId: Address = AEGIS_PROGRAM_ID
+  programId: Address = PRIVACY_COIN_PROGRAM_ID
 ): Promise<[Address, number]> {
   const result = await getProgramDerivedAddress({
     programAddress: programId,
@@ -261,7 +261,7 @@ export async function deriveVkRegistryPDA(
  */
 export async function deriveDepositReceiptPDA(
   depositTxid: Uint8Array,
-  programId: Address = AEGIS_PROGRAM_ID
+  programId: Address = PRIVACY_COIN_PROGRAM_ID
 ): Promise<[Address, number]> {
   if (depositTxid.length !== 32) {
     throw new Error(`depositTxid must be 32 bytes, got ${depositTxid.length}`);

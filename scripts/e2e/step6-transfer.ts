@@ -151,9 +151,9 @@ function serializeGroth16Proof(proof: any): Uint8Array {
 async function main() {
   const state = loadState();
   const authority = loadAuthority();
-  const AEGIS = new PublicKey(state.aegisProgramId);
-  const [poolState] = derivePoolStatePDA(AEGIS);
-  const [commitmentTree] = deriveCommitmentTreePDA(AEGIS);
+  const PRIVACY_COIN = new PublicKey(state.privacyCoinProgramId);
+  const [poolState] = derivePoolStatePDA(PRIVACY_COIN);
+  const [commitmentTree] = deriveCommitmentTreePDA(PRIVACY_COIN);
 
   // Init SDK Poseidon (replaces circomlibjs buildPoseidon)
   await initPoseidon();
@@ -294,8 +294,8 @@ async function main() {
 
   // Accounts
   const nullifierBytes0 = bigintToBytes32BE(nullifier0);
-  const [nullifierPDA0] = deriveNullifierPDA(AEGIS, nullifierBytes0);
-  const [vkRegistry1x2] = deriveVkRegistryPDA(AEGIS, 1, 2);
+  const [nullifierPDA0] = deriveNullifierPDA(PRIVACY_COIN, nullifierBytes0);
+  const [vkRegistry1x2] = deriveVkRegistryPDA(PRIVACY_COIN, 1, 2);
 
   const ix = new TransactionInstruction({
     keys: [
@@ -306,7 +306,7 @@ async function main() {
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       { pubkey: nullifierPDA0, isSigner: false, isWritable: true },
     ],
-    programId: AEGIS,
+    programId: PRIVACY_COIN,
     data: Buffer.from(txData),
   });
 

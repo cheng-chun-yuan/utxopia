@@ -146,7 +146,7 @@ impl DepositTrackerService {
 
     /// Set up verifier with Solana keypair
     pub fn with_verifier(mut self, keypair: Keypair) -> Self {
-        let program_id = std::env::var("AEGIS_PROGRAM_ID")
+        let program_id = std::env::var("PRIVACY_COIN_PROGRAM_ID")
             .unwrap_or_else(|_| "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ".to_string());
         let mut verifier = match SpvVerifier::new(&self.config.solana_rpc, &self.config.esplora_url, &program_id) {
             Ok(v) => v,

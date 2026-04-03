@@ -36,7 +36,7 @@ import { useBitcoinWalletStore } from "@/stores/bitcoin-wallet-store";
 
 import { MobileWalletGuidance } from "@/components/bitcoin-wallet-selector";
 import { useIsMobileWithoutWallet } from "@/hooks/use-mobile-wallet-detect";
-import { useAegis } from "@/hooks/use-aegis";
+import { usePrivacy Coin } from "@/hooks/use-privacy-coin";
 import { useDepositFlow } from "@/hooks/use-deposit-flow";
 import { StealthRecipientInput } from "@/components/ui/stealth-recipient-input";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";

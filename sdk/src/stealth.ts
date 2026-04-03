@@ -1,5 +1,5 @@
 /**
- * Stealth address utilities for AEGIS
+ * Stealth address utilities for PRIVACY_COIN
  *
  * Dual-curve stealth flow (Railgun-style):
  *

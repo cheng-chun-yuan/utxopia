@@ -1,12 +1,12 @@
 /**
- * AegisClient — high-level SDK entry point.
+ * PrivacyCoinClient — high-level SDK entry point.
  *
  * Initialize once, use simple methods everywhere. Encapsulates config,
  * keys, Poseidon init, token IDs, and note scanning so consumers don't
  * chain low-level SDK calls.
  *
  * ```typescript
- * const client = await AegisClient.init({ network: "devnet" });
+ * const client = await PrivacyCoinClient.init({ network: "devnet" });
  * await client.loginWithWallet(wallet);
  * const notes = await client.getNotes();
  * const balance = client.getBalance();
@@ -54,7 +54,7 @@ import { EventClient } from "./event-client";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
-export interface AegisClientConfig {
+export interface PrivacyCoinClientConfig {
   network?: NetworkId;
   /** Override backend URL (default: from network config) */
   backendUrl?: string;
@@ -81,9 +81,9 @@ export interface InboxNote {
 
 // ─── Client ─────────────────────────────────────────────────────────
 
-let _instance: AegisClient | null = null;
+let _instance: PrivacyCoinClient | null = null;
 
-export class AegisClient {
+export class PrivacyCoinClient {
   private _keys: AegisKeys | null = null;
   private _viewOnlyKeys: ViewOnlyKeys | null = null;
   private _isViewOnly = false;
@@ -103,7 +103,7 @@ export class AegisClient {
    * Initialize the SDK. Call once at app startup.
    * Sets up config, initializes Poseidon hash, creates singleton.
    */
-  static async init(opts: AegisClientConfig = {}): Promise<AegisClient> {
+  static async init(opts: PrivacyCoinClientConfig = {}): Promise<PrivacyCoinClient> {
     // Init config (reads env vars, sets up network)
     if (opts.network) {
       await initConfig({ network: opts.network });
@@ -114,7 +114,7 @@ export class AegisClient {
 
     const config = getConfig();
     const backendUrl = opts.backendUrl || "";
-    const client = new AegisClient(backendUrl);
+    const client = new PrivacyCoinClient(backendUrl);
 
     _instance = client;
     return client;
@@ -123,9 +123,9 @@ export class AegisClient {
   /**
    * Get the initialized singleton. Throws if init() hasn't been called.
    */
-  static instance(): AegisClient {
+  static instance(): PrivacyCoinClient {
     if (!_instance) {
-      throw new Error("AegisClient not initialized. Call AegisClient.init() first.");
+      throw new Error("PrivacyCoinClient not initialized. Call PrivacyCoinClient.init() first.");
     }
     return _instance;
   }
@@ -525,7 +525,7 @@ export class AegisClient {
       this._eventClient = new EventClient({
         backendUrl: this._backendUrl,
         solanaRpcUrl: config.solanaRpcUrl || "",
-        programId: config.aegisProgramId,
+        programId: config.privacyCoinProgramId,
       });
     }
     return this._eventClient;

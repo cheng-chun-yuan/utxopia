@@ -80,18 +80,18 @@ async function testCompleteWithoutMarkProcessing() {
 
   const state = loadState();
   const authority = loadAuthority();
-  const AEGIS = new PublicKey(state.aegisProgramId);
+  const PRIVACY_COIN = new PublicKey(state.privacyCoinProgramId);
   const BTC_LC = new PublicKey(state.btcLightClientId);
   const CHADBUFFER_ID = new PublicKey(state.chadbufferId);
   const zkbtcMint = new PublicKey(state.zkbtcMint);
-  const [poolState] = derivePoolStatePDA(AEGIS);
+  const [poolState] = derivePoolStatePDA(PRIVACY_COIN);
   const poolVault = deriveATA(zkbtcMint, poolState);
 
   // Create a new redemption request for this test.
   // We need a fresh RedemptionRequest PDA in Pending status (NOT Processing).
   // Use nonce=99 to avoid collision with step8's nonce=1.
   const testNonce = 99n;
-  const [redemptionPDA] = deriveRedemptionPDA(AEGIS, authority.publicKey, testNonce);
+  const [redemptionPDA] = deriveRedemptionPDA(PRIVACY_COIN, authority.publicKey, testNonce);
 
   // Check if this PDA already exists
   const existingRedemption = await connection.getAccountInfo(redemptionPDA);
@@ -134,11 +134,11 @@ async function testCompleteWithoutMarkProcessing() {
   const [lightClient] = deriveLightClientPDA(BTC_LC);
   const [completionReceipt] = PublicKey.findProgramAddressSync(
     [Buffer.from("completion_receipt"), fakeTxidBytes],
-    AEGIS,
+    PRIVACY_COIN,
   );
   const [poolConfig] = PublicKey.findProgramAddressSync(
     [Buffer.from("pool_config")],
-    AEGIS,
+    PRIVACY_COIN,
   );
 
   // Build complete_redemption instruction data
@@ -153,10 +153,10 @@ async function testCompleteWithoutMarkProcessing() {
   // We need a real RedemptionRequest PDA to target. Since step8b already closed
   // nonce=1, we'll pass the (now-closed) redemption PDA. This should fail because
   // the account doesn't exist or has wrong owner.
-  const [closedRedemptionPDA] = deriveRedemptionPDA(AEGIS, authority.publicKey, 1n);
+  const [closedRedemptionPDA] = deriveRedemptionPDA(PRIVACY_COIN, authority.publicKey, 1n);
 
   const crIx = new TransactionInstruction({
-    programId: AEGIS,
+    programId: PRIVACY_COIN,
     data: crData,
     keys: [
       { pubkey: poolState, isSigner: false, isWritable: true },
@@ -194,10 +194,10 @@ async function testCompleteWithWrongTxid() {
 
   const state = loadState();
   const authority = loadAuthority();
-  const AEGIS = new PublicKey(state.aegisProgramId);
+  const PRIVACY_COIN = new PublicKey(state.privacyCoinProgramId);
   const BTC_LC = new PublicKey(state.btcLightClientId);
   const zkbtcMint = new PublicKey(state.zkbtcMint);
-  const [poolState] = derivePoolStatePDA(AEGIS);
+  const [poolState] = derivePoolStatePDA(PRIVACY_COIN);
   const poolVault = deriveATA(zkbtcMint, poolState);
   const [lightClient] = deriveLightClientPDA(BTC_LC);
 
@@ -213,11 +213,11 @@ async function testCompleteWithWrongTxid() {
   );
   const [completionReceipt] = PublicKey.findProgramAddressSync(
     [Buffer.from("completion_receipt"), wrongTxidBytes],
-    AEGIS,
+    PRIVACY_COIN,
   );
   const [poolConfig] = PublicKey.findProgramAddressSync(
     [Buffer.from("pool_config")],
-    AEGIS,
+    PRIVACY_COIN,
   );
 
   // We need a "redemption PDA" — use a derived one that doesn't exist.
@@ -226,7 +226,7 @@ async function testCompleteWithWrongTxid() {
   // that you can't complete with a non-existent VerifiedTransaction PDA.
   const fakeRedemptionPDA = PublicKey.findProgramAddressSync(
     [Buffer.from("redemption"), authority.publicKey.toBuffer(), Buffer.from([2, 0, 0, 0, 0, 0, 0, 0])],
-    AEGIS,
+    PRIVACY_COIN,
   )[0];
 
   const crData = Buffer.alloc(1 + 32 + 4 + 1 + 1);
@@ -238,7 +238,7 @@ async function testCompleteWithWrongTxid() {
   crData[off++] = 0;
 
   const crIx = new TransactionInstruction({
-    programId: AEGIS,
+    programId: PRIVACY_COIN,
     data: crData,
     keys: [
       { pubkey: poolState, isSigner: false, isWritable: true },
@@ -276,18 +276,18 @@ async function testDuplicateDeposit() {
 
   const state = loadState();
   const authority = loadAuthority();
-  const AEGIS = new PublicKey(state.aegisProgramId);
+  const PRIVACY_COIN = new PublicKey(state.privacyCoinProgramId);
   const BTC_LC = new PublicKey(state.btcLightClientId);
   const CHADBUFFER_ID = new PublicKey(state.chadbufferId);
   const zkbtcMint = new PublicKey(state.zkbtcMint);
-  const [poolState] = derivePoolStatePDA(AEGIS);
+  const [poolState] = derivePoolStatePDA(PRIVACY_COIN);
   const poolVault = deriveATA(zkbtcMint, poolState);
   const [lightClient] = deriveLightClientPDA(BTC_LC);
   const [commitmentTree] = PublicKey.findProgramAddressSync(
     [Buffer.from("commitment_tree")],
-    AEGIS,
+    PRIVACY_COIN,
   );
-  const [tokenConfig] = deriveTokenConfigPDA(AEGIS, new PublicKey(state.zkbtcMint));
+  const [tokenConfig] = deriveTokenConfigPDA(PRIVACY_COIN, new PublicKey(state.zkbtcMint));
 
   // Use btcNote1's deposit data — this was already verified in step3
   const btcNote1 = state.btcNote1;
@@ -307,7 +307,7 @@ async function testDuplicateDeposit() {
   // The deposit_receipt PDA for this deposit txid should already exist (created in step3)
   const [depositReceiptPDA] = PublicKey.findProgramAddressSync(
     [Buffer.from("deposit_receipt"), depositTxidBytes],
-    AEGIS,
+    PRIVACY_COIN,
   );
 
   // Verify the deposit_receipt PDA exists
@@ -338,7 +338,7 @@ async function testDuplicateDeposit() {
 
   // Derive the sweep UTXO PDA (vout from state or default 0)
   const sweepVout = btcNote1.sweepVout ?? 0;
-  const [utxoPDA] = deriveUtxoPDA(AEGIS, sweepTxidBytes, sweepVout);
+  const [utxoPDA] = deriveUtxoPDA(PRIVACY_COIN, sweepTxidBytes, sweepVout);
 
   // Build verify_stealth_deposit instruction with the SAME txids
   // Layout (80 bytes):
@@ -357,7 +357,7 @@ async function testDuplicateDeposit() {
   const fakeDepositBuffer = SystemProgram.programId;
 
   const vsdIx = new TransactionInstruction({
-    programId: AEGIS,
+    programId: PRIVACY_COIN,
     data: ixData,
     keys: [
       { pubkey: poolState, isSigner: false, isWritable: true },           // 0

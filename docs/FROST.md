@@ -216,7 +216,7 @@ cargo run -- run --id 1 --key-file signer1.key.enc --password <pwd> \
   --require-context                                \ # Reject blind signing
   --network testnet4                               \
   --solana-rpc-url https://api.devnet.solana.com   \ # On-chain PDA verification
-  --aegis-program-id 4Gt66pJd...                   \ # Aegis program for PDA derivation
+  --aegis-program-id 4Gt66pJd...                   \ # Privacy Coin program for PDA derivation
   --audit-log /var/log/frost/signer-1.jsonl          # Persist signing history
 ```
 
@@ -358,7 +358,7 @@ The `solana_verification` field supports two variants:
 | `FROST_REQUIRE_CONTEXT` | — | Reject blind signing if set |
 | `FROST_AUDIT_LOG` | — | Audit log file path (enables duplicate prevention persistence) |
 | `FROST_SOLANA_RPC_URL` | — | Solana JSON-RPC URL for on-chain PDA verification |
-| `FROST_AEGIS_PROGRAM_ID` | — | Aegis program ID (base58) for PDA derivation |
+| `FROST_PRIVACY_COIN_PROGRAM_ID` | — | Privacy Coin program ID (base58) for PDA derivation |
 | `RUST_LOG` | `info,frost_server=debug` | Log level filter |
 
 ### CLI Flags
@@ -381,7 +381,7 @@ frost-server run [OPTIONS]
 | `--audit-log` | — | — | Audit log file path (enables duplicate prevention) |
 | `--network` | — | `testnet` | Bitcoin network |
 | `--solana-rpc-url` | — | env: `FROST_SOLANA_RPC_URL` | Solana RPC for on-chain verification |
-| `--aegis-program-id` | — | env: `FROST_AEGIS_PROGRAM_ID` | Aegis program ID for PDA derivation |
+| `--aegis-program-id` | — | env: `FROST_PRIVACY_COIN_PROGRAM_ID` | Privacy Coin program ID for PDA derivation |
 
 ### Subcommands
 

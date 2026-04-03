@@ -304,10 +304,10 @@ export async function createTestContext(): Promise<E2ETestContext> {
     }
 
     // Set SDK config to localnet, overriding with actual deployed addresses from localnet config
-    if (localnetConfig && localnetConfig.programs?.Aegis && localnetConfig.accounts?.poolState) {
+    if (localnetConfig && localnetConfig.programs?.Privacy Coin && localnetConfig.accounts?.poolState) {
       const customConfig = createConfig(LOCALNET_CONFIG, {
         // Override with actual deployed addresses
-        aegisProgramId: kitAddress(localnetConfig.programs.Aegis),
+        privacyCoinProgramId: kitAddress(localnetConfig.programs.Aegis),
         btcLightClientProgramId: kitAddress(localnetConfig.programs.btcLightClient),
         chadbufferProgramId: localnetConfig.programs.chadbuffer
           ? kitAddress(localnetConfig.programs.chadbuffer)
@@ -400,7 +400,7 @@ export async function createTestContext(): Promise<E2ETestContext> {
     network: NETWORK,
     rpcUrl: RPC_URL,
     programs: {
-      Aegis: config.aegisProgramId.toString(),
+      Aegis: config.privacyCoinProgramId.toString(),
       btcLightClient: config.btcLightClientProgramId.toString(),
       groth16Verifier: config.groth16VerifierProgramId.toString(),
       chadbuffer: config.chadbufferProgramId.toString(),
@@ -442,7 +442,7 @@ export function logTestEnvironment(ctx: E2ETestContext): void {
   console.log(`Skip On-Chain Tests: ${ctx.skipOnChain}`);
   console.log(`Skip Proof Tests: ${ctx.skipProof}`);
   console.log(`Prover Ready: ${ctx.proverReady}`);
-  console.log(`Aegis Program: ${ctx.localnetConfig.programs.Aegis}`);
+  console.log(`Privacy Coin Program: ${ctx.localnetConfig.programs.Aegis}`);
   console.log(`Pool State: ${ctx.localnetConfig.accounts.poolState}`);
   console.log(`Commitment Tree: ${ctx.localnetConfig.accounts.commitmentTree}`);
   console.log("=".repeat(60) + "\n");

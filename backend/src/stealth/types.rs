@@ -318,7 +318,7 @@ pub struct PrepareStealthSelfCustodyResponse {
     /// Amount to send (must be exact)
     pub amount_sats: u64,
     /// Encoded stealth data for manual announcement
-    /// Format: aegis:1:{base64}
+    /// Format: pcoin:1:{base64}
     pub stealth_data: Option<String>,
     /// Error message
     pub message: Option<String>,
@@ -392,11 +392,11 @@ pub struct StealthData {
 }
 
 impl StealthData {
-    /// Encode to string format: aegis:1:{base64_json}
+    /// Encode to string format: pcoin:1:{base64_json}
     pub fn encode(&self) -> String {
         let json = serde_json::to_string(self).unwrap();
         let b64 = base64::Engine::encode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, json);
-        format!("aegis:{}:{}", self.version, b64)
+        format!("pcoin:{}:{}", self.version, b64)
     }
 
     /// Decode from string format
@@ -438,7 +438,7 @@ mod tests {
         };
 
         let encoded = data.encode();
-        assert!(encoded.starts_with("aegis:1:"));
+        assert!(encoded.starts_with("pcoin:1:"));
 
         let decoded = StealthData::decode(&encoded).unwrap();
         assert_eq!(decoded.ephemeral_view_pub, data.ephemeral_view_pub);

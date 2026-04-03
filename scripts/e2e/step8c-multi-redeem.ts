@@ -130,9 +130,9 @@ function deriveRedemptionPDA(programId: PublicKey, user: PublicKey, nonce: bigin
 async function main() {
   const state = loadState();
   const authority = loadAuthority();
-  const AEGIS = new PublicKey(state.aegisProgramId);
-  const [poolState] = derivePoolStatePDA(AEGIS);
-  const [commitmentTree] = deriveCommitmentTreePDA(AEGIS);
+  const PRIVACY_COIN = new PublicKey(state.privacyCoinProgramId);
+  const [poolState] = derivePoolStatePDA(PRIVACY_COIN);
+  const [commitmentTree] = deriveCommitmentTreePDA(PRIVACY_COIN);
 
   if (!state.btcNote) {
     throw new Error("btcNote not found. Run step3 first.");
@@ -156,7 +156,7 @@ async function main() {
 
   // Read token_id from on-chain TokenConfig (authoritative)
   const zkbtcMint = new PublicKey(state.zkbtcMint!);
-  const [tokenConfig] = deriveTokenConfigPDA(AEGIS, zkbtcMint);
+  const [tokenConfig] = deriveTokenConfigPDA(PRIVACY_COIN, zkbtcMint);
   const tcInfo = await connection.getAccountInfo(tokenConfig);
   if (!tcInfo) throw new Error("zkBTC TokenConfig not found");
   const tcData = parseTokenConfig(Buffer.from(tcInfo.data))!;
@@ -295,10 +295,10 @@ async function main() {
   // Accounts (disc=15, multi-output):
   // 0-5: fixed, 6..6+N nullifiers, 6+N..6+N+P redemption PDAs
   const nullifierBytes0 = bigintToBytes32BE(nullifier0);
-  const [nullifierPDA0] = deriveNullifierPDA(AEGIS, nullifierBytes0);
-  const [vkRegistry1x2] = deriveVkRegistryPDA(AEGIS, 1, 2);
-  const [redemptionPDA1] = deriveRedemptionPDA(AEGIS, authority.publicKey, nonce1);
-  const [redemptionPDA2] = deriveRedemptionPDA(AEGIS, authority.publicKey, nonce2);
+  const [nullifierPDA0] = deriveNullifierPDA(PRIVACY_COIN, nullifierBytes0);
+  const [vkRegistry1x2] = deriveVkRegistryPDA(PRIVACY_COIN, 1, 2);
+  const [redemptionPDA1] = deriveRedemptionPDA(PRIVACY_COIN, authority.publicKey, nonce1);
+  const [redemptionPDA2] = deriveRedemptionPDA(PRIVACY_COIN, authority.publicKey, nonce2);
 
   // Read pool state before
   const poolBefore = await connection.getAccountInfo(poolState);
@@ -319,7 +319,7 @@ async function main() {
       { pubkey: redemptionPDA1, isSigner: false, isWritable: true },
       { pubkey: redemptionPDA2, isSigner: false, isWritable: true },
     ],
-    programId: AEGIS,
+    programId: PRIVACY_COIN,
     data: txData,
   });
 

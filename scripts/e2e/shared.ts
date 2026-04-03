@@ -241,7 +241,7 @@ export interface NoteState {
 }
 
 export interface LocalnetState {
-  aegisProgramId: string;
+  privacyCoinProgramId: string;
   btcLightClientId: string;
   chadbufferId: string;
   zkbtcMint: string;

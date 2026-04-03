@@ -1,5 +1,5 @@
 /**
- * PSBT builder for Aegis non-interactive deposits.
+ * PSBT builder for Privacy Coin non-interactive deposits.
  *
  * Creates a Partially-Signed Bitcoin Transaction with:
  *   - Input(s): user's UTXOs (P2TR or P2WPKH)

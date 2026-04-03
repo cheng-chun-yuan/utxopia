@@ -1,6 +1,6 @@
 {
   "buildCommand": "bun run build:sdk && bun run build:frontend",
-  "outputDirectory": "aegis-app/.next",
+  "outputDirectory": "privacy-coin-app/.next",
   "installCommand": "bun install",
   "framework": "nextjs"
 }

@@ -1,7 +1,7 @@
 /**
- * AEGIS Instruction Builders (JoinSplit Architecture)
+ * PRIVACY_COIN Instruction Builders (JoinSplit Architecture)
  *
- * Low-level instruction building for AEGIS operations.
+ * Low-level instruction building for PRIVACY_COIN operations.
  * All Groth16 proofs are verified inline using BN254 pairing syscalls.
  *
  * @module instructions
@@ -189,7 +189,7 @@ export function buildShieldInstruction(options: ShieldInstructionOptions): Instr
   });
 
   return {
-    programAddress: config.aegisProgramId,
+    programAddress: config.privacyCoinProgramId,
     accounts: [
       { address: options.accounts.user, role: AccountRole.WRITABLE_SIGNER },
       { address: options.accounts.userTokenAccount, role: AccountRole.WRITABLE },
@@ -322,7 +322,7 @@ export function buildRedemptionRequestInstruction(
   ];
 
   return {
-    programAddress: config.aegisProgramId,
+    programAddress: config.privacyCoinProgramId,
     accounts,
     data,
   };
@@ -455,7 +455,7 @@ export function buildCompleteRedemptionInstruction(
   }
 
   return {
-    programAddress: config.aegisProgramId,
+    programAddress: config.privacyCoinProgramId,
     accounts,
     data,
   };
@@ -628,7 +628,7 @@ export function buildTransactInstruction(options: TransactInstructionOptions): I
   }
 
   return {
-    programAddress: config.aegisProgramId,
+    programAddress: config.privacyCoinProgramId,
     accounts,
     data,
   };
@@ -998,7 +998,7 @@ export function buildUnshieldInstruction(options: UnshieldInstructionOptions): I
   }
 
   return {
-    programAddress: config.aegisProgramId,
+    programAddress: config.privacyCoinProgramId,
     accounts,
     data,
   };
@@ -1071,7 +1071,7 @@ export function buildProposePoolUpdateInstruction(options: ProposePoolUpdateOpti
   );
 
   return {
-    programAddress: config.aegisProgramId,
+    programAddress: config.privacyCoinProgramId,
     accounts: [
       { address: options.accounts.poolState, role: AccountRole.WRITABLE },
       { address: options.accounts.authority, role: AccountRole.WRITABLE_SIGNER },
@@ -1106,7 +1106,7 @@ export function buildExecutePoolUpdateInstruction(options: ExecutePoolUpdateOpti
   const config = getConfig();
 
   return {
-    programAddress: config.aegisProgramId,
+    programAddress: config.privacyCoinProgramId,
     accounts: [
       { address: options.accounts.poolState, role: AccountRole.WRITABLE },
     ],
@@ -1142,7 +1142,7 @@ export function buildCancelPoolUpdateInstruction(options: CancelPoolUpdateOption
   const config = getConfig();
 
   return {
-    programAddress: config.aegisProgramId,
+    programAddress: config.privacyCoinProgramId,
     accounts: [
       { address: options.accounts.poolState, role: AccountRole.WRITABLE },
       { address: options.accounts.authority, role: AccountRole.WRITABLE_SIGNER },
@@ -1187,7 +1187,7 @@ export function buildRotateTreeInstruction(options: RotateTreeOptions): Instruct
   const config = getConfig();
 
   return {
-    programAddress: config.aegisProgramId,
+    programAddress: config.privacyCoinProgramId,
     accounts: [
       { address: options.accounts.poolState, role: AccountRole.WRITABLE },
       { address: options.accounts.currentTree, role: AccountRole.WRITABLE },
@@ -1276,7 +1276,7 @@ export function buildVerifyTransactionInstructionData(params: {
 }
 
 // =============================================================================
-// Aegis Verify Stealth Deposit (disc=11)
+// Privacy Coin Verify Stealth Deposit (disc=11)
 // =============================================================================
 
 /**

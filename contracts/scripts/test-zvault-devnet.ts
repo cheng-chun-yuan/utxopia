@@ -1,5 +1,5 @@
 /**
- * AEGIS Devnet Test Script
+ * PRIVACY_COIN Devnet Test Script
  *
  * Tests all 6 main functions:
  * 1. deposit - Generate credentials
@@ -27,7 +27,7 @@ import * as fs from "fs";
 // Import from SDK
 import {
   createClient,
-  AEGIS_PROGRAM_ID,
+  PRIVACY_COIN_PROGRAM_ID,
   deposit,
   sendLink,
   generateNote,
@@ -45,7 +45,7 @@ import {
 // ============================================================================
 
 const RPC_URL = "https://api.devnet.solana.com";
-const PROGRAM_ID = AEGIS_PROGRAM_ID;
+const PROGRAM_ID = PRIVACY_COIN_PROGRAM_ID;
 
 // Instruction discriminators
 const INSTRUCTION = {
@@ -403,7 +403,7 @@ interface TestResult {
 
 async function main() {
   console.log("\n" + "=".repeat(60));
-  console.log("        AEGIS DEVNET TEST");
+  console.log("        PRIVACY_COIN DEVNET TEST");
   console.log("=".repeat(60));
 
   const results: TestResult[] = [];

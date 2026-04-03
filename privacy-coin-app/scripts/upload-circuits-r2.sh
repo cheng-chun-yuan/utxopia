@@ -9,7 +9,7 @@ SRC_DIR="public/circuits/groth16"
 export CLOUDFLARE_ACCOUNT_ID="fb5def0d0fb624cb76bddca682c8bfaa"
 
 if [ ! -d "$SRC_DIR" ]; then
-  echo "Error: $SRC_DIR not found. Run from aegis-app directory."
+  echo "Error: $SRC_DIR not found. Run from privacy-coin-app directory."
   exit 1
 fi
 

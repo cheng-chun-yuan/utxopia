@@ -1,4 +1,4 @@
-# Aegis Security Audit Checklist
+# Privacy Coin Security Audit Checklist
 
 > Generated 2026-03-07. Track fixes here.
 

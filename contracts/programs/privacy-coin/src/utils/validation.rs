@@ -12,7 +12,7 @@ use pinocchio::{
 };
 
 use crate::constants::{TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID};
-use crate::error::AegisError;
+use crate::error::PrivacyCoinError;
 
 // ============================================================================
 // PDA CREATION HELPER (shared across all instructions)
@@ -105,7 +105,7 @@ pub fn validate_program_owner(
 ) -> Result<(), ProgramError> {
     let owner = account.owner();
     if owner != program_id {
-        return Err(AegisError::InvalidAccountOwner.into());
+        return Err(PrivacyCoinError::InvalidAccountOwner.into());
     }
     Ok(())
 }
@@ -183,7 +183,7 @@ pub fn validate_program_owners(
 #[inline(always)]
 pub fn validate_account_writable(account: &AccountInfo) -> Result<(), ProgramError> {
     if !account.is_writable() {
-        return Err(AegisError::AccountNotWritable.into());
+        return Err(PrivacyCoinError::AccountNotWritable.into());
     }
     Ok(())
 }
@@ -205,15 +205,15 @@ pub fn validate_token_mint(
 ) -> Result<(), ProgramError> {
     let data = token_account.try_borrow_data()?;
     if data.len() < 32 {
-        return Err(AegisError::InvalidAccountData.into());
+        return Err(PrivacyCoinError::InvalidAccountData.into());
     }
 
     let mint_bytes: [u8; 32] = data[0..32]
         .try_into()
-        .map_err(|_| AegisError::InvalidAccountData)?;
+        .map_err(|_| PrivacyCoinError::InvalidAccountData)?;
 
     if mint_bytes != expected_mint.as_ref() {
-        return Err(AegisError::InvalidMint.into());
+        return Err(PrivacyCoinError::InvalidMint.into());
     }
     Ok(())
 }
@@ -245,7 +245,7 @@ pub fn validate_initialized(
 ) -> Result<(), ProgramError> {
     let data = account.try_borrow_data()?;
     if data.is_empty() || data[0] != expected_discriminator {
-        return Err(AegisError::NotInitialized.into());
+        return Err(PrivacyCoinError::NotInitialized.into());
     }
     Ok(())
 }
@@ -261,7 +261,7 @@ pub fn validate_not_initialized(
 ) -> Result<(), ProgramError> {
     let data = account.try_borrow_data()?;
     if !data.is_empty() && data[0] == discriminator {
-        return Err(AegisError::AlreadyInitialized.into());
+        return Err(PrivacyCoinError::AlreadyInitialized.into());
     }
     Ok(())
 }

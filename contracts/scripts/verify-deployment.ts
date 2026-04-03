@@ -5,11 +5,11 @@
 
 import { Connection, PublicKey } from "@solana/web3.js";
 import {
-  AEGIS_PROGRAM_ID,
+  PRIVACY_COIN_PROGRAM_ID,
   BTC_LIGHT_CLIENT_PROGRAM_ID,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
-} from "@aegis/sdk";
+} from "@privacy-coin/sdk";
 
 const RPC_URL = "https://api.devnet.solana.com";
 
@@ -22,17 +22,17 @@ async function main() {
 
   // Check SDK program ID
   console.log("\n=== Program IDs from SDK ===");
-  console.log(`Aegis: ${AEGIS_PROGRAM_ID}`);
+  console.log(`Aegis: ${PRIVACY_COIN_PROGRAM_ID}`);
   console.log(`BTC Light Client: ${BTC_LIGHT_CLIENT_PROGRAM_ID}`);
 
   // Verify program is deployed
   console.log("\n=== Verifying on-chain ===");
 
-  const programInfo = await connection.getAccountInfo(new PublicKey(AEGIS_PROGRAM_ID as string));
+  const programInfo = await connection.getAccountInfo(new PublicKey(PRIVACY_COIN_PROGRAM_ID as string));
   if (programInfo) {
-    console.log(`✓ Aegis program found (${programInfo.data.length} bytes)`);
+    console.log(`✓ Privacy Coin program found (${programInfo.data.length} bytes)`);
   } else {
-    console.log(`✗ Aegis program NOT found!`);
+    console.log(`✗ Privacy Coin program NOT found!`);
   }
 
   // Derive PDAs using SDK

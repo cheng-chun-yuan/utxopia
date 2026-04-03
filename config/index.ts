@@ -6,8 +6,8 @@
  *
  * Usage:
  *   import { getNetworkConfig } from "@/config";  // or "../../config"
- *   const cfg = getNetworkConfig();  // auto-detects from NEXT_PUBLIC_NETWORK or AEGIS_NETWORK
- *   cfg.solana.aegisProgramId
+ *   const cfg = getNetworkConfig();  // auto-detects from NEXT_PUBLIC_NETWORK or PRIVACY_COIN_NETWORK
+ *   cfg.solana.privacyCoinProgramId
  *   cfg.tokens.zkbtcMint
  *   cfg.bitcoin.poolAddress
  */
@@ -19,7 +19,7 @@ export type NetworkId = "devnet" | "testnet" | "mainnet";
 export interface NetworkConfig {
   solana: {
     rpcUrl: string;
-    aegisProgramId: string;
+    privacyCoinProgramId: string;
     btcLightClientId: string;
     chadbufferId: string;
   };
@@ -46,7 +46,7 @@ const networks = networksJson as Record<NetworkId, NetworkConfig>;
 export function detectNetwork(): NetworkId {
   const env =
     (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_NETWORK) ||
-    (typeof process !== "undefined" && process.env?.AEGIS_NETWORK) ||
+    (typeof process !== "undefined" && process.env?.PRIVACY_COIN_NETWORK) ||
     "devnet";
   if (env === "mainnet" || env === "mainnet-beta") return "mainnet";
   if (env === "testnet") return "testnet";

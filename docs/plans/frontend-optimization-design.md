@@ -2,7 +2,7 @@
 
 ## Goal
 
-Break down oversized components, eliminate remaining duplication, and improve code quality across the aegis-app frontend. No behavior changes — pure structural refactoring.
+Break down oversized components, eliminate remaining duplication, and improve code quality across the privacy-coin-app frontend. No behavior changes — pure structural refactoring.
 
 ## Context
 

@@ -56,7 +56,7 @@ impl PoolKeys {
     ///
     /// # Security
     ///
-    /// - Production: Loads key from AEGIS_BTC_SIGNER_KEY environment variable
+    /// - Production: Loads key from PRIVACY_COIN_BTC_SIGNER_KEY environment variable
     /// - Devnet: Falls back to derived key if env var not set (with warning)
     ///
     /// For mainnet, FROST DKG should be used instead of single-key signing.
@@ -66,19 +66,19 @@ impl PoolKeys {
         let secp = Secp256k1::new();
 
         // Try to load from environment variable first
-        let secret_key = match env::var("AEGIS_BTC_SIGNER_KEY") {
+        let secret_key = match env::var("PRIVACY_COIN_BTC_SIGNER_KEY") {
             Ok(hex_key) if !hex_key.is_empty() => {
                 let bytes =
-                    hex::decode(&hex_key).expect("AEGIS_BTC_SIGNER_KEY must be valid hex");
+                    hex::decode(&hex_key).expect("PRIVACY_COIN_BTC_SIGNER_KEY must be valid hex");
                 SecretKey::from_slice(&bytes)
-                    .expect("AEGIS_BTC_SIGNER_KEY must be a valid secp256k1 secret key")
+                    .expect("PRIVACY_COIN_BTC_SIGNER_KEY must be a valid secp256k1 secret key")
             }
             _ => {
                 // Check if we're on devnet (allow fallback) or production (error)
-                let network = env::var("AEGIS_NETWORK").unwrap_or_else(|_| "devnet".to_string());
+                let network = env::var("PRIVACY_COIN_NETWORK").unwrap_or_else(|_| "devnet".to_string());
                 if network == "mainnet" {
                     panic!(
-                        "AEGIS_BTC_SIGNER_KEY environment variable is required for mainnet. \
+                        "PRIVACY_COIN_BTC_SIGNER_KEY environment variable is required for mainnet. \
                          For production, use FROST DKG instead of single-key signing."
                     );
                 }
@@ -88,7 +88,7 @@ impl PoolKeys {
                     "WARNING: Using derived key for {} - DO NOT USE WITH REAL FUNDS!",
                     network
                 );
-                eprintln!("Set AEGIS_BTC_SIGNER_KEY environment variable for custom keys.");
+                eprintln!("Set PRIVACY_COIN_BTC_SIGNER_KEY environment variable for custom keys.");
 
                 // Use environment-specific seed (not fully deterministic)
                 let seed_input = format!(
@@ -683,7 +683,7 @@ mod tests {
     // ========================================================================
     //
     // These tests simulate the full BTC deposit lifecycle:
-    //   1. Aegis (admin) CAN spend immediately via key path
+    //   1. Privacy Coin (admin) CAN spend immediately via key path
     //   2. Depositor CANNOT spend before CSV timelock expires
     //   3. Depositor CAN spend after CSV timelock expires
     //

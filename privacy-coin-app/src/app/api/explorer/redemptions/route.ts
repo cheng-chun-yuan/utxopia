@@ -7,9 +7,9 @@
  */
 
 import { NextResponse } from "next/server";
-import type { RpcClient } from "@aegis/sdk";
+import type { RpcClient } from "@privacy-coin/sdk";
 // Lazy imports to avoid build-time codec validation errors from @solana/kit
-const getAegisSDK = () => import("@aegis/sdk");
+const getAegisSDK = () => import("@privacy-coin/sdk");
 const getSolanaKit = () => import("@solana/kit");
 
 import { getHeliusRpcUrl } from "@/lib/helius-server";
@@ -116,7 +116,7 @@ export async function GET() {
     const [redemptions, allResp, poolStateResp, transfersResp] = await Promise.all([
       createServerRpc().then(rpc => fetchExplorerRedemptions(
         rpc,
-        getConfig().aegisProgramId,
+        getConfig().privacyCoinProgramId,
       )).catch((e) => {
         console.warn("[Redemptions] PDA scan failed:", e.message);
         return [];

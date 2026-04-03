@@ -8,7 +8,7 @@
 services:
   esplora:
     image: blockstream/esplora
-    container_name: aegis-esplora-regtest
+    container_name: privacy-coin-esplora-regtest
     command: ["/srv/explorer/run.sh", "bitcoin-regtest", "explorer"]
     ports:
       - "3002:80"
@@ -25,7 +25,7 @@ services:
     build:
       context: ./frost_server
       dockerfile: Dockerfile
-    container_name: aegis-frost-1
+    container_name: privacy-coin-frost-1
     ports:
       - "19101:9001"
     environment:
@@ -50,7 +50,7 @@ services:
     build:
       context: ./frost_server
       dockerfile: Dockerfile
-    container_name: aegis-frost-2
+    container_name: privacy-coin-frost-2
     ports:
       - "19102:9001"
     environment:

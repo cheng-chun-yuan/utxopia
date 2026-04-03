@@ -14,7 +14,7 @@ import "@solana/wallet-adapter-react-ui/styles.css";
 
 /**
  * Simplified providers - only Solana wallet adapter requires React Context.
- * All other state (Bitcoin wallet, Aegis keys, notes) is managed by Zustand stores.
+ * All other state (Bitcoin wallet, Privacy Coin keys, notes) is managed by Zustand stores.
  */
 export function Providers({ children }: { children: React.ReactNode }) {
   // Helius primary (supports getProgramAccounts), fallback to configured RPC

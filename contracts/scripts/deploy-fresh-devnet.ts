@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Deploy Fresh Aegis to Devnet
+ * Deploy Fresh Privacy Coin to Devnet
  *
  * Creates a completely new deployment with:
  * - New program ID (fresh keypair)
@@ -90,7 +90,7 @@ const envArg = process.argv.find((a) => a.startsWith("--env="))?.split("=")[1]
 
 async function main() {
   console.log("=".repeat(60));
-  console.log(`Deploy Fresh Aegis to Devnet (env: ${envArg})`);
+  console.log(`Deploy Fresh Privacy Coin to Devnet (env: ${envArg})`);
   console.log("=".repeat(60));
   console.log();
   console.log("This will:");
@@ -149,7 +149,7 @@ async function main() {
       `--url ${RPC_URL} ` +
       `--program-id ${programKeypairPath} ` +
       `--keypair ~/.config/solana/johnny.json ` +
-      `target/deploy/aegis_pinocchio.so`,
+      `target/deploy/privacy_coin.so`,
       { cwd: path.join(__dirname, ".."), stdio: "inherit" }
     );
   } catch (error) {
@@ -210,7 +210,7 @@ async function main() {
   console.log(`✓ Frost Vault: ${frostVaultAccount.address.toBase58()}`);
 
   // Initialize Aegis
-  console.log("\nInitializing Aegis pool...");
+  console.log("\nInitializing Privacy Coin pool...");
   const ix = buildInitializeIx(
     poolStatePda,
     commitmentTreePda,
@@ -227,7 +227,7 @@ async function main() {
   const sig = await sendAndConfirmTransaction(connection, tx, [authority], {
     commitment: "confirmed",
   });
-  console.log(`✓ Aegis initialized: ${sig}`);
+  console.log(`✓ Privacy Coin initialized: ${sig}`);
 
   // Verify commitment tree size
   const treeInfo = await connection.getAccountInfo(commitmentTreePda);
@@ -271,16 +271,16 @@ async function main() {
   console.log();
   console.log("Set these env vars to use this deployment:");
   console.log();
-  console.log("  # Frontend (aegis-app/.env.local):");
-  console.log(`  NEXT_PUBLIC_AEGIS_PROGRAM_ID=${programId.toBase58()}`);
+  console.log("  # Frontend (privacy-coin-app/.env.local):");
+  console.log(`  NEXT_PUBLIC_PRIVACY_COIN_PROGRAM_ID=${programId.toBase58()}`);
   console.log(`  NEXT_PUBLIC_ZKBTC_MINT=${zkbtcMint.toBase58()}`);
   console.log();
   console.log("  # Backend (.env):");
-  console.log(`  AEGIS_PROGRAM_ID=${programId.toBase58()}`);
-  console.log(`  AEGIS_ZKBTC_MINT=${zkbtcMint.toBase58()}`);
+  console.log(`  PRIVACY_COIN_PROGRAM_ID=${programId.toBase58()}`);
+  console.log(`  PRIVACY_COIN_ZKBTC_MINT=${zkbtcMint.toBase58()}`);
   console.log();
   console.log("  # Scripts:");
-  console.log(`  AEGIS_PROGRAM_ID=${programId.toBase58()}`);
+  console.log(`  PRIVACY_COIN_PROGRAM_ID=${programId.toBase58()}`);
 }
 
 main().catch((err) => {

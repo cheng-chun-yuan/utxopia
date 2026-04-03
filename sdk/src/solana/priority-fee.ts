@@ -44,7 +44,7 @@ export interface PriorityFeeInstructions {
 // Constants
 // =============================================================================
 
-/** Default compute unit limit for Aegis transactions */
+/** Default compute unit limit for Privacy Coin transactions */
 export const DEFAULT_COMPUTE_UNITS = 200_000;
 
 /** Default priority fee in microLamports when estimation fails */

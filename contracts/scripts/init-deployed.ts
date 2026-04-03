@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Initialize an already-deployed Aegis program.
+ * Initialize an already-deployed Privacy Coin program.
  * Creates mint, vault, frost vault, and calls initialize instruction.
  */
 
@@ -90,7 +90,7 @@ async function main() {
   console.log(`✓ Frost Vault: ${frostVaultAccount.address.toBase58()}`);
 
   // Initialize Aegis
-  console.log("\nInitializing Aegis pool...");
+  console.log("\nInitializing Privacy Coin pool...");
   const ix = buildInitializeIx(
     poolStatePda, commitmentTreePda, zkbtcMint,
     poolVaultAccount.address, frostVaultAccount.address,
@@ -98,7 +98,7 @@ async function main() {
   );
   const tx = new Transaction().add(ix);
   const sig = await sendAndConfirmTransaction(connection, tx, [authority], { commitment: "confirmed" });
-  console.log(`✓ Aegis initialized: ${sig}`);
+  console.log(`✓ Privacy Coin initialized: ${sig}`);
 
   // Save config
   const devnetConfig = {
@@ -134,7 +134,7 @@ async function main() {
   console.log(`  zkBTC Mint:    ${zkbtcMint.toBase58()}`);
   console.log(`  Pool Vault:    ${poolVaultAccount.address.toBase58()}`);
   console.log();
-  console.log(`  NEXT_PUBLIC_AEGIS_PROGRAM_ID=${PROGRAM_ID.toBase58()}`);
+  console.log(`  NEXT_PUBLIC_PRIVACY_COIN_PROGRAM_ID=${PROGRAM_ID.toBase58()}`);
   console.log(`  NEXT_PUBLIC_ZKBTC_MINT=${zkbtcMint.toBase58()}`);
 }
 

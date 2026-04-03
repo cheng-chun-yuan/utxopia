@@ -17,7 +17,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::error::AegisError;
+use crate::error::PrivacyCoinError;
 use crate::state::{PoolState, TokenConfig};
 use crate::utils::{validate_account_writable, validate_program_owner};
 
@@ -56,7 +56,7 @@ pub fn process_update_token_config(
         let pool_data = pool_state_info.try_borrow_data()?;
         let pool = PoolState::from_bytes(&pool_data)?;
         if authority.key().as_ref() != pool.authority {
-            return Err(AegisError::Unauthorized.into());
+            return Err(PrivacyCoinError::Unauthorized.into());
         }
     }
 

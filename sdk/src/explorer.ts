@@ -1,7 +1,7 @@
 /**
- * Explorer utilities for AEGIS
+ * Explorer utilities for PRIVACY_COIN
  *
- * Types, parsers, and fetchers for browsing on-chain Aegis activity:
+ * Types, parsers, and fetchers for browsing on-chain Privacy Coin activity:
  * - Deposits (from event indexer)
  * - Transfers (from event indexer)
  * - Redemptions (RedemptionRequest accounts)

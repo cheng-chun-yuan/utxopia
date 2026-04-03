@@ -30,9 +30,9 @@ use crate::solana::spv;
 /// Token-2022 program ID
 const TOKEN_2022_PROGRAM_ID: Pubkey = pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
-/// Get Aegis program ID from env or use devnet default
+/// Get Privacy Coin program ID from env or use devnet default
 fn aegis_program_id() -> String {
-    std::env::var("AEGIS_PROGRAM_ID")
+    std::env::var("PRIVACY_COIN_PROGRAM_ID")
         .unwrap_or_else(|_| "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ".to_string())
 }
 

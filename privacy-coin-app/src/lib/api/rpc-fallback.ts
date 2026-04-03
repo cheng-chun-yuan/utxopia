@@ -1,5 +1,5 @@
 /**
- * RPC Fallback — scan Solana program logs for Aegis events
+ * RPC Fallback — scan Solana program logs for Privacy Coin events
  *
  * Used by explorer API routes when the backend is unreachable.
  * Reconstructs deposit/transfer data from on-chain sol_log_data events.
@@ -7,7 +7,7 @@
 
 import { getNetworkConfig } from "../network-config";
 import { SOLANA_RPC_FALLBACK_URL } from "./constants";
-const AEGIS_PROGRAM_ID = getNetworkConfig().solana.aegisProgramId;
+const PRIVACY_COIN_PROGRAM_ID = getNetworkConfig().solana.privacyCoinProgramId;
 const COMMITMENT_TREE_PDA = "CbaDvGVVQqskcu4cz6Fsu3i2q8eWG8GjeqpZiKgPiCaW";
 
 // Rent-exempt minimum for a 1-byte account (NullifierRecord)
@@ -35,7 +35,7 @@ export interface RpcTxMeta {
   blockTime: number;
   announcements: RpcAnnouncement[];
   nullifierPdas: string[];
-  /** Aegis instruction discriminator (1=verify_stealth_deposit, 13=demo, 14=transact, 29=shield) */
+  /** Privacy Coin instruction discriminator (1=verify_stealth_deposit, 13=demo, 14=transact, 29=shield) */
   instructionDisc: number | null;
 }
 
@@ -150,7 +150,7 @@ function extractNullifierPdas(result: RpcTransactionResult): string[] {
   return pdas;
 }
 
-/** Extract the first Aegis instruction discriminator from a transaction */
+/** Extract the first Privacy Coin instruction discriminator from a transaction */
 function extractInstructionDisc(result: RpcTransactionResult): number | null {
   try {
     const message = result.transaction?.message;
@@ -160,7 +160,7 @@ function extractInstructionDisc(result: RpcTransactionResult): number | null {
     const instructions = message?.instructions ?? [];
     for (const ix of instructions) {
       const programIdx = ix.programIdIndex;
-      if (accountKeys[programIdx] === AEGIS_PROGRAM_ID && ix.data) {
+      if (accountKeys[programIdx] === PRIVACY_COIN_PROGRAM_ID && ix.data) {
         // Decode base58 instruction data, first byte is discriminator
         const decoded = decodeBase58(ix.data);
         if (decoded.length > 0) return decoded[0];
@@ -194,7 +194,7 @@ function decodeBase58(str: string): Uint8Array {
 }
 
 /**
- * Fetch Aegis program transactions from RPC and parse events.
+ * Fetch Privacy Coin program transactions from RPC and parse events.
  * Returns transaction metadata with parsed stealth announcements.
  */
 export async function fetchAnnouncementsFromRpc(

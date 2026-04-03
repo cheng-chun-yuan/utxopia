@@ -53,7 +53,7 @@ async function main() {
         }));
       },
     },
-    DEVNET_CONFIG.aegisProgramId
+    DEVNET_CONFIG.privacyCoinProgramId
   );
 
   console.log("Tree size:", tree.size());

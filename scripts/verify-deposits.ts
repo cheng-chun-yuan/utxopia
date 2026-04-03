@@ -33,7 +33,7 @@ import { setupScript, TOKEN_2022 } from "./lib/common.ts";
 // =============================================================================
 
 const { conn: _conn, authority: _authority, programId: _pid, state } = setupScript();
-const AEGIS_PROGRAM_ID = _pid;
+const PRIVACY_COIN_PROGRAM_ID = _pid;
 const BTC_LIGHT_CLIENT_PROGRAM_ID = new PublicKey(state.btcLightClientId!);
 const CHADBUFFER_PROGRAM_ID = new PublicKey(state.chadbufferId || "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF");
 const TOKEN_2022_PROGRAM_ID = TOKEN_2022;
@@ -282,10 +282,10 @@ async function verifyDeposit(
 
   // Derive PDAs
   const [poolStatePDA] = PublicKey.findProgramAddressSync(
-    [Buffer.from("pool_state")], AEGIS_PROGRAM_ID
+    [Buffer.from("pool_state")], PRIVACY_COIN_PROGRAM_ID
   );
   const [commitmentTreePDA] = PublicKey.findProgramAddressSync(
-    [Buffer.from("commitment_tree")], AEGIS_PROGRAM_ID
+    [Buffer.from("commitment_tree")], PRIVACY_COIN_PROGRAM_ID
   );
   const [lightClientPDA] = PublicKey.findProgramAddressSync(
     [Buffer.from("btc_light_client")], BTC_LIGHT_CLIENT_PROGRAM_ID
@@ -298,7 +298,7 @@ async function verifyDeposit(
     BTC_LIGHT_CLIENT_PROGRAM_ID
   );
   const [depositReceiptPDA] = PublicKey.findProgramAddressSync(
-    [Buffer.from("deposit_receipt"), Buffer.from(depositTxidInternal)], AEGIS_PROGRAM_ID
+    [Buffer.from("deposit_receipt"), Buffer.from(depositTxidInternal)], PRIVACY_COIN_PROGRAM_ID
   );
   const poolVaultATA = getAssociatedTokenAddressSync(
     ZKBTC_MINT, poolStatePDA, true, TOKEN_2022_PROGRAM_ID
@@ -359,7 +359,7 @@ async function verifyDeposit(
   Buffer.from(depositTxidInternal).copy(verifyDepositData, doff); doff += 32;
 
   const verifyDepositIx = new TransactionInstruction({
-    programId: AEGIS_PROGRAM_ID,
+    programId: PRIVACY_COIN_PROGRAM_ID,
     keys: [
       { pubkey: poolStatePDA, isSigner: false, isWritable: true },          // 0
       { pubkey: verifiedTxPDA, isSigner: false, isWritable: false },        // 1
@@ -418,7 +418,7 @@ async function main() {
   const connection = _conn;
 
   console.log("Authority:", payer.publicKey.toBase58());
-  console.log("Program:", AEGIS_PROGRAM_ID.toBase58());
+  console.log("Program:", PRIVACY_COIN_PROGRAM_ID.toBase58());
   console.log("Mint:", ZKBTC_MINT.toBase58());
 
   const balance = await connection.getBalance(payer.publicKey);

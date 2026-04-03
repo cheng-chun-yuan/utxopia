@@ -1,4 +1,4 @@
-//! Aegis - Privacy-Preserving BTC to Solana Bridge (Pinocchio)
+//! Privacy Coin - Privacy-Preserving BTC to Solana Bridge (Pinocchio)
 //!
 //! SHIELDED-ONLY ARCHITECTURE (JoinSplit Model):
 //! - zkBTC exists only as commitments in Merkle tree
@@ -139,7 +139,7 @@ fn process_set_paused(
     accounts: &[AccountInfo],
     data: &[u8],
 ) -> ProgramResult {
-    use crate::error::AegisError;
+    use crate::error::PrivacyCoinError;
     use crate::state::PoolState;
     use crate::utils::validate_program_owner;
     use pinocchio::sysvars::{clock::Clock, Sysvar};
@@ -167,7 +167,7 @@ fn process_set_paused(
         let pool = PoolState::from_bytes_mut(&mut pool_data)?;
 
         if authority.key().as_ref() != pool.authority {
-            return Err(AegisError::Unauthorized.into());
+            return Err(PrivacyCoinError::Unauthorized.into());
         }
 
         pool.set_paused(paused);

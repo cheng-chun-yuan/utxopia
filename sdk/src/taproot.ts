@@ -10,7 +10,7 @@ import { taggedHash, hexToBytes, bytesToHex } from "./crypto";
 import * as bech32 from "bech32";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 
-// Aegis internal key (x-only pubkey)
+// Privacy Coin internal key (x-only pubkey)
 // In production, this should be the FROST threshold key
 // Using a test key for demonstration
 const INTERNAL_KEY_HEX =

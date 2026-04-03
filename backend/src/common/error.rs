@@ -1,12 +1,12 @@
-//! Common Error Types for Aegis Backend
+//! Common Error Types for Privacy Coin Backend
 //!
 //! Provides unified error handling across all modules.
 
 use thiserror::Error;
 
-/// Root error type for Aegis backend
+/// Root error type for Privacy Coin backend
 #[derive(Debug, Error)]
-pub enum AegisError {
+pub enum PrivacyCoinError {
     /// Configuration errors
     #[error("configuration error: {0}")]
     Config(#[from] crate::config::ConfigError),
@@ -48,7 +48,7 @@ pub enum AegisError {
     Io(#[from] std::io::Error),
 }
 
-impl AegisError {
+impl PrivacyCoinError {
     /// Create a Bitcoin error
     pub fn bitcoin(msg: impl Into<String>) -> Self {
         Self::Bitcoin(msg.into())
@@ -88,32 +88,32 @@ impl AegisError {
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
-            AegisError::Bitcoin(_)
-                | AegisError::Solana(_)
-                | AegisError::Storage(_)
-                | AegisError::Io(_)
+            PrivacyCoinError::Bitcoin(_)
+                | PrivacyCoinError::Solana(_)
+                | PrivacyCoinError::Storage(_)
+                | PrivacyCoinError::Io(_)
         )
     }
 
     /// Get error code for API responses
     pub fn error_code(&self) -> &'static str {
         match self {
-            AegisError::Config(_) => "CONFIG_ERROR",
-            AegisError::Logging(_) => "LOGGING_ERROR",
-            AegisError::Bitcoin(_) => "BITCOIN_ERROR",
-            AegisError::Solana(_) => "SOLANA_ERROR",
-            AegisError::Storage(_) => "STORAGE_ERROR",
-            AegisError::Api(_) => "API_ERROR",
-            AegisError::Service(_) => "SERVICE_ERROR",
-            AegisError::Validation(_) => "VALIDATION_ERROR",
-            AegisError::Internal(_) => "INTERNAL_ERROR",
-            AegisError::Io(_) => "IO_ERROR",
+            PrivacyCoinError::Config(_) => "CONFIG_ERROR",
+            PrivacyCoinError::Logging(_) => "LOGGING_ERROR",
+            PrivacyCoinError::Bitcoin(_) => "BITCOIN_ERROR",
+            PrivacyCoinError::Solana(_) => "SOLANA_ERROR",
+            PrivacyCoinError::Storage(_) => "STORAGE_ERROR",
+            PrivacyCoinError::Api(_) => "API_ERROR",
+            PrivacyCoinError::Service(_) => "SERVICE_ERROR",
+            PrivacyCoinError::Validation(_) => "VALIDATION_ERROR",
+            PrivacyCoinError::Internal(_) => "INTERNAL_ERROR",
+            PrivacyCoinError::Io(_) => "IO_ERROR",
         }
     }
 }
 
-/// Result type alias using AegisError
-pub type Result<T> = std::result::Result<T, AegisError>;
+/// Result type alias using PrivacyCoinError
+pub type Result<T> = std::result::Result<T, PrivacyCoinError>;
 
 #[cfg(test)]
 mod tests {
@@ -121,15 +121,15 @@ mod tests {
 
     #[test]
     fn test_error_creation() {
-        let err = AegisError::bitcoin("connection failed");
+        let err = PrivacyCoinError::bitcoin("connection failed");
         assert!(err.to_string().contains("connection failed"));
         assert_eq!(err.error_code(), "BITCOIN_ERROR");
     }
 
     #[test]
     fn test_retryable_errors() {
-        assert!(AegisError::bitcoin("timeout").is_retryable());
-        assert!(AegisError::solana("rpc failed").is_retryable());
-        assert!(!AegisError::validation("invalid input").is_retryable());
+        assert!(PrivacyCoinError::bitcoin("timeout").is_retryable());
+        assert!(PrivacyCoinError::solana("rpc failed").is_retryable());
+        assert!(!PrivacyCoinError::validation("invalid input").is_retryable());
     }
 }

@@ -146,7 +146,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("
 ╔════════════════════════════════════════════════════════════════════╗
-║      Aegis E2E Deposit Test - FROST + SPV Verification            ║
+║      Privacy Coin E2E Deposit Test - FROST + SPV Verification            ║
 ╚════════════════════════════════════════════════════════════════════╝
 ");
 

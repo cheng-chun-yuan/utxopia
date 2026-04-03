@@ -155,14 +155,14 @@ close_old_programs() {
   local BEFORE=$(solana balance "$AUTHORITY" --url "$RPC_URL" 2>/dev/null | awk '{print $1}')
   log "Balance before: $BEFORE SOL"
 
-  # Try closing old Aegis program
-  local OLD_AEGIS=$(read_state "aegisProgramId")
-  if [ -n "$OLD_AEGIS" ]; then
-    log "Closing old Aegis program: $OLD_AEGIS"
-    solana program close "$OLD_AEGIS" \
+  # Try closing old Privacy Coin program
+  local OLD_PRIVACY_COIN=$(read_state "privacyCoinProgramId")
+  if [ -n "$OLD_PRIVACY_COIN" ]; then
+    log "Closing old Privacy Coin program: $OLD_PRIVACY_COIN"
+    solana program close "$OLD_PRIVACY_COIN" \
       --url "$RPC_URL" \
       --keypair "$KEYPAIR_PATH" \
-      --bypass-warning 2>&1 || warn "Failed to close $OLD_AEGIS (may already be closed)"
+      --bypass-warning 2>&1 || warn "Failed to close $OLD_PRIVACY_COIN (may already be closed)"
   fi
 
   # Try closing old BTC LC program
@@ -211,23 +211,23 @@ run_phase_1() {
   cd "$ROOT"
 
   # Verify .so files
-  local AEGIS_SO="$ROOT/contracts/target/deploy/aegis_pinocchio.so"
+  local PRIVACY_COIN_SO="$ROOT/contracts/target/deploy/privacy_coin.so"
   local BTCLC_SO="$ROOT/contracts/target/deploy/btc_light_client.so"
 
-  if [ ! -f "$AEGIS_SO" ]; then err "aegis_pinocchio.so not found"; exit 1; fi
+  if [ ! -f "$PRIVACY_COIN_SO" ]; then err "privacy_coin.so not found"; exit 1; fi
   if [ ! -f "$BTCLC_SO" ]; then err "btc_light_client.so not found"; exit 1; fi
 
   # Extract program IDs from keypairs
-  local AEGIS_KP="$ROOT/contracts/target/deploy/aegis_pinocchio-keypair.json"
+  local PRIVACY_COIN_KP="$ROOT/contracts/target/deploy/privacy_coin-keypair.json"
   local BTCLC_KP="$ROOT/contracts/target/deploy/btc_light_client-keypair.json"
 
-  local AEGIS_ID=$(solana-keygen pubkey "$AEGIS_KP" 2>/dev/null)
+  local PRIVACY_COIN_ID=$(solana-keygen pubkey "$PRIVACY_COIN_KP" 2>/dev/null)
   local BTCLC_ID=$(solana-keygen pubkey "$BTCLC_KP" 2>/dev/null)
 
-  log "Aegis program ID: $AEGIS_ID"
+  log "Privacy Coin program ID: $PRIVACY_COIN_ID"
   log "BTC LC program ID: $BTCLC_ID"
 
-  save_state "aegisProgramId" "$AEGIS_ID"
+  save_state "privacyCoinProgramId" "$PRIVACY_COIN_ID"
   save_state "btcLightClientId" "$BTCLC_ID"
 
   save_phase 1
@@ -239,21 +239,21 @@ run_phase_1() {
 run_phase_2() {
   phase 2 "Deploy Programs to Devnet"
 
-  local AEGIS_ID=$(read_state "aegisProgramId")
+  local PRIVACY_COIN_ID=$(read_state "privacyCoinProgramId")
   local BTCLC_ID=$(read_state "btcLightClientId")
-  local AEGIS_SO="$ROOT/contracts/target/deploy/aegis_pinocchio.so"
+  local PRIVACY_COIN_SO="$ROOT/contracts/target/deploy/privacy_coin.so"
   local BTCLC_SO="$ROOT/contracts/target/deploy/btc_light_client.so"
-  local AEGIS_KP="$ROOT/contracts/target/deploy/aegis_pinocchio-keypair.json"
+  local PRIVACY_COIN_KP="$ROOT/contracts/target/deploy/privacy_coin-keypair.json"
   local BTCLC_KP="$ROOT/contracts/target/deploy/btc_light_client-keypair.json"
 
-  log "Deploying Aegis ($AEGIS_ID)..."
-  solana program deploy "$AEGIS_SO" \
-    --program-id "$AEGIS_KP" \
+  log "Deploying Privacy Coin ($PRIVACY_COIN_ID)..."
+  solana program deploy "$PRIVACY_COIN_SO" \
+    --program-id "$PRIVACY_COIN_KP" \
     --url "$RPC_URL" \
     --keypair "$KEYPAIR_PATH" \
     --with-compute-unit-price 50000 \
-    || { err "Aegis deploy failed"; exit 1; }
-  log "Aegis deployed!"
+    || { err "Privacy Coin deploy failed"; exit 1; }
+  log "Privacy Coin deployed!"
 
   sleep 3
 
@@ -268,8 +268,8 @@ run_phase_2() {
 
   # Update contracts/config.json
   local tmp=$(mktemp)
-  jq --arg aegis "$AEGIS_ID" --arg btclc "$BTCLC_ID" \
-    '.programs.devnet.Aegis = $aegis | .programs.devnet.btc_light_client = $btclc' \
+  jq --arg aegis "$PRIVACY_COIN_ID" --arg btclc "$BTCLC_ID" \
+    '.programs.devnet.Privacy Coin = $aegis | .programs.devnet.btc_light_client = $btclc' \
     "$CONFIG_FILE" > "$tmp" && mv "$tmp" "$CONFIG_FILE"
   log "Updated contracts/config.json"
 
@@ -282,10 +282,10 @@ run_phase_2() {
 run_phase_3() {
   phase 3 "Initialize Pool + Register Tokens"
 
-  local AEGIS_ID=$(read_state "aegisProgramId")
+  local PRIVACY_COIN_ID=$(read_state "privacyCoinProgramId")
 
   log "Running init-devnet.ts..."
-  local OUTPUT=$(AEGIS_PROGRAM_ID="$AEGIS_ID" \
+  local OUTPUT=$(PRIVACY_COIN_PROGRAM_ID="$PRIVACY_COIN_ID" \
     RPC_URL="$RPC_URL" \
     KEYPAIR_PATH="$KEYPAIR_PATH" \
     bun run "$ROOT/scripts/init-devnet.ts" 2>&1)
@@ -331,10 +331,10 @@ run_phase_4() {
     return
   fi
 
-  local AEGIS_ID=$(read_state "aegisProgramId")
+  local PRIVACY_COIN_ID=$(read_state "privacyCoinProgramId")
 
   log "Registering VK hashes..."
-  AEGIS_PROGRAM_ID="$AEGIS_ID" \
+  PRIVACY_COIN_PROGRAM_ID="$PRIVACY_COIN_ID" \
     RPC_URL="$RPC_URL" \
     KEYPAIR_PATH="$KEYPAIR_PATH" \
     bun run "$ROOT/scripts/register-vk-hashes.ts" 2>&1
@@ -389,12 +389,12 @@ run_phase_6() {
     done
   done
 
-  local AEGIS_ID=$(read_state "aegisProgramId")
+  local PRIVACY_COIN_ID=$(read_state "privacyCoinProgramId")
 
   log "Running DKG ceremony..."
   FROST_NETWORK=testnet4 \
-    AEGIS_PROGRAM_ID="$AEGIS_ID" \
-    AEGIS_SOLANA_RPC="$RPC_URL" \
+    PRIVACY_COIN_PROGRAM_ID="$PRIVACY_COIN_ID" \
+    PRIVACY_COIN_SOLANA_RPC="$RPC_URL" \
     KEYPAIR_PATH="$KEYPAIR_PATH" \
     "$ROOT/scripts/frost-dkg.sh" 2>&1
 
@@ -426,11 +426,11 @@ run_phase_7() {
 
   # Run env sync
   log "Syncing env files..."
-  AEGIS_NETWORK=devnet "$ROOT/scripts/sync-env.sh"
+  PRIVACY_COIN_NETWORK=devnet "$ROOT/scripts/sync-env.sh"
 
   log "Env files synced!"
   log "  backend/.env.devnet"
-  log "  aegis-app/.env.devnet"
+  log "  privacy-coin-app/.env.devnet"
 
   save_phase 7
 }
@@ -446,7 +446,7 @@ run_phase_8() {
   echo -e "${GREEN}════════════════════════════════════════${NC}"
   echo ""
   echo "Program IDs:"
-  echo "  Aegis:          $(read_state aegisProgramId)"
+  echo "  Aegis:          $(read_state privacyCoinProgramId)"
   echo "  BTC Light Client: $(read_state btcLightClientId)"
   echo ""
   echo "Addresses:"
@@ -466,19 +466,19 @@ run_phase_8() {
   echo "  cd backend && railway up --path-as-root ."
   echo ""
   echo "  Railway env vars to set:"
-  echo "    AEGIS_PROGRAM_ID=$(read_state aegisProgramId)"
-  echo "    AEGIS_ZKBTC_MINT=$(read_state zkbtcMint)"
+  echo "    PRIVACY_COIN_PROGRAM_ID=$(read_state privacyCoinProgramId)"
+  echo "    PRIVACY_COIN_ZKBTC_MINT=$(read_state zkbtcMint)"
   echo "    BTC_LIGHT_CLIENT_PROGRAM_ID=$(read_state btcLightClientId)"
-  echo "    AEGIS_NETWORK=devnet"
+  echo "    PRIVACY_COIN_NETWORK=devnet"
   echo "    POOL_RECEIVE_ADDRESS=$(read_state poolBtcAddress)"
-  echo "    AEGIS_FROST_GROUP_PUBKEY=$(read_state btcXOnlyPubKey)"
+  echo "    PRIVACY_COIN_FROST_GROUP_PUBKEY=$(read_state btcXOnlyPubKey)"
   echo "    HEADER_RELAY_ENABLED=true"
   echo "    MEMPOOL_WS_ENABLED=true"
   echo ""
   echo -e "${CYAN}═══ Vercel Frontend ═══${NC}"
   echo ""
   echo "  Env vars to set in Vercel:"
-  echo "    NEXT_PUBLIC_AEGIS_PROGRAM_ID=$(read_state aegisProgramId)"
+  echo "    NEXT_PUBLIC_PRIVACY_COIN_PROGRAM_ID=$(read_state privacyCoinProgramId)"
   echo "    NEXT_PUBLIC_ZKBTC_MINT=$(read_state zkbtcMint)"
   echo "    NEXT_PUBLIC_USDC_MINT=$(read_state tUsdcMint)"
   echo "    NEXT_PUBLIC_BACKEND_URL=https://api-aegis.amidoggy.xyz"
@@ -499,7 +499,7 @@ run_phase_8() {
 
 echo -e "${CYAN}"
 echo "  ╔═══════════════════════════════════════════╗"
-echo "  ║  Aegis — Fresh Devnet Deployment          ║"
+echo "  ║  Privacy Coin — Fresh Devnet Deployment          ║"
 echo "  ║  Solana devnet + Bitcoin testnet4          ║"
 echo "  ╚═══════════════════════════════════════════╝"
 echo -e "${NC}"
@@ -514,12 +514,12 @@ fi
 if [ "$SKIP_DEPLOY" = true ]; then
   # Use existing program IDs from config.json
   if [ $LAST_PHASE -lt 2 ]; then
-    _AEGIS_ID=$(jq -r '.programs.devnet.Aegis' "$CONFIG_FILE")
+    _PRIVACY_COIN_ID=$(jq -r '.programs.devnet.Aegis' "$CONFIG_FILE")
     _BTCLC_ID=$(jq -r '.programs.devnet.btc_light_client' "$CONFIG_FILE")
-    save_state "aegisProgramId" "$_AEGIS_ID"
+    save_state "privacyCoinProgramId" "$_PRIVACY_COIN_ID"
     save_state "btcLightClientId" "$_BTCLC_ID"
     log "Using existing program IDs from config.json"
-    log "  Aegis: $_AEGIS_ID"
+    log "  Aegis: $_PRIVACY_COIN_ID"
     log "  BTC LC: $_BTCLC_ID"
     save_phase 2
     LAST_PHASE=2

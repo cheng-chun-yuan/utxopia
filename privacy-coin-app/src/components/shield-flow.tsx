@@ -19,13 +19,13 @@ import {
   TOKEN_PROGRAM_ID as SPL_TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID as SPL_TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
-import { AegisClient } from "@aegis/sdk";
+import { PrivacyCoinClient } from "@privacy-coin/sdk";
 import { getAegisProgramId, getZkbtcMint, derivePoolStatePDA, deriveCommitmentTreePDA, deriveTokenConfigPDA } from "@/lib/solana/pdas";
-import { useAegis } from "@/hooks/use-aegis";
+import { usePrivacy Coin } from "@/hooks/use-privacy-coin";
 import { Shield, ChevronDown, Loader2, ExternalLink, CheckCircle2, AlertCircle, LogOut, Wallet, Copy, Check, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StealthRecipientInput } from "@/components/ui/stealth-recipient-input";
-import type { StealthMetaAddress } from "@aegis/sdk";
+import type { StealthMetaAddress } from "@privacy-coin/sdk";
 import { SHIELD_TOKENS } from "@/lib/supported-tokens";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
@@ -117,7 +117,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
           ? new PublicKey(selectedToken.mint)
           : getZkbtcMint();
 
-      const client = AegisClient.instance();
+      const client = PrivacyCoinClient.instance();
       const mintAddr = mintPubkey.toBase58();
       const shieldOutput = await client.prepareShieldOutput({ amount: amountRaw, mintAddress: mintAddr });
       const { npkBytes, tokenId: tokenIdBigint } = shieldOutput;

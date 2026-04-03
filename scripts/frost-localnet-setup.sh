@@ -83,8 +83,8 @@ docker compose -f docker-compose.regtest.yml up -d frost-signer-1 frost-signer-2
 
 # Wait a moment then copy keys in
 sleep 2
-docker cp "$KEY_DIR/signer1.key.enc" aegis-frost-1:/app/config/signer1.key.enc || true
-docker cp "$KEY_DIR/signer2.key.enc" aegis-frost-2:/app/config/signer2.key.enc || true
+docker cp "$KEY_DIR/signer1.key.enc" privacy-coin-frost-1:/app/config/signer1.key.enc || true
+docker cp "$KEY_DIR/signer2.key.enc" privacy-coin-frost-2:/app/config/signer2.key.enc || true
 
 # Restart signers to pick up keys
 docker compose -f docker-compose.regtest.yml restart frost-signer-1 frost-signer-2

@@ -5,7 +5,7 @@
  */
 
 import { PublicKey, SystemProgram, TransactionInstruction } from "@solana/web3.js";
-import { INSTRUCTION_DISCRIMINATORS } from "@aegis/sdk";
+import { INSTRUCTION_DISCRIMINATORS } from "@privacy-coin/sdk";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";

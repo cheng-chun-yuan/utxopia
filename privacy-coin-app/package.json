@@ -4,14 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "cd ../sdk && bun run build && cd ../aegis-app && next build --webpack",
+    "build": "cd ../sdk && bun run build && cd ../privacy-coin-app && next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "test": "bun test",
     "copy-circuits": "mkdir -p public/circuits/groth16 && for c in ../sdk/circuits/joinsplit_*; do n=$(basename $c); mkdir -p public/circuits/groth16/$n/${n}_js && cp $c/${n}_js/${n}.wasm public/circuits/groth16/$n/${n}_js/ && cp $c/${n}.zkey public/circuits/groth16/$n/; done"
   },
   "dependencies": {
-    "@aegis/sdk": "file:../sdk",
+    "@privacy-coin/sdk": "file:../sdk",
     "@noble/hashes": "^1.8.0",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-popover": "^1.1.15",

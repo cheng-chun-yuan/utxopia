@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Initialize Aegis program (fresh deploy).
+ * Initialize Privacy Coin program (fresh deploy).
  *
  * Creates: Token-2022 mint, pool vault ATA, frost vault ATA,
  *          pool state PDA, commitment tree PDA.
@@ -9,7 +9,7 @@
  * Usage: bun run scripts/init-devnet.ts
  *
  * Env vars:
- *   AEGIS_PROGRAM_ID — required (env var or state file)
+ *   PRIVACY_COIN_PROGRAM_ID — required (env var or state file)
  *
  * NOTE: deploy-devnet.sh parses stdout for "Mint created:", "Pool State PDA:",
  *       "tUSDC Mint:", etc. Do not change output format without updating it.
@@ -28,19 +28,19 @@ import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import { INSTRUCTION_DISCRIMINATORS } from "@aegis/sdk";
+import { INSTRUCTION_DISCRIMINATORS } from "@privacy-coin/sdk";
 import { loadKeypair, getStateFilePath, detectNetwork, sendTx, TOKEN_2022, ATA_PROGRAM } from "./lib/common.ts";
 
 const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
 function resolveProgramId(): PublicKey {
-  if (process.env.AEGIS_PROGRAM_ID) return new PublicKey(process.env.AEGIS_PROGRAM_ID);
+  if (process.env.PRIVACY_COIN_PROGRAM_ID) return new PublicKey(process.env.PRIVACY_COIN_PROGRAM_ID);
   const f = getStateFilePath();
   if (fs.existsSync(f)) {
     const s = JSON.parse(fs.readFileSync(f, "utf-8"));
-    if (s.aegisProgramId) return new PublicKey(s.aegisProgramId);
+    if (s.privacyCoinProgramId) return new PublicKey(s.privacyCoinProgramId);
   }
-  throw new Error("AEGIS_PROGRAM_ID required (env var or state file)");
+  throw new Error("PRIVACY_COIN_PROGRAM_ID required (env var or state file)");
 }
 
 function deriveATA(mint: PublicKey, owner: PublicKey): PublicKey {

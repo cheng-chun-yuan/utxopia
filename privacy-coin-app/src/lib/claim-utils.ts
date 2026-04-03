@@ -8,7 +8,7 @@ import {
   scanUnifiedNotes,
   parseAnnouncementsFromHex,
   type AegisKeys,
-} from "@aegis/sdk";
+} from "@privacy-coin/sdk";
 import { fetchSpentNullifierPDAs, nullifierHashToPDA } from "@/lib/nullifier-utils";
 import { getBackendUrl } from "@/lib/api/constants";
 

@@ -217,7 +217,7 @@ function buildRecordDepositInstruction(
 
 async function main() {
   console.log("\n========================================");
-  console.log("Aegis Devnet Setup");
+  console.log("Privacy Coin Devnet Setup");
   console.log("========================================\n");
 
   // Connect to devnet

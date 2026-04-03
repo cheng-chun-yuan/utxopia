@@ -1,5 +1,5 @@
 /**
- * Aegis SDK Tests (Consolidated) — JoinSplit Architecture
+ * Privacy Coin SDK Tests (Consolidated) — JoinSplit Architecture
  *
  * Core tests for all SDK functionality:
  * - DEPOSIT: depositToNote

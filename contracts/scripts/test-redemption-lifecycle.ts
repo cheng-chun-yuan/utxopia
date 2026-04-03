@@ -730,7 +730,7 @@ async function testUnauthorizedMarkProcessing(
 
 async function main() {
   console.log("============================================================");
-  console.log(`Aegis Redemption Lifecycle Integration Test (${NETWORK})`);
+  console.log(`Privacy Coin Redemption Lifecycle Integration Test (${NETWORK})`);
   console.log("============================================================");
   console.log(`Network:     ${NETWORK}`);
   console.log(`RPC:         ${RPC_URL}`);

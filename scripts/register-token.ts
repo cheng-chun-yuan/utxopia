@@ -14,7 +14,7 @@
 
 import { PublicKey, SystemProgram, TransactionInstruction } from "@solana/web3.js";
 import { TOKEN_2022_PROGRAM_ID, getOrCreateAssociatedTokenAccount } from "@solana/spl-token";
-import { INSTRUCTION_DISCRIMINATORS } from "@aegis/sdk";
+import { INSTRUCTION_DISCRIMINATORS } from "@privacy-coin/sdk";
 import { setupScript, sendTx } from "./lib/common.ts";
 
 const args = process.argv.slice(2);

@@ -1,4 +1,4 @@
-//! Structured Logging for Aegis Backend
+//! Structured Logging for Privacy Coin Backend
 //!
 //! Provides production-ready structured logging with:
 //! - JSON output for log aggregation services (ELK, Datadog, etc.)
@@ -15,7 +15,7 @@
 //! init_logging(LogLevel::Info, true)?; // JSON mode for production
 //!
 //! // Log events
-//! info!(target: "aegis::api", request_id = %id, "Processing withdrawal");
+//! info!(target: "pcoin::api", request_id = %id, "Processing withdrawal");
 //! ```
 
 use serde::Serialize;
@@ -27,7 +27,7 @@ use tracing_subscriber::{
     EnvFilter,
 };
 
-use crate::config::{Network, AEGISConfig};
+use crate::config::{Network, PRIVACY_COINConfig};
 
 // ============================================================================
 // Log Levels
@@ -200,9 +200,9 @@ pub fn log_security_event(
     };
 
     if success {
-        tracing::info!(target: "aegis::security", "{}", event.to_json());
+        tracing::info!(target: "pcoin::security", "{}", event.to_json());
     } else {
-        tracing::warn!(target: "aegis::security", "{}", event.to_json());
+        tracing::warn!(target: "pcoin::security", "{}", event.to_json());
     }
 }
 
@@ -221,7 +221,7 @@ pub fn log_api_request(
             "client_ip": client_ip
         }));
 
-    tracing::info!(target: "aegis::api", "{}", event.to_json());
+    tracing::info!(target: "pcoin::api", "{}", event.to_json());
 }
 
 /// Log an API response
@@ -250,9 +250,9 @@ pub fn log_api_response(
         }));
 
     match level {
-        LogLevel::Error => tracing::error!(target: "aegis::api", "{}", event.to_json()),
-        LogLevel::Warn => tracing::warn!(target: "aegis::api", "{}", event.to_json()),
-        _ => tracing::info!(target: "aegis::api", "{}", event.to_json()),
+        LogLevel::Error => tracing::error!(target: "pcoin::api", "{}", event.to_json()),
+        LogLevel::Warn => tracing::warn!(target: "pcoin::api", "{}", event.to_json()),
+        _ => tracing::info!(target: "pcoin::api", "{}", event.to_json()),
     }
 }
 
@@ -278,9 +278,9 @@ pub fn log_deposit_event(
     }
 
     if success {
-        tracing::info!(target: "aegis::deposit", "{}", event.to_json());
+        tracing::info!(target: "pcoin::deposit", "{}", event.to_json());
     } else {
-        tracing::error!(target: "aegis::deposit", "{}", event.to_json());
+        tracing::error!(target: "pcoin::deposit", "{}", event.to_json());
     }
 }
 
@@ -310,9 +310,9 @@ pub fn log_withdrawal_event(
     }
 
     if success {
-        tracing::info!(target: "aegis::withdrawal", "{}", event.to_json());
+        tracing::info!(target: "pcoin::withdrawal", "{}", event.to_json());
     } else {
-        tracing::error!(target: "aegis::withdrawal", "{}", event.to_json());
+        tracing::error!(target: "pcoin::withdrawal", "{}", event.to_json());
     }
 }
 
@@ -378,8 +378,8 @@ pub fn init_logging(level: LogLevel, json_format: bool) -> Result<(), LoggingErr
     Ok(())
 }
 
-/// Initialize logging from AEGISConfig
-pub fn init_from_config(config: &AEGISConfig) -> Result<(), LoggingError> {
+/// Initialize logging from PRIVACY_COINConfig
+pub fn init_from_config(config: &PRIVACY_COINConfig) -> Result<(), LoggingError> {
     let level = LogLevel::from(config.log_level.as_str());
     let json_format = config.network == Network::Mainnet;
 

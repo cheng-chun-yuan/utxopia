@@ -1,4 +1,4 @@
-//! Aegis Backend — Private Bitcoin Bridge Services
+//! Privacy Coin Backend — Private Bitcoin Bridge Services
 //!
 //! Runs as a single binary with subcommands. Each mode starts a different
 //! combination of background services:
@@ -17,7 +17,7 @@
 //! - **REST API**: serves frontend requests (deposits, transfers, redemptions, proofs)
 
 use zkbtc::api_server as api;
-use zkbtc::config::AEGISConfig;
+use zkbtc::config::PRIVACY_COINConfig;
 use zkbtc::deposit_tracker::{self, TrackerConfig};
 use zkbtc::deposit_tracker::sqlite_db::SqliteDepositStore;
 use zkbtc::event_indexer::{EventIndexerConfig, EventIndexerService, EventStore, TreeCache, event_indexer_router_with_deposits, SolanaWsConfig, SolanaWsSubscriber, Reconciler};
@@ -72,7 +72,7 @@ fn print_usage() {
     println!("  HEADER_BATCH_SIZE             Headers per batch (2-10, default: 5)");
     println!("  INDEXER_DB_PATH               Event indexer SQLite path (default: data/events.db)");
     println!("  INDEXER_POLL_INTERVAL_SECS    Event indexer poll interval (default: 10)");
-    println!("  AEGIS_PROGRAM_ID             Aegis program ID for event indexing");
+    println!("  PRIVACY_COIN_PROGRAM_ID             Privacy Coin program ID for event indexing");
     println!();
     println!("Note: Most functionality is handled by the SDK on the client side.");
     println!();
@@ -83,7 +83,7 @@ fn print_usage() {
 /// Create redemption service from environment, supporting both single-key and FROST modes
 fn create_service(config: RedemptionConfig) -> RedemptionService {
     // Check for FROST signing mode first
-    if let Ok(mode) = env::var("AEGIS_SIGNING_MODE") {
+    if let Ok(mode) = env::var("PRIVACY_COIN_SIGNING_MODE") {
         if mode.to_lowercase() == "frost" {
             return match create_frost_service(config.clone()) {
                 Ok(service) => service,
@@ -97,7 +97,7 @@ fn create_service(config: RedemptionConfig) -> RedemptionService {
     }
 
     // Single-key mode
-    let mut sol_client = match AEGISConfig::from_env() {
+    let mut sol_client = match PRIVACY_COINConfig::from_env() {
         Ok(cfg) => zkbtc::solana::client::SolClient::from_config(&cfg).unwrap_or_else(|_| {
             zkbtc::solana::client::SolClient::new(zkbtc::solana::client::SolConfig::default())
         }),
@@ -127,23 +127,23 @@ fn create_service(config: RedemptionConfig) -> RedemptionService {
         }
     } else {
         // No signing key — use generated signer but keep env-based sol_client
-        // so program_id comes from AEGIS_PROGRAM_ID env var
+        // so program_id comes from PRIVACY_COIN_PROGRAM_ID env var
         RedemptionService::new_with_signer(config, SingleKeySigner::generate(), sol_client)
     }
 }
 
 /// Create redemption service with FROST threshold signing
 fn create_frost_service(config: RedemptionConfig) -> Result<RedemptionService, String> {
-    let aegis_config = AEGISConfig::from_env().map_err(|e| e.to_string())?;
+    let aegis_config = PRIVACY_COINConfig::from_env().map_err(|e| e.to_string())?;
 
     let frost_client = aegis_config
         .signing
         .frost_client()
         .ok_or("signing mode is not FROST")?;
 
-    // Get group pubkey from AEGIS_FROST_GROUP_PUBKEY env var
-    let group_pubkey_hex = env::var("AEGIS_FROST_GROUP_PUBKEY")
-        .map_err(|_| "AEGIS_FROST_GROUP_PUBKEY required for FROST mode".to_string())?;
+    // Get group pubkey from PRIVACY_COIN_FROST_GROUP_PUBKEY env var
+    let group_pubkey_hex = env::var("PRIVACY_COIN_FROST_GROUP_PUBKEY")
+        .map_err(|_| "PRIVACY_COIN_FROST_GROUP_PUBKEY required for FROST mode".to_string())?;
 
     let group_pubkey_bytes = hex::decode(&group_pubkey_hex)
         .map_err(|e| format!("invalid group pubkey hex: {}", e))?;
@@ -209,7 +209,7 @@ fn load_tracker_config(args: &[String]) -> TrackerConfig {
     if let Ok(addr) = env::var("POOL_RECEIVE_ADDRESS") {
         config.pool_receive_address = addr;
     }
-    if let Ok(rpc) = env::var("AEGIS_SOLANA_RPC").or_else(|_| env::var("SOLANA_RPC_URL")) {
+    if let Ok(rpc) = env::var("PRIVACY_COIN_SOLANA_RPC").or_else(|_| env::var("SOLANA_RPC_URL")) {
         config.solana_rpc = rpc;
     }
     if let Ok(db_path) = env::var("DEPOSIT_DB_PATH") {
@@ -264,7 +264,7 @@ fn configure_sweeper(
     service: deposit_tracker::DepositTrackerService,
     config: &TrackerConfig,
 ) -> deposit_tracker::DepositTrackerService {
-    if let Ok(mode) = env::var("AEGIS_SIGNING_MODE") {
+    if let Ok(mode) = env::var("PRIVACY_COIN_SIGNING_MODE") {
         if mode.to_lowercase() == "frost" {
             return match configure_frost_sweeper(service, config) {
                 Ok(s) => {
@@ -317,17 +317,17 @@ fn configure_verifier(
 
 /// Resolve the Solana RPC URL from environment variables.
 fn solana_rpc_url() -> String {
-    env::var("AEGIS_SOLANA_RPC")
+    env::var("PRIVACY_COIN_SOLANA_RPC")
         .or_else(|_| env::var("SOLANA_RPC_URL"))
         .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string())
 }
 
-/// Resolve the AEGIS_PROGRAM_ID from the environment, returning None on failure.
+/// Resolve the PRIVACY_COIN_PROGRAM_ID from the environment, returning None on failure.
 fn require_aegis_program_id() -> Option<String> {
-    match env::var("AEGIS_PROGRAM_ID") {
+    match env::var("PRIVACY_COIN_PROGRAM_ID") {
         Ok(id) => Some(id),
         Err(_) => {
-            eprintln!("ERROR: AEGIS_PROGRAM_ID env var is required.");
+            eprintln!("ERROR: PRIVACY_COIN_PROGRAM_ID env var is required.");
             eprintln!("Run: ./scripts/sync-env.sh to generate .env files from localnet-state.json");
             None
         }
@@ -527,7 +527,7 @@ async fn run_tracker_service(args: &[String]) {
     let program_pubkey: solana_sdk::pubkey::Pubkey = match aegis_program_id.parse() {
         Ok(pk) => pk,
         Err(e) => {
-            eprintln!("Invalid AEGIS_PROGRAM_ID '{}': {}", aegis_program_id, e);
+            eprintln!("Invalid PRIVACY_COIN_PROGRAM_ID '{}': {}", aegis_program_id, e);
             return;
         }
     };
@@ -613,15 +613,15 @@ fn configure_frost_sweeper(
     service: deposit_tracker::DepositTrackerService,
     _config: &TrackerConfig,
 ) -> Result<deposit_tracker::DepositTrackerService, String> {
-    let aegis_config = AEGISConfig::from_env().map_err(|e| e.to_string())?;
+    let aegis_config = PRIVACY_COINConfig::from_env().map_err(|e| e.to_string())?;
 
     let frost_client = aegis_config
         .signing
         .frost_client()
         .ok_or("signing mode is not FROST")?;
 
-    let group_pubkey_hex = env::var("AEGIS_FROST_GROUP_PUBKEY")
-        .map_err(|_| "AEGIS_FROST_GROUP_PUBKEY required for FROST mode".to_string())?;
+    let group_pubkey_hex = env::var("PRIVACY_COIN_FROST_GROUP_PUBKEY")
+        .map_err(|_| "PRIVACY_COIN_FROST_GROUP_PUBKEY required for FROST mode".to_string())?;
 
     let group_pubkey_bytes = hex::decode(&group_pubkey_hex)
         .map_err(|e| format!("invalid group pubkey hex: {}", e))?;

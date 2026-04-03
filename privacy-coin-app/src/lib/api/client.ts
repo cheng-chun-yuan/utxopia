@@ -21,10 +21,10 @@ import type {
 } from "./types";
 import { ApiError } from "./errors";
 import { API_ENDPOINTS, getBackendUrl } from "./constants";
-import { getConfig } from "@aegis/sdk";
+import { getConfig } from "@privacy-coin/sdk";
 
 /**
- * Aegis API Client (Minimal - Redemption Only)
+ * Privacy Coin API Client (Minimal - Redemption Only)
  *
  * Note: Deposit and claim operations are handled client-side:
  * - Use @/lib/sdk for deposit credential generation

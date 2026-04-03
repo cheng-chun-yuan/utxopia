@@ -1,7 +1,7 @@
 {
-  "name": "@aegis/sdk",
+  "name": "@privacy-coin/sdk",
   "version": "2.0.2",
-  "description": "Aegis SDK - Private Bitcoin on Solana",
+  "description": "Privacy Coin SDK - Private Bitcoin on Solana",
   "type": "module",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -127,6 +127,6 @@
     "snarkjs",
     "taproot"
   ],
-  "author": "Aegis Team",
+  "author": "Privacy Coin Team",
   "license": "MIT"
 }

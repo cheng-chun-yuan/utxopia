@@ -108,7 +108,7 @@ impl SolanaVerifier {
     ///
     /// # Arguments
     /// * `rpc_url` - Solana JSON-RPC URL (e.g., "http://localhost:8899")
-    /// * `program_id_base58` - Aegis program ID in base58
+    /// * `program_id_base58` - Privacy Coin program ID in base58
     pub fn new(rpc_url: String, program_id_base58: &str) -> Result<Self, SolanaVerifyError> {
         let program_id_bytes = bs58::decode(program_id_base58)
             .into_vec()
@@ -611,7 +611,7 @@ mod tests {
     #[test]
     fn test_pda_derivation_known_vector() {
         // Test with a known program ID and seeds
-        // Using the Aegis program ID: 7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ
+        // Using the Privacy Coin program ID: 7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ
         let program_id_bytes = bs58::decode("7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ")
             .into_vec()
             .unwrap();

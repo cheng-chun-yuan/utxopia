@@ -1,4 +1,4 @@
-# Aegis Backend
+# Privacy Coin Backend
 
 Rust backend for the privacy-preserving BTC-to-Solana bridge.
 

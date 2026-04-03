@@ -1,7 +1,7 @@
 {
   "name": "@aegis/circuits",
   "version": "1.0.0",
-  "description": "AEGIS circom circuits for Groth16 proofs",
+  "description": "PRIVACY_COIN circom circuits for Groth16 proofs",
   "private": true,
   "scripts": {
     "compile": "bash scripts/compile.sh",

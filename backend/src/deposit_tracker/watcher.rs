@@ -7,7 +7,7 @@ use reqwest::Client;
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::config::{Network, AEGISConfig};
+use crate::config::{Network, PRIVACY_COINConfig};
 
 /// Watcher errors
 #[derive(Debug, Error)]
@@ -71,8 +71,8 @@ pub struct AddressWatcher {
 }
 
 impl AddressWatcher {
-    /// Create watcher from AEGISConfig
-    pub fn from_config(config: &AEGISConfig) -> Self {
+    /// Create watcher from PRIVACY_COINConfig
+    pub fn from_config(config: &PRIVACY_COINConfig) -> Self {
         Self::new(&config.bitcoin_api)
     }
 

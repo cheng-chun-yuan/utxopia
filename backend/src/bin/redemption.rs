@@ -37,7 +37,7 @@ async fn main() {
 }
 
 fn print_usage() {
-    println!("Aegis Redemption Service - BTC Withdrawal Processor");
+    println!("Privacy Coin Redemption Service - BTC Withdrawal Processor");
     println!();
     println!("Usage:");
     println!("  redemption run [--interval <secs>]              Run service loop");
@@ -103,7 +103,7 @@ async fn cmd_run(args: &[String]) {
 
     let service = get_service();
 
-    println!("=== Aegis Redemption Service ===");
+    println!("=== Privacy Coin Redemption Service ===");
     println!();
     println!("Configuration:");
     println!("  Check Interval: {} seconds", config.check_interval_secs);

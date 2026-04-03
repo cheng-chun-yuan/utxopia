@@ -1,33 +1,33 @@
 import { describe, it, expect, beforeAll, afterEach } from "bun:test";
-import { AegisClient } from "../../src/client";
+import { PrivacyCoinClient } from "../../src/client";
 
-describe("AegisClient", () => {
+describe("PrivacyCoinClient", () => {
   afterEach(() => {
-    AegisClient.reset();
+    PrivacyCoinClient.reset();
   });
 
   describe("lifecycle", () => {
     it("init creates singleton", async () => {
-      const client = await AegisClient.init();
-      expect(AegisClient.isInitialized).toBe(true);
-      expect(AegisClient.instance()).toBe(client);
+      const client = await PrivacyCoinClient.init();
+      expect(PrivacyCoinClient.isInitialized).toBe(true);
+      expect(PrivacyCoinClient.instance()).toBe(client);
     });
 
     it("instance throws before init", () => {
-      expect(() => AegisClient.instance()).toThrow("not initialized");
+      expect(() => PrivacyCoinClient.instance()).toThrow("not initialized");
     });
 
     it("init is idempotent", async () => {
-      const client1 = await AegisClient.init();
-      const client2 = await AegisClient.init();
+      const client1 = await PrivacyCoinClient.init();
+      const client2 = await PrivacyCoinClient.init();
       // Second init creates new instance (replaces singleton)
-      expect(AegisClient.instance()).toBe(client2);
+      expect(PrivacyCoinClient.instance()).toBe(client2);
     });
   });
 
   describe("auth state", () => {
     it("starts unauthenticated", async () => {
-      const client = await AegisClient.init();
+      const client = await PrivacyCoinClient.init();
       expect(client.isAuthenticated).toBe(false);
       expect(client.keys).toBeNull();
       expect(client.stealthAddress).toBeNull();
@@ -35,7 +35,7 @@ describe("AegisClient", () => {
     });
 
     it("loginWithSeed sets keys", async () => {
-      const client = await AegisClient.init();
+      const client = await PrivacyCoinClient.init();
       const seed = new Uint8Array(32);
       seed[0] = 1; seed[1] = 2; seed[2] = 3;
 
@@ -50,7 +50,7 @@ describe("AegisClient", () => {
     });
 
     it("loginWithSeed is deterministic", async () => {
-      const client = await AegisClient.init();
+      const client = await PrivacyCoinClient.init();
       const seed = new Uint8Array(32).fill(0x42);
 
       const result1 = await client.loginWithSeed(seed);
@@ -63,7 +63,7 @@ describe("AegisClient", () => {
     });
 
     it("logout clears keys", async () => {
-      const client = await AegisClient.init();
+      const client = await PrivacyCoinClient.init();
       await client.loginWithSeed(new Uint8Array(32).fill(1));
       expect(client.isAuthenticated).toBe(true);
 
@@ -75,12 +75,12 @@ describe("AegisClient", () => {
     });
 
     it("serializeKeys returns null when not authenticated", async () => {
-      const client = await AegisClient.init();
+      const client = await PrivacyCoinClient.init();
       expect(client.serializeKeys()).toBeNull();
     });
 
     it("serializeKeys returns object when authenticated", async () => {
-      const client = await AegisClient.init();
+      const client = await PrivacyCoinClient.init();
       await client.loginWithSeed(new Uint8Array(32).fill(5));
 
       const serialized = client.serializeKeys();
@@ -93,7 +93,7 @@ describe("AegisClient", () => {
 
   describe("token IDs", () => {
     it("caches token ID after first computation", async () => {
-      const client = await AegisClient.init();
+      const client = await PrivacyCoinClient.init();
       // Use a known 32-byte hex as "mint"
       const fakeMint = "a".repeat(64);
 
@@ -107,13 +107,13 @@ describe("AegisClient", () => {
 
   describe("balance", () => {
     it("getBalance returns empty map for no notes", async () => {
-      const client = await AegisClient.init();
+      const client = await PrivacyCoinClient.init();
       const balance = client.getBalance([]);
       expect(balance.size).toBe(0);
     });
 
     it("getBalance sums unspent notes by token", async () => {
-      const client = await AegisClient.init();
+      const client = await PrivacyCoinClient.init();
       const notes = [
         { tokenSymbol: "zkBTC", amount: 1000n, isSpent: false },
         { tokenSymbol: "zkBTC", amount: 2000n, isSpent: false },
@@ -130,16 +130,16 @@ describe("AegisClient", () => {
 
   describe("isMyDeposit", () => {
     it("returns false when not authenticated", async () => {
-      const client = await AegisClient.init();
+      const client = await PrivacyCoinClient.init();
       expect(client.isMyDeposit("aa".repeat(32), "bb".repeat(32))).toBe(false);
     });
   });
 
   describe("config", () => {
     it("exposes network config", async () => {
-      const client = await AegisClient.init();
+      const client = await PrivacyCoinClient.init();
       const config = client.config;
-      expect(config).toHaveProperty("aegisProgramId");
+      expect(config).toHaveProperty("privacyCoinProgramId");
       expect(config).toHaveProperty("zkbtcMint");
       expect(config).toHaveProperty("solanaRpcUrl");
     });

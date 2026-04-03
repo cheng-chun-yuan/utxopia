@@ -1,5 +1,5 @@
 import { PublicKey } from "@solana/web3.js";
-import { PDA_SEEDS, getConfig } from "@aegis/sdk";
+import { PDA_SEEDS, getConfig } from "@privacy-coin/sdk";
 import { getSolanaRpcUrl } from "@/lib/api/constants";
 
 /** Derive nullifier PDA address (base58) from nullifier hash hex */
@@ -11,7 +11,7 @@ export function nullifierHashToPDA(hashHex: string): string {
   }
   const [pda] = PublicKey.findProgramAddressSync(
     [Buffer.from(PDA_SEEDS.NULLIFIER), bytes],
-    new PublicKey(getConfig().aegisProgramId)
+    new PublicKey(getConfig().privacyCoinProgramId)
   );
   return pda.toBase58();
 }
@@ -42,7 +42,7 @@ export async function fetchSpentNullifierPDAs(backendUrl: string): Promise<Set<s
           id: 1,
           method: "getProgramAccounts",
           params: [
-            getConfig().aegisProgramId,
+            getConfig().privacyCoinProgramId,
             { filters: [{ dataSize: 1 }], encoding: "base64" },
           ],
         }),

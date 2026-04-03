@@ -30,7 +30,7 @@ import {
 import {
   createAssociatedTokenAccountIdempotentInstruction,
 } from "@solana/spl-token";
-const getAegisSDK = () => import("@aegis/sdk");
+const getAegisSDK = () => import("@privacy-coin/sdk");
 
 import {
   getAegisProgramId,

@@ -1,4 +1,4 @@
-//! Instruction handlers for Aegis (Multi-Token Shielded Pool)
+//! Instruction handlers for Privacy Coin (Multi-Token Shielded Pool)
 //!
 //! ## Discriminator Map (sequential 0-19)
 //!

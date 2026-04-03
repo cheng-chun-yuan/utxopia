@@ -16,7 +16,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::error::AegisError;
+use crate::error::PrivacyCoinError;
 use crate::state::{PoolState, RedemptionRequest, RedemptionStatus, UtxoRecord, UtxoStatus};
 use crate::state::utxo::UTXO_RECORD_DISCRIMINATOR;
 use crate::utils::{validate_program_owner, validate_account_writable};
@@ -65,7 +65,7 @@ pub fn process_mark_processing(
         let pool = PoolState::from_bytes(&pool_data)?;
 
         if authority.key().as_ref() != pool.authority {
-            return Err(AegisError::Unauthorized.into());
+            return Err(PrivacyCoinError::Unauthorized.into());
         }
     }
 
@@ -98,14 +98,14 @@ pub fn process_mark_processing(
 
             // Validate discriminator
             if utxo_data.is_empty() || utxo_data[0] != UTXO_RECORD_DISCRIMINATOR {
-                return Err(AegisError::InvalidUtxo.into());
+                return Err(PrivacyCoinError::InvalidUtxo.into());
             }
 
             let utxo = UtxoRecord::from_bytes_mut(&mut utxo_data)?;
 
             // Must be Unspent
             if utxo.get_status() != UtxoStatus::Unspent {
-                return Err(AegisError::UtxoNotUnspent.into());
+                return Err(PrivacyCoinError::UtxoNotUnspent.into());
             }
 
             let amount = utxo.amount_sats();
@@ -150,7 +150,7 @@ pub fn process_mark_processing(
         let redemption = RedemptionRequest::from_bytes_mut(&mut redemption_data)?;
 
         if redemption.get_status() != RedemptionStatus::Pending {
-            return Err(AegisError::InvalidRedemptionState.into());
+            return Err(PrivacyCoinError::InvalidRedemptionState.into());
         }
 
         redemption.set_status(RedemptionStatus::Processing);

@@ -1,4 +1,4 @@
-//! Environment-based Configuration for Aegis Backend
+//! Environment-based Configuration for Privacy Coin Backend
 //!
 //! This module provides secure configuration loading from environment variables.
 //! All sensitive values (keys, secrets) MUST come from environment variables,
@@ -7,30 +7,30 @@
 //! # Required Environment Variables
 //!
 //! ## Network Configuration
-//! - `AEGIS_NETWORK` - "mainnet", "testnet", or "devnet" (default: "devnet")
-//! - `AEGIS_SOLANA_RPC` - Solana RPC endpoint URL
-//! - `AEGIS_BITCOIN_RPC` - Bitcoin/Esplora API endpoint URL
+//! - `PRIVACY_COIN_NETWORK` - "mainnet", "testnet", or "devnet" (default: "devnet")
+//! - `PRIVACY_COIN_SOLANA_RPC` - Solana RPC endpoint URL
+//! - `PRIVACY_COIN_BITCOIN_RPC` - Bitcoin/Esplora API endpoint URL
 //!
 //! ## Solana Program IDs (must match deployed contracts)
-//! - `AEGIS_PROGRAM_ID` - Aegis program ID
-//! - `AEGIS_POOL_STATE` - Pool state PDA
-//! - `AEGIS_COMMITMENT_TREE` - Commitment tree PDA
-//! - `AEGIS_ZKBTC_MINT` - zkBTC mint address
+//! - `PRIVACY_COIN_PROGRAM_ID` - Privacy Coin program ID
+//! - `PRIVACY_COIN_POOL_STATE` - Pool state PDA
+//! - `PRIVACY_COIN_COMMITMENT_TREE` - Commitment tree PDA
+//! - `PRIVACY_COIN_ZKBTC_MINT` - zkBTC mint address
 //!
 //! ## Signing Configuration
-//! - `AEGIS_SIGNING_MODE` - "single" (POC) or "frost" (production)
-//! - `AEGIS_SIGNER_KEY` - Base58-encoded Solana keypair (for relayer)
-//! - `AEGIS_BTC_SIGNER_KEY` - Hex-encoded BTC signing key (single mode only)
+//! - `PRIVACY_COIN_SIGNING_MODE` - "single" (POC) or "frost" (production)
+//! - `PRIVACY_COIN_SIGNER_KEY` - Base58-encoded Solana keypair (for relayer)
+//! - `PRIVACY_COIN_BTC_SIGNER_KEY` - Hex-encoded BTC signing key (single mode only)
 //!
 //! ## FROST Configuration (production)
-//! - `AEGIS_FROST_THRESHOLD` - Required signers (e.g., "2")
-//! - `AEGIS_FROST_PARTICIPANTS` - Total participants (e.g., "3")
-//! - `AEGIS_FROST_KEY_SHARE` - This node's encrypted key share
+//! - `PRIVACY_COIN_FROST_THRESHOLD` - Required signers (e.g., "2")
+//! - `PRIVACY_COIN_FROST_PARTICIPANTS` - Total participants (e.g., "3")
+//! - `PRIVACY_COIN_FROST_KEY_SHARE` - This node's encrypted key share
 //!
 //! ## Optional Settings
-//! - `AEGIS_DEPOSIT_LIMIT_SATS` - Maximum deposit per transaction
-//! - `AEGIS_LOG_LEVEL` - Logging level (debug, info, warn, error)
-//! - `AEGIS_DEMO_MODE` - Set to "1" to enable demo instructions (devnet only)
+//! - `PRIVACY_COIN_DEPOSIT_LIMIT_SATS` - Maximum deposit per transaction
+//! - `PRIVACY_COIN_LOG_LEVEL` - Logging level (debug, info, warn, error)
+//! - `PRIVACY_COIN_DEMO_MODE` - Set to "1" to enable demo instructions (devnet only)
 
 use std::env;
 use std::str::FromStr;
@@ -74,7 +74,7 @@ impl FromStr for Network {
             "devnet" | "dev" | "testnet4" => Ok(Network::Devnet),
             "regtest" | "localnet" | "local" => Ok(Network::Regtest),
             _ => Err(ConfigError::InvalidValue(
-                "AEGIS_NETWORK".to_string(),
+                "PRIVACY_COIN_NETWORK".to_string(),
                 format!("unknown network: {}", s),
             )),
         }
@@ -98,10 +98,10 @@ impl Network {
     }
 
     /// Get default Bitcoin/Esplora API for this network (mempool.space).
-    /// Respects AEGIS_BITCOIN_NETWORK env var to override (e.g., "testnet" or "testnet4").
+    /// Respects PRIVACY_COIN_BITCOIN_NETWORK env var to override (e.g., "testnet" or "testnet4").
     pub fn default_bitcoin_api(&self) -> String {
-        // Allow explicit override via AEGIS_BITCOIN_NETWORK
-        if let Ok(btc_net) = env::var("AEGIS_BITCOIN_NETWORK") {
+        // Allow explicit override via PRIVACY_COIN_BITCOIN_NETWORK
+        if let Ok(btc_net) = env::var("PRIVACY_COIN_BITCOIN_NETWORK") {
             return match btc_net.as_str() {
                 "mainnet" => "https://mempool.space/api".to_string(),
                 "testnet" | "testnet3" => "https://mempool.space/testnet/api".to_string(),
@@ -179,7 +179,7 @@ impl SigningMode {
 
 /// Main configuration struct
 #[derive(Debug, Clone)]
-pub struct AEGISConfig {
+pub struct PRIVACY_COINConfig {
     /// Network environment
     pub network: Network,
 
@@ -189,7 +189,7 @@ pub struct AEGISConfig {
     /// Bitcoin/Esplora API endpoint
     pub bitcoin_api: String,
 
-    /// Aegis program ID
+    /// Privacy Coin program ID
     pub program_id: String,
 
     /// Pool state PDA
@@ -214,31 +214,31 @@ pub struct AEGISConfig {
     pub log_level: String,
 }
 
-impl AEGISConfig {
+impl PRIVACY_COINConfig {
     /// Load configuration from environment variables
     pub fn from_env() -> Result<Self, ConfigError> {
         // Required: Network
-        let network: Network = env::var("AEGIS_NETWORK")
+        let network: Network = env::var("PRIVACY_COIN_NETWORK")
             .unwrap_or_else(|_| "devnet".to_string())
             .parse()?;
 
         // RPC endpoints (with defaults)
-        let solana_rpc = env::var("AEGIS_SOLANA_RPC")
+        let solana_rpc = env::var("PRIVACY_COIN_SOLANA_RPC")
             .unwrap_or_else(|_| network.default_solana_rpc().to_string());
 
-        let bitcoin_api = env::var("AEGIS_BITCOIN_RPC")
+        let bitcoin_api = env::var("PRIVACY_COIN_BITCOIN_RPC")
             .unwrap_or_else(|_| network.default_bitcoin_api().to_string());
 
         // Program IDs (required for non-devnet)
         let program_id = get_required_or_devnet_default(
-            "AEGIS_PROGRAM_ID",
+            "PRIVACY_COIN_PROGRAM_ID",
             "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ",
             network,
         )?;
 
         // Derive PDAs from program ID (deterministic)
         let program_pubkey: solana_sdk::pubkey::Pubkey = program_id.parse()
-            .map_err(|_| ConfigError::MissingEnvVar("AEGIS_PROGRAM_ID (invalid pubkey)".into()))?;
+            .map_err(|_| ConfigError::MissingEnvVar("PRIVACY_COIN_PROGRAM_ID (invalid pubkey)".into()))?;
         let (pool_state_pubkey, _) = solana_sdk::pubkey::Pubkey::find_program_address(
             &[b"pool_state"], &program_pubkey,
         );
@@ -249,7 +249,7 @@ impl AEGISConfig {
         let commitment_tree = commitment_tree_pubkey.to_string();
 
         let zkbtc_mint = get_required_or_devnet_default(
-            "AEGIS_ZKBTC_MINT",
+            "PRIVACY_COIN_ZKBTC_MINT",
             "G5CHaLkWjdUxxmnrVqNLQ29K7PoNwJAzvVT11jjkdGKC",
             network,
         )?;
@@ -263,18 +263,18 @@ impl AEGISConfig {
             Network::Testnet => 10_000_000_000, // 100 BTC for testing
             Network::Devnet | Network::Regtest => 100_000_000_000, // 1000 BTC for development
         };
-        let deposit_limit_sats = env::var("AEGIS_DEPOSIT_LIMIT_SATS")
+        let deposit_limit_sats = env::var("PRIVACY_COIN_DEPOSIT_LIMIT_SATS")
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(default_limit);
 
         // Demo mode (only allowed on testnet/devnet)
-        let demo_mode = env::var("AEGIS_DEMO_MODE").map(|v| v == "1").unwrap_or(false);
+        let demo_mode = env::var("PRIVACY_COIN_DEMO_MODE").map(|v| v == "1").unwrap_or(false);
         if demo_mode && !network.allows_demo_mode() {
             return Err(ConfigError::DemoModeNotAllowed(format!("{:?}", network)));
         }
 
-        let log_level = env::var("AEGIS_LOG_LEVEL").unwrap_or_else(|_| "info".to_string());
+        let log_level = env::var("PRIVACY_COIN_LOG_LEVEL").unwrap_or_else(|_| "info".to_string());
 
         Ok(Self {
             network,
@@ -318,7 +318,7 @@ impl AEGISConfig {
 
     /// Print configuration summary (hiding sensitive values)
     pub fn print_summary(&self) {
-        println!("=== Aegis Configuration ===");
+        println!("=== Privacy Coin Configuration ===");
         println!("Network: {:?}", self.network);
         println!("Solana RPC: {}", self.solana_rpc);
         println!("Bitcoin API: {}", self.bitcoin_api);
@@ -356,7 +356,7 @@ fn get_required_or_devnet_default(
 
 /// Load signing configuration from environment
 fn load_signing_config(network: Network) -> Result<SigningMode, ConfigError> {
-    let mode = env::var("AEGIS_SIGNING_MODE").unwrap_or_else(|_| {
+    let mode = env::var("PRIVACY_COIN_SIGNING_MODE").unwrap_or_else(|_| {
         if matches!(network, Network::Mainnet) {
             "frost".to_string()
         } else {
@@ -367,7 +367,7 @@ fn load_signing_config(network: Network) -> Result<SigningMode, ConfigError> {
     match mode.to_lowercase().as_str() {
         "single" => {
             // For devnet, we can use a derived key (with warning)
-            let key = env::var("AEGIS_BTC_SIGNER_KEY").unwrap_or_else(|_| {
+            let key = env::var("PRIVACY_COIN_BTC_SIGNER_KEY").unwrap_or_else(|_| {
                 if matches!(network, Network::Devnet | Network::Regtest) {
                     eprintln!("WARNING: Using derived POC key for devnet/regtest - DO NOT USE WITH REAL FUNDS");
                     // Return empty string to indicate "use derived key"
@@ -379,54 +379,54 @@ fn load_signing_config(network: Network) -> Result<SigningMode, ConfigError> {
 
             if key.is_empty() && !matches!(network, Network::Devnet | Network::Regtest) {
                 return Err(ConfigError::MissingEnvVar(
-                    "AEGIS_BTC_SIGNER_KEY".to_string(),
+                    "PRIVACY_COIN_BTC_SIGNER_KEY".to_string(),
                 ));
             }
 
             Ok(SigningMode::Single { key })
         }
         "frost" => {
-            let threshold: u8 = env::var("AEGIS_FROST_THRESHOLD")
+            let threshold: u8 = env::var("PRIVACY_COIN_FROST_THRESHOLD")
                 .map_err(|_| {
-                    ConfigError::FrostConfigIncomplete("AEGIS_FROST_THRESHOLD required".to_string())
+                    ConfigError::FrostConfigIncomplete("PRIVACY_COIN_FROST_THRESHOLD required".to_string())
                 })?
                 .parse()
                 .map_err(|_| {
                     ConfigError::InvalidValue(
-                        "AEGIS_FROST_THRESHOLD".to_string(),
+                        "PRIVACY_COIN_FROST_THRESHOLD".to_string(),
                         "must be a number".to_string(),
                     )
                 })?;
 
-            let participants: u8 = env::var("AEGIS_FROST_PARTICIPANTS")
+            let participants: u8 = env::var("PRIVACY_COIN_FROST_PARTICIPANTS")
                 .map_err(|_| {
                     ConfigError::FrostConfigIncomplete(
-                        "AEGIS_FROST_PARTICIPANTS required".to_string(),
+                        "PRIVACY_COIN_FROST_PARTICIPANTS required".to_string(),
                     )
                 })?
                 .parse()
                 .map_err(|_| {
                     ConfigError::InvalidValue(
-                        "AEGIS_FROST_PARTICIPANTS".to_string(),
+                        "PRIVACY_COIN_FROST_PARTICIPANTS".to_string(),
                         "must be a number".to_string(),
                     )
                 })?;
 
-            let key_share = env::var("AEGIS_FROST_KEY_SHARE").map_err(|_| {
-                ConfigError::FrostConfigIncomplete("AEGIS_FROST_KEY_SHARE required".to_string())
+            let key_share = env::var("PRIVACY_COIN_FROST_KEY_SHARE").map_err(|_| {
+                ConfigError::FrostConfigIncomplete("PRIVACY_COIN_FROST_KEY_SHARE required".to_string())
             })?;
 
             if threshold > participants {
                 return Err(ConfigError::InvalidValue(
-                    "AEGIS_FROST_THRESHOLD".to_string(),
+                    "PRIVACY_COIN_FROST_THRESHOLD".to_string(),
                     "threshold cannot exceed participants".to_string(),
                 ));
             }
 
-            let signer_urls: Vec<String> = env::var("AEGIS_FROST_SIGNER_URLS")
+            let signer_urls: Vec<String> = env::var("PRIVACY_COIN_FROST_SIGNER_URLS")
                 .map_err(|_| {
                     ConfigError::FrostConfigIncomplete(
-                        "AEGIS_FROST_SIGNER_URLS required (comma-separated URLs)".to_string(),
+                        "PRIVACY_COIN_FROST_SIGNER_URLS required (comma-separated URLs)".to_string(),
                     )
                 })?
                 .split(',')
@@ -436,13 +436,13 @@ fn load_signing_config(network: Network) -> Result<SigningMode, ConfigError> {
 
             if signer_urls.len() < participants as usize {
                 return Err(ConfigError::FrostConfigIncomplete(format!(
-                    "AEGIS_FROST_SIGNER_URLS has {} URLs but {} participants configured",
+                    "PRIVACY_COIN_FROST_SIGNER_URLS has {} URLs but {} participants configured",
                     signer_urls.len(),
                     participants,
                 )));
             }
 
-            let api_key = env::var("AEGIS_FROST_API_KEY").ok();
+            let api_key = env::var("PRIVACY_COIN_FROST_API_KEY").ok();
 
             Ok(SigningMode::Frost {
                 threshold,
@@ -453,7 +453,7 @@ fn load_signing_config(network: Network) -> Result<SigningMode, ConfigError> {
             })
         }
         _ => Err(ConfigError::InvalidValue(
-            "AEGIS_SIGNING_MODE".to_string(),
+            "PRIVACY_COIN_SIGNING_MODE".to_string(),
             format!("unknown mode: {} (use 'single' or 'frost')", mode),
         )),
     }

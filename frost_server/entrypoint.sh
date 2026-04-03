@@ -8,7 +8,7 @@ elif [ -n "$FROST_KEY_BASE64" ] && [ -n "$SIGNER_ID" ]; then
 fi
 # If no args passed, build command from env vars
 # Note: clap auto-reads FROST_ESPLORA_URL, FROST_POOL_ADDRESS, FROST_MAX_AMOUNT,
-#   FROST_MAX_FEE, FROST_AUDIT_LOG, FROST_SOLANA_RPC_URL, FROST_AEGIS_PROGRAM_ID
+#   FROST_MAX_FEE, FROST_AUDIT_LOG, FROST_SOLANA_RPC_URL, FROST_PRIVACY_COIN_PROGRAM_ID
 #   directly from env vars — no need to pass them as flags.
 if [ $# -eq 0 ] && [ -n "$SIGNER_ID" ]; then
   BIND_PORT=${PORT:-9001}

@@ -1,10 +1,10 @@
 /**
- * Aegis Pinocchio Program Test Suite
+ * Privacy Coin Pinocchio Program Test Suite
  *
  * IDL-like TypeScript interface for testing the raw Pinocchio program
  * with Circom ZK proof integration.
  *
- * Run: bun test tests/pinocchio-Aegis.ts
+ * Run: bun test tests/pinocchio-Privacy Coin.ts
  */
 
 import {
@@ -40,7 +40,7 @@ const __dirname = path.dirname(__filename);
 // ============================================================================
 
 /**
- * Program ID for Aegis Pinocchio
+ * Program ID for Privacy Coin Pinocchio
  * Update this after deployment
  */
 const PROGRAM_ID = new PublicKey("AtztELZfz3GHA8hFQCv7aT9Mt47Xhknv3ZCNb3fmXsgf");
@@ -873,7 +873,7 @@ export class PoseidonMerkleTree {
 // TEST SUITE
 // ============================================================================
 
-describe("Aegis Pinocchio Program", function() {
+describe("Privacy Coin Pinocchio Program", function() {
   this.timeout(120000);
 
   let connection: Connection;

@@ -1,5 +1,5 @@
 /**
- * AEGIS SDK Configuration
+ * PRIVACY_COIN SDK Configuration
  *
  * Centralized configuration for all network-specific addresses, endpoints, and settings.
  * This is the SINGLE SOURCE OF TRUTH for all on-chain addresses and configuration.
@@ -43,8 +43,8 @@ export interface NetworkConfig {
   // Program IDs
   // -------------------------------------------------------------------------
 
-  /** Aegis main program ID */
-  aegisProgramId: Address;
+  /** Privacy Coin main program ID */
+  privacyCoinProgramId: Address;
 
   /** BTC Light Client program ID (manages light client + block headers for SPV) */
   btcLightClientProgramId: Address;
@@ -196,7 +196,7 @@ export const DEVNET_CONFIG: NetworkConfig = {
   network: "devnet",
 
   // Program IDs (devnet deployment 2026-03-25)
-  aegisProgramId: address("AjbX243s2JMFG2uhfTjKkadjPvQEPgcuyV3vfLJv36MT"),
+  privacyCoinProgramId: address("AjbX243s2JMFG2uhfTjKkadjPvQEPgcuyV3vfLJv36MT"),
   btcLightClientProgramId: address("859B7kw1xDyY8rzSXY6pAPNxaAsPWrsaAPJk3iivd43g"),
   chadbufferProgramId: CHADBUFFER_PROGRAM_ID,
   token2022ProgramId: TOKEN_2022_PROGRAM_ID,
@@ -219,7 +219,7 @@ export const DEVNET_CONFIG: NetworkConfig = {
   // Circuit CDN (Groth16 artifacts: .wasm, .zkey files)
   circuitCdnUrl: "https://circuits.amidoggy.xyz",
 
-  // Groth16 Verifier: verification is inline in the Aegis program (no separate verifier program)
+  // Groth16 Verifier: verification is inline in the Privacy Coin program (no separate verifier program)
   groth16VerifierProgramId: address("AjbX243s2JMFG2uhfTjKkadjPvQEPgcuyV3vfLJv36MT"), // inline in aegis program
 
   // VK Hashes (SHA256 of serialized VK bytes, generated from circom trusted setup)
@@ -263,7 +263,7 @@ export const MAINNET_CONFIG: NetworkConfig = {
   network: "mainnet",
 
   // Program IDs (placeholder - update when deployed)
-  aegisProgramId: address("11111111111111111111111111111111"),
+  privacyCoinProgramId: address("11111111111111111111111111111111"),
   btcLightClientProgramId: address("11111111111111111111111111111111"),
   chadbufferProgramId: CHADBUFFER_PROGRAM_ID,
   token2022ProgramId: TOKEN_2022_PROGRAM_ID,
@@ -284,7 +284,7 @@ export const MAINNET_CONFIG: NetworkConfig = {
   esploraUrl: "https://mempool.space/api",
 
   // Circuit CDN
-  circuitCdnUrl: "https://cdn.jsdelivr.net/npm/@aegis/sdk@latest/circuits",
+  circuitCdnUrl: "https://cdn.jsdelivr.net/npm/@privacy-coin/sdk@latest/circuits",
 
   // Groth16 Verifier (placeholder)
   groth16VerifierProgramId: address("11111111111111111111111111111111"),
@@ -319,7 +319,7 @@ export const LOCALNET_CONFIG: NetworkConfig = {
   network: "localnet",
 
   // Program IDs
-  aegisProgramId: address("2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV"),
+  privacyCoinProgramId: address("2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV"),
   btcLightClientProgramId: address("Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"),
   chadbufferProgramId: LOCALNET_CHADBUFFER_PROGRAM_ID,
   token2022ProgramId: TOKEN_2022_PROGRAM_ID,
@@ -342,7 +342,7 @@ export const LOCALNET_CONFIG: NetworkConfig = {
   // Circuit CDN (use local files for development)
   circuitCdnUrl: "/circuits",
 
-  // Groth16 Verifier: verification is inline in the Aegis program
+  // Groth16 Verifier: verification is inline in the Privacy Coin program
   groth16VerifierProgramId: address("RoqAPQgZ5ztdhV3jHBKgTmeLBAfyYcaBsjKiXHNwXf3"),
 
   // VK Hashes (same as devnet - generated from same trusted setup)
@@ -383,10 +383,10 @@ let currentConfig: NetworkConfig = DEVNET_CONFIG;
 // PDA derivation happens async in initConfig(), but at least getConfig()
 // returns the correct program ID immediately.
 if (typeof process !== "undefined") {
-  const _pid = process.env?.NEXT_PUBLIC_AEGIS_PROGRAM_ID || process.env?.AEGIS_PROGRAM_ID;
-  const _mint = process.env?.NEXT_PUBLIC_ZKBTC_MINT || process.env?.AEGIS_ZKBTC_MINT;
+  const _pid = process.env?.NEXT_PUBLIC_PRIVACY_COIN_PROGRAM_ID || process.env?.PRIVACY_COIN_PROGRAM_ID;
+  const _mint = process.env?.NEXT_PUBLIC_ZKBTC_MINT || process.env?.PRIVACY_COIN_ZKBTC_MINT;
   if (_pid) {
-    currentConfig = { ...currentConfig, aegisProgramId: address(_pid), groth16VerifierProgramId: address(_pid) };
+    currentConfig = { ...currentConfig, privacyCoinProgramId: address(_pid), groth16VerifierProgramId: address(_pid) };
   }
   if (_mint) {
     currentConfig = { ...currentConfig, zkbtcMint: address(_mint) };
@@ -437,7 +437,7 @@ export function setConfig(network: NetworkType | NetworkConfig): void {
       case "mainnet":
         throw new Error(
           "Mainnet is not yet deployed. " +
-          "Aegis is currently available on devnet only. " +
+          "Privacy Coin is currently available on devnet only. " +
           "Use setConfig('devnet') or wait for mainnet deployment announcement."
         );
       case "localnet":
@@ -448,7 +448,7 @@ export function setConfig(network: NetworkType | NetworkConfig): void {
     }
   } else {
     // Check if custom config is using placeholder mainnet addresses
-    if (network.network === "mainnet" && network.aegisProgramId === MAINNET_CONFIG.aegisProgramId) {
+    if (network.network === "mainnet" && network.privacyCoinProgramId === MAINNET_CONFIG.privacyCoinProgramId) {
       throw new Error(
         "Cannot use placeholder mainnet configuration. " +
         "Mainnet is not yet deployed."
@@ -478,26 +478,26 @@ export function createConfig(
 /**
  * Initialize SDK configuration with optional overrides.
  *
- * Reads `aegisProgramId` and `zkbtcMint` from params, then env vars, then
+ * Reads `privacyCoinProgramId` and `zkbtcMint` from params, then env vars, then
  * falls back to DEVNET_CONFIG defaults. All PDAs are auto-derived from these
  * two values.
  *
  * Env vars checked (in order):
- * - NEXT_PUBLIC_AEGIS_PROGRAM_ID / AEGIS_PROGRAM_ID
- * - NEXT_PUBLIC_ZKBTC_MINT / AEGIS_ZKBTC_MINT
+ * - NEXT_PUBLIC_PRIVACY_COIN_PROGRAM_ID / PRIVACY_COIN_PROGRAM_ID
+ * - NEXT_PUBLIC_ZKBTC_MINT / PRIVACY_COIN_ZKBTC_MINT
  *
  * @example
- * // Use env vars (set NEXT_PUBLIC_AEGIS_PROGRAM_ID + NEXT_PUBLIC_ZKBTC_MINT)
+ * // Use env vars (set NEXT_PUBLIC_PRIVACY_COIN_PROGRAM_ID + NEXT_PUBLIC_ZKBTC_MINT)
  * await initConfig();
  *
  * // Or pass explicitly
- * await initConfig({ aegisProgramId: "...", zkbtcMint: "..." });
+ * await initConfig({ privacyCoinProgramId: "...", zkbtcMint: "..." });
  */
 export type NetworkId = "devnet" | "localnet" | "mainnet";
 
 export async function initConfig(overrides?: {
   network?: NetworkId;
-  aegisProgramId?: string;
+  privacyCoinProgramId?: string;
   zkbtcMint?: string;
   solanaRpcUrl?: string;
   groupPubKey?: string;
@@ -505,7 +505,7 @@ export async function initConfig(overrides?: {
   // Pick base config from network: param > env > devnet
   const networkId: NetworkId =
     overrides?.network ||
-    (typeof process !== "undefined" && (process.env?.NEXT_PUBLIC_NETWORK || process.env?.AEGIS_NETWORK) as NetworkId) ||
+    (typeof process !== "undefined" && (process.env?.NEXT_PUBLIC_NETWORK || process.env?.PRIVACY_COIN_NETWORK) as NetworkId) ||
     "devnet";
 
   const baseConfig = networkId === "localnet"
@@ -518,33 +518,33 @@ export async function initConfig(overrides?: {
 
   // Resolve program ID: param > env > base config default
   const programId =
-    overrides?.aegisProgramId ||
-    (typeof process !== "undefined" && (process.env?.NEXT_PUBLIC_AEGIS_PROGRAM_ID || process.env?.AEGIS_PROGRAM_ID)) ||
+    overrides?.privacyCoinProgramId ||
+    (typeof process !== "undefined" && (process.env?.NEXT_PUBLIC_PRIVACY_COIN_PROGRAM_ID || process.env?.PRIVACY_COIN_PROGRAM_ID)) ||
     undefined;
 
   // Resolve mint: param > env > default
   let mint =
     overrides?.zkbtcMint ||
-    (typeof process !== "undefined" && (process.env?.NEXT_PUBLIC_ZKBTC_MINT || process.env?.AEGIS_ZKBTC_MINT)) ||
+    (typeof process !== "undefined" && (process.env?.NEXT_PUBLIC_ZKBTC_MINT || process.env?.PRIVACY_COIN_ZKBTC_MINT)) ||
     undefined;
 
   // Resolve RPC URL for on-chain fetching
   const rpcUrl =
     overrides?.solanaRpcUrl ||
-    (typeof process !== "undefined" && (process.env?.NEXT_PUBLIC_SOLANA_RPC_URL || process.env?.AEGIS_SOLANA_RPC)) ||
+    (typeof process !== "undefined" && (process.env?.NEXT_PUBLIC_SOLANA_RPC_URL || process.env?.PRIVACY_COIN_SOLANA_RPC)) ||
     undefined;
 
   if (programId) {
-    config.aegisProgramId = address(programId);
+    config.privacyCoinProgramId = address(programId);
     config.groth16VerifierProgramId = address(programId); // same program
 
     // Derive PDAs from program ID
     const [poolStatePda] = await getProgramDerivedAddress({
-      programAddress: config.aegisProgramId,
+      programAddress: config.privacyCoinProgramId,
       seeds: [new TextEncoder().encode("pool_state")],
     });
     const [commitmentTreePda] = await getProgramDerivedAddress({
-      programAddress: config.aegisProgramId,
+      programAddress: config.privacyCoinProgramId,
       seeds: [new TextEncoder().encode("commitment_tree")],
     });
     config.poolStatePda = poolStatePda;
@@ -609,8 +609,8 @@ export async function initConfig(overrides?: {
 // Convenience Exports
 // =============================================================================
 
-/** Default Aegis program ID (from current config) */
-export const AEGIS_PROGRAM_ID: Address = DEVNET_CONFIG.aegisProgramId;
+/** Default Privacy Coin program ID (from current config) */
+export const PRIVACY_COIN_PROGRAM_ID: Address = DEVNET_CONFIG.privacyCoinProgramId;
 
 /** BTC Light Client program ID (manages light client + block headers) */
 export const BTC_LIGHT_CLIENT_PROGRAM_ID: Address = DEVNET_CONFIG.btcLightClientProgramId;

@@ -46,7 +46,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::error::AegisError;
+use crate::error::PrivacyCoinError;
 use crate::state::{
     CommitmentTree, NullifierOperationType, NullifierRecord, PoolState,
     RedemptionRequest, RedemptionStatus, TokenConfig, VkRegistry,
@@ -177,7 +177,7 @@ pub fn process_redeem(
         offset += 1;
 
         if script_len == 0 || script_len > crate::constants::MAX_BTC_SCRIPT_LEN {
-            return Err(AegisError::InvalidBtcAddress.into());
+            return Err(PrivacyCoinError::InvalidBtcAddress.into());
         }
         if data.len() < offset + script_len + 8 {
             return Err(ProgramError::InvalidInstructionData);
@@ -216,7 +216,7 @@ pub fn process_redeem(
             &stealth_data_hash,
         );
         if *bound_params_hash != expected {
-            return Err(AegisError::InvalidBoundParams.into());
+            return Err(PrivacyCoinError::InvalidBoundParams.into());
         }
     }
 
@@ -251,7 +251,7 @@ pub fn process_redeem(
         let tc_data = token_config_info.try_borrow_data()?;
         let tc = TokenConfig::from_bytes(&tc_data)?;
         if !tc.is_enabled() {
-            return Err(AegisError::TokenDisabled.into());
+            return Err(PrivacyCoinError::TokenDisabled.into());
         }
         tc.token_id
     };
@@ -261,7 +261,7 @@ pub fn process_redeem(
         let pool_data = pool_state_info.try_borrow_data()?;
         let pool = PoolState::from_bytes(&pool_data)?;
         if pool.is_paused() {
-            return Err(AegisError::PoolPaused.into());
+            return Err(PrivacyCoinError::PoolPaused.into());
         }
         validate_active_tree_pda(commitment_tree_info, program_id, pool.active_tree_index())?;
         (pool.pending_redemptions(), pool.total_shielded())
@@ -271,14 +271,14 @@ pub fn process_redeem(
     let mut total_redeem: u64 = 0;
     for k in 0..n_public_outputs {
         if redeem_amounts[k] == 0 {
-            return Err(AegisError::ZeroAmount.into());
+            return Err(PrivacyCoinError::ZeroAmount.into());
         }
         total_redeem = total_redeem
             .checked_add(redeem_amounts[k])
             .ok_or(ProgramError::ArithmeticOverflow)?;
     }
     if total_redeem > total_shielded {
-        return Err(AegisError::InsufficientFunds.into());
+        return Err(PrivacyCoinError::InsufficientFunds.into());
     }
 
     // Validate VK registry for this (N, M) variant
@@ -287,7 +287,7 @@ pub fn process_redeem(
         let vk = VkRegistry::from_bytes(&vk_data)?;
 
         if vk.n_inputs != n_inputs as u8 || vk.n_outputs != n_outputs as u8 {
-            return Err(AegisError::InvalidVkRegistry.into());
+            return Err(PrivacyCoinError::InvalidVkRegistry.into());
         }
     }
 
@@ -296,7 +296,7 @@ pub fn process_redeem(
         let tree_data = commitment_tree_info.try_borrow_data()?;
         let tree = CommitmentTree::from_bytes(&tree_data)?;
         if !tree.is_valid_root(merkle_root) {
-            return Err(AegisError::InvalidMerkleProof.into());
+            return Err(PrivacyCoinError::InvalidMerkleProof.into());
         }
     }
 
@@ -331,7 +331,7 @@ pub fn process_redeem(
                 &zero_npk, &token_id, redeem_amounts[k],
             )?;
             if *commitments_out[idx] != expected_commitment {
-                return Err(AegisError::InvalidCommitment.into());
+                return Err(PrivacyCoinError::InvalidCommitment.into());
             }
         }
     }
@@ -354,7 +354,7 @@ pub fn process_redeem(
         {
             let nullifier_data = nullifier_info.try_borrow_data()?;
             if !nullifier_data.is_empty() && nullifier_data[0] == NULLIFIER_RECORD_DISCRIMINATOR {
-                return Err(AegisError::NullifierAlreadyUsed.into());
+                return Err(PrivacyCoinError::NullifierAlreadyUsed.into());
             }
         }
 
@@ -437,7 +437,7 @@ pub fn process_redeem(
             if !redemption_data.is_empty()
                 && redemption_data[0] == REDEMPTION_REQUEST_DISCRIMINATOR
             {
-                return Err(AegisError::AlreadyInitialized.into());
+                return Err(PrivacyCoinError::AlreadyInitialized.into());
             }
         }
 

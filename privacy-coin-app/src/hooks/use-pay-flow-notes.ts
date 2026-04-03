@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useAegis, type InboxNote } from "@/hooks/use-aegis";
+import { useAegis, type InboxNote } from "@/hooks/use-privacy-coin";
 import { autoSelectNotes, type PayToken } from "@/components/btc-widget/pay-flow/helpers";
 import { scanSecretPhrase, type ScannedSecretNote } from "@/lib/claim-utils";
 

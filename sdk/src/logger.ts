@@ -1,7 +1,7 @@
 /**
- * Conditional debug logger for AEGIS SDK.
+ * Conditional debug logger for PRIVACY_COIN SDK.
  *
- * Set `AEGIS_DEBUG=1` (Node.js) or `localStorage.aegisDebug = "1"` (browser)
+ * Set `PRIVACY_COIN_DEBUG=1` (Node.js) or `localStorage.aegisDebug = "1"` (browser)
  * to enable debug output. All logs are suppressed by default.
  */
 
@@ -11,7 +11,7 @@ function isEnabled(): boolean {
   if (_enabled !== null) return _enabled;
   try {
     // Node.js
-    if (typeof process !== "undefined" && process.env?.AEGIS_DEBUG === "1") {
+    if (typeof process !== "undefined" && process.env?.PRIVACY_COIN_DEBUG === "1") {
       _enabled = true;
       return true;
     }
@@ -28,11 +28,11 @@ function isEnabled(): boolean {
 }
 
 export function debug(tag: string, ...args: unknown[]): void {
-  if (isEnabled()) console.log(`[aegis:${tag}]`, ...args);
+  if (isEnabled()) console.log(`[pcoin:${tag}]`, ...args);
 }
 
 export function warn(tag: string, ...args: unknown[]): void {
-  console.warn(`[aegis:${tag}]`, ...args);
+  console.warn(`[pcoin:${tag}]`, ...args);
 }
 
 /** Force-enable or disable debug logging at runtime */

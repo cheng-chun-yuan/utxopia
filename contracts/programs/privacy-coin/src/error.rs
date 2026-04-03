@@ -1,12 +1,12 @@
-//! Error definitions for AEGIS program
+//! Error definitions for PRIVACY_COIN program
 
 use pinocchio::program_error::ProgramError;
 use thiserror::Error;
 
-/// Custom error codes for AEGIS
+/// Custom error codes for PRIVACY_COIN
 /// Starting at 6000 to avoid conflicts with system errors
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
-pub enum AegisError {
+pub enum PrivacyCoinError {
     #[error("Pool is paused")]
     PoolPaused = 6000,
 
@@ -187,8 +187,8 @@ pub enum AegisError {
     InvalidPDA = 6085,
 }
 
-impl From<AegisError> for ProgramError {
-    fn from(e: AegisError) -> Self {
+impl From<PrivacyCoinError> for ProgramError {
+    fn from(e: PrivacyCoinError) -> Self {
         ProgramError::Custom(e as u32)
     }
 }

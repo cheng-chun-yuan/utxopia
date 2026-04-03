@@ -1,4 +1,4 @@
-# Aegis Documentation Index
+# Privacy Coin Documentation Index
 
 Privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs.
 
@@ -56,7 +56,7 @@ Privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs.
 | FROST Signing Server | `frost_server/` | [FROST Server](./FROST.md) |
 | Backend API + Tracker | `backend/` | [Architecture](../backend/docs/ARCHITECTURE.md), [Services](../backend/docs/SERVICES.md), [API](../backend/docs/API.md) |
 | Header Relayer | `backend/header-relayer/` | [Services](../backend/docs/SERVICES.md), [How to Run](./RUNNING.md) |
-| Web Frontend | `aegis-app/` | [How to Run](./RUNNING.md) |
+| Web Frontend | `privacy-coin-app/` | [How to Run](./RUNNING.md) |
 
 ---
 
@@ -78,6 +78,6 @@ Privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs.
 
 | Program | Address |
 |---------|---------|
-| Aegis | `4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1` |
+| Privacy Coin | `4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1` |
 | BTC Light Client | `Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq` |
 | ChadBuffer | `6VrJmWbhN9WbEkg87JizunVMpL6CHKGVmzWCf3o3LRgy` |

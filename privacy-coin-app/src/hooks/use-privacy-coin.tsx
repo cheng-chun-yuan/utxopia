@@ -9,7 +9,7 @@ import { useAegisStore, type InboxNote } from "@/stores";
 export type { InboxNote };
 
 /**
- * Full Aegis hook - wraps Zustand store with wallet integration.
+ * Full Privacy Coin hook - wraps Zustand store with wallet integration.
  *
  * NOTE: Auto-refresh of inbox is handled in StoreHydration (renders once).
  * This hook just provides wallet-aware wrappers for store actions.

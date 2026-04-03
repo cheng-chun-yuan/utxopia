@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Initialize Fresh Aegis Devnet Program
+ * Initialize Fresh Privacy Coin Devnet Program
  *
  * For the new program ID: GFV24P4Ne3AMcuZJELaKQeuFQzCe7T3Ne8CdKPL7X7mM
  */
@@ -27,7 +27,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Fresh program ID (zKey vanity address)
-const AEGIS_PROGRAM_ID = new PublicKey("zKeyrLmpT8W9o8iRvhizuSihLAFLhfAGBvfM638Pbw8");
+const PRIVACY_COIN_PROGRAM_ID = new PublicKey("zKeyrLmpT8W9o8iRvhizuSihLAFLhfAGBvfM638Pbw8");
 const GROTH16_VERIFIER_ID = new PublicKey("5uAoTLSexeKKLU3ZXniWFE2CsCWGPzMiYPpKiywCGqsd");
 const CHADBUFFER_ID = new PublicKey("C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF");
 
@@ -91,7 +91,7 @@ function buildInitializeIx(
 
 async function main() {
   console.log("============================================================");
-  console.log("Initialize Fresh Aegis on Devnet");
+  console.log("Initialize Fresh Privacy Coin on Devnet");
   console.log("============================================================\n");
 
   const connection = new Connection(RPC_URL, "confirmed");
@@ -99,15 +99,15 @@ async function main() {
   // Load wallet
   const authority = await loadKeypair("~/.config/solana/johnny.json");
   console.log(`Authority: ${authority.publicKey.toBase58()}`);
-  console.log(`Program ID: ${AEGIS_PROGRAM_ID.toBase58()}`);
+  console.log(`Program ID: ${PRIVACY_COIN_PROGRAM_ID.toBase58()}`);
 
   // Check balance
   const balance = await connection.getBalance(authority.publicKey);
   console.log(`Balance: ${balance / 1e9} SOL`);
 
   // Derive PDAs
-  const [poolStatePda, poolBump] = derivePoolStatePDA(AEGIS_PROGRAM_ID);
-  const [commitmentTreePda, treeBump] = deriveCommitmentTreePDA(AEGIS_PROGRAM_ID);
+  const [poolStatePda, poolBump] = derivePoolStatePDA(PRIVACY_COIN_PROGRAM_ID);
+  const [commitmentTreePda, treeBump] = deriveCommitmentTreePDA(PRIVACY_COIN_PROGRAM_ID);
 
   console.log(`\nPool State PDA: ${poolStatePda.toBase58()} (bump: ${poolBump})`);
   console.log(`Commitment Tree PDA: ${commitmentTreePda.toBase58()} (bump: ${treeBump})`);
@@ -129,7 +129,7 @@ async function main() {
       network: "devnet",
       rpcUrl: RPC_URL,
       programs: {
-        Aegis: AEGIS_PROGRAM_ID.toBase58(),
+        Aegis: PRIVACY_COIN_PROGRAM_ID.toBase58(),
         groth16Verifier: GROTH16_VERIFIER_ID.toBase58(),
         chadbuffer: CHADBUFFER_ID.toBase58(),
       },
@@ -194,7 +194,7 @@ async function main() {
   console.log(`✓ Frost Vault: ${frostVaultAccount.address.toBase58()}`);
 
   // Initialize Aegis
-  console.log("\nInitializing Aegis pool...");
+  console.log("\nInitializing Privacy Coin pool...");
   const ix = buildInitializeIx(
     poolStatePda,
     commitmentTreePda,
@@ -202,7 +202,7 @@ async function main() {
     poolVaultAccount.address,
     frostVaultAccount.address,
     authority.publicKey,
-    AEGIS_PROGRAM_ID,
+    PRIVACY_COIN_PROGRAM_ID,
     poolBump,
     treeBump
   );
@@ -211,14 +211,14 @@ async function main() {
   const sig = await sendAndConfirmTransaction(connection, tx, [authority], {
     commitment: "confirmed",
   });
-  console.log(`✓ Aegis initialized: ${sig}`);
+  console.log(`✓ Privacy Coin initialized: ${sig}`);
 
   // Save devnet config
   const devnetConfig = {
     network: "devnet",
     rpcUrl: RPC_URL,
     programs: {
-      Aegis: AEGIS_PROGRAM_ID.toBase58(),
+      Aegis: PRIVACY_COIN_PROGRAM_ID.toBase58(),
       groth16Verifier: GROTH16_VERIFIER_ID.toBase58(),
       chadbuffer: CHADBUFFER_ID.toBase58(),
     },
@@ -241,7 +241,7 @@ async function main() {
   console.log("\n============================================================");
   console.log("Initialization Complete!");
   console.log("============================================================");
-  console.log(`  Program ID:    ${AEGIS_PROGRAM_ID.toBase58()}`);
+  console.log(`  Program ID:    ${PRIVACY_COIN_PROGRAM_ID.toBase58()}`);
   console.log(`  Pool State:    ${poolStatePda.toBase58()}`);
   console.log(`  Commit Tree:   ${commitmentTreePda.toBase58()}`);
   console.log(`  zkBTC Mint:    ${zkbtcMint.toBase58()}`);

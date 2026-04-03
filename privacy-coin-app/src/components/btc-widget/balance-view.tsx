@@ -59,7 +59,7 @@ import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 import { useBackendDeposits } from "@/hooks/use-backend-deposits";
 import { useExplorer, toDepositRecord } from "@/hooks/use-explorer";
 import { useAegisStore, type InboxNote } from "@/stores";
-import { isDepositForViewerHex } from "@aegis/sdk";
+import { isDepositForViewerHex } from "@privacy-coin/sdk";
 
 // =============================================================================
 // Status badge — maps backend DepositStatus to UI

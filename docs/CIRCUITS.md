@@ -318,7 +318,7 @@ Generates Rust code with `ALPHA_G1`, `BETA_G2`, `GAMMA_G2`, `DELTA_G2`, and `IC`
 Proofs are generated in the browser/app via snarkjs WASM:
 
 ```typescript
-import { generateJoinSplitProof } from '@aegis/sdk';
+import { generateJoinSplitProof } from '@privacy-coin/sdk';
 
 const proof = await generateJoinSplitProof({
   nInputs: 2, nOutputs: 2,
@@ -359,7 +359,7 @@ Proofs are verified inline on Solana using `alt_bn128` pairing syscalls:
 
 ### Verification Equation
 
-The Aegis program verifies Groth16 proofs on-chain using Solana's native BN254 syscalls:
+The Privacy Coin program verifies Groth16 proofs on-chain using Solana's native BN254 syscalls:
 
 ```
 e(-A, B) × e(α, β) × e(vk_x, γ) × e(C, δ) == 1

@@ -8,7 +8,7 @@ import {
   parseCommitmentTreeData,
   bytesToBigint,
   type CommitmentTreeIndex,
-} from "@aegis/sdk";
+} from "@privacy-coin/sdk";
 import { getHeliusConnection } from "@/lib/helius-server";
 import { getTreeProofFromBackend } from "@/lib/api/tree";
 export const dynamic = "force-dynamic";
@@ -110,7 +110,7 @@ async function getTreeAndRoot(): Promise<{
           }));
         },
       },
-      getConfig().aegisProgramId,
+      getConfig().privacyCoinProgramId,
       maxLeafIndex !== undefined ? { maxLeafIndex } : undefined
     );
 

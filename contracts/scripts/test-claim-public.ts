@@ -29,11 +29,11 @@ import {
   createAssociatedTokenAccountInstruction,
 } from "@solana/spl-token";
 import {
-  AEGIS_PROGRAM_ID,
+  PRIVACY_COIN_PROGRAM_ID,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
   deriveNullifierRecordPDA,
-} from "@aegis/sdk";
+} from "@privacy-coin/sdk";
 import * as fs from "fs";
 
 const RPC_URL = "https://api.devnet.solana.com";
@@ -140,7 +140,7 @@ async function main() {
   const authority = loadKeypair("~/.config/solana/johnny.json");
 
   console.log(`\nAuthority: ${authority.publicKey.toBase58()}`);
-  console.log(`Program: ${AEGIS_PROGRAM_ID}`);
+  console.log(`Program: ${PRIVACY_COIN_PROGRAM_ID}`);
 
   // Derive PDAs
   const [poolStatePDA] = await derivePoolStatePDA();
@@ -219,7 +219,7 @@ async function main() {
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
-    programId: new PublicKey(AEGIS_PROGRAM_ID as string),
+    programId: new PublicKey(PRIVACY_COIN_PROGRAM_ID as string),
     data: claimPublicData,
   });
 

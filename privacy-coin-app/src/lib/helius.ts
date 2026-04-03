@@ -14,7 +14,7 @@ import {
   getHeliusRpcUrl,
   DEFAULT_COMPUTE_UNITS,
   DEFAULT_PRIORITY_FEE,
-} from "@aegis/sdk";
+} from "@privacy-coin/sdk";
 
 // Use NEXT_PUBLIC_SOLANA_RPC_URL (Helius or other RPC provider)
 // or fall back to plain devnet.

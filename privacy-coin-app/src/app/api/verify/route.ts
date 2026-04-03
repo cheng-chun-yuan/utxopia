@@ -26,13 +26,13 @@ import {
   ComputeBudgetProgram,
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
-const getAegisSDK = () => import("@aegis/sdk");
+const getAegisSDK = () => import("@privacy-coin/sdk");
 
 import {
   buildVerifyTransactionInstructionData,
   buildVerifyStealthDepositInstructionData,
   AUTHORITY_SIZE,
-} from "@aegis/sdk";
+} from "@privacy-coin/sdk";
 
 import {
   getAegisProgramId,
@@ -451,9 +451,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
       depositTxid: depositTxidInternal,
     });
 
-    const aegisProgramId = getAegisProgramId();
+    const privacyCoinProgramId = getAegisProgramId();
     const verifyDepositIx = new TransactionInstruction({
-      programId: aegisProgramId,
+      programId: privacyCoinProgramId,
       keys: [
         { pubkey: poolStatePDA, isSigner: false, isWritable: true },
         { pubkey: verifiedTxPDA, isSigner: false, isWritable: false },

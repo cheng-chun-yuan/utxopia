@@ -27,7 +27,7 @@ import { bytesToHex, doubleSha256 } from "../src/crypto";
 // Program IDs (override via env)
 // =============================================================================
 
-const AEGIS = new PublicKey(process.env.AEGIS_PROGRAM_ID || "zKeyrLmpT8W9o8iRvhizuSihLAFLhfAGBvfM638Pbw8");
+const PRIVACY_COIN = new PublicKey(process.env.PRIVACY_COIN_PROGRAM_ID || "zKeyrLmpT8W9o8iRvhizuSihLAFLhfAGBvfM638Pbw8");
 const BTC_LIGHT_CLIENT = new PublicKey(process.env.BTC_LIGHT_CLIENT_PROGRAM_ID || "Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq");
 const CHADBUFFER = new PublicKey(process.env.CHADBUFFER_PROGRAM_ID || "EgWyMVFZewHmjJ9GGvVBTyaC376Xp7qu7CAFjWYPYYDv");
 const TOKEN_2022 = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
@@ -124,8 +124,8 @@ function buildMockHeader(prevHash: Uint8Array, merkleRoot: Uint8Array): Uint8Arr
 // =============================================================================
 
 async function initPoolIfNeeded(conn: Connection, auth: Keypair) {
-  const [poolState, poolBump] = pda(["pool_state"], AEGIS);
-  const [commitTree, treeBump] = pda(["commitment_tree"], AEGIS);
+  const [poolState, poolBump] = pda(["pool_state"], PRIVACY_COIN);
+  const [commitTree, treeBump] = pda(["commitment_tree"], PRIVACY_COIN);
   const info = await conn.getAccountInfo(poolState);
 
   if (info && info.data.length > 0 && info.data[0] === 0x01) {
@@ -171,7 +171,7 @@ async function initPoolIfNeeded(conn: Connection, auth: Keypair) {
   const initData = Buffer.alloc(3);
   initData[0] = 0; initData[1] = poolBump; initData[2] = treeBump;
   await send(conn, auth, new TransactionInstruction({
-    programId: AEGIS, data: initData,
+    programId: PRIVACY_COIN, data: initData,
     keys: [
       { pubkey: poolState, isSigner: false, isWritable: true },
       { pubkey: commitTree, isSigner: false, isWritable: true },
@@ -375,8 +375,8 @@ async function main() {
   const commitment = await computeCommitment(npk, AMOUNT_SATS);
 
   // 8. Call verify_stealth_deposit
-  const [depositRec] = pda(["deposit", txid], AEGIS);
-  const [stealthAnn] = pda(["stealth", ephemeralPub], AEGIS);
+  const [depositRec] = pda(["deposit", txid], PRIVACY_COIN);
+  const [stealthAnn] = pda(["stealth", ephemeralPub], PRIVACY_COIN);
 
   // Merkle proof for single-tx block: txid + 41 zero bytes (path_bits=0, path_len=0, tx_index=0)
   const merkleProof = new Uint8Array(41);
@@ -394,7 +394,7 @@ async function main() {
   ixData.set(merkleProof, off);
 
   const sig = await send(conn, auth, new TransactionInstruction({
-    programId: AEGIS, data: ixData,
+    programId: PRIVACY_COIN, data: ixData,
     keys: [
       { pubkey: poolState, isSigner: false, isWritable: true },
       { pubkey: lcPDA, isSigner: false, isWritable: false },

@@ -26,7 +26,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::error::AegisError;
+use crate::error::PrivacyCoinError;
 use crate::state::{
     PoolState, RedemptionRequest, RedemptionStatus,
     REDEMPTION_REQUEST_DISCRIMINATOR,
@@ -53,7 +53,7 @@ pub fn process_public_redeem(
     // Parse btc_script (variable length)
     let btc_script_len = data[8] as usize;
     if btc_script_len == 0 || btc_script_len > crate::constants::MAX_BTC_SCRIPT_LEN {
-        return Err(AegisError::InvalidBtcAddress.into());
+        return Err(PrivacyCoinError::InvalidBtcAddress.into());
     }
 
     if data.len() < 9 + btc_script_len + 8 {
@@ -98,7 +98,7 @@ pub fn process_public_redeem(
         let pool_data = pool_state_info.try_borrow_data()?;
         let pool = PoolState::from_bytes(&pool_data)?;
         if pool.is_paused() {
-            return Err(AegisError::PoolPaused.into());
+            return Err(PrivacyCoinError::PoolPaused.into());
         }
 
         // Verify zkbtc_mint matches pool
@@ -111,7 +111,7 @@ pub fn process_public_redeem(
 
     // Validate amount
     if amount_sats == 0 {
-        return Err(AegisError::ZeroAmount.into());
+        return Err(PrivacyCoinError::ZeroAmount.into());
     }
 
     // Validate token account: owned by Token-2022, correct mint, owned by user
@@ -141,7 +141,7 @@ pub fn process_public_redeem(
         if !redemption_data.is_empty()
             && redemption_data[0] == REDEMPTION_REQUEST_DISCRIMINATOR
         {
-            return Err(AegisError::AlreadyInitialized.into());
+            return Err(PrivacyCoinError::AlreadyInitialized.into());
         }
     }
 

@@ -42,7 +42,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::error::AegisError;
+use crate::error::PrivacyCoinError;
 use crate::state::{
     CommitmentTree, NullifierOperationType, NullifierRecord, PoolState,
     VkRegistry, NULLIFIER_RECORD_DISCRIMINATOR,
@@ -158,7 +158,7 @@ pub fn process_transact(
             &stealth_data_hash,
         );
         if *bound_params_hash != expected {
-            return Err(AegisError::InvalidBoundParams.into());
+            return Err(PrivacyCoinError::InvalidBoundParams.into());
         }
     }
 
@@ -209,7 +209,7 @@ pub fn process_transact(
         let pool_data = pool_state_info.try_borrow_data()?;
         let pool = PoolState::from_bytes(&pool_data)?;
         if pool.is_paused() {
-            return Err(AegisError::PoolPaused.into());
+            return Err(PrivacyCoinError::PoolPaused.into());
         }
         validate_active_tree_pda(commitment_tree_info, program_id, pool.active_tree_index())?;
     }
@@ -221,7 +221,7 @@ pub fn process_transact(
 
         if vk.n_inputs != n_inputs as u8 || vk.n_outputs != n_outputs as u8 {
 
-            return Err(AegisError::InvalidVkRegistry.into());
+            return Err(PrivacyCoinError::InvalidVkRegistry.into());
         }
     }
 
@@ -231,7 +231,7 @@ pub fn process_transact(
         let tree = CommitmentTree::from_bytes(&tree_data)?;
         if !tree.is_valid_root(merkle_root) {
 
-            return Err(AegisError::InvalidMerkleProof.into());
+            return Err(PrivacyCoinError::InvalidMerkleProof.into());
         }
     }
 
@@ -285,7 +285,7 @@ pub fn process_transact(
             let nullifier_data = nullifier_info.try_borrow_data()?;
             if !nullifier_data.is_empty() && nullifier_data[0] == NULLIFIER_RECORD_DISCRIMINATOR {
 
-                return Err(AegisError::NullifierAlreadyUsed.into());
+                return Err(PrivacyCoinError::NullifierAlreadyUsed.into());
             }
         }
 

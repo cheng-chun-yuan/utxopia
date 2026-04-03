@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { usePasskey } from "@/hooks/use-passkey";
-import { useAegisStore } from "@/stores/aegis-store";
+import { useAegisStore } from "@/stores/privacy-coin-store";
 
 export function usePayFlowAuth(hasKeys: boolean) {
   const {

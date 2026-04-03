@@ -19,7 +19,7 @@ use pinocchio::{
     ProgramResult,
 };
 
-use crate::error::AegisError;
+use crate::error::PrivacyCoinError;
 use crate::state::{
     PoolConfig, PoolState, RedemptionRequest, RedemptionStatus, UtxoRecord, UtxoStatus,
     VerifiedTransactionView, light_client_tip_height,
@@ -174,7 +174,7 @@ pub fn process_complete_redemption(
         let pool = PoolState::from_bytes(&pool_data)?;
 
         if authority.key().as_ref() != pool.authority {
-            return Err(AegisError::Unauthorized.into());
+            return Err(PrivacyCoinError::Unauthorized.into());
         }
 
         (pool.bump, pool.pending_redemptions())
@@ -201,7 +201,7 @@ pub fn process_complete_redemption(
 
                 if ix_script != on_chain_script {
                     pinocchio::msg!("Aegis: pool_script mismatch (ix data vs on-chain)");
-                    return Err(AegisError::PoolScriptMismatch.into());
+                    return Err(PrivacyCoinError::PoolScriptMismatch.into());
                 }
             }
         }
@@ -220,7 +220,7 @@ pub fn process_complete_redemption(
             let receipt_data = completion_receipt_info.try_borrow_data()?;
             if !receipt_data.is_empty() && receipt_data[0] == COMPLETION_RECEIPT_DISCRIMINATOR {
                 pinocchio::msg!("Aegis: BTC txid already used for completion");
-                return Err(AegisError::DuplicateDeposit.into());
+                return Err(PrivacyCoinError::DuplicateDeposit.into());
             }
         }
 
@@ -253,7 +253,7 @@ pub fn process_complete_redemption(
 
         let status = redemption.get_status();
         if status != RedemptionStatus::Pending && status != RedemptionStatus::Processing {
-            return Err(AegisError::InvalidRedemptionState.into());
+            return Err(PrivacyCoinError::InvalidRedemptionState.into());
         }
 
         let script = redemption.get_btc_script();
@@ -274,7 +274,7 @@ pub fn process_complete_redemption(
 
         // Verify txid matches
         if *vt.txid() != ix_data.btc_txid {
-            return Err(AegisError::RedemptionSpvFailed.into());
+            return Err(PrivacyCoinError::RedemptionSpvFailed.into());
         }
 
         vt.block_height() as u64
@@ -290,7 +290,7 @@ pub fn process_complete_redemption(
             tip - block_height + 1
         };
         if confirmations < REQUIRED_CONFIRMATIONS {
-            return Err(AegisError::InsufficientConfirmations.into());
+            return Err(PrivacyCoinError::InsufficientConfirmations.into());
         }
     }
 
@@ -298,19 +298,19 @@ pub fn process_complete_redemption(
     crate::utils::chadbuffer::validate_chadbuffer_owner(tx_buffer_info)?;
     let buffer_data = tx_buffer_info
         .try_borrow_data()
-        .map_err(|_| AegisError::RedemptionSpvFailed)?;
+        .map_err(|_| PrivacyCoinError::RedemptionSpvFailed)?;
     let raw_tx = read_transaction_from_buffer(&buffer_data, ix_data.tx_size as usize)?;
 
     // Verify transaction hash matches provided txid
     let computed_hash = compute_tx_hash(raw_tx);
     if computed_hash != ix_data.btc_txid {
-        return Err(AegisError::RedemptionSpvFailed.into());
+        return Err(PrivacyCoinError::RedemptionSpvFailed.into());
     }
 
     // --- Output verification ---
     // Parse raw tx and verify an output pays the expected script with sufficient amount
     let parsed_tx = ParsedTransaction::parse(raw_tx)
-        .map_err(|_| AegisError::RedemptionSpvFailed)?;
+        .map_err(|_| PrivacyCoinError::RedemptionSpvFailed)?;
 
     let expected_script_slice = &expected_script[..expected_script_len];
 
@@ -332,7 +332,7 @@ pub fn process_complete_redemption(
         }
     }
     if !found {
-        return Err(AegisError::RedemptionOutputMismatch.into());
+        return Err(PrivacyCoinError::RedemptionOutputMismatch.into());
     }
 
     // --- Compute miner fee trustlessly from on-chain data ---
@@ -340,14 +340,14 @@ pub fn process_complete_redemption(
     // Backward compat mode (total_input_sats=0) is removed — it produces incorrect
     // accounting when the signer overpays the user.
     if total_input_sats == 0 {
-        return Err(AegisError::AmountTooSmall.into());
+        return Err(PrivacyCoinError::AmountTooSmall.into());
     }
     let total_outputs = parsed_tx.sum_outputs();
     let miner_fee = total_input_sats.saturating_sub(total_outputs);
 
     // Sanity: miner fee must not exceed MAX_FEE_SATS
     if miner_fee > MAX_FEE_SATS {
-        return Err(AegisError::RedemptionOutputMismatch.into());
+        return Err(PrivacyCoinError::RedemptionOutputMismatch.into());
     }
 
     let burn_amount = actual_received.saturating_add(miner_fee);
@@ -437,13 +437,13 @@ pub fn process_complete_redemption(
             {
                 let utxo_data = consumed_utxo_info.try_borrow_data()?;
                 if utxo_data.is_empty() || utxo_data[0] != UTXO_RECORD_DISCRIMINATOR {
-                    return Err(AegisError::InvalidUtxo.into());
+                    return Err(PrivacyCoinError::InvalidUtxo.into());
                 }
                 let utxo = UtxoRecord::from_bytes(&utxo_data)?;
                 // SECURITY: Verify UTXO is Reserved (set by mark_processing).
                 // Prevents consuming Unspent UTXOs that weren't part of this withdrawal.
                 if utxo.get_status() != UtxoStatus::Reserved {
-                    return Err(AegisError::InvalidUtxo.into());
+                    return Err(PrivacyCoinError::InvalidUtxo.into());
                 }
                 let amount = utxo.amount_sats();
                 let vout = utxo.vout();

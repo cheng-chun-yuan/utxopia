@@ -1,14 +1,14 @@
 /**
- * Aegis SDK v3.0 (JoinSplit Architecture)
+ * Privacy Coin SDK v3.0 (JoinSplit Architecture)
  *
- * Complete client library for interacting with the Aegis protocol.
+ * Complete client library for interacting with the Privacy Coin protocol.
  * Private Bitcoin on Solana using ZK proofs.
  *
  * Networks: Solana Devnet + Bitcoin Testnet3
  *
  * ## Quick Start
  * ```typescript
- * import { depositToNote, generateJoinSplitProof, buildTransactInstruction } from '@aegis/sdk';
+ * import { depositToNote, generateJoinSplitProof, buildTransactInstruction } from '@privacy-coin/sdk';
  *
  * // 1. DEPOSIT: Generate credentials
  * const result = await depositToNote(100_000n); // 0.001 BTC
@@ -211,8 +211,8 @@ export {
 
 // Prover types only (no runtime dependency on snarkjs)
 // For prover runtime functions (initProver, generateJoinSplitProof, etc.), import from:
-// - @aegis/sdk/prover/web    (browser/Node.js — uses snarkjs)
-// - @aegis/sdk/prover/mobile (React Native — uses mopro-ffi)
+// - @privacy-coin/sdk/prover/web    (browser/Node.js — uses snarkjs)
+// - @privacy-coin/sdk/prover/mobile (React Native — uses mopro-ffi)
 export type {
   ProofData,
   MerkleProofInput,
@@ -284,7 +284,7 @@ export {
 // ==========================================================================
 
 export {
-  AEGIS_PROGRAM_ID,
+  PRIVACY_COIN_PROGRAM_ID,
   BTC_LIGHT_CLIENT_PROGRAM_ID,
   PDA_SEEDS,
   derivePoolStatePDA,
@@ -608,8 +608,8 @@ export {
 // ==========================================================================
 
 export {
-  AegisClient,
-  type AegisClientConfig,
+  PrivacyCoinClient,
+  type PrivacyCoinClientConfig,
   type TokenDefinition,
   type InboxNote as ClientInboxNote,
 } from "./client";
