@@ -615,6 +615,7 @@ async function main() {
             "--max-amount", "1000000000",
             "--audit-log", auditFile,
             "--network", "regtest",
+            "--esplora-url", "http://localhost:3002/regtest/api",
           ],
           {
             stdio: ["ignore", "pipe", "pipe"],
