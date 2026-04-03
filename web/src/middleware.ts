@@ -75,10 +75,12 @@ function addSecurityHeaders(response: NextResponse) {
     "Content-Security-Policy",
     [
       "default-src 'self'",
-      "script-src 'self' 'wasm-unsafe-eval'",
-      "style-src 'self' 'unsafe-inline'",
+      // Next.js injects inline bootstrap/runtime scripts that need to execute
+      // before the app can hydrate.
+      "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: https:",
-      "font-src 'self' data:",
+      "font-src 'self' data: https://fonts.gstatic.com",
       "connect-src 'self' https://*.helius-rpc.com https://api.devnet.solana.com https://api.mainnet-beta.solana.com https://mempool.space wss://mempool.space https://*.amidoggy.xyz",
       "frame-ancestors 'none'",
     ].join("; ")
