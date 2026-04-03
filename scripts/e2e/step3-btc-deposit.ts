@@ -308,6 +308,8 @@ async function main() {
   sweepTxidBytes.reverse(); // display → internal
   const sweepTxHash = new Uint8Array(sweepTxidBytes);
 
+
+
   // Compute sweep block hash in internal order
   const sweepHeaderBuf = await fetchBlockHeader(sweepBlockHash, ESPLORA_URL);
   const sweepBlockHashInternal = dsha256(sweepHeaderBuf);

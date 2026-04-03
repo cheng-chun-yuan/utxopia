@@ -137,10 +137,7 @@ async function main() {
   const btclcSo = path.join(targetDir, "btc_light_client.so");
   const BTC_LC_EFFECTIVE = BTC_LC;
 
-  // ChadBuffer: Privacy Coin built with --features localnet (implies devnet),
-  // so program expects ChadBuffer at devnet address
-  const CHADBUFFER_DEVNET = "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF";
-  chadbufferId = new PublicKey(CHADBUFFER_DEVNET);
+  // ChadBuffer: with --features localnet (no devnet), program expects local keypair address
 
   // NATIVE_MINT_2022 for wSOL support
   const NATIVE_MINT_2022 = "9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP";
@@ -189,44 +186,39 @@ async function main() {
     });
   }
 
-  // Deploy programs via solana CLI
-  function deployProgram(soPath: string, keypairPath: string, label: string) {
+  // Deploy programs via solana CLI + surfnet_writeProgram to register ELF with executor.
+  // solana program deploy writes account data but Surfpool's SVM may not load it;
+  // surfnet_writeProgram ensures the executor picks up the binary.
+  async function deployProgram(soPath: string, keypairPath: string, label: string) {
+    const programId = Keypair.fromSecretKey(
+      Uint8Array.from(JSON.parse(fs.readFileSync(keypairPath, "utf-8"))),
+    ).publicKey.toBase58();
     execSync(
       `solana program deploy ${soPath} --program-id ${keypairPath} --url http://localhost:8899 -k ~/.config/solana/id.json`,
       { stdio: "pipe" },
     );
-    const programId = Keypair.fromSecretKey(
-      Uint8Array.from(JSON.parse(fs.readFileSync(keypairPath, "utf-8"))),
-    ).publicKey.toBase58();
+    // Register ELF with Surfpool's SVM executor
+    const soData = fs.readFileSync(soPath);
+    await fetch("http://127.0.0.1:8899", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0", id: 1,
+        method: "surfnet_writeProgram",
+        params: [programId, soData.toString("hex"), 0],
+      }),
+    });
     log(`${label} loaded at ${programId}`);
   }
 
-  deployProgram(pcoinSo, pcoinKpPath, "Privacy Coin");
-  deployProgram(btclcSo, btclcKpPath, "BTC Light Client");
+  await deployProgram(pcoinSo, pcoinKpPath, "Privacy Coin");
+  await deployProgram(btclcSo, btclcKpPath, "BTC Light Client");
 
-  // Clone ChadBuffer from devnet + register ELF with Surfpool's SVM executor.
-  // surfnet_setAccount alone doesn't register the binary for execution.
-  await cloneFromDevnet(CHADBUFFER_DEVNET);
-  const cbInfo = await devnetConn.getAccountInfo(new PublicKey(CHADBUFFER_DEVNET));
-  if (cbInfo && cbInfo.data.length >= 36) {
-    const cbPdAddr = new PublicKey(cbInfo.data.slice(4, 36));
-    await cloneFromDevnet(cbPdAddr.toBase58());
-    // Extract ELF from ProgramData (skip 45-byte header) and register with executor
-    const pdaInfo = await devnetConn.getAccountInfo(cbPdAddr);
-    if (pdaInfo) {
-      const elf = Buffer.from(pdaInfo.data.subarray(45));
-      await fetch("http://127.0.0.1:8899", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0", id: 1,
-          method: "surfnet_writeProgram",
-          params: [CHADBUFFER_DEVNET, elf.toString("hex"), 0],
-        }),
-      });
-    }
+  // ChadBuffer: deploy via solana CLI at local keypair address
+  const chadbufferSoLocal = path.join(CONTRACTS_DIR, "programs/chadbuffer/chadbuffer.so");
+  if (fs.existsSync(chadbufferSoLocal) && fs.existsSync(chadbufferKpPath)) {
+    await deployProgram(chadbufferSoLocal, chadbufferKpPath, "ChadBuffer");
   }
-  log(`ChadBuffer loaded at ${CHADBUFFER_DEVNET}`);
 
   // Clone NATIVE_MINT_2022 for wSOL support
   await cloneFromDevnet(NATIVE_MINT_2022);
