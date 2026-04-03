@@ -65,7 +65,7 @@ function generateProofViaNode(
   if (!fs.existsSync(wasmPath)) throw new Error(`WASM not found: ${wasmPath}`);
   if (!fs.existsSync(zkeyPath)) throw new Error(`zkey not found: ${zkeyPath}`);
 
-  const tmpDir = fs.mkdtempSync("/tmp/aegis-proof-");
+  const tmpDir = fs.mkdtempSync("/tmp/pcoin-proof-");
   const tmpInput = path.join(tmpDir, "input.json");
   const tmpProof = path.join(tmpDir, "proof.json");
   const tmpPublic = path.join(tmpDir, "public.json");

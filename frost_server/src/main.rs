@@ -4,6 +4,7 @@
 
 use clap::{Parser, Subcommand};
 use frost_server::{create_router, AuditLog, AppState, Keystore, SigningPolicy};
+use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;

@@ -66,7 +66,7 @@ async function shieldToken(
   mpk: bigint,
   label: string,
 ): Promise<NoteState> {
-  const [tokenConfig] = deriveTokenConfigPDA(aegis, mint);
+  const [tokenConfig] = deriveTokenConfigPDA(PRIVACY_COIN, mint);
   const userAta = deriveATA(mint, authority.publicKey);
 
   // Generate note
@@ -109,7 +109,7 @@ async function shieldToken(
       { pubkey: commitmentTree, isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
     ],
-    programId: aegis,
+    programId: PRIVACY_COIN,
     data,
   });
 
@@ -149,7 +149,7 @@ async function shieldSOL(
   mpk: bigint,
 ): Promise<NoteState> {
   const wsolMint = NATIVE_MINT_2022;
-  const [tokenConfig] = deriveTokenConfigPDA(aegis, wsolMint);
+  const [tokenConfig] = deriveTokenConfigPDA(PRIVACY_COIN, wsolMint);
 
   // Check if wSOL TokenConfig exists
   const tcInfo = await connection.getAccountInfo(tokenConfig);
@@ -219,7 +219,7 @@ async function shieldSOL(
       { pubkey: commitmentTree, isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
     ],
-    programId: aegis,
+    programId: PRIVACY_COIN,
     data: shieldData,
   }));
 

@@ -105,18 +105,18 @@ async function main() {
 
   // 2. Get program keypairs for IDs
   const targetDir = path.join(CONTRACTS_DIR, "target/deploy");
-  const aegisKpPath = path.join(targetDir, "privacy_coin-keypair.json");
+  const pcoinKpPath = path.join(targetDir, "privacy_coin-keypair.json");
   const btclcKpPath = path.join(targetDir, "btc_light_client-keypair.json");
   const chadbufferKpPath = path.join(CONTRACTS_DIR, "programs/chadbuffer/chadbuffer-keypair.json");
   const chadbufferSoPath = path.join(CONTRACTS_DIR, "programs/chadbuffer/chadbuffer.so");
 
-  if (!fs.existsSync(aegisKpPath) || !fs.existsSync(btclcKpPath)) {
+  if (!fs.existsSync(pcoinKpPath) || !fs.existsSync(btclcKpPath)) {
     throw new Error("Program keypairs not found. Run 'cargo build-sbf --features devnet' first.");
   }
 
-  const aegisKp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(aegisKpPath, "utf-8"))));
+  const pcoinKp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(pcoinKpPath, "utf-8"))));
   const btclcKp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(btclcKpPath, "utf-8"))));
-  const PRIVACY_COIN = aegisKp.publicKey;
+  const PRIVACY_COIN = pcoinKp.publicKey;
   const BTC_LC = btclcKp.publicKey;
 
   let chadbufferId: PublicKey;
@@ -133,7 +133,7 @@ async function main() {
 
   // 3. Start Surfpool (replaces solana-test-validator)
   log("Starting Surfpool...");
-  const aegisSo = path.join(targetDir, "privacy_coin.so");
+  const pcoinSo = path.join(targetDir, "privacy_coin.so");
   const btclcSo = path.join(targetDir, "btc_light_client.so");
   const BTC_LC_EFFECTIVE = BTC_LC;
 
@@ -187,7 +187,7 @@ async function main() {
     log(`${label} loaded at ${programId}`);
   }
 
-  await loadProgram(PRIVACY_COIN.toBase58(), aegisSo, "Privacy Coin");
+  await loadProgram(PRIVACY_COIN.toBase58(), pcoinSo, "Privacy Coin");
   await loadProgram(BTC_LC.toBase58(), btclcSo, "BTC Light Client");
   if (fs.existsSync(chadbufferSoPath)) {
     await loadProgram(CHADBUFFER_DEVNET, chadbufferSoPath, "ChadBuffer");

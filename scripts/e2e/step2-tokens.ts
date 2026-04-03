@@ -85,7 +85,7 @@ async function registerTokenConfig(
   label: string,
   serviceFee: bigint = 0n,
 ) {
-  const [tokenConfig] = deriveTokenConfigPDA(aegis, mint);
+  const [tokenConfig] = deriveTokenConfigPDA(pcoin, mint);
   const regPayload = Buffer.alloc(32);
   regPayload.writeBigUInt64LE(serviceFee, 0);          // service_fee
   regPayload.writeBigUInt64LE(1000n, 8);               // min_deposit
@@ -101,7 +101,7 @@ async function registerTokenConfig(
       { pubkey: vault, isSigner: false, isWritable: false },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
-    programId: aegis,
+    programId: pcoin,
     data: Buffer.concat([Buffer.from([Disc.REGISTER_TOKEN]), regPayload]),
   });
   await sendIx([ix], [authority]);

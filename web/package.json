@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "cd ../sdk && bun run build && cd ../privacy-coin-app && next build --webpack",
+    "build": "cd ../sdk && bun run build && cd ../web && next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "test": "bun test",
