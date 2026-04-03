@@ -204,11 +204,27 @@ async function main() {
   deployProgram(pcoinSo, pcoinKpPath, "Privacy Coin");
   deployProgram(btclcSo, btclcKpPath, "BTC Light Client");
 
-  // Clone ChadBuffer + ProgramData from devnet (program expects devnet address)
+  // Clone ChadBuffer from devnet + register ELF with Surfpool's SVM executor.
+  // surfnet_setAccount alone doesn't register the binary for execution.
   await cloneFromDevnet(CHADBUFFER_DEVNET);
   const cbInfo = await devnetConn.getAccountInfo(new PublicKey(CHADBUFFER_DEVNET));
   if (cbInfo && cbInfo.data.length >= 36) {
-    await cloneFromDevnet(new PublicKey(cbInfo.data.slice(4, 36)).toBase58());
+    const cbPdAddr = new PublicKey(cbInfo.data.slice(4, 36));
+    await cloneFromDevnet(cbPdAddr.toBase58());
+    // Extract ELF from ProgramData (skip 45-byte header) and register with executor
+    const pdaInfo = await devnetConn.getAccountInfo(cbPdAddr);
+    if (pdaInfo) {
+      const elf = Buffer.from(pdaInfo.data.subarray(45));
+      await fetch("http://127.0.0.1:8899", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0", id: 1,
+          method: "surfnet_writeProgram",
+          params: [CHADBUFFER_DEVNET, elf.toString("hex"), 0],
+        }),
+      });
+    }
   }
   log(`ChadBuffer loaded at ${CHADBUFFER_DEVNET}`);
 

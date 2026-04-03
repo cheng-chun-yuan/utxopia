@@ -37,6 +37,7 @@ mollusk-svm = "0.0.13"
 solana-sdk = "2.1"
 libsecp256k1 = "0.7"
 sha2 = "0.10"
+litesvm = "0.11.0"
 
 [lints.rust]
 # Solana programs use target_os = "solana" which is not a standard cfg value
