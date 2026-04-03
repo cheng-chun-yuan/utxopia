@@ -235,54 +235,36 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
     return { aegisProgramId, btcLightClientProgramId, chadbufferProgramId, groth16VerifierProgramId };
   }
 
+  // Deploy via surfnet_writeProgram RPC (no Solana CLI needed)
+  async function deployViaSurfpool(programId: string, soPath: string, label: string) {
+    const soData = fs.readFileSync(soPath);
+    const hexData = soData.toString("hex");
+    const resp = await fetch("http://127.0.0.1:8899", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0", id: 1,
+        method: "surfnet_writeProgram",
+        params: [programId, hexData, 0],
+      }),
+    });
+    const result = await resp.json() as any;
+    if (result.error) throw new Error(`Failed to deploy ${label}: ${JSON.stringify(result.error)}`);
+    log(`${label} deployed at ${programId}`);
+  }
+
   // Deploy Aegis
   log("Deploying Aegis program...");
-  try {
-    execSync(
-      `solana program deploy ${TARGET_DIR}/aegis_pinocchio.so --program-id ${aegisKeypairPath} -u localhost`,
-      { stdio: "inherit" }
-    );
-    log("Aegis deployed successfully");
-  } catch (e: any) {
-    if (e.message?.includes("already in use")) {
-      log("Aegis program already deployed");
-    } else {
-      throw e;
-    }
-  }
+  await deployViaSurfpool(aegisProgramId.toBase58(), `${TARGET_DIR}/aegis_pinocchio.so`, "Aegis");
 
   // Deploy BTC Light Client
   log("Deploying BTC Light Client program...");
-  try {
-    execSync(
-      `solana program deploy ${TARGET_DIR}/btc_light_client.so --program-id ${btclcKeypairPath} -u localhost`,
-      { stdio: "inherit" }
-    );
-    log("BTC Light Client deployed successfully");
-  } catch (e: any) {
-    if (e.message?.includes("already in use")) {
-      log("BTC Light Client program already deployed");
-    } else {
-      throw e;
-    }
-  }
+  await deployViaSurfpool(btcLightClientProgramId.toBase58(), `${TARGET_DIR}/btc_light_client.so`, "BTC Light Client");
 
   // Deploy ChadBuffer
   if (fs.existsSync(chadbufferSoPath)) {
     log("Deploying ChadBuffer program...");
-    try {
-      execSync(
-        `solana program deploy ${chadbufferSoPath} --program-id ${chadbufferKeypairPath} -u localhost`,
-        { stdio: "inherit" }
-      );
-      log("ChadBuffer deployed successfully");
-    } catch (e: any) {
-      if (e.message?.includes("already in use")) {
-        log("ChadBuffer program already deployed");
-      } else {
-        throw e;
-      }
-    }
+    await deployViaSurfpool(chadbufferProgramId.toBase58(), chadbufferSoPath, "ChadBuffer");
   } else {
     log(`ChadBuffer .so not found at ${chadbufferSoPath}`);
     log("To build ChadBuffer:");
@@ -295,18 +277,10 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
   const groth16SoPath = path.join(TARGET_DIR, "groth16_verifier.so");
   if (fs.existsSync(groth16SoPath)) {
     log("Deploying Groth16 Verifier program...");
-    try {
-      execSync(
-        `solana program deploy ${groth16SoPath} --program-id ${groth16KeypairPath} -u localhost`,
-        { stdio: "inherit" }
-      );
-      log("Groth16 Verifier deployed successfully");
-    } catch (e: any) {
-      if (e.message?.includes("already in use")) {
-        log("Groth16 Verifier program already deployed");
-      } else {
-        throw e;
-      }
+    await deployViaSurfpool(groth16VerifierProgramId.toBase58(), groth16SoPath, "Groth16 Verifier");
+  } else {
+    // Not critical — Groth16 verification uses syscalls, not a separate program
+    if (false) {
     }
   } else {
     log(`Groth16 Verifier .so not found at ${groth16SoPath}, skipping...`);

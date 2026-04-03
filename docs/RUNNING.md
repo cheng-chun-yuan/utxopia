@@ -24,23 +24,21 @@ Complete guide for running all Aegis services locally and on devnet.
 | Tool | Version | Install |
 |------|---------|---------|
 | Rust + Cargo | 1.75+ | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
-| Solana CLI | 1.18+ | `sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"` |
+| Surfpool | 1.1+ | `curl -sL https://run.surfpool.run/ \| bash` |
+| cargo-build-sbf | latest | `cargo install solana-cargo-build-sbf` (or via Solana CLI) |
 | Bun | 1.0+ | `curl -fsSL https://bun.sh/install \| bash` |
 | Node.js | 18+ | Required for snarkjs (proof generation) |
 | circom | 2.1+ | `cargo install circom` |
 
-### Solana Wallet Setup
+### Keypair Setup
 
 ```bash
-# Generate a new keypair (or use existing)
+# Generate a keypair (if you don't have one)
+# Option A: Use solana-keygen if available
 solana-keygen new -o ~/.config/solana/id.json
 
-# For devnet: airdrop SOL
-solana config set --url devnet
-solana airdrop 5
-
-# For localnet testing, also create an authority keypair:
-solana-keygen new -o ~/.config/solana/johnny.json
+# Option B: Generate via bun/node
+bun -e "const {Keypair}=require('@solana/web3.js');const k=Keypair.generate();require('fs').writeFileSync(process.env.HOME+'/.config/solana/id.json',JSON.stringify([...k.secretKey]));console.log(k.publicKey.toBase58())"
 ```
 
 ---
@@ -74,14 +72,11 @@ cd ../frost_server
 cargo build
 ```
 
-### Step 2: Start Local Validator
+### Step 2: Start Surfpool
 
 ```bash
-# IMPORTANT: Must clone devnet feature set for BN254 pairing syscalls
-solana-test-validator \
-  --clone-feature-set \
-  --url devnet \
-  --reset
+# BN254 alt_bn128 syscalls are enabled by default (mainnet feature set)
+surfpool start --no-tui --network devnet
 ```
 
 ### Step 2b: Start FROST + Bitcoin Regtest (Optional)
@@ -513,7 +508,7 @@ Full deposit → claim flow with real Groth16 proof generation. Requires compile
 
 ### Prerequisites for All E2E Tests
 
-1. Local validator running: `solana-test-validator --clone-feature-set --url devnet --reset`
+1. Local validator running: `surfpool start --no-tui --network devnet`
 2. Programs deployed: `cd contracts && bun run scripts/deploy-localnet.ts`
 3. For deposit-claim: circuits compiled (`cd circuits && bash scripts/compile.sh && bash scripts/setup.sh`)
 

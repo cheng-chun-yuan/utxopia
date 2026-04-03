@@ -7,7 +7,7 @@
     "build:devnet": "cargo build-sbf --features devnet",
     "build:localnet": "cargo build-sbf --features localnet",
     "build:mainnet": "cargo build-sbf",
-    "deploy": "solana program deploy target/deploy/aegis_pinocchio.so",
+    "deploy": "bun run scripts/deploy-localnet.ts",
     "deploy:localnet": "bun run scripts/deploy-localnet.ts",
     "deploy:localnet:skip": "bun run scripts/deploy-localnet.ts --skip-deploy",
     "deploy:devnet": "bun run scripts/deploy-devnet.ts",

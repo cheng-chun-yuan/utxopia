@@ -860,17 +860,8 @@ async function main() {
 
   const connection = new Connection(RPC_URL, "confirmed");
 
-  // Load keypair: use KEYPAIR env, or detect from solana config, or fallback to id.json
-  let keypairPath = process.env.KEYPAIR || "";
-  if (!keypairPath) {
-    try {
-      const { execSync } = await import("child_process");
-      const configOut = execSync("solana config get", { encoding: "utf-8" });
-      const match = configOut.match(/Keypair Path:\s*(.+)/);
-      if (match) keypairPath = match[1].trim();
-    } catch {}
-  }
-  if (!keypairPath) keypairPath = `${process.env.HOME}/.config/solana/id.json`;
+  // Load keypair from KEYPAIR env or default path
+  const keypairPath = process.env.KEYPAIR || `${process.env.HOME}/.config/solana/id.json`;
   const authority = fs.existsSync(keypairPath)
     ? await loadKeypair(keypairPath)
     : Keypair.generate();

@@ -10,7 +10,7 @@
 #
 # Localnet starts:
 #   1. Bitcoin regtest (Esplora Docker on port 3002)
-#   2. Solana test validator (port 8899) with BN254
+#   2. Surfpool simnet (port 8899) with BN254 (enabled by default)
 #   3. Deploy & init programs + register tokens
 #   4. Seed mock data (demo deposits + real BTC deposit)
 #   5. Backend API (port 3001)
@@ -19,7 +19,7 @@
 # Prerequisites:
 #   - bun installed
 #   - Docker running (localnet only)
-#   - solana-test-validator installed (localnet only)
+#   - surfpool installed (localnet only): curl -sL https://run.surfpool.run/ | bash
 #   - Contracts built: cd contracts && cargo build-sbf --features devnet
 # =============================================================================
 
@@ -65,6 +65,7 @@ stop_all() {
       rm -f "$pidfile"
     fi
   done
+  pkill -f "surfpool" 2>/dev/null || true
   pkill -f "solana-test-validator" 2>/dev/null || true
   pkill -f "next dev" 2>/dev/null || true
   docker compose -f docker-compose.regtest.yml down 2>/dev/null || true
@@ -136,7 +137,7 @@ setup_localnet() {
 
   # --- Step 1: Check prerequisites ---
   step "Step 1: Prerequisites"
-  command -v solana-test-validator >/dev/null 2>&1 || { err "solana-test-validator not found"; exit 1; }
+  command -v surfpool >/dev/null 2>&1 || { err "surfpool not found. Install: curl -sL https://run.surfpool.run/ | bash"; exit 1; }
   command -v docker >/dev/null 2>&1 || { err "Docker not found"; exit 1; }
   command -v bun >/dev/null 2>&1 || { err "bun not found"; exit 1; }
 

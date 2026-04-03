@@ -101,7 +101,7 @@ How to run the full Aegis stack on **localnet** (regtest) and **devnet** (testne
 
 Localnet uses a local Solana validator + Bitcoin regtest in Docker. All transactions are instant — no waiting for real block times.
 
-**Prerequisites:** Docker running, Solana CLI 2.0+, Bun 1.0+, Node.js 18+, contracts built (`cargo build-sbf --features devnet`), circuits compiled (`cd circuits && bash scripts/compile.sh && bash scripts/setup.sh`).
+**Prerequisites:** Docker running, Surfpool 1.1+ (`curl -sL https://run.surfpool.run/ | bash`), Bun 1.0+, Node.js 18+, contracts built (`cargo build-sbf --features devnet`), circuits compiled (`cd circuits && bash scripts/compile.sh && bash scripts/setup.sh`).
 
 ```bash
 # 1. Start Bitcoin regtest (Docker must be running)
@@ -155,8 +155,8 @@ docker compose -f docker-compose.regtest.yml down
 For debugging or running services individually:
 
 ```bash
-# Terminal 1: Solana validator (MUST clone devnet feature set for BN254)
-solana-test-validator --clone-feature-set --url devnet --reset
+# Terminal 1: Surfpool (BN254 enabled by default via mainnet feature set)
+surfpool start --no-tui --network devnet
 
 # Terminal 2: Bitcoin regtest
 docker compose -f docker-compose.regtest.yml up -d
@@ -189,9 +189,8 @@ Devnet uses Solana devnet + Bitcoin testnet4. Real BTC deposits take ~10 min per
 **Setup:**
 
 ```bash
-# 1. Configure Solana for devnet
-solana config set --url devnet
-solana airdrop 5
+# 1. Ensure you have a funded devnet keypair at ~/.config/solana/id.json
+# Get devnet SOL: https://faucet.solana.com/
 
 # 2. Build with devnet features
 cd contracts && cargo build-sbf --features devnet
@@ -310,7 +309,7 @@ Generated files:
 | Backend says `AEGIS_PROGRAM_ID required` | Run `./scripts/sync-env.sh` then start from `backend/` directory |
 | FROST signer connection refused | Check `docker compose -f docker-compose.local.yml ps` |
 | Esplora 502 Bad Gateway | Wait ~10s after Docker start, then retry |
-| Validator already running | `pkill -f solana-test-validator` then restart |
+| Surfpool already running | `pkill -f surfpool` then restart |
 
 ### Ports Reference
 

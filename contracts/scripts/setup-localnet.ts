@@ -89,15 +89,7 @@ async function main() {
 
   // 6. Airdrop to authority
   console.log("\n5. Ensuring authority has SOL...");
-  let keypairPath = process.env.KEYPAIR || "";
-  if (!keypairPath) {
-    try {
-      const configOut = execSync("solana config get", { encoding: "utf-8" });
-      const match = configOut.match(/Keypair Path:\s*(.+)/);
-      if (match) keypairPath = match[1].trim();
-    } catch {}
-  }
-  if (!keypairPath) keypairPath = `${process.env.HOME}/.config/solana/id.json`;
+  const keypairPath = process.env.KEYPAIR || `${process.env.HOME}/.config/solana/id.json`;
   const authority = Keypair.fromSecretKey(
     Uint8Array.from(JSON.parse(fs.readFileSync(keypairPath, "utf-8"))),
   );

@@ -449,15 +449,7 @@ export async function fetchAndSubmitHeaders(
 // =============================================================================
 
 export function loadAuthorityKeypair(): Keypair {
-  let keypairPath = process.env.KEYPAIR || "";
-  if (!keypairPath) {
-    try {
-      const configOut = execSync("solana config get", { encoding: "utf-8" });
-      const match = configOut.match(/Keypair Path:\s*(.+)/);
-      if (match) keypairPath = match[1].trim();
-    } catch {}
-  }
-  if (!keypairPath) keypairPath = `${process.env.HOME}/.config/solana/id.json`;
+  const keypairPath = process.env.KEYPAIR || `${process.env.HOME}/.config/solana/id.json`;
   return Keypair.fromSecretKey(
     Uint8Array.from(JSON.parse(fs.readFileSync(keypairPath, "utf-8"))),
   );

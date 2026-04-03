@@ -649,16 +649,8 @@ async function main() {
 
   const connection = new Connection(RPC_URL, "confirmed");
 
-  // Load authority keypair
-  let keypairPath = process.env.KEYPAIR || "";
-  if (!keypairPath) {
-    try {
-      const configOut = execSync("solana config get", { encoding: "utf-8" });
-      const match = configOut.match(/Keypair Path:\s*(.+)/);
-      if (match) keypairPath = match[1].trim();
-    } catch {}
-  }
-  if (!keypairPath) keypairPath = `${process.env.HOME}/.config/solana/id.json`;
+  // Load authority keypair from KEYPAIR env or default path
+  const keypairPath = process.env.KEYPAIR || `${process.env.HOME}/.config/solana/id.json`;
   const authority = Keypair.fromSecretKey(
     Uint8Array.from(JSON.parse(fs.readFileSync(keypairPath, "utf-8"))),
   );

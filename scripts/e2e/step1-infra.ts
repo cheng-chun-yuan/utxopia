@@ -97,8 +97,9 @@ async function main() {
   const authority = loadAuthority();
   log(`Authority: ${authority.publicKey.toBase58()}`);
 
-  // 1. Kill existing validator
-  log("Killing existing solana-test-validator...");
+  // 1. Kill existing Surfpool / validator
+  log("Killing existing surfpool...");
+  try { execSync("pkill -f surfpool", { stdio: "ignore" }); } catch {}
   try { execSync("pkill -f solana-test-validator", { stdio: "ignore" }); } catch {}
   await new Promise(r => setTimeout(r, 2000));
 
@@ -130,48 +131,33 @@ async function main() {
   log(`BTC LC: ${BTC_LC.toBase58()}`);
   log(`ChadBuffer: ${chadbufferId.toBase58()}`);
 
-  // 3. Start test validator
-  log("Starting solana-test-validator...");
+  // 3. Start Surfpool (replaces solana-test-validator)
+  log("Starting Surfpool...");
   const aegisSo = path.join(targetDir, "aegis_pinocchio.so");
   const btclcSo = path.join(targetDir, "btc_light_client.so");
-
-  // BTC LC: always deploy local binary at the keypair address.
-  // The aegis contract's localnet feature uses this keypair's address as the hardcoded constant.
-  let bpfArgs = `--bpf-program ${AEGIS.toBase58()} ${aegisSo}`;
-  bpfArgs += ` --bpf-program ${BTC_LC.toBase58()} ${btclcSo}`;
-  log(`BTC LC: ${BTC_LC.toBase58()}`);
   const BTC_LC_EFFECTIVE = BTC_LC;
 
-  // ChadBuffer: always deploy at the devnet address (Aegis built with --features devnet expects it)
+  // ChadBuffer: deploy at devnet address (Aegis expects this)
   const CHADBUFFER_DEVNET = "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF";
-  let cloneArgs = "";
-  if (fs.existsSync(chadbufferSoPath)) {
-    // Deploy local .so at devnet address so Aegis can validate ownership
-    bpfArgs += ` --bpf-program ${CHADBUFFER_DEVNET} ${chadbufferSoPath}`;
-    chadbufferId = new PublicKey(CHADBUFFER_DEVNET);
-    log(`ChadBuffer: deploying local .so at devnet address ${CHADBUFFER_DEVNET}`);
-  } else {
-    cloneArgs = `--clone-upgradeable-program ${CHADBUFFER_DEVNET}`;
-    chadbufferId = new PublicKey(CHADBUFFER_DEVNET);
-    log(`ChadBuffer not found locally, cloning from devnet: ${CHADBUFFER_DEVNET}`);
-  }
+  chadbufferId = new PublicKey(CHADBUFFER_DEVNET);
 
-  // Clone NATIVE_MINT_2022 from devnet for wSOL support
+  // NATIVE_MINT_2022 for wSOL support (fetched from devnet automatically)
   const NATIVE_MINT_2022 = "9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP";
 
-  const validatorCmd = [
-    "solana-test-validator",
-    "--clone-feature-set",
-    "--url devnet",
-    bpfArgs,
-    cloneArgs,
-    `--clone ${NATIVE_MINT_2022}`,
-    "--reset",
-    "--quiet",
-  ].filter(Boolean).join(" ");
+  // Surfpool auto-detects Pinocchio programs from target/deploy/ + keypair files.
+  // Use --network devnet to proxy ChadBuffer + NATIVE_MINT_2022 from devnet.
+  // BN254 alt_bn128 syscalls are enabled by default (mainnet feature set).
+  const surfpoolCmd = [
+    "surfpool start",
+    "--no-tui",
+    "--no-studio",
+    "--network devnet",
+    "--no-deploy",   // we load programs via RPC for precise address control
+    "--log-level warn",
+  ].join(" ");
 
-  execSync(`nohup ${validatorCmd} > /tmp/solana-validator.log 2>&1 &`, { shell: "/bin/bash" });
-  log("Waiting for validator...");
+  execSync(`nohup ${surfpoolCmd} > /tmp/surfpool.log 2>&1 &`, { shell: "/bin/bash" });
+  log("Waiting for Surfpool...");
   for (let i = 0; i < 30; i++) {
     try {
       await connection.getSlot();
@@ -180,7 +166,33 @@ async function main() {
       await new Promise(r => setTimeout(r, 1000));
     }
   }
-  log("Validator ready");
+  log("Surfpool ready");
+
+  // Load programs via surfnet_writeProgram RPC (precise address control)
+  async function loadProgram(programId: string, soPath: string, label: string) {
+    const soData = fs.readFileSync(soPath);
+    const hexData = soData.toString("hex");
+    // Write program in one RPC call (surfnet_writeProgram handles large payloads)
+    const resp = await fetch("http://127.0.0.1:8899", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0", id: 1,
+        method: "surfnet_writeProgram",
+        params: [programId, hexData, 0],
+      }),
+    });
+    const result = await resp.json();
+    if (result.error) throw new Error(`Failed to load ${label}: ${JSON.stringify(result.error)}`);
+    log(`${label} loaded at ${programId}`);
+  }
+
+  await loadProgram(AEGIS.toBase58(), aegisSo, "Aegis");
+  await loadProgram(BTC_LC.toBase58(), btclcSo, "BTC Light Client");
+  if (fs.existsSync(chadbufferSoPath)) {
+    await loadProgram(CHADBUFFER_DEVNET, chadbufferSoPath, "ChadBuffer");
+  }
+  // NATIVE_MINT_2022 and ChadBuffer (if not local) auto-proxied from devnet
 
   // 4. Start regtest Docker + Esplora + mine 101 blocks
   log("Starting Bitcoin regtest Docker...");
