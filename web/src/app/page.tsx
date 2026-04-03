@@ -337,16 +337,10 @@ export default function Home() {
                                   </span>
                                 );
                               }
-                              // Fallback: show primary token amount if no prices
-                              const primary = stats!.tokenTVL[0];
-                              const val = Number(primary.totalShielded) / (10 ** primary.decimals);
                               return (
-                                <>
-                                  <span className="text-2xl font-semibold tracking-tight text-btc">
-                                    {val.toLocaleString(undefined, { maximumFractionDigits: 4 })}
-                                  </span>
-                                  <span className="text-sm text-btc/70">{primary.shieldedSymbol}</span>
-                                </>
+                                <span className="text-2xl font-semibold tracking-tight text-foreground/60">
+                                  —
+                                </span>
                               );
                             })()}
                           </div>

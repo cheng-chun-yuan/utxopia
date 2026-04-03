@@ -258,7 +258,10 @@ export function tvlToUsd(
   let total = 0;
   for (const t of tokenTVL) {
     const token = getTokenBySymbol(t.symbol);
-    const price = token ? (prices[token.priceKey] ?? null) : null;
+    let price = token ? (prices[token.priceKey] ?? null) : null;
+    if (price == null && token && (token.priceKey === "usdc" || token.priceKey === "usdt")) {
+      price = 1;
+    }
     if (price) {
       total += (Number(t.totalShielded) / (10 ** t.decimals)) * price;
     }
