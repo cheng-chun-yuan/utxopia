@@ -12,7 +12,7 @@
 
 import { PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
-import { getConfig, PDA_SEEDS, getTokenProgramForMint as sdkGetTokenProgram } from "@privacy-coin/sdk";
+import { getConfig, PDA_SEEDS } from "@privacy-coin/sdk";
 
 // =============================================================================
 // Program IDs as web3.js PublicKeys (lazy, from SDK config)
@@ -34,15 +34,14 @@ export function getToken2022ProgramId(): PublicKey {
   return new PublicKey(getConfig().token2022ProgramId);
 }
 
-/** Get the correct token program for a mint based on its account owner */
+/** Get the token program that owns a mint (Token Program or Token-2022) */
 export async function getTokenProgramForMint(
   connection: import("@solana/web3.js").Connection,
   mint: PublicKey
 ): Promise<PublicKey> {
   const info = await connection.getAccountInfo(mint);
   if (!info) throw new Error(`Mint account not found: ${mint.toBase58()}`);
-  const tokenProgramAddr = sdkGetTokenProgram(info.owner.toBase58());
-  return new PublicKey(tokenProgramAddr as string);
+  return info.owner;
 }
 
 export function getZkbtcMint(): PublicKey {
