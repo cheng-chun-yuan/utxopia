@@ -1,6 +1,6 @@
 {
   "buildCommand": "bun run build:sdk && bun run build:frontend",
-  "outputDirectory": "privacy-coin-app/.next",
+  "outputDirectory": "web/.next",
   "installCommand": "bun install",
   "framework": "nextjs"
 }
