@@ -142,17 +142,17 @@ async function main() {
   const CHADBUFFER_DEVNET = "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF";
   chadbufferId = new PublicKey(CHADBUFFER_DEVNET);
 
-  // NATIVE_MINT_2022 for wSOL support (fetched from devnet automatically)
+  // NATIVE_MINT_2022 for wSOL support
   const NATIVE_MINT_2022 = "9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP";
 
-  // Start Surfpool WITHOUT --network devnet to avoid devnet account proxying
-  // (proxied accounts override local state and cause authority/cache conflicts).
-  // We clone only the specific devnet accounts we need via surfnet_setAccount.
+  // Start Surfpool fully offline — no devnet proxy, no stale caches.
+  // Programs deployed via `solana program deploy`; devnet accounts cloned explicitly.
   const surfpoolCmd = [
     "surfpool start",
     "--no-tui",
     "--no-studio",
     "--no-deploy",
+    "--offline",
     "--log-level warn",
   ].join(" ");
 
@@ -168,11 +168,10 @@ async function main() {
   }
   log("Surfpool ready");
 
-  // Clone specific devnet accounts needed for the test
+  // Clone a single account from devnet into local Surfpool
   const devnetConn = new (await import("@solana/web3.js")).Connection("https://api.devnet.solana.com");
   async function cloneFromDevnet(address: string) {
-    const pk = new PublicKey(address);
-    const info = await devnetConn.getAccountInfo(pk);
+    const info = await devnetConn.getAccountInfo(new PublicKey(address));
     if (!info) return;
     await fetch("http://127.0.0.1:8899", {
       method: "POST",
@@ -189,33 +188,32 @@ async function main() {
       }),
     });
   }
-  // Clone NATIVE_MINT_2022 for wSOL support
-  await cloneFromDevnet(NATIVE_MINT_2022);
-
 
   // Deploy programs via solana CLI
   function deployProgram(soPath: string, keypairPath: string, label: string) {
-    const programId = Keypair.fromSecretKey(
-      Uint8Array.from(JSON.parse(fs.readFileSync(keypairPath, "utf-8"))),
-    ).publicKey.toBase58();
     execSync(
       `solana program deploy ${soPath} --program-id ${keypairPath} --url http://localhost:8899 -k ~/.config/solana/id.json`,
       { stdio: "pipe" },
     );
+    const programId = Keypair.fromSecretKey(
+      Uint8Array.from(JSON.parse(fs.readFileSync(keypairPath, "utf-8"))),
+    ).publicKey.toBase58();
     log(`${label} loaded at ${programId}`);
   }
 
   deployProgram(pcoinSo, pcoinKpPath, "Privacy Coin");
   deployProgram(btclcSo, btclcKpPath, "BTC Light Client");
-  // ChadBuffer: clone from devnet (program expects devnet address via --features localnet)
+
+  // Clone ChadBuffer + ProgramData from devnet (program expects devnet address)
   await cloneFromDevnet(CHADBUFFER_DEVNET);
-  // Also clone its ProgramData account
   const cbInfo = await devnetConn.getAccountInfo(new PublicKey(CHADBUFFER_DEVNET));
   if (cbInfo && cbInfo.data.length >= 36) {
-    const cbProgramData = new PublicKey(cbInfo.data.slice(4, 36));
-    await cloneFromDevnet(cbProgramData.toBase58());
+    await cloneFromDevnet(new PublicKey(cbInfo.data.slice(4, 36)).toBase58());
   }
   log(`ChadBuffer loaded at ${CHADBUFFER_DEVNET}`);
+
+  // Clone NATIVE_MINT_2022 for wSOL support
+  await cloneFromDevnet(NATIVE_MINT_2022);
 
   // 4. Start regtest Docker + Esplora + mine 101 blocks
   log("Starting Bitcoin regtest Docker...");
