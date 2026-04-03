@@ -137,22 +137,22 @@ async function main() {
   const btclcSo = path.join(targetDir, "btc_light_client.so");
   const BTC_LC_EFFECTIVE = BTC_LC;
 
-  // ChadBuffer: deploy at devnet address (Privacy Coin expects this)
+  // ChadBuffer: Privacy Coin built with --features localnet (implies devnet),
+  // so program expects ChadBuffer at devnet address
   const CHADBUFFER_DEVNET = "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF";
   chadbufferId = new PublicKey(CHADBUFFER_DEVNET);
 
   // NATIVE_MINT_2022 for wSOL support (fetched from devnet automatically)
   const NATIVE_MINT_2022 = "9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP";
 
-  // Surfpool auto-detects Pinocchio programs from target/deploy/ + keypair files.
-  // Use --network devnet to proxy ChadBuffer + NATIVE_MINT_2022 from devnet.
-  // BN254 alt_bn128 syscalls are enabled by default (mainnet feature set).
+  // Start Surfpool WITHOUT --network devnet to avoid devnet account proxying
+  // (proxied accounts override local state and cause authority/cache conflicts).
+  // We clone only the specific devnet accounts we need via surfnet_setAccount.
   const surfpoolCmd = [
     "surfpool start",
     "--no-tui",
     "--no-studio",
-    "--network devnet",
-    "--no-deploy",   // we load programs via RPC for precise address control
+    "--no-deploy",
     "--log-level warn",
   ].join(" ");
 
@@ -168,31 +168,54 @@ async function main() {
   }
   log("Surfpool ready");
 
-  // Load programs via surfnet_writeProgram RPC (precise address control)
-  async function loadProgram(programId: string, soPath: string, label: string) {
-    const soData = fs.readFileSync(soPath);
-    const hexData = soData.toString("hex");
-    // Write program in one RPC call (surfnet_writeProgram handles large payloads)
-    const resp = await fetch("http://127.0.0.1:8899", {
+  // Clone specific devnet accounts needed for the test
+  const devnetConn = new (await import("@solana/web3.js")).Connection("https://api.devnet.solana.com");
+  async function cloneFromDevnet(address: string) {
+    const pk = new PublicKey(address);
+    const info = await devnetConn.getAccountInfo(pk);
+    if (!info) return;
+    await fetch("http://127.0.0.1:8899", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         jsonrpc: "2.0", id: 1,
-        method: "surfnet_writeProgram",
-        params: [programId, hexData, 0],
+        method: "surfnet_setAccount",
+        params: [address, {
+          lamports: info.lamports,
+          data: Buffer.from(info.data).toString("hex"),
+          owner: info.owner.toBase58(),
+          executable: info.executable,
+        }],
       }),
     });
-    const result = await resp.json();
-    if (result.error) throw new Error(`Failed to load ${label}: ${JSON.stringify(result.error)}`);
+  }
+  // Clone NATIVE_MINT_2022 for wSOL support
+  await cloneFromDevnet(NATIVE_MINT_2022);
+
+
+  // Deploy programs via solana CLI
+  function deployProgram(soPath: string, keypairPath: string, label: string) {
+    const programId = Keypair.fromSecretKey(
+      Uint8Array.from(JSON.parse(fs.readFileSync(keypairPath, "utf-8"))),
+    ).publicKey.toBase58();
+    execSync(
+      `solana program deploy ${soPath} --program-id ${keypairPath} --url http://localhost:8899 -k ~/.config/solana/id.json`,
+      { stdio: "pipe" },
+    );
     log(`${label} loaded at ${programId}`);
   }
 
-  await loadProgram(PRIVACY_COIN.toBase58(), pcoinSo, "Privacy Coin");
-  await loadProgram(BTC_LC.toBase58(), btclcSo, "BTC Light Client");
-  if (fs.existsSync(chadbufferSoPath)) {
-    await loadProgram(CHADBUFFER_DEVNET, chadbufferSoPath, "ChadBuffer");
+  deployProgram(pcoinSo, pcoinKpPath, "Privacy Coin");
+  deployProgram(btclcSo, btclcKpPath, "BTC Light Client");
+  // ChadBuffer: clone from devnet (program expects devnet address via --features localnet)
+  await cloneFromDevnet(CHADBUFFER_DEVNET);
+  // Also clone its ProgramData account
+  const cbInfo = await devnetConn.getAccountInfo(new PublicKey(CHADBUFFER_DEVNET));
+  if (cbInfo && cbInfo.data.length >= 36) {
+    const cbProgramData = new PublicKey(cbInfo.data.slice(4, 36));
+    await cloneFromDevnet(cbProgramData.toBase58());
   }
-  // NATIVE_MINT_2022 and ChadBuffer (if not local) auto-proxied from devnet
+  log(`ChadBuffer loaded at ${CHADBUFFER_DEVNET}`);
 
   // 4. Start regtest Docker + Esplora + mine 101 blocks
   log("Starting Bitcoin regtest Docker...");
@@ -261,6 +284,11 @@ async function main() {
     data: initData,
   });
   await sendIx([initIx], [authority]);
+  // Verify PDAs were created (catches silent CPI failures)
+  const poolInfo = await connection.getAccountInfo(poolState);
+  if (!poolInfo) throw new Error("Pool state PDA was not created — program CPI may have failed silently");
+  const treeInfo = await connection.getAccountInfo(commitmentTree);
+  if (!treeInfo) throw new Error("Commitment tree PDA was not created — program CPI may have failed silently");
   log("Pool initialized");
 
   // 9. Register zkBTC TokenConfig (disc=28)
