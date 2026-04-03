@@ -65,16 +65,16 @@ The goal is to keep each test file focused, small, and clearly scoped (unit, int
   - New SDK flows that stay within the SDK (no external services) → `test/integration`.
   - New flows that require a running validator / circuits / backend → `test/e2e`.
 
-### Privacy Coin App (`privacy-coin-app`)
+### Web App (`web`)
 
-- Frontend tests are co-located with code using Vitest:
+- Frontend tests are co-located with code using Bun test:
   - Stores: `src/stores/__tests__/privacy-coin-store.test.ts`, `src/stores/__tests__/notes-store.test.ts`.
   - Hooks: `src/hooks/__tests__/use-pool-stats.test.tsx`, `src/hooks/__tests__/use-copy-to-clipboard.test.ts`.
   - Utils: `src/lib/utils/__tests__/formatting.test.ts`, `src/lib/utils/__tests__/validation.test.ts`.
   - API: `src/lib/api/__tests__/client.test.ts`, `src/lib/api/__tests__/errors.test.ts`.
   - Components: `src/components/btc-widget/__tests__/widget.test.tsx`.
 - **How to run**:
-  - `cd privacy-coin-app && bun test` (Vitest).
+  - `cd web && bun test`.
 - **Conventions**:
   - Keep tests close to the code they cover in `__tests__` folders.
   - Use descriptive file names, e.g. `use-pool-stats.test.tsx`, `widget.test.tsx`.
@@ -101,7 +101,7 @@ How to run the full Privacy Coin stack on **localnet** (regtest) and **devnet** 
 
 Localnet uses a local Solana validator + Bitcoin regtest in Docker. All transactions are instant — no waiting for real block times.
 
-**Prerequisites:** Docker running, Surfpool 1.1+ (`curl -sL https://run.surfpool.run/ | bash`), Bun 1.0+, Node.js 18+, contracts built (`cargo build-sbf --features devnet`), circuits compiled (`cd circuits && bash scripts/compile.sh && bash scripts/setup.sh`).
+**Prerequisites:** Docker running, Surfpool 1.1+ (`curl -sL https://run.surfpool.run/ | bash`), Bun 1.0+, Node.js 18+, contracts built (`cargo build-sbf --features localnet`), circuits compiled (`cd circuits && bash scripts/compile.sh && bash scripts/setup.sh`).
 
 ```bash
 # 1. Start Bitcoin regtest (Docker must be running)
@@ -117,20 +117,25 @@ curl -s http://localhost:3002/regtest/api/blocks/tip/height
 cd backend && cargo run --bin zkbtc-api -- tracker --interval 30 --confirmations 1
 ```
 
-**E2E steps run automatically (total ~80 seconds):**
+**E2E steps run automatically (14 steps by default, 15 if `frost-server` is built; total ~2.5 minutes):**
 
 | Step | What | Time |
 |------|------|------|
-| 1 | Start validator, deploy programs, init pool | ~18s |
+| 1 | Start Surfpool (offline + auto-deploy), init pool | ~33s |
 | 2 | Create tUSDC, tWSOL test tokens | ~5s |
-| 3 | Real BTC deposit: OP_RETURN → sweep → SPV verify → mint | ~11s |
-| 4 | Demo stealth deposit (admin, devnet feature) | ~2s |
+| 3 | Real BTC deposit: OP_RETURN → sweep → SPV verify → mint | ~10s |
+| 3b | Optional: FROST sweep with local threshold signers (`frost-server` binary required) | ~4s |
+| 4 | BTC deposit 2 (for JoinSplit testing) | ~11s |
 | 5 | Shield SPL tokens (tUSDC + wSOL) into commitments | ~2s |
-| 6 | JoinSplit transfer: Groth16 proof splits 30k → 15k + 15k | ~15s |
-| 7 | Unshield: ZK proof burns commitment → returns tUSDC | ~15s |
+| 6 | JoinSplit transfer: Groth16 proof splits notes | ~15s |
+| 7 | Unshield tUSDC | ~15s |
+| 7b | Unshield zkBTC | ~15s |
+| 7c | Multi-output unshield (wSOL) | ~16s |
 | 8 | BTC withdrawal request (redemption PDA) | ~1s |
-| 8b | Complete redemption: BTC tx → SPV verify → close PDA | ~9s |
+| 8b | Complete BTC redemption: SPV verify → close PDA | ~7s |
+| 8c | Multi-output redeem (BTC) | ~15s |
 | 9 | Summary: pool state, tree, token configs | ~0.2s |
+| 10 | Security negative tests | ~0.3s |
 
 **Services after setup:**
 
@@ -322,4 +327,3 @@ Generated files:
 | FROST Signer 1 | 9001 |
 | FROST Signer 2 | 9002 |
 | FROST Signer 3 | 9003 |
-
