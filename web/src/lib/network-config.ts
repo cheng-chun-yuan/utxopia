@@ -10,7 +10,7 @@
 
 import networksJson from "./networks.json";
 
-export type NetworkId = "devnet" | "testnet" | "mainnet";
+export type NetworkId = "devnet" | "testnet" | "mainnet" | "localnet";
 
 export interface NetworkConfig {
   solana: {
@@ -45,6 +45,7 @@ export function detectNetwork(): NetworkId {
     "devnet";
   if (env === "mainnet" || env === "mainnet-beta") return "mainnet";
   if (env === "testnet") return "testnet";
+  if (env === "localnet") return "localnet";
   return "devnet";
 }
 

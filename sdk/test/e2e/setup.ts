@@ -91,8 +91,8 @@ export interface E2ETestContext {
 // Constants
 // =============================================================================
 
-/** Detect network from environment variable (default: localnet) */
-export const NETWORK = (process.env.NETWORK || "localnet") as "localnet" | "devnet";
+/** Detect network from environment variable (default: devnet) */
+export const NETWORK = (process.env.NETWORK || "devnet") as "localnet" | "devnet";
 export const IS_DEVNET = NETWORK === "devnet";
 
 /** RPC URLs based on network */

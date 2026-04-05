@@ -4,7 +4,7 @@
  *
  * Usage:
  *   PRIVACY_COIN_NETWORK=devnet bun run scripts/topup-all.ts pcoin:<address>
- *   bun run scripts/topup-all.ts pcoin:<address>   # defaults to localnet
+ *   bun run scripts/topup-all.ts pcoin:<address>   # defaults to devnet
  */
 
 import {
@@ -34,7 +34,7 @@ import {
 } from "@solana/spl-token";
 import { setupScript } from "./lib/common.ts";
 
-const network = (process.env.PRIVACY_COIN_NETWORK || "localnet") as "localnet" | "devnet";
+const network = (process.env.PRIVACY_COIN_NETWORK || "devnet") as "localnet" | "devnet";
 const { conn, authority, programId: PRIVACY_COIN, state } = setupScript(network);
 
 // Derive constant PDAs once

@@ -16,6 +16,8 @@ export const API_ENDPOINTS = {
 
   // Block header status (Next.js API route -> Solana RPC)
   HEADER_STATUS: (height: number) => `/api/header/status/${height}`,
+  PUBLIC_ZKBTC_BALANCE: (owner: string) =>
+    `/api/public-zkbtc-balance?owner=${encodeURIComponent(owner)}`,
 } as const;
 
 import { getNetworkConfig } from "../network-config";

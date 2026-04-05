@@ -227,14 +227,19 @@ pub struct RedemptionConfig {
 
 impl Default for RedemptionConfig {
     fn default() -> Self {
+        let solana_rpc = std::env::var("PRIVACY_COIN_SOLANA_RPC")
+            .or_else(|_| std::env::var("SOLANA_RPC_URL"))
+            .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
+        let esplora_url = std::env::var("ESPLORA_URL").unwrap_or_default();
+
         Self {
             min_withdrawal: 10_000,        // 0.0001 BTC
             max_withdrawal: 10_000_000_000, // 100 BTC
             fee_rate: 10,                   // 10 sats/vbyte
             required_confirmations: 1,      // For testnet, 1 is enough
             check_interval_secs: 30,
-            solana_rpc: "https://api.devnet.solana.com".to_string(),
-            esplora_url: String::new(),
+            solana_rpc,
+            esplora_url,
             auto_process: true,
             pool_address: std::env::var("POOL_RECEIVE_ADDRESS").unwrap_or_default(),
             // Fallback only — fees are read from on-chain PoolState at runtime

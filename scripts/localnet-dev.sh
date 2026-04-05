@@ -147,7 +147,7 @@ log "Tree: $TREE"
 
 # ── Start frontend ──
 log "Starting frontend..."
-(cd privacy-coin-app && bun run dev > /tmp/privacy-coin-frontend.log 2>&1) &
+(cd web && bun run dev > /tmp/privacy-coin-frontend.log 2>&1) &
 FRONTEND_PID=$!
 sleep 5
 

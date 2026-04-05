@@ -328,7 +328,7 @@ fn require_aegis_program_id() -> Option<String> {
         Ok(id) => Some(id),
         Err(_) => {
             eprintln!("ERROR: PRIVACY_COIN_PROGRAM_ID env var is required.");
-            eprintln!("Run: ./scripts/sync-env.sh to generate .env files from localnet-state.json");
+            eprintln!("Run: PRIVACY_COIN_NETWORK=devnet ./scripts/sync-env.sh to generate .env files");
             None
         }
     }
@@ -430,9 +430,8 @@ fn spawn_solana_ws_subscriber(
     event_store: Arc<EventStore>,
     tree_cache: Arc<TreeCache>,
 ) {
-    let solana_ws_url = env::var("SOLANA_WS_URL").unwrap_or_else(|_| {
-        solana_rpc.replace("https://", "wss://").replace("http://", "ws://")
-    });
+    let solana_ws_url = env::var("SOLANA_WS_URL")
+        .unwrap_or_else(|_| derive_solana_ws_url(solana_rpc));
     let ws_subscriber = SolanaWsSubscriber::new(
         SolanaWsConfig {
             ws_url: solana_ws_url,
@@ -444,6 +443,19 @@ fn spawn_solana_ws_subscriber(
     tokio::spawn(async move {
         ws_subscriber.run().await;
     });
+}
+
+fn derive_solana_ws_url(solana_rpc: &str) -> String {
+    if let Some(rest) = solana_rpc.strip_prefix("http://") {
+        if rest.ends_with(":8899") {
+            return format!("ws://{}:8900", rest.trim_end_matches(":8899"));
+        }
+        return format!("ws://{}", rest);
+    }
+    if let Some(rest) = solana_rpc.strip_prefix("https://") {
+        return format!("wss://{}", rest);
+    }
+    solana_rpc.to_string()
 }
 
 /// Spawn the unified API server (deposit tracker + event indexer + stealth/redeem).
@@ -633,4 +645,3 @@ fn configure_frost_sweeper(
 
     Ok(service.with_frost_sweeper(frost_client, group_pubkey, network))
 }
-

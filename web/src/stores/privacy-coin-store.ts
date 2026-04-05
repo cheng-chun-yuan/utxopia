@@ -19,7 +19,7 @@ import {
 } from "@privacy-coin/sdk";
 import { fetchSpentNullifierPDAs, nullifierHashToPDA } from "@/lib/nullifier-utils";
 import { VAULT_TOKENS } from "@/lib/supported-tokens";
-import { getBackendUrl, getSolanaRpcUrl } from "@/lib/api/constants";
+import { API_ENDPOINTS, getBackendUrl, getSolanaRpcUrl } from "@/lib/api/constants";
 
 // ============================================================================
 // localStorage Key Persistence (AES-256-GCM encrypted)
@@ -611,30 +611,18 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
       return;
     }
     try {
-      const rpcUrl = getSolanaRpcUrl();
-      // Fetch token accounts for the zkBTC mint under Token-2022
-      const response = await fetch(rpcUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "getTokenAccountsByOwner",
-          params: [
-            walletPubkey.toBase58(),
-            { mint: PrivacyCoinClient.instance().config.zkbtcMint },
-            { encoding: "jsonParsed", commitment: "confirmed" },
-          ],
-        }),
-      });
-      const result = await response.json();
-      const accounts = result?.result?.value || [];
-      let total = 0n;
-      for (const acc of accounts) {
-        const amount = acc?.account?.data?.parsed?.info?.tokenAmount?.amount;
-        if (amount) total += BigInt(amount);
+      if (!PrivacyCoinClient.isInitialized) {
+        await PrivacyCoinClient.init();
       }
-      set({ publicZkbtcBalance: total });
+      const response = await fetch(
+        API_ENDPOINTS.PUBLIC_ZKBTC_BALANCE(walletPubkey.toBase58()),
+        { cache: "no-store" }
+      );
+      if (!response.ok) {
+        throw new Error(`Balance request failed with ${response.status}`);
+      }
+      const result = await response.json();
+      set({ publicZkbtcBalance: BigInt(result?.amount ?? "0") });
     } catch (err) {
       console.error("[Aegis] Failed to fetch public zkBTC balance:", err);
     }

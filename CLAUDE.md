@@ -10,7 +10,7 @@ Privacy Coin is a privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowled
 
 ## Commands
 
-### Frontend (Next.js) - `/privacy-coin-app`
+### Frontend (Next.js) - `/web`
 ```bash
 bun run dev          # Start dev server (port 3000)
 bun run build        # Production build (builds SDK first)
@@ -56,11 +56,14 @@ docker compose -f docker-compose.regtest.yml up -d   # Start infrastructure
 docker compose -f docker-compose.regtest.yml down     # Stop all
 ```
 
-### E2E Tests (localnet + regtest)
+### E2E Tests (Surfpool offline + regtest)
 ```bash
-bun run scripts/e2e/run-all.ts       # Full E2E (14 steps)
+bun run scripts/e2e/run-all.ts       # Full E2E (15 steps, ~2 min)
 bun run scripts/e2e/step3b-frost-sweep.ts  # FROST sweep only
 ```
+
+Surfpool runs fully offline with auto-deploy via txtx runbook. Programs are deployed
+through BPFLoaderUpgradeable (real execution). No devnet proxy needed.
 
 ### circom Circuits - `/circuits`
 ```bash
@@ -95,13 +98,13 @@ SOL/USDC/USDT → Shield (disc=29) ───┤──► Poseidon(npk, token_id,
 
 | Directory | Purpose | Language |
 |-----------|---------|----------|
-| `contracts/programs/aegis` | Main Solana program (14 instructions) | Rust (Pinocchio) |
+| `contracts/programs/privacy-coin` | Main Solana program (14 instructions) | Rust (Pinocchio) |
 | `contracts/programs/btc-light-client` | Bitcoin header tracking (standalone program) | Rust (Pinocchio) |
 | `circuits` | JoinSplit Groth16 ZK circuits | circom |
 | `sdk` | TypeScript SDK (@privacy-coin/sdk) | TypeScript |
 | `frost_server` | FROST threshold signing + policy engine + audit log | Rust |
 | `backend` | API server + deposit tracker + redemption + header relayer | Rust + TypeScript |
-| `privacy-coin-app` | Web interface | Next.js + React |
+| `web` | Web interface | Next.js + React |
 
 ### JoinSplit Circuit Architecture
 
@@ -251,8 +254,8 @@ PRIVACY_COIN_NETWORK=devnet ./scripts/sync-env.sh       # switch to devnet
 
 Generated files:
 - `backend/.env.{network}` + symlink `backend/.env`
-- `privacy-coin-app/.env.{network}` + symlink `privacy-coin-app/.env.local`
-- `privacy-coin-app/src/lib/networks.json` (frontend runtime config)
+- `web/.env.{network}` + symlink `web/.env.local`
+- `web/src/lib/networks.json` (frontend runtime config)
 
 **After deploy or validator reset**: update the state JSON, then run `./scripts/sync-env.sh`.
 Never edit `networks.json` or `.env` files directly — they are generated.
@@ -271,7 +274,7 @@ cd backend && cargo run --bin zkbtc-api -- tracker
 
 ### Top up stealth address (all tokens)
 ```bash
-# From privacy-coin-app/ dir (needs SDK):
+# From web/ dir (needs SDK):
 bun run scripts/topup-all.ts pcoin:<stealth_address>
 ```
 
@@ -279,7 +282,8 @@ bun run scripts/topup-all.ts pcoin:<stealth_address>
 
 - **Package Manager**: Always use `bun` instead of `npm`
 - **Network**: Solana devnet + Bitcoin testnet
-- **Build Contracts**: `cargo build-sbf --features devnet`
+- **Build Contracts**: `cargo build-sbf --features localnet` (localnet) or `cargo build-sbf --features devnet` (devnet)
+- **Localnet Validator**: Surfpool (`surfpool start -y --offline` from `contracts/`) — auto-deploys via txtx runbook
 - **Poseidon Hashing**: Done inside circom circuits (BN254 curve)
 - **Token**: zkBTC uses Token-2022 program
 - **Solana SDK**: Uses `@solana/kit` (new framework-kit)

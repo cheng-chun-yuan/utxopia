@@ -1,10 +1,6 @@
 import { useState, useEffect } from "react";
 
-const BINANCE_SYMBOLS = ["BTCUSDT", "SOLUSDT", "USDCUSDT"];
-const BINANCE_URL = `https://api.binance.com/api/v3/ticker/price?symbols=${JSON.stringify(BINANCE_SYMBOLS)}`;
-
-const COINGECKO_IDS = "bitcoin,solana,usd-coin,tether";
-const COINGECKO_URL = `https://api.coingecko.com/api/v3/simple/price?ids=${COINGECKO_IDS}&vs_currencies=usd`;
+const PRICES_API_URL = "/api/token-prices";
 
 const CACHE_KEY = "token_prices_cache";
 const STALE_MS = 60_000; // refresh every 60s
@@ -39,43 +35,24 @@ function writeCache(prices: TokenPrices) {
   } catch (err) { console.error("[TokenPrices] cache write error:", err); }
 }
 
-/** Try Binance first (faster, no rate limit), fall back to CoinGecko */
-async function fetchFromBinance(): Promise<TokenPrices | null> {
+async function fetchPricesFromApi(): Promise<TokenPrices | null> {
   try {
-    const res = await fetch(BINANCE_URL);
-    if (!res.ok) return null;
-    const data: { symbol: string; price: string }[] = await res.json();
-    const map = Object.fromEntries(data.map((d) => [d.symbol, parseFloat(d.price)]));
-    return {
-      btc: map["BTCUSDT"] ?? null,
-      sol: map["SOLUSDT"] ?? null,
-      usdc: map["USDCUSDT"] ?? null,
-      usdt: 1.0, // USDT is the quote currency
-    };
-  } catch (err) {
-    console.error("[TokenPrices] Binance fetch error:", err);
-    return null;
-  }
-}
-
-async function fetchFromCoinGecko(): Promise<TokenPrices | null> {
-  try {
-    const res = await fetch(COINGECKO_URL);
+    const res = await fetch(PRICES_API_URL);
     if (!res.ok) return null;
     const data = await res.json();
     return {
-      btc: data?.bitcoin?.usd ?? null,
-      sol: data?.solana?.usd ?? null,
-      usdc: data?.["usd-coin"]?.usd ?? null,
-      usdt: data?.tether?.usd ?? null,
+      btc: data?.btc ?? null,
+      sol: data?.sol ?? null,
+      usdc: data?.usdc ?? null,
+      usdt: data?.usdt ?? null,
     };
   } catch (err) {
-    console.error("[TokenPrices] CoinGecko fetch error:", err);
+    console.error("[TokenPrices] API fetch error:", err);
     return null;
   }
 }
 
-/** Fetch all token prices (BTC, SOL, USDC, USDT) — Binance primary, CoinGecko fallback */
+/** Fetch all token prices (BTC, SOL, USDC, USDT) via same-origin API */
 export function useTokenPrices(): TokenPrices {
   const [prices, setPrices] = useState<TokenPrices>(() => readCache()?.prices ?? EMPTY);
 
@@ -88,7 +65,7 @@ export function useTokenPrices(): TokenPrices {
         setPrices(cached.prices);
         return;
       }
-      const p = (await fetchFromBinance()) ?? (await fetchFromCoinGecko());
+      const p = await fetchPricesFromApi();
       if (p && !cancelled) {
         setPrices(p);
         writeCache(p);

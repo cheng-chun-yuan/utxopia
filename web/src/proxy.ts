@@ -12,22 +12,19 @@ const ALLOWED_ORIGINS = (
 function isAllowedOrigin(origin: string | null): boolean {
   if (!origin) return true; // Same-origin requests have no Origin header
   if (ALLOWED_ORIGINS.length === 0) {
-    // In production, reject cross-origin if no allowlist is configured
     if (process.env.NODE_ENV === "production") return false;
-    return true; // Allow in development
+    return true;
   }
   return ALLOWED_ORIGINS.some(
     (allowed) => origin === allowed || origin === allowed.replace(/\/$/, "")
   );
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const origin = request.headers.get("origin");
 
-  // ── Origin constraint for API routes ──
   if (pathname.startsWith("/api/")) {
-    // Block cross-origin requests to sensitive relay endpoints
     if (!isAllowedOrigin(origin)) {
       return NextResponse.json(
         { success: false, error: "Forbidden: origin not allowed" },
@@ -35,7 +32,6 @@ export function middleware(request: NextRequest) {
       );
     }
 
-    // Handle CORS preflight
     if (request.method === "OPTIONS") {
       const res = new NextResponse(null, { status: 204 });
       if (origin && isAllowedOrigin(origin)) {
@@ -47,7 +43,6 @@ export function middleware(request: NextRequest) {
       return res;
     }
 
-    // Set CORS headers on API responses
     const response = NextResponse.next();
     if (origin && isAllowedOrigin(origin)) {
       response.headers.set("Access-Control-Allow-Origin", origin);
@@ -56,13 +51,35 @@ export function middleware(request: NextRequest) {
     return response;
   }
 
-  // ── Security headers for all other routes ──
   const response = NextResponse.next();
   addSecurityHeaders(response);
   return response;
 }
 
 function addSecurityHeaders(response: NextResponse) {
+  const isDev = process.env.NODE_ENV !== "production";
+  const circuitCdnUrl = process.env.NEXT_PUBLIC_CIRCUIT_CDN_URL || "";
+  let circuitOrigin = "";
+  try {
+    circuitOrigin = circuitCdnUrl ? new URL(circuitCdnUrl).origin : "";
+  } catch {
+    circuitOrigin = "";
+  }
+  const connectSrc = [
+    "'self'",
+    "https://api.binance.com",
+    "https://api.coingecko.com",
+    "https://*.helius-rpc.com",
+    "https://api.devnet.solana.com",
+    "https://api.mainnet-beta.solana.com",
+    "https://mempool.space",
+    "wss://mempool.space",
+    "https://*.amidoggy.xyz",
+    circuitOrigin,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   response.headers.set("X-Frame-Options", "DENY");
   response.headers.set("X-Content-Type-Options", "nosniff");
   response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -75,13 +92,11 @@ function addSecurityHeaders(response: NextResponse) {
     "Content-Security-Policy",
     [
       "default-src 'self'",
-      // Next.js injects inline bootstrap/runtime scripts that need to execute
-      // before the app can hydrate.
-      "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
+      `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'${isDev ? " 'unsafe-eval'" : ""}`,
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: https:",
       "font-src 'self' data: https://fonts.gstatic.com",
-      "connect-src 'self' https://*.helius-rpc.com https://api.devnet.solana.com https://api.mainnet-beta.solana.com https://mempool.space wss://mempool.space https://*.amidoggy.xyz",
+      `connect-src ${connectSrc}`,
       "frame-ancestors 'none'",
     ].join("; ")
   );
@@ -94,7 +109,5 @@ function addSecurityHeaders(response: NextResponse) {
 }
 
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };

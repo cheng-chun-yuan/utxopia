@@ -430,7 +430,7 @@ run_phase_7() {
 
   log "Env files synced!"
   log "  backend/.env.devnet"
-  log "  privacy-coin-app/.env.devnet"
+  log "  web/.env.devnet"
 
   save_phase 7
 }

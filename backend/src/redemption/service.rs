@@ -21,6 +21,7 @@ use solana_sdk::signature::Signer as SolanaSigner;
 
 use crate::bitcoin::client::EsploraClient;
 use crate::deposit_tracker::header_relayer::HeaderRelayer;
+use crate::config::Network;
 use crate::redemption::builder::TxBuilder;
 use crate::redemption::queue::WithdrawalQueue;
 use crate::redemption::signer::{SingleKeySigner, TxSigner};
@@ -181,7 +182,7 @@ impl RedemptionService {
             queue: WithdrawalQueue::default(),
             builder: RwLock::new(builder),
             signer: Arc::new(signer),
-            esplora: EsploraClient::from_network(crate::config::Network::Devnet),
+            esplora: create_esplora_client(&config),
             pool_utxos: Arc::new(RwLock::new(Vec::new())),
             stats: Arc::new(RwLock::new(RedemptionStats::default())),
             running: Arc::new(RwLock::new(false)),
@@ -1223,11 +1224,7 @@ impl RedemptionService {
 
         // Phase 2: Start WebSocket for live PDA change notifications
         let ws_notify = self.ws_notify.clone();
-        let ws_url = self
-            .config
-            .solana_rpc
-            .replace("https://", "wss://")
-            .replace("http://", "ws://");
+        let ws_url = derive_solana_ws_url(&self.config.solana_rpc);
 
         let program_id_pubkey = *self.sol_client.program_id();
         let ws_notify_clone = ws_notify.clone();
@@ -1317,6 +1314,31 @@ impl RedemptionService {
     pub fn signer_type(&self) -> &'static str {
         self.signer.signer_type()
     }
+}
+
+fn create_esplora_client(config: &RedemptionConfig) -> EsploraClient {
+    if !config.esplora_url.trim().is_empty() {
+        return EsploraClient::new(&config.esplora_url);
+    }
+
+    let network = std::env::var("PRIVACY_COIN_NETWORK")
+        .ok()
+        .and_then(|v| Network::from_str(&v).ok())
+        .unwrap_or(Network::Devnet);
+    EsploraClient::from_network(network)
+}
+
+fn derive_solana_ws_url(solana_rpc: &str) -> String {
+    if let Some(rest) = solana_rpc.strip_prefix("http://") {
+        if rest.ends_with(":8899") {
+            return format!("ws://{}:8900", rest.trim_end_matches(":8899"));
+        }
+        return format!("ws://{}", rest);
+    }
+    if let Some(rest) = solana_rpc.strip_prefix("https://") {
+        return format!("wss://{}", rest);
+    }
+    solana_rpc.to_string()
 }
 
 /// Result of processing a withdrawal

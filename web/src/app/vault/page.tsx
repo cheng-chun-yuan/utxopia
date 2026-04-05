@@ -56,6 +56,7 @@ import { VAULT_TOKENS } from "@/lib/supported-tokens";
 import { OnboardingModal } from "@/components/onboarding-modal";
 import { AuthModal } from "@/components/auth-modal";
 import { HoldButton } from "@/components/ui/hold-button";
+import { detectNetwork, getNetworkConfig } from "@/lib/network-config";
 
 export default function VaultPage() {
   const wallet = useWallet();
@@ -102,6 +103,13 @@ export default function VaultPage() {
 
   const tokenPrices = useTokenPrices();
   const btcPrice = tokenPrices.btc;
+  const networkId = detectNetwork();
+  const networkConfig = getNetworkConfig(networkId);
+  const bitcoinNetworkLabel =
+    networkConfig.bitcoin.network.charAt(0).toUpperCase() +
+    networkConfig.bitcoin.network.slice(1);
+  const solanaNetworkLabel =
+    networkId.charAt(0).toUpperCase() + networkId.slice(1);
 
   const deriveKeysFromPasskeySeed = usePrivacyCoinStore((s) => s.deriveKeysFromPasskeySeed);
   const loadViewOnlyKeys = usePrivacyCoinStore((s) => s.loadViewOnlyKeys);
@@ -585,7 +593,7 @@ export default function VaultPage() {
           <div className="flex items-center justify-center gap-2 py-2">
             <div className="w-1.5 h-1.5 rounded-full bg-warning animate-pulse" />
             <span className="text-[11px] text-gray/40">
-              Bitcoin {getConfig().bitcoinNetwork.charAt(0).toUpperCase() + getConfig().bitcoinNetwork.slice(1)} · Solana {getConfig().network.charAt(0).toUpperCase() + getConfig().network.slice(1)}
+              Bitcoin {bitcoinNetworkLabel} · Solana {solanaNetworkLabel}
             </span>
           </div>
 

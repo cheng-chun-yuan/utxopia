@@ -6,8 +6,8 @@
 # Produces a 2-of-3 threshold key set and prints the group public key.
 #
 # Usage:
-#   ./scripts/frost-dkg.sh                  # Run DKG (default: regtest)
-#   FROST_NETWORK=testnet4 ./scripts/frost-dkg.sh  # Run DKG for devnet
+#   ./scripts/frost-dkg.sh
+#   FROST_NETWORK=testnet4 ./scripts/frost-dkg.sh
 #
 # Prerequisites:
 #   - FROST signers running: docker compose -f docker-compose.local.yml up -d
@@ -203,7 +203,7 @@ print('Updated: poolBtcAddress, btcXOnlyPubKey, signingMode=frost')
   log "State file updated"
 
   # Re-sync env files
-  "$PROJECT_ROOT/scripts/sync-env.sh"
+  PRIVACY_COIN_NETWORK=localnet "$PROJECT_ROOT/scripts/sync-env.sh"
 fi
 
 # ─── Summary ───────────────────────────────────────────────────────────────

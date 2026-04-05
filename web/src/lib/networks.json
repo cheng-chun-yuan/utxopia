@@ -71,22 +71,22 @@
   },
   "localnet": {
     "solana": {
-      "rpcUrl": "https://api.devnet.solana.com",
-      "privacyCoinProgramId": "G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy",
+      "rpcUrl": "http://localhost:8899",
+      "privacyCoinProgramId": "5DCks2djL9orkUwHS7pcroSXiuMuzEmvAxg3VR831eqK",
       "btcLightClientId": "C8JoSKzondM7X1ESwrBSodGMrXWtEWNmawXyjh9zEWJZ",
       "chadbufferId": "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF"
     },
     "tokens": {
-      "zkbtcMint": "7hu1toTT38b7arySjvZWpACjy2XaboWNZMufRWr5xvtB",
-      "usdcMint": "Ee27V46LrSQsewhd8hMyicp64971r6xHyfQM6jDTYoCQ",
+      "zkbtcMint": "HjifoWPYtGndSGMS4XyNwnnwXpbVtEzHqBTXGF39W9Uo",
+      "usdcMint": "8fjtrrw52tUvdenKLupmpnkQUvDcAnyCc9w3a5MEk8DR",
       "usdtMint": "",
       "wsolMint": "",
       "jupusdMint": ""
     },
     "bitcoin": {
-      "network": "testnet4",
-      "poolAddress": "bcrt1pj4296w5uurzzl28sp860x52sgh8mfad925k3k04y7dfcsf32rl4s85qtj3",
-      "groupPubkey": "",
+      "network": "regtest",
+      "poolAddress": "bcrt1pdsvdn95vcdsjwz92tc4x5y8w026hur8ud7nvae65y4rvsjsqe8fq5j9s56",
+      "groupPubkey": "6c18d9968cc3612708aa5e2a6a10ee7ab57e0cfc6fa6cee7542546c84a00c9d2",
       "explorerUrl": "http://localhost:3002/regtest"
     },
     "backend": {
