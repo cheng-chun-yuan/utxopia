@@ -34,6 +34,7 @@ use pinocchio::{
 };
 
 pub mod constants;
+pub mod cpi;
 pub mod error;
 pub mod instructions;
 pub mod state;
