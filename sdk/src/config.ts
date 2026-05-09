@@ -127,9 +127,16 @@ export interface NetworkConfig {
   // -------------------------------------------------------------------------
 
   /** FROST group public key (x-only, hex-encoded 64 chars = 32 bytes).
-   *  Used as the Taproot internal key for deriving deposit addresses client-side.
+   *  Legacy. Used as the Taproot internal key only when `ikaDwalletXOnlyPubkey`
+   *  is unset / all-zero. New deployments leave this all-zero and rely on Ika.
    *  Fetched once from GET /api/pool/info and cached. */
   groupPubKey: string;
+
+  /** Ika dWallet x-only secp256k1 pubkey (hex, 64 chars = 32 bytes).
+   *  When set (non-zero), this replaces `groupPubKey` as the Taproot internal
+   *  key for deposit-address derivation. Read from `pool_config.ika_dwallet_xonly_pubkey`
+   *  on chain. All-zero indicates a legacy FROST-controlled pool. */
+  ikaDwalletXOnlyPubkey: string;
 
   // -------------------------------------------------------------------------
   // SNS Subdomain Resolution (stealth address via .sol names)
@@ -248,8 +255,11 @@ export const DEVNET_CONFIG: NetworkConfig = {
     "4x1": "4c17064df6986482d837a7815ac68b015901b6cec92730c4441d4c8c0b238d63",
   },
 
-  // Pool group key (FROST 2-of-3 DKG output, x-only secp256k1)
+  // Pool group key (FROST 2-of-3 DKG output, x-only secp256k1) — legacy.
   groupPubKey: "29485d031f6ad1ab0c4ca7183bef6cb9ce2d914d0bec8dc842a6962f0fcc3362",
+  // Ika dWallet x-only pubkey — populated by ./scripts/sync-env.sh from devnet-state.json.
+  ikaDwalletXOnlyPubkey:
+    "0000000000000000000000000000000000000000000000000000000000000000",
 
   // SNS Subdomain Resolution (devnet)
   snsNameServiceProgramId: "namesLPneVptA9Z5rqUDD9tMTWEJwofgaYwp8cawRkX",  // SPL Name Service (devnet)
@@ -305,6 +315,8 @@ export const MAINNET_CONFIG: NetworkConfig = {
 
   // Pool group key (placeholder — not yet deployed)
   groupPubKey: "0000000000000000000000000000000000000000000000000000000000000000",
+  ikaDwalletXOnlyPubkey:
+    "0000000000000000000000000000000000000000000000000000000000000000",
 
   // SNS Subdomain Resolution (mainnet)
   snsNameServiceProgramId: "namesLPneVptA9Z5rqUDD9tMTWEJwofgaYwp8cawRkX",  // SPL Name Service (mainnet)
@@ -364,8 +376,11 @@ export const LOCALNET_CONFIG: NetworkConfig = {
     "2x2": "303bdc51d561ff0986e56e59129eeca42a929f0387e638902be00570ee1ab0c1",
   },
 
-  // Pool group key (POC — same as devnet for local dev)
+  // Pool group key (POC — same as devnet for local dev) — legacy fallback.
   groupPubKey: "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+  // Ika dWallet x-only pubkey — populated by ./scripts/sync-env.sh from localnet-state.json.
+  ikaDwalletXOnlyPubkey:
+    "0000000000000000000000000000000000000000000000000000000000000000",
 
   // SNS Subdomain Resolution (not available on localnet)
   snsNameServiceProgramId: "",
@@ -506,6 +521,7 @@ export async function initConfig(overrides?: {
   zkbtcMint?: string;
   solanaRpcUrl?: string;
   groupPubKey?: string;
+  ikaDwalletXOnlyPubkey?: string;
 }): Promise<NetworkConfig> {
   // Pick base config from network: param > env > devnet
   const networkId: NetworkId =
@@ -601,9 +617,14 @@ export async function initConfig(overrides?: {
     config.poolVault = poolVault;
   }
 
-  // Apply groupPubKey override
+  // Apply groupPubKey override (legacy FROST)
   if (overrides?.groupPubKey) {
     config.groupPubKey = overrides.groupPubKey;
+  }
+
+  // Apply Ika dWallet x-only pubkey override (preferred for v2 pools)
+  if (overrides?.ikaDwalletXOnlyPubkey) {
+    config.ikaDwalletXOnlyPubkey = overrides.ikaDwalletXOnlyPubkey;
   }
 
   currentConfig = config;

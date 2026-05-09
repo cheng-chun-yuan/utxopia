@@ -455,15 +455,34 @@ export async function createNonInteractiveDeposit(
 
 /**
  * Create a non-interactive deposit using the current SDK config.
- * Reads groupPubKey from config, no need to pass raw bytes.
+ *
+ * Prefers `ikaDwalletXOnlyPubkey` when set (non-zero); falls back to the
+ * legacy `groupPubKey` only for older FROST-controlled pools. The chosen
+ * value becomes the Taproot internal key for the BIP-341 tweak — both
+ * paths produce a deterministic address bound to the recipient's npk.
  */
 export async function createDepositFromConfig(
   recipientMeta: StealthMetaAddress,
   network: "mainnet" | "testnet" | "regtest" = "testnet",
 ): Promise<NonInteractiveDepositResult> {
   const config = getConfig();
-  const groupPubKey = hexToBytes(config.groupPubKey);
-  return createNonInteractiveDeposit(recipientMeta, groupPubKey, network);
+  const internalKey = pickCustodyInternalKey(config);
+  return createNonInteractiveDeposit(recipientMeta, internalKey, network);
+}
+
+/**
+ * Choose the Taproot internal key for deposit-address derivation.
+ * Exported for unit tests; non-test callers should use `createDepositFromConfig`.
+ */
+export function pickCustodyInternalKey(config: {
+  ikaDwalletXOnlyPubkey?: string;
+  groupPubKey: string;
+}): Uint8Array {
+  const ikaHex = config.ikaDwalletXOnlyPubkey ?? "";
+  if (ikaHex && /[1-9a-f]/i.test(ikaHex)) {
+    return hexToBytes(ikaHex);
+  }
+  return hexToBytes(config.groupPubKey);
 }
 
 // ========== Recipient Scanning (Viewing Key Only) ==========
