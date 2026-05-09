@@ -1,12 +1,16 @@
 //! Set pool config instruction (disc 27)
 //!
-//! Authority-only instruction to set the pool's BTC scriptPubKey and
-//! FROST group public key in the PoolConfig PDA.
+//! Authority-only instruction to set the pool's BTC scriptPubKey and either
+//! the legacy FROST group public key or the new Ika dWallet custody fields
+//! in the PoolConfig PDA.
 //!
-//! Instruction Data Layout:
-//! - [0]      pool_script_len: u8 (max 34)
-//! - [1..1+N] pool_script:    [u8; N]
-//! - [1+N..1+N+32] group_pub_key: [u8; 32] (optional, x-only FROST key)
+//! Instruction Data Layout (all post-script fields optional, append-only):
+//! - [0]                pool_script_len: u8 (max 34)
+//! - [1..1+N]           pool_script:    [u8; N]
+//! - [+32]              group_pub_key: [u8; 32]              (optional, legacy FROST)
+//! - [+32]              ika_dwallet:   [u8; 32]              (optional, Ika)
+//! - [+32]              ika_dwallet_xonly_pubkey: [u8; 32]   (optional, Ika)
+//! - [+1]               cpi_authority_bump: u8               (optional, Ika)
 //!
 //! Accounts:
 //! 0. pool_state       (read)
@@ -74,11 +78,39 @@ pub fn process_set_pool_config(
     }
     let pool_script = &data[1..1 + script_len];
 
-    // Optional: group_pub_key follows pool_script
-    let group_pub_key: Option<[u8; 32]> = if data.len() >= 1 + script_len + 32 {
+    // Optional fields after pool_script: append-only.
+    // Each subsequent field requires the previous one to be present.
+    let mut cursor = 1 + script_len;
+
+    let group_pub_key: Option<[u8; 32]> = if data.len() >= cursor + 32 {
         let mut key = [0u8; 32];
-        key.copy_from_slice(&data[1 + script_len..1 + script_len + 32]);
+        key.copy_from_slice(&data[cursor..cursor + 32]);
+        cursor += 32;
         Some(key)
+    } else {
+        None
+    };
+
+    let ika_dwallet: Option<[u8; 32]> = if data.len() >= cursor + 32 {
+        let mut key = [0u8; 32];
+        key.copy_from_slice(&data[cursor..cursor + 32]);
+        cursor += 32;
+        Some(key)
+    } else {
+        None
+    };
+
+    let ika_dwallet_xonly: Option<[u8; 32]> = if data.len() >= cursor + 32 {
+        let mut key = [0u8; 32];
+        key.copy_from_slice(&data[cursor..cursor + 32]);
+        cursor += 32;
+        Some(key)
+    } else {
+        None
+    };
+
+    let cpi_authority_bump: Option<u8> = if data.len() >= cursor + 1 {
+        Some(data[cursor])
     } else {
         None
     };
@@ -108,10 +140,14 @@ pub fn process_set_pool_config(
 
         let mut config_data = pool_config_info.try_borrow_mut_data()?;
         let config = PoolConfig::init(&mut config_data)?;
-        config.set_pool_script(pool_script)?;
-        if let Some(ref key) = group_pub_key {
-            config.set_group_pub_key(key);
-        }
+        apply_fields(
+            config,
+            pool_script,
+            group_pub_key.as_ref(),
+            ika_dwallet.as_ref(),
+            ika_dwallet_xonly.as_ref(),
+            cpi_authority_bump,
+        )?;
     } else {
         // Update existing
         validate_program_owner(pool_config_info, program_id)?;
@@ -119,19 +155,54 @@ pub fn process_set_pool_config(
 
         if config_data[0] != POOL_CONFIG_DISCRIMINATOR {
             let config = PoolConfig::init(&mut config_data)?;
-            config.set_pool_script(pool_script)?;
-            if let Some(ref key) = group_pub_key {
-                config.set_group_pub_key(key);
-            }
+            apply_fields(
+                config,
+                pool_script,
+                group_pub_key.as_ref(),
+                ika_dwallet.as_ref(),
+                ika_dwallet_xonly.as_ref(),
+                cpi_authority_bump,
+            )?;
         } else {
             let config = PoolConfig::from_bytes_mut(&mut config_data)?;
-            config.set_pool_script(pool_script)?;
-            if let Some(ref key) = group_pub_key {
-                config.set_group_pub_key(key);
-            }
+            apply_fields(
+                config,
+                pool_script,
+                group_pub_key.as_ref(),
+                ika_dwallet.as_ref(),
+                ika_dwallet_xonly.as_ref(),
+                cpi_authority_bump,
+            )?;
         }
     }
 
     pinocchio::msg!("Aegis: pool config updated");
+    Ok(())
+}
+
+/// Apply parsed instruction fields to the PoolConfig PDA. Each `Option`
+/// is "set if present" — passing `None` leaves the existing value alone.
+#[inline]
+fn apply_fields(
+    config: &mut PoolConfig,
+    pool_script: &[u8],
+    group_pub_key: Option<&[u8; 32]>,
+    ika_dwallet: Option<&[u8; 32]>,
+    ika_dwallet_xonly: Option<&[u8; 32]>,
+    cpi_authority_bump: Option<u8>,
+) -> ProgramResult {
+    config.set_pool_script(pool_script)?;
+    if let Some(key) = group_pub_key {
+        config.set_group_pub_key(key);
+    }
+    if let Some(key) = ika_dwallet {
+        config.set_ika_dwallet(key);
+    }
+    if let Some(key) = ika_dwallet_xonly {
+        config.set_ika_dwallet_xonly_pubkey(key);
+    }
+    if let Some(bump) = cpi_authority_bump {
+        config.set_cpi_authority_bump(bump);
+    }
     Ok(())
 }

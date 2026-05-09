@@ -11,7 +11,13 @@ use pinocchio::program_error::ProgramError;
 /// Discriminator for PoolConfig account
 pub const POOL_CONFIG_DISCRIMINATOR: u8 = 0x0A;
 
-/// Pool configuration account (zero-copy layout, 96 bytes)
+/// Pool configuration account (zero-copy layout, 161 bytes)
+///
+/// Field history:
+/// - `group_pub_key` is the legacy FROST group key. New pools (Ika-controlled)
+///   leave it zero; `verify_deposit_v2` falls back to the Ika x-only pubkey.
+/// - `ika_dwallet`, `ika_dwallet_xonly_pubkey`, `cpi_authority_bump` are the
+///   Ika-era custody fields (2026-05).
 #[repr(C)]
 pub struct PoolConfig {
     /// Account discriminator (1 byte)
@@ -23,16 +29,24 @@ pub struct PoolConfig {
     /// Pool wallet's BTC scriptPubKey (P2TR = 0x5120 + 32-byte x-only pubkey)
     pub pool_script: [u8; 34],
 
-    /// FROST group x-only public key (32 bytes, big-endian)
-    /// Used by verify_deposit_v2 to verify npk ↔ Taproot address binding
+    /// FROST group x-only public key (legacy; zero for Ika-controlled pools)
     pub group_pub_key: [u8; 32],
+
+    /// Solana account address of the Ika dWallet controlling pool BTC custody
+    pub ika_dwallet: [u8; 32],
+
+    /// Compressed-x x-only secp256k1 pubkey for the Ika dWallet (Taproot internal key)
+    pub ika_dwallet_xonly_pubkey: [u8; 32],
+
+    /// Bump for our program's CPI authority PDA (`[CPI_AUTHORITY_SEED]` against this program ID)
+    pub cpi_authority_bump: u8,
 
     /// Reserved for future use
     _reserved: [u8; 28],
 }
 
 impl PoolConfig {
-    pub const LEN: usize = core::mem::size_of::<Self>(); // 96 bytes
+    pub const LEN: usize = core::mem::size_of::<Self>(); // 161 bytes
     pub const SEED: &'static [u8] = b"pool_config";
 
     /// Maximum pool_script length (P2TR scriptPubKey)
@@ -104,6 +118,43 @@ impl PoolConfig {
     pub fn set_group_pub_key(&mut self, key: &[u8; 32]) {
         self.group_pub_key = *key;
     }
+
+    // ── Ika-era accessors ──
+
+    /// Get the Ika dWallet's Solana account address (zeros if not set).
+    pub fn get_ika_dwallet(&self) -> &[u8; 32] {
+        &self.ika_dwallet
+    }
+
+    /// True if `ika_dwallet` is set (non-zero).
+    pub fn has_ika_dwallet(&self) -> bool {
+        self.ika_dwallet != [0u8; 32]
+    }
+
+    /// Set the Ika dWallet account address.
+    pub fn set_ika_dwallet(&mut self, key: &[u8; 32]) {
+        self.ika_dwallet = *key;
+    }
+
+    /// Get the Ika dWallet's x-only secp256k1 pubkey (zeros if not set).
+    pub fn get_ika_dwallet_xonly_pubkey(&self) -> &[u8; 32] {
+        &self.ika_dwallet_xonly_pubkey
+    }
+
+    /// Set the Ika dWallet's x-only secp256k1 pubkey.
+    pub fn set_ika_dwallet_xonly_pubkey(&mut self, key: &[u8; 32]) {
+        self.ika_dwallet_xonly_pubkey = *key;
+    }
+
+    /// Get the cached CPI authority bump.
+    pub fn get_cpi_authority_bump(&self) -> u8 {
+        self.cpi_authority_bump
+    }
+
+    /// Set the cached CPI authority bump.
+    pub fn set_cpi_authority_bump(&mut self, bump: u8) {
+        self.cpi_authority_bump = bump;
+    }
 }
 
 #[cfg(test)]
@@ -112,7 +163,9 @@ mod tests {
 
     #[test]
     fn test_pool_config_size() {
-        assert_eq!(PoolConfig::LEN, 96);
+        // 1 disc + 1 len + 34 script + 32 group + 32 ika_dwallet
+        // + 32 ika_xonly + 1 bump + 28 reserved = 161
+        assert_eq!(PoolConfig::LEN, 161);
     }
 
     #[test]
@@ -162,5 +215,36 @@ mod tests {
         let config = PoolConfig::from_bytes(&buf).unwrap();
         assert_eq!(config.get_pool_script(), &[0x51, 0x20, 0x01, 0x02]);
         assert_eq!(config.get_group_pub_key(), &[0xBB; 32]);
+    }
+
+    #[test]
+    fn test_pool_config_round_trips_ika_dwallet() {
+        let mut buf = vec![0u8; PoolConfig::LEN];
+        {
+            let config = PoolConfig::init(&mut buf).unwrap();
+            let dwallet = [0x07u8; 32];
+            let xonly = [0x42u8; 32];
+            config.set_ika_dwallet(&dwallet);
+            config.set_ika_dwallet_xonly_pubkey(&xonly);
+            config.set_cpi_authority_bump(255);
+        }
+        let config = PoolConfig::from_bytes(&buf).unwrap();
+        assert_eq!(config.get_ika_dwallet(), &[0x07u8; 32]);
+        assert_eq!(config.get_ika_dwallet_xonly_pubkey(), &[0x42u8; 32]);
+        assert_eq!(config.get_cpi_authority_bump(), 255);
+        assert!(config.has_ika_dwallet());
+
+        // group_pub_key remains zero — these are independent fields.
+        assert!(!config.has_group_pub_key());
+    }
+
+    #[test]
+    fn test_pool_config_ika_unset_returns_zero() {
+        let mut buf = vec![0u8; PoolConfig::LEN];
+        let config = PoolConfig::init(&mut buf).unwrap();
+        assert!(!config.has_ika_dwallet());
+        assert_eq!(config.get_ika_dwallet(), &[0u8; 32]);
+        assert_eq!(config.get_ika_dwallet_xonly_pubkey(), &[0u8; 32]);
+        assert_eq!(config.get_cpi_authority_bump(), 0);
     }
 }
