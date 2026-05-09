@@ -1,8 +1,11 @@
 # Privacy Coin - Private Bitcoin on Solana
 
-**Trustless BTC bridge with full transaction privacy using Zero-Knowledge Proofs**
+**Trustless BTC bridge with full transaction privacy using Zero-Knowledge Proofs.**
+**Custody now powered by [Ika](https://ika.xyz) dWallets — bridgeless, native BTC controlled directly from a Solana program.**
 
-Privacy Coin lets Bitcoin holders access Solana DeFi without sacrificing privacy. Deposit BTC, receive shielded commitments, and transact — amounts and identities stay hidden.
+Privacy Coin lets Bitcoin holders access Solana DeFi without sacrificing privacy. Deposit BTC, receive shielded commitments, and transact — amounts and identities stay hidden. Withdrawals are signed by an Ika dWallet whose authority is controlled by this Solana program: no FROST committee, no relayer, no trusted operators.
+
+> **Hackathon track:** Encrypt + Ika (Bridgeless Capital Markets). This codebase pivoted from FROST 2-of-3 threshold signing to Ika dWallet custody on Solana devnet (`87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY`, pre-alpha). See [docs/designs/2026-05-09-ika-encrypt-pivot-design.md](docs/designs/2026-05-09-ika-encrypt-pivot-design.md) for the full architecture and [docs/recon/2026-05-09-ika-sdk-brief.md](docs/recon/2026-05-09-ika-sdk-brief.md) for the integration surface.
 
 ```
 BTC Deposit → Taproot Address → SPV Verify → On-Chain Commitment → ZK Transfers → Withdraw BTC
@@ -44,7 +47,8 @@ Bitcoin's transparent blockchain makes privacy challenging:
 | **Data Publishing** | ChadBuffer | Large data upload on-chain |
 | **Client SDK** | TypeScript | Full privacy toolkit |
 | **Frontend** | Next.js | Web interface |
-| **Backend** | Rust (Axum) + FROST | API server + threshold BTC signing |
+| **Custody** | Ika dWallet (2PC-MPC, Solana-native pre-alpha) | BTC signing controlled by this Solana program via `approve_message` CPI |
+| **Backend** | Rust (Axum) + Ika watcher | API server + off-chain Sign-PDA poller (legacy FROST path retained behind `frost-legacy` feature for the migration window) |
 
 ---
 
@@ -98,7 +102,22 @@ Spending Key (Baby Jubjub) ─► Signs JoinSplit transactions (EdDSA-Poseidon)
 
 Share viewing key with accountants or compliance without risk of fund loss.
 
-### 4. .btcpro.sol Name Registry
+### 4. Ika dWallet Custody (Bridgeless BTC)
+
+Privacy Coin v2 holds BTC inside an [Ika](https://ika.xyz) dWallet whose authority has been transferred to a Solana PDA derived from this program. There is no off-chain signer committee — the *Solana program itself* is the policy gate.
+
+When a user redeems shielded zkBTC for native BTC:
+
+1. The pipeline submits `complete_redemption` (instruction discriminator 6). The instruction data carries the BIP-341 Taproot key-spend sighash for the unsigned withdrawal tx.
+2. The on-chain program runs the policy gate (amount cap, fee cap, paused-state — ported on-chain from `frost_server/policy.rs` to `programs/privacy-coin/src/utils/policy.rs`).
+3. The program then **CPIs to the Ika dWallet program** (`87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY` on devnet) calling `approve_message` (discriminator 8). Our CPI helper at `programs/privacy-coin/src/cpi/ika.rs` constructs the call by hand (no `ika-dwallet-pinocchio` git dep, since upstream pins `pinocchio ^0.10` and we use `0.9`). The CPI seeds the signing authority via `["__ika_cpi_authority"]`.
+4. The Ika network's mock signer (pre-alpha) asynchronously fills a `Sign` PDA. An off-chain backend watcher (`backend/src/redemption/signer.rs::IkaSigner`) polls for it, decodes the 64-byte Schnorr signature, assembles the Taproot witness, and broadcasts to Bitcoin testnet.
+
+Architecturally the design extends to any chain Ika supports (Ethereum, Sui, Cardano via EdDSA…). This hackathon ships BTC only; multi-chain is a config change, not a redesign.
+
+> **Pre-alpha disclaimer:** Ika's Solana coordinator (`dwallet-labs/ika-pre-alpha`) currently runs a single mock signer, not real distributed MPC. The on-chain CPI surface and developer flow are real; the cryptographic backend lights up at Ika mainnet. We surface this in the demo.
+
+### 5. .btcpro.sol Name Registry
 
 Human-readable stealth addresses via SNS subdomains:
 
@@ -115,16 +134,21 @@ await sendPrivate(config, myNote, meta.stealthMetaAddress);
 ```
 privacy-coin/
 ├── contracts/                  # Solana programs (Pinocchio)
-│   ├── programs/aegis/        # Main program (14 instructions)
+│   ├── programs/privacy-coin/  # Main program (15 instructions; src/cpi/ika.rs hosts the Ika CPI helper)
 │   └── programs/btc-light-client/ # Bitcoin header tracking (standalone)
 ├── circuits/                   # Zero-knowledge circuits (circom)
 │   ├── circom/joinsplit.circom # Parameterized JoinSplit(N,M,16) template
 │   └── circom/lib/             # Shared (commitment, nullifier, merkle, mpk)
 ├── sdk/                        # TypeScript client SDK
-├── privacy-coin-app/                 # Next.js web interface
+│   └── src/bitcoin/ika.ts     # P2TR address derivation from Ika dWallet pubkey
+├── web/                        # Next.js web interface
 ├── backend/                    # Rust API + deposit tracker + redemption
-├── frost_server/               # FROST threshold signing (BTC redemption)
-└── docs/                       # Technical docs + operational guide
+│   └── src/redemption/signer.rs # SingleKeySigner / MpcSigner (legacy FROST) / IkaSigner
+├── frost_server/               # FROST threshold signing — legacy, being decommissioned
+└── docs/                       # Technical docs, design specs, recon brief
+    ├── designs/2026-05-09-ika-encrypt-pivot-design.md   # Ika+Encrypt pivot architecture
+    ├── plans/2026-05-09-ika-phase1-implementation-plan.md  # step-by-step plan
+    └── recon/2026-05-09-ika-sdk-brief.md   # Ika CPI surface + integration notes
 ```
 
 ---
@@ -276,7 +300,7 @@ That's it — the frontend resolves `tokenId → symbol` automatically using `su
 | Nullifier | `Poseidon(nullifyingKey, leafIndex)` |
 | Stealth | Baby Jubjub + Ed25519 ECDH (EIP-5564) |
 | BTC Deposits | Taproot (BIP-341) |
-| BTC Redemption | FROST 2-of-3 threshold signing (secp256k1-tr) |
+| BTC Redemption | Ika dWallet — 2PC-MPC (user + Ika network), Schnorr/Taproot (`SIG_SCHEME_TAPROOT_SHA256`); pre-alpha mock signer today, real distributed MPC at Ika mainnet |
 | Merkle Tree | Depth 16 (65,536 leaves) |
 | Token | zkBTC (Token-2022) |
 
