@@ -34,6 +34,8 @@ use crate::utils::{
     validate_account_writable, validate_program_owner,
     validate_token_owner, validate_any_token_program_key,
 };
+use crate::cpi::ika::{approve_message, ApproveMessageAccounts, SIG_SCHEME_TAPROOT_SHA256};
+use crate::utils::policy::check_redemption_signing;
 
 /// Required BTC confirmations before completing redemption
 const REQUIRED_CONFIRMATIONS: u64 = 6;
@@ -208,6 +210,16 @@ mod data_tests {
 /// 12. `[]`         Pool config PDA (stores on-chain pool_script; validates backend-provided script)
 /// 13. `[writable]` Change UTXO record PDA (if change exists; else system program as placeholder)
 /// 14..14+N `[writable]` Consumed UTXO PDAs (for closing, N = consumed_utxo_count)
+///
+/// Ika dWallet CPI tail (positions are append-only, after consumed UTXOs):
+/// Let `B = (pool_script_len > 0 ? 14 : 13) + consumed_utxo_count`.
+/// B+0. `[]`         Ika dWallet program (executable; the CPI target)
+/// B+1. `[]`         DWalletCoordinator PDA (owned by Ika program)
+/// B+2. `[writable]` MessageApproval PDA (created by the CPI; seeds: ["message_approval", dwallet, sighash])
+/// B+3. `[]`         dWallet account (owned by Ika program; authority must equal our cpi_authority PDA)
+/// B+4. `[]`         This program's account (executable; the Ika program checks)
+/// B+5. `[signer]`   CPI authority PDA (seeds: ["__ika_cpi_authority"]; signer via invoke_signed)
+/// B+6. `[writable, signer]` Payer for MessageApproval rent
 pub fn process_complete_redemption(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -438,6 +450,16 @@ pub fn process_complete_redemption(
         return Err(PrivacyCoinError::RedemptionOutputMismatch.into());
     }
 
+    // --- Pure on-chain signing policy gate ---
+    // Even though Ika is one entity (and pre-alpha is a single mock signer),
+    // we still gate so a compromised backend cannot drain funds via forged
+    // sighashes. Symmetric with the FROST signers' independent verification.
+    {
+        let pool_data = pool_state_info.try_borrow_data()?;
+        let pool = PoolState::from_bytes(&pool_data)?;
+        check_redemption_signing(pool, amount_sats, miner_fee)?;
+    }
+
     let burn_amount = actual_received.saturating_add(miner_fee);
     let protocol_revenue = service_fee.saturating_sub(miner_fee);
 
@@ -545,6 +567,78 @@ pub fn process_complete_redemption(
             close_account_securely(consumed_utxo_info, rent_recipient)?;
         }
     }
+
+    // --- Ika `approve_message` CPI ---
+    // Accounts beyond the consumed-UTXO tail are the Ika CPI inputs:
+    //   [base + 0] ika_program        (read, executable)
+    //   [base + 1] ika_coordinator    (read, owned by Ika program)
+    //   [base + 2] message_approval   (write, will be created)
+    //   [base + 3] ika_dwallet        (read, owned by Ika program)
+    //   [base + 4] caller_program     (read; this Privacy Coin program account)
+    //   [base + 5] cpi_authority      (read, signer via invoke_signed; PDA)
+    //   [base + 6] ika_payer          (write, signer)
+    // The system program at index 11 is reused for the CPI.
+    let ika_base = consumed_start + consumed_count;
+    if accounts.len() < ika_base + 7 {
+        return Err(PrivacyCoinError::IkaCpiAccountsMissing.into());
+    }
+    let ika_program = &accounts[ika_base];
+    let ika_coordinator = &accounts[ika_base + 1];
+    let ika_message_approval = &accounts[ika_base + 2];
+    let ika_dwallet = &accounts[ika_base + 3];
+    let caller_program = &accounts[ika_base + 4];
+    let cpi_authority = &accounts[ika_base + 5];
+    let ika_payer = &accounts[ika_base + 6];
+    let ika_system_program = &accounts[11]; // shared with the existing system_program slot
+
+    // Read cached CPI authority bump from PoolConfig.
+    let cpi_authority_bump = {
+        let cfg_data = pool_config_info.try_borrow_data()?;
+        if cfg_data.len() < PoolConfig::LEN || cfg_data[0] != POOL_CONFIG_DISCRIMINATOR {
+            return Err(PrivacyCoinError::IkaCpiAccountsMissing.into());
+        }
+        let cfg = PoolConfig::from_bytes(&cfg_data)?;
+        cfg.get_cpi_authority_bump()
+    };
+
+    // Derive MessageApproval PDA bump on-chain.
+    // Seeds (per upstream voting example): ["message_approval", dwallet, message_hash].
+    let (expected_ma_pda, ma_bump) = find_program_address(
+        &[
+            b"message_approval",
+            ika_dwallet.key().as_ref(),
+            ix_data.btc_sighash.as_ref(),
+        ],
+        ika_program.key(),
+    );
+    if ika_message_approval.key() != &expected_ma_pda {
+        return Err(ProgramError::InvalidSeeds);
+    }
+
+    // We echo `btc_sighash` back as `user_pubkey` so the off-chain watcher
+    // can correlate completed Sign sessions to in-flight redemptions without
+    // an extra index. The Ika program treats this as opaque metadata.
+    let user_pubkey: [u8; 32] = ix_data.btc_sighash;
+    let metadata_zero: [u8; 32] = [0u8; 32];
+
+    approve_message(
+        ApproveMessageAccounts {
+            coordinator: ika_coordinator,
+            message_approval: ika_message_approval,
+            dwallet: ika_dwallet,
+            caller_program,
+            cpi_authority,
+            payer: ika_payer,
+            system_program: ika_system_program,
+            dwallet_program: ika_program,
+        },
+        &ix_data.btc_sighash,
+        &metadata_zero,
+        &user_pubkey,
+        SIG_SCHEME_TAPROOT_SHA256,
+        ma_bump,
+        cpi_authority_bump,
+    )?;
 
     // --- Update pool state with exact accounting ---
     let clock = Clock::get()?;
