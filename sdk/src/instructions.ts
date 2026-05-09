@@ -342,6 +342,10 @@ export interface CompleteRedemptionInstructionOptions {
   poolScript: Uint8Array;
   /** Number of consumed UTXO PDAs in remaining accounts */
   consumedUtxoCount: number;
+  /** BIP-341 taproot key-spend sighash (32 bytes) for the *unsigned* withdrawal tx.
+   *  Forwarded as-is to Ika `approve_message` as `message_digest`. The on-chain
+   *  Privacy Coin program does NOT recompute this. */
+  btcSighash: Uint8Array;
   /** Account addresses */
   accounts: {
     poolState: Address;
@@ -361,6 +365,21 @@ export interface CompleteRedemptionInstructionOptions {
     tokenProgram?: Address;
     /** Consumed UTXO PDAs to close */
     consumedUtxos?: Address[];
+    /** Ika dWallet program (executable; CPI target) */
+    ikaProgram: Address;
+    /** Ika DWalletCoordinator PDA */
+    ikaCoordinator: Address;
+    /** MessageApproval PDA — created by the CPI, seeds:
+     *  ["message_approval", dwallet, sighash] against ikaProgram */
+    ikaMessageApproval: Address;
+    /** dWallet account (owned by Ika program) */
+    ikaDwallet: Address;
+    /** This Privacy Coin program's program-account (executable) */
+    callerProgram: Address;
+    /** CPI authority PDA (seeds: ["__ika_cpi_authority"]) */
+    cpiAuthority: Address;
+    /** Payer for MessageApproval rent (writable signer) */
+    ikaPayer: Address;
   };
 }
 
@@ -373,16 +392,21 @@ export interface CompleteRedemptionInstructionOptions {
  * - pool_script_len: u8
  * - pool_script: [u8; 0-34]
  * - consumed_utxo_count: u8
+ * - btc_sighash: [u8; 32]   (forwarded to Ika `approve_message`)
  */
 export function buildCompleteRedemptionInstructionData(options: {
   btcTxid: Uint8Array;
   txSize: number;
   poolScript: Uint8Array;
   consumedUtxoCount: number;
+  btcSighash: Uint8Array;
 }): Uint8Array {
-  const { btcTxid, txSize, poolScript, consumedUtxoCount } = options;
+  const { btcTxid, txSize, poolScript, consumedUtxoCount, btcSighash } = options;
+  if (btcSighash.length !== 32) {
+    throw new Error("btcSighash must be exactly 32 bytes");
+  }
 
-  const totalLen = 1 + 32 + 4 + 1 + poolScript.length + 1;
+  const totalLen = 1 + 32 + 4 + 1 + poolScript.length + 1 + 32;
   const data = new Uint8Array(totalLen);
   const view = new DataView(data.buffer);
 
@@ -396,6 +420,7 @@ export function buildCompleteRedemptionInstructionData(options: {
     data.set(poolScript, offset); offset += poolScript.length;
   }
   data[offset++] = consumedUtxoCount;
+  data.set(btcSighash, offset); offset += 32;
 
   return data;
 }
@@ -403,7 +428,7 @@ export function buildCompleteRedemptionInstructionData(options: {
 /**
  * Build a complete redemption instruction
  *
- * Accounts (13+):
+ * Accounts (13 base + variable + 7 Ika tail):
  * 0.  pool_state (writable)
  * 1.  redemption_request (writable)
  * 2.  authority (signer)
@@ -418,7 +443,16 @@ export function buildCompleteRedemptionInstructionData(options: {
  * 11. system_program (readonly)
  * 12. pool_config (readonly)
  * 13. change_utxo (writable)
- * 14+ consumed_utxos (writable)
+ * 14..14+N consumed_utxos (writable)
+ *
+ * Ika tail (positions B..B+7 where B = (poolScript.length > 0 ? 14 : 13) + consumedUtxoCount):
+ * B+0. ika_program (readonly, executable)
+ * B+1. ika_coordinator (readonly)
+ * B+2. ika_message_approval (writable)
+ * B+3. ika_dwallet (readonly)
+ * B+4. caller_program (readonly)
+ * B+5. cpi_authority (readonly, signer via invoke_signed)
+ * B+6. ika_payer (writable signer)
  */
 export function buildCompleteRedemptionInstruction(
   options: CompleteRedemptionInstructionOptions
@@ -430,6 +464,7 @@ export function buildCompleteRedemptionInstruction(
     txSize: options.txSize,
     poolScript: options.poolScript,
     consumedUtxoCount: options.consumedUtxoCount,
+    btcSighash: options.btcSighash,
   });
 
   const accounts: Instruction["accounts"] = [
@@ -455,6 +490,17 @@ export function buildCompleteRedemptionInstruction(
       accounts.push({ address: utxo, role: AccountRole.WRITABLE });
     }
   }
+
+  // Append the seven Ika CPI tail accounts in fixed order.
+  accounts.push(
+    { address: options.accounts.ikaProgram, role: AccountRole.READONLY },
+    { address: options.accounts.ikaCoordinator, role: AccountRole.READONLY },
+    { address: options.accounts.ikaMessageApproval, role: AccountRole.WRITABLE },
+    { address: options.accounts.ikaDwallet, role: AccountRole.READONLY },
+    { address: options.accounts.callerProgram, role: AccountRole.READONLY },
+    { address: options.accounts.cpiAuthority, role: AccountRole.READONLY },
+    { address: options.accounts.ikaPayer, role: AccountRole.WRITABLE_SIGNER },
+  );
 
   return {
     programAddress: config.privacyCoinProgramId,
