@@ -7,31 +7,31 @@
 
 ## Problem
 
-Solana already has one credible privacy player: Umbra Privacy (mainnet, zkSNARKs + Arcium MPC, Solana-SPL-only). What Solana does **not** have is confidential settlement for **multi-chain assets**: BTC, ETH, RWAs custodied without bridges and traded without leaking flow. Existing privacy systems either lock you to one chain or require trusting a custodial bridge with an off-chain signer committee (Privacy Coin v1 used FROST — a multi-party signer, but an operationally heavy one).
+Solana already has one credible privacy player: Umbra Privacy (mainnet, zkSNARKs + Arcium MPC, Solana-SPL-only). What Solana does **not** have is confidential settlement for **native non-Solana assets** like Bitcoin: held without bridges, traded without leaking flow. Existing BTC-on-Solana paths require a custodial bridge or an off-chain signer committee (Privacy Coin v1 used FROST — a multi-party signer, but operationally heavy).
 
 ## Product
 
-**Privacy Coin v2** — a confidential cross-chain settlement layer on Solana.
+**Privacy Coin v2** — a confidential settlement layer on Solana for native Bitcoin, with an architecture that extends to any Ika-supported chain.
 
-- Native multi-chain assets (BTC first, ETH soon) custodied directly by **Ika dWallets**, governed by Solana program logic. No bridge, no relayer, no FROST committee.
-- Once on-chain, assets become shielded commitments via the existing JoinSplit ZK system. Per-user transfers stay private with Groth16 proofs (already shipped).
-- Cross-user activity — specifically, swaps between shielded asset pools — runs through an **Encrypt-powered sealed-bid batch auction**. Bids stay encrypted; only the per-user fill amounts decrypt.
+- Native BTC custodied directly by **Ika dWallets**, governed by Solana program logic. No bridge, no relayer, no FROST committee. The architecture is chain-agnostic — adding ETH/SUI later is a config change, not a redesign — but this hackathon submission ships BTC only.
+- Once on-chain, BTC becomes a shielded commitment via the existing JoinSplit ZK system. Per-user transfers stay private with Groth16 proofs (already shipped).
+- Cross-user activity — specifically, swaps between shielded zkBTC and shielded USDC — runs through an **Encrypt-powered sealed-bid batch auction**. Bids stay encrypted; only the per-user fill amounts decrypt.
 
-One-line pitch: *"Umbra showed Solana wants confidential transfers. We extend it to any-chain assets, custodied by Ika and matched on encrypted state."*
+One-line pitch: *"Umbra showed Solana wants confidential transfers. We extend it to native BTC — custodied by Ika, matched on encrypted state."*
 
 ## Why this wins the hackathon
 
 1. **Hits both Ika and Encrypt tracks substantively, not superficially.** Ika replaces an entire production subsystem (FROST). Encrypt enables a feature ZK fundamentally cannot: cross-user matching on secret state.
-2. **Defensible vs Umbra.** Umbra is Solana-SPL only. Multi-chain custody via Ika is an architectural moat, not a feature.
+2. **Defensible vs Umbra.** Umbra is Solana-SPL only. Native BTC custody via Ika is a category Umbra doesn't address — and the architecture is multi-chain-ready even though we ship BTC only for the hackathon.
 3. **Production-feasible.** Phase 1 deletes more code than it writes (FROST → Ika). Phase 2 adds one new program (`confidential_swap`) using `encrypt-pinocchio`, which matches the project's existing Pinocchio stack — no Anchor migration.
 4. **Graceful degradation.** Phase 1 alone is a complete demoable submission: BTC privacy bridge with Ika-custodied dWallets. If Encrypt's pre-alpha backend bites us, we still ship.
-5. **Demo narrative is one screen.** Deposit BTC → custody by Ika dWallet (visibly, on-chain) → balance becomes a shielded commitment → swap to shielded USDC via sealed-bid batch → withdraw to native chain.
+5. **Demo narrative is one screen.** Deposit BTC → custody by Ika dWallet (visibly, on-chain) → balance becomes a shielded commitment → swap to shielded USDC via sealed-bid batch → withdraw to BTC.
 
 ## Architecture (target)
 
 ```
 ┌──────────────────┐     ┌──────────────────────┐     ┌──────────────────────┐
-│  BTC / ETH       │     │   Ika dWallet        │     │  Solana program      │
+│  Bitcoin         │     │   Ika dWallet        │     │  Solana program      │
 │  (native chain)  │◄───►│   (2PC-MPC user +    │◄───►│  privacy-coin        │
 │                  │     │    Ika network)      │     │  (Pinocchio)         │
 └──────────────────┘     └──────────────────────┘     └─────────┬────────────┘
@@ -101,11 +101,10 @@ Estimated diff: ~5k LOC deleted (FROST subsystem), ~2-3k LOC added (Ika client, 
 
 **Phase 2 acceptance:** Two test users submit encrypted bids on opposite sides of zkBTC ↔ shielded USDC; matcher clears them; both end up with the swapped shielded notes; on-chain observers see only commitments + nullifiers + ciphertexts.
 
-### Phase 3 — demo polish
+### Demo polish (rolled into Phase 1/2, not its own phase)
 
-1. Add a second source asset via Ika (ETH or SUI) — deposit and withdraw only, no swap. The point is to make the multi-chain story concrete in 30 seconds of demo video.
-2. UI polish: a single dashboard showing shielded balances per asset + a swap button.
-3. Submission video: 2 minutes covering the full flow + 1 minute on architecture + 1 minute on why Ika+Encrypt specifically.
+1. UI: a single dashboard showing the shielded BTC balance, a deposit/withdraw flow, and a swap button.
+2. Submission video: 2 minutes covering the full flow + 1 minute on architecture + 1 minute on why Ika+Encrypt specifically.
 
 ## Risks and mitigations
 
@@ -115,7 +114,6 @@ Estimated diff: ~5k LOC deleted (FROST subsystem), ~2-3k LOC added (Ika client, 
 | Encrypt pre-alpha is too rough for the swap circuit | Medium | Medium | Phase 2 is stretch, not core. Ship Phase 1 alone if needed. Encrypt's plaintext-stub mode means functional integration is achievable even if real FHE isn't. |
 | Bitcoin testnet flakiness on demo day | High | Low | Pre-record the BTC deposit confirmation portion of the demo. Live-demo only the Solana side. |
 | Judges discount "stub-FHE" privacy claim | Low | Medium | Be transparent in the README and demo: "Encrypt is pre-alpha; real FHE replaces the stub at devnet GA. This submission validates the API integration and product surface, not the cryptographic backend." |
-| Multi-chain (Phase 3) consumes Phase 1/2 time | High | Medium | Hard cut: Phase 3 only starts if Phase 2 acceptance passes. Otherwise Phase 3 is documented as roadmap, not built. |
 
 ## Explicitly out of scope
 
@@ -124,7 +122,7 @@ Estimated diff: ~5k LOC deleted (FROST subsystem), ~2-3k LOC added (Ika client, 
 - Compliance / viewing-key disclosure features beyond what Privacy Coin v1 ships (Umbra has them; we don't compete on that axis for the hackathon)
 - Mobile app
 - Mainnet readiness (devnet only)
-- Asset support beyond BTC + (Phase 3) one of {ETH, SUI}
+- **Multi-chain assets — BTC only for the hackathon submission.** Architecture is multi-chain-capable via Ika; ETH/SUI is roadmap, not build target.
 - Custom token issuance / RWA integrations
 - Decentralized indexer / scanner — keep the existing single backend scanner
 
@@ -133,7 +131,7 @@ Estimated diff: ~5k LOC deleted (FROST subsystem), ~2-3k LOC added (Ika client, 
 - [ ] Deployed program IDs (Solana devnet) for `privacy-coin` v2 and `confidential_swap`
 - [ ] Ika dWallet ID(s) used in the demo recorded in README
 - [ ] Public GitHub repo with this spec, an updated `TECHNICAL.md`, and a `MIGRATION_v1_to_v2.md`
-- [ ] README sections: problem, target users (institutions wanting confidential cross-chain settlement; privacy-conscious BTC holders), Ika usage, Encrypt usage, build/test instructions, deployed IDs/URLs
+- [ ] README sections: problem, target users (privacy-conscious BTC holders; institutions wanting confidential BTC settlement on Solana), Ika usage, Encrypt usage, build/test instructions, deployed IDs/URLs
 - [ ] <5 min demo video
 - [ ] Live web frontend deployed (existing Vercel deployment, just rewired)
 
@@ -142,6 +140,5 @@ Estimated diff: ~5k LOC deleted (FROST subsystem), ~2-3k LOC added (Ika client, 
 1. Does Ika's Solana coordinator program expose a CPI for signing requests, or does it require off-chain signing-request submission? (Affects whether `complete_redemption` triggers Ika via CPI or via an event the backend observes.)
 2. What's the latency from `request_redemption` to a fully signed BTC tx via Ika? Affects UX ("withdrawal pending" state design).
 3. Does Encrypt's pre-alpha actually allow `#[encrypt_fn]` to compile and run in the current devnet, or is the integration paper-only right now?
-4. For Phase 3 multi-asset: does Ika's Solana devnet support both BTC and ETH dWallets simultaneously, or one chain at a time?
 
 These get answered during writing-plans, not now.
