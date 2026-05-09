@@ -57,6 +57,10 @@ Privacy boundaries:
 - **Custody privacy + sovereignty**: Ika dWallets — no FROST committee operators to trust or run.
 - **Cross-user matching privacy**: Encrypt FHE — the only piece truly impossible without FHE/MPC.
 
+## Ika Solana integration — concrete
+
+Ika's Solana-native pre-alpha exists at `dwallet-labs/ika-pre-alpha`. Devnet program ID: `87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY`. dWallet gRPC: `pre-alpha-dev-1.ika.ika-network.net:443` (pre-alpha mock signer; same shape as Encrypt's plaintext stub). The integration crate is `ika-dwallet-pinocchio` — direct CPI from our existing Pinocchio program. **No Node IPC bridge, no Sui sidecar, no off-chain orchestration of signing.** The Privacy Coin program CPIs `approve_message(...)` (discriminator 8) into the Ika program when redemption is fully validated; an off-chain watcher polls the resulting Sign session and broadcasts the assembled BTC tx.
+
 ## Component-by-component changes
 
 | Component | Action | Notes |
@@ -64,14 +68,15 @@ Privacy boundaries:
 | `frost_server/` | **Delete** | Ika dWallets supersede. Single biggest code deletion. |
 | `contracts/programs/btc-light-client/` | **Keep** | Belt-and-suspenders. Solana still SPV-verifies BTC deposits even if Ika-custodied. Future: can be removed if Ika provides verified deposit attestation. |
 | `circuits/` (JoinSplit) | **Keep, unchanged** | Ships as-is. |
-| `contracts/programs/privacy-coin/` | **Modify** | Replace FROST verification on withdrawal path with Ika dWallet signature request. Add `confidential_swap_settle` instruction (CPI'd from new program). |
-| `contracts/programs/confidential_swap/` | **NEW** | Encrypt-powered sealed-bid batch auction. Uses `encrypt-pinocchio`. |
-| `sdk/` | **Modify** | Add `IkaClient` (dWallet creation + signing requests). Add Encrypt swap-bid encryption helpers. Remove FROST DKG client code. |
-| `backend/` | **Slim** | Remove FROST orchestration + DKG ceremony. Keep stealth scanner, deposit tracker, redemption processor (now invokes Ika instead of FROST). |
-| `web/` | **Modify** | Deposit flow generates Ika dWallet address instead of FROST Taproot. Add swap UI. |
+| `contracts/programs/privacy-coin/` | **Modify** | Add `ika-dwallet-pinocchio` git dep. `complete_redemption` CPIs `DWalletContext::approve_message` with the BTC sighash. CPI authority PDA derives from `[CPI_AUTHORITY_SEED]`. The pool's Ika dWallet authority is set to this PDA at pool init time. Add `confidential_swap_settle` instruction in Phase 2. |
+| `contracts/programs/confidential_swap/` | **NEW (Phase 2)** | Encrypt-powered sealed-bid batch auction. Uses `encrypt-pinocchio`. |
+| `sdk/` | **Modify** | Add `deriveCustodyAddressFromIkaDWallet` (P2TR from dWallet pubkey). Add helpers for reading Ika `Sign` accounts. Remove FROST DKG client code. |
+| `backend/` | **Slim** | Remove FROST orchestration + DKG ceremony. New thin watcher: poll Ika `Sign` PDAs for completed signatures, assemble + broadcast BTC tx. |
+| `scripts/ika-setup/` | **NEW (one-shot)** | Standalone script that runs the dWallet DKG once on Ika devnet, transfers authority to our program's CPI authority PDA, and writes the dWallet ID into `localnet-state.json` / `devnet-state.json`. Run once per pool deployment. |
+| `web/` | **Modify** | Deposit flow shows Ika-derived BTC address. "Custody: Ika dWallet" copy. Add swap UI in Phase 2. |
 | `docs/` | **Add** | Migration guide, Ika integration doc, Encrypt swap design. Update `TECHNICAL.md`. |
 
-Estimated diff: ~5k LOC deleted (FROST subsystem), ~2-3k LOC added (Ika client, swap program, swap UI). Net negative — production health win.
+Estimated diff: ~5k LOC deleted (FROST subsystem), ~1.5k LOC added (Ika CPI wiring, watcher, swap program, swap UI). Net negative — production health win.
 
 ## Phased plan
 
@@ -79,13 +84,14 @@ Estimated diff: ~5k LOC deleted (FROST subsystem), ~2-3k LOC added (Ika client, 
 
 **Goal:** BTC privacy bridge works end-to-end with Ika dWallets in place of FROST.
 
-1. Stand up Ika devnet integration. Create dWallet from Solana account; obtain a Bitcoin address controlled by it.
-2. Update `createNonInteractiveDeposit` in SDK: deposit address is now the Ika dWallet's BTC address. OP_RETURN stealth-announcement payload unchanged.
-3. Update deposit verification path in `privacy-coin` program: `verify_stealth_deposit` instruction stays (still SPV-verifies via `btc-light-client`); only the *destination* address derivation changes upstream.
-4. Replace withdrawal flow: `complete_redemption` now emits an Ika dWallet sign request via CPI to Ika's Solana coordinator program, instead of dispatching to `frost_server`. The Solana program enforces the signing policy (amount limits, destination whitelist, paused-state check) — which previously lived in `frost_server/policy.rs` — so policy moves on-chain.
-5. Backend `redemption/` worker is reduced to: observe Solana redemption-completed events, broadcast the resulting BTC tx returned by Ika.
-6. Delete `frost_server/` and `backend/src/frost_client.rs` and FROST-related Docker config.
-7. Update web deposit/withdraw UX. No FROST DKG ceremony at startup.
+1. **One-shot dWallet setup**: clone `dwallet-labs/ika-pre-alpha`, run their DKG flow once against Ika devnet (`pre-alpha-dev-1.ika.ika-network.net:443`) to create a SECP256K1 dWallet. Transfer its authority to the Privacy Coin CPI authority PDA. Save dWallet ID + pubkey in `localnet-state.json` / `devnet-state.json`.
+2. Add `ika-dwallet-pinocchio` git dependency to `contracts/programs/privacy-coin/Cargo.toml`. Add `ika_dwallet_id` and `ika_dwallet_pubkey` fields to `pool_config`.
+3. Update `createNonInteractiveDeposit` in SDK: deposit address derives from `pool_config.ika_dwallet_pubkey` (P2TR). OP_RETURN stealth-announcement payload unchanged.
+4. `verify_stealth_deposit` stays as-is (still SPV-verifies via `btc-light-client`); only the *destination* address derivation upstream changes.
+5. Modify `complete_redemption`: after validating the redemption, build the BTC tx → compute taproot sighash → CPI `DWalletContext::approve_message(message_digest = btc_sighash, signature_scheme = ECDSA_secp256k1)`. The Privacy Coin program enforces all signing policy on-chain (amount limits, destination whitelist, paused-state). FROST's `policy.rs` moves into the program.
+6. Backend gets a slim Ika watcher: poll Ika `Sign` PDAs for completed signatures, assemble the witness on the unsigned BTC tx, broadcast to Bitcoin testnet. Replaces `frost_client.rs`.
+7. Delete `frost_server/`, `backend/src/bitcoin/frost_client.rs`, and FROST-related Docker config.
+8. Update web deposit/withdraw UX. No FROST DKG ceremony at startup.
 
 **Phase 1 acceptance:** Run a full E2E (deposit BTC → see shielded note → transfer privately → withdraw to BTC) on Solana devnet + Bitcoin testnet, with all custody controlled by Ika.
 
@@ -110,10 +116,11 @@ Estimated diff: ~5k LOC deleted (FROST subsystem), ~2-3k LOC added (Ika client, 
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| Ika Solana devnet API not stable enough to integrate in time | Medium | High | Start Phase 1 immediately. Keep FROST code in a feature flag for the first week so we can fall back if blocked. Delete only after Ika integration works E2E. |
+| Ika pre-alpha mock signer disclaimer is a non-starter for "core integration" judging | Low | Medium | Be transparent: README + demo explain Ika is pre-alpha (mock MPC signer, real CPI integration). Same disclaimer Ika ships with. The integration *architecture* is real; the cryptographic backend lights up when Ika exits pre-alpha. |
+| Ika devnet wipe ("all on-chain data will be wiped periodically") destroys our dWallet mid-demo | Medium | High | Keep the one-shot setup script (`scripts/ika-setup/`) idempotent. Re-run on demo day to refresh dWallet ID. Pre-record the deposit-flow portion as backup. |
 | Encrypt pre-alpha is too rough for the swap circuit | Medium | Medium | Phase 2 is stretch, not core. Ship Phase 1 alone if needed. Encrypt's plaintext-stub mode means functional integration is achievable even if real FHE isn't. |
 | Bitcoin testnet flakiness on demo day | High | Low | Pre-record the BTC deposit confirmation portion of the demo. Live-demo only the Solana side. |
-| Judges discount "stub-FHE" privacy claim | Low | Medium | Be transparent in the README and demo: "Encrypt is pre-alpha; real FHE replaces the stub at devnet GA. This submission validates the API integration and product surface, not the cryptographic backend." |
+| `ika-dwallet-pinocchio` git dep changes API mid-build | Medium | Low | Pin to a specific commit, not `main`. |
 
 ## Explicitly out of scope
 
@@ -137,8 +144,9 @@ Estimated diff: ~5k LOC deleted (FROST subsystem), ~2-3k LOC added (Ika client, 
 
 ## Open questions for implementation planning
 
-1. Does Ika's Solana coordinator program expose a CPI for signing requests, or does it require off-chain signing-request submission? (Affects whether `complete_redemption` triggers Ika via CPI or via an event the backend observes.)
-2. What's the latency from `request_redemption` to a fully signed BTC tx via Ika? Affects UX ("withdrawal pending" state design).
+1. ~~Does Ika's Solana coordinator program expose a CPI for signing requests?~~ **Resolved.** `ika-dwallet-pinocchio` exposes `DWalletContext::approve_message(...)` (discriminator 8). Direct CPI from `complete_redemption`.
+2. What's the latency from `complete_redemption` (CPI approve) to a usable signature in the Ika `Sign` PDA? Affects UX. (Determined during recon.)
 3. Does Encrypt's pre-alpha actually allow `#[encrypt_fn]` to compile and run in the current devnet, or is the integration paper-only right now?
+4. Does the Ika program expose an instruction for raising the dWallet pubkey on-chain, or is the pubkey only available off-chain after DKG? (Affects whether `pool_config.ika_dwallet_pubkey` is filled at init or read lazily.)
 
 These get answered during writing-plans, not now.
