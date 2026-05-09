@@ -13,7 +13,7 @@ const ROWS: ComparisonRowData[] = [
   { label: "Addresses", traditional: "Linkable & reusable", privateBtc: "One-time stealth addresses" },
   { label: "Deposits", traditional: "Public token minting", privateBtc: "Shielded Merkle insertion" },
   { label: "Withdrawals", traditional: "Traceable burn + send", privateBtc: "Unlinkable via nullifiers" },
-  { label: "Custody", traditional: "Multisig / MPC", privateBtc: "FROST threshold + policy" },
+  { label: "Custody", traditional: "Multisig / MPC", privateBtc: "Ika dWallet · Solana-controlled" },
 ];
 
 function ComparisonRow({ label, traditional, privateBtc }: ComparisonRowData) {

@@ -176,7 +176,7 @@ const COMPARISON_ROWS = [
   { label: "Addresses", traditional: "Linkable & reusable", privateBtc: "One-time stealth addresses" },
   { label: "Deposits", traditional: "Public token minting", privateBtc: "Shielded Merkle insertion" },
   { label: "Withdrawals", traditional: "Traceable burn + send", privateBtc: "Unlinkable via nullifiers" },
-  { label: "Custody", traditional: "Multisig / MPC", privateBtc: "FROST threshold + policy" },
+  { label: "Custody", traditional: "Multisig / MPC", privateBtc: "Ika dWallet · Solana-controlled" },
 ];
 
 function ComparisonTable() {
@@ -246,8 +246,8 @@ const PROTOCOL_STEPS = [
   },
   {
     id: "unshield-withdraw", num: "06", icon: Network, title: "Unshield or Withdraw",
-    desc: "Exit the privacy pool in two ways: unshield SPL tokens back to your Solana wallet instantly, or withdraw BTC via FROST threshold signing (2-of-3). Both operations use a JoinSplit proof — the nullifier prevents double-spending without revealing which note you're spending.",
-    detail: "SPL: instant · BTC: FROST 2-of-3 threshold",
+    desc: "Exit the privacy pool in two ways: unshield SPL tokens back to your Solana wallet instantly, or withdraw BTC via an Ika dWallet whose authority is controlled by this Solana program (2PC-MPC, no off-chain signer committee). Both operations use a JoinSplit proof — the nullifier prevents double-spending without revealing which note you're spending.",
+    detail: "SPL: instant · BTC: Ika dWallet (Solana-controlled)",
   },
 ];
 
@@ -285,12 +285,12 @@ const CRYPTO_ITEMS = [
 ];
 
 const SECURITY_ITEMS = [
-  { icon: ShieldCheck, title: "OFAC Screening", desc: "The FROST policy engine screens deposit addresses and withdrawal destinations against OFAC sanctions lists before approving any signing round. Non-compliant transactions are rejected at the threshold signing level." },
-  { icon: Network, title: "Threshold Custody", desc: "No single key controls the BTC vault. FROST 2-of-3 threshold signing means at least 2 independent signers must approve every sweep and withdrawal. Each signer runs its own policy engine independently." },
+  { icon: ShieldCheck, title: "On-Chain Policy Gate", desc: "Signing policy lives in the Solana program itself: amount limits, fee bounds, paused state, and destination whitelist are checked on-chain before the program issues the Ika `approve_message` CPI. A compromised backend cannot drain funds by submitting forged sighashes." },
+  { icon: Network, title: "Ika dWallet Custody", desc: "BTC is held by an Ika dWallet whose authority is a PDA derived from this Solana program (`[\"__ika_cpi_authority\"]`). 2PC-MPC means the Ika network and our program must both participate in every signature — no single key, no off-chain signer committee. Pre-alpha runs a single mock signer; real distributed MPC ships at Ika mainnet." },
   { icon: GitBranch, title: "Trustless Verification", desc: "Bitcoin deposits are verified on-chain via SPV proofs against a light client tracking BTC block headers. The Solana program validates Merkle inclusion directly — no oracle or trusted third party." },
   { icon: Lock, title: "Double-Spend Prevention", desc: "Each note can only be spent once. Publishing a nullifier (derived from spending key + leaf index) marks the note as consumed. The on-chain program rejects duplicate nullifiers permanently." },
   { icon: Eye, title: "Selective Disclosure", desc: "Share your viewing key with auditors, accountants, or compliance officers. They gain read-only access to your transaction history and balances — without any ability to spend or transfer your funds." },
-  { icon: AlertTriangle, title: "Audit Trail", desc: "Every FROST signing operation is logged in an append-only JSONL audit trail. Policy decisions, sighash verification results, and signing outcomes are recorded for forensic analysis." },
+  { icon: AlertTriangle, title: "Auditable CPI Trail", desc: "Every redemption emits an `approve_message` CPI on-chain, with the sighash, dWallet ID, and signature scheme recorded as inner instructions in the Solana transaction. The full signing history is reconstructable from RPC alone — no separate audit log to operate." },
 ];
 
 /* ── Page ── */
