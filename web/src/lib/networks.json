@@ -89,6 +89,12 @@
       "groupPubkey": "6c18d9968cc3612708aa5e2a6a10ee7ab57e0cfc6fa6cee7542546c84a00c9d2",
       "explorerUrl": "http://localhost:3002/regtest"
     },
+    "ika": {
+      "programId": "87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY",
+      "grpcEndpoint": "pre-alpha-dev-1.ika.ika-network.net:443",
+      "dwallet": "11111111111111111111111111111111",
+      "dwalletXOnlyPubkey": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
     "backend": {
       "url": "http://localhost:3001"
     }

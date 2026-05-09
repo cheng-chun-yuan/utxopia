@@ -74,6 +74,13 @@ BTC_NETWORK=$(jval btcNetwork)
 SOLANA_RPC=$(jval solanaRpc)
 BACKEND_URL=$(jval backendUrl)
 
+# Ika dWallet integration (nested under "ika" — fall back to empty string if absent).
+IKA_PROGRAM_ID=$(python3 -c "import json,sys; d=json.load(open('$STATE_FILE')); print(d.get('ika',{}).get('programId',''))")
+IKA_GRPC_ENDPOINT=$(python3 -c "import json,sys; d=json.load(open('$STATE_FILE')); print(d.get('ika',{}).get('grpcEndpoint',''))")
+IKA_DWALLET=$(python3 -c "import json,sys; d=json.load(open('$STATE_FILE')); print(d.get('ika',{}).get('dwallet',''))")
+IKA_DWALLET_XONLY_PUBKEY=$(python3 -c "import json,sys; d=json.load(open('$STATE_FILE')); print(d.get('ika',{}).get('dwalletXOnlyPubkey',''))")
+IKA_CPI_AUTHORITY_BUMP=$(python3 -c "import json,sys; d=json.load(open('$STATE_FILE')); print(d.get('ika',{}).get('cpiAuthorityBump',0))")
+
 # Defaults for fields not in state file
 BACKEND_URL="${BACKEND_URL:-http://localhost:3001}"
 
@@ -125,7 +132,7 @@ ESPLORA_URL=$ESPLORA_URL
 MEMPOOL_API_URL=$ESPLORA_URL
 POOL_RECEIVE_ADDRESS=$POOL_BTC_ADDR
 
-# ─── FROST Signing ───────────────────────────────────────────────────────────
+# ─── FROST Signing (legacy — being decommissioned) ──────────────────────────
 PRIVACY_COIN_SIGNING_MODE=frost
 PRIVACY_COIN_FROST_THRESHOLD=2
 PRIVACY_COIN_FROST_PARTICIPANTS=3
@@ -133,6 +140,13 @@ PRIVACY_COIN_FROST_SIGNER_URLS=http://localhost:9001,http://localhost:9002,http:
 PRIVACY_COIN_FROST_KEY_SHARE=placeholder
 PRIVACY_COIN_FROST_GROUP_PUBKEY=$GROUP_PUBKEY
 PRIVACY_COIN_FROST_API_KEY=\${PRIVACY_COIN_FROST_API_KEY:?Set PRIVACY_COIN_FROST_API_KEY env var}
+
+# ─── Ika dWallet (replaces FROST in v2) ─────────────────────────────────────
+PRIVACY_COIN_IKA_PROGRAM_ID=$IKA_PROGRAM_ID
+PRIVACY_COIN_IKA_GRPC_ENDPOINT=$IKA_GRPC_ENDPOINT
+PRIVACY_COIN_IKA_DWALLET=$IKA_DWALLET
+PRIVACY_COIN_IKA_DWALLET_XONLY_PUBKEY=$IKA_DWALLET_XONLY_PUBKEY
+PRIVACY_COIN_IKA_CPI_AUTHORITY_BUMP=$IKA_CPI_AUTHORITY_BUMP
 
 # ─── Tracker & Indexer ───────────────────────────────────────────────────────
 TRACKER_API_PORT=3001
@@ -241,6 +255,12 @@ networks["$NETWORK"] = {
         "poolAddress": "$POOL_BTC_ADDR",
         "groupPubkey": "$GROUP_PUBKEY",
         "explorerUrl": "$BTC_EXPLORER"
+    },
+    "ika": {
+        "programId": "$IKA_PROGRAM_ID",
+        "grpcEndpoint": "$IKA_GRPC_ENDPOINT",
+        "dwallet": "$IKA_DWALLET",
+        "dwalletXOnlyPubkey": "$IKA_DWALLET_XONLY_PUBKEY"
     },
     "backend": {
         "url": "$BACKEND_URL"
