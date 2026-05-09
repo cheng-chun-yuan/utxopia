@@ -185,6 +185,16 @@ pub enum PrivacyCoinError {
 
     #[error("Invalid PDA derivation")]
     InvalidPDA = 6085,
+
+    // Ika dWallet integration errors (6086+)
+    #[error("Redemption amount exceeds policy limit")]
+    RedemptionAmountExceedsLimit = 6086,
+
+    #[error("Computed miner fee exceeds policy limit")]
+    RedemptionFeeExceedsLimit = 6087,
+
+    #[error("Required Ika CPI accounts missing from accounts slice")]
+    IkaCpiAccountsMissing = 6088,
 }
 
 impl From<PrivacyCoinError> for ProgramError {
