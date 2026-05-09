@@ -1,0 +1,14 @@
+{
+  "name": "ika-setup",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "bun run setup-dwallet.ts"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.95.0",
+    "@grpc/grpc-js": "^1.11.0",
+    "@grpc/proto-loader": "^0.7.13",
+    "@mysten/bcs": "^1.4.0"
+  }
+}

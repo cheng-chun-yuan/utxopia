@@ -21,7 +21,7 @@ use zkbtc::config::PRIVACY_COINConfig;
 use zkbtc::deposit_tracker::{self, TrackerConfig};
 use zkbtc::deposit_tracker::sqlite_db::SqliteDepositStore;
 use zkbtc::event_indexer::{EventIndexerConfig, EventIndexerService, EventStore, TreeCache, event_indexer_router_with_deposits, SolanaWsConfig, SolanaWsSubscriber, Reconciler};
-use zkbtc::redemption::{MpcSigner, RedemptionConfig, RedemptionService, SingleKeySigner};
+use zkbtc::redemption::{IkaSigner, MpcSigner, RedemptionConfig, RedemptionService, SingleKeySigner};
 use zkbtc::stealth::StealthDepositService;
 use std::env;
 use std::sync::Arc;
@@ -80,19 +80,32 @@ fn print_usage() {
     println!("  cd backend/header-relayer && bun run start");
 }
 
-/// Create redemption service from environment, supporting both single-key and FROST modes
+/// Create redemption service from environment.
+/// Supports three modes: "single" (POC), "frost" (legacy), "ika" (v2 default).
 fn create_service(config: RedemptionConfig) -> RedemptionService {
-    // Check for FROST signing mode first
     if let Ok(mode) = env::var("PRIVACY_COIN_SIGNING_MODE") {
-        if mode.to_lowercase() == "frost" {
-            return match create_frost_service(config.clone()) {
-                Ok(service) => service,
-                Err(e) => {
-                    eprintln!("Warning: Failed to configure FROST signing: {}", e);
-                    eprintln!("Falling back to testnet single-key signer");
-                    RedemptionService::new_testnet()
-                }
-            };
+        match mode.to_lowercase().as_str() {
+            "frost" => {
+                return match create_frost_service(config.clone()) {
+                    Ok(service) => service,
+                    Err(e) => {
+                        eprintln!("Warning: Failed to configure FROST signing: {}", e);
+                        eprintln!("Falling back to testnet single-key signer");
+                        RedemptionService::new_testnet()
+                    }
+                };
+            }
+            "ika" => {
+                return match create_ika_service(config.clone()) {
+                    Ok(service) => service,
+                    Err(e) => {
+                        eprintln!("Warning: Failed to configure Ika signing: {}", e);
+                        eprintln!("Falling back to testnet single-key signer");
+                        RedemptionService::new_testnet()
+                    }
+                };
+            }
+            _ => {}
         }
     }
 
@@ -164,6 +177,62 @@ fn create_frost_service(config: RedemptionConfig) -> Result<RedemptionService, S
             }
             Err(e) => {
                 eprintln!("Warning: Failed to load payer keypair for redemption: {}", e);
+            }
+        }
+    }
+
+    Ok(RedemptionService::new_with_signer(config, signer, sol_client))
+}
+
+/// Create redemption service backed by an Ika dWallet (v2).
+///
+/// The IkaSigner does not produce signatures synchronously the way FROST does.
+/// Instead, the Privacy Coin program's `complete_redemption` instruction CPIs
+/// `approve_message` on the Ika program; the Ika network's mock signer (pre-alpha)
+/// then asynchronously fills a Sign PDA which the IkaSigner polls for. See
+/// `backend/src/redemption/signer.rs::IkaSigner` for the polling contract.
+fn create_ika_service(config: RedemptionConfig) -> Result<RedemptionService, String> {
+    let aegis_config = PRIVACY_COINConfig::from_env().map_err(|e| e.to_string())?;
+
+    let (program_id_str, dwallet_str, dwallet_xonly_hex) = match &aegis_config.signing {
+        zkbtc::config::SigningMode::Ika {
+            program_id,
+            dwallet,
+            dwallet_xonly_pubkey,
+            ..
+        } => (program_id.clone(), dwallet.clone(), dwallet_xonly_pubkey.clone()),
+        _ => return Err("signing mode is not Ika".to_string()),
+    };
+
+    let ika_program_id = program_id_str
+        .parse::<solana_sdk::pubkey::Pubkey>()
+        .map_err(|e| format!("invalid PRIVACY_COIN_IKA_PROGRAM_ID: {}", e))?;
+    let ika_dwallet = dwallet_str
+        .parse::<solana_sdk::pubkey::Pubkey>()
+        .map_err(|e| format!("invalid PRIVACY_COIN_IKA_DWALLET: {}", e))?;
+    let xonly_bytes = hex::decode(&dwallet_xonly_hex)
+        .map_err(|e| format!("invalid IKA dwallet xonly hex: {}", e))?;
+    let xonly = bitcoin::XOnlyPublicKey::from_slice(&xonly_bytes)
+        .map_err(|e| format!("invalid IKA dwallet xonly pubkey: {}", e))?;
+
+    let signer = IkaSigner::new(
+        aegis_config.solana_rpc.clone(),
+        ika_program_id,
+        ika_dwallet,
+        xonly,
+    );
+
+    let mut sol_client = zkbtc::solana::client::SolClient::from_config(&aegis_config)
+        .map_err(|e| format!("SolClient config error: {}", e))?;
+
+    if let Ok(keypair_val) = env::var("RELAYER_KEYPAIR").or_else(|_| env::var("VERIFIER_KEYPAIR")) {
+        match zkbtc::common::keypair::load_keypair(&keypair_val) {
+            Ok(keypair) => {
+                println!("Redemption service: payer keypair set (Ika mode)");
+                sol_client.set_payer(keypair);
+            }
+            Err(e) => {
+                eprintln!("Warning: Failed to load payer keypair for Ika redemption: {}", e);
             }
         }
     }

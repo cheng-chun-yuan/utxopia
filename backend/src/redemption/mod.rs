@@ -70,7 +70,7 @@ pub use builder::{BuilderError, TxBuilder, UnsignedTx};
 pub use events::{AccountUpdate, AccountUpdateStream, StreamError};
 pub use queue::{QueueError, QueueStats, WithdrawalQueue};
 pub use service::{ProcessResult, RedemptionService, ServiceError, TickResult};
-pub use signer::{MpcSigner, SignerError, SingleKeySigner, TxSigner};
+pub use signer::{IkaSigner, MpcSigner, SignerError, SingleKeySigner, TxSigner};
 pub use types::{
     BurnEvent, PoolUtxo, RedemptionConfig, RedemptionStats, WithdrawalRequest, WithdrawalStatus,
 };

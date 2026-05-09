@@ -3,6 +3,16 @@ name = "zkbtc"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+# v2 default: FROST kept available alongside Ika during the migration window.
+# To build the slim Ika-only backend (Task 8 endgame), use:
+#   cargo build --no-default-features --features ika-only
+default = ["frost-legacy", "ika-only"]
+# Legacy FROST 2-of-3 threshold signing (deposit sweeper + redemption MpcSigner).
+frost-legacy = []
+# Ika dWallet support (IkaSigner + Ika SigningMode variant).
+ika-only = []
+
 # Main binary - minimal launcher
 [[bin]]
 name = "zkbtc-api"

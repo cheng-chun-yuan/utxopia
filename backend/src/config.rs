@@ -131,12 +131,12 @@ impl Network {
 /// Signing mode configuration
 #[derive(Debug, Clone)]
 pub enum SigningMode {
-    /// Single key signing (POC only, not for production)
+    /// Single key signing (POC / tests only, not for production)
     Single {
         /// Hex-encoded private key for BTC signing
         key: String,
     },
-    /// FROST threshold signing (production)
+    /// FROST threshold signing (legacy — being decommissioned in favor of Ika)
     Frost {
         /// Required number of signers
         threshold: u8,
@@ -149,11 +149,22 @@ pub enum SigningMode {
         /// Optional API key for authenticating with FROST servers
         api_key: Option<String>,
     },
+    /// Ika dWallet (Solana-native, 2PC-MPC). Replaces FROST in v2.
+    Ika {
+        /// Ika dWallet program ID (devnet: 87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY).
+        program_id: String,
+        /// dWallet account address (Solana pubkey, base58).
+        dwallet: String,
+        /// dWallet's compressed-x x-only secp256k1 pubkey (hex, 32 bytes).
+        dwallet_xonly_pubkey: String,
+        /// gRPC endpoint for the off-chain mock signer (pre-alpha).
+        grpc_endpoint: String,
+    },
 }
 
 impl SigningMode {
     /// Create a FrostClient from FROST signing config.
-    /// Returns None if this is SingleKey mode.
+    /// Returns None for any non-Frost mode.
     pub fn frost_client(&self) -> Option<crate::bitcoin::frost_client::FrostClient> {
         match self {
             SigningMode::Frost { threshold, signer_urls, api_key, .. } => {
@@ -163,17 +174,27 @@ impl SigningMode {
                     api_key.clone(),
                 ))
             }
-            SigningMode::Single { .. } => None,
+            _ => None,
         }
     }
 
     /// Get the FROST group public key from the signer's /info endpoint.
-    /// Returns None if SingleKey mode.
+    /// Returns None for any non-Frost mode.
     pub fn frost_signer_urls(&self) -> Option<&[String]> {
         match self {
             SigningMode::Frost { signer_urls, .. } => Some(signer_urls),
-            SigningMode::Single { .. } => None,
+            _ => None,
         }
+    }
+
+    /// True if this is an Ika dWallet signing config.
+    pub fn is_ika(&self) -> bool {
+        matches!(self, SigningMode::Ika { .. })
+    }
+
+    /// True if this is a FROST signing config.
+    pub fn is_frost(&self) -> bool {
+        matches!(self, SigningMode::Frost { .. })
     }
 }
 
@@ -327,6 +348,7 @@ impl PRIVACY_COINConfig {
             SigningMode::Single { .. } => "Single Key (POC)".to_string(),
             SigningMode::Frost { threshold, participants, signer_urls, .. } =>
                 format!("FROST {}-of-{} ({} signer URLs)", threshold, participants, signer_urls.len()),
+            SigningMode::Ika { dwallet, .. } => format!("Ika dWallet ({})", &dwallet[..16.min(dwallet.len())]),
         };
         println!("Signing Mode: {}", signing_mode);
         println!("Deposit Limit: {} sats", self.deposit_limit_sats);
@@ -452,9 +474,44 @@ fn load_signing_config(network: Network) -> Result<SigningMode, ConfigError> {
                 api_key,
             })
         }
+        "ika" => {
+            // Ika dWallet — Solana-native pre-alpha. All four PRIVACY_COIN_IKA_* vars
+            // are sync-env.sh-generated; missing values mean the state JSON's "ika"
+            // block hasn't been populated by the DKG one-shot setup yet.
+            let program_id = env::var("PRIVACY_COIN_IKA_PROGRAM_ID").map_err(|_| {
+                ConfigError::FrostConfigIncomplete(
+                    "PRIVACY_COIN_IKA_PROGRAM_ID required (run scripts/ika-setup/ to populate)"
+                        .to_string(),
+                )
+            })?;
+            let dwallet = env::var("PRIVACY_COIN_IKA_DWALLET").map_err(|_| {
+                ConfigError::FrostConfigIncomplete(
+                    "PRIVACY_COIN_IKA_DWALLET required (run scripts/ika-setup/ to populate)"
+                        .to_string(),
+                )
+            })?;
+            let dwallet_xonly_pubkey =
+                env::var("PRIVACY_COIN_IKA_DWALLET_XONLY_PUBKEY").map_err(|_| {
+                    ConfigError::FrostConfigIncomplete(
+                        "PRIVACY_COIN_IKA_DWALLET_XONLY_PUBKEY required \
+                         (run scripts/ika-setup/ to populate)"
+                            .to_string(),
+                    )
+                })?;
+            let grpc_endpoint = env::var("PRIVACY_COIN_IKA_GRPC_ENDPOINT").unwrap_or_else(
+                |_| "pre-alpha-dev-1.ika.ika-network.net:443".to_string(),
+            );
+
+            Ok(SigningMode::Ika {
+                program_id,
+                dwallet,
+                dwallet_xonly_pubkey,
+                grpc_endpoint,
+            })
+        }
         _ => Err(ConfigError::InvalidValue(
             "PRIVACY_COIN_SIGNING_MODE".to_string(),
-            format!("unknown mode: {} (use 'single' or 'frost')", mode),
+            format!("unknown mode: {} (use 'single', 'frost', or 'ika')", mode),
         )),
     }
 }
