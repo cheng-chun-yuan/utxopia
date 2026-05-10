@@ -1,0 +1,20 @@
+[package]
+name = "ika-cpi-shim"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Test-only Pinocchio program that exposes a single instruction wrapping privacy_coin::cpi::ika::approve_message. Used by the LiteSVM integration test in privacy-coin/tests/ to exercise the byte-correct CPI against the upstream Ika dWallet program."
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "ika_cpi_shim"
+
+[features]
+default = []
+
+[dependencies]
+pinocchio = "0.9"
+privacy-coin = { path = "../privacy-coin", default-features = false, features = ["no-entrypoint"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ["cfg(target_os, values(\"solana\"))"] }

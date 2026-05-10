@@ -26,12 +26,10 @@
 //! ```
 
 use pinocchio::{
-    account_info::AccountInfo,
-    entrypoint,
-    program_error::ProgramError,
-    pubkey::Pubkey,
-    ProgramResult,
+    account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey, ProgramResult,
 };
+#[cfg(not(feature = "no-entrypoint"))]
+use pinocchio::entrypoint;
 
 pub mod constants;
 pub mod cpi;
@@ -88,6 +86,7 @@ pub mod instruction {
     pub const ROTATE_TREE: u8 = 20;
 }
 
+#[cfg(not(feature = "no-entrypoint"))]
 entrypoint!(process_instruction);
 
 /// Main entrypoint - routes to instruction handlers

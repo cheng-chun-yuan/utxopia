@@ -1,54 +1,79 @@
-//! Mollusk integration test stub: `complete_redemption` issues the
-//! `approve_message` CPI against the real Ika dWallet program SBF binary.
+//! LiteSVM integration test for byte-correct CPI from a Pinocchio program
+//! into the upstream Ika dWallet program (`bin/ika_dwallet_program.so`).
 //!
-//! This test is intentionally `#[ignore]`-d as a placeholder. The full
-//! Mollusk fixture requires byte-correct setup of ~10 account types
-//! (PoolState, RedemptionRequest, VerifiedTransaction, LightClient, ChadBuffer
-//! containing a real BTC tx whose hash matches our claimed txid, Token-2022
-//! mint and pool vault, PoolConfig with all Ika fields set, and the upstream
-//! Ika program's DWalletCoordinator + dWallet accounts pre-populated with
-//! the right discriminators and authority bytes).
+//! ## Status: deferred (toolchain blocker + .so opaqueness)
 //!
-//! See `docs/plans/2026-05-09-task-4b-complete-redemption-cpi-plan.md` Step
-//! 4b.5 for the full fixture spec, including byte offsets for each upstream
-//! account type and the recommended construction order.
+//! This test was scaffolded against `programs/ika-cpi-shim/`, a minimal
+//! Pinocchio crate that wraps `privacy_coin::cpi::ika::approve_message`
+//! so the LiteSVM transaction's program_id chain matches what production
+//! `complete_redemption` does (CPI from a real program, not a raw tx).
+//! The shim crate is committed and builds cleanly.
 //!
-//! Until the fixture is built, runtime validation of the CPI happens in:
-//!   1. The `cpi::ika::tests` module (byte-layout assertions for the ix data).
-//!   2. Task 7 — full E2E against Solana devnet + Ika devnet (the canonical
-//!      acceptance gate for Phase 1).
+//! Two blockers prevent shipping a green assertion in this session:
+//!
+//! 1. **`cargo build-sbf` toolchain is Rust 1.84.** Adding the granular
+//!    Solana crates LiteSVM 0.11 needs (`solana-account`, `solana-address`,
+//!    `solana-pubkey`, `solana-keypair`, `solana-signer`, `solana-instruction`,
+//!    `solana-transaction`) to dev-deps transitively pulls in
+//!    `wincode-derive`, whose manifest requires Cargo's `edition2024`
+//!    feature (Rust 1.85+). Even pinning each crate exactly fails because
+//!    `solana-account ^3.x` requires `solana-pubkey ^4.x`, and 4.x's
+//!    `wincode` opt-in cascades into the resolution graph.
+//!
+//! 2. **Ika `.so` is shipped without source.** During an attempted run with
+//!    the granular deps in place, the simplest possible call —
+//!    `transfer_dwallet` ix sent directly to the Ika program with both a
+//!    valid signer authority and a dWallet account whose `owner` byte-equals
+//!    `DWALLET_PROGRAM_ID` — failed with `InstructionError(0,
+//!    InvalidAccountOwner)` after only 127 CU. The error originates inside
+//!    the Ika program; without source we can't pinpoint the precondition
+//!    that's failing. The upstream voting LiteSVM test (the only working
+//!    reference) cannot be built with our toolchain (its workspace requires
+//!    Cargo 1.85+ for `edition2024`).
+//!
+//! ## What's still here
+//!
+//! - **`programs/ika-cpi-shim/`**: a tiny Pinocchio program with a single
+//!   instruction wrapping `privacy_coin::cpi::ika::approve_message`.
+//!   Builds cleanly via `cargo build-sbf --manifest-path
+//!   programs/ika-cpi-shim/Cargo.toml`. Future test runners against the
+//!   real Solana devnet (or a Rust 1.85+ SBF toolchain + LiteSVM) can
+//!   load this `.so` plus `bin/ika_dwallet_program.so` and exercise the
+//!   exact byte-layout CPI surface that production uses.
+//!
+//! - **`programs/privacy-coin/Cargo.toml` `no-entrypoint` feature**: lets
+//!   privacy-coin be consumed as a pure library (so two cdylibs in the
+//!   workspace don't both define `#[global_allocator]`). The shim depends
+//!   with `default-features = false, features = ["no-entrypoint"]`.
+//!
+//! ## How to revive (in order of effort)
+//!
+//! 1. **Wait for Task 7's real devnet run.** The CPI surface is exercised
+//!    end-to-end there against the live Ika program. Failures during that
+//!    run will surface the actual `InvalidAccountOwner` precondition and
+//!    inform any test-side validation we want to add later.
+//!
+//! 2. **Upgrade the SBF toolchain.** Once Solana ships an SBF cargo with
+//!    `edition2024` (Rust 1.85+), restore the granular Solana crate deps
+//!    in `Cargo.toml` (see commit history for the exact set), uncomment
+//!    the body of this test, run `cargo build-sbf --manifest-path
+//!    programs/ika-cpi-shim/Cargo.toml` to produce
+//!    `target/deploy/ika_cpi_shim.so`, then `cargo test
+//!    -p privacy-coin --test complete_redemption_ika_cpi`.
+//!
+//! 3. **Read upstream Ika source.** When `dwallet-labs/ika-pre-alpha`
+//!    publishes program source, grep for `InvalidAccountOwner` in the
+//!    `transfer_dwallet`/`approve_message` handlers and tune the test
+//!    fixture's pre-state to match.
 
 #![cfg(not(target_os = "solana"))]
 
 #[test]
-#[ignore = "Mollusk fixture builder is large and depends on byte-correct \
-            setup of upstream Ika accounts; deferred until Task 7 E2E reveals \
-            specific shapes that need test-side validation. See plan §4b.5."]
+#[ignore = "Toolchain blocker (cargo build-sbf is Rust 1.84; adding granular \
+            Solana crates pulls wincode-derive which needs edition2024). \
+            See file docstring for full rationale and revival path. The \
+            shim crate at programs/ika-cpi-shim/ remains as concrete \
+            infrastructure for the eventual integration test."]
 fn complete_redemption_dispatches_approve_message_cpi() {
-    // Pre-conditions for a real run (when un-ignored):
-    //
-    //   - upstream binary present at /tmp/ika-pre-alpha-scratch/ika-pre-alpha/bin/ika_dwallet_program.so
-    //   - privacy_coin SBF built at target/deploy/privacy_coin.so
-    //
-    // Test plan (verbatim from §4b.5.2):
-    //
-    //   1. Spin up Mollusk with both programs loaded.
-    //   2. Derive: cpi_authority PDA, dwallet PDA (seeds: ["dwallet", curve, pubkey]),
-    //      coordinator PDA, NEK PDA, message_approval PDA (seeds: ["message_approval",
-    //      dwallet, sighash]).
-    //   3. Build a redemption fixture (PoolState, RedemptionRequest, VerifiedTransaction,
-    //      LightClient, ChadBuffer-with-real-tx, zkBTC mint+vault, completion receipt PDA,
-    //      PoolConfig with set_cpi_authority_bump + set_ika_dwallet + set_ika_dwallet_xonly_pubkey).
-    //   4. Construct the COMPLETE_REDEMPTION instruction with a 32-byte sighash trailer
-    //      and the 7 Ika-tail accounts after the existing 13 base accounts.
-    //   5. mollusk.process_instruction(...) — assert program_result.is_ok().
-    //   6. Assert the resulting MessageApproval PDA has discriminator 14 and its
-    //      `message_hash` field equals the sighash we passed.
-    //
-    // Per the plan: this test is "the long pole" of Task 4b. When the Phase 1 E2E
-    // runs, it exercises this same path end-to-end against live devnet — that's
-    // the actual production validation. This unit test is for fast inner-loop
-    // iteration, valuable later but not blocking now.
-
-    panic!("fixture builder not implemented — see plan §4b.5.2");
+    panic!("see docstring — deferred behind two independent blockers");
 }

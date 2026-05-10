@@ -11,6 +11,10 @@ name = "privacy_coin"
 [features]
 default = []
 idl-build = []
+# Suppresses the SBF entrypoint + global allocator. Used when privacy-coin
+# is consumed as a pure library (e.g. by the ika-cpi-shim test harness),
+# so two cdylibs in the workspace don't both define `#[global_allocator]`.
+no-entrypoint = []
 # Enable demo instructions (ADD_DEMO_NOTE, ADD_DEMO_STEALTH) for devnet/testnet only.
 # SECURITY: DO NOT enable in production/mainnet builds.
 devnet = []
@@ -38,6 +42,17 @@ solana-sdk = "2.1"
 libsecp256k1 = "0.7"
 sha2 = "0.10"
 litesvm = "0.11.0"
+#
+# Note: an earlier attempt added granular Solana crates (solana-account,
+# solana-address, solana-pubkey, solana-keypair, solana-signer,
+# solana-instruction, solana-transaction) so the LiteSVM integration test
+# in `tests/complete_redemption_ika_cpi.rs` could use the runtime API
+# native types. It worked for `cargo test` but broke `cargo build-sbf`
+# because solana-account ^3.x transitively pulls solana-pubkey 4.x →
+# wincode → wincode-derive, which requires Cargo edition2024 (Rust 1.85+).
+# Our SBF toolchain is 1.84. The test file remains and uses solana-sdk 2.1
+# types where possible; full byte-correct CPI coverage waits on Task 7
+# (real devnet) or a 1.85+ SBF toolchain.
 
 [lints.rust]
 # Solana programs use target_os = "solana" which is not a standard cfg value
