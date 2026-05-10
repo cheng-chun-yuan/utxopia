@@ -1,6 +1,8 @@
 "use client";
 
-import { useReducer, useState, useMemo } from "react";
+import { useReducer, useState, useMemo, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useWallet } from "@solana/wallet-adapter-react";
 import { Send, Link as LinkIcon, Loader2 } from "lucide-react";
 import { detectRecipient } from "./recipient-detect";
 import { buildSendIntent } from "./build-tx";
@@ -10,8 +12,18 @@ import { AmountField } from "./amount-field";
 import { FeeSummary } from "./fee-summary";
 import { ReviewModal } from "./review-modal";
 import { ClaimLinkModal, type ClaimLinkResult } from "./claim-link-modal";
-import { useTokenNotes } from "@/hooks/use-privacy-coin";
+import { usePrivacyCoin } from "@/hooks/use-privacy-coin";
 import { useTokenPrices } from "@/hooks/use-token-prices";
+import { useNoteAutoSelector } from "@/hooks/use-note-auto-selector";
+import { useJoinSplitSubmit } from "@/hooks/use-joinsplit-submit";
+import { useSnsName } from "@/hooks/use-sns-name";
+import { useRelayerConfig } from "@/hooks/use-relayer-config";
+import { buildTransferParams } from "@/hooks/use-build-transfer-params";
+import { autoSelectNotes } from "@/components/btc-widget/pay-flow/helpers";
+import { PAY_TOKENS } from "@/lib/supported-tokens";
+import { validateBtcAddress } from "@/components/ui/btc-address-input";
+import { parseSats } from "@/lib/utils/validation";
+import type { StealthMetaAddress } from "@privacy-coin/sdk";
 
 type Action =
   | { type: "set_recipient"; value: string }
@@ -52,6 +64,12 @@ function reducer(state: State, action: Action): State {
   }
 }
 
+function generateClaimSecret(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export function SendForm() {
   const [state, dispatch] = useReducer(reducer, initial);
   const [linkOpen, setLinkOpen] = useState(false);
@@ -67,11 +85,29 @@ export function SendForm() {
   const effectiveToken =
     detection.type === "btc" ? "zkBTC" : state.sourceToken;
 
-  // Pull the user's shielded balance for the chosen token.
-  const { totalBalance } = useTokenNotes(effectiveToken);
+  const ctx = usePrivacyCoin();
+  const { lookupSnsName } = useSnsName();
+  const submitter = useJoinSplitSubmit();
+  const { publicKey } = useWallet();
+  const router = useRouter();
   const tokenPrices = useTokenPrices();
-  // Phase 1 simplification: BTC-only USD preview.
   const usdPerUnit = tokenPrices.btc ?? null;
+
+  const selectedPayToken = useMemo(
+    () =>
+      PAY_TOKENS.find((t) => t.shieldedSymbol === effectiveToken) ??
+      PAY_TOKENS[0],
+    [effectiveToken],
+  );
+  const { relayerMeta, effectiveRelayerFee } =
+    useRelayerConfig(selectedPayToken);
+
+  const amountSats = parseSats(state.amount) ?? 0;
+  const totalNeeded = amountSats + effectiveRelayerFee;
+  const noteSelector = useNoteAutoSelector(
+    selectedPayToken.shieldedSymbol,
+    totalNeeded,
+  );
 
   const recipientValid =
     detection.type !== "empty" &&
@@ -81,25 +117,16 @@ export function SendForm() {
   const amountNum = parseFloat(state.amount || "0");
   const amountValid = recipientValid && amountNum > 0;
 
-  const legacyPathFor = (
-    kind: "redeem" | "transact" | "unshield" | "claim_link",
-  ): string => {
-    switch (kind) {
-      case "redeem":
-        return "/vault/pay/withdraw";
-      case "transact":
-        return "/vault/pay/transfer";
-      case "unshield":
-        return "/vault/pay/unshield";
-      case "claim_link":
-        return "/vault/pay/cashout";
-    }
-  };
-
-  const onSend = () => {
+  const onSend = useCallback(async () => {
     setError(null);
     setSubmitting(true);
     try {
+      if (!ctx.keys || !ctx.stealthAddress) {
+        throw new Error(
+          "Vault locked. Sign in via the gear menu first.",
+        );
+      }
+
       const intent = buildSendIntent({
         recipientType: detection.type as
           | "btc"
@@ -111,30 +138,184 @@ export function SendForm() {
         amount: state.amount,
       });
 
-      // Phase 1.5 will wire the SDK ix builders into this branch. For
-      // now, surface a clear pointer to the still-live legacy path so
-      // the user is never stranded.
-      const legacy = legacyPathFor(intent.kind);
-      setError(
-        `Send is in preview — the unified flow ships in Phase 1.5. To complete this transaction today, use the legacy path: ${legacy}`,
-      );
-      dispatch({ type: "close_review" });
+      const { decodeStealthMetaAddress } = await import("@privacy-coin/sdk");
+
+      let mode: "stealth" | "public" | "btc";
+      let recipientArg: {
+        stealthMeta?: StealthMetaAddress;
+        solanaAddress?: string;
+        btcScriptPubKey?: Uint8Array;
+      };
+
+      switch (intent.kind) {
+        case "redeem": {
+          const v = validateBtcAddress(intent.recipientValue);
+          if (!v.valid || !v.scriptPubKey) {
+            throw new Error(v.error || "Invalid Bitcoin address");
+          }
+          mode = "btc";
+          recipientArg = { btcScriptPubKey: v.scriptPubKey };
+          break;
+        }
+        case "transact": {
+          if (intent.recipientType === "stealth_sns") {
+            const sub = intent.recipientValue
+              .toLowerCase()
+              .replace(/\.btcpro\.sol$/, "");
+            const r = await lookupSnsName(sub);
+            if (!r) {
+              throw new Error(
+                `Could not resolve ${intent.recipientValue}`,
+              );
+            }
+            recipientArg = {
+              stealthMeta: {
+                spendingPubKey: new Uint8Array(32),
+                viewingPubKey: r.viewingPubKey,
+                mpk: r.mpk,
+              } as StealthMetaAddress,
+            };
+          } else {
+            recipientArg = {
+              stealthMeta: decodeStealthMetaAddress(intent.recipientValue),
+            };
+          }
+          mode = "stealth";
+          break;
+        }
+        case "unshield": {
+          mode = "public";
+          recipientArg = { solanaAddress: intent.recipientValue };
+          break;
+        }
+        case "claim_link":
+          throw new Error(
+            "Claim links are generated via the dedicated modal.",
+          );
+      }
+
+      if (noteSelector.selectedNotes.length === 0) {
+        throw new Error(
+          "No shielded notes available to cover this amount.",
+        );
+      }
+
+      const params = await buildTransferParams({
+        mode,
+        amountSats: BigInt(amountSats),
+        selectedNotes: noteSelector.selectedNotes,
+        keys: ctx.keys,
+        selfMeta: ctx.stealthAddress,
+        relayerMeta: relayerMeta?.stealthMeta
+          ? decodeStealthMetaAddress(relayerMeta.stealthMeta)
+          : undefined,
+        relayerFee: effectiveRelayerFee,
+        recipient: recipientArg,
+      });
+
+      await submitter.submit(params, BigInt(amountSats));
+
+      for (const delay of [2000, 5000, 10000]) {
+        setTimeout(() => {
+          ctx.refreshInbox(undefined, true);
+          if (publicKey) ctx.refreshPublicBalance?.(publicKey);
+        }, delay);
+      }
+
+      dispatch({ type: "reset" });
+      router.push("/vault/activity");
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Send failed";
-      setError(msg);
+      setError(e instanceof Error ? e.message : "Send failed");
     } finally {
       setSubmitting(false);
     }
-  };
+  }, [
+    ctx,
+    detection.type,
+    state.recipient,
+    state.amount,
+    effectiveToken,
+    lookupSnsName,
+    noteSelector.selectedNotes,
+    relayerMeta,
+    effectiveRelayerFee,
+    submitter,
+    publicKey,
+    amountSats,
+    router,
+  ]);
 
-  const onGenerateClaimLink = async (_input: {
-    sourceToken: string;
-    amount: string;
-  }): Promise<ClaimLinkResult> => {
-    throw new Error(
-      "Claim-link generation is in preview — ships in Phase 1.5. Use /vault/pay/cashout for now.",
-    );
-  };
+  const onGenerateClaimLink = useCallback(
+    async (input: {
+      sourceToken: string;
+      amount: string;
+    }): Promise<ClaimLinkResult> => {
+      if (!ctx.keys || !ctx.stealthAddress) {
+        throw new Error(
+          "Vault locked. Sign in via the gear menu first.",
+        );
+      }
+      const sats = parseSats(input.amount);
+      if (!sats || sats <= 0) {
+        throw new Error("Enter a valid amount");
+      }
+
+      const phrase = generateClaimSecret();
+      const {
+        deriveMasterKey,
+        deriveKeysFromSeedCircuit,
+        createStealthMetaAddress,
+        decodeStealthMetaAddress,
+      } = await import("@privacy-coin/sdk");
+
+      const noteMaster = deriveMasterKey(phrase);
+      const noteKeys = await deriveKeysFromSeedCircuit(noteMaster);
+      const noteMeta = createStealthMetaAddress(noteKeys);
+
+      const totalNeededLink = sats + effectiveRelayerFee;
+      const linkAvail = ctx.inboxNotes.filter(
+        (n) =>
+          n.amount > 0n &&
+          !n.isSpent &&
+          n.tokenSymbol === input.sourceToken,
+      );
+      const ids = autoSelectNotes(linkAvail, totalNeededLink);
+      const linkSelected = linkAvail.filter((n) => ids.has(n.id));
+      if (linkSelected.length === 0) {
+        throw new Error(
+          "No shielded notes available to cover this amount.",
+        );
+      }
+
+      const params = await buildTransferParams({
+        mode: "stealth",
+        amountSats: BigInt(sats),
+        selectedNotes: linkSelected,
+        keys: ctx.keys,
+        selfMeta: ctx.stealthAddress,
+        relayerMeta: relayerMeta?.stealthMeta
+          ? decodeStealthMetaAddress(relayerMeta.stealthMeta)
+          : undefined,
+        relayerFee: effectiveRelayerFee,
+        recipient: { stealthMeta: noteMeta },
+      });
+
+      await submitter.submit(params, BigInt(sats));
+
+      for (const delay of [2000, 5000, 10000]) {
+        setTimeout(() => {
+          ctx.refreshInbox(undefined, true);
+          if (publicKey) ctx.refreshPublicBalance?.(publicKey);
+        }, delay);
+      }
+
+      const origin =
+        typeof window !== "undefined" ? window.location.origin : "";
+      const url = `${origin}/claim#note=${encodeURIComponent(phrase)}`;
+      return { url, secret: phrase };
+    },
+    [ctx, relayerMeta, effectiveRelayerFee, submitter, publicKey],
+  );
 
   return (
     <div className="space-y-4">
@@ -147,7 +328,11 @@ export function SendForm() {
         <>
           <TokenSourcePicker
             recipientType={
-              detection.type as "btc" | "stealth_sns" | "stealth_meta" | "spl_wallet"
+              detection.type as
+                | "btc"
+                | "stealth_sns"
+                | "stealth_meta"
+                | "spl_wallet"
             }
             selected={effectiveToken}
             onSelect={(s) => dispatch({ type: "set_token", value: s })}
@@ -155,13 +340,9 @@ export function SendForm() {
           <AmountField
             value={state.amount}
             onChange={(v) => dispatch({ type: "set_amount", value: v })}
-            decimals={8}
-            unit="BTC"
-            availableBaseUnits={
-              typeof totalBalance === "bigint"
-                ? totalBalance
-                : BigInt(totalBalance ?? 0)
-            }
+            decimals={selectedPayToken.decimals}
+            unit={selectedPayToken.unit}
+            availableBaseUnits={BigInt(noteSelector.totalAvailable)}
             usdPerUnit={usdPerUnit}
           />
         </>
@@ -170,7 +351,11 @@ export function SendForm() {
       {amountValid && (
         <FeeSummary
           recipientType={
-            detection.type as "btc" | "stealth_sns" | "stealth_meta" | "spl_wallet"
+            detection.type as
+              | "btc"
+              | "stealth_sns"
+              | "stealth_meta"
+              | "spl_wallet"
           }
           networkFeeLabel="≈ 120 sats"
           serviceFeeLabel="≈ 5 sats"
@@ -221,21 +406,17 @@ export function SendForm() {
         open={linkOpen}
         onOpenChange={setLinkOpen}
         onGenerate={onGenerateClaimLink}
-        availableBaseUnits={
-          typeof totalBalance === "bigint"
-            ? totalBalance
-            : BigInt(totalBalance ?? 0)
-        }
-        decimals={8}
-        unit="BTC"
+        availableBaseUnits={BigInt(noteSelector.totalAvailable)}
+        decimals={selectedPayToken.decimals}
+        unit={selectedPayToken.unit}
         usdPerUnit={usdPerUnit}
         defaultToken={effectiveToken}
       />
 
-      {submitting && (
+      {(submitting || submitter.status === "preparing" || submitter.status === "processing" || submitter.status === "submitting") && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Loader2 className="w-3 h-3 animate-spin" />
-          Submitting…
+          {submitter.statusMessage || "Submitting…"}
         </div>
       )}
     </div>

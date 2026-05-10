@@ -6,6 +6,14 @@ afterEach(cleanup);
 
 // Stub the hooks the form depends on so the test stays unit-scoped.
 mock.module("@/hooks/use-privacy-coin", () => ({
+  usePrivacyCoin: () => ({
+    keys: null,
+    stealthAddress: null,
+    hasKeys: false,
+    inboxNotes: [],
+    refreshInbox: () => {},
+    refreshPublicBalance: () => {},
+  }),
   useTokenNotes: () => ({
     availableNotes: [],
     totalBalance: 0n,
@@ -14,6 +22,50 @@ mock.module("@/hooks/use-privacy-coin", () => ({
 }));
 mock.module("@/hooks/use-token-prices", () => ({
   useTokenPrices: () => ({ btc: 50000, sol: null, usdc: null, usdt: null }),
+}));
+mock.module("@/hooks/use-note-auto-selector", () => ({
+  useNoteAutoSelector: () => ({
+    availableNotes: [],
+    selectedNotes: [],
+    totalAvailable: 0,
+    totalSelected: 0,
+    isLoading: false,
+    refresh: () => {},
+    hasNotes: false,
+  }),
+}));
+mock.module("@/hooks/use-joinsplit-submit", () => ({
+  useJoinSplitSubmit: () => ({
+    status: "idle",
+    statusMessage: "",
+    txSignature: null,
+    error: null,
+    submit: async () => {},
+    reset: () => {},
+  }),
+}));
+mock.module("@/hooks/use-sns-name", () => ({
+  useSnsName: () => ({
+    lookupSnsName: async () => null,
+    registeredSnsName: null,
+    hasRegisteredSnsName: false,
+    needsUpdate: false,
+    isLoading: false,
+    isRegistering: false,
+    error: null,
+    lookupMySnsName: async () => {},
+    registerSnsSubdomain: async () => false,
+    updateSnsStealthData: async () => false,
+  }),
+}));
+// Note: not mocking @/hooks/use-relayer-config — bun's mock.module is global,
+// and use-relayer-config.test.ts imports the real hook. Real useRelayerConfig
+// is render-safe (initial state returns defaults; fetch fires in useEffect).
+mock.module("@solana/wallet-adapter-react", () => ({
+  useWallet: () => ({ publicKey: null }),
+}));
+mock.module("next/navigation", () => ({
+  useRouter: () => ({ push: () => {} }),
 }));
 
 import { SendForm } from "./send-form";
