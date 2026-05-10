@@ -81,19 +81,43 @@ export function SendForm() {
   const amountNum = parseFloat(state.amount || "0");
   const amountValid = recipientValid && amountNum > 0;
 
+  const legacyPathFor = (
+    kind: "redeem" | "transact" | "unshield" | "claim_link",
+  ): string => {
+    switch (kind) {
+      case "redeem":
+        return "/vault/pay/withdraw";
+      case "transact":
+        return "/vault/pay/transfer";
+      case "unshield":
+        return "/vault/pay/unshield";
+      case "claim_link":
+        return "/vault/pay/cashout";
+    }
+  };
+
   const onSend = () => {
     setError(null);
     setSubmitting(true);
     try {
       const intent = buildSendIntent({
-        recipientType: detection.type as "btc" | "stealth_sns" | "stealth_meta" | "spl_wallet",
+        recipientType: detection.type as
+          | "btc"
+          | "stealth_sns"
+          | "stealth_meta"
+          | "spl_wallet",
         recipientValue: state.recipient.trim(),
         sourceToken: effectiveToken,
         amount: state.amount,
       });
 
-      // SDK plumbing wired in Task 12. For now, the structure ships.
-      void intent;
+      // Phase 1.5 will wire the SDK ix builders into this branch. For
+      // now, surface a clear pointer to the still-live legacy path so
+      // the user is never stranded.
+      const legacy = legacyPathFor(intent.kind);
+      setError(
+        `Send is in preview — the unified flow ships in Phase 1.5. To complete this transaction today, use the legacy path: ${legacy}`,
+      );
       dispatch({ type: "close_review" });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Send failed";
@@ -107,8 +131,9 @@ export function SendForm() {
     sourceToken: string;
     amount: string;
   }): Promise<ClaimLinkResult> => {
-    // Wired in Task 12 (lifts existing logic from PayFlow).
-    throw new Error("Claim-link generation not yet wired — see Task 12.");
+    throw new Error(
+      "Claim-link generation is in preview — ships in Phase 1.5. Use /vault/pay/cashout for now.",
+    );
   };
 
   return (
