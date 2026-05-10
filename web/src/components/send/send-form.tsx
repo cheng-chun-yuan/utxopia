@@ -4,7 +4,7 @@ import { useReducer, useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { Send, Link as LinkIcon, Loader2 } from "lucide-react";
-import { detectRecipient } from "./recipient-detect";
+import { detectRecipient, type RecipientType } from "./recipient-detect";
 import { buildSendIntent } from "./build-tx";
 import { RecipientInput } from "./recipient-input";
 import { TokenSourcePicker } from "./token-source-picker";
@@ -23,7 +23,13 @@ import { autoSelectNotes } from "@/components/send/_lifted/helpers";
 import { PAY_TOKENS } from "@/lib/supported-tokens";
 import { validateBtcAddress } from "@/components/ui/btc-address-input";
 import { parseSats } from "@/lib/utils/validation";
-import type { StealthMetaAddress } from "@privacy-coin/sdk";
+import {
+  decodeStealthMetaAddress,
+  deriveMasterKey,
+  deriveKeysFromSeedCircuit,
+  createStealthMetaAddress,
+  type StealthMetaAddress,
+} from "@privacy-coin/sdk";
 
 type Action =
   | { type: "set_recipient"; value: string }
@@ -114,8 +120,30 @@ export function SendForm() {
     detection.type !== "invalid" &&
     detection.type !== "ambiguous";
 
+  // Narrowed alias used by JSX + buildSendIntent; only meaningful when
+  // recipientValid is true (the JSX gates on that before reading it).
+  const recipientType = detection.type as RecipientType;
+
   const amountNum = parseFloat(state.amount || "0");
   const amountValid = recipientValid && amountNum > 0;
+
+  const totalAvailable = BigInt(noteSelector.totalAvailable);
+  const isSubmittingInFlight =
+    submitting ||
+    (submitter.status !== "idle" &&
+      submitter.status !== "success" &&
+      submitter.status !== "error");
+
+  // Re-fetch inbox + public balance shortly after a submit lands. Run on a
+  // staggered schedule so we catch confirmation across slow RPC paths.
+  const scheduleInboxRefresh = useCallback(() => {
+    for (const delay of [2000, 5000, 10000]) {
+      setTimeout(() => {
+        ctx.refreshInbox(undefined, true);
+        if (publicKey) ctx.refreshPublicBalance?.(publicKey);
+      }, delay);
+    }
+  }, [ctx, publicKey]);
 
   const onSend = useCallback(async () => {
     setError(null);
@@ -128,17 +156,11 @@ export function SendForm() {
       }
 
       const intent = buildSendIntent({
-        recipientType: detection.type as
-          | "btc"
-          | "stealth_sns"
-          | "stealth_meta"
-          | "spl_wallet",
+        recipientType,
         recipientValue: state.recipient.trim(),
         sourceToken: effectiveToken,
         amount: state.amount,
       });
-
-      const { decodeStealthMetaAddress } = await import("@privacy-coin/sdk");
 
       let mode: "stealth" | "public" | "btc";
       let recipientArg: {
@@ -214,13 +236,7 @@ export function SendForm() {
       });
 
       await submitter.submit(params, BigInt(amountSats));
-
-      for (const delay of [2000, 5000, 10000]) {
-        setTimeout(() => {
-          ctx.refreshInbox(undefined, true);
-          if (publicKey) ctx.refreshPublicBalance?.(publicKey);
-        }, delay);
-      }
+      scheduleInboxRefresh();
 
       dispatch({ type: "reset" });
       router.push("/vault/activity");
@@ -231,7 +247,7 @@ export function SendForm() {
     }
   }, [
     ctx,
-    detection.type,
+    recipientType,
     state.recipient,
     state.amount,
     effectiveToken,
@@ -240,9 +256,9 @@ export function SendForm() {
     relayerMeta,
     effectiveRelayerFee,
     submitter,
-    publicKey,
     amountSats,
     router,
+    scheduleInboxRefresh,
   ]);
 
   const onGenerateClaimLink = useCallback(
@@ -261,12 +277,6 @@ export function SendForm() {
       }
 
       const phrase = generateClaimSecret();
-      const {
-        deriveMasterKey,
-        deriveKeysFromSeedCircuit,
-        createStealthMetaAddress,
-        decodeStealthMetaAddress,
-      } = await import("@privacy-coin/sdk");
 
       const noteMaster = deriveMasterKey(phrase);
       const noteKeys = await deriveKeysFromSeedCircuit(noteMaster);
@@ -301,20 +311,14 @@ export function SendForm() {
       });
 
       await submitter.submit(params, BigInt(sats));
-
-      for (const delay of [2000, 5000, 10000]) {
-        setTimeout(() => {
-          ctx.refreshInbox(undefined, true);
-          if (publicKey) ctx.refreshPublicBalance?.(publicKey);
-        }, delay);
-      }
+      scheduleInboxRefresh();
 
       const origin =
         typeof window !== "undefined" ? window.location.origin : "";
       const url = `${origin}/claim#note=${encodeURIComponent(phrase)}`;
       return { url, secret: phrase };
     },
-    [ctx, relayerMeta, effectiveRelayerFee, submitter, publicKey],
+    [ctx, relayerMeta, effectiveRelayerFee, submitter, scheduleInboxRefresh],
   );
 
   return (
@@ -327,13 +331,7 @@ export function SendForm() {
       {recipientValid && (
         <>
           <TokenSourcePicker
-            recipientType={
-              detection.type as
-                | "btc"
-                | "stealth_sns"
-                | "stealth_meta"
-                | "spl_wallet"
-            }
+            recipientType={recipientType}
             selected={effectiveToken}
             onSelect={(s) => dispatch({ type: "set_token", value: s })}
           />
@@ -342,7 +340,7 @@ export function SendForm() {
             onChange={(v) => dispatch({ type: "set_amount", value: v })}
             decimals={selectedPayToken.decimals}
             unit={selectedPayToken.unit}
-            availableBaseUnits={BigInt(noteSelector.totalAvailable)}
+            availableBaseUnits={totalAvailable}
             usdPerUnit={usdPerUnit}
           />
         </>
@@ -350,13 +348,7 @@ export function SendForm() {
 
       {amountValid && (
         <FeeSummary
-          recipientType={
-            detection.type as
-              | "btc"
-              | "stealth_sns"
-              | "stealth_meta"
-              | "spl_wallet"
-          }
+          recipientType={recipientType}
           networkFeeLabel="≈ 120 sats"
           serviceFeeLabel="≈ 5 sats"
         />
@@ -406,14 +398,14 @@ export function SendForm() {
         open={linkOpen}
         onOpenChange={setLinkOpen}
         onGenerate={onGenerateClaimLink}
-        availableBaseUnits={BigInt(noteSelector.totalAvailable)}
+        availableBaseUnits={totalAvailable}
         decimals={selectedPayToken.decimals}
         unit={selectedPayToken.unit}
         usdPerUnit={usdPerUnit}
         defaultToken={effectiveToken}
       />
 
-      {(submitting || submitter.status === "preparing" || submitter.status === "processing" || submitter.status === "submitting") && (
+      {isSubmittingInFlight && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Loader2 className="w-3 h-3 animate-spin" />
           {submitter.statusMessage || "Submitting…"}
