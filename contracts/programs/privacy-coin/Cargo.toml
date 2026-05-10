@@ -24,35 +24,18 @@ localnet = []
 
 [dependencies]
 pinocchio = "0.9"
-pinocchio-token = "0.4"
 pinocchio-system = "0.3"
-pinocchio-associated-token-account = "0.3"
 solana-bn254 = "~2.1"
 solana-poseidon = "~2.1"
 thiserror = "2.0"
-num-derive = "0.4"
 hex-literal = "0.4"
 # Real Poseidon for off-chain (cargo test/check) — SBF builds use the syscall instead
 light-poseidon = "0.2"
 ark-bn254 = "0.4"
 
 [dev-dependencies]
-mollusk-svm = "0.0.13"
-solana-sdk = "2.1"
 libsecp256k1 = "0.7"
 sha2 = "0.10"
-litesvm = "0.11.0"
-#
-# Note: an earlier attempt added granular Solana crates (solana-account,
-# solana-address, solana-pubkey, solana-keypair, solana-signer,
-# solana-instruction, solana-transaction) so the LiteSVM integration test
-# in `tests/complete_redemption_ika_cpi.rs` could use the runtime API
-# native types. It worked for `cargo test` but broke `cargo build-sbf`
-# because solana-account ^3.x transitively pulls solana-pubkey 4.x →
-# wincode → wincode-derive, which requires Cargo edition2024 (Rust 1.85+).
-# Our SBF toolchain is 1.84. The test file remains and uses solana-sdk 2.1
-# types where possible; full byte-correct CPI coverage waits on Task 7
-# (real devnet) or a 1.85+ SBF toolchain.
 
 [lints.rust]
 # Solana programs use target_os = "solana" which is not a standard cfg value

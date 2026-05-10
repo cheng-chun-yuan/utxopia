@@ -3,7 +3,6 @@ resolver = "2"
 members = [
     "programs/privacy-coin",
     "programs/btc-light-client",
-    "programs/ika-cpi-shim",
 ]
 exclude = [
     "programs/chadbuffer"
