@@ -20,6 +20,30 @@
 
 ---
 
+## Phase 1 ship status (2026-05-10)
+
+**Shipped tasks: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 21**
+- All 128 web tests pass.
+- `bun run build` clean.
+- `/send` route renders the unified wizard end-to-end through the review modal.
+- `/settings` route shows the disabled Advanced toggle.
+- Header gear icon + AdvancedModeBadge slot mounted.
+- `/vault` dashboard's "Send" button routes to `/send`.
+
+**Deferred to Phase 1.5: tasks 12, 19, 20** — coupled. Task 12 (SDK ix wiring inside `SendForm.onSend`) was found to require ~500 LOC of careful refactoring to disentangle the four send paths from the existing 1653-LOC `pay-flow.tsx`. Without Task 12, deleting the legacy routes (Tasks 19, 20) would strand users mid-flow. Both are deferred together.
+
+**Bridge state during deferral:** `SendForm.onSend` and `onGenerateClaimLink` surface a clear "preview — use legacy path /vault/pay/X" message pointing back to the still-live legacy route. Users always have a working send path.
+
+**Phase 1.5 plan must:**
+1. Implement the four `run*` functions in `SendForm` by lifting the relevant code from `web/src/components/btc-widget/pay-flow.tsx` and `web/src/components/payment-wizard/payment-wizard.tsx`.
+2. Replace the "preview" error in `SendForm.onSend` with the actual SDK pipeline.
+3. Wire `ClaimLinkModal.onGenerate` similarly.
+4. Manual-QA each recipient type end-to-end on devnet/localnet.
+5. Then execute Tasks 19 + 20 (delete `/vault/pay/*` and `payment-wizard/` + `pay-flow/`).
+6. Update `/vault/page.tsx` to remove the "Cash Out" entry (it becomes redundant with the unified `/send`).
+
+---
+
 ## File-Structure Map
 
 | File | Status | Responsibility |
