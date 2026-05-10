@@ -8,7 +8,7 @@
 
 import { useMemo } from "react";
 import { usePrivacyCoin } from "@/hooks/use-privacy-coin";
-import { autoSelectNotes } from "@/components/btc-widget/pay-flow/helpers";
+import { autoSelectNotes } from "@/components/send/_lifted/helpers";
 
 export function useNoteAutoSelector(tokenSymbol: string, amountSats: number) {
   const { inboxNotes, inboxLoading, refreshInbox } = usePrivacyCoin();

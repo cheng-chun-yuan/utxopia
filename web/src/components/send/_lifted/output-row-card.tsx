@@ -15,8 +15,8 @@ import { parseSats } from "@/lib/utils/validation";
 import { StealthRecipientInput } from "@/components/ui/stealth-recipient-input";
 import { BtcAddressInput } from "@/components/ui/btc-address-input";
 import type { StealthMetaAddress } from "@privacy-coin/sdk";
-import type { OutputRow } from "../../btc-widget/pay-flow/helpers";
-import { isValidSolanaAddress } from "../../btc-widget/pay-flow/helpers";
+import type { OutputRow } from "./helpers";
+import { isValidSolanaAddress } from "./helpers";
 import { NoteLinkPreview } from "./note-links";
 
 export interface OutputRowHandlers {

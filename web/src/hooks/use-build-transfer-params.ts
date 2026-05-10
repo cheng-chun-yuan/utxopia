@@ -10,7 +10,7 @@
 import { PublicKey } from "@solana/web3.js";
 import type { InboxNote } from "@/hooks/use-privacy-coin";
 import type { JoinSplitProofInputs, PrivacyCoinKeys, StealthMetaAddress, ScannedNote } from "@privacy-coin/sdk";
-import { ZKBTC_TOKEN_ID, reduceToFieldOnChain } from "@/components/btc-widget/pay-flow/helpers";
+import { ZKBTC_TOKEN_ID, reduceToFieldOnChain } from "@/components/send/_lifted/helpers";
 
 export type TransferMode = "stealth" | "public" | "btc";
 

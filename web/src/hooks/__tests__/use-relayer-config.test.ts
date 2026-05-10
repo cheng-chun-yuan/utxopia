@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, mock, afterEach } from "bun:test";
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { useRelayerConfig } from "../use-relayer-config";
-import type { PayToken } from "@/components/btc-widget/pay-flow/helpers";
+import type { PayToken } from "@/components/send/_lifted/helpers";
 
 // Minimal PayToken fixture
 const mockToken: PayToken = {

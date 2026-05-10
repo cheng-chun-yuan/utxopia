@@ -5,7 +5,7 @@ import {
   SERVICE_FEE_SATS,
   RELAYER_FEE_SATS,
   type PayToken,
-} from "@/components/btc-widget/pay-flow/helpers";
+} from "@/components/send/_lifted/helpers";
 
 interface RelayerMeta {
   stealthMeta: string | null;

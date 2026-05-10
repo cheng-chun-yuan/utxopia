@@ -19,7 +19,7 @@ import { useJoinSplitSubmit } from "@/hooks/use-joinsplit-submit";
 import { useSnsName } from "@/hooks/use-sns-name";
 import { useRelayerConfig } from "@/hooks/use-relayer-config";
 import { buildTransferParams } from "@/hooks/use-build-transfer-params";
-import { autoSelectNotes } from "@/components/btc-widget/pay-flow/helpers";
+import { autoSelectNotes } from "@/components/send/_lifted/helpers";
 import { PAY_TOKENS } from "@/lib/supported-tokens";
 import { validateBtcAddress } from "@/components/ui/btc-address-input";
 import { parseSats } from "@/lib/utils/validation";
