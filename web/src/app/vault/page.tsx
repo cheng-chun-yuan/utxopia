@@ -431,7 +431,11 @@ export default function VaultPage() {
               <div className="flex items-center justify-center gap-5 sm:gap-8 mb-6">
                 {[
                   { icon: <ArrowDownToLine className="w-5 h-5" />, label: "Deposit", href: "/vault/deposit", color: "text-green-400" },
-                  { icon: <Send className="w-5 h-5" />, label: "Send", href: "/vault/pay/transfer", color: "text-purple-400" },
+                  // Send routes to the unified /send wizard (Phase 1 preview).
+                  // The actual SDK wiring lands in Phase 1.5; until then SendForm
+                  // surfaces a pointer to the legacy /vault/pay/* route the user
+                  // needs to complete a real tx.
+                  { icon: <Send className="w-5 h-5" />, label: "Send", href: "/send", color: "text-purple-400" },
                   { icon: <ArrowUpFromLine className="w-5 h-5" />, label: "Cash Out", href: "/vault/pay/cashout", color: "text-btc" },
                 ].filter((a) => !isViewOnly || a.label === "Cash Out")
                   .map((action) => (
