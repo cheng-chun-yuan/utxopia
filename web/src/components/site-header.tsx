@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Shield, Rocket, Menu, X } from "lucide-react";
+import { Shield, Rocket, Menu, X, Settings as SettingsIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { AdvancedModeBadge } from "@/components/ui/advanced-mode-badge";
 
 export function SiteHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -50,6 +51,14 @@ export function SiteHeader() {
 
           {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-2 shrink-0">
+            <AdvancedModeBadge />
+            <Link
+              href="/settings"
+              aria-label="Settings"
+              className="p-2 rounded-full text-gray hover:text-foreground hover:bg-muted/50 transition-colors"
+            >
+              <SettingsIcon className="w-3.5 h-3.5" />
+            </Link>
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Link
                 href="/vault"
@@ -97,6 +106,7 @@ export function SiteHeader() {
                   { href: "/vault", label: "Vault" },
                   { href: "/explorer", label: "Explorer" },
                   { href: "/docs", label: "Docs" },
+                  { href: "/settings", label: "Settings" },
                 ].map(({ href, label }) => (
                   <Link
                     key={href}
