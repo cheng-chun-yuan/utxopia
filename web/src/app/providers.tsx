@@ -8,6 +8,7 @@ import { Toaster } from "sonner";
 import { StoreHydration } from "@/stores";
 import { HELIUS_RPC_DEVNET } from "@/lib/helius";
 import { getSolanaRpcUrl } from "@/lib/api/constants";
+import { UiModeProvider } from "@/hooks/use-ui-mode";
 
 // Import wallet adapter CSS
 import "@solana/wallet-adapter-react-ui/styles.css";
@@ -37,6 +38,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <ConnectionProvider endpoint={endpoint}>
       <WalletProvider wallets={wallets} autoConnect>
         <WalletModalProvider>
+          <UiModeProvider>
           {/* Hydrate Zustand stores (Bitcoin wallet, Poseidon) */}
           <StoreHydration />
           {children}
@@ -55,6 +57,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
               },
             }}
           />
+          </UiModeProvider>
         </WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
