@@ -1,7 +1,9 @@
 /** @happy-dom */
-import { describe, it, expect } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, afterEach } from "bun:test";
+import { render, screen, cleanup } from "@testing-library/react";
 import { TokenSourcePicker } from "./token-source-picker";
+
+afterEach(cleanup);
 
 describe("TokenSourcePicker", () => {
   it("is disabled when recipient type is btc, locked to zkBTC", () => {

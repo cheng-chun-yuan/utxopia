@@ -1,6 +1,8 @@
 /** @happy-dom */
-import { describe, it, expect, mock } from "bun:test";
-import { render, fireEvent, screen } from "@testing-library/react";
+import { describe, it, expect, mock, afterEach } from "bun:test";
+import { render, fireEvent, screen, cleanup } from "@testing-library/react";
+
+afterEach(cleanup);
 
 // Stub the hooks the form depends on so the test stays unit-scoped.
 mock.module("@/hooks/use-privacy-coin", () => ({
@@ -11,7 +13,7 @@ mock.module("@/hooks/use-privacy-coin", () => ({
   }),
 }));
 mock.module("@/hooks/use-token-prices", () => ({
-  useTokenPrices: () => ({ prices: { btc: 50000 } }),
+  useTokenPrices: () => ({ btc: 50000, sol: null, usdc: null, usdt: null }),
 }));
 
 import { SendForm } from "./send-form";

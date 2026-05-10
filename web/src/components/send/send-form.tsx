@@ -69,9 +69,9 @@ export function SendForm() {
 
   // Pull the user's shielded balance for the chosen token.
   const { totalBalance } = useTokenNotes(effectiveToken);
-  const { prices } = useTokenPrices();
+  const tokenPrices = useTokenPrices();
   // Phase 1 simplification: BTC-only USD preview.
-  const usdPerUnit = prices?.btc ?? null;
+  const usdPerUnit = tokenPrices.btc ?? null;
 
   const recipientValid =
     detection.type !== "empty" &&

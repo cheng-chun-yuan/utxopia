@@ -1,7 +1,9 @@
 /** @happy-dom */
-import { describe, it, expect } from "bun:test";
-import { render, fireEvent, screen } from "@testing-library/react";
+import { describe, it, expect, afterEach } from "bun:test";
+import { render, fireEvent, screen, cleanup } from "@testing-library/react";
 import { RecipientInput } from "./recipient-input";
+
+afterEach(cleanup);
 
 describe("RecipientInput", () => {
   it("renders an empty input with placeholder", () => {
