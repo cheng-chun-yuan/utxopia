@@ -19,6 +19,12 @@
       "groupPubkey": "29485d031f6ad1ab0c4ca7183bef6cb9ce2d914d0bec8dc842a6962f0fcc3362",
       "explorerUrl": "https://mempool.space/testnet4"
     },
+    "ika": {
+      "programId": "87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY",
+      "grpcEndpoint": "pre-alpha-dev-1.ika.ika-network.net:443",
+      "dwallet": "DmZfRVeZHnFZ1ARVHRPJn88VCcJB2QhXLmSe8RuzFMfq",
+      "dwalletXOnlyPubkey": "87a1014ea16e42c825026889874902875aec7650b39c2b334a4d04d49b904c76"
+    },
     "backend": {
       "url": "https://api-aegis.amidoggy.xyz"
     }

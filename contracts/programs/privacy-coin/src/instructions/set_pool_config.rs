@@ -151,6 +151,25 @@ pub fn process_set_pool_config(
     } else {
         // Update existing
         validate_program_owner(pool_config_info, program_id)?;
+
+        // Migration path: old (pre-Ika) PoolConfig PDAs are 96 bytes. The
+        // current struct is 161 bytes. Grow the account in-place + top up
+        // rent before re-initialising the layout. Authority pays.
+        if config_data_len < PoolConfig::LEN {
+            let rent = Rent::get()?;
+            let needed = rent.minimum_balance(PoolConfig::LEN);
+            let current = pool_config_info.lamports();
+            if needed > current {
+                let transfer_ix = pinocchio_system::instructions::Transfer {
+                    from: authority,
+                    to: pool_config_info,
+                    lamports: needed - current,
+                };
+                transfer_ix.invoke()?;
+            }
+            pool_config_info.resize(PoolConfig::LEN)?;
+        }
+
         let mut config_data = pool_config_info.try_borrow_mut_data()?;
 
         if config_data[0] != POOL_CONFIG_DISCRIMINATOR {

@@ -20,9 +20,9 @@
   "ika": {
     "programId": "87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY",
     "grpcEndpoint": "pre-alpha-dev-1.ika.ika-network.net:443",
-    "dwallet": "11111111111111111111111111111111",
-    "dwalletXOnlyPubkey": "0000000000000000000000000000000000000000000000000000000000000000",
-    "cpiAuthorityBump": 0
+    "dwallet": "DmZfRVeZHnFZ1ARVHRPJn88VCcJB2QhXLmSe8RuzFMfq",
+    "dwalletXOnlyPubkey": "87a1014ea16e42c825026889874902875aec7650b39c2b334a4d04d49b904c76",
+    "cpiAuthorityBump": 255
   },
   "backendUrl": "https://api-aegis.amidoggy.xyz"
 }

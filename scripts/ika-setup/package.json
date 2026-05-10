@@ -6,9 +6,10 @@
     "setup": "bun run setup-dwallet.ts"
   },
   "dependencies": {
-    "@solana/web3.js": "^1.95.0",
-    "@grpc/grpc-js": "^1.11.0",
-    "@grpc/proto-loader": "^0.7.13",
-    "@mysten/bcs": "^1.4.0"
+    "@grpc/grpc-js": "^1.14.3",
+    "@grpc/proto-loader": "^0.8.1",
+    "@mysten/bcs": "^2.0.5",
+    "@noble/hashes": "^2.2.0",
+    "@solana/web3.js": "^1.95.0"
   }
 }
