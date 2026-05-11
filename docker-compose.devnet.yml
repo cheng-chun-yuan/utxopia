@@ -1,54 +1,14 @@
-# Privacy Coin Devnet Stack — Backend + FROST Signers
+# Privacy Coin Devnet Stack — Backend
 #
 # Frontend runs separately (Vercel, standalone Docker, or `bun run dev`)
+# Custody is held by an Ika dWallet (see backend Ika env vars below).
 #
 # Usage:
 #   docker compose -f docker-compose.devnet.yml up --build -d
 #   docker compose -f docker-compose.devnet.yml logs -f
 #   docker compose -f docker-compose.devnet.yml down
 
-x-frost-common: &frost-common
-  build:
-    context: ./frost_server
-    dockerfile: Dockerfile
-  volumes:
-    - ./frost_server/config:/app/config
-    - ./frost_server/logs:/app/logs
-  environment: &frost-env
-    RUST_LOG: info,frost_server=debug
-    FROST_KEY_PASSWORD: "${FROST_KEY_PASSWORD:-test}"
-    FROST_API_KEY: "${FROST_API_KEY}"
-  restart: unless-stopped
-
 services:
-  # ─── FROST Threshold Signers (2-of-3) ──────────────────────────────
-  frost-signer-1:
-    <<: *frost-common
-    container_name: privacy-coin-frost-1
-    expose:
-      - "9001"
-    command: >
-      run --bind 0.0.0.0:9001 --id 1
-      --password "${FROST_KEY_PASSWORD:-test}" --network testnet4
-
-  frost-signer-2:
-    <<: *frost-common
-    container_name: privacy-coin-frost-2
-    expose:
-      - "9002"
-    command: >
-      run --bind 0.0.0.0:9002 --id 2
-      --password "${FROST_KEY_PASSWORD:-test}" --network testnet4
-
-  frost-signer-3:
-    <<: *frost-common
-    container_name: privacy-coin-frost-3
-    expose:
-      - "9003"
-    command: >
-      run --bind 0.0.0.0:9003 --id 3
-      --password "${FROST_KEY_PASSWORD:-test}" --network testnet4
-
   # ─── Unified Backend (API + Deposit Tracker + Event Indexer) ──────
   backend:
     build:
@@ -68,13 +28,12 @@ services:
       PRIVACY_COIN_BITCOIN_NETWORK: testnet4
       PRIVACY_COIN_SOLANA_RPC: https://devnet.helius-rpc.com/?api-key=200fd940-548a-473b-849b-8dd13d5eba6e
       PRIVACY_COIN_BITCOIN_RPC: https://mempool.space/testnet4/api
-      PRIVACY_COIN_SIGNING_MODE: frost
-      PRIVACY_COIN_FROST_THRESHOLD: "2"
-      PRIVACY_COIN_FROST_PARTICIPANTS: "3"
-      PRIVACY_COIN_FROST_API_KEY: "${FROST_API_KEY}"
-      PRIVACY_COIN_FROST_SIGNER_URLS: http://frost-signer-1:9001,http://frost-signer-2:9002,http://frost-signer-3:9003
-      PRIVACY_COIN_FROST_KEY_SHARE: placeholder
-      PRIVACY_COIN_FROST_GROUP_PUBKEY: b425ad56ed0584c7297f4b010bcf2c32d406f176af825117556db103745b4bd9
+      PRIVACY_COIN_SIGNING_MODE: ika
+      PRIVACY_COIN_IKA_PROGRAM_ID: 87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY
+      PRIVACY_COIN_IKA_GRPC_ENDPOINT: pre-alpha-dev-1.ika.ika-network.net:443
+      PRIVACY_COIN_IKA_DWALLET: DmZfRVeZHnFZ1ARVHRPJn88VCcJB2QhXLmSe8RuzFMfq
+      PRIVACY_COIN_IKA_DWALLET_XONLY_PUBKEY: 87a1014ea16e42c825026889874902875aec7650b39c2b334a4d04d49b904c76
+      PRIVACY_COIN_IKA_CPI_AUTHORITY_BUMP: "255"
       PRIVACY_COIN_DEMO_MODE: "1"
       POOL_RECEIVE_ADDRESS: tb1pksj664hdqkzvw2tlfvqshnevxt2qdutk47p9z964dkcsxazmf0vsjas4n4
       ESPLORA_URL: https://mempool.space/testnet4/api
@@ -96,10 +55,6 @@ services:
       PRIVACY_COIN_BROADCAST_MODE: real
       VERIFIER_KEYPAIR: "${RELAYER_KEYPAIR}"
       HEADER_BATCH_SIZE: "5"
-    depends_on:
-      - frost-signer-1
-      - frost-signer-2
-      - frost-signer-3
     restart: unless-stopped
 
   # ─── Cloudflare Tunnel ───────────────────────────────────────────

@@ -1,9 +1,7 @@
-# Localnet infrastructure: Bitcoin regtest + Esplora + 2 FROST signers
+# Localnet infrastructure: Bitcoin regtest + Esplora
 #
 # Usage:
-#   docker compose -f docker-compose.localnet.yml up -d
-#   # Generate keys first: scripts/frost-localnet-keygen.sh
-#   docker compose -f docker-compose.localnet.yml up -d frost-signer-1 frost-signer-2
+#   docker compose -f docker-compose.regtest.yml up -d
 
 services:
   esplora:
@@ -21,56 +19,5 @@ services:
       retries: 30
       start_period: 30s
 
-  frost-signer-1:
-    build:
-      context: ./frost_server
-      dockerfile: Dockerfile
-    container_name: privacy-coin-frost-1
-    ports:
-      - "19101:9001"
-    environment:
-      - SIGNER_ID=1
-      - FROST_KEY_PASSWORD=localnet_test
-      - FROST_NETWORK=regtest
-      - FROST_API_KEY=${FROST_API_KEY:-localnet_test_key}
-      - FROST_REQUIRE_CONTEXT=1
-      - FROST_ESPLORA_URL=http://esplora:80/regtest/api
-      - FROST_POOL_ADDRESS=${FROST_POOL_ADDRESS:-}
-      - FROST_MAX_FEE=100000
-      - FROST_MAX_AMOUNT=10000000000
-      - PORT=9001
-      - RUST_LOG=info,frost_server=debug
-    volumes:
-      - frost-localnet-keys:/app/config
-    depends_on:
-      esplora:
-        condition: service_healthy
-
-  frost-signer-2:
-    build:
-      context: ./frost_server
-      dockerfile: Dockerfile
-    container_name: privacy-coin-frost-2
-    ports:
-      - "19102:9001"
-    environment:
-      - SIGNER_ID=2
-      - FROST_KEY_PASSWORD=localnet_test
-      - FROST_NETWORK=regtest
-      - FROST_API_KEY=${FROST_API_KEY:-localnet_test_key}
-      - FROST_REQUIRE_CONTEXT=1
-      - FROST_ESPLORA_URL=http://esplora:80/regtest/api
-      - FROST_POOL_ADDRESS=${FROST_POOL_ADDRESS:-}
-      - FROST_MAX_FEE=100000
-      - FROST_MAX_AMOUNT=10000000000
-      - PORT=9001
-      - RUST_LOG=info,frost_server=debug
-    volumes:
-      - frost-localnet-keys:/app/config
-    depends_on:
-      esplora:
-        condition: service_healthy
-
 volumes:
   esplora-regtest-data:
-  frost-localnet-keys:

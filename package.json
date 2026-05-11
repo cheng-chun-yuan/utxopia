@@ -12,7 +12,6 @@
     "dev": "cd web && bun run dev",
     "setup": "./scripts/setup.sh devnet",
     "setup:local": "./scripts/setup.sh localnet",
-    "setup:local:frost": "./scripts/localnet-docker-frost.sh",
     "setup:devnet": "./scripts/setup.sh devnet",
     "setup:mainnet": "./scripts/setup.sh mainnet",
     "setup:stop": "./scripts/setup.sh localnet --stop",

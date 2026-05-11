@@ -111,9 +111,9 @@ Full operational guide: [docs/RUNNING.md](docs/RUNNING.md).
 We are shipping against `dwallet-labs/ika-pre-alpha`. A few things judges should know up-front rather than discover mid-demo:
 
 - **Ika devnet uses a mock signer, not real distributed MPC.** The CPI surface (`approve_message`, disc 8), the dWallet account format, the authority transfer, the on-chain CPI from our program — all real. The cryptographic backend that fills the `Sign` PDA is a single mock node until Ika mainnet. We surface this in the demo.
-- **Backend dispatch now defaults to Ika.** `PRIVACY_COIN_SIGNING_MODE=ika` is the default in `sync-env.sh`, and `backend/src/main.rs::create_ika_service` constructs an `IkaSigner` that polls the `MessageApproval` PDA on Solana and assembles the Taproot witness. One known limitation: the exact byte offset of the Schnorr signature inside `MessageApproval` is "trailing 64 bytes" — correct for many layouts but to be pinned during the first live exercise. Deposit sweeps (`backend/src/deposit_tracker/sweeper.rs`) still use FROST; cutover follows the same shape and is a known follow-up.
-- **FROST `group_pub_key` is still populated in `PoolConfig`.** This is intentional — pre-Ika deposits remain redeemable on the legacy code path until they're swept. The cutover to `group_pub_key = [0; 32]` happens after the sweep, per [docs/MIGRATION_v1_to_v2.md](docs/MIGRATION_v1_to_v2.md) step 6.
-- **`frost_server/` is retained for the migration window.** It is being decommissioned in the same task batch as the backend dispatch rewrite.
+- **Backend dispatch is Ika by default.** `PRIVACY_COIN_SIGNING_MODE=ika` is the default in `sync-env.sh`, and `backend/src/main.rs::create_ika_service` constructs an `IkaSigner` that polls the `MessageApproval` PDA on Solana and assembles the Taproot witness. One known limitation: the exact byte offset of the Schnorr signature inside `MessageApproval` is "trailing 64 bytes" — correct for many layouts but to be pinned during the first live exercise. Deposit sweeps (`backend/src/deposit_tracker/sweeper.rs`) auto-select single-key signing when `SIGNING_MODE != frost`; Ika-based sweep signing is a follow-up.
+- **FROST `group_pub_key` is still populated in `PoolConfig`** for now — it's vestigial since the backend never enters the FROST signing path with `SIGNING_MODE=ika`, but the on-chain field is preserved so any pre-Ika deposits would still validate against the legacy verifier if we re-enabled it. Zeroing it is a one-line follow-up.
+- **`frost_server/` has been decommissioned.** The cluster, the Docker stack, the DKG scripts, and the standalone test binaries are gone. Backend still contains dead FROST code paths (`MpcSigner`, `create_frost_service`, `SigningMode::Frost` config variant, `deposit_tracker/sweeper.rs::SigningMode::Frost`) because `backend/src/bitcoin/frost_client.rs` exports shared types (`SolanaVerification`, `PrevoutInfo`, `SigningContext`) used by the Ika path too. Extracting those into a neutral module is a clean follow-up.
 - **Pinocchio version mismatch.** Upstream `ika-dwallet-pinocchio` pins Pinocchio 0.10; we're on 0.9. Our `contracts/programs/privacy-coin/src/cpi/ika.rs` hand-builds the CPI to avoid the dep. The CPI bytes are byte-equivalent — when we upgrade Pinocchio, the helper can be swapped for the upstream crate without callsite changes.
 - **Devnet wipes.** Per the upstream README, Ika's Solana coordinator is wiped periodically and fully reset at the Ika Alpha 1 transition. Our `scripts/ika-setup/` is idempotent and re-runnable on demo day.
 
@@ -163,7 +163,7 @@ Bitcoin's transparent blockchain makes privacy challenging:
 | **Custody** | Ika dWallet (2PC-MPC, Solana-native pre-alpha) | BTC signing gated by the program via `approve_message` CPI |
 | **Client SDK** | TypeScript | Full privacy toolkit |
 | **Frontend** | Next.js | Unified `/send` flow (deposit / transfer / unshield / redeem) |
-| **Backend** | Rust (Axum) + Ika watcher | API server + off-chain Sign-PDA poller (legacy FROST behind `frost-legacy` feature) |
+| **Backend** | Rust (Axum) + Ika watcher | API server + off-chain `MessageApproval` PDA poller that assembles the Taproot witness |
 
 ---
 
@@ -256,9 +256,8 @@ privacy-coin/
 │   └── src/bitcoin/ika.ts      # P2TR address derivation from Ika dWallet pubkey
 ├── web/                        # Next.js web interface (/send unified flow)
 ├── backend/                    # Rust API + deposit tracker + redemption
-│   └── src/redemption/signer.rs # SingleKeySigner / MpcSigner (legacy FROST) / IkaSigner
+│   └── src/redemption/signer.rs # IkaSigner (primary) + SingleKeySigner (sweep fallback)
 ├── scripts/ika-setup/          # DKG + transfer_dwallet + set_pool_config one-shots
-├── frost_server/               # FROST threshold signing — legacy, being decommissioned
 └── docs/                       # Technical docs, design specs, recon brief
     ├── designs/2026-05-09-ika-encrypt-pivot-design.md   # Ika+Encrypt pivot architecture
     ├── plans/2026-05-09-ika-phase1-implementation-plan.md  # step-by-step plan

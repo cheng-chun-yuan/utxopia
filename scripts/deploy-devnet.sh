@@ -8,7 +8,7 @@ set -euo pipefail
 #   ./scripts/deploy-devnet.sh                    # Full deploy
 #   ./scripts/deploy-devnet.sh --resume           # Resume from last phase
 #   ./scripts/deploy-devnet.sh --close-old         # Close old programs first (reclaim SOL)
-#   ./scripts/deploy-devnet.sh --skip-frost       # Skip FROST DKG
+#   ./scripts/deploy-devnet.sh --skip-dkg         # Skip Ika DKG (reuse existing dWallet)
 #   ./scripts/deploy-devnet.sh --skip-deploy      # Skip contract deploy (reuse existing)
 #   ./scripts/deploy-devnet.sh --rpc <url>        # Custom Solana RPC
 #   ./scripts/deploy-devnet.sh --yes              # Skip confirmations
@@ -21,7 +21,7 @@ CONFIG_FILE="$ROOT/contracts/config.json"
 KEYPAIR_PATH="${KEYPAIR_PATH:-$HOME/.config/solana/johnny.json}"
 RPC_URL="${RPC_URL:-https://api.devnet.solana.com}"
 BTC_API="https://mempool.space/testnet4/api"
-SKIP_FROST=false
+SKIP_DKG=false
 SKIP_DEPLOY=false
 CLOSE_OLD=false
 RESUME=false
@@ -30,7 +30,7 @@ AUTO_YES=false
 # Parse flags
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --skip-frost)  SKIP_FROST=true; shift ;;
+    --skip-dkg)    SKIP_DKG=true; shift ;;
     --skip-deploy) SKIP_DEPLOY=true; shift ;;
     --close-old)   CLOSE_OLD=true; shift ;;
     --resume)      RESUME=true; shift ;;
@@ -363,54 +363,41 @@ run_phase_5() {
 }
 
 # =============================================================================
-# Phase 6: FROST DKG
+# Phase 6: Ika dWallet DKG
 # =============================================================================
 run_phase_6() {
-  phase 6 "FROST DKG Ceremony"
+  phase 6 "Ika dWallet DKG"
 
-  if [ "$SKIP_FROST" = true ]; then
-    warn "Skipping FROST DKG (--skip-frost)"
+  if [ "$SKIP_DKG" = true ]; then
+    warn "Skipping Ika DKG (--skip-dkg)"
     save_phase 6
     return
   fi
 
-  log "Starting FROST signers via Docker..."
-  docker compose -f "$ROOT/docker-compose.local.yml" up -d frost-signer-1 frost-signer-2 frost-signer-3 2>&1 || true
-
-  # Wait for health
-  log "Waiting for signers..."
-  sleep 5
-  for port in 9001 9002 9003; do
-    for i in $(seq 1 10); do
-      if curl -sf "http://localhost:$port/health" &>/dev/null; then
-        break
-      fi
-      sleep 2
-    done
-  done
-
   local PRIVACY_COIN_ID=$(read_state "privacyCoinProgramId")
-
-  log "Running DKG ceremony..."
-  FROST_NETWORK=testnet4 \
-    PRIVACY_COIN_PROGRAM_ID="$PRIVACY_COIN_ID" \
-    PRIVACY_COIN_SOLANA_RPC="$RPC_URL" \
-    KEYPAIR_PATH="$KEYPAIR_PATH" \
-    "$ROOT/scripts/frost-dkg.sh" 2>&1
-
-  # Read DKG state
-  local DKG_STATE="$ROOT/frost_server/config/dkg-state-testnet4.json"
-  if [ -f "$DKG_STATE" ]; then
-    local GROUP_PUB=$(jq -r '.groupPubKey' "$DKG_STATE")
-    local TAPROOT_ADDR=$(jq -r '.taprootAddress' "$DKG_STATE")
-    save_state "btcXOnlyPubKey" "$GROUP_PUB"
-    save_state "poolBtcAddress" "$TAPROOT_ADDR"
-    save_state "signingMode" "frost"
-    log "Group pubkey: $GROUP_PUB"
-    log "Pool address: $TAPROOT_ADDR"
-  else
-    warn "DKG state file not found — check frost-dkg.sh output"
+  if [ -z "$PRIVACY_COIN_ID" ]; then
+    warn "privacyCoinProgramId not in state — run earlier phases first"
+    save_phase 6
+    return
   fi
+
+  log "Installing scripts/ika-setup deps..."
+  (cd "$ROOT/scripts/ika-setup" && bun install >/dev/null 2>&1)
+
+  log "Running Ika DKG against Ika devnet (Secp256k1 + Taproot)..."
+  PRIVACY_COIN_PROGRAM_ID="$PRIVACY_COIN_ID" \
+    PAYER_KEYPAIR_PATH="$KEYPAIR_PATH" \
+    node --experimental-strip-types --no-warnings \
+      "$ROOT/scripts/ika-setup/dkg.ts" --network devnet 2>&1
+
+  log "Submitting set_pool_config (disc 2) to pin the dWallet on-chain..."
+  PRIVACY_COIN_PROGRAM_ID="$PRIVACY_COIN_ID" \
+    PAYER_KEYPAIR_PATH="$KEYPAIR_PATH" \
+    node --experimental-strip-types --no-warnings \
+      "$ROOT/scripts/ika-setup/set-pool-config.ts" --network devnet 2>&1
+
+  save_state "signingMode" "ika"
+  log "Signing mode → ika"
 
   save_phase 6
 }
@@ -453,13 +440,16 @@ run_phase_8() {
   echo "  zkBTC Mint:     $(read_state zkbtcMint)"
   echo "  Pool State:     $(read_state poolState)"
   echo "  Pool Vault:     $(read_state poolVault)"
-  echo "  Frost Vault:    $(read_state frostVault)"
   echo "  tUSDC Mint:     $(read_state tUsdcMint)"
   echo "  tUSDT Mint:     $(read_state tUsdtMint)"
   echo ""
+  echo "Ika dWallet custody:"
+  echo "  dWallet:        $(read_state ika.dwallet 2>/dev/null || echo '<not set — run phase 6>')"
+  echo "  x-only pubkey:  $(read_state ika.dwalletXOnlyPubkey 2>/dev/null || echo '<not set>')"
+  echo "  CPI auth bump:  $(read_state ika.cpiAuthorityBump 2>/dev/null || echo '<not set>')"
+  echo ""
   echo "Bitcoin (testnet4):"
   echo "  Pool Address:   $(read_state poolBtcAddress)"
-  echo "  Group Pubkey:   $(read_state btcXOnlyPubKey)"
   echo ""
   echo -e "${CYAN}═══ Railway Deployment ═══${NC}"
   echo ""
@@ -471,7 +461,11 @@ run_phase_8() {
   echo "    BTC_LIGHT_CLIENT_PROGRAM_ID=$(read_state btcLightClientId)"
   echo "    PRIVACY_COIN_NETWORK=devnet"
   echo "    POOL_RECEIVE_ADDRESS=$(read_state poolBtcAddress)"
-  echo "    PRIVACY_COIN_FROST_GROUP_PUBKEY=$(read_state btcXOnlyPubKey)"
+  echo "    PRIVACY_COIN_SIGNING_MODE=ika"
+  echo "    PRIVACY_COIN_IKA_PROGRAM_ID=$(read_state ika.programId 2>/dev/null || echo)"
+  echo "    PRIVACY_COIN_IKA_DWALLET=$(read_state ika.dwallet 2>/dev/null || echo)"
+  echo "    PRIVACY_COIN_IKA_DWALLET_XONLY_PUBKEY=$(read_state ika.dwalletXOnlyPubkey 2>/dev/null || echo)"
+  echo "    PRIVACY_COIN_IKA_CPI_AUTHORITY_BUMP=$(read_state ika.cpiAuthorityBump 2>/dev/null || echo)"
   echo "    HEADER_RELAY_ENABLED=true"
   echo "    MEMPOOL_WS_ENABLED=true"
   echo ""

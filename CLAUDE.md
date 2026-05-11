@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Privacy Coin is a privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs. Users deposit BTC, which becomes shielded commitments in a Merkle tree. All transfers use JoinSplit(N,M) proofs — no public tokens ever exist. Amount is revealed only at BTC withdrawal.
 
-**Key Technologies**: Pinocchio (Solana), circom circuits (Groth16 JoinSplit proofs), Taproot (BTC deposits), Baby Jubjub + Ed25519 (stealth addresses), FROST (threshold signing)
+**Key Technologies**: Pinocchio (Solana), circom circuits (Groth16 JoinSplit proofs), Taproot (BTC deposits), Baby Jubjub + Ed25519 (stealth addresses), Ika dWallet (Solana-native 2PC-MPC custody, CPI-gated)
 
 ## Commands
 
@@ -34,32 +34,32 @@ cargo test                           # Run tests
 bun run test                         # TypeScript tests
 ```
 
-### FROST Server - `/frost_server`
-```bash
-cargo run --bin frost-server       # Start FROST signing server
-cargo run --bin generate_deposit_address  # Generate Taproot address
-cargo run --bin spend_utxo         # Spend UTXO with threshold sig
-cargo run --bin mock_sweep_e2e     # Mock sweep E2E test
-cargo test                         # Run tests
-```
-
 ### Backend (Rust) - `/backend`
 ```bash
-cargo run                # Start API server
+cargo run                # Start API server (Ika signing path by default)
 cargo test               # Run tests
 ```
 
-### FROST Localnet (Docker)
+### Ika dWallet Setup - `/scripts/ika-setup`
 ```bash
-./scripts/frost-localnet-setup.sh    # Start Esplora + 2 FROST signers
-docker compose -f docker-compose.regtest.yml up -d   # Start infrastructure
-docker compose -f docker-compose.regtest.yml down     # Stop all
+# DKG ceremony against Ika devnet (Secp256k1 + Taproot)
+PRIVACY_COIN_PROGRAM_ID=<pid> PAYER_KEYPAIR_PATH=<path> \
+  node --experimental-strip-types scripts/ika-setup/dkg.ts --network devnet
+
+# Pin the dWallet on-chain by calling set_pool_config (disc 2)
+PRIVACY_COIN_PROGRAM_ID=<pid> PAYER_KEYPAIR_PATH=<path> \
+  node --experimental-strip-types scripts/ika-setup/set-pool-config.ts --network devnet
+```
+
+### Bitcoin Regtest (Docker)
+```bash
+docker compose -f docker-compose.regtest.yml up -d   # Esplora + regtest
+docker compose -f docker-compose.regtest.yml down     # Stop
 ```
 
 ### E2E Tests (Surfpool offline + regtest)
 ```bash
 bun run scripts/e2e/run-all.ts       # Full E2E (15 steps, ~2 min)
-bun run scripts/e2e/step3b-frost-sweep.ts  # FROST sweep only
 ```
 
 Surfpool runs fully offline with auto-deploy via txtx runbook. Programs are deployed
@@ -91,20 +91,20 @@ SOL/USDC/USDT → Shield (disc=29) ───┤──► Poseidon(npk, token_id,
                                       │              JoinSplit Transact (N in → M out, ZK proof)
                                       │                                              ↓
                                       ├──► Unshield → SPL token back to wallet (disc=15)
-                                      └──► Withdraw → BTC via FROST threshold signing (disc=16)
+                                      └──► Withdraw → BTC via Ika dWallet CPI (disc=17 → Ika approve_message disc 8)
 ```
 
 ### Main Components
 
 | Directory | Purpose | Language |
 |-----------|---------|----------|
-| `contracts/programs/privacy-coin` | Main Solana program (14 instructions) | Rust (Pinocchio) |
+| `contracts/programs/privacy-coin` | Main Solana program (21 instructions, incl. Ika CPI in `complete_redemption`) | Rust (Pinocchio) |
 | `contracts/programs/btc-light-client` | Bitcoin header tracking (standalone program) | Rust (Pinocchio) |
 | `circuits` | JoinSplit Groth16 ZK circuits | circom |
 | `sdk` | TypeScript SDK (@privacy-coin/sdk) | TypeScript |
-| `frost_server` | FROST threshold signing + policy engine + audit log | Rust |
-| `backend` | API server + deposit tracker + redemption + header relayer | Rust + TypeScript |
-| `web` | Web interface | Next.js + React |
+| `scripts/ika-setup` | One-shot DKG + transfer_dwallet + set_pool_config | TypeScript |
+| `backend` | API server + deposit tracker + redemption (Ika watcher) + header relayer | Rust + TypeScript |
+| `web` | Web interface (`/send` unified flow) | Next.js + React |
 
 ### JoinSplit Circuit Architecture
 
@@ -142,28 +142,25 @@ Spending Key (Baby Jubjub) ─► Signs JoinSplit transactions (EdDSA-Poseidon)
 - **NPK** = `Poseidon(MPK, random)` — per-note public key
 - Use case: Share viewing key with accountants/compliance without spending risk
 
-### FROST Server Modules
+### On-chain policy gate (Ika v2)
 
-| Module | Purpose |
-|--------|---------|
-| `policy.rs` | Signing policy engine: sighash verification, UTXO checks, destination whitelist, amount/fee limits |
-| `audit.rs` | Append-only JSONL audit log for all signing operations |
-| `crypto.rs` | X25519/AES-256-GCM encryption for DKG round 2, commitment digest verification |
+The signing policy now lives **on-chain** in `contracts/programs/privacy-coin/src/utils/policy.rs` (ported from the old off-chain `frost_server/policy.rs`): sighash binding, UTXO + destination checks, amount/fee caps, paused-state. `complete_redemption` (disc 17) runs the gate and then CPIs into `ika_dwallet::approve_message` (disc 8). The dWallet's authority is `find_program_address(["__ika_cpi_authority"], privacy_coin_program_id)` so only our program can fire the approval.
 
 ### Backend Modules
 
 | Module | Purpose |
 |--------|---------|
-| `frost_client.rs` | Shared `FrostClient` with broadcast verification, session retry, round coordination |
+| `redemption/signer.rs::IkaSigner` | Polls the `MessageApproval` PDA on Solana RPC, extracts the Schnorr signature, assembles the Taproot witness |
+| `bitcoin/frost_client.rs` | Holds shared types (`SolanaVerification`, `PrevoutInfo`, `SigningContext`) used by Ika and any legacy paths. Refactor out is a known follow-up |
 | `deposit_tracker/` | Full deposit lifecycle: detection → confirmation → sweep → SPV verify → claim |
-| `redemption/` | BTC withdrawal processor (single-key or FROST mode) |
+| `redemption/` | BTC withdrawal processor (Ika signing by default; single-key fallback) |
 
 ### Cryptography
 
 1. **Commitment**: `Poseidon(npk, token, amount)` — 3-field Poseidon hash
 2. **ZK Proof**: Groth16 via circom/snarkjs (client-side, 256 byte proofs)
 3. **Stealth**: Baby Jubjub ECDH + Ed25519 viewing keys
-4. **Redemption**: FROST threshold signatures (secp256k1-tr)
+4. **Redemption**: Ika dWallet (2PC-MPC, Taproot Schnorr) — `approve_message` CPI from the Privacy Coin program
 5. **DKG Security**: X25519 ECDH + AES-256-GCM for encrypted key shares
 
 ## Key Program IDs
