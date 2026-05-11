@@ -402,7 +402,7 @@ impl StealthData {
     /// Decode from string format
     pub fn decode(encoded: &str) -> Result<Self, String> {
         let parts: Vec<&str> = encoded.split(':').collect();
-        if parts.len() != 3 || parts[0] != "aegis" {
+        if parts.len() != 3 || parts[0] != "pcoin" {
             return Err("Invalid stealth data format".to_string());
         }
 
