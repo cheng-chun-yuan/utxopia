@@ -1,0 +1,81 @@
+# Privacy Coin Backend — local-only devnet stack
+#
+# Variant of docker-compose.devnet.yml for running just the backend on this
+# machine (no cloudflared). Host port 3010 → container 3001. Mounts
+# ~/.config/solana/privacycoin.json as the relayer/verifier keypair.
+#
+# Usage:
+#   docker compose -f docker-compose.backend.yml up --build -d
+#   docker compose -f docker-compose.backend.yml logs -f
+#   docker compose -f docker-compose.backend.yml down
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: privacy-coin-backend
+    command: ["/app/zkbtc-api", "tracker", "--interval", "60", "--confirmations", "1"]
+    ports:
+      - "3010:3001"
+    volumes:
+      - tracker-data:/app/data
+      - ${HOME}/.config/solana/id.json:/app/keypair.json:ro
+    environment:
+      RUST_LOG: info,zkbtc=debug
+      PRIVACY_COIN_NETWORK: devnet
+      PRIVACY_COIN_BITCOIN_NETWORK: testnet4
+      PRIVACY_COIN_SOLANA_RPC: https://api.devnet.solana.com
+      PRIVACY_COIN_BITCOIN_RPC: https://mempool.space/testnet4/api
+      # ─── Ika dWallet custody ──────────────────────────────────────
+      PRIVACY_COIN_SIGNING_MODE: ika
+      PRIVACY_COIN_IKA_PROGRAM_ID: 87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY
+      PRIVACY_COIN_IKA_GRPC_ENDPOINT: pre-alpha-dev-1.ika.ika-network.net:443
+      PRIVACY_COIN_IKA_DWALLET: DmZfRVeZHnFZ1ARVHRPJn88VCcJB2QhXLmSe8RuzFMfq
+      PRIVACY_COIN_IKA_DWALLET_XONLY_PUBKEY: 87a1014ea16e42c825026889874902875aec7650b39c2b334a4d04d49b904c76
+      PRIVACY_COIN_IKA_CPI_AUTHORITY_BUMP: "255"
+      # ─── Programs (current live devnet IDs) ───────────────────────
+      PRIVACY_COIN_PROGRAM_ID: G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy
+      PRIVACY_COIN_ZKBTC_MINT: CDqY9mTzbWma7GzCULTJMMZzyVothKEXtr7AnXdpD6v8
+      BTC_LIGHT_CLIENT_PROGRAM_ID: C8JoSKzondM7X1ESwrBSodGMrXWtEWNmawXyjh9zEWJZ
+      POOL_RECEIVE_ADDRESS: tb1p99y96qcldtg6krzv5uvrhmmvh88zmy2dp0kgmjzz56tz7r7vxd3qqn2q95
+      # ─── Operational ─────────────────────────────────────────────
+      PRIVACY_COIN_DEMO_MODE: "1"
+      ESPLORA_URL: https://mempool.space/testnet4/api
+      SOLANA_RPC_URL: https://api.devnet.solana.com
+      DEPOSIT_DB_PATH: /app/data/deposits.db
+      INDEXER_DB_PATH: /app/data/events.db
+      INDEXER_POLL_INTERVAL_SECS: "10"
+      TRACKER_API_PORT: "3001"
+      MEMPOOL_WS_ENABLED: "false"
+      MEMPOOL_WS_URL: wss://mempool.space/testnet4/api/v1/ws
+      HEADER_RELAY_ENABLED: "true"
+      PRIVACY_COIN_BROADCAST_MODE: real
+      HEADER_BATCH_SIZE: "5"
+      SERVICE_FEE_SATS: "500"
+      RELAYER_FEE_SATS: "500"
+      RELAYER_KEYPAIR: /app/keypair.json
+      VERIFIER_KEYPAIR: /app/keypair.json
+      RELAYER_STEALTH_META: "${RELAYER_STEALTH_META:-}"
+      # Set via .env file or `BACKEND_API_KEY=... docker compose up`.
+      # Backend fails-closed if empty: every non-public endpoint returns 401.
+      BACKEND_API_KEY: "${BACKEND_API_KEY:?BACKEND_API_KEY must be set (see .env or env override)}"
+      # Allowed CORS origin for the Vercel frontend. Override at runtime once you know the deploy URL.
+      ALLOWED_ORIGIN: "${ALLOWED_ORIGIN:-http://localhost:3002}"
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: privacy-coin-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
+    volumes:
+      - ${HOME}/.cloudflared/privacy-coin-backend.yml:/etc/cloudflared/config.yml:ro
+      - ${HOME}/.cloudflared/45a55012-105e-412b-ab39-ffcf9c8944dd.json:/etc/cloudflared/45a55012-105e-412b-ab39-ffcf9c8944dd.json:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - backend
+
+volumes:
+  tracker-data:
