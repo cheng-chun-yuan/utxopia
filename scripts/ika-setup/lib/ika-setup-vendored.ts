@@ -107,7 +107,7 @@ const UserSignature = bcs.enum("UserSignature", {
   }),
 });
 
-const NetworkSignedAttestation = bcs.struct("NetworkSignedAttestation", {
+export const NetworkSignedAttestation = bcs.struct("NetworkSignedAttestation", {
   attestation_data: bcs.vector(bcs.u8()),
   network_signature: bcs.vector(bcs.u8()),
   network_pubkey: bcs.vector(bcs.u8()),
@@ -134,7 +134,7 @@ const UserSecretKeyShare = bcs.enum("UserSecretKeyShare", {
   }),
 });
 
-const DWalletRequest = bcs.enum("DWalletRequest", {
+export const DWalletRequest = bcs.enum("DWalletRequest", {
   DKG: bcs.struct("DKG", {
     dwallet_network_encryption_public_key: bcs.vector(bcs.u8()),
     curve: DWalletCurve,
@@ -211,7 +211,7 @@ const DWalletRequest = bcs.enum("DWalletRequest", {
   }),
 });
 
-const SignedRequestData = bcs.struct("SignedRequestData", {
+export const SignedRequestData = bcs.struct("SignedRequestData", {
   session_identifier_preimage: bcs.fixedArray(32, bcs.u8()),
   epoch: bcs.u64(),
   chain_id: ChainId,
@@ -223,7 +223,7 @@ const SignedRequestData = bcs.struct("SignedRequestData", {
 // (NOA-signed wrapper covering DKG / FutureSign / ReEncrypt /
 // MakeSharePublic / ImportedKeyVerification AND presigns), Error.
 // `Attestation` carries `NetworkSignedAttestation` directly as a tuple variant.
-const TransactionResponseData = bcs.enum("TransactionResponseData", {
+export const TransactionResponseData = bcs.enum("TransactionResponseData", {
   Signature: bcs.struct("SignatureResponse", {
     signature: bcs.vector(bcs.u8()),
   }),
@@ -235,7 +235,7 @@ const TransactionResponseData = bcs.enum("TransactionResponseData", {
 
 // Per-type versioned attestation enums for NetworkSignedAttestation.attestation_data.
 // DKG results: decode with `VersionedDWalletDataAttestation.parse(...)`.
-const VersionedDWalletDataAttestation = bcs.enum("VersionedDWalletDataAttestation", {
+export const VersionedDWalletDataAttestation = bcs.enum("VersionedDWalletDataAttestation", {
   V1: bcs.struct("DWalletDataAttestationV1", {
     session_identifier: bcs.fixedArray(32, bcs.u8()),
     intended_chain_sender: bcs.vector(bcs.u8()),
@@ -263,7 +263,7 @@ const VersionedPresignDataAttestation = bcs.enum("VersionedPresignDataAttestatio
 
 // ── gRPC Client ──
 
-function loadGrpcClient(grpcUrl: string): any {
+export function loadGrpcClient(grpcUrl: string): any {
   const protoPath = path.resolve(
     import.meta.dirname ?? ".",
     "ika_dwallet.proto",
@@ -288,7 +288,7 @@ function loadGrpcClient(grpcUrl: string): any {
   return new DWalletService(stripped, creds);
 }
 
-function grpcSubmitTransaction(
+export function grpcSubmitTransaction(
   client: any,
   userSignature: Uint8Array,
   signedRequestData: Uint8Array,
@@ -332,7 +332,7 @@ function dwalletPdaSeeds(curve: number, publicKey: Uint8Array): Buffer[] {
   return seeds;
 }
 
-function buildUserSignature(payer: Keypair): Uint8Array {
+export function buildUserSignature(payer: Keypair): Uint8Array {
   return UserSignature.serialize({
     Ed25519: {
       signature: Array.from(new Uint8Array(64)),
