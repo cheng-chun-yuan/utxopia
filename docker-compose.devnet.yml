@@ -20,69 +20,67 @@ services:
       - "3001:3001"
     volumes:
       - tracker-data:/app/data
+      # Mount the host's johnny.json keypair (uFBM…) read-only.
+      # The container references it via RELAYER_KEYPAIR/VERIFIER_KEYPAIR env vars.
+      - ${HOME}/.config/solana/johnny.json:/app/keypair.json:ro
     environment:
       RUST_LOG: info,zkbtc=debug
       ALLOWED_ORIGIN: "${ALLOWED_ORIGIN:-https://aegis.amidoggy.xyz}"
       PRIVACY_COIN_NETWORK: devnet
-      # Single place to switch Bitcoin network: "testnet" (testnet3) or "testnet4"
       PRIVACY_COIN_BITCOIN_NETWORK: testnet4
-      PRIVACY_COIN_SOLANA_RPC: https://devnet.helius-rpc.com/?api-key=200fd940-548a-473b-849b-8dd13d5eba6e
+      PRIVACY_COIN_SOLANA_RPC: https://api.devnet.solana.com
       PRIVACY_COIN_BITCOIN_RPC: https://mempool.space/testnet4/api
+      # ─── Ika dWallet custody (replaces FROST) ─────────────────────
       PRIVACY_COIN_SIGNING_MODE: ika
       PRIVACY_COIN_IKA_PROGRAM_ID: 87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY
       PRIVACY_COIN_IKA_GRPC_ENDPOINT: pre-alpha-dev-1.ika.ika-network.net:443
       PRIVACY_COIN_IKA_DWALLET: DmZfRVeZHnFZ1ARVHRPJn88VCcJB2QhXLmSe8RuzFMfq
       PRIVACY_COIN_IKA_DWALLET_XONLY_PUBKEY: 87a1014ea16e42c825026889874902875aec7650b39c2b334a4d04d49b904c76
       PRIVACY_COIN_IKA_CPI_AUTHORITY_BUMP: "255"
+      # ─── Programs (current live devnet IDs) ───────────────────────
+      PRIVACY_COIN_PROGRAM_ID: G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy
+      PRIVACY_COIN_ZKBTC_MINT: CDqY9mTzbWma7GzCULTJMMZzyVothKEXtr7AnXdpD6v8
+      BTC_LIGHT_CLIENT_PROGRAM_ID: C8JoSKzondM7X1ESwrBSodGMrXWtEWNmawXyjh9zEWJZ
+      POOL_RECEIVE_ADDRESS: tb1p99y96qcldtg6krzv5uvrhmmvh88zmy2dp0kgmjzz56tz7r7vxd3qqn2q95
+      # ─── Operational ─────────────────────────────────────────────
       PRIVACY_COIN_DEMO_MODE: "1"
-      POOL_RECEIVE_ADDRESS: tb1pksj664hdqkzvw2tlfvqshnevxt2qdutk47p9z964dkcsxazmf0vsjas4n4
       ESPLORA_URL: https://mempool.space/testnet4/api
-      SOLANA_RPC_URL: https://devnet.helius-rpc.com/?api-key=200fd940-548a-473b-849b-8dd13d5eba6e
+      SOLANA_RPC_URL: https://api.devnet.solana.com
       DEPOSIT_DB_PATH: /app/data/deposits.db
       INDEXER_DB_PATH: /app/data/events.db
       INDEXER_POLL_INTERVAL_SECS: "10"
-      PRIVACY_COIN_PROGRAM_ID: 7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ
-      PRIVACY_COIN_ZKBTC_MINT: G5CHaLkWjdUxxmnrVqNLQ29K7PoNwJAzvVT11jjkdGKC
       TRACKER_API_PORT: "3001"
       MEMPOOL_WS_ENABLED: "true"
       MEMPOOL_WS_URL: wss://mempool.space/testnet4/api/v1/ws
       HEADER_RELAY_ENABLED: "true"
-      BTC_LIGHT_CLIENT_PROGRAM_ID: Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq
-      RELAYER_KEYPAIR: "${RELAYER_KEYPAIR}"
+      PRIVACY_COIN_BROADCAST_MODE: real
+      HEADER_BATCH_SIZE: "5"
       SERVICE_FEE_SATS: "500"
       RELAYER_FEE_SATS: "500"
+      # Both vars point at the same mounted keypair.
+      RELAYER_KEYPAIR: /app/keypair.json
+      VERIFIER_KEYPAIR: /app/keypair.json
+      # Optional: relayer's stealth meta-address for routing fee outputs.
+      # Override at runtime if needed: RELAYER_STEALTH_META=... docker compose up
       RELAYER_STEALTH_META: "${RELAYER_STEALTH_META:-}"
-      PRIVACY_COIN_BROADCAST_MODE: real
-      VERIFIER_KEYPAIR: "${RELAYER_KEYPAIR}"
-      HEADER_BATCH_SIZE: "5"
     restart: unless-stopped
 
   # ─── Cloudflare Tunnel ───────────────────────────────────────────
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: aegis-cloudflared
-    command: tunnel --no-autoupdate --config /etc/cloudflared/aegis.yml run 2cf1a4fa-ace1-4c53-9865-b3d8086dc516
+    command: tunnel --no-autoupdate --config /etc/cloudflared/aegis-docker.yml run c4bdbf46-2acf-4b9d-9d72-c4d1f59fcde3
     volumes:
       - /Users/chengchunyuan/.cloudflared:/etc/cloudflared:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - backend
     restart: unless-stopped
 
-  # ─── Header Relayer (testnet4 → Solana devnet) ─────────────────────
-  header-relayer:
-    build:
-      context: ./backend/header-relayer
-      dockerfile: Dockerfile
-    container_name: aegis-header-relayer
-    environment:
-      DEPLOY_ENV: devnet
-      DEVNET_SOLANA_RPC_URL: https://devnet.helius-rpc.com/?api-key=200fd940-548a-473b-849b-8dd13d5eba6e
-      DEVNET_PROGRAM_ID: Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq
-      DEVNET_RELAYER_KEYPAIR: "${DEVNET_RELAYER_KEYPAIR}"
-      DEVNET_BITCOIN_NETWORK: testnet4
-      DEVNET_START_BLOCK_HEIGHT: "124088"
-      DEVNET_POLL_INTERVAL_MS: "30000"
-    restart: unless-stopped
+  # Header relay runs in-process inside `zkbtc-api tracker` when
+  # HEADER_RELAY_ENABLED=true (set in the `backend` block above).
+  # See backend/src/deposit_tracker/header_relayer.rs.
 
 volumes:
   tracker-data:
