@@ -16,7 +16,10 @@ import type {
 
 const CREDENTIAL_STORAGE_KEY = "pcoin:passkey_credential_id";
 const SEED_STORAGE_KEY = "pcoin:passkey_seed";
-/** Derive per-user PRF salt by mixing domain separator with credential ID */
+/** Derive per-user PRF salt by mixing domain separator with credential ID.
+ *  The base string "aegis-passkey-prf-v1" is a LOAD-BEARING domain separator —
+ *  the project's name is now "Privacy Coin" but this string stays as-is so
+ *  existing passkey-derived keys keep working. */
 function getPrfSalt(credentialId?: string | null): Uint8Array {
   const base = "aegis-passkey-prf-v1";
   const input = credentialId ? `${base}:${credentialId}` : base;
@@ -57,7 +60,11 @@ export function clearStoredCredential(): void {
 
 // ── Fallback seed storage (used when PRF is not available) ──
 
-/** Derive AES-GCM key from credential ID for encrypting fallback seed at rest */
+/** Derive AES-GCM key from credential ID for encrypting fallback seed at rest.
+ *  "aegis-seed-enc:" and "aegis-fallback-seed" are LOAD-BEARING HKDF inputs
+ *  frozen from the pre-rename era — changing them breaks the fallback-seed
+ *  recovery path for every existing passkey user. Project name is now
+ *  "Privacy Coin" but these strings stay as-is. */
 async function deriveStorageKey(credentialId: string): Promise<CryptoKey> {
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
@@ -166,7 +173,7 @@ export function usePasskey(): UsePasskeyReturn {
         rp: { name: RP_NAME, id: rpId },
         user: {
           id: randomBase64URL(32),
-          name: "aegis-user",
+          name: "pcoin-user",
           displayName: "Privacy Coin User",
         },
         challenge: randomBase64URL(32),

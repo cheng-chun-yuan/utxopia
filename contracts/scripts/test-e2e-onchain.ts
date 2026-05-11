@@ -588,7 +588,7 @@ async function main() {
   const authority = await loadKeypair(walletPath);
 
   // Program IDs
-  const programId = new PublicKey(localConfig.programs.Aegis);
+  const programId = new PublicKey(localConfig.programs.PrivacyCoin);
   const zkbtcMint = new PublicKey(localConfig.accounts.zkbtcMint);
   const poolVault = new PublicKey(localConfig.accounts.poolVault);
 
@@ -831,7 +831,7 @@ async function main() {
   // ==========================================================================
   logSection("Step 7: Compute VK Hash");
 
-  const vkHash = await computeVkHash("aegis_claim");
+  const vkHash = await computeVkHash("privacy_coin_claim");
   log(`VK hash: 0x${Buffer.from(vkHash).toString("hex").slice(0, 32)}...`);
 
   // ==========================================================================

@@ -29,6 +29,10 @@ const KEYS_STORAGE_PREFIX = "pcoin:keys:";
 
 async function deriveStorageKey(walletPubkey: string): Promise<CryptoKey> {
   const enc = new TextEncoder();
+  // ":aegis-storage-key" and "aegis-v4:" are LOAD-BEARING KDF inputs — frozen
+  // from the project's pre-rename era. Changing either breaks the AES-GCM
+  // key that decrypts every existing user's persisted spending/viewing keys.
+  // The project name is "Privacy Coin", but these strings stay as-is.
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
     enc.encode(walletPubkey + ":aegis-storage-key"),
@@ -241,7 +245,7 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
       }
       set({ isPoseidonReady: true });
     } catch (err) {
-      console.error("[Aegis] Failed to init:", err);
+      console.error("[PrivacyCoin] Failed to init:", err);
     }
   },
 
@@ -464,15 +468,15 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
         lastAnnouncementCount = announcements.length;
 
         // Build token list with computed tokenIds for multi-token scanning
-        const aegisClient = PrivacyCoinClient.instance();
-        const config = aegisClient.config;
+        const pcoinClient = PrivacyCoinClient.instance();
+        const config = pcoinClient.config;
         const tokensToScan: { symbol: string; tokenId: bigint }[] = [];
         for (const token of VAULT_TOKENS) {
           try {
             let mintAddr = token.mint;
             if (!mintAddr && token.symbol === "zkBTC") mintAddr = config.zkbtcMint;
             if (!mintAddr) continue; // skip tokens without mint addresses
-            tokensToScan.push({ symbol: token.shieldedSymbol, tokenId: aegisClient.getTokenId(mintAddr) });
+            tokensToScan.push({ symbol: token.shieldedSymbol, tokenId: pcoinClient.getTokenId(mintAddr) });
           } catch (err) { console.error("[PrivacyCoinStore] invalid mint for token:", token.symbol, err); }
         }
 
@@ -515,7 +519,7 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
 
         // Compute nullifier hashes (hex) for each note via PrivacyCoinClient
         const nullifierData = scanned.map((note) => {
-          const hashBytes = aegisClient.computeNullifier(note);
+          const hashBytes = pcoinClient.computeNullifier(note);
           const hashHex = Buffer.from(hashBytes).toString("hex");
           return { note, hashHex };
         });
@@ -572,7 +576,7 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
           inboxLoading: false,
         });
       } catch (err) {
-        console.error("[Aegis] Inbox error:", err);
+        console.error("[PrivacyCoin] Inbox error:", err);
         set({
           inboxError: err instanceof Error ? err.message : "Failed to fetch inbox",
           inboxLoading: false,
@@ -589,7 +593,7 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
   startRealtimeInbox: () => {
     const client = getEventClient();
     client.start().catch((err) => {
-      console.warn("[Aegis] EventClient start failed:", err);
+      console.warn("[PrivacyCoin] EventClient start failed:", err);
     });
     const unsub = client.onAnnouncement(() => {
       // New announcements arrived via WS — trigger inbox refresh
@@ -624,7 +628,7 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
       const result = await response.json();
       set({ publicZkbtcBalance: BigInt(result?.amount ?? "0") });
     } catch (err) {
-      console.error("[Aegis] Failed to fetch public zkBTC balance:", err);
+      console.error("[PrivacyCoin] Failed to fetch public zkBTC balance:", err);
     }
   },
 

@@ -40,7 +40,7 @@ export const MIN_WITHDRAWAL_SATS = 1_000;
 export const BTC_ADDRESS_REGEX = /^(bc1|[13]|tb1)[a-zA-HJ-NP-Z0-9]{25,62}$/;
 
 // Dynamic getters — call after ensureSdkInit() resolves
-export const getAegisProgramId = () => getConfig().privacyCoinProgramId;
+export const getPrivacyCoinProgramId = () => getConfig().privacyCoinProgramId;
 export const getBtcLightClientId = () => getConfig().btcLightClientProgramId;
 export const getPoolStateAddress = () => getConfig().poolStatePda;
 export const getCommitmentTreeAddress = () => getConfig().commitmentTreePda;

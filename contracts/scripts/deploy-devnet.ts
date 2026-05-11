@@ -199,17 +199,17 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
   logSection("Program Deployment");
 
   // Get program IDs from keypairs
-  const aegisKeypairPath = path.join(TARGET_DIR, "privacy_coin-keypair.json");
+  const pcoinKeypairPath = path.join(TARGET_DIR, "privacy_coin-keypair.json");
   const btclcKeypairPath = path.join(TARGET_DIR, "btc_light_client-keypair.json");
 
-  if (!fs.existsSync(aegisKeypairPath) || !fs.existsSync(btclcKeypairPath)) {
+  if (!fs.existsSync(pcoinKeypairPath) || !fs.existsSync(btclcKeypairPath)) {
     throw new Error("Program keypairs not found. Run 'cargo build-sbf' first.");
   }
 
-  const aegisKeypair = await loadKeypair(aegisKeypairPath);
+  const pcoinKeypair = await loadKeypair(pcoinKeypairPath);
   const btclcKeypair = await loadKeypair(btclcKeypairPath);
 
-  const privacyCoinProgramId = aegisKeypair.publicKey;
+  const privacyCoinProgramId = pcoinKeypair.publicKey;
   const btcLightClientProgramId = btclcKeypair.publicKey;
 
   log(`Privacy Coin Program ID: ${privacyCoinProgramId.toBase58()}`);
@@ -220,11 +220,11 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
     return { privacyCoinProgramId, btcLightClientProgramId };
   }
 
-  // Deploy Aegis
+  // Deploy Privacy Coin
   log("Deploying Privacy Coin program to devnet...");
   try {
     execSync(
-      `solana program deploy ${TARGET_DIR}/privacy_coin.so --program-id ${aegisKeypairPath} -u devnet`,
+      `solana program deploy ${TARGET_DIR}/privacy_coin.so --program-id ${pcoinKeypairPath} -u devnet`,
       { stdio: "inherit" }
     );
     log("Privacy Coin deployed successfully");
@@ -558,7 +558,7 @@ async function initializePRIVACY_COIN(
   );
   log(`Frost Vault: ${frostVault.address.toBase58()}`);
 
-  // Initialize Aegis
+  // Initialize Privacy Coin
   log("Initializing Privacy Coin pool...");
   const ix = buildPrivacyCoinInitializeIx(
     poolStatePda,
@@ -678,7 +678,7 @@ function saveDevnetConfig(
 
   // Update config.json with devnet values
   config.programs.devnet = {
-    Aegis: deployResult.privacyCoinProgramId.toBase58(),
+    PrivacyCoin: deployResult.privacyCoinProgramId.toBase58(),
     btc_light_client: deployResult.btcLightClientProgramId.toBase58(),
   };
 
@@ -690,7 +690,7 @@ function saveDevnetConfig(
     network: "devnet",
     rpcUrl: RPC_URL,
     programs: {
-      Aegis: deployResult.privacyCoinProgramId.toBase58(),
+      PrivacyCoin: deployResult.privacyCoinProgramId.toBase58(),
       btcLightClient: deployResult.btcLightClientProgramId.toBase58(),
     },
     accounts: {
@@ -790,7 +790,7 @@ async function main() {
     btcBlock
   );
 
-  // Initialize Aegis
+  // Initialize Privacy Coin
   const initResult = await initializePRIVACY_COIN(
     connection,
     authority,

@@ -1,5 +1,5 @@
 /// Bitcoin block header account (zero-copy layout)
-/// Must match aegis's BlockHeader exactly.
+/// Must match privacy-coin's BlockHeader exactly.
 #[repr(C)]
 pub(crate) struct BlockHeader {
     pub discriminator: u8,

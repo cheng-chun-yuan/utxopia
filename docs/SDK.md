@@ -131,7 +131,7 @@ interface BabyJubPoint {
 }
 
 // PRIVACY_COIN keys (private)
-interface AegisKeys {
+interface PrivacyCoinKeys {
   spendingPrivKey: bigint;         // Baby Jubjub scalar
   spendingPubKey: BabyJubPoint;
   viewingPrivKey: Uint8Array;      // Ed25519 (32 bytes)

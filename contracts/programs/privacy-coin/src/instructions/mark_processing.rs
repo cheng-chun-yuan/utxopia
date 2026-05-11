@@ -173,6 +173,6 @@ pub fn process_mark_processing(
         );
     }
 
-    pinocchio::msg!("Aegis: redemption processing");
+    pinocchio::msg!("PrivacyCoin: redemption processing");
     Ok(())
 }

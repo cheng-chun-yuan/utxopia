@@ -21,7 +21,7 @@ import { PublicKey } from "@solana/web3.js";
 import { getHeliusConnection } from "./helius-server";
 
 // Privacy Coin Program ID from SDK
-const getAegisProgramId = () => new PublicKey(getConfig().privacyCoinProgramId);
+const getPrivacyCoinProgramId = () => new PublicKey(getConfig().privacyCoinProgramId);
 
 // Storage path for the commitment index
 const DATA_DIR = process.cwd() + "/data";
@@ -251,7 +251,7 @@ export async function syncFromOnChain(): Promise<{
 
   // Fallback: scan transaction logs directly
   if (!fromBackend) {
-    const signatures = await connection.getSignaturesForAddress(getAegisProgramId(), { limit: 1000 }, "confirmed");
+    const signatures = await connection.getSignaturesForAddress(getPrivacyCoinProgramId(), { limit: 1000 }, "confirmed");
 
     const BATCH_SIZE = 20;
     for (let i = 0; i < signatures.length; i += BATCH_SIZE) {

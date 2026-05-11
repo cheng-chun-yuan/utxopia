@@ -22,7 +22,7 @@
 - [x] **H3** mark_processing missing writable validation
 - [x] **H4** XOR amount encryption: deterministic, unauthenticated, 64-bit key
 - [x] **H5** Weak PBKDF2: 100k-150k iterations → increase to 600k
-- [x] **H6** Static PBKDF2 salt "aegis-v3" → random per-user salt
+- [x] **H6** Static PBKDF2 salt "pcoin-v3" → random per-user salt
 - [x] **H7** BigInt private keys can't be securely zeroized in JS (document)
 - [x] **H8** No replay prevention in FROST signing sessions
 - [x] **H9** DKG ceremony secrets unencrypted in memory (1h timeout → 10min)

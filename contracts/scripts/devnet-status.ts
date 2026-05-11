@@ -17,7 +17,7 @@ async function main() {
   const devnetConfig = JSON.parse(fs.readFileSync(".devnet-config.json", "utf-8"));
 
   console.log("\n📋 Configuration:");
-  console.log(`  Program: ${devnetConfig.programs.Aegis}`);
+  console.log(`  Program: ${devnetConfig.programs.PrivacyCoin}`);
   console.log(`  Pool State: ${devnetConfig.accounts.poolState}`);
   console.log(`  Commitment Tree: ${devnetConfig.accounts.commitmentTree}`);
   console.log(`  zkBTC Mint: ${devnetConfig.accounts.zkbtcMint}`);
@@ -85,7 +85,7 @@ async function main() {
 
   // Fetch recent stealth announcements
   console.log("\n📣 Recent Stealth Announcements:");
-  const programId = new PublicKey(devnetConfig.programs.Aegis);
+  const programId = new PublicKey(devnetConfig.programs.PrivacyCoin);
   try {
     const accounts = await connection.getProgramAccounts(programId, {
       filters: [

@@ -105,6 +105,6 @@ pub fn process_update_token_config(
         tc.set_enabled(data[offset] != 0);
     }
 
-    pinocchio::msg!("Aegis: updated token config");
+    pinocchio::msg!("PrivacyCoin: updated token config");
     Ok(())
 }

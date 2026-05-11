@@ -1,5 +1,5 @@
 /**
- * Cryptographic utilities for Aegis
+ * Cryptographic utilities for Privacy Coin
  *
  * This module provides:
  * - Field constants (BN254)

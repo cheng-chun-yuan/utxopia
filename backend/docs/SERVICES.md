@@ -430,18 +430,18 @@ cargo run -- redemption
 Create service files for each component:
 
 ```ini
-# /etc/systemd/system/aegis-tracker.service
+# /etc/systemd/system/privacy-coin-tracker.service
 [Unit]
 Description=Privacy Coin Deposit Tracker
 After=network.target
 
 [Service]
 Type=simple
-User=aegis
-WorkingDirectory=/opt/aegis/backend
-ExecStart=/opt/aegis/backend/target/release/zkbtc-api tracker
+User=privacy-coin
+WorkingDirectory=/opt/privacy-coin/backend
+ExecStart=/opt/privacy-coin/backend/target/release/zkbtc-api tracker
 Restart=always
-Environment=DEPOSIT_DB_PATH=/var/lib/aegis/deposits.db
+Environment=DEPOSIT_DB_PATH=/var/lib/privacy-coin/deposits.db
 
 [Install]
 WantedBy=multi-user.target

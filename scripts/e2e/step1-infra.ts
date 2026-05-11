@@ -165,7 +165,7 @@ async function main() {
     chadbufferId = new PublicKey("C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF");
   }
 
-  log(`Aegis: ${PRIVACY_COIN.toBase58()}`);
+  log(`Privacy Coin: ${PRIVACY_COIN.toBase58()}`);
   log(`BTC LC: ${BTC_LC.toBase58()}`);
   log(`ChadBuffer: ${chadbufferId.toBase58()}`);
 

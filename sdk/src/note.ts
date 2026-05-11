@@ -1,5 +1,5 @@
 /**
- * Note (shielded commitment) utilities for Aegis
+ * Note (shielded commitment) utilities for Privacy Coin
  *
  * A Note represents a shielded deposit with:
  * - nullifier: Random secret for spending

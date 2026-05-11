@@ -394,7 +394,7 @@ function generateSystemOverview() {
   els.push(...labeledRect(460, innerY + 70, 200, 55, "Name Registry\n(.zkey)", { backgroundColor: "#f3e5f5", fontSize: 13 }));
   els.push(...labeledRect(680, innerY + 70, 180, 55, "VK Registry", { backgroundColor: "#f3e5f5", fontSize: 13 }));
 
-  // Arrow between BTC Light Client and Aegis
+  // Arrow between BTC Light Client and Privacy Coin
   els.push(arrow(340, 380, [[0, 0], [100, 0]], { strokeColor: "#6a1b9a", startArrowhead: "arrow" }));
 
   // Down arrow from Solana to Client
@@ -2388,7 +2388,7 @@ function generateSweepTransaction() {
     { label: "Mine 6+ blocks\n(SPV requirement)", bg: "#ffe0b2", border: "#e65100" },
     { label: "Upload sweep tx\nto ChadBuffer\n(non-witness)", bg: "#b2dfdb", border: "#00695c" },
     { label: "verify_transaction\n(btc-light-client)\nMerkle + headers", bg: "#b2dfdb", border: "#00695c" },
-    { label: "verify_stealth_\ndeposit (Aegis)\ncompute commitment", bg: "#c8e6c9", border: "#2e7d32" },
+    { label: "verify_stealth_\ndeposit (Privacy Coin)\ncompute commitment", bg: "#c8e6c9", border: "#2e7d32" },
     { label: "StealthAnnounce-\nment PDA created\n(90 bytes, type=0)", bg: "#a5d6a7", border: "#1b5e20" },
   ];
 

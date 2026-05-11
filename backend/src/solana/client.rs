@@ -21,7 +21,7 @@ use solana_sdk::{
 use std::str::FromStr;
 
 use crate::common::crypto::double_sha256 as double_sha256_header;
-use crate::config::PRIVACY_COINConfig;
+use crate::config::PrivacyCoinConfig;
 use crate::redemption::types::ParsedRedemption;
 
 // ============================================================================
@@ -56,7 +56,7 @@ pub struct CompleteRedemptionParams<'a> {
 // Constants
 // ============================================================================
 
-/// Solana devnet RPC endpoint (default, override via PRIVACY_COINConfig)
+/// Solana devnet RPC endpoint (default, override via PrivacyCoinConfig)
 pub const DEVNET_RPC: &str = "https://api.devnet.solana.com";
 
 /// Token-2022 program ID
@@ -222,8 +222,8 @@ impl SolClient {
         }
     }
 
-    /// Create new client from PRIVACY_COINConfig (preferred for production)
-    pub fn from_config(config: &PRIVACY_COINConfig) -> Result<Self, SolError> {
+    /// Create new client from PrivacyCoinConfig (preferred for production)
+    pub fn from_config(config: &PrivacyCoinConfig) -> Result<Self, SolError> {
         let rpc = RpcClient::new_with_commitment(
             config.solana_rpc.clone(),
             CommitmentConfig::confirmed(),

@@ -22,7 +22,7 @@ async function main() {
 
   // Check SDK program ID
   console.log("\n=== Program IDs from SDK ===");
-  console.log(`Aegis: ${PRIVACY_COIN_PROGRAM_ID}`);
+  console.log(`Privacy Coin: ${PRIVACY_COIN_PROGRAM_ID}`);
   console.log(`BTC Light Client: ${BTC_LIGHT_CLIENT_PROGRAM_ID}`);
 
   // Verify program is deployed

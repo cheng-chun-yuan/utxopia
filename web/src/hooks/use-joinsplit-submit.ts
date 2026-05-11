@@ -123,8 +123,8 @@ export function useJoinSplitSubmit() {
 
       // Track tx count for Lite/Pro toggle visibility
       try {
-        const count = parseInt(localStorage.getItem("aegis-tx-count") || "0", 10);
-        localStorage.setItem("aegis-tx-count", String(count + 1));
+        const count = parseInt(localStorage.getItem("pcoin-tx-count") || "0", 10);
+        localStorage.setItem("pcoin-tx-count", String(count + 1));
       } catch {};
     } catch (err) {
       console.error("[Submit] Error:", err);

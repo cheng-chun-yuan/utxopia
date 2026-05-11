@@ -2,7 +2,7 @@
 //!
 //! Submits sweep transactions for SPV verification on Solana.
 //! Uses btc-light-client's verify_transaction to create a VerifiedTransaction PDA,
-//! then calls aegis's verify_stealth_deposit with that PDA.
+//! then calls privacy-coin's verify_stealth_deposit with that PDA.
 //!
 //! Raw Bitcoin transactions are uploaded to ChadBuffer accounts before verification.
 //! Core SPV utilities (ChadBuffer upload/close, strip_witness, etc.) live in
@@ -31,7 +31,7 @@ use crate::solana::spv;
 const TOKEN_2022_PROGRAM_ID: Pubkey = pubkey!("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
 /// Get Privacy Coin program ID from env or use devnet default
-fn aegis_program_id() -> String {
+fn privacy_coin_program_id() -> String {
     std::env::var("PRIVACY_COIN_PROGRAM_ID")
         .unwrap_or_else(|_| "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ".to_string())
 }
@@ -95,7 +95,7 @@ impl SpvVerifier {
             rpc: RpcClient::new_with_commitment(solana_rpc, CommitmentConfig::confirmed()),
             payer: None,
             watcher: AddressWatcher::from_network(crate::config::Network::Devnet),
-            program_id: Pubkey::from_str(&aegis_program_id()).unwrap(),
+            program_id: Pubkey::from_str(&privacy_coin_program_id()).unwrap(),
             light_client_program_id: Pubkey::from_str(&btc_light_client_program_id()).unwrap(),
         }
     }
@@ -138,7 +138,7 @@ impl SpvVerifier {
     /// Verify a Bitcoin deposit via SPV proof on Solana.
     ///
     /// Uploads raw sweep + deposit transactions to ChadBuffer accounts, then sends
-    /// two instructions: btc-light-client verify_transaction + aegis verify_stealth_deposit.
+    /// two instructions: btc-light-client verify_transaction + privacy-coin verify_stealth_deposit.
     pub async fn verify_deposit(
         &self,
         sweep_txid: &str,
@@ -405,7 +405,7 @@ impl SpvVerifier {
         })
     }
 
-    /// Send verify_deposit_v2 transaction (btc-light-client verify + aegis disc 25)
+    /// Send verify_deposit_v2 transaction (btc-light-client verify + privacy-coin disc 25)
     #[allow(clippy::too_many_arguments)]
     async fn send_verify_deposit_v2_tx(
         &self,
@@ -463,7 +463,7 @@ impl SpvVerifier {
             &light_client, &block_header_pda, &verified_tx_pda, sweep_buffer,
         )?;
 
-        // --- Instruction 2: aegis verify_deposit_v2 (disc 25) ---
+        // --- Instruction 2: privacy-coin verify_deposit_v2 (disc 25) ---
         // Layout: disc(1) + sweep_txid(32) + block_height(8) + sweep_tx_size(4) + deposit_txid(32) = 77
         let mut v2_data = Vec::with_capacity(77);
         v2_data.push(25u8); // discriminator
@@ -581,7 +581,7 @@ impl SpvVerifier {
     /// Send the verify_deposit transaction to Solana (two instructions).
     ///
     /// 1. btc-light-client verify_transaction (disc 2) — creates VerifiedTransaction PDA
-    /// 2. aegis verify_stealth_deposit (disc 1) — reads ChadBuffer accounts, extracts npk
+    /// 2. privacy-coin verify_stealth_deposit (disc 1) — reads ChadBuffer accounts, extracts npk
     #[allow(clippy::too_many_arguments)]
     async fn send_verify_deposit_tx(
         &self,
@@ -642,7 +642,7 @@ impl SpvVerifier {
             sweep_buffer,
         )?;
 
-        // --- Instruction 2: aegis verify_stealth_deposit (disc 1) ---
+        // --- Instruction 2: privacy-coin verify_stealth_deposit (disc 1) ---
         // Layout: disc(1) + sweep_txid(32) + block_height(8) + sweep_tx_size(4) + deposit_tx_size(4) + deposit_txid(32)
         let mut deposit_data = Vec::with_capacity(81);
         deposit_data.push(1u8); // discriminator

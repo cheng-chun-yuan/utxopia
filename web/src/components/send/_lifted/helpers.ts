@@ -64,7 +64,7 @@ export function isValidSolanaAddress(address: string): boolean {
  * This ensures the commitment computed off-chain matches the on-chain verification.
  *
  * Mirrors on-chain mask approach (result[0] &= 0x2F). Must stay in sync with
- * contracts/programs/aegis/src/utils/crypto.rs reduce_to_field().
+ * contracts/programs/privacy-coin/src/utils/crypto.rs reduce_to_field().
  */
 export function reduceToFieldOnChain(bytes: Uint8Array): bigint {
   let isGe = true;

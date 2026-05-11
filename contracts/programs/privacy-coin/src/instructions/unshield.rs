@@ -453,6 +453,6 @@ pub fn process_unshield(
 
     let _ = clock; // suppress unused warning
 
-    pinocchio::msg!("Aegis: unshield");
+    pinocchio::msg!("PrivacyCoin: unshield");
     Ok(())
 }

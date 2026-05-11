@@ -9,7 +9,7 @@
 import { NextResponse } from "next/server";
 import type { RpcClient } from "@privacy-coin/sdk";
 // Lazy imports to avoid build-time codec validation errors from @solana/kit
-const getAegisSDK = () => import("@privacy-coin/sdk");
+const getPrivacyCoinSDK = () => import("@privacy-coin/sdk");
 const getSolanaKit = () => import("@solana/kit");
 
 import { getHeliusRpcUrl } from "@/lib/helius-server";
@@ -110,7 +110,7 @@ async function createServerRpc(): Promise<RpcClient> {
 
 export async function GET() {
   try {
-    const { getConfig, fetchExplorerRedemptions } = await getAegisSDK();
+    const { getConfig, fetchExplorerRedemptions } = await getPrivacyCoinSDK();
 
     // Fetch all sources in parallel: PDA scan + consolidated backend + pool state + transfers
     const [redemptions, allResp, poolStateResp, transfersResp] = await Promise.all([

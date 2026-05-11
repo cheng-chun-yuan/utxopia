@@ -68,7 +68,7 @@ const RPC_URL = process.env.RPC_URL || (NETWORK === "devnet" ? "https://api.devn
 
 interface LocalnetConfig {
   programs: {
-    Aegis: string;
+    PrivacyCoin: string;
     btcLightClient: string;
     chadbuffer: string;
   };
@@ -93,7 +93,7 @@ function loadConfig(): LocalnetConfig {
 }
 
 const config = loadConfig();
-const PROGRAM_ID = new PublicKey(config.programs.Aegis);
+const PROGRAM_ID = new PublicKey(config.programs.PrivacyCoin);
 const BTC_LIGHT_CLIENT_ID = new PublicKey(config.programs.btcLightClient);
 const CHADBUFFER_ID = new PublicKey(config.programs.chadbuffer);
 
@@ -734,7 +734,7 @@ async function main() {
   console.log("============================================================");
   console.log(`Network:     ${NETWORK}`);
   console.log(`RPC:         ${RPC_URL}`);
-  console.log(`Aegis:      ${PROGRAM_ID.toBase58()}`);
+  console.log(`Privacy Coin:      ${PROGRAM_ID.toBase58()}`);
   console.log(`BTC Relay:   ${BTC_LIGHT_CLIENT_ID.toBase58()}`);
 
   const connection = new Connection(RPC_URL, "confirmed");

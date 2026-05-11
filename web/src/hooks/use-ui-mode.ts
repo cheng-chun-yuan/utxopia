@@ -12,7 +12,7 @@ import {
 
 export type UiMode = "lite" | "advanced";
 
-const STORAGE_KEY = "aegis-ui-mode";
+const STORAGE_KEY = "pcoin-ui-mode";
 
 type UiModeContextValue = {
   mode: UiMode;

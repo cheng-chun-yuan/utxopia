@@ -35,7 +35,7 @@ bun run setup:devnet
 ```
 contracts/
 ├── programs/
-│   ├── aegis/              # Main Pinocchio program
+│   ├── privacy-coin/        # Main Pinocchio program
 │   │   └── src/
 │   │       ├── lib.rs       # Entry point + dispatcher
 │   │       ├── instructions/ # All instruction handlers

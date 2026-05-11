@@ -11,7 +11,7 @@ Create a high-level `PrivacyCoinClient` class in the SDK that encapsulates confi
 import { getConfig, computeTokenId, createStealthOutputWithKeys,
          hexToBytes, bytesToHex, initPoseidon, scanUnifiedNotes,
          prepareClaimInputs, parseMerkleProofResponse } from "@privacy-coin/sdk";
-import { getAegisProgramId, derivePoolStatePDA } from "@/lib/solana/pdas";
+import { getPrivacyCoinProgramId, derivePoolStatePDA } from "@/lib/solana/pdas";
 
 // 15 imports, manual wiring everywhere
 const config = getConfig();
@@ -42,7 +42,7 @@ class PrivacyCoinClient {
   // ─── Auth ─────────────────────────────────────────
   async loginWithWallet(wallet: WalletSignerAdapter): Promise<KeySetupResult>;
   async loginWithSeed(seed: Uint8Array): Promise<KeySetupResult>;
-  get keys(): AegisKeys | null;
+  get keys(): PrivacyCoinKeys | null;
   get stealthAddress(): StealthMetaAddress | null;
   get stealthAddressEncoded(): string | null;
   get isAuthenticated(): boolean;
@@ -118,7 +118,7 @@ After `PrivacyCoinClient` exists, the frontend migration is:
 
 ## What stays outside the client
 
-- React hooks (`useAegis`, `useExplorer`, etc.) — these manage React state, not SDK state
+- React hooks (`usePrivacyCoin`, `useExplorer`, etc.) — these manage React state, not SDK state
 - Zustand store — manages UI state (auth modal, loading flags)
 - API routes — server-side, use low-level SDK directly
 - PDA derivation — sync helpers needed by instruction builders

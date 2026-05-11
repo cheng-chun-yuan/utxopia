@@ -40,9 +40,9 @@ const notes = await scanAnnouncements(keys, announcements);
 Derive spending and viewing keys from a Solana wallet signature (RAILGUN-style):
 
 ```typescript
-import { deriveKeysFromWallet, type AegisKeys } from '@privacy-coin/sdk';
+import { deriveKeysFromWallet, type PrivacyCoinKeys } from '@privacy-coin/sdk';
 
-const keys: AegisKeys = await deriveKeysFromWallet(walletAdapter);
+const keys: PrivacyCoinKeys = await deriveKeysFromWallet(walletAdapter);
 // keys.spendingPubKey - for receiving funds
 // keys.viewingPubKey  - for scanning deposits
 // keys.spendingPrivKey - for claiming (keep secret!)
@@ -208,10 +208,10 @@ DEMO_INSTRUCTION.ADD_DEMO_STEALTH // 22
 
 ## Types
 
-### AegisKeys
+### PrivacyCoinKeys
 
 ```typescript
-interface AegisKeys {
+interface PrivacyCoinKeys {
   spendingPubKey: BabyJubPoint;
   spendingPrivKey: bigint;
   viewingPubKey: Uint8Array;

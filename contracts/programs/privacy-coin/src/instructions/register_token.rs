@@ -128,6 +128,6 @@ pub fn process_register_token(
         tc.set_deposit_cap(deposit_cap);
     }
 
-    pinocchio::msg!("Aegis: registered token");
+    pinocchio::msg!("PrivacyCoin: registered token");
     Ok(())
 }

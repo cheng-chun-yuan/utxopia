@@ -1,5 +1,5 @@
 /**
- * Toast notification helpers for Aegis
+ * Toast notification helpers for Privacy Coin
  *
  * Uses sonner for beautiful toast notifications
  */

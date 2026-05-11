@@ -124,8 +124,8 @@ import {
   buildRedemptionRequestInstruction, // BTC withdrawal request
 
   // === Key Derivation ===
-  deriveKeysFromWallet,             // Wallet → AegisKeys
-  deriveKeysFromSeed,               // Seed → AegisKeys
+  deriveKeysFromWallet,             // Wallet → PrivacyCoinKeys
+  deriveKeysFromSeed,               // Seed → PrivacyCoinKeys
   createStealthMetaAddress,         // Keys → StealthMetaAddress
 
   // === Poseidon (JoinSplit) ===
@@ -151,7 +151,7 @@ import {
   type JoinSplitProofInputs,
   type TransactInstructionOptions,
   type JoinSplitNote,
-  type AegisKeys,
+  type PrivacyCoinKeys,
   type StealthMetaAddress,
   type BoundParams,
   type NonInteractiveDepositResult,
@@ -210,10 +210,10 @@ interface JoinSplitProofInputs {
 }
 ```
 
-### AegisKeys
+### PrivacyCoinKeys
 
 ```typescript
-interface AegisKeys {
+interface PrivacyCoinKeys {
   solanaPublicKey: Uint8Array;          // User identity (32 bytes)
   spendingPrivKey: bigint;              // Baby Jubjub private key
   spendingPubKey: BabyJubPoint;         // BJJ public key
@@ -433,7 +433,7 @@ Derive 3-key set from Solana wallet signature:
 | `createStealthMetaAddress(keys)` | 96-byte shareable stealth address |
 | `serialize/deserializeStealthMetaAddress` | Stealth address encoding |
 | `createDelegatedViewKey(keys, permissions)` | Time-limited view-only key |
-| `clearAegisKeys(keys)` | Secure memory clearing |
+| `clearPrivacyCoinKeys(keys)` | Secure memory clearing |
 | `extractViewOnlyBundle(keys)` | Export view-only key bundle |
 
 ### Stealth Deposit (`./stealth-deposit`)

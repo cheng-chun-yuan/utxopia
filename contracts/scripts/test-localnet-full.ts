@@ -255,7 +255,7 @@ async function setupLocalnet(): Promise<TestContext> {
   }
 
   const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-  const programId = new PublicKey(config.programs.Aegis);
+  const programId = new PublicKey(config.programs.PrivacyCoin);
   const zkbtcMint = new PublicKey(config.accounts.zkbtcMint);
   const poolVault = new PublicKey(config.accounts.poolVault);
 

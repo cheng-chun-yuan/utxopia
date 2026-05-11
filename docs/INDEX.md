@@ -22,14 +22,14 @@ Privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs.
 
 ## Recommended Reading Order
 
-### New to Aegis
+### New to Privacy Coin
 
 1. **[Technical Overview](./TECHNICAL.md)** - Understand the architecture and key innovations
 2. **[Circuits](./CIRCUITS.md)** - How JoinSplit proofs work
 3. **[SDK Reference](../sdk/docs/SDK.md)** - Client-side API
 4. **[How to Run](./RUNNING.md)** - Set up a local development environment
 
-### Operating Aegis
+### Operating Privacy Coin
 
 1. **[How to Run](./RUNNING.md)** - Start all services
 2. **[Backend Configuration](../backend/docs/CONFIGURATION.md)** - Environment setup

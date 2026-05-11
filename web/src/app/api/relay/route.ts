@@ -30,10 +30,10 @@ import {
 import {
   createAssociatedTokenAccountIdempotentInstruction,
 } from "@solana/spl-token";
-const getAegisSDK = () => import("@privacy-coin/sdk");
+const getPrivacyCoinSDK = () => import("@privacy-coin/sdk");
 
 import {
-  getAegisProgramId,
+  getPrivacyCoinProgramId,
   getChadbufferProgramId,
   getToken2022ProgramId,
   getZkbtcMint,
@@ -122,7 +122,7 @@ function validateHexField(
 }
 
 function deriveRedemptionRequestPDA(
-  user: PublicKey, nonce: bigint, programId: PublicKey = getAegisProgramId()
+  user: PublicKey, nonce: bigint, programId: PublicKey = getPrivacyCoinProgramId()
 ): [PublicKey, number] {
   return deriveSyncRedemptionRequestPDA(user, nonce, programId);
 }
@@ -244,7 +244,7 @@ export async function POST(request: NextRequest) {
       buildTransactInstructionData,
       buildUnshieldInstructionData,
       buildRedeemInstructionData,
-    } = await getAegisSDK();
+    } = await getPrivacyCoinSDK();
 
     const body: RelayRequest = await request.json();
     const { mode = "transfer" } = body;
@@ -457,7 +457,7 @@ export async function POST(request: NextRequest) {
 
     // ── Submit transaction ─────────────────────────────────────────────
     const mainIx = new TransactionInstruction({
-      programId: getAegisProgramId(),
+      programId: getPrivacyCoinProgramId(),
       keys,
       data: Buffer.from(ixData),
     });

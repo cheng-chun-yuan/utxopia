@@ -35,7 +35,7 @@ pub mod redemption;
 pub mod stealth;
 
 // Re-exports: Configuration
-pub use config::{ConfigError, Network, SigningMode, PRIVACY_COINConfig};
+pub use config::{ConfigError, Network, SigningMode, PrivacyCoinConfig};
 
 // Re-exports: Middleware (from api module)
 pub use api::middleware::{

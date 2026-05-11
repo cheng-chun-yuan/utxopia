@@ -19,7 +19,7 @@ export interface TransferUserInputs {
   amountSats: bigint;
   /** Selected notes from inbox */
   selectedNotes: InboxNote[];
-  /** User's aegis keys */
+  /** User's privacy-coin keys */
   keys: PrivacyCoinKeys;
   /** User's stealth meta address (for change output) */
   selfMeta: StealthMetaAddress;
@@ -72,11 +72,11 @@ export async function buildTransferParams(inputs: TransferUserInputs): Promise<T
   const { mode, amountSats, selectedNotes, keys, selfMeta, relayerMeta, relayerFee, recipient } = inputs;
 
   // 1. Fetch merkle proofs and prepare claim inputs for each note
-  const aegisClient = PrivacyCoinClient.isInitialized
+  const pcoinClient = PrivacyCoinClient.isInitialized
     ? PrivacyCoinClient.instance()
     : await PrivacyCoinClient.init();
 
-  const merkleProofs = await aegisClient.fetchMerkleProofs(
+  const merkleProofs = await pcoinClient.fetchMerkleProofs(
     selectedNotes.map((n) => n.commitmentHex),
   );
 
@@ -212,7 +212,7 @@ export async function buildTransferParams(inputs: TransferUserInputs): Promise<T
   // 7. Sign
   const allNullifiers = inputsData.map((d) => d.claimInputs.nullifier);
   const msgHashInputs = [merkleRoot, boundParamsHash, ...allNullifiers, ...outCommitments];
-  const sig = await aegisClient.signTransaction(msgHashInputs, keys.eddsaSeed);
+  const sig = await pcoinClient.signTransaction(msgHashInputs, keys.eddsaSeed);
 
   // 8. Build JoinSplit proof inputs
   const nInputs = selectedNotes.length;

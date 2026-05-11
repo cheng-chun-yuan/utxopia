@@ -18,10 +18,10 @@
  * - Edge cases (min/max inputs, empty optional fields)
  *
  * Reference Rust files:
- * - contracts/programs/aegis/src/instructions/transact.rs
- * - contracts/programs/aegis/src/instructions/unshield.rs
- * - contracts/programs/aegis/src/instructions/request_redemption.rs
- * - contracts/programs/aegis/src/instructions/complete_redemption.rs
+ * - contracts/programs/privacy-coin/src/instructions/transact.rs
+ * - contracts/programs/privacy-coin/src/instructions/unshield.rs
+ * - contracts/programs/privacy-coin/src/instructions/request_redemption.rs
+ * - contracts/programs/privacy-coin/src/instructions/complete_redemption.rs
  */
 
 import { describe, it, expect } from "bun:test";
@@ -42,13 +42,13 @@ import {
 // Contract constants (from Rust source of truth)
 // =============================================================================
 
-/** From contracts/programs/aegis/src/constants.rs */
+/** From contracts/programs/privacy-coin/src/constants.rs */
 const MAX_SAFE_JOINSPLIT_SIZE = 10;
 const MAX_BTC_SCRIPT_LEN = 34;
 const GROTH16_PROOF_SIZE = 256;
 const STEALTH_DATA_PER_OUTPUT = 72; // ephemeral_pub(32) + encrypted_amount(8) + encrypted_token_id(32)
 
-// Instruction discriminators from contracts/programs/aegis/src/lib.rs
+// Instruction discriminators from contracts/programs/privacy-coin/src/lib.rs
 const DISC_TRANSACT = 14;
 const DISC_UNSHIELD = 30;
 const DISC_REQUEST_REDEMPTION = 5;
@@ -85,7 +85,7 @@ function fakeAddress(label: string): ReturnType<typeof address> {
 }
 
 // =============================================================================
-// TRANSACT (disc 14) — contracts/programs/aegis/src/instructions/transact.rs
+// TRANSACT (disc 14) — contracts/programs/privacy-coin/src/instructions/transact.rs
 // =============================================================================
 
 describe("Cross-layer: buildTransactInstructionData (disc=14)", () => {
@@ -395,7 +395,7 @@ describe("Cross-layer: buildTransactInstructionData (disc=14)", () => {
 });
 
 // =============================================================================
-// UNSHIELD (disc 30) — contracts/programs/aegis/src/instructions/unshield.rs
+// UNSHIELD (disc 30) — contracts/programs/privacy-coin/src/instructions/unshield.rs
 // =============================================================================
 
 describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
@@ -720,7 +720,7 @@ describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
 });
 
 // =============================================================================
-// REQUEST_REDEMPTION (disc 5) — contracts/programs/aegis/src/instructions/request_redemption.rs
+// REQUEST_REDEMPTION (disc 5) — contracts/programs/privacy-coin/src/instructions/request_redemption.rs
 // =============================================================================
 
 describe("Cross-layer: buildRedemptionRequestInstructionData (disc=5)", () => {
@@ -1020,7 +1020,7 @@ describe("Cross-layer: buildRedemptionRequestInstructionData (disc=5)", () => {
 });
 
 // =============================================================================
-// COMPLETE_REDEMPTION (disc 6) — contracts/programs/aegis/src/instructions/complete_redemption.rs
+// COMPLETE_REDEMPTION (disc 6) — contracts/programs/privacy-coin/src/instructions/complete_redemption.rs
 // =============================================================================
 
 describe("Cross-layer: buildCompleteRedemptionInstructionData (disc=6)", () => {

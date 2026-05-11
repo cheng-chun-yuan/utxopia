@@ -98,7 +98,7 @@ cd frost_server && cargo build --release && cd ..
 ```bash
 cd contracts
 
-# Deploy both aegis and btc-light-client programs
+# Deploy both privacy-coin and btc-light-client programs
 bun run scripts/deploy-localnet.ts
 
 # Or deploy to devnet:

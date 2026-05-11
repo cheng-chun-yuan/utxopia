@@ -456,7 +456,7 @@ Create `privacy-coin-app/src/hooks/use-pay-flow-auth.ts`:
 
 import { useState, useEffect, useRef } from "react";
 import { usePasskey } from "@/hooks/use-passkey";
-import { useAegisStore } from "@/stores/privacy-coin-store";
+import { usePrivacyCoinStore } from "@/stores/privacy-coin-store";
 
 export function usePayFlowAuth(hasKeys: boolean) {
   const {
@@ -467,7 +467,7 @@ export function usePayFlowAuth(hasKeys: boolean) {
     register: registerPasskey,
     authenticate: authenticatePasskey,
   } = usePasskey();
-  const deriveKeysFromPasskeySeed = useAegisStore((s) => s.deriveKeysFromPasskeySeed);
+  const deriveKeysFromPasskeySeed = usePrivacyCoinStore((s) => s.deriveKeysFromPasskeySeed);
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
   const handlePasskeyRegister = async () => {
@@ -523,7 +523,7 @@ const {
 } = usePayFlowAuth(hasKeys);
 ```
 
-Remove: `usePasskey` import, `useAegisStore` selector for `deriveKeysFromPasskeySeed`, the `authAutoOpenedRef`, and the two handler functions.
+Remove: `usePasskey` import, `usePrivacyCoinStore` selector for `deriveKeysFromPasskeySeed`, the `authAutoOpenedRef`, and the two handler functions.
 
 - [ ] **Step 3: Verify**
 
@@ -551,7 +551,7 @@ Create `privacy-coin-app/src/hooks/use-pay-flow-notes.ts`:
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useAegis, type InboxNote } from "@/hooks/use-privacy-coin";
+import { usePrivacyCoin, type InboxNote } from "@/hooks/use-privacy-coin";
 import { scanSecretPhrase, type ScannedSecretNote } from "@/lib/claim-utils";
 import { autoSelectNotes, type PayToken } from "@/components/btc-widget/pay-flow/helpers";
 
@@ -569,7 +569,7 @@ export function usePayFlowNotes(
   preselectedNote?: PreselectedNote,
   onPreselected?: () => void,
 ) {
-  const { inboxNotes, inboxLoading, refreshInbox } = useAegis();
+  const { inboxNotes, inboxLoading, refreshInbox } = usePrivacyCoin();
 
   // Note selection
   const [selectedNoteIds, setSelectedNoteIds] = useState<Set<string>>(new Set());

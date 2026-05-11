@@ -1,5 +1,5 @@
 /**
- * Devnet Setup Script for Aegis
+ * Devnet Setup Script for Privacy Coin
  *
  * This script:
  * 1. Initializes the pool state

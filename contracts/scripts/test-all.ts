@@ -75,7 +75,7 @@ function loadProgramId(): PublicKey {
     const configFile = NETWORK === "devnet" ? ".devnet-config.json" : ".localnet-config.json";
     const configPath = path.join(__dirname, "..", configFile);
     const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    return new PublicKey(config.programs.Aegis);
+    return new PublicKey(config.programs.PrivacyCoin);
   } catch {
     return new PublicKey("3Df8Xv9hMtVVLRxagnbCsofvgn18yPzfCqTmbUEnx9KF");
   }

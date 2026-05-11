@@ -157,6 +157,6 @@ pub fn process_cancel_redemption(
     // Close RedemptionRequest PDA — return rent to user
     close_account_securely(redemption_info, user)?;
 
-    pinocchio::msg!("Aegis: redemption cancelled");
+    pinocchio::msg!("PrivacyCoin: redemption cancelled");
     Ok(())
 }

@@ -129,12 +129,12 @@ impl UtxoSweeper {
         let keypair = Keypair::from_secret_key(&secp, &pool_secret_key);
         let (pool_public_key, _parity) = keypair.x_only_public_key();
 
-        let aegis_network = if network == Network::Bitcoin {
+        let btc_network = if network == Network::Bitcoin {
             crate::config::Network::Mainnet
         } else {
             crate::config::Network::Devnet
         };
-        let watcher = AddressWatcher::from_network(aegis_network);
+        let watcher = AddressWatcher::from_network(btc_network);
 
         Ok(Self {
             secp,
@@ -175,12 +175,12 @@ impl UtxoSweeper {
         let watcher = match esplora_url {
             Some(url) => AddressWatcher::new(url),
             None => {
-                let aegis_network = if network == Network::Bitcoin {
+                let btc_network = if network == Network::Bitcoin {
                     crate::config::Network::Mainnet
                 } else {
                     crate::config::Network::Devnet
                 };
-                AddressWatcher::from_network(aegis_network)
+                AddressWatcher::from_network(btc_network)
             },
         };
 

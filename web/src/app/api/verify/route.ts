@@ -1,14 +1,14 @@
 /**
  * Verify API — On-chain SPV deposit verification
  *
- * Triggers btc-light-client verify_transaction + aegis verify_stealth_deposit
+ * Triggers btc-light-client verify_transaction + privacy-coin verify_stealth_deposit
  * for a confirmed BTC sweep transaction.
  *
  * Flow:
  * 1. Fetch raw tx hex from mempool.space
  * 2. Upload raw tx to ChadBuffer
  * 3. Build verify_transaction instruction (btc-light-client)
- * 4. Build verify_stealth_deposit instruction (aegis)
+ * 4. Build verify_stealth_deposit instruction (privacy-coin)
  * 5. Submit both in one Solana transaction
  * 6. Close buffer and reclaim rent
  *
@@ -26,7 +26,7 @@ import {
   ComputeBudgetProgram,
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
-const getAegisSDK = () => import("@privacy-coin/sdk");
+const getPrivacyCoinSDK = () => import("@privacy-coin/sdk");
 
 import {
   buildVerifyTransactionInstructionData,
@@ -35,7 +35,7 @@ import {
 } from "@privacy-coin/sdk";
 
 import {
-  getAegisProgramId,
+  getPrivacyCoinProgramId,
   getBtcLightClientProgramId,
   getChadbufferProgramId,
   getZkbtcMint,
@@ -60,7 +60,7 @@ import {
 import {
   reverseBytes,
 } from "@/lib/spv/mempool";
-// hexToBytes imported lazily via getAegisSDK()
+// hexToBytes imported lazily via getPrivacyCoinSDK()
 
 import {
   buildMerkleProofPath,
@@ -340,7 +340,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
   }
 
   const startTime = Date.now();
-  const { hexToBytes } = await getAegisSDK();
+  const { hexToBytes } = await getPrivacyCoinSDK();
   const spvHexToBytes = hexToBytes;
 
   try {
@@ -451,7 +451,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
       depositTxid: depositTxidInternal,
     });
 
-    const privacyCoinProgramId = getAegisProgramId();
+    const privacyCoinProgramId = getPrivacyCoinProgramId();
     const verifyDepositIx = new TransactionInstruction({
       programId: privacyCoinProgramId,
       keys: [

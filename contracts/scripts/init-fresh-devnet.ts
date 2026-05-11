@@ -129,7 +129,7 @@ async function main() {
       network: "devnet",
       rpcUrl: RPC_URL,
       programs: {
-        Aegis: PRIVACY_COIN_PROGRAM_ID.toBase58(),
+        PrivacyCoin: PRIVACY_COIN_PROGRAM_ID.toBase58(),
         groth16Verifier: GROTH16_VERIFIER_ID.toBase58(),
         chadbuffer: CHADBUFFER_ID.toBase58(),
       },
@@ -193,7 +193,7 @@ async function main() {
   );
   console.log(`✓ Frost Vault: ${frostVaultAccount.address.toBase58()}`);
 
-  // Initialize Aegis
+  // Initialize Privacy Coin
   console.log("\nInitializing Privacy Coin pool...");
   const ix = buildInitializeIx(
     poolStatePda,
@@ -218,7 +218,7 @@ async function main() {
     network: "devnet",
     rpcUrl: RPC_URL,
     programs: {
-      Aegis: PRIVACY_COIN_PROGRAM_ID.toBase58(),
+      PrivacyCoin: PRIVACY_COIN_PROGRAM_ID.toBase58(),
       groth16Verifier: GROTH16_VERIFIER_ID.toBase58(),
       chadbuffer: CHADBUFFER_ID.toBase58(),
     },

@@ -1,5 +1,5 @@
 /**
- * Taproot address utilities for Aegis
+ * Taproot address utilities for Privacy Coin
  *
  * Generates commitment-bound Taproot addresses following BIP-340/341.
  * The deposit address is derived from the commitment, ensuring
@@ -577,7 +577,7 @@ export function deriveTaprootAddressWithRefund(
 }
 
 /**
- * Get the internal key used by Aegis
+ * Get the internal key used by Privacy Coin
  * In production, this would be the FROST threshold public key
  */
 export function getInternalKey(): Uint8Array {

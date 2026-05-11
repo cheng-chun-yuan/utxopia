@@ -9,7 +9,7 @@
  * 5. sendStealth - Send via ECDH
  * 6. withdraw - Request BTC withdrawal
  *
- * Run: bun run scripts/test-aegis-devnet.ts
+ * Run: bun run scripts/test-zvault-devnet.ts
  */
 
 import {
@@ -295,7 +295,7 @@ function testSendLink() {
 function testDeriveNote() {
   console.log("\n--- Test 3: DERIVE_NOTE (deterministic) ---");
 
-  const seed = "test-wallet-aegis-2024";
+  const seed = "test-wallet-pcoin-2024";
 
   // Derive multiple notes from same seed
   const note0 = deriveNote(seed, 0, 100_000n);

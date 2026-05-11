@@ -447,7 +447,7 @@ pub fn process_verify_deposit_v2(
         intent_data.fill(0);
     }
 
-    pinocchio::msg!("Aegis: deposit verified (v2)");
+    pinocchio::msg!("PrivacyCoin: deposit verified (v2)");
 
     Ok(())
 }

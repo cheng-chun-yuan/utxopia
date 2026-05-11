@@ -1,5 +1,5 @@
 {
-  "name": "@aegis/circuits",
+  "name": "@privacy-coin/circuits",
   "version": "1.0.0",
   "description": "PRIVACY_COIN circom circuits for Groth16 proofs",
   "private": true,

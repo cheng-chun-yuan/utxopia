@@ -17,7 +17,7 @@
 //! - **REST API**: serves frontend requests (deposits, transfers, redemptions, proofs)
 
 use zkbtc::api_server as api;
-use zkbtc::config::PRIVACY_COINConfig;
+use zkbtc::config::PrivacyCoinConfig;
 use zkbtc::deposit_tracker::{self, TrackerConfig};
 use zkbtc::deposit_tracker::sqlite_db::SqliteDepositStore;
 use zkbtc::event_indexer::{EventIndexerConfig, EventIndexerService, EventStore, TreeCache, event_indexer_router_with_deposits, SolanaWsConfig, SolanaWsSubscriber, Reconciler};
@@ -110,7 +110,7 @@ fn create_service(config: RedemptionConfig) -> RedemptionService {
     }
 
     // Single-key mode
-    let mut sol_client = match PRIVACY_COINConfig::from_env() {
+    let mut sol_client = match PrivacyCoinConfig::from_env() {
         Ok(cfg) => zkbtc::solana::client::SolClient::from_config(&cfg).unwrap_or_else(|_| {
             zkbtc::solana::client::SolClient::new(zkbtc::solana::client::SolConfig::default())
         }),
@@ -147,9 +147,9 @@ fn create_service(config: RedemptionConfig) -> RedemptionService {
 
 /// Create redemption service with FROST threshold signing
 fn create_frost_service(config: RedemptionConfig) -> Result<RedemptionService, String> {
-    let aegis_config = PRIVACY_COINConfig::from_env().map_err(|e| e.to_string())?;
+    let pcoin_config = PrivacyCoinConfig::from_env().map_err(|e| e.to_string())?;
 
-    let frost_client = aegis_config
+    let frost_client = pcoin_config
         .signing
         .frost_client()
         .ok_or("signing mode is not FROST")?;
@@ -165,7 +165,7 @@ fn create_frost_service(config: RedemptionConfig) -> Result<RedemptionService, S
         .map_err(|e| format!("invalid group pubkey: {}", e))?;
 
     let signer = MpcSigner::new(frost_client, group_pubkey);
-    let mut sol_client = zkbtc::solana::client::SolClient::from_config(&aegis_config)
+    let mut sol_client = zkbtc::solana::client::SolClient::from_config(&pcoin_config)
         .map_err(|e| format!("SolClient config error: {}", e))?;
 
     // Set payer keypair for on-chain transactions (mark_processing, complete_redemption)
@@ -192,9 +192,9 @@ fn create_frost_service(config: RedemptionConfig) -> Result<RedemptionService, S
 /// then asynchronously fills a Sign PDA which the IkaSigner polls for. See
 /// `backend/src/redemption/signer.rs::IkaSigner` for the polling contract.
 fn create_ika_service(config: RedemptionConfig) -> Result<RedemptionService, String> {
-    let aegis_config = PRIVACY_COINConfig::from_env().map_err(|e| e.to_string())?;
+    let pcoin_config = PrivacyCoinConfig::from_env().map_err(|e| e.to_string())?;
 
-    let (program_id_str, dwallet_str, dwallet_xonly_hex) = match &aegis_config.signing {
+    let (program_id_str, dwallet_str, dwallet_xonly_hex) = match &pcoin_config.signing {
         zkbtc::config::SigningMode::Ika {
             program_id,
             dwallet,
@@ -216,13 +216,13 @@ fn create_ika_service(config: RedemptionConfig) -> Result<RedemptionService, Str
         .map_err(|e| format!("invalid IKA dwallet xonly pubkey: {}", e))?;
 
     let signer = IkaSigner::new(
-        aegis_config.solana_rpc.clone(),
+        pcoin_config.solana_rpc.clone(),
         ika_program_id,
         ika_dwallet,
         xonly,
     );
 
-    let mut sol_client = zkbtc::solana::client::SolClient::from_config(&aegis_config)
+    let mut sol_client = zkbtc::solana::client::SolClient::from_config(&pcoin_config)
         .map_err(|e| format!("SolClient config error: {}", e))?;
 
     if let Ok(keypair_val) = env::var("RELAYER_KEYPAIR").or_else(|_| env::var("VERIFIER_KEYPAIR")) {
@@ -392,7 +392,7 @@ fn solana_rpc_url() -> String {
 }
 
 /// Resolve the PRIVACY_COIN_PROGRAM_ID from the environment, returning None on failure.
-fn require_aegis_program_id() -> Option<String> {
+fn require_privacy_coin_program_id() -> Option<String> {
     match env::var("PRIVACY_COIN_PROGRAM_ID") {
         Ok(id) => Some(id),
         Err(_) => {
@@ -466,7 +466,7 @@ fn spawn_reconciler(
 /// Spawn the event indexer polling service.
 fn spawn_event_indexer(
     solana_rpc: &str,
-    aegis_program_id: &str,
+    privacy_coin_program_id: &str,
     event_store: Arc<EventStore>,
     tree_cache: Arc<TreeCache>,
 ) {
@@ -475,7 +475,7 @@ fn spawn_event_indexer(
     let indexer_poll_secs: u64 = env_or("INDEXER_POLL_INTERVAL_SECS", 10);
     let indexer_config = EventIndexerConfig {
         rpc_url: solana_rpc.to_string(),
-        program_id: aegis_program_id.to_string(),
+        program_id: privacy_coin_program_id.to_string(),
         poll_interval_secs: indexer_poll_secs,
     };
     let indexer_service = match EventIndexerService::new(indexer_config, event_store) {
@@ -495,7 +495,7 @@ fn spawn_event_indexer(
 /// Spawn the Solana WebSocket log subscriber for real-time events.
 fn spawn_solana_ws_subscriber(
     solana_rpc: &str,
-    aegis_program_id: &str,
+    privacy_coin_program_id: &str,
     event_store: Arc<EventStore>,
     tree_cache: Arc<TreeCache>,
 ) {
@@ -504,7 +504,7 @@ fn spawn_solana_ws_subscriber(
     let ws_subscriber = SolanaWsSubscriber::new(
         SolanaWsConfig {
             ws_url: solana_ws_url,
-            program_id: aegis_program_id.to_string(),
+            program_id: privacy_coin_program_id.to_string(),
         },
         event_store,
         tree_cache,
@@ -592,7 +592,7 @@ async fn run_tracker_service(args: &[String]) {
 
     // Resolve common env values
     let solana_rpc = solana_rpc_url();
-    let aegis_program_id = match require_aegis_program_id() {
+    let privacy_coin_program_id = match require_privacy_coin_program_id() {
         Some(id) => id,
         None => return,
     };
@@ -605,10 +605,10 @@ async fn run_tracker_service(args: &[String]) {
     };
 
     // Parse and validate program pubkey
-    let program_pubkey: solana_sdk::pubkey::Pubkey = match aegis_program_id.parse() {
+    let program_pubkey: solana_sdk::pubkey::Pubkey = match privacy_coin_program_id.parse() {
         Ok(pk) => pk,
         Err(e) => {
-            eprintln!("Invalid PRIVACY_COIN_PROGRAM_ID '{}': {}", aegis_program_id, e);
+            eprintln!("Invalid PRIVACY_COIN_PROGRAM_ID '{}': {}", privacy_coin_program_id, e);
             return;
         }
     };
@@ -635,8 +635,8 @@ async fn run_tracker_service(args: &[String]) {
         reconciler_status,
     );
 
-    spawn_event_indexer(&solana_rpc, &aegis_program_id, event_store.clone(), tree_cache.clone());
-    spawn_solana_ws_subscriber(&solana_rpc, &aegis_program_id, event_store.clone(), tree_cache.clone());
+    spawn_event_indexer(&solana_rpc, &privacy_coin_program_id, event_store.clone(), tree_cache.clone());
+    spawn_solana_ws_subscriber(&solana_rpc, &privacy_coin_program_id, event_store.clone(), tree_cache.clone());
 
     // Redemption + stealth services
     let redemption_config = RedemptionConfig::default();
@@ -694,9 +694,9 @@ fn configure_frost_sweeper(
     service: deposit_tracker::DepositTrackerService,
     _config: &TrackerConfig,
 ) -> Result<deposit_tracker::DepositTrackerService, String> {
-    let aegis_config = PRIVACY_COINConfig::from_env().map_err(|e| e.to_string())?;
+    let pcoin_config = PrivacyCoinConfig::from_env().map_err(|e| e.to_string())?;
 
-    let frost_client = aegis_config
+    let frost_client = pcoin_config
         .signing
         .frost_client()
         .ok_or("signing mode is not FROST")?;
@@ -710,7 +710,7 @@ fn configure_frost_sweeper(
     let group_pubkey = bitcoin::XOnlyPublicKey::from_slice(&group_pubkey_bytes)
         .map_err(|e| format!("invalid group pubkey: {}", e))?;
 
-    let network = aegis_config.network.bitcoin_network();
+    let network = pcoin_config.network.bitcoin_network();
 
     Ok(service.with_frost_sweeper(frost_client, group_pubkey, network))
 }

@@ -209,7 +209,7 @@ async function main() {
   );
   console.log(`✓ Frost Vault: ${frostVaultAccount.address.toBase58()}`);
 
-  // Initialize Aegis
+  // Initialize Privacy Coin
   console.log("\nInitializing Privacy Coin pool...");
   const ix = buildInitializeIx(
     poolStatePda,
@@ -238,7 +238,7 @@ async function main() {
     network: "devnet",
     rpcUrl: RPC_URL,
     programs: {
-      Aegis: programId.toBase58(),
+      PrivacyCoin: programId.toBase58(),
       groth16Verifier: GROTH16_VERIFIER_ID.toBase58(),
       chadbuffer: CHADBUFFER_ID.toBase58(),
     },

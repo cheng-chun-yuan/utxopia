@@ -7,7 +7,7 @@
  *
  * Prerequisites:
  *   solana-test-validator --clone-feature-set --url devnet --reset
- *   Deploy: aegis, btc-light-client, chadbuffer
+ *   Deploy: privacy-coin, btc-light-client, chadbuffer
  *
  * Usage:
  *   bun run scripts/e2e-mock-spv.ts

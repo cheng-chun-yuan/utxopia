@@ -61,7 +61,7 @@
 | `web/src/components/send/claim-link-modal.tsx` | **NEW** | Generate claim link UI. Uses `_lifted/note-links.tsx`. |
 | `web/src/components/send/send-form.tsx` | **NEW** | Orchestrator. `useReducer` state. Progressive disclosure. |
 | `web/src/app/send/page.tsx` | **NEW** | Route — wraps `SendForm` in `FlowPageLayout`. |
-| `web/src/hooks/use-ui-mode.ts` | **NEW** | localStorage `aegis-ui-mode` + React context broadcast. |
+| `web/src/hooks/use-ui-mode.ts` | **NEW** | localStorage `pcoin-ui-mode` + React context broadcast. |
 | `web/src/components/ui/advanced-mode-badge.tsx` | **NEW** | Header badge when Advanced active. Returns null in Phase 1 (Advanced is disabled). |
 | `web/src/components/settings/preferences-form.tsx` | **NEW** | Toggle list. One disabled toggle in Phase 1. |
 | `web/src/app/settings/page.tsx` | **NEW** | Route — wraps `PreferencesForm` in `FlowPageLayout`. |
@@ -353,7 +353,7 @@ describe("useUiMode", () => {
   });
 
   it("reads existing localStorage value", () => {
-    localStorage.setItem("aegis-ui-mode", "advanced");
+    localStorage.setItem("pcoin-ui-mode", "advanced");
     const { result } = renderHook(() => useUiMode(), { wrapper });
     expect(result.current.mode).toBe("advanced");
     expect(result.current.isAdvanced).toBe(true);
@@ -363,11 +363,11 @@ describe("useUiMode", () => {
     const { result } = renderHook(() => useUiMode(), { wrapper });
     act(() => result.current.setMode("advanced"));
     expect(result.current.mode).toBe("advanced");
-    expect(localStorage.getItem("aegis-ui-mode")).toBe("advanced");
+    expect(localStorage.getItem("pcoin-ui-mode")).toBe("advanced");
   });
 
   it("ignores invalid localStorage values (falls back to lite)", () => {
-    localStorage.setItem("aegis-ui-mode", "garbage");
+    localStorage.setItem("pcoin-ui-mode", "garbage");
     const { result } = renderHook(() => useUiMode(), { wrapper });
     expect(result.current.mode).toBe("lite");
   });
@@ -396,7 +396,7 @@ import {
 
 export type UiMode = "lite" | "advanced";
 
-const STORAGE_KEY = "aegis-ui-mode";
+const STORAGE_KEY = "pcoin-ui-mode";
 
 type UiModeContextValue = {
   mode: UiMode;
@@ -465,7 +465,7 @@ Expected: PASS, 4 tests.
 git add web/src/hooks/use-ui-mode.ts web/src/hooks/__tests__/use-ui-mode.test.tsx web/src/app/providers.tsx
 git commit -m "Add use-ui-mode hook for Lite/Advanced send mode preference
 
-localStorage-backed (key: aegis-ui-mode), default 'lite'. Cross-tab
+localStorage-backed (key: pcoin-ui-mode), default 'lite'. Cross-tab
 broadcast via 'storage' event. Provider mounted in app/providers.tsx
 so /send and the future /settings page can both read it."
 ```

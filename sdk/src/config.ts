@@ -232,7 +232,7 @@ export const DEVNET_CONFIG: NetworkConfig = {
   circuitCdnUrl: "https://circuits.amidoggy.xyz",
 
   // Groth16 Verifier: verification is inline in the Privacy Coin program (no separate verifier program)
-  groth16VerifierProgramId: address("AjbX243s2JMFG2uhfTjKkadjPvQEPgcuyV3vfLJv36MT"), // inline in aegis program
+  groth16VerifierProgramId: address("AjbX243s2JMFG2uhfTjKkadjPvQEPgcuyV3vfLJv36MT"), // inline in privacy-coin program
 
   // VK Hashes (SHA256 of serialized VK bytes, generated from circom trusted setup)
   vkHashes: {

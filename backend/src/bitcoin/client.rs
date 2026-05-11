@@ -7,7 +7,7 @@
 use reqwest::Client;
 use serde::Deserialize;
 
-use crate::config::{Network, PRIVACY_COINConfig};
+use crate::config::{Network, PrivacyCoinConfig};
 
 /// Esplora HTTP client
 #[derive(Debug, Clone)]
@@ -25,8 +25,8 @@ impl EsploraClient {
         }
     }
 
-    /// Create a client from PRIVACY_COINConfig
-    pub fn from_config(config: &PRIVACY_COINConfig) -> Self {
+    /// Create a client from PrivacyCoinConfig
+    pub fn from_config(config: &PrivacyCoinConfig) -> Self {
         Self::new(&config.bitcoin_api)
     }
 

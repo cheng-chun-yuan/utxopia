@@ -1,4 +1,4 @@
-# Aegis: Complete Transaction Flow
+# Privacy Coin: Complete Transaction Flow
 
 End-to-end lifecycle from BTC deposit through shielded transfers to withdrawal.
 

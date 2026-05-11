@@ -200,7 +200,7 @@ impl SigningMode {
 
 /// Main configuration struct
 #[derive(Debug, Clone)]
-pub struct PRIVACY_COINConfig {
+pub struct PrivacyCoinConfig {
     /// Network environment
     pub network: Network,
 
@@ -235,7 +235,7 @@ pub struct PRIVACY_COINConfig {
     pub log_level: String,
 }
 
-impl PRIVACY_COINConfig {
+impl PrivacyCoinConfig {
     /// Load configuration from environment variables
     pub fn from_env() -> Result<Self, ConfigError> {
         // Required: Network

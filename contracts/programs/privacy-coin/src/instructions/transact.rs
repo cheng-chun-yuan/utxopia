@@ -258,7 +258,7 @@ pub fn process_transact(
         proof_bytes, &public_inputs[..pi_len], delta_g2, ic,
     )?;
 
-    pinocchio::msg!("Aegis: transact");
+    pinocchio::msg!("PrivacyCoin: transact");
 
     // Get rent for PDA creation
     let rent = Rent::get()?;

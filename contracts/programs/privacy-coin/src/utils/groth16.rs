@@ -72,17 +72,17 @@ fn verify_groth16_proof(
     ic: &[[u8; 64]],
 ) -> Result<(), ProgramError> {
     if proof_bytes.len() != GROTH16_PROOF_SIZE {
-        pinocchio::msg!("Aegis: groth16 bad proof size");
+        pinocchio::msg!("PrivacyCoin: groth16 bad proof size");
         return Err(ProgramError::InvalidInstructionData);
     }
 
     let num_inputs = public_inputs.len();
     if ic.len() != num_inputs + 1 {
-        pinocchio::msg!("Aegis: groth16 IC len mismatch");
+        pinocchio::msg!("PrivacyCoin: groth16 IC len mismatch");
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    pinocchio::msg!("Aegis: groth16 verifying");
+    pinocchio::msg!("PrivacyCoin: groth16 verifying");
 
     // Parse proof components
     let pi_a: &[u8] = &proof_bytes[0..64];    // G1 (64 bytes)
@@ -108,7 +108,7 @@ fn verify_groth16_proof(
 
         let term = alt_bn128_multiplication(&mul_input)
             .map_err(|_| {
-                pinocchio::msg!("Aegis: groth16 mul failed");
+                pinocchio::msg!("PrivacyCoin: groth16 mul failed");
                 ProgramError::InvalidInstructionData
             })?;
 
@@ -118,14 +118,14 @@ fn verify_groth16_proof(
 
         let sum = alt_bn128_addition(&add_input)
             .map_err(|_| {
-                pinocchio::msg!("Aegis: groth16 add failed");
+                pinocchio::msg!("PrivacyCoin: groth16 add failed");
                 ProgramError::InvalidInstructionData
             })?;
 
         vk_x.copy_from_slice(&sum);
     }
 
-    pinocchio::msg!("Aegis: groth16 pairing check");
+    pinocchio::msg!("PrivacyCoin: groth16 pairing check");
 
     // Step 3: Build pairing input (4 pairs × 192 bytes = 768 bytes)
     // Pairing check: e(-A, B) * e(alpha, beta) * e(vk_x, gamma) * e(C, delta) == 1
@@ -150,7 +150,7 @@ fn verify_groth16_proof(
     // Step 4: Verify pairing
     let pairing_result = alt_bn128_pairing(&pairing_input)
         .map_err(|_| {
-            pinocchio::msg!("Aegis: groth16 pairing syscall failed");
+            pinocchio::msg!("PrivacyCoin: groth16 pairing syscall failed");
             ProgramError::InvalidInstructionData
         })?;
 
@@ -161,11 +161,11 @@ fn verify_groth16_proof(
         v
     };
     if pairing_result.len() != 32 || pairing_result[..] != VALID_PAIRING {
-        pinocchio::msg!("Aegis: groth16 proof invalid");
+        pinocchio::msg!("PrivacyCoin: groth16 proof invalid");
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    pinocchio::msg!("Aegis: groth16 proof verified");
+    pinocchio::msg!("PrivacyCoin: groth16 proof verified");
     Ok(())
 }
 

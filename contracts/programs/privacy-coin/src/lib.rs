@@ -230,7 +230,7 @@ mod tests {
         use crate::state::pool_config::POOL_CONFIG_DISCRIMINATOR;
         use crate::state::token_config::TOKEN_CONFIG_DISCRIMINATOR;
 
-        // All Aegis-owned account discriminators must be unique
+        // All PrivacyCoin-owned account discriminators must be unique
         let discs: &[u8] = &[
             POOL_STATE_DISCRIMINATOR,           // 0x01
             NULLIFIER_RECORD_DISCRIMINATOR,     // 0x03

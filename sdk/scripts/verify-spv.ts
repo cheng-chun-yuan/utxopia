@@ -416,7 +416,7 @@ async function main() {
   });
 
   // =========================================================================
-  // Step 5: Build verify_stealth_deposit instruction (aegis, disc=1)
+  // Step 5: Build verify_stealth_deposit instruction (privacy-coin, disc=1)
   //         Amount is NO LONGER in instruction data — extracted on-chain from raw tx
   // =========================================================================
 

@@ -195,7 +195,7 @@ pub fn process_set_pool_config(
         }
     }
 
-    pinocchio::msg!("Aegis: pool config updated");
+    pinocchio::msg!("PrivacyCoin: pool config updated");
     Ok(())
 }
 

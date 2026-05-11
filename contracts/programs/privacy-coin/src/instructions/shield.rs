@@ -171,6 +171,6 @@ pub fn process_shield(
         tc.add_fees(protocol_fee)?;
     }
 
-    pinocchio::msg!("Aegis: shielded tokens");
+    pinocchio::msg!("PrivacyCoin: shielded tokens");
     Ok(())
 }

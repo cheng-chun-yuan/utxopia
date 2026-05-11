@@ -20,7 +20,7 @@ import {
   TOKEN_2022_PROGRAM_ID as SPL_TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
 import { PrivacyCoinClient } from "@privacy-coin/sdk";
-import { getAegisProgramId, getZkbtcMint, derivePoolStatePDA, deriveCommitmentTreePDA, deriveTokenConfigPDA } from "@/lib/solana/pdas";
+import { getPrivacyCoinProgramId, getZkbtcMint, derivePoolStatePDA, deriveCommitmentTreePDA, deriveTokenConfigPDA } from "@/lib/solana/pdas";
 import { usePrivacyCoin } from "@/hooks/use-privacy-coin";
 import { Shield, ChevronDown, Loader2, ExternalLink, CheckCircle2, AlertCircle, LogOut, Wallet, Copy, Check, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -122,7 +122,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
       const shieldOutput = await client.prepareShieldOutput({ amount: amountRaw, mintAddress: mintAddr });
       const { npkBytes, tokenId: tokenIdBigint } = shieldOutput;
 
-      const programId = getAegisProgramId();
+      const programId = getPrivacyCoinProgramId();
       const [tokenConfigPda] = deriveTokenConfigPDA(mintPubkey);
       const [poolStatePda] = derivePoolStatePDA();
       const [commitmentTreePda] = deriveCommitmentTreePDA();

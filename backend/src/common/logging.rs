@@ -27,7 +27,7 @@ use tracing_subscriber::{
     EnvFilter,
 };
 
-use crate::config::{Network, PRIVACY_COINConfig};
+use crate::config::{Network, PrivacyCoinConfig};
 
 // ============================================================================
 // Log Levels
@@ -335,7 +335,7 @@ pub fn init_logging(level: LogLevel, json_format: bool) -> Result<(), LoggingErr
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| {
             EnvFilter::new(format!(
-                "aegis={},tower_http={},axum={}",
+                "pcoin={},tower_http={},axum={}",
                 format!("{:?}", level).to_lowercase(),
                 format!("{:?}", level).to_lowercase(),
                 format!("{:?}", level).to_lowercase()
@@ -378,8 +378,8 @@ pub fn init_logging(level: LogLevel, json_format: bool) -> Result<(), LoggingErr
     Ok(())
 }
 
-/// Initialize logging from PRIVACY_COINConfig
-pub fn init_from_config(config: &PRIVACY_COINConfig) -> Result<(), LoggingError> {
+/// Initialize logging from PrivacyCoinConfig
+pub fn init_from_config(config: &PrivacyCoinConfig) -> Result<(), LoggingError> {
     let level = LogLevel::from(config.log_level.as_str());
     let json_format = config.network == Network::Mainnet;
 

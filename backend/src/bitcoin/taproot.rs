@@ -92,7 +92,7 @@ impl PoolKeys {
 
                 // Use environment-specific seed (not fully deterministic)
                 let seed_input = format!(
-                    "aegis_devnet_key_{}",
+                    "pcoin_devnet_key_{}",
                     env::var("HOSTNAME").unwrap_or_else(|_| "local".to_string())
                 );
                 let seed = sha256(seed_input.as_bytes());
@@ -502,7 +502,7 @@ pub fn reconstruct_frost_address(
 /// Compute commitment tweak: H_commitment(output_key || commitment)
 fn compute_commitment_tweak(output_key: &XOnlyPublicKey, commitment: &[u8; 32]) -> [u8; 32] {
     // Use a tagged hash for domain separation
-    let tag_hash = sha256(b"Aegis/CommitmentTweak");
+    let tag_hash = sha256(b"PrivacyCoin/CommitmentTweak");
 
     let mut hasher = Sha256::new();
     hasher.update(tag_hash);
@@ -781,7 +781,7 @@ mod tests {
 
     #[test]
     fn test_admin_can_spend_immediately_via_key_path() {
-        println!("\n=== TEST: Admin (Aegis) can spend immediately via key path ===\n");
+        println!("\n=== TEST: Admin (PrivacyCoin) can spend immediately via key path ===\n");
 
         let secp = Secp256k1::new();
         let pool_keys = PoolKeys::from_seed(b"test_pool_admin");
@@ -1177,7 +1177,7 @@ mod tests {
         let admin_sig = secp.sign_schnorr(&admin_msg, &final_kp);
         let admin_ok = secp.verify_schnorr(&admin_sig, &admin_msg, &deposit.output_key).is_ok();
 
-        println!("\nStep 3: Admin (Aegis) sweeps via key path");
+        println!("\nStep 3: Admin (PrivacyCoin) sweeps via key path");
         println!("  Sequence: no restriction (key path)");
         println!("  Signature valid: {}", admin_ok);
         println!("  Result: {} - Admin sweeps BTC to pool custody",

@@ -207,9 +207,9 @@ POOL_RECEIVE_ADDRESS=bc1q...
 
 ESPLORA_URL=https://mempool.space/api
 SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
-VERIFIER_KEYPAIR=/etc/aegis/verifier.json
+VERIFIER_KEYPAIR=/etc/privacy-coin/verifier.json
 
-DEPOSIT_DB_PATH=/var/lib/aegis/deposits.db
+DEPOSIT_DB_PATH=/var/lib/privacy-coin/deposits.db
 DEPOSIT_POLL_INTERVAL_SECS=30
 DEPOSIT_REQUIRED_CONFIRMATIONS=6
 
@@ -278,7 +278,7 @@ LOG_FORMAT=pretty
 
 ```bash
 # Example: Load from Vault
-export POOL_SIGNING_KEY=$(vault kv get -field=key secret/aegis/btc)
+export POOL_SIGNING_KEY=$(vault kv get -field=key secret/privacy-coin/btc)
 ```
 
 ### Key Rotation
@@ -297,8 +297,8 @@ export POOL_SIGNING_KEY=$(vault kv get -field=key secret/aegis/btc)
 
 ```bash
 # Secure keypair file
-chmod 600 /etc/aegis/verifier.json
-chown pcoin:aegis /etc/aegis/verifier.json
+chmod 600 /etc/privacy-coin/verifier.json
+chown privacy-coin:privacy-coin /etc/privacy-coin/verifier.json
 ```
 
 ---

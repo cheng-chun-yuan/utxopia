@@ -354,6 +354,6 @@ pub fn process_request_redemption(
         &ix_data.btc_script[..ix_data.btc_script_len as usize],
     );
 
-    pinocchio::msg!("Aegis: redemption requested");
+    pinocchio::msg!("PrivacyCoin: redemption requested");
     Ok(())
 }

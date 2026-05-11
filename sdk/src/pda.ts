@@ -2,7 +2,7 @@
  * PDA (Program Derived Address) Derivation Utilities
  *
  * Centralized module for all Privacy Coin PDA derivations.
- * Prevents code duplication across api.ts, aegis.ts, etc.
+ * Prevents code duplication across api.ts, pda.ts, etc.
  *
  * NOTE: Program IDs are defined in config.ts and re-exported here
  * for backwards compatibility. Use config.ts for all new code.

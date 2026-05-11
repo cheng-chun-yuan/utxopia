@@ -19,7 +19,7 @@ pub mod reconnect;
 pub mod ws;
 
 // Re-export config types from crate::config for convenience
-pub use crate::config::{ConfigError, Network, SigningMode, PRIVACY_COINConfig};
+pub use crate::config::{ConfigError, Network, SigningMode, PrivacyCoinConfig};
 pub use error::{Result, PrivacyCoinError};
 pub use logging::{
     generate_correlation_id, init_from_config, init_logging, log_api_request, log_api_response,

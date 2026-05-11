@@ -5,7 +5,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { Shield, ArrowDownToLine, Send, ArrowRight, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const ONBOARDING_STORAGE_KEY = "aegis-onboarding-completed";
+const ONBOARDING_STORAGE_KEY = "pcoin-onboarding-completed";
 
 // Custom hook to check localStorage with SSR support
 function useHasCompletedOnboarding() {

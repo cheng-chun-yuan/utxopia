@@ -203,6 +203,6 @@ pub fn process_public_redeem(
         btc_script,
     );
 
-    pinocchio::msg!("Aegis: public redeem");
+    pinocchio::msg!("PrivacyCoin: public redeem");
     Ok(())
 }

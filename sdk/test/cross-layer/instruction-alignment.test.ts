@@ -17,7 +17,7 @@ import { describe, it, expect } from "bun:test";
 // Contract-defined constants (from Rust source)
 // =============================================================================
 
-/** From contracts/programs/aegis/src/instructions/shield.rs */
+/** From contracts/programs/privacy-coin/src/instructions/shield.rs */
 const CONTRACT = {
   shield: {
     disc: 29,

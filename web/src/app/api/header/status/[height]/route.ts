@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchAccountInfo } from "@/lib/helius-server";
-const getAegisSDK = () => import("@privacy-coin/sdk");
+const getPrivacyCoinSDK = () => import("@privacy-coin/sdk");
 const getSolanaKit = () => import("@solana/kit");
 export const dynamic = "force-dynamic";
 
 export const runtime = "nodejs";
 
 const getBtcLightClientId = async () => {
-  const { getConfig } = await getAegisSDK();
+  const { getConfig } = await getPrivacyCoinSDK();
   return getConfig().btcLightClientProgramId;
 };
 

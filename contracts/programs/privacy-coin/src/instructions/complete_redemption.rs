@@ -300,7 +300,7 @@ pub fn process_complete_redemption(
                 };
 
                 if ix_script != on_chain_script {
-                    pinocchio::msg!("Aegis: pool_script mismatch (ix data vs on-chain)");
+                    pinocchio::msg!("PrivacyCoin: pool_script mismatch (ix data vs on-chain)");
                     return Err(PrivacyCoinError::PoolScriptMismatch.into());
                 }
             }
@@ -319,7 +319,7 @@ pub fn process_complete_redemption(
         {
             let receipt_data = completion_receipt_info.try_borrow_data()?;
             if !receipt_data.is_empty() && receipt_data[0] == COMPLETION_RECEIPT_DISCRIMINATOR {
-                pinocchio::msg!("Aegis: BTC txid already used for completion");
+                pinocchio::msg!("PrivacyCoin: BTC txid already used for completion");
                 return Err(PrivacyCoinError::DuplicateDeposit.into());
             }
         }
@@ -679,6 +679,6 @@ pub fn process_complete_redemption(
     // --- Close RedemptionRequest PDA ---
     close_account_securely(redemption_info, rent_recipient)?;
 
-    pinocchio::msg!("Aegis: redemption completed");
+    pinocchio::msg!("PrivacyCoin: redemption completed");
     Ok(())
 }

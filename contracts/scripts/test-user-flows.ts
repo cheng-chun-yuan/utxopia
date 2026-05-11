@@ -97,7 +97,7 @@ function loadProgramId(): PublicKey {
   if (process.env.PROGRAM_ID) return new PublicKey(process.env.PROGRAM_ID);
   try {
     const config = loadConfig();
-    return new PublicKey(config.programs.Aegis);
+    return new PublicKey(config.programs.PrivacyCoin);
   } catch {
     return NETWORK === "devnet"
       ? new PublicKey(DEVNET_PROGRAM_ID)

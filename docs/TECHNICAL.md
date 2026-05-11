@@ -532,7 +532,7 @@ Custom error codes start at 6000 to avoid conflicts with Solana system errors.
 | 6072 | `TimelockNotElapsed` | 48h timelock period has not elapsed |
 | 6073 | `NoPendingProposal` | No pending pool update proposal to execute/cancel |
 
-> Source: `contracts/programs/aegis/src/error.rs`
+> Source: `contracts/programs/privacy-coin/src/error.rs`
 
 ---
 
@@ -585,7 +585,7 @@ Total: 256 bytes
 
 Public inputs per variant: `2 + N + M` (merkleRoot + boundParamsHash + N nullifiers + M commitments).
 
-> Source: `contracts/programs/aegis/src/state/commitment_tree.rs`, `vk_registry.rs`
+> Source: `contracts/programs/privacy-coin/src/state/commitment_tree.rs`, `vk_registry.rs`
 
 ---
 

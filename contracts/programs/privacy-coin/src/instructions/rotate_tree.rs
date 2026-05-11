@@ -88,7 +88,7 @@ pub fn process_rotate_tree(
         let tree_data = current_tree_info.try_borrow_data()?;
         let tree = CommitmentTree::from_bytes(&tree_data)?;
         if tree.next_index() < CommitmentTree::MAX_LEAVES {
-            pinocchio::msg!("Aegis: tree not full yet");
+            pinocchio::msg!("PrivacyCoin: tree not full yet");
             return Err(ProgramError::InvalidInstructionData);
         }
     }
@@ -131,6 +131,6 @@ pub fn process_rotate_tree(
         pool.set_active_tree_index(new_index);
     }
 
-    pinocchio::msg!("Aegis: tree rotated");
+    pinocchio::msg!("PrivacyCoin: tree rotated");
     Ok(())
 }

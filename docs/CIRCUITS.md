@@ -400,7 +400,7 @@ VK Registry PDA seed: ["vk_registry", n_inputs, n_outputs]
 VK hash: SHA-256(alpha || beta || gamma || delta || IC[0] || ... || IC[k])
 ```
 
-> Source: `contracts/programs/aegis/src/utils/groth16.rs`
+> Source: `contracts/programs/privacy-coin/src/utils/groth16.rs`
 
 ---
 

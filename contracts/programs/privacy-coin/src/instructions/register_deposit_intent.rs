@@ -77,7 +77,7 @@ pub fn process_register_deposit_intent(
     let mut intent_data = deposit_intent_info.try_borrow_mut_data()?;
     DepositIntent::init(&mut intent_data, &ephemeral_pub, &npk)?;
 
-    pinocchio::msg!("Aegis: deposit intent registered");
+    pinocchio::msg!("PrivacyCoin: deposit intent registered");
 
     Ok(())
 }

@@ -111,6 +111,6 @@ pub fn process_claim_fees(
         tc.sub_fees(amount)?;
     }
 
-    pinocchio::msg!("Aegis: claimed fees");
+    pinocchio::msg!("PrivacyCoin: claimed fees");
     Ok(())
 }

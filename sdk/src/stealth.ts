@@ -187,7 +187,10 @@ export interface OnChainStealthAnnouncement {
 
 // ========== Helper Functions ==========
 
-/** Domain separator for stealth key derivation */
+/** Domain separator for stealth key derivation.
+ *  "Aegis-stealth-v1" is LOAD-BEARING — every existing stealth address was
+ *  derived using this exact byte sequence. The project's name is now
+ *  "Privacy Coin"; this string stays as-is. A v2 would bump the suffix. */
 const STEALTH_KEY_DOMAIN = new TextEncoder().encode("Aegis-stealth-v1");
 
 // tokenId removed — use computeTokenId(mintBytes) from poseidon.ts instead

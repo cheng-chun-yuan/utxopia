@@ -79,7 +79,7 @@ export const useNotesStore = create<NotesState>()(
       },
     }),
     {
-      name: "aegis-notes",
+      name: "pcoin-notes",
     }
   )
 );

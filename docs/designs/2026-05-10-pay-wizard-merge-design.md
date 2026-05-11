@@ -52,7 +52,7 @@ This spec covers only the pay-wizard merge — the highest-leverage piece. Dashb
 
 - **`web/src/app/settings/page.tsx`** — preferences list.
 - **`web/src/components/settings/preferences-form.tsx`** — toggle UI.
-- **`web/src/hooks/use-ui-mode.ts`** — `aegis-ui-mode` localStorage key with React context broadcast. Exposes `{ mode: "lite" | "advanced", setMode, isAdvanced }`.
+- **`web/src/hooks/use-ui-mode.ts`** — `pcoin-ui-mode` localStorage key with React context broadcast. Exposes `{ mode: "lite" | "advanced", setMode, isAdvanced }`.
 - **`web/src/components/ui/advanced-mode-badge.tsx`** — small chip in the header user-area when Advanced is active.
 - **`web/src/components/site-header.tsx`** — modified: gear icon → `/settings`; mount badge slot.
 
@@ -111,7 +111,7 @@ Disabled state shows tooltip: *"Bitcoin addresses can only receive zkBTC. To sen
 
 ## Advanced (Pro) mode
 
-Stored as `aegis-ui-mode = "advanced"` in localStorage; toggled at `/settings`. Default `lite`. Phased delivery (separate commits / reviewable slices recommended in the implementation plan):
+Stored as `pcoin-ui-mode = "advanced"` in localStorage; toggled at `/settings`. Default `lite`. Phased delivery (separate commits / reviewable slices recommended in the implementation plan):
 
 1. **Lite-only ship.** New `/send`, deletes old routes, header gear stub. `/settings` exists with the toggle disabled and labeled "Coming soon."
 2. **Advanced multi-output** + mode badge.

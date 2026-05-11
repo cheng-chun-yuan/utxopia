@@ -32,7 +32,7 @@ export interface Instruction {
 // Constants
 // =============================================================================
 
-/** Instruction discriminators — sequential 0-19 (must match contracts/programs/aegis/src/lib.rs) */
+/** Instruction discriminators — sequential 0-19 (must match contracts/programs/privacy-coin/src/lib.rs) */
 const INSTRUCTION = {
   // Core (0-2)
   INITIALIZE: 0,
@@ -1330,7 +1330,7 @@ export function buildVerifyTransactionInstructionData(params: {
 // =============================================================================
 
 /**
- * Build aegis verify_stealth_deposit instruction data (disc=11)
+ * Build privacy-coin verify_stealth_deposit instruction data (disc=11)
  *
  * npk + ephemeral_pub are extracted ON-CHAIN from the deposit TX OP_RETURN.
  * Amount is extracted from the SPV-verified sweep TX.

@@ -87,7 +87,7 @@ Remove:
 - `extract_unshield_from_token_balances()` — fallback no longer needed
 
 Keep:
-- `extract_aegis_instruction_disc()` — still useful for metadata
+- `extract_privacy_coin_instruction_disc()` — still useful for metadata
 - `extract_btc_txids()` — fallback for old txs without DepositVerified event
 
 #### 3. Frontend `transfers-tab.tsx` — Simplified classification

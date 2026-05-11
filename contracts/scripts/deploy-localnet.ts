@@ -188,17 +188,17 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
   logSection("Program Deployment");
 
   // Get program IDs from keypairs
-  const aegisKeypairPath = path.join(TARGET_DIR, "privacy_coin-keypair.json");
+  const pcoinKeypairPath = path.join(TARGET_DIR, "privacy_coin-keypair.json");
   const btclcKeypairPath = path.join(TARGET_DIR, "btc_light_client-keypair.json");
   const chadbufferKeypairPath = path.join(CONTRACTS_DIR, "programs/chadbuffer/chadbuffer-keypair.json");
   const groth16KeypairPath = path.join(TARGET_DIR, "groth16_verifier-keypair.json");
   const chadbufferSoPath = path.join(CONTRACTS_DIR, "programs/chadbuffer/chadbuffer.so");
 
-  if (!fs.existsSync(aegisKeypairPath) || !fs.existsSync(btclcKeypairPath)) {
+  if (!fs.existsSync(pcoinKeypairPath) || !fs.existsSync(btclcKeypairPath)) {
     throw new Error("Program keypairs not found. Run 'cargo build-sbf' first.");
   }
 
-  const aegisKeypair = await loadKeypair(aegisKeypairPath);
+  const pcoinKeypair = await loadKeypair(pcoinKeypairPath);
   const btclcKeypair = await loadKeypair(btclcKeypairPath);
 
   // Load chadbuffer and groth16 keypairs
@@ -220,7 +220,7 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
     groth16Keypair = Keypair.generate();
   }
 
-  const privacyCoinProgramId = aegisKeypair.publicKey;
+  const privacyCoinProgramId = pcoinKeypair.publicKey;
   const btcLightClientProgramId = btclcKeypair.publicKey;
   const chadbufferProgramId = chadbufferKeypair.publicKey;
   const groth16VerifierProgramId = groth16Keypair.publicKey;
@@ -253,7 +253,7 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
     log(`${label} deployed at ${programId}`);
   }
 
-  // Deploy Aegis
+  // Deploy Privacy Coin
   log("Deploying Privacy Coin program...");
   await deployViaSurfpool(privacyCoinProgramId.toBase58(), `${TARGET_DIR}/privacy_coin.so`, "Privacy Coin");
 
@@ -585,7 +585,7 @@ async function initializePRIVACY_COIN(
   );
   log(`Frost Vault: ${frostVault.address.toBase58()}`);
 
-  // Initialize Aegis
+  // Initialize Privacy Coin
   log("Initializing Privacy Coin pool...");
   const ix = buildPrivacyCoinInitializeIx(
     poolStatePda,
@@ -710,7 +710,7 @@ function saveLocalnetConfig(
 
   // Update config.json with localnet values
   config.programs.localnet = {
-    Aegis: deployResult.privacyCoinProgramId.toBase58(),
+    PrivacyCoin: deployResult.privacyCoinProgramId.toBase58(),
     btc_light_client: deployResult.btcLightClientProgramId.toBase58(),
     chadbuffer: deployResult.chadbufferProgramId.toBase58(),
     groth16_verifier: deployResult.groth16VerifierProgramId.toBase58(),
@@ -724,7 +724,7 @@ function saveLocalnetConfig(
     network: "localnet",
     rpcUrl: RPC_URL,
     programs: {
-      Aegis: deployResult.privacyCoinProgramId.toBase58(),
+      PrivacyCoin: deployResult.privacyCoinProgramId.toBase58(),
       btcLightClient: deployResult.btcLightClientProgramId.toBase58(),
       chadbuffer: deployResult.chadbufferProgramId.toBase58(),
       groth16Verifier: deployResult.groth16VerifierProgramId.toBase58(),
@@ -818,7 +818,7 @@ async function main() {
     deployResult.btcLightClientProgramId
   );
 
-  // Initialize Aegis
+  // Initialize Privacy Coin
   const initResult = await initializePRIVACY_COIN(
     connection,
     authority,

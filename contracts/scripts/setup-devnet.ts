@@ -38,7 +38,7 @@ const __dirname = path.dirname(__filename);
 // Load config
 const configPath = path.join(__dirname, "../config.json");
 const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-const PROGRAM_ID = new PublicKey(config.programs.devnet.Aegis);
+const PROGRAM_ID = new PublicKey(config.programs.devnet.PrivacyCoin);
 
 const RPC_URL = process.env.RPC_URL || "https://api.devnet.solana.com";
 

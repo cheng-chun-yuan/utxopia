@@ -669,7 +669,7 @@ impl EventIndexerService {
         };
 
         // Extract Privacy Coin instruction discriminator (first byte of instruction data)
-        let instruction_disc = Self::extract_aegis_instruction_disc(
+        let instruction_disc = Self::extract_privacy_coin_instruction_disc(
             &json["result"]["transaction"]["message"]["instructions"],
             &account_keys,
             &self.config.program_id,
@@ -789,7 +789,7 @@ impl EventIndexerService {
 
     /// Extract the Privacy Coin program instruction discriminator from transaction instructions.
     /// Returns the first byte of instruction data for the Privacy Coin program invocation.
-    fn extract_aegis_instruction_disc(
+    fn extract_privacy_coin_instruction_disc(
         instructions: &serde_json::Value,
         account_keys: &[&str],
         program_id: &str,

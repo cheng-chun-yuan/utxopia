@@ -450,7 +450,7 @@ pub fn process_verify_stealth_deposit(
         tc.add_fees(total_fee)?;
     }
 
-    pinocchio::msg!("Aegis: deposit verified (SPV)");
+    pinocchio::msg!("PrivacyCoin: deposit verified (SPV)");
 
     Ok(())
 }

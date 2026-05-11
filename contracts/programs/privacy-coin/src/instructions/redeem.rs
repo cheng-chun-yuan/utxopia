@@ -516,6 +516,6 @@ pub fn process_redeem(
         pool.set_last_update(clock.unix_timestamp);
     }
 
-    pinocchio::msg!("Aegis: redeem");
+    pinocchio::msg!("PrivacyCoin: redeem");
     Ok(())
 }

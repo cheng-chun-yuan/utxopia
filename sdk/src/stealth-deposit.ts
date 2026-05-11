@@ -74,7 +74,8 @@ const SYSTEM_PROGRAM_ID: Address = address(
   "11111111111111111111111111111111"
 );
 
-/** Domain separator for stealth key derivation */
+/** Domain separator for stealth key derivation.
+ *  LOAD-BEARING: see stealth.ts for the full note. Stays as "Aegis-stealth-v1". */
 const STEALTH_KEY_DOMAIN = new TextEncoder().encode("Aegis-stealth-v1");
 
 // ========== Types ==========
