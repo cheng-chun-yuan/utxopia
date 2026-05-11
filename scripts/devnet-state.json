@@ -16,7 +16,7 @@
   "tUsdtVault": "CTE9dxT29iYi56eUAJgRkRse4w8BEdmfFGpkwrCFCNk2",
   "btcXOnlyPubKey": "29485d031f6ad1ab0c4ca7183bef6cb9ce2d914d0bec8dc842a6962f0fcc3362",
   "poolBtcAddress": "tb1p99y96qcldtg6krzv5uvrhmmvh88zmy2dp0kgmjzz56tz7r7vxd3qqn2q95",
-  "signingMode": "frost",
+  "signingMode": "ika",
   "ika": {
     "programId": "87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY",
     "grpcEndpoint": "pre-alpha-dev-1.ika.ika-network.net:443",

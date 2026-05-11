@@ -74,6 +74,8 @@ BTC_NETWORK=$(jval btcNetwork)
 SOLANA_RPC=$(jval solanaRpc)
 BACKEND_URL=$(jval backendUrl)
 
+SIGNING_MODE=$(python3 -c "import json,sys; d=json.load(open('$STATE_FILE')); print(d.get('signingMode','frost'))")
+
 # Ika dWallet integration (nested under "ika" — fall back to empty string if absent).
 IKA_PROGRAM_ID=$(python3 -c "import json,sys; d=json.load(open('$STATE_FILE')); print(d.get('ika',{}).get('programId',''))")
 IKA_GRPC_ENDPOINT=$(python3 -c "import json,sys; d=json.load(open('$STATE_FILE')); print(d.get('ika',{}).get('grpcEndpoint',''))")
@@ -132,16 +134,10 @@ ESPLORA_URL=$ESPLORA_URL
 MEMPOOL_API_URL=$ESPLORA_URL
 POOL_RECEIVE_ADDRESS=$POOL_BTC_ADDR
 
-# ─── FROST Signing (legacy — being decommissioned) ──────────────────────────
-PRIVACY_COIN_SIGNING_MODE=frost
-PRIVACY_COIN_FROST_THRESHOLD=2
-PRIVACY_COIN_FROST_PARTICIPANTS=3
-PRIVACY_COIN_FROST_SIGNER_URLS=http://localhost:9001,http://localhost:9002,http://localhost:9003
-PRIVACY_COIN_FROST_KEY_SHARE=placeholder
-PRIVACY_COIN_FROST_GROUP_PUBKEY=$GROUP_PUBKEY
-PRIVACY_COIN_FROST_API_KEY=\${PRIVACY_COIN_FROST_API_KEY:?Set PRIVACY_COIN_FROST_API_KEY env var}
+# ─── Signing mode (driven by state JSON's "signingMode" field) ──────────────
+PRIVACY_COIN_SIGNING_MODE=$SIGNING_MODE
 
-# ─── Ika dWallet (replaces FROST in v2) ─────────────────────────────────────
+# ─── Ika dWallet (custody for v2 — primary signing path) ────────────────────
 PRIVACY_COIN_IKA_PROGRAM_ID=$IKA_PROGRAM_ID
 PRIVACY_COIN_IKA_GRPC_ENDPOINT=$IKA_GRPC_ENDPOINT
 PRIVACY_COIN_IKA_DWALLET=$IKA_DWALLET
