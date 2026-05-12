@@ -15,9 +15,8 @@
 import { NextResponse } from "next/server";
 import { fetchAnnouncementsFromRpc } from "@/lib/api/rpc-fallback";
 import { getBackendUrl } from "@/lib/api/constants";
+import { detectNetworkFromRequest } from "@/lib/network-config";
 export const dynamic = "force-dynamic";
-
-const BACKEND_URL = getBackendUrl();
 
 interface AnnouncementRow {
   leaf_index: number;
@@ -116,16 +115,19 @@ function decodeLeU64(hex: string): number {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const network = detectNetworkFromRequest(request);
+    const backendUrl = getBackendUrl(network);
+
     // Build token ID map (async — uses Poseidon for localnet mint resolution)
     const { buildTokenIdMap } = await import("@/lib/token-map");
     const tokenMap = await buildTokenIdMap();
 
     const [annResp, depResp, leavesResp] = await Promise.all([
-      fetch(`${BACKEND_URL}/api/announcements`),
-      fetch(`${BACKEND_URL}/api/deposits`),
-      fetch(`${BACKEND_URL}/api/tree/leaves`),
+      fetch(`${backendUrl}/api/announcements`),
+      fetch(`${backendUrl}/api/deposits`),
+      fetch(`${backendUrl}/api/tree/leaves`),
     ]);
 
     const annData = annResp.ok

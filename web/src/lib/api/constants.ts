@@ -20,7 +20,7 @@ export const API_ENDPOINTS = {
     `/api/public-zkbtc-balance?owner=${encodeURIComponent(owner)}`,
 } as const;
 
-import { getNetworkConfig } from "../network-config";
+import { getNetworkConfig, type NetworkId } from "../network-config";
 
 export const DEFAULT_API_URL = "http://localhost:3001";
 
@@ -39,10 +39,15 @@ export function getSolanaRpcUrl(): string {
 /**
  * Get the backend API URL.
  *
- * Priority: env var override > config/networks.json > localhost fallback
+ * Pass an explicit `network` to resolve a specific stack (used by server-side
+ * API routes that read the network from a request cookie via
+ * `detectNetworkFromRequest`). Without it we use the build-time / browser-
+ * detected default.
+ *
+ * Priority: env var override > networks.json[network] > localhost fallback
  */
-export function getBackendUrl(): string {
-  const cfgUrl = getNetworkConfig().backend.url;
+export function getBackendUrl(network?: NetworkId): string {
+  const cfgUrl = getNetworkConfig(network).backend.url;
   if (typeof window === "undefined") {
     return process.env.BACKEND_API_URL || cfgUrl || DEFAULT_API_URL;
   }

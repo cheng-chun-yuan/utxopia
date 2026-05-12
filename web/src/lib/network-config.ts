@@ -87,9 +87,9 @@ export const NETWORK_META: NetworkMeta[] = [
     label: "Localnet",
     tagline: "Surfpool validator + regtest",
     description:
-      "Fully local stack: Surfpool offline validator, regtest BTC, programs deployed via txtx runbook. Used by the E2E test suite.",
+      "Fully local stack: Surfpool offline validator, regtest BTC, programs deployed via txtx runbook. Used by the E2E test suite — not surfaced as an end-user option.",
     caveats: ["Requires `surfpool start -y --offline` running locally."],
-    enabled: true,
+    enabled: false,
   },
   {
     id: "testnet",
@@ -112,19 +112,49 @@ export const NETWORK_META: NetworkMeta[] = [
 const networks = networksJson as Record<NetworkId, NetworkConfig>;
 
 const STORAGE_KEY = "utxopia.network";
+/** Cookie name — same key, browser-readable, sent on every same-origin request
+ *  so server-side API routes can route to the right backend per request. */
+const COOKIE_NAME = "utxopia.network";
+
+function isKnownNetwork(value: string | null | undefined): value is NetworkId {
+  return !!value && value in networks;
+}
+
+/** Parse our cookie value out of an HTTP `Cookie:` header. */
+export function parseNetworkCookie(cookieHeader: string | null): NetworkId | null {
+  if (!cookieHeader) return null;
+  for (const part of cookieHeader.split(";")) {
+    const [k, v] = part.trim().split("=");
+    if (k === COOKIE_NAME && isKnownNetwork(v)) return v;
+  }
+  return null;
+}
+
+/** Server-side helper: resolve the network for a single request based on its
+ *  cookies. Falls back to env-var default. Use this in API routes instead of
+ *  the bare `detectNetwork()` (which only knows about the build-time env). */
+export function detectNetworkFromRequest(req: Request): NetworkId {
+  const cookieNet = parseNetworkCookie(req.headers.get("cookie"));
+  if (cookieNet) return cookieNet;
+  return detectNetwork();
+}
 
 export function detectNetwork(): NetworkId {
   // 1. localStorage (per-browser user preference, set via /settings)
   if (typeof window !== "undefined") {
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored && stored in networks) return stored as NetworkId;
+      if (isKnownNetwork(stored)) return stored;
     } catch {
       // localStorage may be unavailable (SSR, privacy mode) — fall through.
     }
+
+    // 2. cookie fallback (in case localStorage was cleared but cookie remains)
+    const cookieNet = parseNetworkCookie(document.cookie);
+    if (cookieNet) return cookieNet;
   }
 
-  // 2. env vars (build-time default)
+  // 3. env vars (build-time default)
   const env =
     process.env.NEXT_PUBLIC_NETWORK ||
     process.env.UTXOPIA_NETWORK ||
@@ -136,14 +166,23 @@ export function detectNetwork(): NetworkId {
   return "devnet";
 }
 
-/** Persist the user's network choice. Caller is responsible for triggering
- *  any reload needed to re-read network config in long-lived modules. */
+/** Persist the user's network choice. Writes both localStorage (so client-only
+ *  reads stay synchronous) and a cookie (so server-side API routes can resolve
+ *  the right backend per request). Caller still needs to reload the page if
+ *  long-lived modules captured a previous value. */
 export function setNetwork(network: NetworkId): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(STORAGE_KEY, network);
   } catch {
     // ignore — best-effort
+  }
+  try {
+    // 1 year, same-site lax (sent on top-level navigation + XHR to same origin)
+    const maxAge = 60 * 60 * 24 * 365;
+    document.cookie = `${COOKIE_NAME}=${network}; Path=/; Max-Age=${maxAge}; SameSite=Lax`;
+  } catch {
+    // ignore
   }
 }
 

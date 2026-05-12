@@ -8,9 +8,8 @@
 
 import { NextResponse } from "next/server";
 import { getBackendUrl } from "@/lib/api/constants";
+import { detectNetworkFromRequest } from "@/lib/network-config";
 export const dynamic = "force-dynamic";
-
-const BACKEND_URL = getBackendUrl();
 
 interface ExplorerTx {
   txSignature?: string;
@@ -20,9 +19,9 @@ interface ExplorerTx {
   [key: string]: unknown;
 }
 
-async function fetchFromBackendUnified(): Promise<ExplorerTx[] | null> {
+async function fetchFromBackendUnified(backendUrl: string): Promise<ExplorerTx[] | null> {
   try {
-    const resp = await fetch(`${BACKEND_URL}/api/explorer/transactions`, { cache: "no-store" });
+    const resp = await fetch(`${backendUrl}/api/explorer/transactions`, { cache: "no-store" });
     if (!resp.ok) return null;
     const data = await resp.json();
     if (!data.success) return null;
@@ -33,10 +32,16 @@ async function fetchFromBackendUnified(): Promise<ExplorerTx[] | null> {
 }
 
 /** Fallback: combine deposits + transfers from separate endpoints */
-async function fetchCombined(origin: string): Promise<ExplorerTx[]> {
+async function fetchCombined(
+  origin: string,
+  cookieHeader: string | null,
+): Promise<ExplorerTx[]> {
+  // Forward the network cookie so sub-routes resolve the same backend.
+  const headers: Record<string, string> = {};
+  if (cookieHeader) headers["cookie"] = cookieHeader;
   const [depositsResp, transfersResp] = await Promise.all([
-    fetch(`${origin}/api/explorer/deposits`, { cache: "no-store" }).catch(() => null),
-    fetch(`${origin}/api/transfers`, { cache: "no-store" }).catch(() => null),
+    fetch(`${origin}/api/explorer/deposits`, { cache: "no-store", headers }).catch(() => null),
+    fetch(`${origin}/api/transfers`, { cache: "no-store", headers }).catch(() => null),
   ]);
 
   const deposits: ExplorerTx[] = depositsResp?.ok
@@ -53,13 +58,18 @@ async function fetchCombined(origin: string): Promise<ExplorerTx[]> {
 
 export async function GET(request: Request) {
   try {
+    // Resolve backend URL per-request from the network cookie so the user's
+    // selection in /settings reaches the right stack.
+    const network = detectNetworkFromRequest(request);
+    const backendUrl = getBackendUrl(network);
+
     // Try unified backend endpoint first
-    let transactions = await fetchFromBackendUnified();
+    let transactions = await fetchFromBackendUnified(backendUrl);
 
     // Fallback: combine deposits (includes tracker-only) + transfers
     if (!transactions) {
       const origin = new URL(request.url).origin;
-      transactions = await fetchCombined(origin);
+      transactions = await fetchCombined(origin, request.headers.get("cookie"));
     }
 
     // Resolve token symbols server-side

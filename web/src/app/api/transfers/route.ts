@@ -12,9 +12,8 @@
 
 import { NextResponse } from "next/server";
 import { getBackendUrl } from "@/lib/api/constants";
+import { detectNetworkFromRequest } from "@/lib/network-config";
 export const dynamic = "force-dynamic";
-
-const BACKEND_URL = getBackendUrl();
 
 // =============================================================================
 // Types — shared with frontend hooks
@@ -146,9 +145,11 @@ function transformTransfer(t: BackendTransfer, tokenMap: Map<string, string>): E
 // Route handler
 // =============================================================================
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const resp = await fetch(`${BACKEND_URL}/api/transfers`, { cache: "no-store" });
+    const network = detectNetworkFromRequest(request);
+    const backendUrl = getBackendUrl(network);
+    const resp = await fetch(`${backendUrl}/api/transfers`, { cache: "no-store" });
     if (!resp.ok) {
       return NextResponse.json({ success: true, transactions: [], count: 0 });
     }
@@ -169,7 +170,7 @@ export async function GET() {
     const missingTokenIds = data.transfers.some((t: BackendTransfer) => !t.token_id && t.instruction_disc === 15);
     if (missingTokenIds) {
       try {
-        const annResp = await fetch(`${BACKEND_URL}/api/announcements`, { cache: "no-store" });
+        const annResp = await fetch(`${backendUrl}/api/announcements`, { cache: "no-store" });
         if (annResp.ok) {
           const annData = await annResp.json();
           const tokenIdByAmount = new Map<number, string>();
@@ -199,7 +200,7 @@ export async function GET() {
 
     // Enrich withdraw outputs with redemption data (btcTxid, completion status)
     try {
-      const redemptionResp = await fetch(`${BACKEND_URL}/api/redemption/all`, { cache: "no-store" });
+      const redemptionResp = await fetch(`${backendUrl}/api/redemption/all`, { cache: "no-store" });
       if (redemptionResp.ok) {
         const rData = await redemptionResp.json();
         const trackingByReqTx = new Map<string, { btc_txid?: string; local_status?: string; amount_sats?: number }>();

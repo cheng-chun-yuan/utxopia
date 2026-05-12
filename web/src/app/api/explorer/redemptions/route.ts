@@ -17,9 +17,8 @@ import { getHeliusRpcUrl } from "@/lib/helius-server";
 const RPC_URL = getHeliusRpcUrl();
 
 import { getBackendUrl } from "@/lib/api/constants";
+import { detectNetworkFromRequest } from "@/lib/network-config";
 export const dynamic = "force-dynamic";
-
-const BACKEND_URL = getBackendUrl();
 
 interface TrackingEntry {
   pda_address: string;
@@ -108,9 +107,11 @@ async function createServerRpc(): Promise<RpcClient> {
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { getConfig, fetchExplorerRedemptions } = await getUTXOpiaSDK();
+    const network = detectNetworkFromRequest(request);
+    const backendUrl = getBackendUrl(network);
 
     // Fetch all sources in parallel: PDA scan + consolidated backend + pool state + transfers
     const [redemptions, allResp, poolStateResp, transfersResp] = await Promise.all([
@@ -121,9 +122,9 @@ export async function GET() {
         console.warn("[Redemptions] PDA scan failed:", e.message);
         return [];
       }),
-      fetch(`${BACKEND_URL}/api/redemption/all`).catch(() => null),
-      fetch(`${BACKEND_URL}/api/relayer/meta`).catch(() => null),
-      fetch(`${BACKEND_URL}/api/transfers`).catch(() => null),
+      fetch(`${backendUrl}/api/redemption/all`).catch(() => null),
+      fetch(`${backendUrl}/api/relayer/meta`).catch(() => null),
+      fetch(`${backendUrl}/api/transfers`).catch(() => null),
     ]);
 
     // Parse fee config from backend relayer meta

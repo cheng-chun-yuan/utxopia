@@ -3,11 +3,15 @@
  *
  * Used by Next.js API routes to proxy client requests to the Rust backend,
  * avoiding CORS/PNA issues (browser never talks to backend directly).
+ *
+ * The backend URL is resolved per-request from the `utxopia.network` cookie,
+ * so a user who flips network in /settings has subsequent /api/* requests
+ * routed to the matching stack (production devnet vs hybrid devnet-regtest).
  */
 
 import { getBackendUrl } from "@/lib/api/constants";
+import { detectNetworkFromRequest } from "@/lib/network-config";
 
-const BACKEND_URL = getBackendUrl();
 const BACKEND_API_KEY =
   process.env.BACKEND_API_KEY || "";
 
@@ -16,7 +20,9 @@ export async function proxyToBackend(
   backendPath: string,
 ): Promise<Response> {
   const url = new URL(request.url);
-  const target = `${BACKEND_URL}${backendPath}${url.search}`;
+  const network = detectNetworkFromRequest(request);
+  const backendUrl = getBackendUrl(network);
+  const target = `${backendUrl}${backendPath}${url.search}`;
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
