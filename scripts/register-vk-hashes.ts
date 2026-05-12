@@ -5,7 +5,7 @@
  */
 
 import { PublicKey, SystemProgram, TransactionInstruction } from "@solana/web3.js";
-import { INSTRUCTION_DISCRIMINATORS } from "@utxopia/sdk";
+import { INSTRUCTION_DISCRIMINATORS } from "../sdk/src/index";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -37,6 +37,9 @@ async function main() {
     .map(m => [parseInt(m[1]), parseInt(m[2])] as [number, number])
     .sort((a, b) => (a[0] + a[1]) - (b[0] + b[1]) || a[0] - b[0]);
 
+  const doUpdate = process.argv.includes("--update");
+  if (doUpdate) console.log("Mode: UPDATE (rewrites mismatched on-chain hashes)");
+
   for (const [nIn, nOut] of circuits) {
     const name = `joinsplit_${nIn}x${nOut}`;
     const vkPath = path.join(buildDir, name, `${name}.vkey.json`);
@@ -46,15 +49,38 @@ async function main() {
       [Buffer.from("vk_registry"), Buffer.from([nIn]), Buffer.from([nOut])], programId,
     );
     const existing = await conn.getAccountInfo(vkRegistry);
-    if (existing?.data?.length && existing.data[0] === 0x14) { console.log(`  ${name}: registered`); continue; }
-
+    const isInitialized = existing?.data?.length && existing.data[0] === 0x14;
     const vkHash = computeVkHash(JSON.parse(fs.readFileSync(vkPath, "utf-8")));
+
+    if (isInitialized) {
+      // vk_hash lives at offset 36 in the VkRegistry struct (disc=1, padding=1, n_in=1, n_out=1, authority=32, vk_hash=32, ...)
+      const onChainHash = existing!.data!.slice(36, 68);
+      if (onChainHash.equals(vkHash)) { console.log(`  ${name}: registered + hash matches`); continue; }
+      if (!doUpdate) { console.log(`  ${name}: registered but HASH MISMATCH — rerun with --update`); continue; }
+
+      // UPDATE_VK_REGISTRY path — only vk_registry (writable) + authority (signer).
+      const data = Buffer.alloc(35);
+      data[0] = INSTRUCTION_DISCRIMINATORS.UPDATE_VK_REGISTRY;
+      data[1] = nIn;
+      data[2] = nOut;
+      vkHash.copy(data, 3);
+      const sig = await sendTx(conn, authority, new TransactionInstruction({
+        keys: [
+          { pubkey: vkRegistry, isSigner: false, isWritable: true },
+          { pubkey: authority.publicKey, isSigner: true, isWritable: false },
+        ],
+        programId, data,
+      }));
+      console.log(`  ${name}: UPDATED (${sig.slice(0, 16)}...)`);
+      continue;
+    }
+
+    // INIT_VK_REGISTRY path
     const data = Buffer.alloc(35);
     data[0] = INSTRUCTION_DISCRIMINATORS.INIT_VK_REGISTRY;
     data[1] = nIn;
     data[2] = nOut;
     vkHash.copy(data, 3);
-
     const sig = await sendTx(conn, authority, new TransactionInstruction({
       keys: [
         { pubkey: poolState, isSigner: false, isWritable: false },
