@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Shield, Rocket, Menu, X, Settings as SettingsIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AdvancedModeBadge } from "@/components/ui/advanced-mode-badge";
+import { NetworkBadge } from "@/components/ui/network-badge";
 
 export function SiteHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -51,6 +52,7 @@ export function SiteHeader() {
 
           {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-2 shrink-0">
+            <NetworkBadge />
             <AdvancedModeBadge />
             <Link
               href="/settings"
