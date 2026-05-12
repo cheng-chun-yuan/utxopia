@@ -22,7 +22,7 @@ BUILD_DIR="$REPO_ROOT/circuits/build"
 TARBALL="$BUILD_DIR/circuits-tier2.tar.gz"
 
 # Replace with your real release URL when published.
-DEFAULT_RELEASE_URL="https://github.com/cheng-chun-yuan/private_bitcoin_bridge/releases/latest/download/circuits-tier2.tar.gz"
+DEFAULT_RELEASE_URL="https://github.com/cheng-chun-yuan/utxopia/releases/latest/download/circuits-tier2.tar.gz"
 RELEASE_URL="${CIRCUIT_RELEASE_URL:-$DEFAULT_RELEASE_URL}"
 
 if [ "${1:-}" = "--rebuild" ]; then
