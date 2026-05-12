@@ -1,2 +1,9 @@
 node_modules/
-build/
+
+# Ignore all build artifacts EXCEPT vkey JSON files (tiny, deterministic-ish,
+# anchored on-chain via init/update_verification_key_hash). Larger artifacts
+# (wasm/zkey/ptau/r1cs) come from scripts/fetch-circuits.sh.
+build/*
+!build/joinsplit_*/
+build/joinsplit_*/*
+!build/joinsplit_*/*.vkey.json

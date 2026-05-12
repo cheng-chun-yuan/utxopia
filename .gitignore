@@ -46,8 +46,14 @@ sdk/dist/
 test-ledger/
 .vercel
 
-# Circom build artifacts
-circuits/build/
+# Circom build artifacts — gitignore everything heavy (ptau, r1cs, wasm, zkey, sym).
+# Verification keys are tiny (~600 bytes each) and the on-chain program hashes them
+# via init/update_verification_key_hash, so commit those for reproducibility.
+# Large artifacts (wasm/zkey) come from scripts/fetch-circuits.sh.
+circuits/build/*
+!circuits/build/joinsplit_*/
+circuits/build/joinsplit_*/*
+!circuits/build/joinsplit_*/*.vkey.json
 sdk/circuits/
 
 # Unused programs
@@ -61,3 +67,4 @@ backend/data/*.db
 
 # Superpowers design docs (generated, not tracked)
 docs/superpowers/
+scripts/.demo-seed.json

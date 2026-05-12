@@ -14,7 +14,8 @@ set -e
 
 # Pre-flight checks
 command -v npx >/dev/null 2>&1 || { echo "Error: npx not found. Install Node.js first."; exit 1; }
-npx snarkjs --version >/dev/null 2>&1 || { echo "Error: snarkjs not installed. Run: npm install -g snarkjs"; exit 1; }
+# snarkjs --version exits 99 (unrecognized flag), so probe with a harmless real command
+npx snarkjs 2>&1 | grep -q "^snarkjs@" || { echo "Error: snarkjs not installed. Run: npm install -g snarkjs"; exit 1; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
