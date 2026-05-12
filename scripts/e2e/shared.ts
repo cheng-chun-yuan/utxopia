@@ -162,9 +162,12 @@ export function buildMerkleTree(leaves: bigint[]): { root: bigint; getProof: (id
 // Constants
 // =============================================================================
 
-export const RPC_URL = "http://127.0.0.1:8899";
-export const ESPLORA_URL = "http://localhost:3002/regtest/api";
-export const STATE_FILE = path.join(__dirname, "localnet-state.json");
+// Allow env overrides so the e2e can target devnet-regtest hybrid (or other envs).
+export const RPC_URL = process.env.UTXOPIA_E2E_RPC_URL || "http://127.0.0.1:8899";
+export const ESPLORA_URL = process.env.UTXOPIA_E2E_ESPLORA_URL || "http://localhost:3002/regtest/api";
+export const STATE_FILE = process.env.UTXOPIA_E2E_STATE_FILE
+  ? path.resolve(process.env.UTXOPIA_E2E_STATE_FILE)
+  : path.join(__dirname, "localnet-state.json");
 export const CONTRACTS_DIR = path.resolve(__dirname, "../../contracts");
 export const SDK_DIR = path.resolve(__dirname, "../../sdk");
 export const CIRCUITS_DIR = path.resolve(__dirname, "../../circuits");
