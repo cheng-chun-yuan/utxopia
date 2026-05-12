@@ -98,15 +98,24 @@ impl Network {
     }
 
     /// Get default Bitcoin/Esplora API for this network (mempool.space).
-    /// Respects UTXOPIA_BITCOIN_NETWORK env var to override (e.g., "testnet" or "testnet4").
+    /// Highest precedence: UTXOPIA_BITCOIN_RPC / ESPLORA_URL env vars.
+    /// Then UTXOPIA_BITCOIN_NETWORK (e.g., "testnet", "testnet4", "regtest").
     pub fn default_bitcoin_api(&self) -> String {
-        // Allow explicit override via UTXOPIA_BITCOIN_NETWORK
+        // Explicit RPC URL wins (so a regtest stack can point at local esplora
+        // without monkey-patching the wildcard mempool.space fallback).
+        if let Ok(rpc) = env::var("UTXOPIA_BITCOIN_RPC") {
+            return rpc;
+        }
+        if let Ok(esplora) = env::var("ESPLORA_URL") {
+            return esplora;
+        }
         if let Ok(btc_net) = env::var("UTXOPIA_BITCOIN_NETWORK") {
             return match btc_net.as_str() {
                 "mainnet" => "https://mempool.space/api".to_string(),
                 "testnet" | "testnet3" => "https://mempool.space/testnet/api".to_string(),
                 "testnet4" => "https://mempool.space/testnet4/api".to_string(),
                 "signet" => "https://mempool.space/signet/api".to_string(),
+                "regtest" => "http://localhost:3002/regtest/api".to_string(),
                 _ => format!("https://mempool.space/{}/api", btc_net),
             };
         }

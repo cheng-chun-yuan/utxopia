@@ -9,5 +9,14 @@
   "poolVault": "7TPAzhB8xC9aZ3NQYYDBdgg7KFWVPwUxULes3xqnFceh",
   "frostVault": "BfvFLUk1ZGw1qMHMXobfazUXvdvs2Gim6L1fpCoB1WYq",
   "tokenConfigZkbtc": "DbE1mFfZD5KW6GZzU73P9VAeCpx6GAWF4TE4WrEsGecF",
-  "authority": "uFBMJSxoGkHj2NyncPzAkhNWsGSQirQcRjUnGfEfWg1"
+  "authority": "uFBMJSxoGkHj2NyncPzAkhNWsGSQirQcRjUnGfEfWg1",
+  "demoPool": {
+    "privKey": "04edfd60b32f55849a8a66f97f5d2033b359e67568e00e63831402cc931d0f78",
+    "xOnlyPubKey": "876bc2ba11c5a74469246b40221a06a67341ad9dd12ca6ce60802d1c29c974d1",
+    "btcAddress": "bcrt1psa4u9ws3ckn5g6fyddqzyxsx5ee5rtva6yk2dnnqsqk3c2wfwngszukxjn",
+    "generatedAt": "2026-05-12T08:14:25.764Z",
+    "note": "Demo-mode placeholder while Ika devnet is unavailable. Throwaway key — do not use in prod."
+  },
+  "btcXOnlyPubKey": "876bc2ba11c5a74469246b40221a06a67341ad9dd12ca6ce60802d1c29c974d1",
+  "poolBtcAddress": "bcrt1psa4u9ws3ckn5g6fyddqzyxsx5ee5rtva6yk2dnnqsqk3c2wfwngszukxjn"
 }

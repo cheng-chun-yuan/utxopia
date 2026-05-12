@@ -1,0 +1,7 @@
+# Per-developer demo state — random seeds, spent note material, snarkjs scratch,
+# and one-off diagnostic scripts. None of this should be checked in.
+.demo-seed.json
+.notes.json
+.tmp/
+.check-commit.ts
+.debug-scan.ts

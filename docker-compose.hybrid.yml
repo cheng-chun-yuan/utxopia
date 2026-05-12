@@ -53,8 +53,17 @@ services:
       # NOTE: This dWallet is bound to the OLD program's PDA, so complete_redemption
       # via Ika will FAIL on the new program. Run a fresh DKG ceremony to get a
       # new dWallet whose authority is the new program's __ika_cpi_authority PDA.
-      # Pool BTC address: regtest-flavored (bcrt1p prefix) — must be regenerated.
-      POOL_RECEIVE_ADDRESS: bcrt1pPLACEHOLDER  # regenerate after Ika DKG
+      # Pool BTC address: demo-mode key (Ika devnet was unreachable when this
+      # was generated, so we ship a real secp256k1 P2TR we control instead of
+      # a true Ika-controlled address). Private key + xonly are persisted in
+      # scripts/devnet-regtest-state.json under `demoPool.*`. Regenerate via
+      # bun run scripts/ika-setup/gen-demo-pool-key.ts. Replace with a true
+      # Ika-derived address once dkg.ts can complete (see set-pool-config.ts).
+      POOL_RECEIVE_ADDRESS: bcrt1psa4u9ws3ckn5g6fyddqzyxsx5ee5rtva6yk2dnnqsqk3c2wfwngszukxjn
+      # Demo-mode pool secret matching POOL_RECEIVE_ADDRESS above. Throwaway —
+      # see scripts/devnet-regtest-state.json `demoPool.privKey`. Activates the
+      # SingleKey sweeper path so deposits to the bcrt1p address can be swept.
+      POOL_SIGNING_KEY: 04edfd60b32f55849a8a66f97f5d2033b359e67568e00e63831402cc931d0f78
       # ─── Operational ─────────────────────────────────────────────
       UTXOPIA_DEMO_MODE: "1"
       DEPOSIT_DB_PATH: /app/data/deposits.db

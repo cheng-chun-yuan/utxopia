@@ -429,6 +429,15 @@ pub fn process_verify_deposit_v2(
         pool.set_last_update(clock.unix_timestamp);
     }
 
+    // Update token config: keep total_shielded symmetric with unshield.sub_shielded.
+    // Without this, an unshield against a v2-deposited note would underflow on the
+    // TokenConfig.total_shielded counter.
+    {
+        let mut tc_data = token_config_info.try_borrow_mut_data()?;
+        let tc = TokenConfig::from_bytes_mut(&mut tc_data)?;
+        tc.add_shielded(amount_sats)?;
+    }
+
     // Close DepositIntent PDA — return rent to authority
     {
         let dest_starting_lamports = authority.lamports();

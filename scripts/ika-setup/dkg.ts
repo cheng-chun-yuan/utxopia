@@ -30,8 +30,12 @@ const NETWORK = process.argv.includes("--network")
 const STATE_FILE =
   NETWORK === "localnet"
     ? path.resolve(import.meta.dirname ?? ".", "../e2e/localnet-state.json")
-    : path.resolve(import.meta.dirname ?? ".", "../devnet-state.json");
+    : NETWORK === "devnet-regtest"
+      ? path.resolve(import.meta.dirname ?? ".", "../devnet-regtest-state.json")
+      : path.resolve(import.meta.dirname ?? ".", "../devnet-state.json");
 
+// devnet-regtest is a hybrid: real Solana devnet + local regtest BTC.
+// Same Solana RPC as devnet — only the state file + BTC side differ.
 const RPC_URL =
   NETWORK === "localnet"
     ? "http://localhost:8899"

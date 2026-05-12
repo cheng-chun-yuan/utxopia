@@ -33,7 +33,9 @@ const NETWORK = process.argv.includes("--network")
 const STATE_FILE =
   NETWORK === "localnet"
     ? path.resolve(import.meta.dirname ?? ".", "../e2e/localnet-state.json")
-    : path.resolve(import.meta.dirname ?? ".", "../devnet-state.json");
+    : NETWORK === "devnet-regtest"
+      ? path.resolve(import.meta.dirname ?? ".", "../devnet-regtest-state.json")
+      : path.resolve(import.meta.dirname ?? ".", "../devnet-state.json");
 
 const RPC_URL =
   NETWORK === "localnet"
@@ -96,11 +98,19 @@ if (existing) {
   console.log(`existing script:   ${poolScript.toString("hex")} (${scriptLen} bytes)`);
   console.log(`existing group_pk: ${groupPubKey.toString("hex")}`);
 } else {
-  // First-time init — derive pool_script from poolBtcAddress (P2TR: 0x5120 + xonly).
-  const xonly = Buffer.from(state.btcXOnlyPubKey, "hex");
-  if (xonly.length !== 32) throw new Error("btcXOnlyPubKey must be 32 bytes");
+  // First-time init — derive pool_script from the pool's x-only pubkey
+  // (P2TR: 0x5120 + xonly). For Ika-mode pools (no prior FROST), the
+  // dWallet's x-only IS the pool signer; fall back to it.
+  const xonlyHex = state.btcXOnlyPubKey ?? state.ika?.dwalletXOnlyPubkey;
+  if (!xonlyHex) {
+    throw new Error(
+      "Need state.btcXOnlyPubKey or state.ika.dwalletXOnlyPubkey to derive pool_script",
+    );
+  }
+  const xonly = Buffer.from(xonlyHex, "hex");
+  if (xonly.length !== 32) throw new Error("x-only pubkey must be 32 bytes");
   poolScript = Buffer.concat([Buffer.from([0x51, 0x20]), xonly]);
-  groupPubKey = xonly; // FROST tweaked output key
+  groupPubKey = xonly;
   console.log(`new script:        ${poolScript.toString("hex")}`);
   console.log(`new group_pk:      ${groupPubKey.toString("hex")}`);
 }

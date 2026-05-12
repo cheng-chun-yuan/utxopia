@@ -115,10 +115,18 @@ impl DepositTrackerService {
 
     /// Set up sweeper with pool private key
     pub fn with_sweeper(mut self, pool_signing_key: &str) -> Result<Self, TrackerError> {
+        let net_str = std::env::var("UTXOPIA_BITCOIN_NETWORK")
+            .unwrap_or_else(|_| "testnet".into());
+        let network = match net_str.to_lowercase().as_str() {
+            "mainnet" | "bitcoin" => bitcoin::Network::Bitcoin,
+            "regtest" => bitcoin::Network::Regtest,
+            "signet" => bitcoin::Network::Signet,
+            _ => bitcoin::Network::Testnet,
+        };
         let sweeper = UtxoSweeper::from_private_key(
             pool_signing_key,
             self.config.pool_receive_address.clone(),
-            bitcoin::Network::Testnet,
+            network,
         )
         .map_err(|e| TrackerError::InvalidAddress(e.to_string()))?;
 
@@ -658,7 +666,15 @@ impl DepositTrackerService {
             }
 
             let tweaked = bitcoin::key::TweakedPublicKey::dangerous_assume_tweaked(output_key);
-            let addr = bitcoin::Address::p2tr_tweaked(tweaked, bitcoin::Network::Testnet);
+            let net_str = std::env::var("UTXOPIA_BITCOIN_NETWORK")
+                .unwrap_or_else(|_| "testnet".into());
+            let net = match net_str.to_lowercase().as_str() {
+                "mainnet" | "bitcoin" => bitcoin::Network::Bitcoin,
+                "regtest" => bitcoin::Network::Regtest,
+                "signet" => bitcoin::Network::Signet,
+                _ => bitcoin::Network::Testnet,
+            };
+            let addr = bitcoin::Address::p2tr_tweaked(tweaked, net);
             let taproot_address = addr.to_string();
 
             if self.db.get_by_address(&taproot_address).ok().flatten().is_some() {

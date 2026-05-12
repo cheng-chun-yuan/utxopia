@@ -28,6 +28,8 @@
 // Core operations
 pub mod initialize;
 pub mod verify_stealth_deposit;
+pub mod register_deposit_intent;
+pub mod verify_deposit_v2;
 pub mod transact;
 pub mod redeem;
 pub mod request_redemption;
@@ -55,6 +57,8 @@ pub mod rotate_tree;
 // Re-exports
 pub use initialize::*;
 pub use verify_stealth_deposit::*;
+pub use register_deposit_intent::*;
+pub use verify_deposit_v2::*;
 pub use transact::*;
 pub use redeem::*;
 pub use request_redemption::*;

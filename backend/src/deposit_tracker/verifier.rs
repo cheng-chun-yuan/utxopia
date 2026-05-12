@@ -457,6 +457,12 @@ impl SpvVerifier {
             &[b"deposit_receipt", deposit_txid], &self.program_id,
         );
 
+        // Derive TokenConfig PDA for the zkBTC mint — verify_deposit_v2 reads
+        // token_id from here (multi-token support).
+        let (token_config_pda, _) = Pubkey::find_program_address(
+            &[b"token_config", zkbtc_mint.as_ref()], &self.program_id,
+        );
+
         // --- Instruction 1: btc-light-client verify_transaction ---
         let verify_tx_ix = self.build_verify_transaction_ix(
             payer, sweep_txid, merkle_proof, block_hash, sweep_tx_size,
@@ -485,6 +491,7 @@ impl SpvVerifier {
             AccountMeta::new_readonly(TOKEN_2022_PROGRAM_ID, false),     // 9: token_program
             AccountMeta::new(deposit_intent_pda, false),                 // 10: deposit_intent PDA
             AccountMeta::new(deposit_receipt_pda, false),                // 11: deposit_receipt
+            AccountMeta::new_readonly(token_config_pda, false),          // 12: token_config (required by v2)
         ];
 
         let v2_ix = Instruction {
