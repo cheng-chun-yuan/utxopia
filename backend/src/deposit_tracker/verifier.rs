@@ -491,7 +491,7 @@ impl SpvVerifier {
             AccountMeta::new_readonly(TOKEN_2022_PROGRAM_ID, false),     // 9: token_program
             AccountMeta::new(deposit_intent_pda, false),                 // 10: deposit_intent PDA
             AccountMeta::new(deposit_receipt_pda, false),                // 11: deposit_receipt
-            AccountMeta::new_readonly(token_config_pda, false),          // 12: token_config (required by v2)
+            AccountMeta::new(token_config_pda, false),                   // 12: token_config (writable: v2 increments total_shielded)
         ];
 
         let v2_ix = Instruction {
