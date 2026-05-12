@@ -64,14 +64,14 @@ services:
       ALLOWED_ORIGIN: "${ALLOWED_ORIGIN:-http://localhost:3002}"
     restart: unless-stopped
 
+  # Public tunnel for api.utxopia.com — managed via Cloudflare Zero Trust dashboard
+  # (Public Hostnames + routing live there; this container just runs the connector).
+  # Token is read from gitignored .env. To rotate, regenerate via the dashboard.
   cloudflared:
     image: cloudflare/cloudflared:latest
-    container_name: privacy-coin-cloudflared
+    container_name: utxopia-cloudflared
     restart: unless-stopped
-    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run
-    volumes:
-      - ${HOME}/.cloudflared/privacy-coin-backend.yml:/etc/cloudflared/config.yml:ro
-      - ${HOME}/.cloudflared/45a55012-105e-412b-ab39-ffcf9c8944dd.json:/etc/cloudflared/45a55012-105e-412b-ab39-ffcf9c8944dd.json:ro
+    command: tunnel --no-autoupdate run --token "${UTXOPIA_TUNNEL_TOKEN:?UTXOPIA_TUNNEL_TOKEN must be set (see .env)}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
