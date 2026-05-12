@@ -14,7 +14,11 @@
 # Coexists with docker-compose.backend.yml (testnet4 stack) — different container names + ports.
 
 services:
-  backend:
+  # Service name `api-hybrid` is what cloudflared (on the same docker network)
+  # resolves via DNS — see api-hybrid.utxopia.com tunnel route → http://api-hybrid:3001.
+  # `container_name` stays as utxopia-backend-hybrid for existing `docker logs`
+  # / `docker exec` commands.
+  api-hybrid:
     build:
       context: ./backend
       dockerfile: Dockerfile

@@ -4,6 +4,10 @@
 #   docker compose -f docker-compose.regtest.yml up -d
 
 services:
+  # Service name `esplora` is what cloudflared (on the same docker network)
+  # resolves via DNS — see btc.utxopia.com tunnel route → http://esplora.
+  # `container_name` stays as utxopia-esplora-regtest so existing scripts
+  # (bitcoin-cli helpers, `docker exec utxopia-esplora-regtest …`) keep working.
   esplora:
     image: blockstream/esplora
     container_name: utxopia-esplora-regtest
