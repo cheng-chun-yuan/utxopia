@@ -2,6 +2,7 @@
 
 import { useUiMode } from "@/hooks/use-ui-mode";
 import { cn } from "@/lib/utils";
+import { NetworkSelector } from "@/components/settings/network-selector";
 
 export function PreferencesForm() {
   const { isAdvanced } = useUiMode();
@@ -11,7 +12,9 @@ export function PreferencesForm() {
   const advancedDisabled = true;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
+      <NetworkSelector />
+
       <div
         className={cn(
           "flex items-start justify-between gap-4 p-4 rounded-xl border",

@@ -9,7 +9,7 @@ export default function SettingsPage() {
     <FlowPageLayout
       backHref="/vault"
       backLabel="Back"
-      width={460}
+      width={560}
       badges={[
         {
           icon: <SettingsIcon className="w-full h-full" />,
