@@ -60,8 +60,9 @@ services:
       # Set via .env file or `BACKEND_API_KEY=... docker compose up`.
       # Backend fails-closed if empty: every non-public endpoint returns 401.
       BACKEND_API_KEY: "${BACKEND_API_KEY:?BACKEND_API_KEY must be set (see .env or env override)}"
-      # Allowed CORS origin for the Vercel frontend. Override at runtime once you know the deploy URL.
-      ALLOWED_ORIGIN: "${ALLOWED_ORIGIN:-http://localhost:3002}"
+      # Allowed CORS origins (comma-separated; tower-http builds a list from these).
+      # Add your Vercel preview URL too if you need preview-build access from the browser.
+      ALLOWED_ORIGIN: "${ALLOWED_ORIGIN:-http://localhost:3000,http://localhost:3002,https://utxopia.com,https://www.utxopia.com,https://app.utxopia.com}"
     restart: unless-stopped
 
   # Public tunnel for api.utxopia.com — managed via Cloudflare Zero Trust dashboard
