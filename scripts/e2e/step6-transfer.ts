@@ -117,6 +117,10 @@ function generateProofViaNode(
 
     const proof = JSON.parse(fs.readFileSync(tmpProof, "utf8"));
     const publicSignals: string[] = JSON.parse(fs.readFileSync(tmpPublic, "utf8"));
+    // DIAGNOSIS: copy artifacts to a stable path so we can verify them offline.
+    fs.copyFileSync(tmpInput, path.join(tmpDir, `LAST_input_${circuitName}.json`));
+    fs.copyFileSync(tmpProof, path.join(tmpDir, `LAST_proof_${circuitName}.json`));
+    fs.copyFileSync(tmpPublic, path.join(tmpDir, `LAST_public_${circuitName}.json`));
     return { proof, publicSignals };
   } finally {
     try { fs.unlinkSync(tmpInput); } catch {}
