@@ -42,7 +42,7 @@ async function createToken(
   decimals: number,
   label: string,
   poolState: PublicKey,
-  utxo: PublicKey,
+  utxopia: PublicKey,
 ): Promise<{ mint: PublicKey; vault: PublicKey; userAta: PublicKey }> {
   // Create mint
   const mintKp = Keypair.generate();
@@ -81,7 +81,7 @@ async function registerTokenConfig(
   poolState: PublicKey,
   mint: PublicKey,
   vault: PublicKey,
-  utxo: PublicKey,
+  utxopia: PublicKey,
   label: string,
   serviceFee: bigint = 0n,
 ) {

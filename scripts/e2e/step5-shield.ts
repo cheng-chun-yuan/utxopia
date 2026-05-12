@@ -56,7 +56,7 @@ stepHeader(5, "Shield SPL Tokens");
 
 async function shieldToken(
   authority: ReturnType<typeof loadAuthority>,
-  utxo: PublicKey,
+  utxopia: PublicKey,
   poolState: PublicKey,
   commitmentTree: PublicKey,
   mint: PublicKey,
@@ -141,7 +141,7 @@ async function shieldToken(
  */
 async function shieldSOL(
   authority: ReturnType<typeof loadAuthority>,
-  utxo: PublicKey,
+  utxopia: PublicKey,
   poolState: PublicKey,
   commitmentTree: PublicKey,
   lamports: bigint,

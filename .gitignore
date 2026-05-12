@@ -57,7 +57,7 @@ circuits/build/joinsplit_*/*
 sdk/circuits/
 
 # Unused programs
-contracts/programs/chadbuffer/
+# contracts/programs/chadbuffer/  (restored for localnet E2E)
 .gstack/
 backend/data/*.db
 
@@ -68,3 +68,4 @@ backend/data/*.db
 # Superpowers design docs (generated, not tracked)
 docs/superpowers/
 scripts/.demo-seed.json
+contracts/programs/chadbuffer/*.so
