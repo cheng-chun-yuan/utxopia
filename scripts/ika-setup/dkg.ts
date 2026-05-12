@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * One-shot Solana-native Ika DKG runner for Privacy Coin.
+ * One-shot Solana-native Ika DKG runner for UTXOpia.
  *
  * Replaces the runbook-driven setup-dwallet.ts. Flow:
  *   1. gRPC DKG against Ika devnet for curve=Secp256k1.
@@ -14,7 +14,7 @@
  * No Sui involvement.
  *
  * Usage:
- *   PRIVACY_COIN_PROGRAM_ID=<pid> PAYER_KEYPAIR_PATH=<path> \
+ *   UTXOPIA_PROGRAM_ID=<pid> PAYER_KEYPAIR_PATH=<path> \
  *     bun run dkg.ts --network devnet
  */
 
@@ -41,9 +41,9 @@ const IKA_PROGRAM_ID = new PublicKey(
   "87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY",
 );
 
-const programIdStr = process.env.PRIVACY_COIN_PROGRAM_ID;
+const programIdStr = process.env.UTXOPIA_PROGRAM_ID;
 if (!programIdStr) {
-  console.error("error: PRIVACY_COIN_PROGRAM_ID required");
+  console.error("error: UTXOPIA_PROGRAM_ID required");
   process.exit(1);
 }
 const privacyCoinProgramId = new PublicKey(programIdStr);
@@ -70,7 +70,7 @@ console.log("\n═══ Ika dWallet DKG (Secp256k1 + Taproot) ═══");
 console.log(`Network:           ${NETWORK}`);
 console.log(`Solana RPC:        ${RPC_URL}`);
 console.log(`Ika program:       ${IKA_PROGRAM_ID.toBase58()}`);
-console.log(`Privacy Coin pid:  ${privacyCoinProgramId.toBase58()}`);
+console.log(`UTXOpia pid:  ${privacyCoinProgramId.toBase58()}`);
 console.log(`Payer:             ${payer.publicKey.toBase58()}`);
 console.log(`State file:        ${STATE_FILE}`);
 console.log();
@@ -130,7 +130,7 @@ state.ika = {
 writeFileSync(STATE_FILE, JSON.stringify(state, null, 2) + "\n");
 console.log(`\n✓ Wrote ika.* block to ${STATE_FILE}`);
 console.log(
-  "\nNext step: PRIVACY_COIN_NETWORK=" +
+  "\nNext step: UTXOPIA_NETWORK=" +
     NETWORK +
     " ./scripts/sync-env.sh",
 );

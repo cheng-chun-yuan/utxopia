@@ -47,8 +47,8 @@ describe("detectRecipient", () => {
     expect(r.confidence).toBe("medium");
   });
 
-  it("detects stealth meta-address (hex prefix 'pcoin:')", () => {
-    const meta = "pcoin:" + "01".repeat(32) + "02".repeat(32);
+  it("detects stealth meta-address (hex prefix 'utxo:')", () => {
+    const meta = "utxo:" + "01".repeat(32) + "02".repeat(32);
     const r = detectRecipient(meta);
     expect(r.type).toBe("stealth_meta");
     expect(r.confidence).toBe("high");

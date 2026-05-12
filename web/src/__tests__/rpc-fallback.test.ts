@@ -69,7 +69,7 @@ function encodeBase58(bytes: Uint8Array): string {
 describe("RPC fallback: instruction discriminator extraction", () => {
   const VERIFY_DISC = 1;
   const SHIELD_DISC = 29;
-  const PRIVACY_COIN_PROGRAM_ID = "8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim";
+  const UTXOPIA_PROGRAM_ID = "8fqRet9WB5PECvKfWmzTPSusJgQz1onzxTLfHD75XKim";
 
   /** Simulate extractInstructionDisc from rpc-fallback.ts */
   function extractInstructionDisc(result: any): number | null {
@@ -81,7 +81,7 @@ describe("RPC fallback: instruction discriminator extraction", () => {
       const instructions = message?.instructions ?? [];
       for (const ix of instructions) {
         const programIdx = ix.programIdIndex;
-        if (accountKeys[programIdx] === PRIVACY_COIN_PROGRAM_ID && ix.data) {
+        if (accountKeys[programIdx] === UTXOPIA_PROGRAM_ID && ix.data) {
           const decoded = decodeBase58(ix.data);
           if (decoded.length > 0) return decoded[0];
         }
@@ -101,11 +101,11 @@ describe("RPC fallback: instruction discriminator extraction", () => {
         message: {
           accountKeys: [
             "SomeUserKey111111111111111111111111111111111",
-            PRIVACY_COIN_PROGRAM_ID,
+            UTXOPIA_PROGRAM_ID,
             "11111111111111111111111111111111",
           ],
           instructions: [{
-            programIdIndex: 1, // points to PRIVACY_COIN_PROGRAM_ID
+            programIdIndex: 1, // points to UTXOPIA_PROGRAM_ID
             data: encoded,
             accounts: [0, 2],
           }],
@@ -125,7 +125,7 @@ describe("RPC fallback: instruction discriminator extraction", () => {
     expect(extractInstructionDisc(result)).toBe(29);
   });
 
-  it("returns null for non-PrivacyCoin transaction", () => {
+  it("returns null for non-UTXOpia transaction", () => {
     const result = {
       transaction: {
         message: {
@@ -145,7 +145,7 @@ describe("RPC fallback: instruction discriminator extraction", () => {
     const result = {
       transaction: {
         message: {
-          accountKeys: [PRIVACY_COIN_PROGRAM_ID],
+          accountKeys: [UTXOPIA_PROGRAM_ID],
           instructions: [{ programIdIndex: 0 }],
         },
       },

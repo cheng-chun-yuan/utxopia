@@ -1,6 +1,6 @@
 //! Common Infrastructure Module
 //!
-//! Shared utilities for the Privacy Coin backend.
+//! Shared utilities for the UTXOpia backend.
 //!
 //! This module contains:
 //! - Structured logging setup
@@ -19,8 +19,8 @@ pub mod reconnect;
 pub mod ws;
 
 // Re-export config types from crate::config for convenience
-pub use crate::config::{ConfigError, Network, SigningMode, PrivacyCoinConfig};
-pub use error::{Result, PrivacyCoinError};
+pub use crate::config::{ConfigError, Network, SigningMode, UTXOpiaConfig};
+pub use error::{Result, UTXOpiaError};
 pub use logging::{
     generate_correlation_id, init_from_config, init_logging, log_api_request, log_api_response,
     log_deposit_event, log_security_event, log_withdrawal_event, ErrorDetails, EventCategory,

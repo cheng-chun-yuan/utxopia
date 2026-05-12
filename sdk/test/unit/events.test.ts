@@ -1,5 +1,5 @@
 /**
- * Event parser tests for Privacy Coin sol_log_data events
+ * Event parser tests for UTXOpia sol_log_data events
  */
 
 import { describe, test, expect } from "bun:test";

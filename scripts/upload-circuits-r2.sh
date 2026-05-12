@@ -10,7 +10,7 @@
 set -euo pipefail
 
 BUCKET="zvault-circuits"
-CIRCUIT_DIR="privacy-coin-app/public/circuits/groth16"
+CIRCUIT_DIR="utxopia-app/public/circuits/groth16"
 
 TIER1=(joinsplit_1x1 joinsplit_1x2 joinsplit_2x1 joinsplit_2x2)
 TIER2=(joinsplit_1x1 joinsplit_1x2 joinsplit_1x3 joinsplit_1x4 joinsplit_2x1 joinsplit_2x2 joinsplit_2x3 joinsplit_3x1 joinsplit_3x2 joinsplit_4x1)

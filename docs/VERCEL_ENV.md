@@ -8,7 +8,7 @@ Copy these into the Vercel dashboard (Project → Settings → Environment Varia
 | --- | --- |
 | `NEXT_PUBLIC_NETWORK` | `devnet` |
 | `NEXT_PUBLIC_BACKEND_API_URL` | `https://api.utxopia.com` |
-| `NEXT_PUBLIC_PRIVACY_COIN_PROGRAM_ID` | `G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy` |
+| `NEXT_PUBLIC_UTXOPIA_PROGRAM_ID` | `G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy` |
 | `NEXT_PUBLIC_ZKBTC_MINT` | `CDqY9mTzbWma7GzCULTJMMZzyVothKEXtr7AnXdpD6v8` |
 | `NEXT_PUBLIC_BTC_NETWORK` | `testnet4` |
 | `NEXT_PUBLIC_SOLANA_RPC_URL` | `https://api.devnet.solana.com` |
@@ -55,7 +55,7 @@ Browser ──► https://<your-vercel-domain>          (Vercel-hosted Next.js)
                        utxopia-cloudflared (Docker, locally)
                                                   │
                                                   ▼
-                       backend:3001 (privacy-coin-backend container)
+                       backend:3001 (utxopia-backend container)
                                                   │
                                                   ▼
                            Solana devnet + Bitcoin testnet4

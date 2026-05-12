@@ -25,7 +25,7 @@ import {
   POOL_STATE_SIZE,
 } from "../helpers/pda";
 
-describe("Privacy Coin Instruction Encoding", function () {
+describe("UTXOpia Instruction Encoding", function () {
   let authority: Keypair;
   let user: Keypair;
   let poolStatePda: PublicKey;

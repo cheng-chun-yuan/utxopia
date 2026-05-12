@@ -41,7 +41,7 @@ const networks = networksJson as Record<NetworkId, NetworkConfig>;
 export function detectNetwork(): NetworkId {
   const env =
     process.env.NEXT_PUBLIC_NETWORK ||
-    process.env.PRIVACY_COIN_NETWORK ||
+    process.env.UTXOPIA_NETWORK ||
     "devnet";
   if (env === "mainnet" || env === "mainnet-beta") return "mainnet";
   if (env === "testnet") return "testnet";

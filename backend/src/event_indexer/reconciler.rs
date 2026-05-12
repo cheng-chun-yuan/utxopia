@@ -203,7 +203,7 @@ impl Reconciler {
     /// all commitment hashes. We seed the local DB from that file.
     async fn try_seed_from_state_file(&self) -> Option<usize> {
         // Only attempt on localnet
-        let network = std::env::var("PRIVACY_COIN_NETWORK").unwrap_or_default();
+        let network = std::env::var("UTXOPIA_NETWORK").unwrap_or_default();
         if network != "localnet" {
             return None;
         }

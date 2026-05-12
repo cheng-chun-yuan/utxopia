@@ -1,7 +1,7 @@
-//! Shared constants for the Privacy Coin backend.
+//! Shared constants for the UTXOpia backend.
 
 // =============================================================================
-// Pool State Layout Offsets (matches contracts/programs/privacy-coin/src/state/pool.rs)
+// Pool State Layout Offsets (matches contracts/programs/utxopia/src/state/pool.rs)
 // =============================================================================
 
 /// PoolState byte offsets for zero-copy deserialization.

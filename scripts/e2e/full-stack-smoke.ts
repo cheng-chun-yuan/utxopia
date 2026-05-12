@@ -130,7 +130,7 @@ function startService(
   cwd: string,
   env?: NodeJS.ProcessEnv,
 ): StartedService {
-  const logPath = path.join("/tmp", `privacy-coin-${name}-${Date.now()}.log`);
+  const logPath = path.join("/tmp", `utxopia-${name}-${Date.now()}.log`);
   const logStream = fs.createWriteStream(logPath, { flags: "a" });
   const proc = spawn(cmd, cmdArgs, {
     cwd,
@@ -247,12 +247,12 @@ function makeBackendEnv(state: LocalnetState): NodeJS.ProcessEnv {
   const timestamp = Date.now().toString();
 
   return {
-    PRIVACY_COIN_NETWORK: "localnet",
-    PRIVACY_COIN_PROGRAM_ID: state.privacyCoinProgramId,
-    PRIVACY_COIN_SOLANA_RPC: SOLANA_RPC_URL,
+    UTXOPIA_NETWORK: "localnet",
+    UTXOPIA_PROGRAM_ID: state.privacyCoinProgramId,
+    UTXOPIA_SOLANA_RPC: SOLANA_RPC_URL,
     SOLANA_RPC_URL,
     BTC_LIGHT_CLIENT_PROGRAM_ID: state.btcLightClientId,
-    PRIVACY_COIN_BITCOIN_NETWORK: "regtest",
+    UTXOPIA_BITCOIN_NETWORK: "regtest",
     ESPLORA_URL,
     MEMPOOL_API_URL: ESPLORA_URL,
     MEMPOOL_WS_ENABLED: "false",
@@ -262,10 +262,10 @@ function makeBackendEnv(state: LocalnetState): NodeJS.ProcessEnv {
     BACKEND_API_KEY: API_KEY,
     ALLOWED_ORIGIN: WEB_URL,
     TRACKER_API_PORT: "3001",
-    DEPOSIT_DB_PATH: `/tmp/privacy-coin-deposits-${timestamp}.db`,
-    INDEXER_DB_PATH: `/tmp/privacy-coin-events-${timestamp}.db`,
+    DEPOSIT_DB_PATH: `/tmp/utxopia-deposits-${timestamp}.db`,
+    INDEXER_DB_PATH: `/tmp/utxopia-events-${timestamp}.db`,
     RELAYER_FEE_SATS: "500",
-    PRIVACY_COIN_SIGNING_MODE: "single",
+    UTXOPIA_SIGNING_MODE: "single",
     VERIFIER_KEYPAIR: keypairPath,
     RELAYER_KEYPAIR: keypairPath,
     RUST_LOG: "info,zkbtc=debug",

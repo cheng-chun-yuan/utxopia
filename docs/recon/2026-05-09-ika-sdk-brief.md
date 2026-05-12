@@ -61,7 +61,7 @@ Source: `crates/ika-dwallet-types/src/lib.rs` lines 163–180.
 | `EddsaSha512` | `5` | Ed25519 (Solana, Sui) |
 | `SchnorrkelMerlin` | `6` | Substrate |
 
-For Privacy Coin v2 BTC redemptions: **`signature_scheme = 3` (TaprootSha256)** with the dWallet curve set to `Secp256k1`.
+For UTXOpia v2 BTC redemptions: **`signature_scheme = 3` (TaprootSha256)** with the dWallet curve set to `Secp256k1`.
 
 ## Account discriminators (Ika program)
 
@@ -87,7 +87,7 @@ Offsets after the 2-byte disc+version prefix:
 | 142 | is_imported | 1 |
 | 659 | bump | 1 |
 
-The Privacy Coin watcher reads `public_key` at offset 37 to populate `pool_config.ika_dwallet_pubkey`.
+The UTXOpia watcher reads `public_key` at offset 37 to populate `pool_config.ika_dwallet_pubkey`.
 
 ## DKG flow (one-shot setup)
 
@@ -96,10 +96,10 @@ Source: `chains/solana/examples/_shared/ika-setup.ts` `setupDWallet(...)`.
 Sequence:
 1. **Wait for the coordinator PDA**: poll `[b"dwallet_coordinator"]` until `data[0] == 1` (DISC_COORDINATOR) and len ≥ 116.
 2. **Find the NEK**: `getProgramAccounts(dwalletProgramId)` filtered by `data[0] == 3`. Take the first one.
-3. **Build a `SignedRequestData` BCS payload** with `chain_id: { Solana: true }`, `intended_chain_sender: payer.publicKey`, `request: { DKG: { ... curve, … } }`. For Privacy Coin we use `curve: { Secp256k1: true }` (TS index — observe at runtime).
+3. **Build a `SignedRequestData` BCS payload** with `chain_id: { Solana: true }`, `intended_chain_sender: payer.publicKey`, `request: { DKG: { ... curve, … } }`. For UTXOpia we use `curve: { Secp256k1: true }` (TS index — observe at runtime).
 4. **Submit via gRPC** to `pre-alpha-dev-1.ika.ika-network.net:443`. Returns a `TransactionResponseData::Attestation` payload.
 5. **Use the attestation to send the on-chain Solana tx** that creates the dWallet account.
-6. **Transfer authority** of the dWallet to our Privacy Coin's CPI authority PDA via `IX_TRANSFER_OWNERSHIP = 24` (`DWalletContext::transfer_dwallet`).
+6. **Transfer authority** of the dWallet to our UTXOpia's CPI authority PDA via `IX_TRANSFER_OWNERSHIP = 24` (`DWalletContext::transfer_dwallet`).
 
 For our pivot: this one-shot flow lives in `scripts/ika-setup/` (TypeScript — we copy the `_shared/ika-setup.ts` patterns). It runs once per pool deployment and writes the resulting dWallet address + pubkey into `localnet-state.json` / `devnet-state.json` so `sync-env.sh` propagates them.
 
@@ -118,7 +118,7 @@ The `requestSign(...)` helper at `chains/solana/examples/_shared/ika-setup.ts:53
 - Pre-create the dWallet account in LiteSVM with `data[0] = DISC_DWALLET` and `authority = our_cpi_authority_pda` (mocks the post-DKG state).
 - Send our program's instruction; assert the resulting `MessageApproval` PDA exists and contains the right `message_digest`.
 
-We adopt this pattern verbatim for `contracts/programs/privacy-coin/tests/complete_redemption_ika_cpi.rs` in Task 4.
+We adopt this pattern verbatim for `contracts/programs/utxopia/tests/complete_redemption_ika_cpi.rs` in Task 4.
 
 ## Latency observed
 

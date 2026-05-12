@@ -30,10 +30,10 @@ import {
 import {
   createAssociatedTokenAccountIdempotentInstruction,
 } from "@solana/spl-token";
-const getPrivacyCoinSDK = () => import("@privacy-coin/sdk");
+const getUTXOpiaSDK = () => import("@utxopia/sdk");
 
 import {
-  getPrivacyCoinProgramId,
+  getUTXOpiaProgramId,
   getChadbufferProgramId,
   getToken2022ProgramId,
   getZkbtcMint,
@@ -122,7 +122,7 @@ function validateHexField(
 }
 
 function deriveRedemptionRequestPDA(
-  user: PublicKey, nonce: bigint, programId: PublicKey = getPrivacyCoinProgramId()
+  user: PublicKey, nonce: bigint, programId: PublicKey = getUTXOpiaProgramId()
 ): [PublicKey, number] {
   return deriveSyncRedemptionRequestPDA(user, nonce, programId);
 }
@@ -244,7 +244,7 @@ export async function POST(request: NextRequest) {
       buildTransactInstructionData,
       buildUnshieldInstructionData,
       buildRedeemInstructionData,
-    } = await getPrivacyCoinSDK();
+    } = await getUTXOpiaSDK();
 
     const body: RelayRequest = await request.json();
     const { mode = "transfer" } = body;
@@ -457,7 +457,7 @@ export async function POST(request: NextRequest) {
 
     // ── Submit transaction ─────────────────────────────────────────────
     const mainIx = new TransactionInstruction({
-      programId: getPrivacyCoinProgramId(),
+      programId: getUTXOpiaProgramId(),
       keys,
       data: Buffer.from(ixData),
     });

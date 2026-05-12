@@ -28,7 +28,7 @@ export function SiteHeader() {
               <Shield className="h-3.5 w-3.5 text-privacy privacy-glow" />
             </motion.div>
             <span className="text-sm font-semibold tracking-tight text-foreground group-hover:text-privacy transition-colors">
-              Privacy Coin
+              UTXOpia
             </span>
           </Link>
 

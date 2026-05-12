@@ -8,8 +8,8 @@
  */
 
 import { PublicKey } from "@solana/web3.js";
-import type { InboxNote } from "@/hooks/use-privacy-coin";
-import type { JoinSplitProofInputs, PrivacyCoinKeys, StealthMetaAddress, ScannedNote } from "@privacy-coin/sdk";
+import type { InboxNote } from "@/hooks/use-utxopia";
+import type { JoinSplitProofInputs, UTXOpiaKeys, StealthMetaAddress, ScannedNote } from "@utxopia/sdk";
 import { ZKBTC_TOKEN_ID, reduceToFieldOnChain } from "@/components/send/_lifted/helpers";
 
 export type TransferMode = "stealth" | "public" | "btc";
@@ -19,8 +19,8 @@ export interface TransferUserInputs {
   amountSats: bigint;
   /** Selected notes from inbox */
   selectedNotes: InboxNote[];
-  /** User's privacy-coin keys */
-  keys: PrivacyCoinKeys;
+  /** User's utxopia keys */
+  keys: UTXOpiaKeys;
   /** User's stealth meta address (for change output) */
   selfMeta: StealthMetaAddress;
   /** Relayer stealth meta (for fee output) */
@@ -63,18 +63,18 @@ export async function buildTransferParams(inputs: TransferUserInputs): Promise<T
     createTransferBoundParams,
     computeStealthDataHash,
     decodeStealthMetaAddress,
-    PrivacyCoinClient,
+    UTXOpiaClient,
     bytesToHex,
-  } = await import("@privacy-coin/sdk");
+  } = await import("@utxopia/sdk");
 
   await initPoseidon();
 
   const { mode, amountSats, selectedNotes, keys, selfMeta, relayerMeta, relayerFee, recipient } = inputs;
 
   // 1. Fetch merkle proofs and prepare claim inputs for each note
-  const pcoinClient = PrivacyCoinClient.isInitialized
-    ? PrivacyCoinClient.instance()
-    : await PrivacyCoinClient.init();
+  const pcoinClient = UTXOpiaClient.isInitialized
+    ? UTXOpiaClient.instance()
+    : await UTXOpiaClient.init();
 
   const merkleProofs = await pcoinClient.fetchMerkleProofs(
     selectedNotes.map((n) => n.commitmentHex),

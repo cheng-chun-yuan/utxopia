@@ -7,9 +7,9 @@ addon "svm" {
     network_id = input.network_id
 }
 
-action "deploy_privacy_coin" "svm::deploy_program" {
-    description = "Deploy Privacy Coin program"
-    program = svm::get_program_from_native_project("privacy-coin")
+action "deploy_utxopia" "svm::deploy_program" {
+    description = "Deploy UTXOpia program"
+    program = svm::get_program_from_native_project("utxopia")
     authority = signer.authority
     payer = signer.payer
 }

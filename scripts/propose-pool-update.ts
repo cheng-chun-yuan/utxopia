@@ -5,7 +5,7 @@
  */
 
 import { TransactionInstruction } from "@solana/web3.js";
-import { buildProposePoolUpdateInstructionData } from "@privacy-coin/sdk";
+import { buildProposePoolUpdateInstructionData } from "@utxopia/sdk";
 import { setupScript, sendTx } from "./lib/common.ts";
 
 const args = process.argv.slice(2);

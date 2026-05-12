@@ -62,7 +62,7 @@ function loadProgramId(): PublicKey {
   if (process.env.PROGRAM_ID) return new PublicKey(process.env.PROGRAM_ID);
   try {
     const config = loadConfig();
-    return new PublicKey(config.programs.PrivacyCoin);
+    return new PublicKey(config.programs.UTXOpia);
   } catch {
     return NETWORK === "devnet"
       ? new PublicKey(DEVNET_PROGRAM_ID)

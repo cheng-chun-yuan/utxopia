@@ -36,7 +36,7 @@ import { formatBlockHeaderForChain, formatMerkleProofForChain } from "@/lib/spv/
 import { zkBTCApi } from "@/lib/api/client";
 import { getEsploraApiUrl, getMempoolExplorerUrl } from "@/lib/btc-network";
 import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
-import { getConfig } from "@privacy-coin/sdk";
+import { getConfig } from "@utxopia/sdk";
 
 interface VerificationData {
   txInfo: TransactionInfo;

@@ -1,5 +1,5 @@
 /**
- * Taproot address utilities for Privacy Coin
+ * Taproot address utilities for UTXOpia
  *
  * Generates commitment-bound Taproot addresses following BIP-340/341.
  * The deposit address is derived from the commitment, ensuring
@@ -10,7 +10,7 @@ import { taggedHash, hexToBytes, bytesToHex } from "./crypto";
 import * as bech32 from "bech32";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 
-// Privacy Coin internal key (x-only pubkey)
+// UTXOpia internal key (x-only pubkey)
 // In production, this should be the FROST threshold key
 // Using a test key for demonstration
 const INTERNAL_KEY_HEX =
@@ -577,7 +577,7 @@ export function deriveTaprootAddressWithRefund(
 }
 
 /**
- * Get the internal key used by Privacy Coin
+ * Get the internal key used by UTXOpia
  * In production, this would be the FROST threshold public key
  */
 export function getInternalKey(): Uint8Array {

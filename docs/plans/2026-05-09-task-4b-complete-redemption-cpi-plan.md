@@ -1,15 +1,15 @@
 # Task 4b — `complete_redemption` CPIs Ika `approve_message`: Implementation Plan
 
 > **Sub-plan of:** `docs/plans/2026-05-09-ika-phase1-implementation-plan.md` (Task 4).
-> **Predecessors:** Tasks 0–3 (recon, PoolConfig fields, SDK helpers) plus Task 4a (manual CPI helper at `contracts/programs/privacy-coin/src/cpi/ika.rs`) — all landed.
+> **Predecessors:** Tasks 0–3 (recon, PoolConfig fields, SDK helpers) plus Task 4a (manual CPI helper at `contracts/programs/utxopia/src/cpi/ika.rs`) — all landed.
 > **Successor:** Task 5 (off-chain Ika watcher polls `MessageApproval`/`Sign` PDAs).
 > **Branch:** `ika`.
 
 ## Executive summary
 
-Task 4a landed a Pinocchio-0.9 manual CPI helper (`cpi::ika::approve_message`) that wraps the Ika dWallet program's `approve_message` (discriminator 8). Task 4b finishes the on-chain side of the FROST→Ika pivot: when `complete_redemption` succeeds, the Privacy Coin program (1) runs the *pure* portion of `frost_server::policy` against the redemption (amount limits, fee bound, paused state) on-chain, (2) accepts the BIP-341 taproot sighash as opaque 32-byte instruction data from the trusted backend caller, and (3) issues the CPI to Ika to create a `MessageApproval` PDA. The off-chain mock signer (Task 5) populates the `Sign` PDA asynchronously; this plan stops at the CPI dispatch and `MessageApproval` creation.
+Task 4a landed a Pinocchio-0.9 manual CPI helper (`cpi::ika::approve_message`) that wraps the Ika dWallet program's `approve_message` (discriminator 8). Task 4b finishes the on-chain side of the FROST→Ika pivot: when `complete_redemption` succeeds, the UTXOpia program (1) runs the *pure* portion of `frost_server::policy` against the redemption (amount limits, fee bound, paused state) on-chain, (2) accepts the BIP-341 taproot sighash as opaque 32-byte instruction data from the trusted backend caller, and (3) issues the CPI to Ika to create a `MessageApproval` PDA. The off-chain mock signer (Task 5) populates the `Sign` PDA asynchronously; this plan stops at the CPI dispatch and `MessageApproval` creation.
 
-The architecturally load-bearing decision is to **pass the sighash as a 32-byte field in instruction data** rather than recompute it on-chain. The Privacy Coin program already SPV-validates the *settled* BTC tx in `complete_redemption` (against a `VerifiedTransaction` PDA owned by `btc-light-client`). The pre-broadcast unsigned-tx sighash, by contrast, would require the program to re-serialize a full Bitcoin transaction (inputs + prevouts + scripts + scheme byte) and call BIP-341 hashing — none of which is currently in `utils/secp256k1.rs` and all of which costs CU we cannot afford. The trust boundary stays at the Privacy Coin program (it owns the redemption PDA, its `btc_script`, and its `amount_sats`); the backend's only freedom in choosing the sighash is to choose a different unsigned tx, which we constrain via on-chain policy + the existing post-settlement `complete_redemption` SPV check that ties the *broadcast* tx output back to the redemption's `btc_script` and amount.
+The architecturally load-bearing decision is to **pass the sighash as a 32-byte field in instruction data** rather than recompute it on-chain. The UTXOpia program already SPV-validates the *settled* BTC tx in `complete_redemption` (against a `VerifiedTransaction` PDA owned by `btc-light-client`). The pre-broadcast unsigned-tx sighash, by contrast, would require the program to re-serialize a full Bitcoin transaction (inputs + prevouts + scripts + scheme byte) and call BIP-341 hashing — none of which is currently in `utils/secp256k1.rs` and all of which costs CU we cannot afford. The trust boundary stays at the UTXOpia program (it owns the redemption PDA, its `btc_script`, and its `amount_sats`); the backend's only freedom in choosing the sighash is to choose a different unsigned tx, which we constrain via on-chain policy + the existing post-settlement `complete_redemption` SPV check that ties the *broadcast* tx output back to the redemption's `btc_script` and amount.
 
 ## Architectural decisions (locked in)
 
@@ -23,7 +23,7 @@ The architecturally load-bearing decision is to **pass the sighash as a 32-byte 
 
 4. **On-chain policy: only the pure validation parts port.** Read of `frost_server/src/policy.rs` shows nine sections: (1) sighash recompute → drop (decision 1); (2) Esplora UTXO check → drop (off-chain only, requires HTTP); (3) destination address parsing → drop (Bitcoin address parsing is heavy); (4) amount limit; (5) fee limit; (6) Solana on-chain verification → already done elsewhere in this same instruction; (6b) PDA service-fee sanity → already done at request time; (6c) UTXO PDA cross-check → already done in `mark_processing`; (7) duplicate signing → already done by `CompletionReceipt` + `RedemptionStatus`; (8) cross-validate outputs → already done by `complete_redemption`'s output-match block; (9) mempool check → off-chain only.
 
-   Net port: **only #4 (`max_amount_sats`) and #5 (`max_fee_sats`) survive.** Plus a `paused` check pulled from `PoolState::is_paused()` (already in tree). New file `contracts/programs/privacy-coin/src/utils/policy.rs` with one public function: `pub fn check_redemption_signing(pool: &PoolState, amount_sats: u64, miner_fee: u64) -> Result<(), ProgramError>`. Constants `MAX_REDEMPTION_AMOUNT_SATS` and `MAX_MINER_FEE_SATS` are local consts (matching `complete_redemption.rs`'s existing `MAX_FEE_SATS = 50_000`).
+   Net port: **only #4 (`max_amount_sats`) and #5 (`max_fee_sats`) survive.** Plus a `paused` check pulled from `PoolState::is_paused()` (already in tree). New file `contracts/programs/utxopia/src/utils/policy.rs` with one public function: `pub fn check_redemption_signing(pool: &PoolState, amount_sats: u64, miner_fee: u64) -> Result<(), ProgramError>`. Constants `MAX_REDEMPTION_AMOUNT_SATS` and `MAX_MINER_FEE_SATS` are local consts (matching `complete_redemption.rs`'s existing `MAX_FEE_SATS = 50_000`).
 
 5. **Test harness: Mollusk with the pre-built `ika_dwallet_program.so`.** We reuse the upstream-provided binary at `/tmp/ika-pre-alpha-scratch/ika-pre-alpha/bin/ika_dwallet_program.so` (referenced in recon brief). We pre-populate Coordinator + DWallet + payer accounts following the voting example's `litesvm.rs` pattern, then drive `complete_redemption`, then assert the `MessageApproval` PDA was created and contains the right `message_hash`. The Mollusk recorder is *not* needed — the upstream Ika program creates a real PDA we can read post-execution.
 
@@ -31,12 +31,12 @@ The architecturally load-bearing decision is to **pass the sighash as a 32-byte 
 
 | File | Status | Responsibility |
 |---|---|---|
-| `contracts/programs/privacy-coin/src/utils/policy.rs` | **NEW** | Pure on-chain redemption-signing policy: amount cap + fee cap + paused. Single public fn `check_redemption_signing`. |
-| `contracts/programs/privacy-coin/src/utils/mod.rs` | **MODIFY** | Add `pub mod policy;` and re-export. |
-| `contracts/programs/privacy-coin/src/instructions/complete_redemption.rs` | **MODIFY** | Accept new 32-byte `btc_sighash` field at end of ix data. After existing SPV+burn block, run `policy::check_redemption_signing`, then CPI `cpi::ika::approve_message` with cached `cpi_authority_bump`. New 6 accounts appended after consumed UTXOs. |
-| `contracts/programs/privacy-coin/src/error.rs` | **MODIFY** | Add three error variants: `RedemptionAmountExceedsLimit`, `RedemptionFeeExceedsLimit`, `IkaCpiAccountsMissing`. |
-| `contracts/programs/privacy-coin/tests/complete_redemption_ika_cpi.rs` | **NEW** | Mollusk test: load `ika_dwallet_program.so`, build `complete_redemption` ix with full 19+ accounts, assert program returns Ok and `MessageApproval` PDA was created with the expected `message_hash`. |
-| `contracts/programs/privacy-coin/Cargo.toml` | **MODIFY** | Bump `[dev-dependencies]` already has `mollusk-svm` and `litesvm`; only add new test target if `tests/` dir didn't exist. (It doesn't — first integration test in this crate.) |
+| `contracts/programs/utxopia/src/utils/policy.rs` | **NEW** | Pure on-chain redemption-signing policy: amount cap + fee cap + paused. Single public fn `check_redemption_signing`. |
+| `contracts/programs/utxopia/src/utils/mod.rs` | **MODIFY** | Add `pub mod policy;` and re-export. |
+| `contracts/programs/utxopia/src/instructions/complete_redemption.rs` | **MODIFY** | Accept new 32-byte `btc_sighash` field at end of ix data. After existing SPV+burn block, run `policy::check_redemption_signing`, then CPI `cpi::ika::approve_message` with cached `cpi_authority_bump`. New 6 accounts appended after consumed UTXOs. |
+| `contracts/programs/utxopia/src/error.rs` | **MODIFY** | Add three error variants: `RedemptionAmountExceedsLimit`, `RedemptionFeeExceedsLimit`, `IkaCpiAccountsMissing`. |
+| `contracts/programs/utxopia/tests/complete_redemption_ika_cpi.rs` | **NEW** | Mollusk test: load `ika_dwallet_program.so`, build `complete_redemption` ix with full 19+ accounts, assert program returns Ok and `MessageApproval` PDA was created with the expected `message_hash`. |
+| `contracts/programs/utxopia/Cargo.toml` | **MODIFY** | Bump `[dev-dependencies]` already has `mollusk-svm` and `litesvm`; only add new test target if `tests/` dir didn't exist. (It doesn't — first integration test in this crate.) |
 
 ## Pre-flight check
 
@@ -55,7 +55,7 @@ Expected: branch `ika`; recent commit history mentions Task 4a (the `cpi/ika.rs`
 
 ```bash
 cd /Users/chengchunyuan/project/hackathon/private_coin/contracts
-cargo test -p privacy-coin 2>&1 | tail -20
+cargo test -p utxopia 2>&1 | tail -20
 ```
 
 Expected: `test result: ok. 107 passed` (or higher). Any failure here is blocking — fix before starting Task 4b.
@@ -64,7 +64,7 @@ Expected: `test result: ok. 107 passed` (or higher). Any failure here is blockin
 
 ```bash
 cd /Users/chengchunyuan/project/hackathon/private_coin
-cargo build-sbf --features localnet --manifest-path contracts/programs/privacy-coin/Cargo.toml 2>&1 | tail -5
+cargo build-sbf --features localnet --manifest-path contracts/programs/utxopia/Cargo.toml 2>&1 | tail -5
 ```
 
 Expected: `Finished`.
@@ -83,19 +83,19 @@ Expected: file exists, size >100KB. If missing, restore from upstream repo befor
 
 **Why this exists:** New policy checks need typed errors so callers can react. Reusing `ProgramError::Custom(N)` is fine but typed errors keep `cargo test` failure messages readable.
 
-**Files:** `contracts/programs/privacy-coin/src/error.rs`
+**Files:** `contracts/programs/utxopia/src/error.rs`
 
 - [ ] **Step 4b.1.1: Read existing error tail to find next free discriminant**
 
 ```bash
-grep -nE "^[[:space:]]*[A-Z][a-zA-Z]+ = [0-9]+" /Users/chengchunyuan/project/hackathon/private_coin/contracts/programs/privacy-coin/src/error.rs | tail -10
+grep -nE "^[[:space:]]*[A-Z][a-zA-Z]+ = [0-9]+" /Users/chengchunyuan/project/hackathon/private_coin/contracts/programs/utxopia/src/error.rs | tail -10
 ```
 
 Capture the highest variant number — the new ones append after it.
 
 - [ ] **Step 4b.1.2: Add three new variants**
 
-In `error.rs`, immediately before the closing `}` of `enum PrivacyCoinError`, insert:
+In `error.rs`, immediately before the closing `}` of `enum UTXOpiaError`, insert:
 
 ```rust
     #[error("Redemption amount exceeds policy limit")]
@@ -114,7 +114,7 @@ In `error.rs`, immediately before the closing `}` of `enum PrivacyCoinError`, in
 
 ```bash
 cd /Users/chengchunyuan/project/hackathon/private_coin/contracts
-cargo build -p privacy-coin 2>&1 | tail -5
+cargo build -p utxopia 2>&1 | tail -5
 ```
 
 Expected: `Finished`.
@@ -123,7 +123,7 @@ Expected: `Finished`.
 
 ## Task 4b.2 — Pure on-chain policy module
 
-**Files:** `contracts/programs/privacy-coin/src/utils/policy.rs` (new), `contracts/programs/privacy-coin/src/utils/mod.rs` (modify).
+**Files:** `contracts/programs/utxopia/src/utils/policy.rs` (new), `contracts/programs/utxopia/src/utils/mod.rs` (modify).
 
 - [ ] **Step 4b.2.1: Create `utils/policy.rs` with the minimal port**
 
@@ -153,7 +153,7 @@ Create the file with this exact content:
 
 use pinocchio::program_error::ProgramError;
 
-use crate::error::PrivacyCoinError;
+use crate::error::UTXOpiaError;
 use crate::state::PoolState;
 
 /// Maximum gross redemption amount per signing operation, in satoshis.
@@ -178,13 +178,13 @@ pub fn check_redemption_signing(
     miner_fee_sats: u64,
 ) -> Result<(), ProgramError> {
     if pool.is_paused() {
-        return Err(PrivacyCoinError::PoolPaused.into());
+        return Err(UTXOpiaError::PoolPaused.into());
     }
     if amount_sats > MAX_REDEMPTION_AMOUNT_SATS {
-        return Err(PrivacyCoinError::RedemptionAmountExceedsLimit.into());
+        return Err(UTXOpiaError::RedemptionAmountExceedsLimit.into());
     }
     if miner_fee_sats > MAX_MINER_FEE_SATS {
-        return Err(PrivacyCoinError::RedemptionFeeExceedsLimit.into());
+        return Err(UTXOpiaError::RedemptionFeeExceedsLimit.into());
     }
     Ok(())
 }
@@ -223,7 +223,7 @@ mod tests {
             0,
         )
         .unwrap_err();
-        assert_eq!(err, PrivacyCoinError::RedemptionAmountExceedsLimit.into());
+        assert_eq!(err, UTXOpiaError::RedemptionAmountExceedsLimit.into());
     }
 
     #[test]
@@ -236,7 +236,7 @@ mod tests {
             MAX_MINER_FEE_SATS + 1,
         )
         .unwrap_err();
-        assert_eq!(err, PrivacyCoinError::RedemptionFeeExceedsLimit.into());
+        assert_eq!(err, UTXOpiaError::RedemptionFeeExceedsLimit.into());
     }
 
     #[test]
@@ -248,16 +248,16 @@ mod tests {
         }
         let pool = PoolState::from_bytes(&buf).unwrap();
         let err = check_redemption_signing(pool, 0, 0).unwrap_err();
-        assert_eq!(err, PrivacyCoinError::PoolPaused.into());
+        assert_eq!(err, UTXOpiaError::PoolPaused.into());
     }
 }
 ```
 
-> Note: if `PoolState::init` and `set_paused` have different signatures than assumed, adjust by reading `contracts/programs/privacy-coin/src/state/pool_state.rs`. The test logic stays the same — only the helper accessors change.
+> Note: if `PoolState::init` and `set_paused` have different signatures than assumed, adjust by reading `contracts/programs/utxopia/src/state/pool_state.rs`. The test logic stays the same — only the helper accessors change.
 
 - [ ] **Step 4b.2.2: Wire into `utils/mod.rs`**
 
-Edit `contracts/programs/privacy-coin/src/utils/mod.rs`. After the existing `pub mod validation;` line, add:
+Edit `contracts/programs/utxopia/src/utils/mod.rs`. After the existing `pub mod validation;` line, add:
 
 ```rust
 pub mod policy;
@@ -269,7 +269,7 @@ Do **not** glob-re-export — `policy::check_redemption_signing` is intentionall
 
 ```bash
 cd /Users/chengchunyuan/project/hackathon/private_coin/contracts
-cargo test -p privacy-coin policy:: 2>&1 | tail -10
+cargo test -p utxopia policy:: 2>&1 | tail -10
 ```
 
 Expected: 4 new tests pass.
@@ -278,7 +278,7 @@ Expected: 4 new tests pass.
 
 ```bash
 cd /Users/chengchunyuan/project/hackathon/private_coin/contracts
-cargo test -p privacy-coin 2>&1 | tail -5
+cargo test -p utxopia 2>&1 | tail -5
 ```
 
 Expected: 111+ tests pass (107 baseline + 4 new). Zero new failures.
@@ -287,7 +287,7 @@ Expected: 111+ tests pass (107 baseline + 4 new). Zero new failures.
 
 ## Task 4b.3 — Extend `CompleteRedemptionData` with sighash
 
-**Files:** `contracts/programs/privacy-coin/src/instructions/complete_redemption.rs`
+**Files:** `contracts/programs/utxopia/src/instructions/complete_redemption.rs`
 
 - [ ] **Step 4b.3.1: Extend the `CompleteRedemptionData` struct**
 
@@ -421,7 +421,7 @@ mod ix_data_layout_tests {
 
 ```bash
 cd /Users/chengchunyuan/project/hackathon/private_coin/contracts
-cargo test -p privacy-coin ix_data_layout_tests 2>&1 | tail -10
+cargo test -p utxopia ix_data_layout_tests 2>&1 | tail -10
 ```
 
 Expected: 3 new tests pass.
@@ -430,7 +430,7 @@ Expected: 3 new tests pass.
 
 ```bash
 cd /Users/chengchunyuan/project/hackathon/private_coin/contracts
-cargo test -p privacy-coin 2>&1 | tail -5
+cargo test -p utxopia 2>&1 | tail -5
 ```
 
 Expected: count went up by 3 (or 7 counting the policy tests from Task 4b.2). Zero failures.
@@ -439,7 +439,7 @@ Expected: count went up by 3 (or 7 counting the policy tests from Task 4b.2). Ze
 
 ## Task 4b.4 — Wire the Ika CPI into `complete_redemption`
 
-**Files:** `contracts/programs/privacy-coin/src/instructions/complete_redemption.rs`
+**Files:** `contracts/programs/utxopia/src/instructions/complete_redemption.rs`
 
 The instruction's existing burn + change-utxo + consumed-utxo + close-PDA flow stays unchanged. We add (a) policy gate before the burn, (b) Ika CPI block after the burn but before the close-redemption step (so the redemption PDA is still readable for cross-checks if a future policy needs it; close happens last).
 
@@ -485,7 +485,7 @@ After the consumed-UTXO close loop completes (the `for i in 0..consumed_count` b
     //   [base + 1] coordinator            (read, owned by Ika program)
     //   [base + 2] message_approval       (write, will be created)
     //   [base + 3] dwallet                (read, owned by Ika program)
-    //   [base + 4] caller_program         (read; this Privacy Coin program account)
+    //   [base + 4] caller_program         (read; this UTXOpia program account)
     //   [base + 5] cpi_authority          (read, signer via invoke_signed; PDA)
     //   [base + 6] payer                  (write, signer)
     //   [base + 7] ika_system_program     (read, system program — re-used because
@@ -499,7 +499,7 @@ After the consumed-UTXO close loop completes (the `for i in 0..consumed_count` b
     //                                      the Ika program. See below.
     let ika_base = consumed_start + consumed_count;
     if accounts.len() < ika_base + 7 {
-        return Err(PrivacyCoinError::IkaCpiAccountsMissing.into());
+        return Err(UTXOpiaError::IkaCpiAccountsMissing.into());
     }
     let ika_program = &accounts[ika_base];
     let ika_coordinator = &accounts[ika_base + 1];
@@ -517,7 +517,7 @@ After the consumed-UTXO close loop completes (the `for i in 0..consumed_count` b
     let cpi_authority_bump = {
         let cfg_data = pool_config_info.try_borrow_data()?;
         if cfg_data.len() < PoolConfig::LEN || cfg_data[0] != POOL_CONFIG_DISCRIMINATOR {
-            return Err(PrivacyCoinError::IkaCpiAccountsMissing.into());
+            return Err(UTXOpiaError::IkaCpiAccountsMissing.into());
         }
         let cfg = PoolConfig::from_bytes(&cfg_data)?;
         cfg.get_cpi_authority_bump()
@@ -575,7 +575,7 @@ Above `pub fn process_complete_redemption`, extend the existing `/// # Accounts`
 ///   - [+1] `[]`           Ika DWalletCoordinator PDA
 ///   - [+2] `[writable]`   MessageApproval PDA (created by Ika program)
 ///   - [+3] `[]`           dWallet account (owned by Ika program)
-///   - [+4] `[]`           This Privacy Coin program's program-account (caller)
+///   - [+4] `[]`           This UTXOpia program's program-account (caller)
 ///   - [+5] `[]`           CPI authority PDA (PDA of this program)
 ///   - [+6] `[writable, signer]` Payer for MessageApproval rent
 ///
@@ -586,8 +586,8 @@ Above `pub fn process_complete_redemption`, extend the existing `/// # Accounts`
 
 ```bash
 cd /Users/chengchunyuan/project/hackathon/private_coin/contracts
-cargo build -p privacy-coin 2>&1 | tail -10
-cargo build-sbf --features localnet --manifest-path contracts/programs/privacy-coin/Cargo.toml 2>&1 | tail -10
+cargo build -p utxopia 2>&1 | tail -10
+cargo build-sbf --features localnet --manifest-path contracts/programs/utxopia/Cargo.toml 2>&1 | tail -10
 ```
 
 Expected: both green. If the second command fails, that's blocking — likely `find_program_address` is not exposed for SBF target; in that case use the upstream import path used elsewhere in this file (the file already calls `find_program_address` for `RedemptionRequest::SEED`, so this should compile).
@@ -596,7 +596,7 @@ Expected: both green. If the second command fails, that's blocking — likely `f
 
 ```bash
 cd /Users/chengchunyuan/project/hackathon/private_coin/contracts
-cargo test -p privacy-coin --lib 2>&1 | tail -10
+cargo test -p utxopia --lib 2>&1 | tail -10
 ```
 
 Expected: lib tests still pass (110+). Integration tests not yet present.
@@ -605,7 +605,7 @@ Expected: lib tests still pass (110+). Integration tests not yet present.
 
 ## Task 4b.5 — Mollusk integration test
 
-**Files:** `contracts/programs/privacy-coin/tests/complete_redemption_ika_cpi.rs` (new)
+**Files:** `contracts/programs/utxopia/tests/complete_redemption_ika_cpi.rs` (new)
 
 This is the load-bearing acceptance test: it loads the upstream Ika program SBF, constructs a complete_redemption call with a fake (but well-formed) redemption + light-client + chadbuffer state, executes it, and verifies the `MessageApproval` PDA was populated by Ika.
 
@@ -613,7 +613,7 @@ The test is large because it must seed every account `complete_redemption` reads
 
 - [ ] **Step 4b.5.1: Create the test file with the harness**
 
-Create `contracts/programs/privacy-coin/tests/complete_redemption_ika_cpi.rs` with:
+Create `contracts/programs/utxopia/tests/complete_redemption_ika_cpi.rs` with:
 
 ```rust
 //! Mollusk integration test: complete_redemption issues approve_message CPI
@@ -637,9 +637,9 @@ use solana_sdk::{
 const IKA_PROGRAM_BINARY: &str =
     "/tmp/ika-pre-alpha-scratch/ika-pre-alpha/bin/ika_dwallet_program.so";
 
-const PRIVACY_COIN_PROGRAM_PATH: &str = concat!(
+const UTXOPIA_PROGRAM_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../../target/deploy/privacy_coin"
+    "/../../../target/deploy/utxopia"
 );
 
 // ── Ika constants (mirrored from upstream litesvm.rs) ──
@@ -687,8 +687,8 @@ const NEK_STATE_ACTIVE: u8 = 1;
 const MA_DWALLET: usize = 2;
 const MA_MESSAGE_HASH: usize = 34;
 
-// ── Privacy Coin constants ──
-const PRIVACY_COIN_INSTRUCTION_COMPLETE_REDEMPTION: u8 = 17;
+// ── UTXOpia constants ──
+const UTXOPIA_INSTRUCTION_COMPLETE_REDEMPTION: u8 = 17;
 
 // ── Helpers ──
 fn funded() -> Account {
@@ -781,13 +781,13 @@ fn build_dwallet_data(authority: &Pubkey, noa: &Pubkey, bump: u8) -> Vec<u8> {
 #[ignore = "requires upstream Ika SBF binary at /tmp/...; gated to keep CI green"]
 fn complete_redemption_dispatches_approve_message_cpi() {
     // ── Set up Mollusk with both programs loaded ──
-    let privacy_coin_program_id = Pubkey::new_unique();
-    let mut mollusk = Mollusk::new(&privacy_coin_program_id, PRIVACY_COIN_PROGRAM_PATH);
+    let utxopia_program_id = Pubkey::new_unique();
+    let mut mollusk = Mollusk::new(&utxopia_program_id, UTXOPIA_PROGRAM_PATH);
     mollusk.add_program(&IKA_PROGRAM_ID, IKA_PROGRAM_BINARY, &solana_sdk::bpf_loader::ID);
 
     // ── Derive CPI authority PDA + bump for our program ──
     let (cpi_authority_pda, cpi_authority_bump) =
-        Pubkey::find_program_address(&[CPI_AUTHORITY_SEED], &privacy_coin_program_id);
+        Pubkey::find_program_address(&[CPI_AUTHORITY_SEED], &utxopia_program_id);
 
     // ── Synthetic NoA + dwallet seeds ──
     let noa = Pubkey::new_unique();
@@ -811,7 +811,7 @@ fn complete_redemption_dispatches_approve_message_cpi() {
         &IKA_PROGRAM_ID,
     );
 
-    // ── Privacy Coin accounts. We seed enough state to reach the CPI block. ──
+    // ── UTXOpia accounts. We seed enough state to reach the CPI block. ──
     // NOTE: the existing complete_redemption requires a populated VerifiedTransaction
     // PDA, light-client tip, ChadBuffer with raw tx bytes, redemption PDA, etc. The
     // simplest robust path is to construct a *minimal valid* redemption that passes
@@ -822,11 +822,11 @@ fn complete_redemption_dispatches_approve_message_cpi() {
     // To keep this test focused on the CPI dispatch path, we wire it with
     // pool_script_len = 0 and consumed_utxo_count = 0 — eliminates the change UTXO
     // and consumed UTXO branches entirely.
-    let fixture = build_redemption_fixture(&privacy_coin_program_id, &btc_sighash);
+    let fixture = build_redemption_fixture(&utxopia_program_id, &btc_sighash);
 
     // ── Build instruction data ──
     let mut ix_data = Vec::with_capacity(1 + 70);
-    ix_data.push(PRIVACY_COIN_INSTRUCTION_COMPLETE_REDEMPTION);
+    ix_data.push(UTXOPIA_INSTRUCTION_COMPLETE_REDEMPTION);
     ix_data.extend_from_slice(&fixture.btc_txid);
     ix_data.extend_from_slice(&fixture.tx_size.to_le_bytes());
     ix_data.push(0); // pool_script_len = 0 (no change tracking)
@@ -856,13 +856,13 @@ fn complete_redemption_dispatches_approve_message_cpi() {
         AccountMeta::new_readonly(coord_pda, false),             // 14 coordinator
         AccountMeta::new(message_approval_pda, false),           // 15 message_approval
         AccountMeta::new_readonly(dwallet_pda, false),           // 16 dwallet
-        AccountMeta::new_readonly(privacy_coin_program_id, false),// 17 caller_program
+        AccountMeta::new_readonly(utxopia_program_id, false),// 17 caller_program
         AccountMeta::new_readonly(cpi_authority_pda, false),     // 18 cpi_authority
         AccountMeta::new(payer, true),                            // 19 payer (signer)
     ];
 
     let ix = Instruction {
-        program_id: privacy_coin_program_id,
+        program_id: utxopia_program_id,
         accounts,
         data: ix_data,
     };
@@ -887,7 +887,7 @@ fn complete_redemption_dispatches_approve_message_cpi() {
             (coord_pda, program_account(&IKA_PROGRAM_ID, build_coord_data(&Pubkey::new_unique(), coord_bump))),
             (message_approval_pda, empty()),
             (dwallet_pda, program_account(&IKA_PROGRAM_ID, build_dwallet_data(&cpi_authority_pda, &noa, dwallet_bump))),
-            (privacy_coin_program_id, upstream_program_account()),
+            (utxopia_program_id, upstream_program_account()),
             (cpi_authority_pda, empty()),
             (payer, funded()),
         ],
@@ -952,7 +952,7 @@ impl RedemptionFixture {
     // Each `*_account` method returns a populated Account with the correct
     // discriminator, owner, and minimal data layout that complete_redemption's
     // existing checks accept. The exact byte layouts come from
-    // contracts/programs/privacy-coin/src/state/*.rs and src/utils/*.rs —
+    // contracts/programs/utxopia/src/state/*.rs and src/utils/*.rs —
     // mirror those when implementing.
     fn pool_state_account(&self) -> Account { /* impl: PoolState::init + set authority + unpaused */ unimplemented!() }
     fn redemption_account(&self) -> Account { /* impl: RedemptionRequest::init with btc_script matching the verified tx output, status = Pending, total_input_sats > 0 */ unimplemented!() }
@@ -991,7 +991,7 @@ Concretely:
 - `verified_tx_account`: see `src/state/btc_light_client.rs::VerifiedTransactionView`. Owner = `BTC_LIGHT_CLIENT_PROGRAM_ID` (pull from `src/constants.rs`). `txid` matches `self.btc_txid`. `block_height = 100`.
 - `light_client_account`: synthesize a minimal `LightClient` blob — only `light_client_tip_height` is read (see `src/state/btc_light_client.rs`). Set tip_height = 200 (gives 101 confirmations).
 - `tx_buffer_account`: a real raw BTC tx whose hash matches `btc_txid`. Easiest path: pre-compute `btc_txid` as `compute_tx_hash(raw_tx)` using `src/utils/bitcoin.rs::compute_tx_hash` so the fixture is internally consistent. The raw tx must have at least one output paying `btc_script` with value `amount_sats - service_fee = 49_000`. Set `tx_size` to `raw_tx.len() as u32`.
-- `zkbtc_mint_account` / `pool_vault_account`: these are token-2022 / SPL token accounts. Use the same fake-mint helpers that `src/instructions/mark_processing.rs` tests use — check existing test code: `grep -rn "Token-2022\|fake_mint\|build_mint_account" contracts/programs/privacy-coin/src/`. If no existing helper, mint a minimal mint blob: Token-2022 mint is 82 bytes minimum, owner = TOKEN_2022_PROGRAM_ID. Set `supply >= burn_amount`.
+- `zkbtc_mint_account` / `pool_vault_account`: these are token-2022 / SPL token accounts. Use the same fake-mint helpers that `src/instructions/mark_processing.rs` tests use — check existing test code: `grep -rn "Token-2022\|fake_mint\|build_mint_account" contracts/programs/utxopia/src/`. If no existing helper, mint a minimal mint blob: Token-2022 mint is 82 bytes minimum, owner = TOKEN_2022_PROGRAM_ID. Set `supply >= burn_amount`.
 - `token_program_account`: load Token-2022 program SBF from upstream Solana — Mollusk has helpers, or use `mollusk_svm::program::token::add_program` if available; fall back to `upstream_program_account()` with key = `spl_token_2022::ID`.
 - `pool_config_account`: owner = `program_id`. `PoolConfig::init`, `set_pool_script(&[])` (length 0), `set_cpi_authority_bump(bump)`, `set_ika_dwallet(&[0x42; 32])`, `set_ika_dwallet_xonly_pubkey(&[0x02; 32])`.
 
@@ -1001,7 +1001,7 @@ After filling in, remove the `#[ignore]` attribute.
 
 ```bash
 cd /Users/chengchunyuan/project/hackathon/private_coin
-cargo test -p privacy-coin --test complete_redemption_ika_cpi -- --nocapture 2>&1 | tail -30
+cargo test -p utxopia --test complete_redemption_ika_cpi -- --nocapture 2>&1 | tail -30
 ```
 
 Expected (most likely): the Ika program rejects because (a) the dwallet `authority` doesn't match the CPI authority PDA, or (b) the curve byte is wrong, or (c) `MessageApproval` PDA seeds differ. Capture the exact error message and resolve by:
@@ -1015,7 +1015,7 @@ Re-run after each fix. Allow up to 3 fixup iterations. Hard cap: if after 3 iter
 
 ```bash
 cd /Users/chengchunyuan/project/hackathon/private_coin
-cargo test -p privacy-coin --test complete_redemption_ika_cpi -- --nocapture 2>&1 | tail -30
+cargo test -p utxopia --test complete_redemption_ika_cpi -- --nocapture 2>&1 | tail -30
 ```
 
 Expected at success: `test result: ok. 1 passed`.
@@ -1024,7 +1024,7 @@ Expected at success: `test result: ok. 1 passed`.
 
 ```bash
 cd /Users/chengchunyuan/project/hackathon/private_coin/contracts
-cargo test -p privacy-coin 2>&1 | tail -10
+cargo test -p utxopia 2>&1 | tail -10
 ```
 
 Expected: 107 baseline + 4 (policy) + 3 (ix data layout) + 1 (CPI integration) = 115. No new failures elsewhere.
@@ -1108,7 +1108,7 @@ export interface CompleteRedemptionInstructionOptions {
     ikaMessageApproval: Address;
     /** dWallet account */
     ikaDwallet: Address;
-    /** This Privacy Coin program's program-account */
+    /** This UTXOpia program's program-account */
     callerProgram: Address;
     /** CPI authority PDA */
     cpiAuthority: Address;
@@ -1149,7 +1149,7 @@ Expected: 27 baseline failures (recorded at `/tmp/sdk-baseline-failures.txt`) �
 
 ```bash
 cd /Users/chengchunyuan/project/hackathon/private_coin
-cargo build-sbf --features localnet --manifest-path contracts/programs/privacy-coin/Cargo.toml 2>&1 | tail -10
+cargo build-sbf --features localnet --manifest-path contracts/programs/utxopia/Cargo.toml 2>&1 | tail -10
 ```
 
 Expected: `Finished`.
@@ -1158,7 +1158,7 @@ Expected: `Finished`.
 
 ```bash
 cd /Users/chengchunyuan/project/hackathon/private_coin/contracts
-cargo test -p privacy-coin 2>&1 | tail -10
+cargo test -p utxopia 2>&1 | tail -10
 ```
 
 Expected: 115 passed (107 baseline + 8 new). If the count is lower or any failures appear, halt — do not proceed to commit.
@@ -1190,11 +1190,11 @@ Expected: same single pre-existing failure, no new ones. (Backend wiring is Task
 
 ```bash
 cd /Users/chengchunyuan/project/hackathon/private_coin
-git add contracts/programs/privacy-coin/src/utils/policy.rs \
-        contracts/programs/privacy-coin/src/utils/mod.rs \
-        contracts/programs/privacy-coin/src/instructions/complete_redemption.rs \
-        contracts/programs/privacy-coin/src/error.rs \
-        contracts/programs/privacy-coin/tests/complete_redemption_ika_cpi.rs \
+git add contracts/programs/utxopia/src/utils/policy.rs \
+        contracts/programs/utxopia/src/utils/mod.rs \
+        contracts/programs/utxopia/src/instructions/complete_redemption.rs \
+        contracts/programs/utxopia/src/error.rs \
+        contracts/programs/utxopia/tests/complete_redemption_ika_cpi.rs \
         sdk/src/instructions.ts
 git commit -m "$(cat <<'EOF'
 Task 4b: complete_redemption CPIs Ika approve_message
@@ -1246,10 +1246,10 @@ Reading the file structure cleanly — Task 4b.1 (10m), Task 4b.2 (25m), Task 4b
 
 ### Critical files for implementation
 
-- /Users/chengchunyuan/project/hackathon/private_coin/contracts/programs/privacy-coin/src/instructions/complete_redemption.rs
-- /Users/chengchunyuan/project/hackathon/private_coin/contracts/programs/privacy-coin/src/cpi/ika.rs
-- /Users/chengchunyuan/project/hackathon/private_coin/contracts/programs/privacy-coin/src/utils/policy.rs (new)
-- /Users/chengchunyuan/project/hackathon/private_coin/contracts/programs/privacy-coin/tests/complete_redemption_ika_cpi.rs (new)
+- /Users/chengchunyuan/project/hackathon/private_coin/contracts/programs/utxopia/src/instructions/complete_redemption.rs
+- /Users/chengchunyuan/project/hackathon/private_coin/contracts/programs/utxopia/src/cpi/ika.rs
+- /Users/chengchunyuan/project/hackathon/private_coin/contracts/programs/utxopia/src/utils/policy.rs (new)
+- /Users/chengchunyuan/project/hackathon/private_coin/contracts/programs/utxopia/tests/complete_redemption_ika_cpi.rs (new)
 - /Users/chengchunyuan/project/hackathon/private_coin/sdk/src/instructions.ts
 
 Note: I am in strict read-only mode (no Write/Edit tools available), so I cannot save the markdown to disk myself. The full plan content is the body of the assistant message above — copy everything between the opening ```` ```markdown ```` fence and its closing ```` ``` `

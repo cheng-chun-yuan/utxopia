@@ -212,7 +212,7 @@ impl RedemptionService {
 
         let keypair = crate::common::keypair::load_keypair(&relayer_keypair_val).ok()?;
 
-        let solana_rpc = std::env::var("PRIVACY_COIN_SOLANA_RPC")
+        let solana_rpc = std::env::var("UTXOPIA_SOLANA_RPC")
             .or_else(|_| std::env::var("SOLANA_RPC_URL"))
             .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
         let esplora_url = std::env::var("ESPLORA_URL")
@@ -729,7 +729,7 @@ impl RedemptionService {
 
         // Broadcast
         let broadcast_mode =
-            std::env::var("PRIVACY_COIN_BROADCAST_MODE").unwrap_or_else(|_| "simulated".to_string());
+            std::env::var("UTXOPIA_BROADCAST_MODE").unwrap_or_else(|_| "simulated".to_string());
 
         if broadcast_mode == "real" {
             println!("=== Broadcasting Transaction (Real) ===");
@@ -806,7 +806,7 @@ impl RedemptionService {
     ///   3. Call complete_redemption (burns zkBTC, closes RedemptionRequest PDA)
     ///   4. Close ChadBuffer
     ///
-    /// In simulated mode (PRIVACY_COIN_BROADCAST_MODE != "real"), skips SPV and just marks locally complete.
+    /// In simulated mode (UTXOPIA_BROADCAST_MODE != "real"), skips SPV and just marks locally complete.
     ///
     /// Returns Ok(true) if completed, Ok(false) if not ready yet.
     async fn try_complete_redemption(
@@ -829,7 +829,7 @@ impl RedemptionService {
         };
 
         let broadcast_mode =
-            std::env::var("PRIVACY_COIN_BROADCAST_MODE").unwrap_or_else(|_| "simulated".to_string());
+            std::env::var("UTXOPIA_BROADCAST_MODE").unwrap_or_else(|_| "simulated".to_string());
 
         // Simulated mode: no real BTC tx to verify — leave as AwaitingConfirmation
         // so the explorer correctly shows that BTC broadcast + SPV + completion are pending.
@@ -1321,7 +1321,7 @@ fn create_esplora_client(config: &RedemptionConfig) -> EsploraClient {
         return EsploraClient::new(&config.esplora_url);
     }
 
-    let network = std::env::var("PRIVACY_COIN_NETWORK")
+    let network = std::env::var("UTXOPIA_NETWORK")
         .ok()
         .and_then(|v| Network::from_str(&v).ok())
         .unwrap_or(Network::Devnet);

@@ -38,11 +38,11 @@ stepHeader(8, "BTC Withdrawal Request");
 async function main() {
   const state = loadState();
   const authority = loadAuthority();
-  const PRIVACY_COIN = new PublicKey(state.privacyCoinProgramId);
+  const UTXOPIA = new PublicKey(state.privacyCoinProgramId);
   const zkbtcMint = new PublicKey(state.zkbtcMint);
-  const [poolState] = derivePoolStatePDA(PRIVACY_COIN);
-  const [commitmentTree] = deriveCommitmentTreePDA(PRIVACY_COIN);
-  const [zkbtcTokenConfig] = deriveTokenConfigPDA(PRIVACY_COIN, zkbtcMint);
+  const [poolState] = derivePoolStatePDA(UTXOPIA);
+  const [commitmentTree] = deriveCommitmentTreePDA(UTXOPIA);
+  const [zkbtcTokenConfig] = deriveTokenConfigPDA(UTXOPIA, zkbtcMint);
 
   if (!state.transferNotes) throw new Error("Transfer notes not found. Run step6 first.");
 
@@ -100,8 +100,8 @@ async function main() {
   data.writeBigUInt64LE(requestNonce, off); off += 8;
 
   // Accounts (7): poolState, commitmentTree, nullifier, redemption, user, system, tokenConfig
-  const [nullifierPDA] = deriveNullifierPDA(PRIVACY_COIN, nullifierBytes);
-  const [redemptionPDA] = deriveRedemptionPDA(PRIVACY_COIN, authority.publicKey, requestNonce);
+  const [nullifierPDA] = deriveNullifierPDA(UTXOPIA, nullifierBytes);
+  const [redemptionPDA] = deriveRedemptionPDA(UTXOPIA, authority.publicKey, requestNonce);
 
   const ix = new TransactionInstruction({
     keys: [
@@ -113,7 +113,7 @@ async function main() {
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       { pubkey: zkbtcTokenConfig, isSigner: false, isWritable: true },
     ],
-    programId: PRIVACY_COIN,
+    programId: UTXOPIA,
     data,
   });
 

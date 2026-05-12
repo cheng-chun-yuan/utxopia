@@ -1,5 +1,5 @@
 /**
- * Ed25519/X25519 utilities for Privacy Coin viewing keys
+ * Ed25519/X25519 utilities for UTXOpia viewing keys
  *
  * Uses @noble/curves for Ed25519 key generation and X25519 ECDH.
  * Ed25519 is used for viewing keys (off-chain only, fast and standard).

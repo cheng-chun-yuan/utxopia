@@ -21,7 +21,7 @@ use super::tree_cache::TreeCache;
 pub struct SolanaWsConfig {
     /// Solana WebSocket RPC URL (e.g. wss://api.devnet.solana.com)
     pub ws_url: String,
-    /// Privacy Coin program ID (base58)
+    /// UTXOpia program ID (base58)
     pub program_id: String,
 }
 

@@ -1,7 +1,7 @@
 {
-  "name": "privacy-coin-contracts",
+  "name": "utxopia-contracts",
   "version": "0.1.0",
-  "description": "Privacy Coin Solana smart contracts (Pinocchio)",
+  "description": "UTXOpia Solana smart contracts (Pinocchio)",
   "scripts": {
     "build": "cargo build-sbf --features devnet",
     "build:devnet": "cargo build-sbf --features devnet",
@@ -36,7 +36,7 @@
     "@noble/hashes": "^2.0.1",
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.4",
-    "@privacy-coin/sdk": "file:../sdk",
+    "@utxopia/sdk": "file:../sdk",
     "chai": "^6.2.2",
     "circomlibjs": "^0.1.7",
     "snarkjs": "^0.7.6"

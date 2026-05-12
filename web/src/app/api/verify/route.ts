@@ -1,14 +1,14 @@
 /**
  * Verify API — On-chain SPV deposit verification
  *
- * Triggers btc-light-client verify_transaction + privacy-coin verify_stealth_deposit
+ * Triggers btc-light-client verify_transaction + utxopia verify_stealth_deposit
  * for a confirmed BTC sweep transaction.
  *
  * Flow:
  * 1. Fetch raw tx hex from mempool.space
  * 2. Upload raw tx to ChadBuffer
  * 3. Build verify_transaction instruction (btc-light-client)
- * 4. Build verify_stealth_deposit instruction (privacy-coin)
+ * 4. Build verify_stealth_deposit instruction (utxopia)
  * 5. Submit both in one Solana transaction
  * 6. Close buffer and reclaim rent
  *
@@ -26,16 +26,16 @@ import {
   ComputeBudgetProgram,
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
-const getPrivacyCoinSDK = () => import("@privacy-coin/sdk");
+const getUTXOpiaSDK = () => import("@utxopia/sdk");
 
 import {
   buildVerifyTransactionInstructionData,
   buildVerifyStealthDepositInstructionData,
   AUTHORITY_SIZE,
-} from "@privacy-coin/sdk";
+} from "@utxopia/sdk";
 
 import {
-  getPrivacyCoinProgramId,
+  getUTXOpiaProgramId,
   getBtcLightClientProgramId,
   getChadbufferProgramId,
   getZkbtcMint,
@@ -60,7 +60,7 @@ import {
 import {
   reverseBytes,
 } from "@/lib/spv/mempool";
-// hexToBytes imported lazily via getPrivacyCoinSDK()
+// hexToBytes imported lazily via getUTXOpiaSDK()
 
 import {
   buildMerkleProofPath,
@@ -340,7 +340,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
   }
 
   const startTime = Date.now();
-  const { hexToBytes } = await getPrivacyCoinSDK();
+  const { hexToBytes } = await getUTXOpiaSDK();
   const spvHexToBytes = hexToBytes;
 
   try {
@@ -451,7 +451,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
       depositTxid: depositTxidInternal,
     });
 
-    const privacyCoinProgramId = getPrivacyCoinProgramId();
+    const privacyCoinProgramId = getUTXOpiaProgramId();
     const verifyDepositIx = new TransactionInstruction({
       programId: privacyCoinProgramId,
       keys: [

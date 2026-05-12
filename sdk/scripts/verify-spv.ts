@@ -38,7 +38,7 @@ const NPK = "1a721b70e048c86e94e573785a5ffc26e30cb409d56b814b494878cf81b27227";
 const AMOUNT_SATS = 9778; // Actual sweep output amount (not the old 10000)
 
 // Program IDs
-const PRIVACY_COIN_PROGRAM_ID = new PublicKey("7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ");
+const UTXOPIA_PROGRAM_ID = new PublicKey("7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ");
 const BTC_LIGHT_CLIENT_PROGRAM_ID = new PublicKey("Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq");
 const CHADBUFFER_PROGRAM_ID = new PublicKey("C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF");
 const TOKEN_2022_PROGRAM_ID = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
@@ -182,13 +182,13 @@ async function main() {
 
   // Derive PDAs
   const [poolStatePDA] = PublicKey.findProgramAddressSync(
-    [Buffer.from("pool_state")], PRIVACY_COIN_PROGRAM_ID
+    [Buffer.from("pool_state")], UTXOPIA_PROGRAM_ID
   );
   const [commitmentTreePDA] = PublicKey.findProgramAddressSync(
-    [Buffer.from("commitment_tree")], PRIVACY_COIN_PROGRAM_ID
+    [Buffer.from("commitment_tree")], UTXOPIA_PROGRAM_ID
   );
   const [stealthAnnouncementPDA] = PublicKey.findProgramAddressSync(
-    [Buffer.from("stealth"), Buffer.from(txidInternal)], PRIVACY_COIN_PROGRAM_ID
+    [Buffer.from("stealth"), Buffer.from(txidInternal)], UTXOPIA_PROGRAM_ID
   );
   const [lightClientPDA] = PublicKey.findProgramAddressSync(
     [Buffer.from("btc_light_client")], BTC_LIGHT_CLIENT_PROGRAM_ID
@@ -227,7 +227,7 @@ async function main() {
     proposeData.writeBigUInt64LE(SERVICE_FEE, 17);
 
     const proposeIx = new TransactionInstruction({
-      programId: PRIVACY_COIN_PROGRAM_ID,
+      programId: UTXOPIA_PROGRAM_ID,
       keys: [
         { pubkey: poolStatePDA, isSigner: false, isWritable: true },
         { pubkey: relayer.publicKey, isSigner: true, isWritable: false },
@@ -258,7 +258,7 @@ async function main() {
     console.log("Existing StealthAnnouncement found, closing...");
 
     const closePdaIx = new TransactionInstruction({
-      programId: PRIVACY_COIN_PROGRAM_ID,
+      programId: UTXOPIA_PROGRAM_ID,
       keys: [
         { pubkey: poolStatePDA, isSigner: false, isWritable: false },
         { pubkey: stealthAnnouncementPDA, isSigner: false, isWritable: true },
@@ -416,7 +416,7 @@ async function main() {
   });
 
   // =========================================================================
-  // Step 5: Build verify_stealth_deposit instruction (privacy-coin, disc=1)
+  // Step 5: Build verify_stealth_deposit instruction (utxopia, disc=1)
   //         Amount is NO LONGER in instruction data — extracted on-chain from raw tx
   // =========================================================================
 
@@ -434,7 +434,7 @@ async function main() {
   Buffer.from(npkBytes).copy(verifyDepositData, doff); doff += 32;
 
   const verifyDepositIx = new TransactionInstruction({
-    programId: PRIVACY_COIN_PROGRAM_ID,
+    programId: UTXOPIA_PROGRAM_ID,
     keys: [
       { pubkey: poolStatePDA, isSigner: false, isWritable: true },
       { pubkey: verifiedTxPDA, isSigner: false, isWritable: false },

@@ -1,5 +1,5 @@
 {
-  "name": "privacy-coin",
+  "name": "utxopia",
   "private": true,
   "workspaces": [
     "sdk",

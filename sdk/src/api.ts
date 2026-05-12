@@ -1,5 +1,5 @@
 /**
- * Privacy Coin Simplified API (JoinSplit Architecture)
+ * UTXOpia Simplified API (JoinSplit Architecture)
  *
  * DEPOSIT (BTC -> zkBTC):
  * - depositToNote: Generate deposit credentials (taproot address + claim link)
@@ -68,7 +68,7 @@ export interface ApiClientConfig {
 // ============================================================================
 
 /** Default program ID (Solana Devnet) - imported from pda.ts */
-export { PRIVACY_COIN_PROGRAM_ID as DEFAULT_PROGRAM_ID } from "./pda";
+export { UTXOPIA_PROGRAM_ID as DEFAULT_PROGRAM_ID } from "./pda";
 
 /** Maximum BTC supply in satoshis (21 million BTC) */
 const MAX_SATS = 21_000_000n * 100_000_000n;
@@ -130,7 +130,7 @@ export async function depositToNote(
   );
 
   // Encode nullifier+secret as claim link
-  const claimLink = `${baseUrl || "https://privacy-coin.app"}/claim#note=${encodeClaimLink(
+  const claimLink = `${baseUrl || "https://utxopia.app"}/claim#note=${encodeClaimLink(
     `${note.nullifier.toString(16)}.${note.secret.toString(16)}`
   )}`;
 
@@ -156,4 +156,4 @@ export {
 export type { Note } from "./note";
 export type { MerkleProof } from "./merkle";
 export type { StealthDeposit, ScannedNote, ClaimInputs } from "./stealth";
-export type { StealthMetaAddress, PrivacyCoinKeys } from "./keys";
+export type { StealthMetaAddress, UTXOpiaKeys } from "./keys";

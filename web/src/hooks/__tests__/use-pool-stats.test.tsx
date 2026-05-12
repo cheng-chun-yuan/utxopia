@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from "bun:test";
 
-// PoolState layout constants (from contracts/programs/privacy-coin/src/state/pool.rs)
+// PoolState layout constants (from contracts/programs/utxopia/src/state/pool.rs)
 const POOL_STATE_DISC = 0x01;
 const DEPOSIT_COUNT_OFFSET = 164;
 const PENDING_REDEMPTIONS_OFFSET = 188;

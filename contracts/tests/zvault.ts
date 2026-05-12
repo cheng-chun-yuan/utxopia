@@ -1,10 +1,10 @@
 /**
- * Privacy Coin Pinocchio Program Test Suite
+ * UTXOpia Pinocchio Program Test Suite
  *
  * IDL-like TypeScript interface for testing the raw Pinocchio program
  * with Circom ZK proof integration.
  *
- * Run: bun test tests/pinocchio-Privacy Coin.ts
+ * Run: bun test tests/pinocchio-UTXOpia.ts
  */
 
 import {
@@ -40,7 +40,7 @@ const __dirname = path.dirname(__filename);
 // ============================================================================
 
 /**
- * Program ID for Privacy Coin Pinocchio
+ * Program ID for UTXOpia Pinocchio
  * Update this after deployment
  */
 const PROGRAM_ID = new PublicKey("AtztELZfz3GHA8hFQCv7aT9Mt47Xhknv3ZCNb3fmXsgf");
@@ -873,7 +873,7 @@ export class PoseidonMerkleTree {
 // TEST SUITE
 // ============================================================================
 
-describe("Privacy Coin Pinocchio Program", function() {
+describe("UTXOpia Pinocchio Program", function() {
   this.timeout(120000);
 
   let connection: Connection;

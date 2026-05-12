@@ -1,4 +1,4 @@
-# Privacy Coin Technical Documentation
+# UTXOpia Technical Documentation
 
 **Multi-Token Privacy Pool on Solana with Zero-Knowledge Proofs**
 
@@ -6,7 +6,7 @@
 
 ## Overview
 
-Privacy Coin is a universal shielded pool on Solana that enables private transactions for **any token** — BTC (via SPV bridge), SOL, USDC, USDT, and any SPL token. All tokens exist only as cryptographic commitments inside a shared Merkle tree. No public balances, no transaction graphs.
+UTXOpia is a universal shielded pool on Solana that enables private transactions for **any token** — BTC (via SPV bridge), SOL, USDC, USDT, and any SPL token. All tokens exist only as cryptographic commitments inside a shared Merkle tree. No public balances, no transaction graphs.
 
 ```
                           ┌─────────────────────────────────┐
@@ -68,7 +68,7 @@ Privacy Coin is a universal shielded pool on Solana that enables private transac
 │                               SPV proof │                                       │
 │                                        ▼                                        │
 │   ┌────────────────────────────────────────────────────────────────────────┐    │
-│   │                    Privacy Coin Program (Pinocchio)                          │    │
+│   │                    UTXOpia Program (Pinocchio)                          │    │
 │   │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌───────────┐│    │
 │   │   │ Commitment   │  │  Nullifier   │  │   Stealth    │  │   Name    ││    │
 │   │   │    Tree      │  │  Registry    │  │Announcements │  │ Registry  ││    │
@@ -82,7 +82,7 @@ Privacy Coin is a universal shielded pool on Solana that enables private transac
 ┌────────────────────────────────────────▼────────────────────────────────────────┐
 │                            CLIENT LAYER                                          │
 │   ┌──────────────────────────────────────────────────────────────────────────┐  │
-│   │                         @privacy-coin/sdk                                       │  │
+│   │                         @utxopia/sdk                                       │  │
 │   │   Note Management │ Proof Generation │ Stealth ECDH │ Taproot Derivation │  │
 │   └──────────────────────────────────────────────────────────────────────────┘  │
 │              ┌─────────────────────────┼─────────────────────────┐              │
@@ -98,7 +98,7 @@ Privacy Coin is a universal shielded pool on Solana that enables private transac
 | Component | Responsibility |
 |-----------|---------------|
 | **BTC Light Client** | Maintains Bitcoin header chain, validates SPV proofs |
-| **Privacy Coin Program** | Manages commitments, nullifiers, stealth announcements, token configs |
+| **UTXOpia Program** | Manages commitments, nullifiers, stealth announcements, token configs |
 | **Header Relayer** | Syncs Bitcoin headers to Solana (permissionless) |
 | **SDK** | Client-side proof generation, key derivation, stealth ECDH, transaction building |
 | **FROST Server** | BTC redemption signing (2-of-3 threshold) |
@@ -460,7 +460,7 @@ Frontend falls back to RPC log scanning when indexer is unavailable.
 
 | Program | Address |
 |---------|---------|
-| Privacy Coin | `4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1` |
+| UTXOpia | `4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1` |
 | BTC Light Client | `Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq` |
 | ChadBuffer | `6VrJmWbhN9WbEkg87JizunVMpL6CHKGVmzWCf3o3LRgy` |
 
@@ -532,7 +532,7 @@ Custom error codes start at 6000 to avoid conflicts with Solana system errors.
 | 6072 | `TimelockNotElapsed` | 48h timelock period has not elapsed |
 | 6073 | `NoPendingProposal` | No pending pool update proposal to execute/cancel |
 
-> Source: `contracts/programs/privacy-coin/src/error.rs`
+> Source: `contracts/programs/utxopia/src/error.rs`
 
 ---
 
@@ -585,7 +585,7 @@ Total: 256 bytes
 
 Public inputs per variant: `2 + N + M` (merkleRoot + boundParamsHash + N nullifiers + M commitments).
 
-> Source: `contracts/programs/privacy-coin/src/state/commitment_tree.rs`, `vk_registry.rs`
+> Source: `contracts/programs/utxopia/src/state/commitment_tree.rs`, `vk_registry.rs`
 
 ---
 

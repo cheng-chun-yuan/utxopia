@@ -1,5 +1,5 @@
 {
-  "name": "privacy-coin-frontend",
+  "name": "utxopia-frontend",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -11,7 +11,7 @@
     "copy-circuits": "mkdir -p public/circuits/groth16 && for c in ../sdk/circuits/joinsplit_*; do n=$(basename $c); mkdir -p public/circuits/groth16/$n/${n}_js && cp $c/${n}_js/${n}.wasm public/circuits/groth16/$n/${n}_js/ && cp $c/${n}.zkey public/circuits/groth16/$n/; done"
   },
   "dependencies": {
-    "@privacy-coin/sdk": "file:../sdk",
+    "@utxopia/sdk": "file:../sdk",
     "@noble/hashes": "^1.8.0",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-popover": "^1.1.15",

@@ -2,7 +2,7 @@
 
 ## Goal
 
-Break down oversized components, eliminate remaining duplication, and improve code quality across the privacy-coin-app frontend. No behavior changes — pure structural refactoring.
+Break down oversized components, eliminate remaining duplication, and improve code quality across the utxopia-app frontend. No behavior changes — pure structural refactoring.
 
 ## Context
 
@@ -19,7 +19,7 @@ After the API cleanup (frontend-api-cleanup.md), the codebase has clean data fet
 Extracts auth modal state + passkey handlers from PayFlow:
 - State: `authModalOpen`
 - Logic: `handlePasskeyRegister`, `handlePasskeyAuthenticate`, auto-open effect
-- Deps: `usePasskey()`, `usePrivacyCoinStore` (deriveKeysFromPasskeySeed), `hasKeys`
+- Deps: `usePasskey()`, `useUTXOpiaStore` (deriveKeysFromPasskeySeed), `hasKeys`
 - Returns: `{ authModalOpen, setAuthModalOpen, handlePasskeyRegister, handlePasskeyAuthenticate }`
 
 ### Hook: `usePayFlowNotes(selectedToken, totalOutputSats, initialSecretPhrase?, preselectedNote?)`
@@ -29,7 +29,7 @@ Extracts auth modal state + passkey handlers from PayFlow:
 Extracts note selection + secret phrase import logic:
 - State: `selectedNoteIds`, `showNoteSelector`, `importPhrase`, `importedNotes`, `importLoading`, `importError`, `showImportInput`
 - Logic: auto-select notes when output changes, pre-select from props, `handleImportScan`, `clearImportedNote`, `handleRefresh`
-- Deps: `usePrivacyCoin()` (inboxNotes, refreshInbox), `scanSecretPhrase`
+- Deps: `useUTXOpia()` (inboxNotes, refreshInbox), `scanSecretPhrase`
 - Returns: `{ selectedNotes, availableNotes, totalInputSats, activeImportedNotes, hasImportedNotes, handleImportScan, clearImportedNote, handleRefresh, showNoteSelector, setShowNoteSelector, showImportInput, setShowImportInput, importPhrase, setImportPhrase, importLoading, importError }`
 
 ### Hook: `useRelayerConfig(selectedToken)`

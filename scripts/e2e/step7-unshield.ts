@@ -130,9 +130,9 @@ function serializeGroth16Proof(proof: any): Uint8Array {
 async function main() {
   const state = loadState();
   const authority = loadAuthority();
-  const PRIVACY_COIN = new PublicKey(state.privacyCoinProgramId);
-  const [poolState] = derivePoolStatePDA(PRIVACY_COIN);
-  const [commitmentTree] = deriveCommitmentTreePDA(PRIVACY_COIN);
+  const UTXOPIA = new PublicKey(state.privacyCoinProgramId);
+  const [poolState] = derivePoolStatePDA(UTXOPIA);
+  const [commitmentTree] = deriveCommitmentTreePDA(UTXOPIA);
 
   if (!state.usdcNote || !state.tUsdcMint) {
     throw new Error("USDC note not found. Run step5 first.");
@@ -161,7 +161,7 @@ async function main() {
 
   // Get token config for the token_id
   const tUsdcMint = new PublicKey(state.tUsdcMint);
-  const [tokenConfig] = deriveTokenConfigPDA(PRIVACY_COIN, tUsdcMint);
+  const [tokenConfig] = deriveTokenConfigPDA(UTXOPIA, tUsdcMint);
   const tUsdcVault = new PublicKey(state.tUsdcVault!);
   const userAta = deriveATA(tUsdcMint, authority.publicKey);
 
@@ -268,8 +268,8 @@ async function main() {
   // 0. pool_state, 1. commitment_tree, 2. vk_registry, 3. user, 4. system_program,
   // 5. token_config, 6. vault, 7. token_program, 8..8+P recipients, 8+P+ nullifiers
   const nullifierBytes0 = bigintToBytes32BE(nullifier0);
-  const [nullifierPDA0] = deriveNullifierPDA(PRIVACY_COIN, nullifierBytes0);
-  const [vkRegistry1x1] = deriveVkRegistryPDA(PRIVACY_COIN, 1, 1);
+  const [nullifierPDA0] = deriveNullifierPDA(UTXOPIA, nullifierBytes0);
+  const [vkRegistry1x1] = deriveVkRegistryPDA(UTXOPIA, 1, 1);
 
   const ix = new TransactionInstruction({
     keys: [
@@ -284,7 +284,7 @@ async function main() {
       { pubkey: userAta, isSigner: false, isWritable: true }, // recipient
       { pubkey: nullifierPDA0, isSigner: false, isWritable: true },
     ],
-    programId: PRIVACY_COIN,
+    programId: UTXOPIA,
     data: txData,
   });
 

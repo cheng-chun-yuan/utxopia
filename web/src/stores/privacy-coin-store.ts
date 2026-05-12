@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { PublicKey, type Connection } from "@solana/web3.js";
 import {
-  PrivacyCoinClient,
+  UTXOpiaClient,
   hexToBytes,
   bytesToHex,
   deserializeKeysFromStorage,
@@ -11,12 +11,12 @@ import {
   scanAnnouncementsViewOnly,
   decodeViewOnlyKeys,
   EventClient,
-  type PrivacyCoinKeys,
+  type UTXOpiaKeys,
   type StealthMetaAddress,
   type ViewOnlyKeys,
   type ScannedNote,
   type ViewOnlyScannedNote,
-} from "@privacy-coin/sdk";
+} from "@utxopia/sdk";
 import { fetchSpentNullifierPDAs, nullifierHashToPDA } from "@/lib/nullifier-utils";
 import { VAULT_TOKENS } from "@/lib/supported-tokens";
 import { API_ENDPOINTS, getBackendUrl, getSolanaRpcUrl } from "@/lib/api/constants";
@@ -25,14 +25,14 @@ import { API_ENDPOINTS, getBackendUrl, getSolanaRpcUrl } from "@/lib/api/constan
 // localStorage Key Persistence (AES-256-GCM encrypted)
 // ============================================================================
 
-const KEYS_STORAGE_PREFIX = "pcoin:keys:";
+const KEYS_STORAGE_PREFIX = "utxo:keys:";
 
 async function deriveStorageKey(walletPubkey: string): Promise<CryptoKey> {
   const enc = new TextEncoder();
   // ":aegis-storage-key" and "aegis-v4:" are LOAD-BEARING KDF inputs — frozen
   // from the project's pre-rename era. Changing either breaks the AES-GCM
   // key that decrypts every existing user's persisted spending/viewing keys.
-  // The project name is "Privacy Coin", but these strings stay as-is.
+  // The project name is "UTXOpia", but these strings stay as-is.
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
     enc.encode(walletPubkey + ":aegis-storage-key"),
@@ -74,9 +74,9 @@ async function decryptData(key: CryptoKey, encrypted: string): Promise<string> {
   return new TextDecoder().decode(plaintext);
 }
 
-async function persistKeys(walletPubkey: string, _keys: PrivacyCoinKeys): Promise<void> {
+async function persistKeys(walletPubkey: string, _keys: UTXOpiaKeys): Promise<void> {
   try {
-    const client = PrivacyCoinClient.instance();
+    const client = UTXOpiaClient.instance();
     const data = client.serializeKeys();
     if (!data) return;
     const storageKey = await deriveStorageKey(walletPubkey);
@@ -87,7 +87,7 @@ async function persistKeys(walletPubkey: string, _keys: PrivacyCoinKeys): Promis
   }
 }
 
-async function loadKeys(walletPubkey: string, solanaPublicKey: Uint8Array): Promise<PrivacyCoinKeys | null> {
+async function loadKeys(walletPubkey: string, solanaPublicKey: Uint8Array): Promise<UTXOpiaKeys | null> {
   try {
     const raw = localStorage.getItem(KEYS_STORAGE_PREFIX + walletPubkey);
     if (!raw) return null;
@@ -128,8 +128,8 @@ export function getEventClient(): EventClient {
       backendUrl,
       backendWsUrl: wsUrl,
       solanaRpcUrl: getSolanaRpcUrl(),
-      programId: PrivacyCoinClient.instance().config.privacyCoinProgramId,
-      commitmentTreeAddress: PrivacyCoinClient.instance().config.commitmentTreePda,
+      programId: UTXOpiaClient.instance().config.privacyCoinProgramId,
+      commitmentTreeAddress: UTXOpiaClient.instance().config.commitmentTreePda,
     });
   }
   return eventClient;
@@ -167,12 +167,12 @@ export interface ActiveWithdrawal {
   updatedAt: number;
 }
 
-interface PrivacyCoinState {
+interface UTXOpiaState {
   // Poseidon
   isPoseidonReady: boolean;
 
   // Keys
-  keys: PrivacyCoinKeys | null;
+  keys: UTXOpiaKeys | null;
   viewOnlyKeys: ViewOnlyKeys | null;
   isViewOnly: boolean;
   stealthAddress: StealthMetaAddress | null;
@@ -218,7 +218,7 @@ interface PrivacyCoinState {
 // Store
 // ============================================================================
 
-export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
+export const useUTXOpiaStore = create<UTXOpiaState>((set, get) => ({
   // Initial state
   isPoseidonReady: false,
   keys: null,
@@ -240,12 +240,12 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
 
   initPoseidon: async () => {
     try {
-      if (!PrivacyCoinClient.isInitialized) {
-        await PrivacyCoinClient.init();
+      if (!UTXOpiaClient.isInitialized) {
+        await UTXOpiaClient.init();
       }
       set({ isPoseidonReady: true });
     } catch (err) {
-      console.error("[PrivacyCoin] Failed to init:", err);
+      console.error("[UTXOpia] Failed to init:", err);
     }
   },
 
@@ -253,7 +253,7 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const client = PrivacyCoinClient.instance();
+      const client = UTXOpiaClient.instance();
       const { keys: derivedKeys, stealthAddress: meta, stealthAddressEncoded: encoded } =
         await client.loginWithWallet({
           publicKey: wallet.publicKey,
@@ -298,8 +298,8 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
     const restored = await loadKeys(pubkeyStr, walletPubkey.toBytes());
     if (!restored) return false;
 
-    // Sync the PrivacyCoinClient singleton with the restored keys
-    const client = PrivacyCoinClient.instance();
+    // Sync the UTXOpiaClient singleton with the restored keys
+    const client = UTXOpiaClient.instance();
     const serialized = client.serializeKeys();
     // restoreKeys needs serialized form — re-serialize via loadKeys result
     // Since loadKeys already deserialized, we re-read raw from localStorage
@@ -327,13 +327,13 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
   deriveKeysFromPasskeySeed: async (seed: Uint8Array) => {
     set({ isLoading: true, error: null });
     try {
-      const client = PrivacyCoinClient.instance();
+      const client = UTXOpiaClient.instance();
       const { keys: derivedKeys, stealthAddress: meta, stealthAddressEncoded: encoded } =
         await client.loginWithSeed(seed);
 
       // Persist with "passkey:" prefix
       const credentialId = typeof window !== "undefined"
-        ? localStorage.getItem("pcoin:passkey_credential_id") || "default"
+        ? localStorage.getItem("utxo:passkey_credential_id") || "default"
         : "default";
       persistKeys("passkey:" + credentialId, derivedKeys);
 
@@ -355,7 +355,7 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
   hydratePasskeyKeys: async () => {
     try {
       const credentialId = typeof window !== "undefined"
-        ? localStorage.getItem("pcoin:passkey_credential_id")
+        ? localStorage.getItem("utxo:passkey_credential_id")
         : null;
       if (!credentialId) return false;
 
@@ -363,8 +363,8 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
       const restored = await loadKeys(storageId, new Uint8Array(32));
       if (!restored) return false;
 
-      // Sync the PrivacyCoinClient singleton with the restored keys
-      const client = PrivacyCoinClient.instance();
+      // Sync the UTXOpiaClient singleton with the restored keys
+      const client = UTXOpiaClient.instance();
       try {
         const raw = localStorage.getItem(KEYS_STORAGE_PREFIX + storageId);
         if (raw) {
@@ -392,8 +392,8 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
   loadViewOnlyKeys: (encoded: string) => {
     try {
       const voKeys = decodeViewOnlyKeys(encoded);
-      // Sync with PrivacyCoinClient so computeNullifier works in view-only mode
-      const client = PrivacyCoinClient.instance();
+      // Sync with UTXOpiaClient so computeNullifier works in view-only mode
+      const client = UTXOpiaClient.instance();
       client.loginViewOnly(voKeys);
       set({
         keys: null,
@@ -414,9 +414,9 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
     if (walletPubkey) {
       removeKeys(walletPubkey);
     }
-    // Clear PrivacyCoinClient state
-    if (PrivacyCoinClient.isInitialized) {
-      PrivacyCoinClient.instance().logout();
+    // Clear UTXOpiaClient state
+    if (UTXOpiaClient.isInitialized) {
+      UTXOpiaClient.instance().logout();
     }
     set({
       keys: null,
@@ -468,7 +468,7 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
         lastAnnouncementCount = announcements.length;
 
         // Build token list with computed tokenIds for multi-token scanning
-        const pcoinClient = PrivacyCoinClient.instance();
+        const pcoinClient = UTXOpiaClient.instance();
         const config = pcoinClient.config;
         const tokensToScan: { symbol: string; tokenId: bigint }[] = [];
         for (const token of VAULT_TOKENS) {
@@ -477,7 +477,7 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
             if (!mintAddr && token.symbol === "zkBTC") mintAddr = config.zkbtcMint;
             if (!mintAddr) continue; // skip tokens without mint addresses
             tokensToScan.push({ symbol: token.shieldedSymbol, tokenId: pcoinClient.getTokenId(mintAddr) });
-          } catch (err) { console.error("[PrivacyCoinStore] invalid mint for token:", token.symbol, err); }
+          } catch (err) { console.error("[UTXOpiaStore] invalid mint for token:", token.symbol, err); }
         }
 
         // Scan locally for privacy (server doesn't know which are ours)
@@ -517,7 +517,7 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
         // Check which notes are spent via backend batch nullifier API (use proxy)
         const backendUrl = "";
 
-        // Compute nullifier hashes (hex) for each note via PrivacyCoinClient
+        // Compute nullifier hashes (hex) for each note via UTXOpiaClient
         const nullifierData = scanned.map((note) => {
           const hashBytes = pcoinClient.computeNullifier(note);
           const hashHex = Buffer.from(hashBytes).toString("hex");
@@ -576,7 +576,7 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
           inboxLoading: false,
         });
       } catch (err) {
-        console.error("[PrivacyCoin] Inbox error:", err);
+        console.error("[UTXOpia] Inbox error:", err);
         set({
           inboxError: err instanceof Error ? err.message : "Failed to fetch inbox",
           inboxLoading: false,
@@ -593,7 +593,7 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
   startRealtimeInbox: () => {
     const client = getEventClient();
     client.start().catch((err) => {
-      console.warn("[PrivacyCoin] EventClient start failed:", err);
+      console.warn("[UTXOpia] EventClient start failed:", err);
     });
     const unsub = client.onAnnouncement(() => {
       // New announcements arrived via WS — trigger inbox refresh
@@ -615,8 +615,8 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
       return;
     }
     try {
-      if (!PrivacyCoinClient.isInitialized) {
-        await PrivacyCoinClient.init();
+      if (!UTXOpiaClient.isInitialized) {
+        await UTXOpiaClient.init();
       }
       const response = await fetch(
         API_ENDPOINTS.PUBLIC_ZKBTC_BALANCE(walletPubkey.toBase58()),
@@ -628,7 +628,7 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
       const result = await response.json();
       set({ publicZkbtcBalance: BigInt(result?.amount ?? "0") });
     } catch (err) {
-      console.error("[PrivacyCoin] Failed to fetch public zkBTC balance:", err);
+      console.error("[UTXOpia] Failed to fetch public zkBTC balance:", err);
     }
   },
 
@@ -660,12 +660,12 @@ export const usePrivacyCoinStore = create<PrivacyCoinState>((set, get) => ({
 // Convenience Hooks
 // ============================================================================
 
-export function usePrivacyCoin() {
-  return usePrivacyCoinStore();
+export function useUTXOpia() {
+  return useUTXOpiaStore();
 }
 
-export function usePrivacyCoinKeys() {
-  const store = usePrivacyCoinStore();
+export function useUTXOpiaKeys() {
+  const store = useUTXOpiaStore();
   return {
     keys: store.keys,
     stealthAddress: store.stealthAddress,
@@ -679,7 +679,7 @@ export function usePrivacyCoinKeys() {
 }
 
 export function useStealthInbox() {
-  const store = usePrivacyCoinStore();
+  const store = useUTXOpiaStore();
   return {
     notes: store.inboxNotes,
     totalAmountSats: store.inboxTotalSats,

@@ -1,4 +1,4 @@
-//! Privacy Coin Backend — Private Bitcoin Bridge Services
+//! UTXOpia Backend — Private Bitcoin Bridge Services
 //!
 //! Runs as a single binary with subcommands. Each mode starts a different
 //! combination of background services:
@@ -17,7 +17,7 @@
 //! - **REST API**: serves frontend requests (deposits, transfers, redemptions, proofs)
 
 use zkbtc::api_server as api;
-use zkbtc::config::PrivacyCoinConfig;
+use zkbtc::config::UTXOpiaConfig;
 use zkbtc::deposit_tracker::{self, TrackerConfig};
 use zkbtc::deposit_tracker::sqlite_db::SqliteDepositStore;
 use zkbtc::event_indexer::{EventIndexerConfig, EventIndexerService, EventStore, TreeCache, event_indexer_router_with_deposits, SolanaWsConfig, SolanaWsSubscriber, Reconciler};
@@ -72,7 +72,7 @@ fn print_usage() {
     println!("  HEADER_BATCH_SIZE             Headers per batch (2-10, default: 5)");
     println!("  INDEXER_DB_PATH               Event indexer SQLite path (default: data/events.db)");
     println!("  INDEXER_POLL_INTERVAL_SECS    Event indexer poll interval (default: 10)");
-    println!("  PRIVACY_COIN_PROGRAM_ID             Privacy Coin program ID for event indexing");
+    println!("  UTXOPIA_PROGRAM_ID             UTXOpia program ID for event indexing");
     println!();
     println!("Note: Most functionality is handled by the SDK on the client side.");
     println!();
@@ -83,7 +83,7 @@ fn print_usage() {
 /// Create redemption service from environment.
 /// Supports three modes: "single" (POC), "frost" (legacy), "ika" (v2 default).
 fn create_service(config: RedemptionConfig) -> RedemptionService {
-    if let Ok(mode) = env::var("PRIVACY_COIN_SIGNING_MODE") {
+    if let Ok(mode) = env::var("UTXOPIA_SIGNING_MODE") {
         match mode.to_lowercase().as_str() {
             "frost" => {
                 return match create_frost_service(config.clone()) {
@@ -110,7 +110,7 @@ fn create_service(config: RedemptionConfig) -> RedemptionService {
     }
 
     // Single-key mode
-    let mut sol_client = match PrivacyCoinConfig::from_env() {
+    let mut sol_client = match UTXOpiaConfig::from_env() {
         Ok(cfg) => zkbtc::solana::client::SolClient::from_config(&cfg).unwrap_or_else(|_| {
             zkbtc::solana::client::SolClient::new(zkbtc::solana::client::SolConfig::default())
         }),
@@ -140,23 +140,23 @@ fn create_service(config: RedemptionConfig) -> RedemptionService {
         }
     } else {
         // No signing key — use generated signer but keep env-based sol_client
-        // so program_id comes from PRIVACY_COIN_PROGRAM_ID env var
+        // so program_id comes from UTXOPIA_PROGRAM_ID env var
         RedemptionService::new_with_signer(config, SingleKeySigner::generate(), sol_client)
     }
 }
 
 /// Create redemption service with FROST threshold signing
 fn create_frost_service(config: RedemptionConfig) -> Result<RedemptionService, String> {
-    let pcoin_config = PrivacyCoinConfig::from_env().map_err(|e| e.to_string())?;
+    let pcoin_config = UTXOpiaConfig::from_env().map_err(|e| e.to_string())?;
 
     let frost_client = pcoin_config
         .signing
         .frost_client()
         .ok_or("signing mode is not FROST")?;
 
-    // Get group pubkey from PRIVACY_COIN_FROST_GROUP_PUBKEY env var
-    let group_pubkey_hex = env::var("PRIVACY_COIN_FROST_GROUP_PUBKEY")
-        .map_err(|_| "PRIVACY_COIN_FROST_GROUP_PUBKEY required for FROST mode".to_string())?;
+    // Get group pubkey from UTXOPIA_FROST_GROUP_PUBKEY env var
+    let group_pubkey_hex = env::var("UTXOPIA_FROST_GROUP_PUBKEY")
+        .map_err(|_| "UTXOPIA_FROST_GROUP_PUBKEY required for FROST mode".to_string())?;
 
     let group_pubkey_bytes = hex::decode(&group_pubkey_hex)
         .map_err(|e| format!("invalid group pubkey hex: {}", e))?;
@@ -187,12 +187,12 @@ fn create_frost_service(config: RedemptionConfig) -> Result<RedemptionService, S
 /// Create redemption service backed by an Ika dWallet (v2).
 ///
 /// The IkaSigner does not produce signatures synchronously the way FROST does.
-/// Instead, the Privacy Coin program's `complete_redemption` instruction CPIs
+/// Instead, the UTXOpia program's `complete_redemption` instruction CPIs
 /// `approve_message` on the Ika program; the Ika network's mock signer (pre-alpha)
 /// then asynchronously fills a Sign PDA which the IkaSigner polls for. See
 /// `backend/src/redemption/signer.rs::IkaSigner` for the polling contract.
 fn create_ika_service(config: RedemptionConfig) -> Result<RedemptionService, String> {
-    let pcoin_config = PrivacyCoinConfig::from_env().map_err(|e| e.to_string())?;
+    let pcoin_config = UTXOpiaConfig::from_env().map_err(|e| e.to_string())?;
 
     let (program_id_str, dwallet_str, dwallet_xonly_hex) = match &pcoin_config.signing {
         zkbtc::config::SigningMode::Ika {
@@ -206,10 +206,10 @@ fn create_ika_service(config: RedemptionConfig) -> Result<RedemptionService, Str
 
     let ika_program_id = program_id_str
         .parse::<solana_sdk::pubkey::Pubkey>()
-        .map_err(|e| format!("invalid PRIVACY_COIN_IKA_PROGRAM_ID: {}", e))?;
+        .map_err(|e| format!("invalid UTXOPIA_IKA_PROGRAM_ID: {}", e))?;
     let ika_dwallet = dwallet_str
         .parse::<solana_sdk::pubkey::Pubkey>()
-        .map_err(|e| format!("invalid PRIVACY_COIN_IKA_DWALLET: {}", e))?;
+        .map_err(|e| format!("invalid UTXOPIA_IKA_DWALLET: {}", e))?;
     let xonly_bytes = hex::decode(&dwallet_xonly_hex)
         .map_err(|e| format!("invalid IKA dwallet xonly hex: {}", e))?;
     let xonly = bitcoin::XOnlyPublicKey::from_slice(&xonly_bytes)
@@ -278,7 +278,7 @@ fn load_tracker_config(args: &[String]) -> TrackerConfig {
     if let Ok(addr) = env::var("POOL_RECEIVE_ADDRESS") {
         config.pool_receive_address = addr;
     }
-    if let Ok(rpc) = env::var("PRIVACY_COIN_SOLANA_RPC").or_else(|_| env::var("SOLANA_RPC_URL")) {
+    if let Ok(rpc) = env::var("UTXOPIA_SOLANA_RPC").or_else(|_| env::var("SOLANA_RPC_URL")) {
         config.solana_rpc = rpc;
     }
     if let Ok(db_path) = env::var("DEPOSIT_DB_PATH") {
@@ -333,7 +333,7 @@ fn configure_sweeper(
     service: deposit_tracker::DepositTrackerService,
     config: &TrackerConfig,
 ) -> deposit_tracker::DepositTrackerService {
-    if let Ok(mode) = env::var("PRIVACY_COIN_SIGNING_MODE") {
+    if let Ok(mode) = env::var("UTXOPIA_SIGNING_MODE") {
         if mode.to_lowercase() == "frost" {
             return match configure_frost_sweeper(service, config) {
                 Ok(s) => {
@@ -386,18 +386,18 @@ fn configure_verifier(
 
 /// Resolve the Solana RPC URL from environment variables.
 fn solana_rpc_url() -> String {
-    env::var("PRIVACY_COIN_SOLANA_RPC")
+    env::var("UTXOPIA_SOLANA_RPC")
         .or_else(|_| env::var("SOLANA_RPC_URL"))
         .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string())
 }
 
-/// Resolve the PRIVACY_COIN_PROGRAM_ID from the environment, returning None on failure.
-fn require_privacy_coin_program_id() -> Option<String> {
-    match env::var("PRIVACY_COIN_PROGRAM_ID") {
+/// Resolve the UTXOPIA_PROGRAM_ID from the environment, returning None on failure.
+fn require_utxopia_program_id() -> Option<String> {
+    match env::var("UTXOPIA_PROGRAM_ID") {
         Ok(id) => Some(id),
         Err(_) => {
-            eprintln!("ERROR: PRIVACY_COIN_PROGRAM_ID env var is required.");
-            eprintln!("Run: PRIVACY_COIN_NETWORK=devnet ./scripts/sync-env.sh to generate .env files");
+            eprintln!("ERROR: UTXOPIA_PROGRAM_ID env var is required.");
+            eprintln!("Run: UTXOPIA_NETWORK=devnet ./scripts/sync-env.sh to generate .env files");
             None
         }
     }
@@ -466,7 +466,7 @@ fn spawn_reconciler(
 /// Spawn the event indexer polling service.
 fn spawn_event_indexer(
     solana_rpc: &str,
-    privacy_coin_program_id: &str,
+    utxopia_program_id: &str,
     event_store: Arc<EventStore>,
     tree_cache: Arc<TreeCache>,
 ) {
@@ -475,7 +475,7 @@ fn spawn_event_indexer(
     let indexer_poll_secs: u64 = env_or("INDEXER_POLL_INTERVAL_SECS", 10);
     let indexer_config = EventIndexerConfig {
         rpc_url: solana_rpc.to_string(),
-        program_id: privacy_coin_program_id.to_string(),
+        program_id: utxopia_program_id.to_string(),
         poll_interval_secs: indexer_poll_secs,
     };
     let indexer_service = match EventIndexerService::new(indexer_config, event_store) {
@@ -495,7 +495,7 @@ fn spawn_event_indexer(
 /// Spawn the Solana WebSocket log subscriber for real-time events.
 fn spawn_solana_ws_subscriber(
     solana_rpc: &str,
-    privacy_coin_program_id: &str,
+    utxopia_program_id: &str,
     event_store: Arc<EventStore>,
     tree_cache: Arc<TreeCache>,
 ) {
@@ -504,7 +504,7 @@ fn spawn_solana_ws_subscriber(
     let ws_subscriber = SolanaWsSubscriber::new(
         SolanaWsConfig {
             ws_url: solana_ws_url,
-            program_id: privacy_coin_program_id.to_string(),
+            program_id: utxopia_program_id.to_string(),
         },
         event_store,
         tree_cache,
@@ -592,7 +592,7 @@ async fn run_tracker_service(args: &[String]) {
 
     // Resolve common env values
     let solana_rpc = solana_rpc_url();
-    let privacy_coin_program_id = match require_privacy_coin_program_id() {
+    let utxopia_program_id = match require_utxopia_program_id() {
         Some(id) => id,
         None => return,
     };
@@ -605,10 +605,10 @@ async fn run_tracker_service(args: &[String]) {
     };
 
     // Parse and validate program pubkey
-    let program_pubkey: solana_sdk::pubkey::Pubkey = match privacy_coin_program_id.parse() {
+    let program_pubkey: solana_sdk::pubkey::Pubkey = match utxopia_program_id.parse() {
         Ok(pk) => pk,
         Err(e) => {
-            eprintln!("Invalid PRIVACY_COIN_PROGRAM_ID '{}': {}", privacy_coin_program_id, e);
+            eprintln!("Invalid UTXOPIA_PROGRAM_ID '{}': {}", utxopia_program_id, e);
             return;
         }
     };
@@ -635,8 +635,8 @@ async fn run_tracker_service(args: &[String]) {
         reconciler_status,
     );
 
-    spawn_event_indexer(&solana_rpc, &privacy_coin_program_id, event_store.clone(), tree_cache.clone());
-    spawn_solana_ws_subscriber(&solana_rpc, &privacy_coin_program_id, event_store.clone(), tree_cache.clone());
+    spawn_event_indexer(&solana_rpc, &utxopia_program_id, event_store.clone(), tree_cache.clone());
+    spawn_solana_ws_subscriber(&solana_rpc, &utxopia_program_id, event_store.clone(), tree_cache.clone());
 
     // Redemption + stealth services
     let redemption_config = RedemptionConfig::default();
@@ -694,15 +694,15 @@ fn configure_frost_sweeper(
     service: deposit_tracker::DepositTrackerService,
     _config: &TrackerConfig,
 ) -> Result<deposit_tracker::DepositTrackerService, String> {
-    let pcoin_config = PrivacyCoinConfig::from_env().map_err(|e| e.to_string())?;
+    let pcoin_config = UTXOpiaConfig::from_env().map_err(|e| e.to_string())?;
 
     let frost_client = pcoin_config
         .signing
         .frost_client()
         .ok_or("signing mode is not FROST")?;
 
-    let group_pubkey_hex = env::var("PRIVACY_COIN_FROST_GROUP_PUBKEY")
-        .map_err(|_| "PRIVACY_COIN_FROST_GROUP_PUBKEY required for FROST mode".to_string())?;
+    let group_pubkey_hex = env::var("UTXOPIA_FROST_GROUP_PUBKEY")
+        .map_err(|_| "UTXOPIA_FROST_GROUP_PUBKEY required for FROST mode".to_string())?;
 
     let group_pubkey_bytes = hex::decode(&group_pubkey_hex)
         .map_err(|e| format!("invalid group pubkey hex: {}", e))?;

@@ -1,7 +1,7 @@
 /**
  * Ika dWallet → Bitcoin P2TR address derivation.
  *
- * Privacy Coin v2 custody is held by an Ika dWallet on Solana. The dWallet's
+ * UTXOpia v2 custody is held by an Ika dWallet on Solana. The dWallet's
  * compressed secp256k1 public key (or its x-only form) is the BIP-341 internal
  * key for a Taproot output with no script tree. Spending happens via key-path
  * only — Ika produces a Schnorr signature over the BTC sighash on demand.

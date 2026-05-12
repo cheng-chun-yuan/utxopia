@@ -35,7 +35,7 @@ We explored per-user PDA deposit addresses (backend detects transfer → auto-sh
 The paradox: if a user has tokens in a Solana wallet to send to the PDA, they already have a wallet that can sign the shield tx directly. The PDA is only useful for exchange withdrawals — a niche case for a hackathon.
 
 ## Implementation
-Single file change: `privacy-coin-app/src/components/shield-flow.tsx`
+Single file change: `utxopia-app/src/components/shield-flow.tsx`
 - Show all tokens to passkey users (not just BTC)
 - When passkey user selects SPL token without wallet: show "Connect Wallet" prompt
 - After wallet connected: existing shield flow works as-is

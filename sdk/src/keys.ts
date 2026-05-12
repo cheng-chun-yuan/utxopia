@@ -1,5 +1,5 @@
 /**
- * Key Derivation for Privacy Coin (Baby Jubjub + Ed25519)
+ * Key Derivation for UTXOpia (Baby Jubjub + Ed25519)
  *
  * Dual-curve architecture (Railgun-style):
  * - Baby Jubjub spending key: SNARK-friendly, in-circuit verification via BabyPbk()
@@ -9,7 +9,7 @@
  * ```
  * Solana Wallet (Ed25519)
  *         │
- *         │ signs message: "Privacy Coin key derivation v1"
+ *         │ signs message: "UTXOpia key derivation v1"
  *         ▼
  *    Signature (64 bytes)
  *         │
@@ -62,11 +62,11 @@ type Eddsa = any;
 // ========== Types ==========
 
 /**
- * Complete Privacy Coin key hierarchy derived from Solana wallet
+ * Complete UTXOpia key hierarchy derived from Solana wallet
  *
  * Uses Baby Jubjub for spending keys and Ed25519 for viewing keys.
  */
-export interface PrivacyCoinKeys {
+export interface UTXOpiaKeys {
   /** Solana public key (32 bytes) - user identity */
   solanaPublicKey: Uint8Array;
 
@@ -159,7 +159,7 @@ export interface DelegatedViewKey {
 
 /** Message to sign for key derivation */
 export const SPENDING_KEY_DERIVATION_MESSAGE =
-  "Privacy Coin key derivation v1";
+  "UTXOpia key derivation v1";
 
 /** Domain separator for spending key derivation */
 const SPENDING_KEY_DOMAIN = "spend";
@@ -309,14 +309,14 @@ export interface WalletSignerAdapter {
 // ========== Key Derivation ==========
 
 /**
- * Derive Privacy Coin keys from Solana wallet signature.
+ * Derive UTXOpia keys from Solana wallet signature.
  *
  * Uses circomlibjs EdDSA for spendingPubKey derivation so keys are
  * compatible with the EdDSAPoseidonVerifier circuit.
  */
 export async function deriveKeysFromWallet(
   wallet: WalletSignerAdapter
-): Promise<PrivacyCoinKeys> {
+): Promise<UTXOpiaKeys> {
   if (!wallet.publicKey) {
     throw new Error("Wallet not connected");
   }
@@ -342,7 +342,7 @@ export async function deriveKeysFromWallet(
 }
 
 /**
- * Derive Privacy Coin keys from a signature
+ * Derive UTXOpia keys from a signature
  *
  * Spending key: SHA256(sig || "spend") → reduce mod BJJ_ORDER → babyJubMul(scalar, BASE8)
  * Viewing key: SHA256(sig || "view") → Ed25519 private key → ed25519.getPublicKey()
@@ -350,7 +350,7 @@ export async function deriveKeysFromWallet(
 export function deriveKeysFromSignature(
   signature: Uint8Array,
   solanaPublicKey: Uint8Array
-): PrivacyCoinKeys {
+): UTXOpiaKeys {
   if (signature.length !== 64) {
     throw new Error("Signature must be 64 bytes");
   }
@@ -398,7 +398,7 @@ export function deriveKeysFromSignature(
 /**
  * Derive keys from a seed phrase (sync — for scanning/non-circuit use)
  */
-export function deriveKeysFromSeed(seed: Uint8Array): PrivacyCoinKeys {
+export function deriveKeysFromSeed(seed: Uint8Array): UTXOpiaKeys {
   const fakeSig = new Uint8Array(64);
   const hash1 = sha256(seed);
   const hash2 = sha256(concatBytes(seed, new Uint8Array([1])));
@@ -415,7 +415,7 @@ export function deriveKeysFromSeed(seed: Uint8Array): PrivacyCoinKeys {
  * The sync `deriveKeysFromSeed` uses a different scalar derivation that doesn't
  * match circomlibjs's internal BLAKE-512 derivation used by `eddsaPoseidonSign`.
  */
-export async function deriveKeysFromSeedCircuit(seed: Uint8Array): Promise<PrivacyCoinKeys> {
+export async function deriveKeysFromSeedCircuit(seed: Uint8Array): Promise<UTXOpiaKeys> {
   const baseKeys = deriveKeysFromSeed(seed);
 
   // Override spending keys with circomlibjs-derived versions (same as deriveKeysFromWallet)
@@ -432,11 +432,11 @@ export async function deriveKeysFromSeedCircuit(seed: Uint8Array): Promise<Priva
 // ========== Stealth Meta-Address ==========
 
 /**
- * Create a stealth meta-address from Privacy Coin keys
+ * Create a stealth meta-address from UTXOpia keys
  *
  * Size: 96 bytes (32 BJJ compressed + 32 Ed25519 + 32 MPK)
  */
-export function createStealthMetaAddress(keys: PrivacyCoinKeys): StealthMetaAddress {
+export function createStealthMetaAddress(keys: UTXOpiaKeys): StealthMetaAddress {
   const mpk = computeMPKSync(
     keys.spendingPubKey.x,
     keys.spendingPubKey.y,
@@ -491,19 +491,19 @@ export function parseStealthMetaAddress(meta: StealthMetaAddress): {
 }
 
 /**
- * Encode stealth meta-address as a single string with pcoin: prefix
- * Format: "pcoin:" + hex(spendingPubKey (32) || viewingPubKey (32) || mpk (32))
+ * Encode stealth meta-address as a single string with utxo: prefix
+ * Format: "utxo:" + hex(spendingPubKey (32) || viewingPubKey (32) || mpk (32))
  */
 export function encodeStealthMetaAddress(meta: StealthMetaAddress): string {
   const combined = concatBytes(meta.spendingPubKey, meta.viewingPubKey, meta.mpk);
-  return "pcoin:" + bytesToHex(combined);
+  return "utxo:" + bytesToHex(combined);
 }
 
 /**
- * Decode stealth meta-address from a string (with or without pcoin: prefix)
+ * Decode stealth meta-address from a string (with or without utxo: prefix)
  */
 export function decodeStealthMetaAddress(encoded: string): StealthMetaAddress {
-  const hex = encoded.startsWith("pcoin:") ? encoded.slice(6) : encoded;
+  const hex = encoded.startsWith("utxo:") ? encoded.slice(6) : encoded;
   const bytes = hexToBytes(hex);
   if (bytes.length !== 96) {
     throw new Error("Invalid stealth meta-address length (expected 96 bytes)");
@@ -521,7 +521,7 @@ export function decodeStealthMetaAddress(encoded: string): StealthMetaAddress {
  * Create a delegated viewing key for auditors/compliance
  */
 export function createDelegatedViewKey(
-  keys: PrivacyCoinKeys,
+  keys: UTXOpiaKeys,
   permissions: ViewPermissions = ViewPermissions.FULL,
   options: { expiresAt?: number; label?: string } = {}
 ): DelegatedViewKey {
@@ -719,9 +719,9 @@ export function clearKey(key: Uint8Array): void {
 }
 
 /**
- * Securely clear all sensitive keys from an PrivacyCoinKeys object
+ * Securely clear all sensitive keys from an UTXOpiaKeys object
  */
-export function clearPrivacyCoinKeys(keys: PrivacyCoinKeys): void {
+export function clearUTXOpiaKeys(keys: UTXOpiaKeys): void {
   (keys as { spendingPrivKey: bigint }).spendingPrivKey = 0n;
   (keys as { nullifyingKey: bigint }).nullifyingKey = 0n;
   clearKey(keys.viewingPrivKey);
@@ -739,7 +739,7 @@ export function clearDelegatedViewKey(key: DelegatedViewKey): void {
  * Derive a view-only key bundle (no spending key)
  * Safe to export/backup separately from spending key
  */
-export function extractViewOnlyBundle(keys: PrivacyCoinKeys): {
+export function extractViewOnlyBundle(keys: UTXOpiaKeys): {
   solanaPublicKey: Uint8Array;
   spendingPubKey: Uint8Array;
   viewingPrivKey: Uint8Array;
@@ -768,11 +768,11 @@ export interface SerializedKeysForStorage {
 }
 
 /**
- * Serialize PrivacyCoinKeys to a plain object with hex strings (for encrypted storage).
+ * Serialize UTXOpiaKeys to a plain object with hex strings (for encrypted storage).
  *
  * The result is JSON-safe. Use `deserializeKeysFromStorage` to reconstruct.
  */
-export function serializeKeysForStorage(keys: PrivacyCoinKeys): SerializedKeysForStorage {
+export function serializeKeysForStorage(keys: UTXOpiaKeys): SerializedKeysForStorage {
   return {
     eddsaSeedHex: bytesToHex(keys.eddsaSeed),
     spendingPrivKeyHex: keys.spendingPrivKey.toString(16),
@@ -784,7 +784,7 @@ export function serializeKeysForStorage(keys: PrivacyCoinKeys): SerializedKeysFo
 }
 
 /**
- * Deserialize PrivacyCoinKeys from a storage object (reverse of serializeKeysForStorage).
+ * Deserialize UTXOpiaKeys from a storage object (reverse of serializeKeysForStorage).
  *
  * Requires `solanaPublicKey` to be provided separately since it is not stored
  * in the serialized format (it comes from the connected wallet).
@@ -792,7 +792,7 @@ export function serializeKeysForStorage(keys: PrivacyCoinKeys): SerializedKeysFo
 export function deserializeKeysFromStorage(
   data: SerializedKeysForStorage,
   solanaPublicKey: Uint8Array,
-): PrivacyCoinKeys {
+): UTXOpiaKeys {
   return {
     solanaPublicKey,
     spendingPrivKey: BigInt("0x" + data.spendingPrivKeyHex),
@@ -810,7 +810,7 @@ export function deserializeKeysFromStorage(
  * Result of a complete key setup operation (derivation + stealth address creation).
  */
 export interface KeySetupResult {
-  keys: PrivacyCoinKeys;
+  keys: UTXOpiaKeys;
   stealthAddress: StealthMetaAddress;
   stealthAddressEncoded: string;
 }
@@ -848,7 +848,7 @@ export async function setupKeysFromSeed(
  *
  * Use this when keys are already deserialized and you just need the stealth address.
  */
-export function recreateStealthAddress(keys: PrivacyCoinKeys): {
+export function recreateStealthAddress(keys: UTXOpiaKeys): {
   stealthAddress: StealthMetaAddress;
   stealthAddressEncoded: string;
 } {

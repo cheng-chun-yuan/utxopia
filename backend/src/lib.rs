@@ -1,4 +1,4 @@
-//! Privacy Coin Backend
+//! UTXOpia Backend
 //!
 //! Server-side services for the privacy-preserving Bitcoin-to-Solana bridge.
 //!
@@ -35,7 +35,7 @@ pub mod redemption;
 pub mod stealth;
 
 // Re-exports: Configuration
-pub use config::{ConfigError, Network, SigningMode, PrivacyCoinConfig};
+pub use config::{ConfigError, Network, SigningMode, UTXOpiaConfig};
 
 // Re-exports: Middleware (from api module)
 pub use api::middleware::{

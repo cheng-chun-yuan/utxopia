@@ -1,7 +1,7 @@
 {
-  "name": "@privacy-coin/circuits",
+  "name": "@utxopia/circuits",
   "version": "1.0.0",
-  "description": "PRIVACY_COIN circom circuits for Groth16 proofs",
+  "description": "UTXOPIA circom circuits for Groth16 proofs",
   "private": true,
   "scripts": {
     "compile": "bash scripts/compile.sh",

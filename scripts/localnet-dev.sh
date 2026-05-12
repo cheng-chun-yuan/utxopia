@@ -79,7 +79,7 @@ log "Cleaned indexer DB"
 
 # ── Start backend (indexes in real-time) ──
 log "Starting backend..."
-(cd backend && cargo run --bin zkbtc-api > /tmp/privacy-coin-backend.log 2>&1) &
+(cd backend && cargo run --bin zkbtc-api > /tmp/utxopia-backend.log 2>&1) &
 BACKEND_PID=$!
 
 # Wait for backend to be ready
@@ -89,7 +89,7 @@ for i in $(seq 1 30); do
     break
   fi
   if [[ $i -eq 30 ]]; then
-    err "Backend failed to start. Check /tmp/privacy-coin-backend.log"
+    err "Backend failed to start. Check /tmp/utxopia-backend.log"
     exit 1
   fi
   sleep 1
@@ -126,7 +126,7 @@ if [[ "$ONLY_SERVICES" == false ]]; then
 
   if [[ "$FAILED" == true ]]; then
     warn "Some E2E steps failed. Backend is still running for debugging."
-    warn "Backend logs: /tmp/privacy-coin-backend.log"
+    warn "Backend logs: /tmp/utxopia-backend.log"
   else
     log "All E2E steps passed!"
   fi
@@ -147,14 +147,14 @@ log "Tree: $TREE"
 
 # ── Start frontend ──
 log "Starting frontend..."
-(cd web && bun run dev > /tmp/privacy-coin-frontend.log 2>&1) &
+(cd web && bun run dev > /tmp/utxopia-frontend.log 2>&1) &
 FRONTEND_PID=$!
 sleep 5
 
 if curl -sf http://localhost:3000 > /dev/null 2>&1; then
   log "Frontend ready at http://localhost:3000"
 else
-  warn "Frontend may still be starting... check /tmp/privacy-coin-frontend.log"
+  warn "Frontend may still be starting... check /tmp/utxopia-frontend.log"
 fi
 
 # ── Done ──
@@ -163,8 +163,8 @@ log "═════════════════════════
 log "  Localnet dev environment ready!"
 log "  Frontend: http://localhost:3000"
 log "  Backend:  http://localhost:3001"
-log "  Logs:     /tmp/privacy-coin-backend.log"
-log "            /tmp/privacy-coin-frontend.log"
+log "  Logs:     /tmp/utxopia-backend.log"
+log "            /tmp/utxopia-frontend.log"
 log "════════════════════════════════════════"
 echo ""
 log "Press Ctrl+C to stop all services."

@@ -1,13 +1,13 @@
 // Validation utilities
 //
-// Uses @privacy-coin/sdk for Bitcoin address validation (more comprehensive than regex)
+// Uses @utxopia/sdk for Bitcoin address validation (more comprehensive than regex)
 
 import {
   MIN_DEPOSIT_SATS,
   MAX_DEPOSIT_SATS,
   MIN_WITHDRAWAL_SATS,
 } from "@/lib/constants";
-import { isValidBitcoinAddress } from "@privacy-coin/sdk";
+import { isValidBitcoinAddress } from "@utxopia/sdk";
 
 export function validateDepositAmount(amount: number): { valid: boolean; error?: string } {
   if (!amount || amount <= 0) {

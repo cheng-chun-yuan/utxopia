@@ -7,11 +7,11 @@
  */
 
 import { useMemo } from "react";
-import { usePrivacyCoin } from "@/hooks/use-privacy-coin";
+import { useUTXOpia } from "@/hooks/use-utxopia";
 import { autoSelectNotes } from "@/components/send/_lifted/helpers";
 
 export function useNoteAutoSelector(tokenSymbol: string, amountSats: number) {
-  const { inboxNotes, inboxLoading, refreshInbox } = usePrivacyCoin();
+  const { inboxNotes, inboxLoading, refreshInbox } = useUTXOpia();
 
   const availableNotes = useMemo(
     () => inboxNotes.filter((n) => n.amount > 0n && !n.isSpent && n.tokenSymbol === tokenSymbol),

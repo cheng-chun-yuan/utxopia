@@ -3,27 +3,27 @@
 import { useEffect, useRef, useCallback, type JSX } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useBitcoinWalletStore } from "./bitcoin-wallet-store";
-import { usePrivacyCoinStore } from "./privacy-coin-store";
+import { useUTXOpiaStore } from "./utxopia-store";
 
 /**
  * Component to hydrate Zustand stores on mount.
  * Handles localStorage restoration, Poseidon initialization,
- * and auto-hydration of Privacy Coin keys from localStorage on wallet connect.
+ * and auto-hydration of UTXOpia keys from localStorage on wallet connect.
  */
 export function StoreHydration(): JSX.Element {
   const hydrateBtcWallet = useBitcoinWalletStore((s) => s._hydrate);
-  const initPoseidon = usePrivacyCoinStore((s) => s.initPoseidon);
-  const keys = usePrivacyCoinStore((s) => s.keys);
-  const viewOnlyKeys = usePrivacyCoinStore((s) => s.viewOnlyKeys);
+  const initPoseidon = useUTXOpiaStore((s) => s.initPoseidon);
+  const keys = useUTXOpiaStore((s) => s.keys);
+  const viewOnlyKeys = useUTXOpiaStore((s) => s.viewOnlyKeys);
   const hasAnyKeys = !!(keys || viewOnlyKeys);
-  const isPoseidonReady = usePrivacyCoinStore((s) => s.isPoseidonReady);
-  const hydrateKeys = usePrivacyCoinStore((s) => s.hydrateKeys);
-  const hydratePasskeyKeys = usePrivacyCoinStore((s) => s.hydratePasskeyKeys);
-  const inboxLoading = usePrivacyCoinStore((s) => s.inboxLoading);
-  const inboxNotesLength = usePrivacyCoinStore((s) => s.inboxNotes.length);
-  const refreshInbox = usePrivacyCoinStore((s) => s.refreshInbox);
+  const isPoseidonReady = useUTXOpiaStore((s) => s.isPoseidonReady);
+  const hydrateKeys = useUTXOpiaStore((s) => s.hydrateKeys);
+  const hydratePasskeyKeys = useUTXOpiaStore((s) => s.hydratePasskeyKeys);
+  const inboxLoading = useUTXOpiaStore((s) => s.inboxLoading);
+  const inboxNotesLength = useUTXOpiaStore((s) => s.inboxNotes.length);
+  const refreshInbox = useUTXOpiaStore((s) => s.refreshInbox);
 
-  const refreshPublicBalance = usePrivacyCoinStore((s) => s.refreshPublicBalance);
+  const refreshPublicBalance = useUTXOpiaStore((s) => s.refreshPublicBalance);
   const { publicKey: walletPubkey } = useWallet();
 
   // Track if we've already triggered a refresh
@@ -38,7 +38,7 @@ export function StoreHydration(): JSX.Element {
     initPoseidon();
   }, [hydrateBtcWallet, initPoseidon]);
 
-  // Auto-hydrate Privacy Coin keys from localStorage when wallet connects
+  // Auto-hydrate UTXOpia keys from localStorage when wallet connects
   useEffect(() => {
     if (walletPubkey && isPoseidonReady && !keys && !hasHydratedRef.current) {
       hasHydratedRef.current = true;

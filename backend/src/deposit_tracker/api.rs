@@ -44,11 +44,11 @@ pub fn create_deposit_router(tracker: DepositTrackerService) -> Router {
     let tracker_with_ws = tracker.with_websocket(ws_state.clone());
 
     // Read group pubkey from env (set by FROST DKG), fall back to POC default
-    let group_pubkey = std::env::var("PRIVACY_COIN_FROST_GROUP_PUBKEY").unwrap_or_else(|_| {
+    let group_pubkey = std::env::var("UTXOPIA_FROST_GROUP_PUBKEY").unwrap_or_else(|_| {
         "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798".to_string()
     });
 
-    let bitcoin_network = std::env::var("PRIVACY_COIN_BITCOIN_NETWORK").unwrap_or_else(|_| "testnet4".to_string());
+    let bitcoin_network = std::env::var("UTXOPIA_BITCOIN_NETWORK").unwrap_or_else(|_| "testnet4".to_string());
 
     let state = Arc::new(AppState {
         tracker: Arc::new(RwLock::new(tracker_with_ws)),

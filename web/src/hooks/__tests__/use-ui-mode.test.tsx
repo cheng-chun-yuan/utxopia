@@ -20,7 +20,7 @@ describe("useUiMode", () => {
   });
 
   it("reads existing localStorage value", () => {
-    localStorage.setItem("pcoin-ui-mode", "advanced");
+    localStorage.setItem("utxopia-ui-mode", "advanced");
     const { result } = renderHook(() => useUiMode(), { wrapper });
     expect(result.current.mode).toBe("advanced");
     expect(result.current.isAdvanced).toBe(true);
@@ -30,11 +30,11 @@ describe("useUiMode", () => {
     const { result } = renderHook(() => useUiMode(), { wrapper });
     act(() => result.current.setMode("advanced"));
     expect(result.current.mode).toBe("advanced");
-    expect(localStorage.getItem("pcoin-ui-mode")).toBe("advanced");
+    expect(localStorage.getItem("utxopia-ui-mode")).toBe("advanced");
   });
 
   it("ignores invalid localStorage values (falls back to lite)", () => {
-    localStorage.setItem("pcoin-ui-mode", "garbage");
+    localStorage.setItem("utxopia-ui-mode", "garbage");
     const { result } = renderHook(() => useUiMode(), { wrapper });
     expect(result.current.mode).toBe("lite");
   });

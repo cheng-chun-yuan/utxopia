@@ -1,5 +1,5 @@
 /**
- * Cryptographic utilities for Privacy Coin
+ * Cryptographic utilities for UTXOpia
  *
  * This module provides:
  * - Field constants (BN254)

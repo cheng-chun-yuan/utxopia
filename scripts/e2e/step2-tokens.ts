@@ -42,7 +42,7 @@ async function createToken(
   decimals: number,
   label: string,
   poolState: PublicKey,
-  pcoin: PublicKey,
+  utxo: PublicKey,
 ): Promise<{ mint: PublicKey; vault: PublicKey; userAta: PublicKey }> {
   // Create mint
   const mintKp = Keypair.generate();
@@ -81,11 +81,11 @@ async function registerTokenConfig(
   poolState: PublicKey,
   mint: PublicKey,
   vault: PublicKey,
-  pcoin: PublicKey,
+  utxo: PublicKey,
   label: string,
   serviceFee: bigint = 0n,
 ) {
-  const [tokenConfig] = deriveTokenConfigPDA(pcoin, mint);
+  const [tokenConfig] = deriveTokenConfigPDA(utxopia, mint);
   const regPayload = Buffer.alloc(32);
   regPayload.writeBigUInt64LE(serviceFee, 0);          // service_fee
   regPayload.writeBigUInt64LE(1000n, 8);               // min_deposit
@@ -101,7 +101,7 @@ async function registerTokenConfig(
       { pubkey: vault, isSigner: false, isWritable: false },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
-    programId: pcoin,
+    programId: utxopia,
     data: Buffer.concat([Buffer.from([Disc.REGISTER_TOKEN]), regPayload]),
   });
   await sendIx([ix], [authority]);
@@ -111,14 +111,14 @@ async function registerTokenConfig(
 async function main() {
   const state = loadState();
   const authority = loadAuthority();
-  const PRIVACY_COIN = new PublicKey(state.privacyCoinProgramId);
-  const [poolState] = derivePoolStatePDA(PRIVACY_COIN);
+  const UTXOPIA = new PublicKey(state.privacyCoinProgramId);
+  const [poolState] = derivePoolStatePDA(UTXOPIA);
 
   // tUSDC (6 decimals)
   log("Creating tUSDC...");
-  const usdc = await createToken(authority, 6, "tUSDC", poolState, PRIVACY_COIN);
+  const usdc = await createToken(authority, 6, "tUSDC", poolState, UTXOPIA);
   // USDC: service_fee = 2_000_000 (= $2.00 at 6 decimals)
-  await registerTokenConfig(authority, poolState, usdc.mint, usdc.vault, PRIVACY_COIN, "tUSDC", 2_000_000n);
+  await registerTokenConfig(authority, poolState, usdc.mint, usdc.vault, UTXOPIA, "tUSDC", 2_000_000n);
 
   // Mint 1M tUSDC to user
   const mintUsdcIx = createMintToInstruction(
@@ -129,9 +129,9 @@ async function main() {
 
   // tWSOL (9 decimals)
   log("Creating tWSOL...");
-  const wsol = await createToken(authority, 9, "tWSOL", poolState, PRIVACY_COIN);
+  const wsol = await createToken(authority, 9, "tWSOL", poolState, UTXOPIA);
   // SOL: service_fee = 10_000_000 (= 0.01 SOL ≈ $2 at 9 decimals)
-  await registerTokenConfig(authority, poolState, wsol.mint, wsol.vault, PRIVACY_COIN, "tWSOL", 10_000_000n);
+  await registerTokenConfig(authority, poolState, wsol.mint, wsol.vault, UTXOPIA, "tWSOL", 10_000_000n);
 
   // Mint 100 tWSOL to user
   const mintWsolIx = createMintToInstruction(

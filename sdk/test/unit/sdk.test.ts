@@ -1,5 +1,5 @@
 /**
- * Privacy Coin SDK Tests (Consolidated) — JoinSplit Architecture
+ * UTXOpia SDK Tests (Consolidated) — JoinSplit Architecture
  *
  * Core tests for all SDK functionality:
  * - DEPOSIT: depositToNote
@@ -33,7 +33,7 @@ describe("DEPOSIT", () => {
 
     expect(result.note.amount).toBe(100_000n);
     expect(result.taprootAddress).toMatch(/^tb1p/);
-    expect(result.claimLink).toContain("privacy-coin.app/claim");
+    expect(result.claimLink).toContain("utxopia.app/claim");
     expect(result.displayAmount).toBe("0.00100000 BTC");
   });
 

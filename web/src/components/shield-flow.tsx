@@ -19,13 +19,13 @@ import {
   TOKEN_PROGRAM_ID as SPL_TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID as SPL_TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
-import { PrivacyCoinClient } from "@privacy-coin/sdk";
-import { getPrivacyCoinProgramId, getZkbtcMint, derivePoolStatePDA, deriveCommitmentTreePDA, deriveTokenConfigPDA } from "@/lib/solana/pdas";
-import { usePrivacyCoin } from "@/hooks/use-privacy-coin";
+import { UTXOpiaClient } from "@utxopia/sdk";
+import { getUTXOpiaProgramId, getZkbtcMint, derivePoolStatePDA, deriveCommitmentTreePDA, deriveTokenConfigPDA } from "@/lib/solana/pdas";
+import { useUTXOpia } from "@/hooks/use-utxopia";
 import { Shield, ChevronDown, Loader2, ExternalLink, CheckCircle2, AlertCircle, LogOut, Wallet, Copy, Check, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StealthRecipientInput } from "@/components/ui/stealth-recipient-input";
-import type { StealthMetaAddress } from "@privacy-coin/sdk";
+import type { StealthMetaAddress } from "@utxopia/sdk";
 import { SHIELD_TOKENS } from "@/lib/supported-tokens";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
@@ -49,7 +49,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
   const { publicKey, sendTransaction } = wallet;
   const { connection } = useConnection();
   const { setVisible: openWalletModal } = useWalletModal();
-  const { keys, stealthAddress, stealthAddressEncoded } = usePrivacyCoin();
+  const { keys, stealthAddress, stealthAddressEncoded } = useUTXOpia();
 
   // Passkey users have keys but no Solana wallet — need to connect wallet for SPL shielding
   const isPasskeyOnly = !!keys && !publicKey;
@@ -117,12 +117,12 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
           ? new PublicKey(selectedToken.mint)
           : getZkbtcMint();
 
-      const client = PrivacyCoinClient.instance();
+      const client = UTXOpiaClient.instance();
       const mintAddr = mintPubkey.toBase58();
       const shieldOutput = await client.prepareShieldOutput({ amount: amountRaw, mintAddress: mintAddr });
       const { npkBytes, tokenId: tokenIdBigint } = shieldOutput;
 
-      const programId = getPrivacyCoinProgramId();
+      const programId = getUTXOpiaProgramId();
       const [tokenConfigPda] = deriveTokenConfigPDA(mintPubkey);
       const [poolStatePda] = derivePoolStatePDA();
       const [commitmentTreePda] = deriveCommitmentTreePDA();

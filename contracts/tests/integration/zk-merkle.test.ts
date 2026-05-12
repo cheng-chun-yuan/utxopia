@@ -11,7 +11,7 @@ import {
   generateClaimDirectProof,
 } from "../helpers/zk";
 
-describe("Privacy Coin Circom ZK Proof Integration", function () {
+describe("UTXOpia Circom ZK Proof Integration", function () {
   let user: Keypair;
   let poseidon: Poseidon;
   let merkleTree: PoseidonMerkleTree;

@@ -175,14 +175,14 @@ async function submitHeaders(
 async function main() {
   const state = loadState();
   const authority = loadAuthority();
-  const PRIVACY_COIN = new PublicKey(state.privacyCoinProgramId);
+  const UTXOPIA = new PublicKey(state.privacyCoinProgramId);
   const BTC_LC = new PublicKey(state.btcLightClientId);
   const CHADBUFFER_ID = new PublicKey(state.chadbufferId);
   const zkbtcMint = new PublicKey(state.zkbtcMint);
   const poolVault = new PublicKey(state.poolVault);
-  const [poolState] = derivePoolStatePDA(PRIVACY_COIN);
-  const [commitmentTree] = deriveCommitmentTreePDA(PRIVACY_COIN);
-  const [zkbtcTokenConfig] = deriveTokenConfigPDA(PRIVACY_COIN, zkbtcMint);
+  const [poolState] = derivePoolStatePDA(UTXOPIA);
+  const [commitmentTree] = deriveCommitmentTreePDA(UTXOPIA);
+  const [zkbtcTokenConfig] = deriveTokenConfigPDA(UTXOPIA, zkbtcMint);
 
   // Initialize SDK Poseidon
   const { initPoseidon, computeNPKSync } = await import("../../sdk/dist/index.js");
@@ -374,7 +374,7 @@ async function main() {
   // Derive deposit receipt PDA: ["deposit", deposit_txid]
   const [depositReceipt] = PublicKey.findProgramAddressSync(
     [Buffer.from("deposit_receipt"), depositTxHash],
-    PRIVACY_COIN,
+    UTXOPIA,
   );
 
   // Derive UTXO record PDA: ["utxo", sweep_txid, vout(LE)]
@@ -383,7 +383,7 @@ async function main() {
   voutBuf.writeUInt32LE(0);
   const [utxoRecord] = PublicKey.findProgramAddressSync(
     [Buffer.from("utxo"), sweepTxHash, voutBuf],
-    PRIVACY_COIN,
+    UTXOPIA,
   );
 
   // Instruction data: sweep_txid(32) + block_height(8) + sweep_tx_size(4) + deposit_tx_size(4) + deposit_txid(32) = 80 bytes
@@ -413,7 +413,7 @@ async function main() {
       { pubkey: utxoRecord, isSigner: false, isWritable: true },                   // 12
       { pubkey: zkbtcTokenConfig, isSigner: false, isWritable: true },             // 13
     ],
-    programId: PRIVACY_COIN,
+    programId: UTXOPIA,
     data: vsdData,
   });
 

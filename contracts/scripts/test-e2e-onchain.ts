@@ -11,7 +11,7 @@
  *
  * Prerequisites:
  *   - solana-test-validator running
- *   - Privacy Coin and Groth16 verifier deployed
+ *   - UTXOpia and Groth16 verifier deployed
  *
  * Run: bun run scripts/test-e2e-onchain.ts
  */
@@ -61,10 +61,10 @@ import {
   prepareClaimInputs,
   bytesToBigint,
   type ClaimInputs,
-  type PrivacyCoinKeys,
+  type UTXOpiaKeys,
   type StealthMetaAddress,
   type ScannedNote,
-} from "@privacy-coin/sdk";
+} from "@utxopia/sdk";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -588,7 +588,7 @@ async function main() {
   const authority = await loadKeypair(walletPath);
 
   // Program IDs
-  const programId = new PublicKey(localConfig.programs.PrivacyCoin);
+  const programId = new PublicKey(localConfig.programs.UTXOpia);
   const zkbtcMint = new PublicKey(localConfig.accounts.zkbtcMint);
   const poolVault = new PublicKey(localConfig.accounts.poolVault);
 
@@ -627,13 +627,13 @@ async function main() {
   log("✓ Prover initialized");
 
   // ==========================================================================
-  // Step 1: Generate PRIVACY_COIN keys (proper stealth model)
+  // Step 1: Generate UTXOPIA keys (proper stealth model)
   // ==========================================================================
   logSection("Step 1: Generate Stealth Keys");
 
   // Generate deterministic keys from a seed (simulating wallet signature derivation)
   const testSeed = randomFieldElement();
-  const keys: PrivacyCoinKeys = await deriveKeysFromSeed(bigintToBytes32(testSeed));
+  const keys: UTXOpiaKeys = await deriveKeysFromSeed(bigintToBytes32(testSeed));
 
   // Create stealth meta address (spending + viewing public keys)
   const stealthMetaAddress: StealthMetaAddress = createStealthMetaAddress(keys);
@@ -742,7 +742,7 @@ async function main() {
 
   // Use scanAnnouncements to properly reconstruct the ScannedNote
   // This uses the SDK's internal stealth derivation logic (SHA256 domain separator)
-  const { scanAnnouncements } = await import("@privacy-coin/sdk");
+  const { scanAnnouncements } = await import("@utxopia/sdk");
 
   // Format the deposit as an announcement for scanning
   const announcements = [{
@@ -831,7 +831,7 @@ async function main() {
   // ==========================================================================
   logSection("Step 7: Compute VK Hash");
 
-  const vkHash = await computeVkHash("privacy_coin_claim");
+  const vkHash = await computeVkHash("utxopia_claim");
   log(`VK hash: 0x${Buffer.from(vkHash).toString("hex").slice(0, 32)}...`);
 
   // ==========================================================================

@@ -5,9 +5,9 @@ import { BTC_DUST_LIMIT } from "@/lib/btc-constants";
 import {
   bytesToHex,
   buildDepositPsbt,
-  PrivacyCoinClient,
+  UTXOpiaClient,
   type StealthMetaAddress,
-} from "@privacy-coin/sdk";
+} from "@utxopia/sdk";
 import { useBitcoinWalletStore } from "@/stores/bitcoin-wallet-store";
 import type { WalletUtxo } from "@/stores/bitcoin-wallet-store";
 import { useNotesStore } from "@/stores/notes-store";
@@ -75,7 +75,7 @@ export function useDepositFlow() {
     setDepositPreview(null);
 
     try {
-      const client = PrivacyCoinClient.instance();
+      const client = UTXOpiaClient.instance();
       const [deposit, utxos] = await Promise.all([
         client.prepareDeposit({ recipient: resolvedMeta }),
         btcWallet.getPaymentUtxos(),

@@ -7,8 +7,8 @@ import {
   computeJoinSplitNullifierSync,
   scanUnifiedNotes,
   parseAnnouncementsFromHex,
-  type PrivacyCoinKeys,
-} from "@privacy-coin/sdk";
+  type UTXOpiaKeys,
+} from "@utxopia/sdk";
 import { fetchSpentNullifierPDAs, nullifierHashToPDA } from "@/lib/nullifier-utils";
 import { getBackendUrl } from "@/lib/api/constants";
 
@@ -18,13 +18,13 @@ export interface ScannedSecretNote {
   commitment: string;
   nullifierHash: string;
   isSpent: boolean;
-  /** Full PrivacyCoinKeys derived from phrase — use for scanning, signing, and proof generation */
-  keys: PrivacyCoinKeys;
+  /** Full UTXOpiaKeys derived from phrase — use for scanning, signing, and proof generation */
+  keys: UTXOpiaKeys;
 }
 
 /**
  * Scan a secret phrase to find ALL matching on-chain notes (spent and unspent).
- * Derives full PrivacyCoinKeys from the phrase, scans stealth announcements
+ * Derives full UTXOpiaKeys from the phrase, scans stealth announcements
  * using the viewing key (same as normal inbox scanning), and checks nullifiers.
  */
 export async function scanSecretPhrase(
@@ -36,7 +36,7 @@ export async function scanSecretPhrase(
 
   await initPoseidon();
 
-  // Derive PrivacyCoinKeys from phrase with circomlibjs-compatible spending keys.
+  // Derive UTXOpiaKeys from phrase with circomlibjs-compatible spending keys.
   const masterKey = deriveMasterKey(phrase.trim());
   const keys = await deriveKeysFromSeedCircuit(masterKey);
 

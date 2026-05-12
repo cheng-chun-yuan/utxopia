@@ -8,13 +8,13 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import type { JoinSplitProofInputs, ProofData } from "@privacy-coin/sdk";
+import type { JoinSplitProofInputs, ProofData } from "@utxopia/sdk";
 import {
   initProver,
   generateJoinSplitProof,
   proofToBytes,
   setCircuitPath,
-} from "@privacy-coin/sdk/prover/web";
+} from "@utxopia/sdk/prover/web";
 
 // Point circuit artifacts at R2 CDN when configured
 const cdnUrl = process.env.NEXT_PUBLIC_CIRCUIT_CDN_URL;

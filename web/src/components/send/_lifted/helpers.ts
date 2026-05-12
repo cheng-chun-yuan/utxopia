@@ -4,7 +4,7 @@
  */
 
 import { PublicKey } from "@solana/web3.js";
-import type { InboxNote } from "@/hooks/use-privacy-coin";
+import type { InboxNote } from "@/hooks/use-utxopia";
 
 // --- Constants ---
 
@@ -64,7 +64,7 @@ export function isValidSolanaAddress(address: string): boolean {
  * This ensures the commitment computed off-chain matches the on-chain verification.
  *
  * Mirrors on-chain mask approach (result[0] &= 0x2F). Must stay in sync with
- * contracts/programs/privacy-coin/src/utils/crypto.rs reduce_to_field().
+ * contracts/programs/utxopia/src/utils/crypto.rs reduce_to_field().
  */
 export function reduceToFieldOnChain(bytes: Uint8Array): bigint {
   let isGe = true;
@@ -138,7 +138,7 @@ export interface OutputRow {
   mode: OutputMode;
   amount: string;
   secretPhrase: string;
-  resolvedMeta: import("@privacy-coin/sdk").StealthMetaAddress | null;
+  resolvedMeta: import("@utxopia/sdk").StealthMetaAddress | null;
   resolvedName: string | null;
   stealthError: string | null;
   solanaAddress: string;

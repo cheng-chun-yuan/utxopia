@@ -27,7 +27,7 @@ const sharedSecret = x25519.getSharedSecret(ephemeralPriv, viewingPub);
 
 // Derive stealth scalar
 // LOAD-BEARING: see sdk/src/stealth.ts for the full note on why this stays
-// as 'Aegis-stealth-v1' despite the project rename to Privacy Coin.
+// as 'Aegis-stealth-v1' despite the project rename to UTXOpia.
 const STEALTH_KEY_DOMAIN = new TextEncoder().encode('Aegis-stealth-v1');
 const hi = new Uint8Array(sharedSecret.length + STEALTH_KEY_DOMAIN.length);
 hi.set(sharedSecret, 0);

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { PublicKey, LAMPORTS_PER_SOL, type Connection } from "@solana/web3.js";
-import { getConfig } from "@privacy-coin/sdk";
+import { getConfig } from "@utxopia/sdk";
 import { BTC_MINER_FEE_ESTIMATE, TOKEN_2022_PROGRAM_ID_STR } from "@/lib/btc-constants";
 import type { SupportedToken } from "@/lib/supported-tokens";
 

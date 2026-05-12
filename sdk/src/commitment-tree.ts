@@ -521,7 +521,7 @@ export function getCommitmentIndex(): CommitmentTreeIndex {
     // Try to load from localStorage if available
     if (typeof window !== "undefined" && window.localStorage) {
       try {
-        const stored = localStorage.getItem("privacy_coin_commitment_index");
+        const stored = localStorage.getItem("utxopia_commitment_index");
         if (stored) {
           globalIndex.import(JSON.parse(stored));
           debug("tree", `Loaded ${globalIndex.size()} commitments from storage`);
@@ -543,7 +543,7 @@ export function saveCommitmentIndex(): void {
   if (typeof window !== "undefined" && window.localStorage) {
     try {
       const data = globalIndex.export();
-      localStorage.setItem("privacy_coin_commitment_index", JSON.stringify(data));
+      localStorage.setItem("utxopia_commitment_index", JSON.stringify(data));
       debug("tree", `Saved ${globalIndex.size()} commitments`);
     } catch (e) {
       warn("tree", "Failed to save to storage:", e);
@@ -596,7 +596,7 @@ export interface OnChainMerkleProof {
  * from the event indexer and builds the local Merkle tree.
  *
  * @param _rpc - RPC client (unused, kept for API compatibility)
- * @param _programId - Privacy Coin program ID (unused)
+ * @param _programId - UTXOpia program ID (unused)
  * @param options - commitments map from indexer
  */
 export async function buildCommitmentTreeFromChain(
@@ -638,7 +638,7 @@ export async function buildCommitmentTreeFromChain(
  * This function builds the full tree from provided commitments to find the index.
  *
  * @param rpc - RPC client
- * @param programId - Privacy Coin program ID
+ * @param programId - UTXOpia program ID
  * @param commitment - Commitment to find
  * @returns Leaf index or -1 if not found
  */
@@ -666,7 +666,7 @@ export async function getLeafIndexForCommitment(
  * once and call getMerkleProof on the resulting tree.
  *
  * @param rpc - RPC client
- * @param programId - Privacy Coin program ID
+ * @param programId - UTXOpia program ID
  * @param commitment - Commitment to get proof for
  * @returns Merkle proof or null if commitment not found
  *

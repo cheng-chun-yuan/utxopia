@@ -56,7 +56,7 @@ stepHeader(5, "Shield SPL Tokens");
 
 async function shieldToken(
   authority: ReturnType<typeof loadAuthority>,
-  pcoin: PublicKey,
+  utxo: PublicKey,
   poolState: PublicKey,
   commitmentTree: PublicKey,
   mint: PublicKey,
@@ -66,7 +66,7 @@ async function shieldToken(
   mpk: bigint,
   label: string,
 ): Promise<NoteState> {
-  const [tokenConfig] = deriveTokenConfigPDA(pcoin, mint);
+  const [tokenConfig] = deriveTokenConfigPDA(utxopia, mint);
   const userAta = deriveATA(mint, authority.publicKey);
 
   // Generate note
@@ -109,7 +109,7 @@ async function shieldToken(
       { pubkey: commitmentTree, isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
     ],
-    programId: pcoin,
+    programId: utxopia,
     data,
   });
 
@@ -141,7 +141,7 @@ async function shieldToken(
  */
 async function shieldSOL(
   authority: ReturnType<typeof loadAuthority>,
-  pcoin: PublicKey,
+  utxo: PublicKey,
   poolState: PublicKey,
   commitmentTree: PublicKey,
   lamports: bigint,
@@ -149,7 +149,7 @@ async function shieldSOL(
   mpk: bigint,
 ): Promise<NoteState> {
   const wsolMint = NATIVE_MINT_2022;
-  const [tokenConfig] = deriveTokenConfigPDA(pcoin, wsolMint);
+  const [tokenConfig] = deriveTokenConfigPDA(utxopia, wsolMint);
 
   // Check if wSOL TokenConfig exists
   const tcInfo = await connection.getAccountInfo(tokenConfig);
@@ -219,7 +219,7 @@ async function shieldSOL(
       { pubkey: commitmentTree, isSigner: false, isWritable: true },
       { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
     ],
-    programId: pcoin,
+    programId: utxopia,
     data: shieldData,
   }));
 
@@ -254,9 +254,9 @@ async function shieldSOL(
 async function main() {
   const state = loadState();
   const authority = loadAuthority();
-  const PRIVACY_COIN = new PublicKey(state.privacyCoinProgramId);
-  const [poolState] = derivePoolStatePDA(PRIVACY_COIN);
-  const [commitmentTree] = deriveCommitmentTreePDA(PRIVACY_COIN);
+  const UTXOPIA = new PublicKey(state.privacyCoinProgramId);
+  const [poolState] = derivePoolStatePDA(UTXOPIA);
+  const [commitmentTree] = deriveCommitmentTreePDA(UTXOPIA);
 
   await initPoseidon();
   const poseidonHash = null; // passed to functions for backward compat, but SDK used internally
@@ -268,7 +268,7 @@ async function main() {
 
   // Shield 1000 tUSDC (6 decimals → 1_000_000_000)
   const usdcNote = await shieldToken(
-    authority, PRIVACY_COIN, poolState, commitmentTree,
+    authority, UTXOPIA, poolState, commitmentTree,
     new PublicKey(state.tUsdcMint), new PublicKey(state.tUsdcVault!),
     1_000_000_000n, poseidonHash, mpk, "tUSDC",
   );
@@ -278,7 +278,7 @@ async function main() {
   let wsolNote: NoteState;
   try {
     wsolNote = await shieldSOL(
-      authority, PRIVACY_COIN, poolState, commitmentTree,
+      authority, UTXOPIA, poolState, commitmentTree,
       100_000_000n, // 0.1 SOL
       poseidonHash, mpk,
     );
@@ -288,7 +288,7 @@ async function main() {
       log("wSOL: NATIVE_MINT_2022 not available — falling back to tWSOL");
       if (!state.tWsolMint) throw new Error("Neither wSOL nor tWSOL available");
       wsolNote = await shieldToken(
-        authority, PRIVACY_COIN, poolState, commitmentTree,
+        authority, UTXOPIA, poolState, commitmentTree,
         new PublicKey(state.tWsolMint), new PublicKey(state.tWsolVault!),
         5_000_000_000n, poseidonHash, mpk, "tWSOL (fallback)",
       );

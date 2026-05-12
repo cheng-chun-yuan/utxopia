@@ -1,6 +1,6 @@
-//! Event parser for Privacy Coin sol_log_data events
+//! Event parser for UTXOpia sol_log_data events
 //!
-//! Matches discriminators from contracts/programs/privacy-coin/src/utils/events.rs:
+//! Matches discriminators from contracts/programs/utxopia/src/utils/events.rs:
 //! - 0x02 = NullifierSpent (nullifier_hash + op_type + ix_disc)
 //! - 0x03 = StealthAnnouncement (type + ephemeral + amount + commitment + leaf_index + token_id)
 //! - 0x07 = RedemptionCompleted
@@ -1017,9 +1017,9 @@ mod integration_tests {
             "Program ComputeBudget111111111111111111111111111111 invoke [1]".to_string(),
             "Program ComputeBudget111111111111111111111111111111 success".to_string(),
             "Program 6cv5vLKCc19oDHMSv1eSLvkJw6Nq1QkvznXavEF6hcDT invoke [1]".to_string(),
-            "Program log: PrivacyCoin: groth16 verifying".to_string(),
-            "Program log: PrivacyCoin: groth16 pairing check".to_string(),
-            "Program log: PrivacyCoin: groth16 proof verified".to_string(),
+            "Program log: UTXOpia: groth16 verifying".to_string(),
+            "Program log: UTXOpia: groth16 pairing check".to_string(),
+            "Program log: UTXOpia: groth16 proof verified".to_string(),
             "Program 11111111111111111111111111111111 invoke [2]".to_string(),
             "Program 11111111111111111111111111111111 success".to_string(),
             "Program data: Ag== Drf9e9z3IYQJFoHdF53QX4aedxOBneEhhRj8nykHQ2E= AA== Dg==".to_string(),

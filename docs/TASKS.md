@@ -2,7 +2,7 @@
 
 > **Branch:** `ika`. **Status as of 2026-05-10**: 10 of 13 tasks complete; 3 require live network exercise. See [docs/PHASE1_HANDOFF.md](PHASE1_HANDOFF.md) for the runbook.
 >
-> **2026-05-10 update**: Investigated a Mollusk/LiteSVM integration test as a substitute acceptance gate. Built a working `ika-cpi-shim` test harness (`programs/ika-cpi-shim/`) and a `programs/privacy-coin/tests/complete_redemption_ika_cpi.rs` LiteSVM fixture. Test infrastructure passes a smoke check (loads both `.so` binaries and seeds the fixture); the full CPI assertion is `#[ignore]`-d due to `InvalidAccountOwner` at 127 CU from the Ika `.so`. Diagnosis is blocked because the Ika program is shipped without source and the upstream voting LiteSVM test (the only working reference) requires Cargo 1.85+ (we have 1.84). See test docstring for re-enablement criteria. **The shim crate + test scaffolding are committed work the next session can build on; they do NOT replace Task 7 as the acceptance gate.**
+> **2026-05-10 update**: Investigated a Mollusk/LiteSVM integration test as a substitute acceptance gate. Built a working `ika-cpi-shim` test harness (`programs/ika-cpi-shim/`) and a `programs/utxopia/tests/complete_redemption_ika_cpi.rs` LiteSVM fixture. Test infrastructure passes a smoke check (loads both `.so` binaries and seeds the fixture); the full CPI assertion is `#[ignore]`-d due to `InvalidAccountOwner` at 127 CU from the Ika `.so`. Diagnosis is blocked because the Ika program is shipped without source and the upstream voting LiteSVM test (the only working reference) requires Cargo 1.85+ (we have 1.84). See test docstring for re-enablement criteria. **The shim crate + test scaffolding are committed work the next session can build on; they do NOT replace Task 7 as the acceptance gate.**
 
 ## Status table
 
@@ -13,7 +13,7 @@
 | 3 | Task 1: Add `ika_dwallet_id` to `PoolConfig` | ✅ Done | `06c3e96` |
 | 4 | Task 2: SDK helper `deriveCustodyAddressFromIkaDWallet` | ✅ Done | `7d6de5d` |
 | 5 | Task 3: Wire deposit address through Ika | ✅ Done | `d452a48` |
-| 6 | Task 4: Privacy Coin → Ika CPI in `complete_redemption` | ✅ Done | `a10237a`, `8e9581e`, `7d3c27e`, `035be94`, `590f78e` |
+| 6 | Task 4: UTXOpia → Ika CPI in `complete_redemption` | ✅ Done | `a10237a`, `8e9581e`, `7d3c27e`, `035be94`, `590f78e` |
 | 7 | Task 5: Ika watcher in backend (`IkaSigner` end-to-end) | ✅ Done | `5d73f0a`, `a63a9a3` |
 | 8 | Task 6: Config plumbing | ✅ Done | `05255b0` |
 | 9 | **Task 7: E2E on localnet (3× green)** | 🟡 **Pending — needs live exercise** | Requires Ika devnet DKG + funded payer. **Note:** the runbook in PHASE1_HANDOFF.md §7 underestimates scope on three independent fronts (see "Three showstoppers" addendum below). |
@@ -27,8 +27,8 @@
 
 | Surface | Result |
 |---|---|
-| `cd contracts && cargo test -p privacy-coin` | **115/115** lib + 1 `#[ignore]`-d full-CPI test (deferred behind two blockers — see test docstring) |
-| `cd contracts && cargo build-sbf --features localnet --manifest-path programs/privacy-coin/Cargo.toml` | **❗️BROKEN if `cargo update` has been run** — see "Lockfile time-bomb" below |
+| `cd contracts && cargo test -p utxopia` | **115/115** lib + 1 `#[ignore]`-d full-CPI test (deferred behind two blockers — see test docstring) |
+| `cd contracts && cargo build-sbf --features localnet --manifest-path programs/utxopia/Cargo.toml` | **❗️BROKEN if `cargo update` has been run** — see "Lockfile time-bomb" below |
 | `cd contracts && cargo build-sbf --manifest-path programs/ika-cpi-shim/Cargo.toml` | builds when SBF toolchain has cached older lockfile; fails after `cargo update` for the same reason |
 | `cd backend && cargo test` | **155 pass / 1 baseline failure** (`stealth::types::test_stealth_data_encode_decode` was already failing on `main`) |
 | `cd sdk && bun test` | 621 ran / 42 fail / 3 module-load errors (27 pre-existing baseline + 15 expected layout-change fallout) |
@@ -63,7 +63,7 @@ docs/
 │   └── 2026-05-09-task-4b-complete-redemption-cpi-plan.md   # sub-plan (CPI surgery)
 └── recon/2026-05-09-ika-sdk-brief.md                        # Ika integration brief
 
-contracts/programs/privacy-coin/src/
+contracts/programs/utxopia/src/
 ├── cpi/ika.rs                                               # Manual approve_message CPI
 ├── utils/policy.rs                                          # On-chain signing policy
 └── instructions/complete_redemption.rs                      # CPIs into Ika
@@ -83,7 +83,7 @@ scripts/ika-setup/                                           # One-shot DKG runb
 
 ## Lockfile time-bomb: `cargo build-sbf` after `cargo update` (discovered 2026-05-10)
 
-`Cargo.lock` is gitignored in `contracts/.gitignore:24`, so the project relies on Cargo's resolver to pick versions on first build. `litesvm = "0.11.0"` (in both `programs/privacy-coin/Cargo.toml` and `programs/btc-light-client/Cargo.toml` dev-deps) has flexible transitive constraints that, against today's crates.io index, resolve to `solana-pubkey 4.2.0` → `wincode-derive 0.4.4`, whose manifest requires Cargo's `edition2024` feature. Our `cargo build-sbf` ships Rust 1.84 (no edition2024). Result: SBF builds fail mid-resolve with "feature `edition2024` is required".
+`Cargo.lock` is gitignored in `contracts/.gitignore:24`, so the project relies on Cargo's resolver to pick versions on first build. `litesvm = "0.11.0"` (in both `programs/utxopia/Cargo.toml` and `programs/btc-light-client/Cargo.toml` dev-deps) has flexible transitive constraints that, against today's crates.io index, resolve to `solana-pubkey 4.2.0` → `wincode-derive 0.4.4`, whose manifest requires Cargo's `edition2024` feature. Our `cargo build-sbf` ships Rust 1.84 (no edition2024). Result: SBF builds fail mid-resolve with "feature `edition2024` is required".
 
 This was reproduced **with the working tree's Cargo.toml stashed back to HEAD** — confirming the issue is purely in the regenerated lockfile, not in any source change made this session.
 

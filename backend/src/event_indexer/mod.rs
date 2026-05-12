@@ -1,4 +1,4 @@
-//! Event indexer for Privacy Coin sol_log_data events
+//! Event indexer for UTXOpia sol_log_data events
 //!
 //! Parses NullifierSpent and StealthAnnouncement events from on-chain transaction logs,
 //! stores them in SQLite, and serves them via REST API endpoints.

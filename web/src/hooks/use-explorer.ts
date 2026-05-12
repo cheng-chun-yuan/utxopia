@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import type { IndexerLeaf } from "@privacy-coin/sdk";
+import type { IndexerLeaf } from "@utxopia/sdk";
 
 // =============================================================================
 // Types

@@ -1,4 +1,4 @@
-# Privacy Coin — "Encrypt" Integration Scoping Plan
+# UTXOpia — "Encrypt" Integration Scoping Plan
 
 **Status:** Scoping draft
 **Date:** 2026-05-11
@@ -17,17 +17,17 @@ The old `docs/designs/2026-05-09-ika-encrypt-pivot-design.md` Phase 2 plan to bu
 
 **Therefore, the SVES (Smallest Valuable Encrypt Slice) we recommend** is **not** building on a non-existent "Encrypt network." It is:
 
-> **Use the Ika dWallet's existing zero-trust DKG mode (`UserSecretKeyShare::Encrypted`) and the `ReEncryptShare` operation to ship one credible "Encrypt-adjacent" feature: an _Ika-backed encrypted viewing-key share_ that lets a Privacy Coin user grant scoped, revocable read access to a third party (auditor, accountant, tax software) by re-encrypting a viewing-key share to that third party's encryption key, with the re-encryption gated by an on-chain policy our program enforces.**
+> **Use the Ika dWallet's existing zero-trust DKG mode (`UserSecretKeyShare::Encrypted`) and the `ReEncryptShare` operation to ship one credible "Encrypt-adjacent" feature: an _Ika-backed encrypted viewing-key share_ that lets a UTXOpia user grant scoped, revocable read access to a third party (auditor, accountant, tax software) by re-encrypting a viewing-key share to that third party's encryption key, with the re-encryption gated by an on-chain policy our program enforces.**
 
 This SVES is honest about what Ika actually exposes, fits in 6–12 hours, and tells judges:
 
 1. Ika dWallets aren't just for signing — their **encrypted user share** protocol is the primitive we use to deliver confidentiality, not just signatures.
-2. Privacy Coin's "3-key model" gets a new capability that ZK alone cannot provide: third parties can be granted decryption rights **without ever holding the secret directly** — the share lives encrypted at rest, and the re-encryption is a network-attested operation.
+2. UTXOpia's "3-key model" gets a new capability that ZK alone cannot provide: third parties can be granted decryption rights **without ever holding the secret directly** — the share lives encrypted at rest, and the re-encryption is a network-attested operation.
 3. We hit "Encrypt" by leaning into the **actual encryption primitives** Ika ships in pre-alpha (encrypted share + re-encryption attestation), not by faking integration with a product that doesn't exist.
 
 **Effort estimate:** 8–10 hours. **Critical risk:** `ReEncryptShare` is documented as "Wire format defined; not yet implemented in mock" — see §5 for the contingency plan if the mock signer can't actually run it.
 
-If the mock contingency triggers, the **fallback SVES** (also documented below) is to ship a smaller variant: a static-NEK-encrypted view-key blob whose decryption is performed by our backend after gathering an `approve_message`-style on-chain authorization from our Privacy Coin program. This is "Encrypt-shaped using only dWallet primitives" and is a 4-hour ship.
+If the mock contingency triggers, the **fallback SVES** (also documented below) is to ship a smaller variant: a static-NEK-encrypted view-key blob whose decryption is performed by our backend after gathering an `approve_message`-style on-chain authorization from our UTXOpia program. This is "Encrypt-shaped using only dWallet primitives" and is a 4-hour ship.
 
 If even the fallback is blocked, the **honest exit** is a written-down design (§9) demonstrating we understand Encrypt well enough to ship it post-hackathon — which we argue is more credible than papering over an integration that doesn't compile.
 
@@ -37,7 +37,7 @@ If even the fallback is blocked, the **honest exit** is a written-down design (�
 
 ### 1.1 User-facing scenario
 
-**Alice** is a Privacy Coin user who runs a small fund. She holds shielded zkBTC, zkUSDC, and zkSOL notes. **Bob** is her accountant. At tax time, Alice needs Bob to be able to **read** all her transaction history — for compliance, tax filing, audit — but she does **not** want to:
+**Alice** is a UTXOpia user who runs a small fund. She holds shielded zkBTC, zkUSDC, and zkSOL notes. **Bob** is her accountant. At tax time, Alice needs Bob to be able to **read** all her transaction history — for compliance, tax filing, audit — but she does **not** want to:
 
 - Email Bob the literal Ed25519 viewing private key (bearer secret, can't revoke, can't scope)
 - Trust Bob's email/laptop/cloud provider with her viewing key forever
@@ -52,13 +52,13 @@ Today (post-Phase-1 Ika), Alice's only export option is `serializeDelegatedViewK
 
 **With the SVES**, Alice does this instead:
 
-1. Bob shares a one-time encryption pubkey with Alice (e.g. a fresh X25519 key generated in Bob's Privacy Coin web client, or — better — Bob has already done a one-time dWallet DKG and his dWallet's NEK-encrypted user share *is* his encryption key).
+1. Bob shares a one-time encryption pubkey with Alice (e.g. a fresh X25519 key generated in Bob's UTXOpia web client, or — better — Bob has already done a one-time dWallet DKG and his dWallet's NEK-encrypted user share *is* his encryption key).
 2. Alice initiates "Grant view access" in the web UI. Under the hood, the SDK:
    - Wraps her Ed25519 viewing private key (or a strict subset of it — see §3.2 on **scoping**) into the same format Ika's `UserSecretKeyShare::Encrypted` expects.
    - Calls Ika's `ReEncryptShare` operation: take her _existing_ encrypted-share blob (from when she did DKG) and request the Ika network to re-encrypt it to Bob's encryption key.
    - Receives back a `VersionedEncryptedUserKeyShareAttestation` — a network-signed blob that says "the share underlying dWallet X has been re-encrypted to encryption-key Y, attested by NOA at epoch Z."
-3. Alice's Privacy Coin program records the grant on-chain (a small `view_grant` PDA: grantor solana pubkey, grantee solana pubkey, expiry slot, scope flags, attestation hash).
-4. Bob receives the re-encrypted blob (off-chain link) + the on-chain grant PDA pubkey. He decrypts using **his** private encryption key (which never left him); the SDK then loads the viewing private key into his local Privacy Coin client and he can scan Alice's stealth announcements.
+3. Alice's UTXOpia program records the grant on-chain (a small `view_grant` PDA: grantor solana pubkey, grantee solana pubkey, expiry slot, scope flags, attestation hash).
+4. Bob receives the re-encrypted blob (off-chain link) + the on-chain grant PDA pubkey. He decrypts using **his** private encryption key (which never left him); the SDK then loads the viewing private key into his local UTXOpia client and he can scan Alice's stealth announcements.
 5. To revoke, Alice submits a `revoke_view_grant` instruction. The on-chain PDA is closed; the SDK refuses to use the share thereafter. (Cryptographic revocation requires Alice to rotate her viewing key — same as today — but the on-chain grant is auditable and the SDK behavior is gated.)
 
 ### 1.2 What's encrypted, by whom, decryptable by whom
@@ -77,7 +77,7 @@ The **load-bearing** privacy claim is: Alice's full viewing private key never le
                                                                        Solana devnet
                                                                        ─────────────
    Alice's web client                                                  ┌─────────────────┐
-   ────────────────                                                    │ Privacy Coin    │
+   ────────────────                                                    │ UTXOpia    │
                                                                        │ G1bj9Vw9...3ixUy│
    1. createViewShare(viewingKey, scope)                               │                 │
         │                                                              │ ┌─────────────┐ │
@@ -121,7 +121,7 @@ The **load-bearing** privacy claim is: Alice's full viewing private key never le
    ──────────────
    4. fetch view_grant PDA + Bob-encrypted share blob
    5. decrypt share locally
-   6. PrivacyCoinClient.loginWithDelegatedView(decryptedShare)
+   6. UTXOpiaClient.loginWithDelegatedView(decryptedShare)
    7. scan announcements for Alice's MPK
 ```
 
@@ -158,13 +158,13 @@ The old design doc (`docs/designs/2026-05-09-ika-encrypt-pivot-design.md`) made 
 
 | Primitive | What it does | SVES relevance |
 |---|---|---|
-| `UserSecretKeyShare::Encrypted` | DKG produces a dWallet whose user secret share is **encrypted to an arbitrary recipient encryption key** that the user controls | The encryption primitive Privacy Coin can hook into |
+| `UserSecretKeyShare::Encrypted` | DKG produces a dWallet whose user secret share is **encrypted to an arbitrary recipient encryption key** that the user controls | The encryption primitive UTXOpia can hook into |
 | `ReEncryptShare` (`DWalletRequest::ReEncryptShare`) | The network re-encrypts an existing user share to a **new** encryption key without ever holding the plaintext | The grant-access operation our SVES needs |
 | `MakeSharePublic` | Convert encrypted share → public share (one-way reveal) | Could be a "publish to public auditor" stretch feature; out of SVES scope |
 | `dwallet_network_encryption_public_key` | The network's encryption key (NEK) — used to seal validator-side state | Not directly user-facing, but it's the proof Ika is built around encryption, not just signing |
 | `FutureSign` / `SignWithPartialUserSig` | Two-step conditional signing — user pre-authorizes a partial sig, network only completes when an approval proof arrives | Adjacent to "encrypted commitment to a future action"; orthogonal to our SVES |
 
-**Conclusion:** Privacy Coin's path to genuine "Encrypt" integration on pre-alpha goes through the **encrypted user share + re-encryption** surface, not through a non-existent FHE matcher. That is what the SVES targets.
+**Conclusion:** UTXOpia's path to genuine "Encrypt" integration on pre-alpha goes through the **encrypted user share + re-encryption** surface, not through a non-existent FHE matcher. That is what the SVES targets.
 
 ---
 
@@ -172,13 +172,13 @@ The old design doc (`docs/designs/2026-05-09-ika-encrypt-pivot-design.md`) made 
 
 ### 3.1 What we ship
 
-**One feature:** "Grant view access via Ika encrypted share" — an additional flow available to any Privacy Coin user. Surfaces:
+**One feature:** "Grant view access via Ika encrypted share" — an additional flow available to any UTXOpia user. Surfaces:
 
 - **Web UI:** new "Sharing" tab in `/settings`, lets Alice select a grantee + scope + expiry and produces a Bob-decryptable share blob plus an on-chain grant.
-- **SDK:** new `@privacy-coin/sdk` module `viewShare.ts` exporting `createEncryptedViewShare`, `reEncryptViewShareTo`, `unwrapEncryptedViewShare`, `verifyAttestation`.
+- **SDK:** new `@utxopia/sdk` module `viewShare.ts` exporting `createEncryptedViewShare`, `reEncryptViewShareTo`, `unwrapEncryptedViewShare`, `verifyAttestation`.
 - **On-chain program:** new instruction `grant_view_access` (discriminator 21) that creates a `view_grant` PDA bound to `(grantor, grantee_solana_pubkey, attestation_hash)`. New instruction `revoke_view_grant` (disc 22). No CPI to Ika program — the attestation hash is opaque from the program's view, the on-chain record is just a Bloom-filter-style allowlist for SDK-level enforcement.
 - **Backend:** no changes required. (The watcher doesn't touch view shares.)
-- **Demo line:** "Privacy Coin also leans on Ika for the *encryption* side, not just signing. Here's Alice granting Bob view access — the share never leaves her device in plaintext; the Ika network performs the re-encryption."
+- **Demo line:** "UTXOpia also leans on Ika for the *encryption* side, not just signing. Here's Alice granting Bob view access — the share never leaves her device in plaintext; the Ika network performs the re-encryption."
 
 ### 3.2 The viewing-share binding (the tricky bit)
 
@@ -186,7 +186,7 @@ The naïve approach is "use Alice's Ed25519 viewing private key as the `user_sec
 
 **Recommended binding (works around the mismatch):**
 
-1. Generate a fresh **viewing-share scalar** `s = SHA256("Privacy Coin view-share v1" || viewingPrivKey)`. This is a derived secret strictly dominated by `viewingPrivKey`. Anyone with `s` can scan Alice's stealth announcements **iff** we also publish enough metadata to reconstruct the X25519 ECDH path.
+1. Generate a fresh **viewing-share scalar** `s = SHA256("UTXOpia view-share v1" || viewingPrivKey)`. This is a derived secret strictly dominated by `viewingPrivKey`. Anyone with `s` can scan Alice's stealth announcements **iff** we also publish enough metadata to reconstruct the X25519 ECDH path.
 2. Run a one-time Ika DKG on `Curve25519` (or `Secp256k1` — see §3.4 trade-offs) where `s` is the user-side scalar contribution. The resulting dWallet `D_view` exists purely as a key custody vehicle — we never sign anything with it.
 3. The dWallet's user secret share, sealed in `UserSecretKeyShare::Encrypted`, is now "Alice's viewing-share, wrapped by the Ika network for Alice's encryption key."
 4. When Alice wants to grant Bob: call `ReEncryptShare { dwallet_public_key: D_view.pubkey, encryption_key: bob_enc_pubkey, ... }`. Network returns `EncryptedUserKeyShareAttestationV1 { encrypted_centralized_secret_share_and_proof, ... }` plus a NOA signature.
@@ -220,23 +220,23 @@ Two options for what the `grant_view_access` instruction does on-chain with the 
 |---|------|-------|--------|-------|
 | 1 | **Recon spike:** verify `ReEncryptShare` actually returns an attestation on `pre-alpha-dev-1.ika.ika-network.net:443`. Build the minimal gRPC call, hit it, log the response shape. | `scripts/encrypt-recon/probe-reencrypt.ts` (NEW) | **2h** | **GO/NO-GO gate.** If this fails, we drop to §6 fallback. |
 | 2 | **SDK: `viewShare.ts` module.** `createEncryptedViewShare(viewingKey)` runs the one-time DKG against Ika devnet, persists the resulting `D_view` pubkey + Alice-encrypted-share blob. `reEncryptViewShareTo(d_view, bob_enc_pubkey)` calls `ReEncryptShare` and returns the Bob-blob + attestation. `unwrapEncryptedViewShare(bob_blob, bob_enc_privkey)` is Bob's side. Pure-TypeScript wrapping; uses the existing `@ika.xyz/pre-alpha-solana-client` package. | `sdk/src/viewShare.ts` (NEW), `sdk/src/index.ts` (EXPORT) | **2h** | Reuses BCS helpers from `scripts/ika-setup/` if present. |
-| 3 | **On-chain: `grant_view_access` + `revoke_view_grant` instructions.** New discriminators 21, 22. New `view_grant` PDA seed `[b"view_grant", grantor.key().as_ref(), grantee.key().as_ref()]`. PDA stores `(grantor: Pubkey, grantee: Pubkey, expiry_slot: u64, scope: u8, attestation_hash: [u8;32], created_slot: u64)`. No CPI. **Requires program redeploy.** | `contracts/programs/privacy-coin/src/instructions/{grant_view_access,revoke_view_grant}.rs` (NEW), `lib.rs` (dispatch wire-in), `instructions/mod.rs` (re-export) | **2h** | Watch out: discriminators 21+22 — confirm not already taken; current README lists 0–20 with no gap. |
+| 3 | **On-chain: `grant_view_access` + `revoke_view_grant` instructions.** New discriminators 21, 22. New `view_grant` PDA seed `[b"view_grant", grantor.key().as_ref(), grantee.key().as_ref()]`. PDA stores `(grantor: Pubkey, grantee: Pubkey, expiry_slot: u64, scope: u8, attestation_hash: [u8;32], created_slot: u64)`. No CPI. **Requires program redeploy.** | `contracts/programs/utxopia/src/instructions/{grant_view_access,revoke_view_grant}.rs` (NEW), `lib.rs` (dispatch wire-in), `instructions/mod.rs` (re-export) | **2h** | Watch out: discriminators 21+22 — confirm not already taken; current README lists 0–20 with no gap. |
 | 4 | **Web: settings → sharing tab.** Lists existing grants, "New grant" form (grantee solana pubkey + scope checkboxes + expiry days), copyable share-link generation, revoke buttons. | `web/src/app/settings/sharing/page.tsx` (NEW), `web/src/components/sharing/*` (NEW), wire into existing `web/src/app/settings/page.tsx` | **2h** | Stays consistent with current settings page styling (see `web/src/components/preferences-form.tsx`). |
-| 5 | **Tests.** Unit: viewShare wrap/unwrap roundtrip with mocked Ika gRPC. Integration: grant + revoke on localnet (already covered by `scripts/e2e/run-all.ts` pattern). | `sdk/test/viewShare.test.ts` (NEW), `contracts/programs/privacy-coin/tests/grant_view_access.rs` (NEW LiteSVM test) | **1h** | If we have the Ika program SBF on hand (we do — see Phase 1 plan Task 0.3), the LiteSVM test pre-creates the dWallet account similar to existing patterns. |
-| 6 | **README + DEMO.md updates.** Add a "Privacy Coin uses Ika for both signing and **encryption**" framing paragraph. Add a 10-second tail to the demo script showing the sharing flow. | `README.md`, `docs/DEMO.md` | **30min** | Keep messaging honest — "encrypted-share primitive" not "FHE." |
+| 5 | **Tests.** Unit: viewShare wrap/unwrap roundtrip with mocked Ika gRPC. Integration: grant + revoke on localnet (already covered by `scripts/e2e/run-all.ts` pattern). | `sdk/test/viewShare.test.ts` (NEW), `contracts/programs/utxopia/tests/grant_view_access.rs` (NEW LiteSVM test) | **1h** | If we have the Ika program SBF on hand (we do — see Phase 1 plan Task 0.3), the LiteSVM test pre-creates the dWallet account similar to existing patterns. |
+| 6 | **README + DEMO.md updates.** Add a "UTXOpia uses Ika for both signing and **encryption**" framing paragraph. Add a 10-second tail to the demo script showing the sharing flow. | `README.md`, `docs/DEMO.md` | **30min** | Keep messaging honest — "encrypted-share primitive" not "FHE." |
 | | **Total** | | **~9h 30min** | Fits the 6–12 hour window. |
 
 ### 3.6 Acceptance for SVES
 
 - [ ] Alice (test wallet A) successfully runs the one-time DKG; her `D_view` dWallet exists on Ika devnet, owned by her Solana pubkey.
 - [ ] Alice grants Bob (test wallet B). The on-chain `view_grant` PDA exists with the right grantor/grantee/scope/attestation hash. The Ika network attestation is logged in the SDK and matches the on-chain hash.
-- [ ] Bob loads the share into his Privacy Coin client. He successfully scans Alice's stealth announcements and sees her shielded note set.
+- [ ] Bob loads the share into his UTXOpia client. He successfully scans Alice's stealth announcements and sees her shielded note set.
 - [ ] Alice calls `revoke_view_grant`. The PDA is closed. Bob's next scan attempt is denied at the SDK layer (the SDK fetches the PDA before scanning and refuses if missing).
 - [ ] Demo recording shows the full grant + revoke flow plus the on-chain explorer view of the `view_grant` PDA and a callout to the attestation hash.
 
 ---
 
-## 4. What Encrypt buys Privacy Coin that the current crypto doesn't
+## 4. What Encrypt buys UTXOpia that the current crypto doesn't
 
 (Required by the brief — this section is what tells the story to a judge.)
 
@@ -251,7 +251,7 @@ Gaps the existing stack **cannot close** without a new primitive:
 
 1. **No revocable, third-party-bound view delegation.** Today, the moment Alice gives Bob her AES-GCM blob + password, Bob has unrevocable plaintext access. Revocation requires Alice to rotate her viewing key (which orphans her own scan history). An Ika-managed encrypted share + on-chain `view_grant` PDA gives revocation teeth.
 2. **No on-chain audit of who-can-read-what.** Today, view delegations are entirely off-chain. An auditor's regulator can't verify "Bob had read access to Alice's history from slot X to slot Y" without trusting Alice's records. With on-chain grants, this is a trivial query.
-3. **No "the encryption is performed by a committee, not by me locally."** All existing encryption in Privacy Coin is symmetric or 1-of-1 keypair (XOR with ECDH shared secret, AES-GCM with password). There is no point in the system where a *neutral third party* (the Ika committee) holds the decryption authority. This matters for institutional adoption — institutions want "the protocol custodies the keys," not "the user has a JSON file on their laptop." The Ika encrypted-share construction gives that property.
+3. **No "the encryption is performed by a committee, not by me locally."** All existing encryption in UTXOpia is symmetric or 1-of-1 keypair (XOR with ECDH shared secret, AES-GCM with password). There is no point in the system where a *neutral third party* (the Ika committee) holds the decryption authority. This matters for institutional adoption — institutions want "the protocol custodies the keys," not "the user has a JSON file on their laptop." The Ika encrypted-share construction gives that property.
 4. **(Phase 2 stretch — explicitly out of scope for hackathon SVES, see §7):** No cross-user computation on shielded state. ZK proofs are per-user; you cannot match two users' encrypted bids without an MPC/FHE substrate. Encrypt-as-a-service product (when Ika ships it) closes this. The old design doc was right about *what* Encrypt would buy us; it was wrong about *whether* the SDK existed to build it on.
 
 Adding the SVES closes **gaps 1, 2, and 3** in one feature. Gap 4 stays open until Ika ships an Encrypt SDK.
@@ -277,7 +277,7 @@ If after building the SVES we find users don't actually care about revocable vie
 | Ika devnet wipe mid-build: existing dWallet `DmZfRVeZHnFZ1ARVHRPJn88VCcJB2QhXLmSe8RuzFMfq` gets reset, our `D_view` test dWallets disappear. | High | Low | Idempotent setup script `scripts/encrypt-recon/setup-test-dwallets.ts` re-runs DKG on demand. Same pattern as `scripts/ika-setup/`. |
 | Pre-alpha mock signer same as our existing dWallet — judges might double-count the disclaimer as a negative. | Low | Low | One line in README, one line in demo voiceover. Already established this is fine for Phase 1. |
 | New on-chain instructions (21, 22) require a program redeploy on devnet, breaking continuity with the current `G1bj9Vw9...3ixUy` deployment. | Medium | Medium | Acceptable — we already redeployed for Ika. Demo recording captures the new program ID. README updates the deployed-addresses table. |
-| Bob's web client needs a Privacy Coin install just to decrypt — UX friction for the "send to your accountant" scenario. | High | Low | Out-of-scope for SVES. Phase 2 could ship a CLI-decrypt tool. For the demo, both Alice and Bob use the same web client with different wallets. |
+| Bob's web client needs a UTXOpia install just to decrypt — UX friction for the "send to your accountant" scenario. | High | Low | Out-of-scope for SVES. Phase 2 could ship a CLI-decrypt tool. For the demo, both Alice and Bob use the same web client with different wallets. |
 | Discriminator collision: instructions 21/22 may overlap with future planned ones. | Low | Low | Reserve 21–22 today. Confirm `instructions/mod.rs` map is clear of 21/22 before committing Step 3. |
 
 ### 5.2 Unknowns to resolve in the recon spike (Step 1)
@@ -301,7 +301,7 @@ If any of these are unresolvable, the SVES exits to §6.
 
 If Step 1 reveals `ReEncryptShare` is non-functional or its blob format is too opaque to roundtrip in the time budget, drop to this 4-hour variant.
 
-**Idea:** "Static-NEK + Program-Attested Unwrap" — encrypt Alice's view-share to **Ika's network encryption key** (NEK) directly using a standard `nacl.secretbox` or libsodium primitive, and have our Privacy Coin program emit an "this grantee may decrypt" instruction. The actual decrypt is performed by a **backend service** that holds the NEK private key (which today we don't have, but pre-alpha lets us fake by using a deterministic test key).
+**Idea:** "Static-NEK + Program-Attested Unwrap" — encrypt Alice's view-share to **Ika's network encryption key** (NEK) directly using a standard `nacl.secretbox` or libsodium primitive, and have our UTXOpia program emit an "this grantee may decrypt" instruction. The actual decrypt is performed by a **backend service** that holds the NEK private key (which today we don't have, but pre-alpha lets us fake by using a deterministic test key).
 
 This is **not** real Encrypt integration. It's Encrypt-shaped using only dWallet primitives + a backend service. The honest demo framing is: "Here's the user flow Ika's `ReEncryptShare` will power once it's live on pre-alpha. Today, we route it through our backend because the network operation isn't ready yet."
 
@@ -380,7 +380,7 @@ This is more credible to a thoughtful judge than a half-mocked Encrypt feature t
 - `sdk/src/keys.ts` — current 3-key model + `DelegatedViewKey` (the thing we're upgrading)
 - `sdk/src/stealth.ts` — DKSAP / EIP-5564 stealth address derivation (unchanged)
 - `sdk/src/bitcoin/ika.ts` — existing dWallet P2TR helper (model for new `viewShare.ts`)
-- `contracts/programs/privacy-coin/src/cpi/ika.rs` — existing CPI helper (model for any future Encrypt CPI; not needed for SVES)
+- `contracts/programs/utxopia/src/cpi/ika.rs` — existing CPI helper (model for any future Encrypt CPI; not needed for SVES)
 - Upstream:
   - `/tmp/ika-pre-alpha-scratch/ika-pre-alpha/README.md` — confirms dWallet-only scope
   - `/tmp/ika-pre-alpha-scratch/ika-pre-alpha/docs/src/grpc/request-types.md` — full `DWalletRequest` enum incl. `ReEncryptShare`
@@ -396,5 +396,5 @@ This is more credible to a thoughtful judge than a half-mocked Encrypt feature t
 - **Blockers found:** Encrypt-as-a-product does NOT exist in pre-alpha — we use dWallet's `UserSecretKeyShare::Encrypted` + `ReEncryptShare` as the actual primitives
 - **Gate:** 2h recon spike on `ReEncryptShare` mock status — if it fails, drop to §6 fallback (4h, AES-GCM-shaped, less rigorous but ships)
 - **If both fail:** §9 honest exit — land this doc, frame as "Encrypt roadmap," ship on Ika strength
-- **Demo addition:** +15 seconds to the existing 60s — "Privacy Coin also leans on Ika for encryption, not just signing"
+- **Demo addition:** +15 seconds to the existing 60s — "UTXOpia also leans on Ika for encryption, not just signing"
 - **Out of scope:** the old design doc's Phase 2 confidential_swap — that needs `encrypt-pinocchio` which doesn't exist

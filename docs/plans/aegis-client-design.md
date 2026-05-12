@@ -1,8 +1,8 @@
-# PrivacyCoinClient Design
+# UTXOpiaClient Design
 
 ## Goal
 
-Create a high-level `PrivacyCoinClient` class in the SDK that encapsulates config, keys, and connection state. Frontend calls simple methods instead of chaining low-level SDK functions.
+Create a high-level `UTXOpiaClient` class in the SDK that encapsulates config, keys, and connection state. Frontend calls simple methods instead of chaining low-level SDK functions.
 
 ## Before / After
 
@@ -10,8 +10,8 @@ Create a high-level `PrivacyCoinClient` class in the SDK that encapsulates confi
 ```typescript
 import { getConfig, computeTokenId, createStealthOutputWithKeys,
          hexToBytes, bytesToHex, initPoseidon, scanUnifiedNotes,
-         prepareClaimInputs, parseMerkleProofResponse } from "@privacy-coin/sdk";
-import { getPrivacyCoinProgramId, derivePoolStatePDA } from "@/lib/solana/pdas";
+         prepareClaimInputs, parseMerkleProofResponse } from "@utxopia/sdk";
+import { getUTXOpiaProgramId, derivePoolStatePDA } from "@/lib/solana/pdas";
 
 // 15 imports, manual wiring everywhere
 const config = getConfig();
@@ -21,11 +21,11 @@ const output = await createStealthOutputWithKeys(keys, amount, tokenId);
 // ... 50 more lines
 ```
 
-### After (with PrivacyCoinClient)
+### After (with UTXOpiaClient)
 ```typescript
-import { PrivacyCoinClient } from "@privacy-coin/sdk";
+import { UTXOpiaClient } from "@utxopia/sdk";
 
-const client = PrivacyCoinClient.instance(); // singleton, already initialized
+const client = UTXOpiaClient.instance(); // singleton, already initialized
 const preview = await client.prepareDeposit("BTC", 50000);
 const result = await client.executeDeposit(preview);
 const balance = await client.getBalance();
@@ -34,15 +34,15 @@ const balance = await client.getBalance();
 ## API Design
 
 ```typescript
-class PrivacyCoinClient {
+class UTXOpiaClient {
   // ─── Lifecycle ────────────────────────────────────
-  static async init(opts: { network: "devnet" | "localnet" | "mainnet" }): Promise<PrivacyCoinClient>;
-  static instance(): PrivacyCoinClient; // get initialized singleton
+  static async init(opts: { network: "devnet" | "localnet" | "mainnet" }): Promise<UTXOpiaClient>;
+  static instance(): UTXOpiaClient; // get initialized singleton
 
   // ─── Auth ─────────────────────────────────────────
   async loginWithWallet(wallet: WalletSignerAdapter): Promise<KeySetupResult>;
   async loginWithSeed(seed: Uint8Array): Promise<KeySetupResult>;
-  get keys(): PrivacyCoinKeys | null;
+  get keys(): UTXOpiaKeys | null;
   get stealthAddress(): StealthMetaAddress | null;
   get stealthAddressEncoded(): string | null;
   get isAuthenticated(): boolean;
@@ -87,9 +87,9 @@ class PrivacyCoinClient {
 ## Implementation Approach
 
 ### Phase 1 (this PR): Core client + auth + balance
-- `PrivacyCoinClient.init()` — calls `initConfig()`, `initPoseidon()`, caches config
+- `UTXOpiaClient.init()` — calls `initConfig()`, `initPoseidon()`, caches config
 - `loginWithWallet()` / `loginWithSeed()` — wraps `setupKeysFromWallet/Seed`
-- `getBalance()` / `getNotes()` — wraps the scanning logic from privacy-coin-store
+- `getBalance()` / `getNotes()` — wraps the scanning logic from utxopia-store
 - `getTokenId()` — wraps `computeTokenId` with caching
 - Singleton pattern with `instance()`
 
@@ -104,21 +104,21 @@ class PrivacyCoinClient {
 ## File Location
 
 ```
-sdk/src/client.ts    ← PrivacyCoinClient class
-sdk/src/index.ts     ← export { PrivacyCoinClient }
+sdk/src/client.ts    ← UTXOpiaClient class
+sdk/src/index.ts     ← export { UTXOpiaClient }
 ```
 
 ## Frontend Migration
 
-After `PrivacyCoinClient` exists, the frontend migration is:
-1. `privacy-coin-store.ts` replaces `initPoseidon + setupKeysFromWallet + scanUnifiedNotes` with `client.loginWithWallet() + client.getNotes()`
+After `UTXOpiaClient` exists, the frontend migration is:
+1. `utxopia-store.ts` replaces `initPoseidon + setupKeysFromWallet + scanUnifiedNotes` with `client.loginWithWallet() + client.getNotes()`
 2. `shield-flow.tsx` replaces `computeTokenId + createStealthOutputWithKeys + PDA derivation` with `client.prepareShield()`
 3. `use-btc-deposit.ts` replaces `createDepositFromConfig` with `client.prepareDeposit()`
 4. Eventually `pay-flow.tsx` replaces 200 lines of proof building with `client.prepareTransfer()`
 
 ## What stays outside the client
 
-- React hooks (`usePrivacyCoin`, `useExplorer`, etc.) — these manage React state, not SDK state
+- React hooks (`useUTXOpia`, `useExplorer`, etc.) — these manage React state, not SDK state
 - Zustand store — manages UI state (auth modal, loading flags)
 - API routes — server-side, use low-level SDK directly
 - PDA derivation — sync helpers needed by instruction builders

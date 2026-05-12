@@ -1,5 +1,5 @@
 /**
- * Devnet Setup Script for Privacy Coin (Poseidon2 version)
+ * Devnet Setup Script for UTXOpia (Poseidon2 version)
  *
  * 1. Initialize pool state (if needed)
  * 2. Add demo commitments using Poseidon2
@@ -38,7 +38,7 @@ const __dirname = path.dirname(__filename);
 // Load config
 const configPath = path.join(__dirname, "../config.json");
 const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-const PROGRAM_ID = new PublicKey(config.programs.devnet.PrivacyCoin);
+const PROGRAM_ID = new PublicKey(config.programs.devnet.UTXOpia);
 
 const RPC_URL = process.env.RPC_URL || "https://api.devnet.solana.com";
 
@@ -202,7 +202,7 @@ function buildAddDemoNoteIx(
 
 async function main() {
   console.log("\n" + "=".repeat(70));
-  console.log("         Privacy Coin DEVNET SETUP (Poseidon2)");
+  console.log("         UTXOpia DEVNET SETUP (Poseidon2)");
   console.log("=".repeat(70) + "\n");
 
   // Load wallet

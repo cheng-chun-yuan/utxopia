@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey, Transaction, TransactionInstruction, SystemProgram, SYSVAR_RENT_PUBKEY } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID, NATIVE_MINT, getAssociatedTokenAddressSync, createAssociatedTokenAccountIdempotentInstruction, createSyncNativeInstruction, createCloseAccountInstruction } from "@solana/spl-token";
-import { usePrivacyCoinKeys } from "./use-privacy-coin";
+import { useUTXOpiaKeys } from "./use-utxopia";
 import { getConnectionAdapter } from "@/lib/adapters/connection-adapter";
 import {
   getConfig,
@@ -13,7 +13,7 @@ import {
   deriveParentDomainKey,
   sha256Hash,
   type SnsStealthAddress,
-} from "@privacy-coin/sdk";
+} from "@utxopia/sdk";
 
 /** SPL Name Service instruction discriminators */
 const SNS_DISC_UPDATE = 1;
@@ -55,7 +55,7 @@ interface UseSnsNameReturn {
 export function useSnsName(): UseSnsNameReturn {
   const { connection } = useConnection();
   const wallet = useWallet();
-  const { stealthAddress } = usePrivacyCoinKeys();
+  const { stealthAddress } = useUTXOpiaKeys();
 
   const [registeredSnsName, setRegisteredSnsName] = useState<string | null>(null);
   const [hasRegisteredSnsName, setHasRegisteredSnsName] = useState(false);

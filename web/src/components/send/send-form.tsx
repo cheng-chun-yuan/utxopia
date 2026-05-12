@@ -12,7 +12,7 @@ import { AmountField } from "./amount-field";
 import { FeeSummary } from "./fee-summary";
 import { ReviewModal } from "./review-modal";
 import { ClaimLinkModal, type ClaimLinkResult } from "./claim-link-modal";
-import { usePrivacyCoin } from "@/hooks/use-privacy-coin";
+import { useUTXOpia } from "@/hooks/use-utxopia";
 import { useTokenPrices } from "@/hooks/use-token-prices";
 import { useNoteAutoSelector } from "@/hooks/use-note-auto-selector";
 import { useJoinSplitSubmit } from "@/hooks/use-joinsplit-submit";
@@ -29,7 +29,7 @@ import {
   deriveKeysFromSeedCircuit,
   createStealthMetaAddress,
   type StealthMetaAddress,
-} from "@privacy-coin/sdk";
+} from "@utxopia/sdk";
 
 type Action =
   | { type: "set_recipient"; value: string }
@@ -91,7 +91,7 @@ export function SendForm() {
   const effectiveToken =
     detection.type === "btc" ? "zkBTC" : state.sourceToken;
 
-  const ctx = usePrivacyCoin();
+  const ctx = useUTXOpia();
   const { lookupSnsName } = useSnsName();
   const submitter = useJoinSplitSubmit();
   const { publicKey } = useWallet();

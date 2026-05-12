@@ -6,7 +6,7 @@
 
 **Architecture:** New top-level `/send` route renders a single `<SendForm>` orchestrator with progressive disclosure (recipient → token → amount → fee → review). A pure `recipient-detect` function dispatches one of four ix paths via `build-tx`. A new `/settings` route holds the Advanced-send toggle (disabled, "Coming soon" until Phase 2). Old `/vault/pay/*` routes and the `payment-wizard/` + `pay-flow/` directories are deleted; useful sub-components (`note-links`, `proving-steps`) are lifted into `components/send/_lifted/` first.
 
-**Tech stack:** Next.js 14 App Router, React 18, TypeScript, `@privacy-coin/sdk`, `bun test` + `@testing-library/react` + `@happy-dom`, `lucide-react`, `framer-motion`, Tailwind, Radix Dialog, existing hooks (`usePrivacyCoin`, `usePayFlowAuth`, `useProver`, `useTokenBalance`, `useTokenPrices`, `useStealthInbox`).
+**Tech stack:** Next.js 14 App Router, React 18, TypeScript, `@utxopia/sdk`, `bun test` + `@testing-library/react` + `@happy-dom`, `lucide-react`, `framer-motion`, Tailwind, Radix Dialog, existing hooks (`useUTXOpia`, `usePayFlowAuth`, `useProver`, `useTokenBalance`, `useTokenPrices`, `useStealthInbox`).
 
 **Spec:** [docs/designs/2026-05-10-pay-wizard-merge-design.md](../designs/2026-05-10-pay-wizard-merge-design.md). This plan implements Phase 1 only; Phases 2–4 (Advanced multi-output, custom BTC fee rate, coin control) are separate plans.
 
@@ -61,7 +61,7 @@
 | `web/src/components/send/claim-link-modal.tsx` | **NEW** | Generate claim link UI. Uses `_lifted/note-links.tsx`. |
 | `web/src/components/send/send-form.tsx` | **NEW** | Orchestrator. `useReducer` state. Progressive disclosure. |
 | `web/src/app/send/page.tsx` | **NEW** | Route — wraps `SendForm` in `FlowPageLayout`. |
-| `web/src/hooks/use-ui-mode.ts` | **NEW** | localStorage `pcoin-ui-mode` + React context broadcast. |
+| `web/src/hooks/use-ui-mode.ts` | **NEW** | localStorage `utxopia-ui-mode` + React context broadcast. |
 | `web/src/components/ui/advanced-mode-badge.tsx` | **NEW** | Header badge when Advanced active. Returns null in Phase 1 (Advanced is disabled). |
 | `web/src/components/settings/preferences-form.tsx` | **NEW** | Toggle list. One disabled toggle in Phase 1. |
 | `web/src/app/settings/page.tsx` | **NEW** | Route — wraps `PreferencesForm` in `FlowPageLayout`. |
@@ -176,9 +176,9 @@ describe("detectRecipient", () => {
     expect(r.confidence).toBe("medium");
   });
 
-  it("detects stealth meta-address (hex prefix 'pcoin:')", () => {
-    // Format: 'pcoin:' + 64 hex chars (spending pub) + 64 hex chars (viewing pub)
-    const meta = "pcoin:" + "01".repeat(32) + "02".repeat(32);
+  it("detects stealth meta-address (hex prefix 'utxo:')", () => {
+    // Format: 'utxo:' + 64 hex chars (spending pub) + 64 hex chars (viewing pub)
+    const meta = "utxo:" + "01".repeat(32) + "02".repeat(32);
     const r = detectRecipient(meta);
     expect(r.type).toBe("stealth_meta");
     expect(r.confidence).toBe("high");
@@ -226,7 +226,7 @@ export type DetectionResult = {
 };
 
 const SNS_SUFFIX = ".btcpro.sol";
-const STEALTH_META_PREFIX = "pcoin:";
+const STEALTH_META_PREFIX = "utxo:";
 const STEALTH_META_HEX_LEN = 64 + 64; // 32-byte spending pub + 32-byte viewing pub
 
 const BECH32_PREFIXES = ["bc1", "tb1", "bcrt1"];
@@ -353,7 +353,7 @@ describe("useUiMode", () => {
   });
 
   it("reads existing localStorage value", () => {
-    localStorage.setItem("pcoin-ui-mode", "advanced");
+    localStorage.setItem("utxopia-ui-mode", "advanced");
     const { result } = renderHook(() => useUiMode(), { wrapper });
     expect(result.current.mode).toBe("advanced");
     expect(result.current.isAdvanced).toBe(true);
@@ -363,11 +363,11 @@ describe("useUiMode", () => {
     const { result } = renderHook(() => useUiMode(), { wrapper });
     act(() => result.current.setMode("advanced"));
     expect(result.current.mode).toBe("advanced");
-    expect(localStorage.getItem("pcoin-ui-mode")).toBe("advanced");
+    expect(localStorage.getItem("utxopia-ui-mode")).toBe("advanced");
   });
 
   it("ignores invalid localStorage values (falls back to lite)", () => {
-    localStorage.setItem("pcoin-ui-mode", "garbage");
+    localStorage.setItem("utxopia-ui-mode", "garbage");
     const { result } = renderHook(() => useUiMode(), { wrapper });
     expect(result.current.mode).toBe("lite");
   });
@@ -396,7 +396,7 @@ import {
 
 export type UiMode = "lite" | "advanced";
 
-const STORAGE_KEY = "pcoin-ui-mode";
+const STORAGE_KEY = "utxopia-ui-mode";
 
 type UiModeContextValue = {
   mode: UiMode;
@@ -465,7 +465,7 @@ Expected: PASS, 4 tests.
 git add web/src/hooks/use-ui-mode.ts web/src/hooks/__tests__/use-ui-mode.test.tsx web/src/app/providers.tsx
 git commit -m "Add use-ui-mode hook for Lite/Advanced send mode preference
 
-localStorage-backed (key: pcoin-ui-mode), default 'lite'. Cross-tab
+localStorage-backed (key: utxopia-ui-mode), default 'lite'. Cross-tab
 broadcast via 'storage' event. Provider mounted in app/providers.tsx
 so /send and the future /settings page can both read it."
 ```
@@ -1393,7 +1393,7 @@ describe("buildSendIntent", () => {
   it("dispatches stealth_meta to transact kind", () => {
     const intent = buildSendIntent({
       recipientType: "stealth_meta",
-      recipientValue: "pcoin:" + "01".repeat(32) + "02".repeat(32),
+      recipientValue: "utxo:" + "01".repeat(32) + "02".repeat(32),
       sourceToken: "zkBTC",
       amount: "0.001",
     });
@@ -1536,8 +1536,8 @@ mock.module("@/hooks/use-token-balance", () => ({
 mock.module("@/hooks/use-token-prices", () => ({
   useTokenPrices: () => ({ prices: { btc: 50000 } }),
 }));
-mock.module("@/hooks/use-privacy-coin", () => ({
-  usePrivacyCoin: () => ({ client: null, ready: true }),
+mock.module("@/hooks/use-utxopia", () => ({
+  useUTXOpia: () => ({ client: null, ready: true }),
 }));
 
 describe("SendForm", () => {
@@ -1815,7 +1815,7 @@ Identify the exact SDK call sequence for each of:
 - `transact` (stealth transfer; both SNS and meta — SNS resolves first via `useSnsName`)
 - `unshield` (SPL wallet)
 
-Each path fundamentally is: prepare inputs → run `useProver` → assemble Solana ix → sign + submit via `usePayFlowAuth` + `usePrivacyCoin`.
+Each path fundamentally is: prepare inputs → run `useProver` → assemble Solana ix → sign + submit via `usePayFlowAuth` + `useUTXOpia`.
 
 - [ ] **Step 2: Implement `onSend`**
 

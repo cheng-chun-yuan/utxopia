@@ -26,7 +26,7 @@ export function useJoinSplitSubmit() {
     setTxSignature(null);
 
     try {
-      const { bytesToHex, PrivacyCoinClient, getConfig } = await import("@privacy-coin/sdk");
+      const { bytesToHex, UTXOpiaClient, getConfig } = await import("@utxopia/sdk");
 
       // Initialize prover if needed
       if (!prover.isInitialized) {
@@ -55,9 +55,9 @@ export function useJoinSplitSubmit() {
         (s: string) => BigInt(s).toString(16).padStart(64, "0"),
       );
 
-      const relayClient = PrivacyCoinClient.isInitialized
-        ? PrivacyCoinClient.instance()
-        : await PrivacyCoinClient.init();
+      const relayClient = UTXOpiaClient.isInitialized
+        ? UTXOpiaClient.instance()
+        : await UTXOpiaClient.init();
 
       const commonFields = {
         nInputs,
@@ -123,8 +123,8 @@ export function useJoinSplitSubmit() {
 
       // Track tx count for Lite/Pro toggle visibility
       try {
-        const count = parseInt(localStorage.getItem("pcoin-tx-count") || "0", 10);
-        localStorage.setItem("pcoin-tx-count", String(count + 1));
+        const count = parseInt(localStorage.getItem("utxopia-tx-count") || "0", 10);
+        localStorage.setItem("utxopia-tx-count", String(count + 1));
       } catch {};
     } catch (err) {
       console.error("[Submit] Error:", err);

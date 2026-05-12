@@ -17,7 +17,7 @@ Use the **event type** (0x0E UnshieldMeta, 0x0D DepositVerified, 0x07 Redemption
 ### Decision Tree
 
 ```
-Backend receives tx with Privacy Coin program logs
+Backend receives tx with UTXOpia program logs
     │
     ├── Has UnshieldMeta event (0x0E)?
     │   └── YES → UNSHIELD. Amount + recipient + token from event.
@@ -87,7 +87,7 @@ Remove:
 - `extract_unshield_from_token_balances()` — fallback no longer needed
 
 Keep:
-- `extract_privacy_coin_instruction_disc()` — still useful for metadata
+- `extract_utxopia_instruction_disc()` — still useful for metadata
 - `extract_btc_txids()` — fallback for old txs without DepositVerified event
 
 #### 3. Frontend `transfers-tab.tsx` — Simplified classification
@@ -164,9 +164,9 @@ Frontend displays: Request → Processing → BTC Sent → Complete (with all tx
 | `backend/src/event_indexer/storage.rs` | Add redemption lifecycle tables, `transfer_type` field | Medium |
 | `backend/src/event_indexer/routes.rs` | Add `transfer_type` to API, redemption lifecycle endpoint | Medium |
 | `backend/src/event_indexer/parser.rs` | Ensure all event types are parsed (0x07, 0x08, 0x0A) | Small |
-| `privacy-coin-app/src/app/explorer/components/transfers-tab.tsx` | Use `transfer_type` from backend | Small |
-| `privacy-coin-app/src/hooks/use-explorer.ts` | Update types | Small |
-| `privacy-coin-app/src/app/api/transfers/route.ts` | Pass through `transfer_type` | Small |
+| `utxopia-app/src/app/explorer/components/transfers-tab.tsx` | Use `transfer_type` from backend | Small |
+| `utxopia-app/src/hooks/use-explorer.ts` | Update types | Small |
+| `utxopia-app/src/app/api/transfers/route.ts` | Pass through `transfer_type` | Small |
 
 ## Migration / Backwards Compat
 

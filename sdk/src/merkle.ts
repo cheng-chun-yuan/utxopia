@@ -1,5 +1,5 @@
 /**
- * Merkle tree utilities for Privacy Coin
+ * Merkle tree utilities for UTXOpia
  *
  * Provides structures and helpers for Merkle proofs.
  * Actual tree operations use Poseidon hashing which is computed

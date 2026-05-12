@@ -4,9 +4,9 @@ import { useState, useCallback, useRef } from "react";
 import {
   bytesToHex,
   buildDepositPsbt,
-  PrivacyCoinClient,
-} from "@privacy-coin/sdk";
-import type { StealthMetaAddress } from "@privacy-coin/sdk";
+  UTXOpiaClient,
+} from "@utxopia/sdk";
+import type { StealthMetaAddress } from "@utxopia/sdk";
 import { useBitcoinWalletStore, type WalletUtxo } from "@/stores/bitcoin-wallet-store";
 import { useNotesStore } from "@/stores/notes-store";
 import { registerDeposit } from "@/lib/api/deposits";
@@ -78,7 +78,7 @@ export function useBtcDeposit({
     setDepositPreview(null);
 
     try {
-      const client = PrivacyCoinClient.instance();
+      const client = UTXOpiaClient.instance();
       const [deposit, utxos] = await Promise.all([
         client.prepareDeposit({ recipient: resolvedMeta }),
         btcWallet.getPaymentUtxos(),

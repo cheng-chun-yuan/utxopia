@@ -143,7 +143,7 @@ async function main() {
 
   // 2. Get program keypairs for IDs
   const targetDir = path.join(CONTRACTS_DIR, "target/deploy");
-  const pcoinKpPath = path.join(targetDir, "privacy_coin-keypair.json");
+  const pcoinKpPath = path.join(targetDir, "utxopia-keypair.json");
   const btclcKpPath = path.join(targetDir, "btc_light_client-keypair.json");
   const chadbufferKpPath = path.join(CONTRACTS_DIR, "programs/chadbuffer/chadbuffer-keypair.json");
   const chadbufferSoPath = path.join(CONTRACTS_DIR, "programs/chadbuffer/chadbuffer.so");
@@ -154,7 +154,7 @@ async function main() {
 
   const pcoinKp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(pcoinKpPath, "utf-8"))));
   const btclcKp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(btclcKpPath, "utf-8"))));
-  const PRIVACY_COIN = pcoinKp.publicKey;
+  const UTXOPIA = pcoinKp.publicKey;
   const BTC_LC = btclcKp.publicKey;
 
   let chadbufferId: PublicKey;
@@ -165,13 +165,13 @@ async function main() {
     chadbufferId = new PublicKey("C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF");
   }
 
-  log(`Privacy Coin: ${PRIVACY_COIN.toBase58()}`);
+  log(`UTXOpia: ${UTXOPIA.toBase58()}`);
   log(`BTC LC: ${BTC_LC.toBase58()}`);
   log(`ChadBuffer: ${chadbufferId.toBase58()}`);
 
   // 3. Start Surfpool (replaces solana-test-validator)
   log("Starting Surfpool...");
-  const pcoinSo = path.join(targetDir, "privacy_coin.so");
+  const pcoinSo = path.join(targetDir, "utxopia.so");
   const btclcSo = path.join(targetDir, "btc_light_client.so");
   const BTC_LC_EFFECTIVE = BTC_LC;
 
@@ -185,8 +185,8 @@ async function main() {
   // Programs are deployed through BPFLoaderUpgradeable (real execution, not stubs).
   // Symlinks in target/deploy/ map hyphenated names to Cargo's underscore names.
   const symlinkPairs = [
-    ["privacy_coin.so", "privacy-coin.so"],
-    ["privacy_coin-keypair.json", "privacy-coin-keypair.json"],
+    ["utxopia.so", "utxopia.so"],
+    ["utxopia-keypair.json", "utxopia-keypair.json"],
     ["btc_light_client.so", "btc-light-client.so"],
     ["btc_light_client-keypair.json", "btc-light-client-keypair.json"],
   ];
@@ -221,11 +221,11 @@ async function main() {
   }
   // Wait for runbook deployment to complete
   for (let i = 0; i < 30; i++) {
-    const info = await connection.getAccountInfo(PRIVACY_COIN);
+    const info = await connection.getAccountInfo(UTXOPIA);
     if (info?.executable) break;
     await new Promise(r => setTimeout(r, 1000));
   }
-  log(`Privacy Coin loaded at ${PRIVACY_COIN.toBase58()}`);
+  log(`UTXOpia loaded at ${UTXOPIA.toBase58()}`);
   log(`BTC Light Client loaded at ${BTC_LC.toBase58()}`);
 
   // ChadBuffer: deploy via solana CLI (not in txtx runbook since it's a prebuilt .so)
@@ -268,8 +268,8 @@ async function main() {
   log("Authority funded");
 
   // 6. Create zkBTC mint (mint authority = pool state PDA so program can mint)
-  const [poolState, poolBump] = derivePoolStatePDA(PRIVACY_COIN);
-  const [commitmentTree, treeBump] = deriveCommitmentTreePDA(PRIVACY_COIN);
+  const [poolState, poolBump] = derivePoolStatePDA(UTXOPIA);
+  const [commitmentTree, treeBump] = deriveCommitmentTreePDA(UTXOPIA);
 
   log("Creating zkBTC mint...");
   const mintKp = Keypair.generate();
@@ -303,7 +303,7 @@ async function main() {
   // 8. Initialize pool (disc=0)
   // Fees: deposit_fee_bps=20 (0.2%), withdrawal_fee_bps=20 (0.2%)
   // On-chain also hardcodes service_fee_base=2000 sats
-  log("Initializing Privacy Coin pool (deposit fee: 0.2%, withdrawal fee: 2000 sats + 0.2%)...");
+  log("Initializing UTXOpia pool (deposit fee: 0.2%, withdrawal fee: 2000 sats + 0.2%)...");
   const initData = Buffer.alloc(7); // disc(1) + pool_bump(1) + tree_bump(1) + deposit_bps(2) + withdrawal_bps(2)
   initData[0] = Disc.INITIALIZE;
   initData[1] = poolBump;
@@ -321,7 +321,7 @@ async function main() {
       { pubkey: authority.publicKey, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
-    programId: PRIVACY_COIN,
+    programId: UTXOPIA,
     data: initData,
   });
   await sendIx([initIx], [authority]);
@@ -334,7 +334,7 @@ async function main() {
 
   // 9. Register zkBTC TokenConfig (disc=28)
   log("Registering zkBTC TokenConfig...");
-  const [zkbtcTokenConfig] = deriveTokenConfigPDA(PRIVACY_COIN, zkbtcMint);
+  const [zkbtcTokenConfig] = deriveTokenConfigPDA(UTXOPIA, zkbtcMint);
   const regData = Buffer.alloc(1 + 32); // disc + service_fee(8) + min(8) + max(8) + cap(8)
   regData[0] = Disc.REGISTER_TOKEN;
   // service_fee = 2000 sats (~$2 at $100k BTC), min_deposit = 1000, max_deposit = 100 BTC, deposit_cap = 1000 BTC
@@ -353,7 +353,7 @@ async function main() {
       { pubkey: poolVaultAccount.address, isSigner: false, isWritable: false },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
-    programId: PRIVACY_COIN,
+    programId: UTXOPIA,
     data: Buffer.concat([Buffer.from([Disc.REGISTER_TOKEN]), regPayload]),
   });
   await sendIx([regIx], [authority]);
@@ -368,7 +368,7 @@ async function main() {
       const wsolVault = await getOrCreateAssociatedTokenAccount(
         connection, authority, NATIVE_MINT_2022, poolState, true, undefined, undefined, TOKEN_2022,
       );
-      const [wsolTokenConfig] = deriveTokenConfigPDA(PRIVACY_COIN, NATIVE_MINT_2022);
+      const [wsolTokenConfig] = deriveTokenConfigPDA(UTXOPIA, NATIVE_MINT_2022);
       const wsolRegPayload = Buffer.alloc(32);
       wsolRegPayload.writeBigUInt64LE(10_000_000n, 0);      // service_fee (~0.01 SOL ≈ $2)
       wsolRegPayload.writeBigUInt64LE(10_000_000n, 8);      // min_deposit (0.01 SOL)
@@ -383,7 +383,7 @@ async function main() {
           { pubkey: wsolVault.address, isSigner: false, isWritable: false },
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
         ],
-        programId: PRIVACY_COIN,
+        programId: UTXOPIA,
         data: Buffer.concat([Buffer.from([Disc.REGISTER_TOKEN]), wsolRegPayload]),
       });
       await sendIx([wsolRegIx], [authority]);
@@ -404,7 +404,7 @@ async function main() {
     }
     const vkJson = JSON.parse(fs.readFileSync(vkPath, "utf-8"));
     const vkHash = computeVkHash(vkJson);
-    const [vkRegistry] = deriveVkRegistryPDA(PRIVACY_COIN, nIn, nOut);
+    const [vkRegistry] = deriveVkRegistryPDA(UTXOPIA, nIn, nOut);
 
     const existing = await connection.getAccountInfo(vkRegistry);
     if (existing && existing.data[0] === 0x14) {
@@ -425,7 +425,7 @@ async function main() {
         { pubkey: authority.publicKey, isSigner: true, isWritable: true },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
-      programId: PRIVACY_COIN,
+      programId: UTXOPIA,
       data: vkData,
     });
     await sendIx([vkIx], [authority]);
@@ -462,7 +462,7 @@ async function main() {
 
   const btcCliPath = "/srv/explorer/bitcoin-27.2/bin/bitcoin-cli";
   const btcCmd = (cmd: string) =>
-    execSync(`docker exec privacy-coin-esplora-regtest ${btcCliPath} -regtest -datadir=/data/bitcoin -rpcwallet=test ${cmd}`, { encoding: "utf8" }).trim();
+    execSync(`docker exec utxopia-esplora-regtest ${btcCliPath} -regtest -datadir=/data/bitcoin -rpcwallet=test ${cmd}`, { encoding: "utf8" }).trim();
 
   const poolBtcAddress = btcCmd("getnewaddress pool_receive bech32m");
   const poolAddrInfo = JSON.parse(btcCmd(`getaddressinfo ${poolBtcAddress}`));
@@ -474,7 +474,7 @@ async function main() {
 
   // 13. Write state
   const state: LocalnetState = {
-    privacyCoinProgramId: PRIVACY_COIN.toBase58(),
+    privacyCoinProgramId: UTXOPIA.toBase58(),
     btcLightClientId: BTC_LC_EFFECTIVE.toBase58(),
     chadbufferId: chadbufferId.toBase58(),
     zkbtcMint: zkbtcMint.toBase58(),
@@ -506,9 +506,9 @@ async function main() {
     const { PublicKey: PK } = await import("@solana/web3.js");
     const [poolConfigPda] = PK.findProgramAddressSync(
       [Buffer.from("pool_config")],
-      PRIVACY_COIN_ID,
+      UTXOPIA_ID,
     );
-    const [poolStatePda] = derivePoolStatePDA(PRIVACY_COIN_ID);
+    const [poolStatePda] = derivePoolStatePDA(UTXOPIA_ID);
 
     // disc(27) + pool_script_len(1) + pool_script(34) + group_pub_key(32)
     const configData = Buffer.alloc(1 + 1 + poolScript.length + xOnlyBytes.length);
@@ -519,7 +519,7 @@ async function main() {
     xOnlyBytes.copy(configData, off);
 
     const configIx = new TransactionInstruction({
-      programId: PRIVACY_COIN_ID,
+      programId: UTXOPIA_ID,
       data: configData,
       keys: [
         { pubkey: poolStatePda, isSigner: false, isWritable: false },

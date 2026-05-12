@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { RefreshCw, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { InboxItem } from "./InboxItem";
-import type { InboxNote } from "@/hooks/use-privacy-coin";
+import type { InboxNote } from "@/hooks/use-utxopia";
 
 interface InboxListProps {
   notes: InboxNote[];

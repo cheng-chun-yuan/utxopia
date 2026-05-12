@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Check, Wallet, Inbox, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatBtc } from "@privacy-coin/sdk";
+import { formatBtc } from "@utxopia/sdk";
 
 /**
  * Owned note that can be selected for transfer

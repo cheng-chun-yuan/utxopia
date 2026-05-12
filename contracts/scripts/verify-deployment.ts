@@ -5,11 +5,11 @@
 
 import { Connection, PublicKey } from "@solana/web3.js";
 import {
-  PRIVACY_COIN_PROGRAM_ID,
+  UTXOPIA_PROGRAM_ID,
   BTC_LIGHT_CLIENT_PROGRAM_ID,
   derivePoolStatePDA,
   deriveCommitmentTreePDA,
-} from "@privacy-coin/sdk";
+} from "@utxopia/sdk";
 
 const RPC_URL = "https://api.devnet.solana.com";
 
@@ -22,17 +22,17 @@ async function main() {
 
   // Check SDK program ID
   console.log("\n=== Program IDs from SDK ===");
-  console.log(`Privacy Coin: ${PRIVACY_COIN_PROGRAM_ID}`);
+  console.log(`UTXOpia: ${UTXOPIA_PROGRAM_ID}`);
   console.log(`BTC Light Client: ${BTC_LIGHT_CLIENT_PROGRAM_ID}`);
 
   // Verify program is deployed
   console.log("\n=== Verifying on-chain ===");
 
-  const programInfo = await connection.getAccountInfo(new PublicKey(PRIVACY_COIN_PROGRAM_ID as string));
+  const programInfo = await connection.getAccountInfo(new PublicKey(UTXOPIA_PROGRAM_ID as string));
   if (programInfo) {
-    console.log(`✓ Privacy Coin program found (${programInfo.data.length} bytes)`);
+    console.log(`✓ UTXOpia program found (${programInfo.data.length} bytes)`);
   } else {
-    console.log(`✗ Privacy Coin program NOT found!`);
+    console.log(`✗ UTXOpia program NOT found!`);
   }
 
   // Derive PDAs using SDK

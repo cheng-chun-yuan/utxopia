@@ -1,6 +1,6 @@
-# Privacy Coin Backend Services
+# UTXOpia Backend Services
 
-The Privacy Coin backend consists of three main services that run as background processes.
+The UTXOpia backend consists of three main services that run as background processes.
 
 ## Overview
 
@@ -380,7 +380,7 @@ All services use structured JSON logging:
 {
   "timestamp": "2024-01-01T00:00:00Z",
   "level": "INFO",
-  "target": "pcoin::deposit_tracker",
+  "target": "utxopia::deposit_tracker",
   "message": "Deposit confirmed",
   "deposit_id": "dep_...",
   "confirmations": 3
@@ -430,18 +430,18 @@ cargo run -- redemption
 Create service files for each component:
 
 ```ini
-# /etc/systemd/system/privacy-coin-tracker.service
+# /etc/systemd/system/utxopia-tracker.service
 [Unit]
-Description=Privacy Coin Deposit Tracker
+Description=UTXOpia Deposit Tracker
 After=network.target
 
 [Service]
 Type=simple
-User=privacy-coin
-WorkingDirectory=/opt/privacy-coin/backend
-ExecStart=/opt/privacy-coin/backend/target/release/zkbtc-api tracker
+User=utxopia
+WorkingDirectory=/opt/utxopia/backend
+ExecStart=/opt/utxopia/backend/target/release/zkbtc-api tracker
 Restart=always
-Environment=DEPOSIT_DB_PATH=/var/lib/privacy-coin/deposits.db
+Environment=DEPOSIT_DB_PATH=/var/lib/utxopia/deposits.db
 
 [Install]
 WantedBy=multi-user.target

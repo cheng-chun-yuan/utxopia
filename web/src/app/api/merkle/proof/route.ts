@@ -8,7 +8,7 @@ import {
   parseCommitmentTreeData,
   bytesToBigint,
   type CommitmentTreeIndex,
-} from "@privacy-coin/sdk";
+} from "@utxopia/sdk";
 import { getHeliusConnection } from "@/lib/helius-server";
 import { getTreeProofFromBackend } from "@/lib/api/tree";
 export const dynamic = "force-dynamic";

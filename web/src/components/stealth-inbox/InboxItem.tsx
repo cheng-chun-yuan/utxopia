@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDown, Copy, Check, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { InboxNote } from "@/hooks/use-privacy-coin";
+import type { InboxNote } from "@/hooks/use-utxopia";
 import { SUPPORTED_TOKENS, getTokenBySymbol, type SupportedToken } from "@/lib/supported-tokens";
 import { useTokenPrices } from "@/hooks/use-token-prices";
 

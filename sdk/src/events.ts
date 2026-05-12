@@ -1,5 +1,5 @@
 /**
- * Event parser for Privacy Coin sol_log_data events
+ * Event parser for UTXOpia sol_log_data events
  *
  * Events are emitted by the on-chain program as base64-encoded log data.
  * Transaction logs contain lines like: "Program data: <base64>"
@@ -13,7 +13,7 @@
  * - 0x0C AnnouncementsBatch: flat payload in single segment
  */
 
-/** Event discriminators matching contracts/programs/privacy-coin/src/utils/events.rs */
+/** Event discriminators matching contracts/programs/utxopia/src/utils/events.rs */
 export const EVENT_NULLIFIER_SPENT = 0x02;
 export const EVENT_STEALTH_ANNOUNCEMENT = 0x03;
 export const EVENT_NULLIFIERS_BATCH = 0x0b;

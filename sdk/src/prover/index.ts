@@ -3,8 +3,8 @@
  *
  * Auto-detects platform and exports the appropriate prover backend.
  * For explicit imports, use:
- * - @privacy-coin/sdk/prover/web for browser/Node.js snarkjs Groth16 prover
- * - @privacy-coin/sdk/prover/mobile for React Native Groth16 prover
+ * - @utxopia/sdk/prover/web for browser/Node.js snarkjs Groth16 prover
+ * - @utxopia/sdk/prover/mobile for React Native Groth16 prover
  */
 
 // Re-export everything from the web prover (default for browser/Node.js)

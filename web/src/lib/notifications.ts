@@ -1,5 +1,5 @@
 /**
- * Toast notification helpers for Privacy Coin
+ * Toast notification helpers for UTXOpia
  *
  * Uses sonner for beautiful toast notifications
  */

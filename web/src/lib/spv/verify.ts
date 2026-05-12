@@ -12,7 +12,7 @@ import {
   type BlockHeader,
   type MerkleProof,
 } from "./mempool";
-import { hexToBytes } from "@privacy-coin/sdk";
+import { hexToBytes } from "@utxopia/sdk";
 
 // BTC Light Client Program ID — uses env var, falls back to devnet for dev
 const BTC_LIGHT_CLIENT_ID = new PublicKey(

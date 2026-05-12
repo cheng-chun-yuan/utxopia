@@ -42,13 +42,13 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
-import { usePrivacyCoinKeys } from "@/hooks/use-privacy-coin";
+import { useUTXOpiaKeys } from "@/hooks/use-utxopia";
 import { usePasskey } from "@/hooks/use-passkey";
-import { usePrivacyCoinStore } from "@/stores";
+import { useUTXOpiaStore } from "@/stores";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useSnsName } from "@/hooks/use-sns-name";
-import { useStealthInbox } from "@/hooks/use-privacy-coin";
-import { getConfig, exportViewOnlyKeys, encodeViewOnlyKeys } from "@privacy-coin/sdk";
+import { useStealthInbox } from "@/hooks/use-utxopia";
+import { getConfig, exportViewOnlyKeys, encodeViewOnlyKeys } from "@utxopia/sdk";
 import { notifyCopied } from "@/lib/notifications";
 import { useTokenPrices } from "@/hooks/use-token-prices";
 import { VAULT_TOKENS } from "@/lib/supported-tokens";
@@ -68,7 +68,7 @@ export default function VaultPage() {
     error,
     deriveKeys,
     clearKeys,
-  } = usePrivacyCoinKeys();
+  } = useUTXOpiaKeys();
   const { copied: snsCopied, copy: copySns } = useCopyToClipboard();
   const { copied: stealthCopied, copy: copyStealth } = useCopyToClipboard();
   const { copied: viewKeyCopied, copy: copyViewKey } = useCopyToClipboard();
@@ -110,8 +110,8 @@ export default function VaultPage() {
   const solanaNetworkLabel =
     networkId.charAt(0).toUpperCase() + networkId.slice(1);
 
-  const deriveKeysFromPasskeySeed = usePrivacyCoinStore((s) => s.deriveKeysFromPasskeySeed);
-  const loadViewOnlyKeys = usePrivacyCoinStore((s) => s.loadViewOnlyKeys);
+  const deriveKeysFromPasskeySeed = useUTXOpiaStore((s) => s.deriveKeysFromPasskeySeed);
+  const loadViewOnlyKeys = useUTXOpiaStore((s) => s.loadViewOnlyKeys);
 
   const handlePasskeyRegister = async () => {
     const seed = await registerPasskey();

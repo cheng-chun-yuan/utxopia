@@ -1,6 +1,6 @@
 //! Solana Relayer Client
 //!
-//! Simple relayer that calls Privacy Coin contract instructions.
+//! Simple relayer that calls UTXOpia contract instructions.
 //! All logic (merkle tree, token minting) is handled by the contract.
 //!
 //! Flow:
@@ -21,7 +21,7 @@ use solana_sdk::{
 use std::str::FromStr;
 
 use crate::common::crypto::double_sha256 as double_sha256_header;
-use crate::config::PrivacyCoinConfig;
+use crate::config::UTXOpiaConfig;
 use crate::redemption::types::ParsedRedemption;
 
 // ============================================================================
@@ -56,7 +56,7 @@ pub struct CompleteRedemptionParams<'a> {
 // Constants
 // ============================================================================
 
-/// Solana devnet RPC endpoint (default, override via PrivacyCoinConfig)
+/// Solana devnet RPC endpoint (default, override via UTXOpiaConfig)
 pub const DEVNET_RPC: &str = "https://api.devnet.solana.com";
 
 /// Token-2022 program ID
@@ -72,11 +72,11 @@ pub const BTC_LIGHT_CLIENT_PROGRAM_ID: Pubkey =
     solana_sdk::pubkey!("Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq");
 
 // ============================================================================
-// Devnet Defaults (used when PRIVACY_COIN_NETWORK=devnet and no env vars set)
+// Devnet Defaults (used when UTXOPIA_NETWORK=devnet and no env vars set)
 // For production, all addresses MUST come from environment variables.
 // ============================================================================
 
-/// Privacy Coin program ID (devnet default)
+/// UTXOpia program ID (devnet default)
 pub const DEVNET_PROGRAM_ID: &str = "7JJeVjVCy1fZqCDWvf41R7LuTWirTjX7Tp6suC2WVUMQ";
 
 /// Pool state PDA (devnet default)
@@ -222,8 +222,8 @@ impl SolClient {
         }
     }
 
-    /// Create new client from PrivacyCoinConfig (preferred for production)
-    pub fn from_config(config: &PrivacyCoinConfig) -> Result<Self, SolError> {
+    /// Create new client from UTXOpiaConfig (preferred for production)
+    pub fn from_config(config: &UTXOpiaConfig) -> Result<Self, SolError> {
         let rpc = RpcClient::new_with_commitment(
             config.solana_rpc.clone(),
             CommitmentConfig::confirmed(),

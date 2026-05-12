@@ -186,7 +186,7 @@ function ComparisonTable() {
       <div className="hidden sm:grid grid-cols-3 gap-4 pb-3 mb-2 border-b border-gray/10">
         <span className="text-[11px] font-mono uppercase tracking-wider text-gray/40">Aspect</span>
         <span className="text-[11px] font-mono uppercase tracking-wider text-gray/40">Traditional Bridges</span>
-        <span className="text-[11px] font-mono uppercase tracking-wider text-gray/50">Privacy Coin</span>
+        <span className="text-[11px] font-mono uppercase tracking-wider text-gray/50">UTXOpia</span>
       </div>
       {/* Mobile header */}
       <div className="sm:hidden pb-3 mb-2 border-b border-gray/10">
@@ -338,7 +338,7 @@ export default function DocsPage() {
                 </h1>
                 <p className="text-sm sm:text-base text-gray font-light max-w-2xl leading-relaxed">
                   A deep dive into the cryptography, architecture, and security model
-                  that makes Privacy Coin a universal shielded pool for BTC, SOL, USDC, and any token on Solana.
+                  that makes UTXOpia a universal shielded pool for BTC, SOL, USDC, and any token on Solana.
                 </p>
               </div>
             </section>
@@ -348,7 +348,7 @@ export default function DocsPage() {
               <SectionHeading
                 label="The Problem"
                 title="Why Tokens Need Privacy"
-                subtitle="Every blockchain transaction is permanently public. Whether you're using BTC, SOL, or USDC — your balances, transfers, and trading patterns are visible to anyone. Privacy Coin shields all your tokens in a single privacy pool."
+                subtitle="Every blockchain transaction is permanently public. Whether you're using BTC, SOL, or USDC — your balances, transfers, and trading patterns are visible to anyone. UTXOpia shields all your tokens in a single privacy pool."
               />
               <ComparisonTable />
             </DocsSection>

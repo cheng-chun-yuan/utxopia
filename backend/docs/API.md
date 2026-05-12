@@ -1,4 +1,4 @@
-# Privacy Coin Backend API Reference
+# UTXOpia Backend API Reference
 
 ## Base URL
 
@@ -342,7 +342,7 @@ Manual announcement for self-custody mode.
 **Request Body**
 ```json
 {
-  "stealth_data": "pcoin:1:eyJhbGciOiJI..."
+  "stealth_data": "utxo:1:eyJhbGciOiJI..."
 }
 ```
 

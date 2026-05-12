@@ -1,4 +1,4 @@
-// API Request/Response Types for Privacy Coin (zkBTC)
+// API Request/Response Types for UTXOpia (zkBTC)
 //
 // Simplified Flow:
 // 1. User generates: nullifier + secret

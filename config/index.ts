@@ -6,7 +6,7 @@
  *
  * Usage:
  *   import { getNetworkConfig } from "@/config";  // or "../../config"
- *   const cfg = getNetworkConfig();  // auto-detects from NEXT_PUBLIC_NETWORK or PRIVACY_COIN_NETWORK
+ *   const cfg = getNetworkConfig();  // auto-detects from NEXT_PUBLIC_NETWORK or UTXOPIA_NETWORK
  *   cfg.solana.privacyCoinProgramId
  *   cfg.tokens.zkbtcMint
  *   cfg.bitcoin.poolAddress
@@ -46,7 +46,7 @@ const networks = networksJson as Record<NetworkId, NetworkConfig>;
 export function detectNetwork(): NetworkId {
   const env =
     (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_NETWORK) ||
-    (typeof process !== "undefined" && process.env?.PRIVACY_COIN_NETWORK) ||
+    (typeof process !== "undefined" && process.env?.UTXOPIA_NETWORK) ||
     "devnet";
   if (env === "mainnet" || env === "mainnet-beta") return "mainnet";
   if (env === "testnet") return "testnet";

@@ -116,16 +116,16 @@ async function submitHeaders(
 async function main() {
   const state = loadState();
   const authority = loadAuthority();
-  const PRIVACY_COIN = new PublicKey(state.privacyCoinProgramId);
+  const UTXOPIA = new PublicKey(state.privacyCoinProgramId);
   const BTC_LC = new PublicKey(state.btcLightClientId);
   const CHADBUFFER_ID = new PublicKey(state.chadbufferId);
   const zkbtcMint = new PublicKey(state.zkbtcMint);
-  const poolVault = deriveATA(zkbtcMint, derivePoolStatePDA(PRIVACY_COIN)[0]);
-  const [poolState] = derivePoolStatePDA(PRIVACY_COIN);
+  const poolVault = deriveATA(zkbtcMint, derivePoolStatePDA(UTXOPIA)[0]);
+  const [poolState] = derivePoolStatePDA(UTXOPIA);
 
   // Redemption from step8: user=authority, nonce=1
   const requestNonce = 1n;
-  const [redemptionPDA] = deriveRedemptionPDA(PRIVACY_COIN, authority.publicKey, requestNonce);
+  const [redemptionPDA] = deriveRedemptionPDA(UTXOPIA, authority.publicKey, requestNonce);
 
   // Verify redemption PDA exists
   const redemptionInfo = await connection.getAccountInfo(redemptionPDA);
@@ -151,7 +151,7 @@ async function main() {
   const sweepTxidBytes = Buffer.from(btcNote2.sweepTxid, "hex");
   sweepTxidBytes.reverse(); // display → internal byte order
   const sweepVout = btcNote2.sweepVout ?? 0;
-  const [utxoPDA] = deriveUtxoPDA(PRIVACY_COIN, sweepTxidBytes, sweepVout);
+  const [utxoPDA] = deriveUtxoPDA(UTXOPIA, sweepTxidBytes, sweepVout);
 
   // Verify UTXO PDA exists on-chain
   const utxoInfo = await connection.getAccountInfo(utxoPDA);
@@ -168,7 +168,7 @@ async function main() {
   mpData[1] = 1; // utxo_count = 1
 
   const mpIx = new TransactionInstruction({
-    programId: PRIVACY_COIN,
+    programId: UTXOPIA,
     data: mpData,
     keys: [
       { pubkey: poolState, isSigner: false, isWritable: true },
@@ -350,13 +350,13 @@ async function main() {
   // Derive PoolConfig PDA
   const [poolConfig] = PublicKey.findProgramAddressSync(
     [Buffer.from("pool_config")],
-    PRIVACY_COIN,
+    UTXOPIA,
   );
 
   // Derive CompletionReceipt PDA
   const [completionReceipt] = PublicKey.findProgramAddressSync(
     [Buffer.from("completion_receipt"), withdrawTxHash],
-    PRIVACY_COIN,
+    UTXOPIA,
   );
 
   // Build pool scriptPubKey from pool address (P2TR: OP_1 + PUSH32 + x-only-pubkey)
@@ -384,7 +384,7 @@ async function main() {
   // Change output is typically vout=1 (user=vout=0, change=vout=1).
   const hasPoolScript = poolScriptBuf.length > 0;
   const changeUtxoAccount = hasPoolScript
-    ? deriveUtxoPDA(PRIVACY_COIN, withdrawTxHash, 1)[0] // change output at vout=1
+    ? deriveUtxoPDA(UTXOPIA, withdrawTxHash, 1)[0] // change output at vout=1
     : SystemProgram.programId; // placeholder, won't be used
 
   // Debug: log all accounts and their owners
@@ -409,7 +409,7 @@ async function main() {
   log(`  crData length: ${crData.length}, first bytes: ${crData.subarray(0, 8).toString("hex")}`);
 
   const crIx = new TransactionInstruction({
-    programId: PRIVACY_COIN,
+    programId: UTXOPIA,
     data: crData,
     keys: [
       { pubkey: poolState, isSigner: false, isWritable: true },           // 0

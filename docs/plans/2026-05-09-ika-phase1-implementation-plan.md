@@ -4,9 +4,9 @@
 
 **Goal:** Replace the entire FROST custody subsystem with Ika dWallet-controlled BTC custody. By the end of this plan, BTC deposits land at an Ika-controlled P2TR address; redemptions are signed by Ika; `frost_server/` is decommissioned behind a feature flag, then deleted.
 
-**Architecture:** The on-chain `privacy-coin` Pinocchio program adds the `ika-dwallet-pinocchio` git dep and CPIs `DWalletContext::approve_message(...)` from `complete_redemption`. The Ika devnet program (`87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY`) creates a `MessageApproval` PDA on our behalf; its mock signer (pre-alpha) populates a `Sign` account with the resulting signature. A thin off-chain watcher polls `Sign` PDAs, assembles the BTC witness, and broadcasts to Bitcoin testnet. **No Sui sidecar, no Node IPC bridge** — that earlier plan version was wrong (built against `@ika.xyz/sdk` which is Sui-only; the right tooling is `dwallet-labs/ika-pre-alpha` which is Solana-native).
+**Architecture:** The on-chain `utxopia` Pinocchio program adds the `ika-dwallet-pinocchio` git dep and CPIs `DWalletContext::approve_message(...)` from `complete_redemption`. The Ika devnet program (`87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY`) creates a `MessageApproval` PDA on our behalf; its mock signer (pre-alpha) populates a `Sign` account with the resulting signature. A thin off-chain watcher polls `Sign` PDAs, assembles the BTC witness, and broadcasts to Bitcoin testnet. **No Sui sidecar, no Node IPC bridge** — that earlier plan version was wrong (built against `@ika.xyz/sdk` which is Sui-only; the right tooling is `dwallet-labs/ika-pre-alpha` which is Solana-native).
 
-**Tech stack:** Rust (Pinocchio program with `ika-dwallet-pinocchio` git dep, backend watcher), TypeScript (`@privacy-coin/sdk`, web), Bitcoin (testnet, P2TR), Solana devnet, Ika devnet (gRPC `pre-alpha-dev-1.ika.ika-network.net:443`).
+**Tech stack:** Rust (Pinocchio program with `ika-dwallet-pinocchio` git dep, backend watcher), TypeScript (`@utxopia/sdk`, web), Bitcoin (testnet, P2TR), Solana devnet, Ika devnet (gRPC `pre-alpha-dev-1.ika.ika-network.net:443`).
 
 **Phase 1 acceptance:** End-to-end test passes — deposit BTC to an Ika-controlled P2TR → SPV-verify on Solana → see shielded note in SDK → transfer privately → request redemption → Ika signs the BTC tx → BTC arrives at withdrawal address. No `frost_server/` process running. Phase 2 (Encrypt swap) is a separate plan written after this one ships.
 
@@ -20,13 +20,13 @@ Locked-in changes. Each file has one clear responsibility.
 |---|---|---|
 | `docs/recon/2026-05-09-ika-sdk-brief.md` | **NEW** | Output of Task 0. Concrete `ika-dwallet-pinocchio` CPI call signatures, `DWallet` and `Sign` PDA layouts, devnet endpoints. Used by every later task. |
 | `scripts/ika-setup/Cargo.toml` | **NEW** | Standalone Rust workspace member that runs the one-shot dWallet DKG against Ika devnet. |
-| `scripts/ika-setup/src/main.rs` | **NEW** | Creates SECP256K1 dWallet via Ika devnet, transfers authority to Privacy Coin CPI authority PDA, prints dWallet ID + pubkey, writes them into the appropriate state JSON. |
-| `contracts/programs/privacy-coin/Cargo.toml` | **MODIFY** | Add `ika-dwallet-pinocchio = { git = "https://github.com/dwallet-labs/ika-pre-alpha", rev = "<pinned>" }`. |
-| `contracts/programs/privacy-coin/src/state/pool_config.rs` | **MODIFY** | Add `ika_dwallet: [u8; 32]` (the Solana account holding the dWallet) and `ika_dwallet_pubkey: [u8; 33]` (compressed secp256k1) fields. Keep `group_pub_key` for migration. |
-| `contracts/programs/privacy-coin/src/instructions/set_pool_config.rs` | **MODIFY** | Allow setting `ika_dwallet` and `ika_dwallet_pubkey`. |
-| `contracts/programs/privacy-coin/src/instructions/complete_redemption.rs` | **MODIFY** | After existing redemption validation, build BTC tx → compute taproot sighash → CPI `DWalletContext::approve_message(...)` to create `MessageApproval` PDA. Adds new accounts: ika_program, coordinator, message_approval, dwallet, cpi_authority, payer. |
-| `contracts/programs/privacy-coin/src/cpi/ika.rs` | **NEW** | Thin wrapper around `DWalletContext::approve_message` with our specific account layout. CPI authority bump is computed once and stored in `pool_config`. |
-| `contracts/programs/privacy-coin/src/utils/policy.rs` | **NEW** | Migrated from `frost_server/policy.rs`. Pure on-chain validation: amount limits, destination whitelist, paused-state. Called from `complete_redemption` before the CPI. |
+| `scripts/ika-setup/src/main.rs` | **NEW** | Creates SECP256K1 dWallet via Ika devnet, transfers authority to UTXOpia CPI authority PDA, prints dWallet ID + pubkey, writes them into the appropriate state JSON. |
+| `contracts/programs/utxopia/Cargo.toml` | **MODIFY** | Add `ika-dwallet-pinocchio = { git = "https://github.com/dwallet-labs/ika-pre-alpha", rev = "<pinned>" }`. |
+| `contracts/programs/utxopia/src/state/pool_config.rs` | **MODIFY** | Add `ika_dwallet: [u8; 32]` (the Solana account holding the dWallet) and `ika_dwallet_pubkey: [u8; 33]` (compressed secp256k1) fields. Keep `group_pub_key` for migration. |
+| `contracts/programs/utxopia/src/instructions/set_pool_config.rs` | **MODIFY** | Allow setting `ika_dwallet` and `ika_dwallet_pubkey`. |
+| `contracts/programs/utxopia/src/instructions/complete_redemption.rs` | **MODIFY** | After existing redemption validation, build BTC tx → compute taproot sighash → CPI `DWalletContext::approve_message(...)` to create `MessageApproval` PDA. Adds new accounts: ika_program, coordinator, message_approval, dwallet, cpi_authority, payer. |
+| `contracts/programs/utxopia/src/cpi/ika.rs` | **NEW** | Thin wrapper around `DWalletContext::approve_message` with our specific account layout. CPI authority bump is computed once and stored in `pool_config`. |
+| `contracts/programs/utxopia/src/utils/policy.rs` | **NEW** | Migrated from `frost_server/policy.rs`. Pure on-chain validation: amount limits, destination whitelist, paused-state. Called from `complete_redemption` before the CPI. |
 | `backend/src/bitcoin/ika_watcher.rs` | **NEW** | Thin off-chain watcher: polls Ika `Sign` PDAs (gRPC + Solana RPC) for completed signatures matching pending redemptions. Assembles witness onto unsigned BTC tx, broadcasts to bitcoind. |
 | `backend/src/redemption/signer.rs` | **MODIFY** | Add `IkaSigner` enum variant — much thinner than FROST: no MPC orchestration, just sighash computation + handing off the sighash to the on-chain `complete_redemption` ix. The actual signature comes back through the watcher. Existing `SingleKeySigner` stays for tests. `FrostSigner` gated behind `frost-legacy` feature. |
 | `backend/src/redemption/types.rs` | **MODIFY** | Add `Ika { dwallet: [u8; 32], dwallet_pubkey: [u8; 33] }` variant to `SigningMode`. |
@@ -184,24 +184,24 @@ git commit -m "Task 0: Ika Solana pre-alpha recon (CPI surface, DKG flow, Sign P
 ## Task 1 — Add Ika dWallet ID to on-chain pool config
 
 **Files:**
-- Modify: `contracts/programs/privacy-coin/src/state/pool_config.rs`
-- Modify: `contracts/programs/privacy-coin/src/instructions/set_pool_config.rs`
-- Test: `contracts/programs/privacy-coin/tests/pool_config_ika.rs` (new)
+- Modify: `contracts/programs/utxopia/src/state/pool_config.rs`
+- Modify: `contracts/programs/utxopia/src/instructions/set_pool_config.rs`
+- Test: `contracts/programs/utxopia/tests/pool_config_ika.rs` (new)
 
 - [ ] **Step 1.1: Read existing pool_config.rs to anchor the change**
 
 ```bash
-sed -n '1,80p' contracts/programs/privacy-coin/src/state/pool_config.rs
+sed -n '1,80p' contracts/programs/utxopia/src/state/pool_config.rs
 ```
 
 Capture: current struct layout, byte offsets, existing `group_pub_key` location.
 
 - [ ] **Step 1.2: Write a failing test for the new field**
 
-Create `contracts/programs/privacy-coin/tests/pool_config_ika.rs`:
+Create `contracts/programs/utxopia/tests/pool_config_ika.rs`:
 
 ```rust
-use privacy_coin::state::pool_config::PoolConfig;
+use utxopia::state::pool_config::PoolConfig;
 
 #[test]
 fn pool_config_round_trips_ika_dwallet_id() {
@@ -219,7 +219,7 @@ fn pool_config_round_trips_ika_dwallet_id() {
 - [ ] **Step 1.3: Run the test, confirm it fails**
 
 ```bash
-cd contracts && cargo test -p privacy-coin pool_config_round_trips_ika_dwallet_id 2>&1 | tail -10
+cd contracts && cargo test -p utxopia pool_config_round_trips_ika_dwallet_id 2>&1 | tail -10
 ```
 
 Expected: failure (`ika_dwallet_id` field does not exist yet).
@@ -231,7 +231,7 @@ In `pool_config.rs`, add `pub ika_dwallet_id: [u8; 32]` as the next field after 
 Verify by re-reading the file:
 
 ```bash
-grep -n "ika_dwallet_id\|LEN\|group_pub_key" contracts/programs/privacy-coin/src/state/pool_config.rs
+grep -n "ika_dwallet_id\|LEN\|group_pub_key" contracts/programs/utxopia/src/state/pool_config.rs
 ```
 
 Expected: field present, `LEN` increased by 32.
@@ -239,7 +239,7 @@ Expected: field present, `LEN` increased by 32.
 - [ ] **Step 1.5: Run the test, confirm it passes**
 
 ```bash
-cd contracts && cargo test -p privacy-coin pool_config_round_trips_ika_dwallet_id 2>&1 | tail -5
+cd contracts && cargo test -p utxopia pool_config_round_trips_ika_dwallet_id 2>&1 | tail -5
 ```
 
 Expected: PASS.
@@ -247,18 +247,18 @@ Expected: PASS.
 - [ ] **Step 1.6: Run the full program test suite**
 
 ```bash
-cd contracts && cargo test -p privacy-coin 2>&1 | tail -15
+cd contracts && cargo test -p utxopia 2>&1 | tail -15
 ```
 
 Expected: all green. If a serialization-size test fails, update it to the new `PoolConfig::LEN`.
 
 - [ ] **Step 1.7: Allow setting ika_dwallet_id in `set_pool_config`**
 
-Modify `contracts/programs/privacy-coin/src/instructions/set_pool_config.rs` to accept an optional 32-byte `ika_dwallet_id` argument (analogous to the existing optional `group_pub_key` handling). Reference the existing `group_pub_key` pattern — same length, same optionality, same authority check.
+Modify `contracts/programs/utxopia/src/instructions/set_pool_config.rs` to accept an optional 32-byte `ika_dwallet_id` argument (analogous to the existing optional `group_pub_key` handling). Reference the existing `group_pub_key` pattern — same length, same optionality, same authority check.
 
 - [ ] **Step 1.8: Add a test for `set_pool_config` with ika_dwallet_id**
 
-Add a unit test in the same `tests/` file that constructs a `set_pool_config` instruction with the new field and confirms it round-trips into the PDA. Use the existing `set_pool_config` tests as a template (search `grep -rn "set_pool_config" contracts/programs/privacy-coin/tests/`).
+Add a unit test in the same `tests/` file that constructs a `set_pool_config` instruction with the new field and confirms it round-trips into the PDA. Use the existing `set_pool_config` tests as a template (search `grep -rn "set_pool_config" contracts/programs/utxopia/tests/`).
 
 - [ ] **Step 1.9: cargo build-sbf passes**
 
@@ -397,7 +397,7 @@ git commit -m "Task 2: SDK helper deriveCustodyAddressFromIkaDWallet"
 
 **Files:**
 - Modify: `sdk/src/stealth-deposit.ts`
-- Modify: `sdk/src/client.ts` (the `PrivacyCoinClient` high-level wrapper)
+- Modify: `sdk/src/client.ts` (the `UTXOpiaClient` high-level wrapper)
 - Test: `sdk/tests/stealth-deposit.test.ts` (extend existing)
 
 - [ ] **Step 3.1: Locate the existing FROST/Taproot derivation in `stealth-deposit.ts`**
@@ -484,12 +484,12 @@ cd sdk && bun test stealth-deposit 2>&1 | tail -5
 
 Expected: PASS.
 
-- [ ] **Step 3.6: Update `PrivacyCoinClient.init` to resolve the dWallet pubkey at startup**
+- [ ] **Step 3.6: Update `UTXOpiaClient.init` to resolve the dWallet pubkey at startup**
 
 In `sdk/src/client.ts`, find where `pool_config` is loaded. If `ika_dwallet_id` is non-zero, populate `ika_dwallet_pubkey` by calling the Ika resolver (placeholder for Task 4 wiring; for now, accept it as an optional config arg):
 
 ```typescript
-constructor(opts: PrivacyCoinClientOptions) {
+constructor(opts: UTXOpiaClientOptions) {
   // ...
   this.poolConfig = {
     ...loadedPoolConfig,
@@ -517,21 +517,21 @@ git commit -m "Task 3: deposit address derives from ika_dwallet_id, falls back t
 
 ---
 
-## Task 4 — Privacy Coin → Ika CPI from `complete_redemption`
+## Task 4 — UTXOpia → Ika CPI from `complete_redemption`
 
-**Why this exists:** This is the heart of the pivot. The Privacy Coin Pinocchio program directly CPIs the Ika dWallet program via `ika-dwallet-pinocchio`. No Node bridge. No off-chain sign orchestration.
+**Why this exists:** This is the heart of the pivot. The UTXOpia Pinocchio program directly CPIs the Ika dWallet program via `ika-dwallet-pinocchio`. No Node bridge. No off-chain sign orchestration.
 
 **Files:**
-- Modify: `contracts/programs/privacy-coin/Cargo.toml` (add git dep)
-- Create: `contracts/programs/privacy-coin/src/cpi/mod.rs` and `cpi/ika.rs` (CPI wrapper specific to our account layout)
-- Modify: `contracts/programs/privacy-coin/src/instructions/complete_redemption.rs` (CPI on the success path)
-- Create: `contracts/programs/privacy-coin/src/utils/policy.rs` (migrated from `frost_server/policy.rs`)
-- Test: `contracts/programs/privacy-coin/tests/complete_redemption_ika_cpi.rs` (new — uses Mollusk to assert the CPI is dispatched with the right accounts and the right `message_digest`)
+- Modify: `contracts/programs/utxopia/Cargo.toml` (add git dep)
+- Create: `contracts/programs/utxopia/src/cpi/mod.rs` and `cpi/ika.rs` (CPI wrapper specific to our account layout)
+- Modify: `contracts/programs/utxopia/src/instructions/complete_redemption.rs` (CPI on the success path)
+- Create: `contracts/programs/utxopia/src/utils/policy.rs` (migrated from `frost_server/policy.rs`)
+- Test: `contracts/programs/utxopia/tests/complete_redemption_ika_cpi.rs` (new — uses Mollusk to assert the CPI is dispatched with the right accounts and the right `message_digest`)
 - Reference: `docs/recon/2026-05-09-ika-sdk-brief.md` for exact account ordering and instruction data layout
 
 - [ ] **Step 4.1: Add the git dep, pinned to the recon SHA**
 
-Edit `contracts/programs/privacy-coin/Cargo.toml`:
+Edit `contracts/programs/utxopia/Cargo.toml`:
 
 ```toml
 [dependencies]
@@ -546,7 +546,7 @@ Expected: builds. If git auth fails, capture the failure mode and document in th
 
 - [ ] **Step 4.2: Migrate signing policy on-chain**
 
-Create `contracts/programs/privacy-coin/src/utils/policy.rs`. Port the *pure* validation functions from `frost_server/policy.rs` (no FROST-specific bits — just amount limits, destination whitelist, paused state, fee bounds). Each is a standalone `pub fn` that returns `Result<(), Error>`.
+Create `contracts/programs/utxopia/src/utils/policy.rs`. Port the *pure* validation functions from `frost_server/policy.rs` (no FROST-specific bits — just amount limits, destination whitelist, paused state, fee bounds). Each is a standalone `pub fn` that returns `Result<(), Error>`.
 
 ```bash
 sed -n '1,80p' frost_server/src/policy.rs
@@ -556,21 +556,21 @@ Read it, identify the pure-validation functions, port them to `utils/policy.rs` 
 
 - [ ] **Step 4.3: Failing test for `complete_redemption` Ika CPI**
 
-Create `contracts/programs/privacy-coin/tests/complete_redemption_ika_cpi.rs` using Mollusk. Assert: when `complete_redemption` runs the success path, it dispatches an outer instruction to the Ika program with `discriminator = 8` and the expected account list (coordinator, message_approval, dwallet, caller_program, cpi_authority, payer, system_program). Use a stub Ika program loaded via Mollusk that simply records the dispatched instruction so we can assert against it.
+Create `contracts/programs/utxopia/tests/complete_redemption_ika_cpi.rs` using Mollusk. Assert: when `complete_redemption` runs the success path, it dispatches an outer instruction to the Ika program with `discriminator = 8` and the expected account list (coordinator, message_approval, dwallet, caller_program, cpi_authority, payer, system_program). Use a stub Ika program loaded via Mollusk that simply records the dispatched instruction so we can assert against it.
 
 Reference: voting example at `/tmp/ika-pre-alpha-scratch/ika-pre-alpha/chains/solana/examples/voting/pinocchio/tests/mollusk.rs` — copy its harness setup.
 
 - [ ] **Step 4.4: Verify the test fails to compile**
 
 ```bash
-cd contracts && cargo test -p privacy-coin complete_redemption_ika_cpi --no-run 2>&1 | tail -10
+cd contracts && cargo test -p utxopia complete_redemption_ika_cpi --no-run 2>&1 | tail -10
 ```
 
 Expected: missing imports / functions.
 
 - [ ] **Step 4.5: Implement the CPI inside `complete_redemption`**
 
-Modify `contracts/programs/privacy-coin/src/instructions/complete_redemption.rs`. After existing redemption validation:
+Modify `contracts/programs/utxopia/src/instructions/complete_redemption.rs`. After existing redemption validation:
 
 ```rust
 use ika_dwallet_pinocchio::DWalletContext;
@@ -610,7 +610,7 @@ ctx.approve_message(
 - [ ] **Step 4.7: Test passes**
 
 ```bash
-cd contracts && cargo test -p privacy-coin complete_redemption_ika_cpi 2>&1 | tail -10
+cd contracts && cargo test -p utxopia complete_redemption_ika_cpi 2>&1 | tail -10
 ```
 
 Expected: PASS. The Mollusk recorder asserts the CPI dispatched with the right shape.
@@ -1078,7 +1078,7 @@ Create `docs/MIGRATION_v1_to_v2.md`:
 ## What did NOT change
 - JoinSplit ZK circuits — unchanged
 - Stealth addresses, OP_RETURN format, commitment derivation — unchanged
-- SDK public surface (`PrivacyCoinClient`, `createNonInteractiveDeposit`, etc.) — same names, same arguments
+- SDK public surface (`UTXOpiaClient`, `createNonInteractiveDeposit`, etc.) — same names, same arguments
 
 ## For pool operators
 1. Spin up the Ika orchestrator (`bun run sdk/dist/ika/orchestrator.js`)
@@ -1125,7 +1125,7 @@ Expected: 3/3 green.
 
 - [ ] **Step F.3: Devnet smoke**
 
-Deploy the modified `privacy-coin` program to Solana devnet (existing deploy script). Run a single deposit→shielded note→redemption→BTC arrival cycle on Solana devnet + Bitcoin testnet using the live Ika devnet dWallet from Task 0.
+Deploy the modified `utxopia` program to Solana devnet (existing deploy script). Run a single deposit→shielded note→redemption→BTC arrival cycle on Solana devnet + Bitcoin testnet using the live Ika devnet dWallet from Task 0.
 
 - [ ] **Step F.4: Tag and push**
 

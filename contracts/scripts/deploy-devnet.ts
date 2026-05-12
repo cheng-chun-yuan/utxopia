@@ -1,12 +1,12 @@
 #!/usr/bin/env bun
 /**
- * Deploy and Initialize Privacy Coin on Devnet
+ * Deploy and Initialize UTXOpia on Devnet
  *
  * This script:
- * 1. Deploys both Privacy Coin and BTC Light Client programs (optional)
+ * 1. Deploys both UTXOpia and BTC Light Client programs (optional)
  * 2. Initializes the BTC Light Client with a real testnet block
  * 3. Creates the zkBTC Token-2022 mint
- * 4. Initializes the Privacy Coin pool state and commitment tree
+ * 4. Initializes the UTXOpia pool state and commitment tree
  * 5. Adds demo notes for testing
  *
  * Prerequisites:
@@ -52,7 +52,7 @@ import {
   computeUnifiedCommitment,
   encryptAmountEd25519,
   initPoseidon,
-} from "@privacy-coin/sdk";
+} from "@utxopia/sdk";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -69,7 +69,7 @@ const CONFIG_PATH = path.join(CONTRACTS_DIR, "config.json");
 // Load config
 const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
 
-// Seeds for Privacy Coin PDAs
+// Seeds for UTXOpia PDAs
 const PC_Seeds = {
   POOL_STATE: "pool_state",
   COMMITMENT_TREE: "commitment_tree",
@@ -199,7 +199,7 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
   logSection("Program Deployment");
 
   // Get program IDs from keypairs
-  const pcoinKeypairPath = path.join(TARGET_DIR, "privacy_coin-keypair.json");
+  const pcoinKeypairPath = path.join(TARGET_DIR, "utxopia-keypair.json");
   const btclcKeypairPath = path.join(TARGET_DIR, "btc_light_client-keypair.json");
 
   if (!fs.existsSync(pcoinKeypairPath) || !fs.existsSync(btclcKeypairPath)) {
@@ -212,7 +212,7 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
   const privacyCoinProgramId = pcoinKeypair.publicKey;
   const btcLightClientProgramId = btclcKeypair.publicKey;
 
-  log(`Privacy Coin Program ID: ${privacyCoinProgramId.toBase58()}`);
+  log(`UTXOpia Program ID: ${privacyCoinProgramId.toBase58()}`);
   log(`BTC Light Client Program ID: ${btcLightClientProgramId.toBase58()}`);
 
   if (skipDeploy) {
@@ -220,17 +220,17 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
     return { privacyCoinProgramId, btcLightClientProgramId };
   }
 
-  // Deploy Privacy Coin
-  log("Deploying Privacy Coin program to devnet...");
+  // Deploy UTXOpia
+  log("Deploying UTXOpia program to devnet...");
   try {
     execSync(
-      `solana program deploy ${TARGET_DIR}/privacy_coin.so --program-id ${pcoinKeypairPath} -u devnet`,
+      `solana program deploy ${TARGET_DIR}/utxopia.so --program-id ${pcoinKeypairPath} -u devnet`,
       { stdio: "inherit" }
     );
-    log("Privacy Coin deployed successfully");
+    log("UTXOpia deployed successfully");
   } catch (e: any) {
     if (e.message?.includes("already in use") || e.status === 1) {
-      log("Privacy Coin program already deployed");
+      log("UTXOpia program already deployed");
     } else {
       throw e;
     }
@@ -335,7 +335,7 @@ function buildBTCLCInitializeIx(
   });
 }
 
-function buildPrivacyCoinInitializeIx(
+function buildUTXOpiaInitializeIx(
   poolState: PublicKey,
   commitmentTree: PublicKey,
   zkbtcMint: PublicKey,
@@ -465,12 +465,12 @@ async function initializeBTCRelay(
   return lightClientPda;
 }
 
-async function initializePRIVACY_COIN(
+async function initializeUTXOPIA(
   connection: Connection,
   authority: Keypair,
   programId: PublicKey
 ): Promise<InitResult> {
-  logSection("Privacy Coin Initialization");
+  logSection("UTXOpia Initialization");
 
   const [poolStatePda, poolBump] = derivePoolStatePDA(programId);
   const [commitmentTreePda, treeBump] = deriveCommitmentTreePDA(programId);
@@ -481,7 +481,7 @@ async function initializePRIVACY_COIN(
   // Check if already initialized
   const poolAccount = await connection.getAccountInfo(poolStatePda);
   if (poolAccount && poolAccount.data[0] === Discriminators.POOL_STATE) {
-    log("Privacy Coin already initialized, skipping...");
+    log("UTXOpia already initialized, skipping...");
 
     // Parse existing pool state to get mint and vault info
     const mintPubkey = new PublicKey(poolAccount.data.subarray(36, 68));
@@ -558,9 +558,9 @@ async function initializePRIVACY_COIN(
   );
   log(`Frost Vault: ${frostVault.address.toBase58()}`);
 
-  // Initialize Privacy Coin
-  log("Initializing Privacy Coin pool...");
-  const ix = buildPrivacyCoinInitializeIx(
+  // Initialize UTXOpia
+  log("Initializing UTXOpia pool...");
+  const ix = buildUTXOpiaInitializeIx(
     poolStatePda,
     commitmentTreePda,
     zkbtcMint,
@@ -577,7 +577,7 @@ async function initializePRIVACY_COIN(
     commitment: "confirmed",
   });
 
-  log(`Privacy Coin initialized: ${sig}`);
+  log(`UTXOpia initialized: ${sig}`);
 
   return {
     poolStatePda,
@@ -678,7 +678,7 @@ function saveDevnetConfig(
 
   // Update config.json with devnet values
   config.programs.devnet = {
-    PrivacyCoin: deployResult.privacyCoinProgramId.toBase58(),
+    UTXOpia: deployResult.privacyCoinProgramId.toBase58(),
     btc_light_client: deployResult.btcLightClientProgramId.toBase58(),
   };
 
@@ -690,7 +690,7 @@ function saveDevnetConfig(
     network: "devnet",
     rpcUrl: RPC_URL,
     programs: {
-      PrivacyCoin: deployResult.privacyCoinProgramId.toBase58(),
+      UTXOpia: deployResult.privacyCoinProgramId.toBase58(),
       btcLightClient: deployResult.btcLightClientProgramId.toBase58(),
     },
     accounts: {
@@ -734,7 +734,7 @@ async function main() {
   const args = process.argv.slice(2);
   const skipDeploy = args.includes("--skip-deploy") || args.includes("--init-only");
 
-  logSection("Privacy Coin Devnet Deploy & Initialize");
+  logSection("UTXOpia Devnet Deploy & Initialize");
 
   // Initialize Poseidon hasher (needed for computeUnifiedCommitment)
   await initPoseidon();
@@ -790,8 +790,8 @@ async function main() {
     btcBlock
   );
 
-  // Initialize Privacy Coin
-  const initResult = await initializePRIVACY_COIN(
+  // Initialize UTXOpia
+  const initResult = await initializeUTXOPIA(
     connection,
     authority,
     deployResult.privacyCoinProgramId
@@ -816,7 +816,7 @@ async function main() {
   logSection("Deployment Complete!");
 
   console.log("Summary:");
-  console.log(`  Privacy Coin Program:       ${deployResult.privacyCoinProgramId.toBase58()}`);
+  console.log(`  UTXOpia Program:       ${deployResult.privacyCoinProgramId.toBase58()}`);
   console.log(`  BTC Light Client:     ${deployResult.btcLightClientProgramId.toBase58()}`);
   console.log(`  Pool State PDA:       ${initResult.poolStatePda.toBase58()}`);
   console.log(`  Commitment Tree PDA:  ${initResult.commitmentTreePda.toBase58()}`);

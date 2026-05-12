@@ -14,7 +14,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
-import { PrivacyCoinClient, createNonInteractiveDeposit } from "../sdk/src/index";
+import { UTXOpiaClient, createNonInteractiveDeposit } from "../sdk/src/index";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:3010";
 const API_KEY = process.env.BACKEND_API_KEY;
@@ -56,7 +56,7 @@ function hex(buf: Uint8Array): string {
 async function main() {
   console.log("─── 1/4  Init SDK + login ────────────────────────────────");
   const seed = loadOrCreateSeed();
-  const client = await PrivacyCoinClient.init({ network: "devnet" });
+  const client = await UTXOpiaClient.init({ network: "devnet" });
   const setup = await client.loginWithSeed(seed);
   console.log(`Stealth meta-address: ${setup.stealthAddressEncoded}`);
   console.log(`(viewing key will let this wallet recognize the deposit later)\n`);
@@ -101,7 +101,7 @@ async function main() {
   console.log(`    https://mempool.space/testnet4/address/${deposit.btcAddress}`);
   console.log(`\nBackend polls every 60s. After 1 confirmation it will:`);
   console.log(`  → SPV-verify the tx + on-demand sync the BTC header`);
-  console.log(`  → call privacy-coin's verify_stealth_deposit (disc=1)`);
+  console.log(`  → call utxopia's verify_stealth_deposit (disc=1)`);
   console.log(`  → on-chain Poseidon(npk, ZKBTC, amount) commitment lands in the tree`);
   console.log(`\nPolling for tree.size > ${tree0.size}. Ctrl+C to stop (deposit still processes).\n`);
 

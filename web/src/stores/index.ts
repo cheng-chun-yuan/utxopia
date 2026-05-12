@@ -7,12 +7,12 @@ export {
 } from "./bitcoin-wallet-store";
 
 export {
-  usePrivacyCoinStore,
-  usePrivacyCoin,
-  usePrivacyCoinKeys,
+  useUTXOpiaStore,
+  useUTXOpia,
+  useUTXOpiaKeys,
   useStealthInbox,
   type InboxNote,
-} from "./privacy-coin-store";
+} from "./utxopia-store";
 
 export {
   useNotesStore,

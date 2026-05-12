@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ["lucide-react"],
   },
-  transpilePackages: ["@privacy-coin/sdk"],
+  transpilePackages: ["@utxopia/sdk"],
   webpack: (config, { isServer }) => {
     // Enable symlinks for bun workspace compatibility
     config.resolve.symlinks = true;

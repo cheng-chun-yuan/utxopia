@@ -370,7 +370,7 @@ function generateSystemOverview() {
     })
   );
 
-  // Privacy Coin Program outer box
+  // UTXOpia Program outer box
   els.push(
     rect(440, 330, 900, 210, {
       backgroundColor: "#e1bee7",
@@ -379,7 +379,7 @@ function generateSystemOverview() {
     })
   );
   els.push(
-    text(460, 335, "Privacy Coin Program (Pinocchio)", {
+    text(460, 335, "UTXOpia Program (Pinocchio)", {
       fontSize: 18,
       strokeColor: "#6a1b9a",
       textAlign: "left",
@@ -394,7 +394,7 @@ function generateSystemOverview() {
   els.push(...labeledRect(460, innerY + 70, 200, 55, "Name Registry\n(.zkey)", { backgroundColor: "#f3e5f5", fontSize: 13 }));
   els.push(...labeledRect(680, innerY + 70, 180, 55, "VK Registry", { backgroundColor: "#f3e5f5", fontSize: 13 }));
 
-  // Arrow between BTC Light Client and Privacy Coin
+  // Arrow between BTC Light Client and UTXOpia
   els.push(arrow(340, 380, [[0, 0], [100, 0]], { strokeColor: "#6a1b9a", startArrowhead: "arrow" }));
 
   // Down arrow from Solana to Client
@@ -419,7 +419,7 @@ function generateSystemOverview() {
 
   // SDK box
   els.push(
-    ...labeledRect(400, 670, 600, 60, "@privacy-coin/sdk\n(Note Mgmt | Proofs | Stealth | Taproot)", {
+    ...labeledRect(400, 670, 600, 60, "@utxopia/sdk\n(Note Mgmt | Proofs | Stealth | Taproot)", {
       backgroundColor: "#90caf9",
       fontSize: 14,
     })
@@ -2388,7 +2388,7 @@ function generateSweepTransaction() {
     { label: "Mine 6+ blocks\n(SPV requirement)", bg: "#ffe0b2", border: "#e65100" },
     { label: "Upload sweep tx\nto ChadBuffer\n(non-witness)", bg: "#b2dfdb", border: "#00695c" },
     { label: "verify_transaction\n(btc-light-client)\nMerkle + headers", bg: "#b2dfdb", border: "#00695c" },
-    { label: "verify_stealth_\ndeposit (Privacy Coin)\ncompute commitment", bg: "#c8e6c9", border: "#2e7d32" },
+    { label: "verify_stealth_\ndeposit (UTXOpia)\ncompute commitment", bg: "#c8e6c9", border: "#2e7d32" },
     { label: "StealthAnnounce-\nment PDA created\n(90 bytes, type=0)", bg: "#a5d6a7", border: "#1b5e20" },
   ];
 

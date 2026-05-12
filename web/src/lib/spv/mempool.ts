@@ -11,13 +11,13 @@ import {
   reverseBytes as sdkReverseBytes,
   type BlockHeader as SdkBlockHeader,
   type TransactionInfo as SdkTransactionInfo,
-} from "@privacy-coin/sdk";
+} from "@utxopia/sdk";
 
 // Re-export SDK types and utilities
 export type BlockHeader = SdkBlockHeader;
 export type TransactionInfo = SdkTransactionInfo;
 export { MempoolClient, mempoolTestnet, mempoolMainnet };
-export { bytesToHex } from "@privacy-coin/sdk";
+export { bytesToHex } from "@utxopia/sdk";
 export const reverseBytes = sdkReverseBytes;
 
 // Local interface for merkle proof (matches original API)

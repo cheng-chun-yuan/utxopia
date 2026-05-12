@@ -56,7 +56,7 @@ impl PoolKeys {
     ///
     /// # Security
     ///
-    /// - Production: Loads key from PRIVACY_COIN_BTC_SIGNER_KEY environment variable
+    /// - Production: Loads key from UTXOPIA_BTC_SIGNER_KEY environment variable
     /// - Devnet: Falls back to derived key if env var not set (with warning)
     ///
     /// For mainnet, FROST DKG should be used instead of single-key signing.
@@ -66,19 +66,19 @@ impl PoolKeys {
         let secp = Secp256k1::new();
 
         // Try to load from environment variable first
-        let secret_key = match env::var("PRIVACY_COIN_BTC_SIGNER_KEY") {
+        let secret_key = match env::var("UTXOPIA_BTC_SIGNER_KEY") {
             Ok(hex_key) if !hex_key.is_empty() => {
                 let bytes =
-                    hex::decode(&hex_key).expect("PRIVACY_COIN_BTC_SIGNER_KEY must be valid hex");
+                    hex::decode(&hex_key).expect("UTXOPIA_BTC_SIGNER_KEY must be valid hex");
                 SecretKey::from_slice(&bytes)
-                    .expect("PRIVACY_COIN_BTC_SIGNER_KEY must be a valid secp256k1 secret key")
+                    .expect("UTXOPIA_BTC_SIGNER_KEY must be a valid secp256k1 secret key")
             }
             _ => {
                 // Check if we're on devnet (allow fallback) or production (error)
-                let network = env::var("PRIVACY_COIN_NETWORK").unwrap_or_else(|_| "devnet".to_string());
+                let network = env::var("UTXOPIA_NETWORK").unwrap_or_else(|_| "devnet".to_string());
                 if network == "mainnet" {
                     panic!(
-                        "PRIVACY_COIN_BTC_SIGNER_KEY environment variable is required for mainnet. \
+                        "UTXOPIA_BTC_SIGNER_KEY environment variable is required for mainnet. \
                          For production, use FROST DKG instead of single-key signing."
                     );
                 }
@@ -88,7 +88,7 @@ impl PoolKeys {
                     "WARNING: Using derived key for {} - DO NOT USE WITH REAL FUNDS!",
                     network
                 );
-                eprintln!("Set PRIVACY_COIN_BTC_SIGNER_KEY environment variable for custom keys.");
+                eprintln!("Set UTXOPIA_BTC_SIGNER_KEY environment variable for custom keys.");
 
                 // Use environment-specific seed (not fully deterministic)
                 let seed_input = format!(
@@ -502,7 +502,7 @@ pub fn reconstruct_frost_address(
 /// Compute commitment tweak: H_commitment(output_key || commitment)
 fn compute_commitment_tweak(output_key: &XOnlyPublicKey, commitment: &[u8; 32]) -> [u8; 32] {
     // Use a tagged hash for domain separation
-    let tag_hash = sha256(b"PrivacyCoin/CommitmentTweak");
+    let tag_hash = sha256(b"UTXOpia/CommitmentTweak");
 
     let mut hasher = Sha256::new();
     hasher.update(tag_hash);
@@ -683,7 +683,7 @@ mod tests {
     // ========================================================================
     //
     // These tests simulate the full BTC deposit lifecycle:
-    //   1. Privacy Coin (admin) CAN spend immediately via key path
+    //   1. UTXOpia (admin) CAN spend immediately via key path
     //   2. Depositor CANNOT spend before CSV timelock expires
     //   3. Depositor CAN spend after CSV timelock expires
     //
@@ -781,7 +781,7 @@ mod tests {
 
     #[test]
     fn test_admin_can_spend_immediately_via_key_path() {
-        println!("\n=== TEST: Admin (PrivacyCoin) can spend immediately via key path ===\n");
+        println!("\n=== TEST: Admin (UTXOpia) can spend immediately via key path ===\n");
 
         let secp = Secp256k1::new();
         let pool_keys = PoolKeys::from_seed(b"test_pool_admin");
@@ -1177,7 +1177,7 @@ mod tests {
         let admin_sig = secp.sign_schnorr(&admin_msg, &final_kp);
         let admin_ok = secp.verify_schnorr(&admin_sig, &admin_msg, &deposit.output_key).is_ok();
 
-        println!("\nStep 3: Admin (PrivacyCoin) sweeps via key path");
+        println!("\nStep 3: Admin (UTXOpia) sweeps via key path");
         println!("  Sequence: no restriction (key path)");
         println!("  Signature valid: {}", admin_ok);
         println!("  Result: {} - Admin sweeps BTC to pool custody",

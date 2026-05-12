@@ -1,5 +1,5 @@
 /**
- * Baby Jubjub curve operations for Privacy Coin
+ * Baby Jubjub curve operations for UTXOpia
  *
  * Twisted Edwards curve matching circomlib's BabyJubjub:
  *   a*x^2 + y^2 = 1 + d*x^2*y^2

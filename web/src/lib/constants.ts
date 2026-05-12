@@ -2,7 +2,7 @@
 
 // Import network config (single source of truth — no env vars needed for addresses)
 import { getNetworkConfig } from "./network-config";
-import { initConfig, getConfig } from "@privacy-coin/sdk";
+import { initConfig, getConfig } from "@utxopia/sdk";
 
 const networkCfg = getNetworkConfig();
 
@@ -40,7 +40,7 @@ export const MIN_WITHDRAWAL_SATS = 1_000;
 export const BTC_ADDRESS_REGEX = /^(bc1|[13]|tb1)[a-zA-HJ-NP-Z0-9]{25,62}$/;
 
 // Dynamic getters — call after ensureSdkInit() resolves
-export const getPrivacyCoinProgramId = () => getConfig().privacyCoinProgramId;
+export const getUTXOpiaProgramId = () => getConfig().privacyCoinProgramId;
 export const getBtcLightClientId = () => getConfig().btcLightClientProgramId;
 export const getPoolStateAddress = () => getConfig().poolStatePda;
 export const getCommitmentTreeAddress = () => getConfig().commitmentTreePda;

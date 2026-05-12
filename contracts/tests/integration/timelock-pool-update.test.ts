@@ -11,7 +11,7 @@
  * 7. Security: cannot cancel with no pending proposal
  * 8. Propose overwrites existing proposal
  *
- * Requires: solana-test-validator running, privacy-coin program deployed.
+ * Requires: solana-test-validator running, utxopia program deployed.
  */
 
 import { describe, it, beforeAll, expect } from "bun:test";

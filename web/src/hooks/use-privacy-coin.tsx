@@ -3,21 +3,21 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useConnection } from "@solana/wallet-adapter-react";
-import { usePrivacyCoinStore, type InboxNote } from "@/stores";
+import { useUTXOpiaStore, type InboxNote } from "@/stores";
 
 // Re-export types
 export type { InboxNote };
 
 /**
- * Full Privacy Coin hook - wraps Zustand store with wallet integration.
+ * Full UTXOpia hook - wraps Zustand store with wallet integration.
  *
  * NOTE: Auto-refresh of inbox is handled in StoreHydration (renders once).
  * This hook just provides wallet-aware wrappers for store actions.
  */
-export function usePrivacyCoin() {
+export function useUTXOpia() {
   const wallet = useWallet();
   const { connection } = useConnection();
-  const store = usePrivacyCoinStore();
+  const store = useUTXOpiaStore();
 
   // Wrap deriveKeys to automatically use wallet
   const deriveKeys = useCallback(async () => {
@@ -82,9 +82,9 @@ export function usePrivacyCoin() {
   };
 }
 
-/** Keys-only subset of usePrivacyCoin() */
-export function usePrivacyCoinKeys() {
-  const ctx = usePrivacyCoin();
+/** Keys-only subset of useUTXOpia() */
+export function useUTXOpiaKeys() {
+  const ctx = useUTXOpia();
   return {
     keys: ctx.keys,
     isViewOnly: ctx.isViewOnly,
@@ -99,9 +99,9 @@ export function usePrivacyCoinKeys() {
   };
 }
 
-/** Inbox-only subset of usePrivacyCoin() */
+/** Inbox-only subset of useUTXOpia() */
 export function useStealthInbox() {
-  const ctx = usePrivacyCoin();
+  const ctx = useUTXOpia();
   return {
     notes: ctx.inboxNotes,
     totalAmountSats: ctx.inboxTotalSats,
@@ -122,7 +122,7 @@ export function useStealthInbox() {
  * @param tokenSymbol - The shielded token symbol (e.g. "zkBTC", "zkSOL", "zkUSDC")
  */
 export function useTokenNotes(tokenSymbol: string) {
-  const { inboxNotes, inboxLoading } = usePrivacyCoin();
+  const { inboxNotes, inboxLoading } = useUTXOpia();
 
   const availableNotes = useMemo(() => {
     return inboxNotes.filter(

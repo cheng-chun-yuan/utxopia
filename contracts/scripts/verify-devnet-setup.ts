@@ -10,7 +10,7 @@ import { Connection, PublicKey } from "@solana/web3.js";
 const RPC_URL = "https://api.devnet.solana.com";
 
 // Expected addresses from .devnet-config.json (fresh deployment 2026-02-01)
-const PRIVACY_COIN_PROGRAM = new PublicKey("Hcqp9b83Hh2gN1bFWydZWJmpYQceo3PZCXobamSEj3bt");
+const UTXOPIA_PROGRAM = new PublicKey("Hcqp9b83Hh2gN1bFWydZWJmpYQceo3PZCXobamSEj3bt");
 const TOKEN_2022 = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
 const ACCOUNTS = {
@@ -27,18 +27,18 @@ async function main() {
 
   const connection = new Connection(RPC_URL, "confirmed");
 
-  console.log(`\nExpected Privacy Coin program: ${PRIVACY_COIN_PROGRAM.toBase58()}`);
+  console.log(`\nExpected UTXOpia program: ${UTXOPIA_PROGRAM.toBase58()}`);
   console.log(`Expected Token-2022: ${TOKEN_2022.toBase58()}\n`);
 
   // Check program exists
-  const programInfo = await connection.getAccountInfo(PRIVACY_COIN_PROGRAM);
+  const programInfo = await connection.getAccountInfo(UTXOPIA_PROGRAM);
   if (programInfo) {
-    console.log(`✓ Privacy Coin program exists`);
+    console.log(`✓ UTXOpia program exists`);
     console.log(`  Owner: ${programInfo.owner.toBase58()}`);
     console.log(`  Executable: ${programInfo.executable}`);
     console.log(`  Size: ${programInfo.data.length} bytes`);
   } else {
-    console.log(`✗ Privacy Coin program NOT FOUND`);
+    console.log(`✗ UTXOpia program NOT FOUND`);
     return;
   }
 
@@ -52,7 +52,7 @@ async function main() {
       let expectedOwner = "";
 
       if (name === "poolState" || name === "commitmentTree") {
-        expectedOwner = PRIVACY_COIN_PROGRAM.toBase58();
+        expectedOwner = UTXOPIA_PROGRAM.toBase58();
         status = owner === expectedOwner ? "✓" : "✗";
       } else if (name === "zkbtcMint" || name === "poolVault") {
         expectedOwner = TOKEN_2022.toBase58();

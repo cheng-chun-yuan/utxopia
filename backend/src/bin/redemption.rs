@@ -37,7 +37,7 @@ async fn main() {
 }
 
 fn print_usage() {
-    println!("Privacy Coin Redemption Service - BTC Withdrawal Processor");
+    println!("UTXOpia Redemption Service - BTC Withdrawal Processor");
     println!();
     println!("Usage:");
     println!("  redemption run [--interval <secs>]              Run service loop");
@@ -103,7 +103,7 @@ async fn cmd_run(args: &[String]) {
 
     let service = get_service();
 
-    println!("=== Privacy Coin Redemption Service ===");
+    println!("=== UTXOpia Redemption Service ===");
     println!();
     println!("Configuration:");
     println!("  Check Interval: {} seconds", config.check_interval_secs);

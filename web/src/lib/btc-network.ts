@@ -3,7 +3,7 @@
  * Maps SDK config to all network-dependent values.
  * This is the ONLY file that should contain network string literals.
  */
-import { getConfig } from "@privacy-coin/sdk";
+import { getConfig } from "@utxopia/sdk";
 import { BitcoinNetworkType } from "sats-connect";
 
 type BitcoinNetwork = ReturnType<typeof getConfig>["bitcoinNetwork"];

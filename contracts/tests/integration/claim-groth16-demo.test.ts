@@ -12,7 +12,7 @@ import { PoseidonMerkleTree } from "../helpers/merkle";
 import { type Poseidon, generateNote } from "../helpers/zk";
 import { buildClaimGroth16Instruction } from "../helpers/instructions";
 
-describe("Privacy Coin Groth16 ZK Proof Integration (demo mode)", function () {
+describe("UTXOpia Groth16 ZK Proof Integration (demo mode)", function () {
   let user: Keypair;
   let poseidon: Poseidon;
   let merkleTree: PoseidonMerkleTree;

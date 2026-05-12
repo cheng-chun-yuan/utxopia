@@ -7,7 +7,7 @@
 | Concern | v1 (FROST) | v2 (Ika) |
 |---|---|---|
 | BTC custody | 2-of-3 FROST signers (`frost_server/`), HTTP RPC, off-chain DKG ceremony | Ika dWallet on Solana (`87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY`), 2PC-MPC, authority pinned to a Solana PDA |
-| Where signing policy lives | `frost_server/src/policy.rs` (off-chain Rust) | `contracts/programs/privacy-coin/src/utils/policy.rs` (on-chain Pinocchio) |
+| Where signing policy lives | `frost_server/src/policy.rs` (off-chain Rust) | `contracts/programs/utxopia/src/utils/policy.rs` (on-chain Pinocchio) |
 | Withdrawal flow | `complete_redemption` → backend dispatches FROST round → broadcast | `complete_redemption` (now carries 32-byte sighash) → CPI `approve_message` → off-chain watcher polls Sign PDA → broadcast |
 | `pool_config` PDA | 96 bytes; stores FROST `group_pub_key` | 161 bytes; adds `ika_dwallet`, `ika_dwallet_xonly_pubkey`, `cpi_authority_bump`. `group_pub_key` retained zero for new pools |
 | SDK custody hint | `config.groupPubKey` (FROST) | `config.ikaDwalletXOnlyPubkey` (Ika); `pickCustodyInternalKey` falls back to FROST when zero |
@@ -21,7 +21,7 @@
 - `verify_stealth_deposit` SPV path (still uses `btc-light-client`).
 - OP_RETURN payload format (`ephemeralPub(32) || npk(32) = 64 bytes`).
 - Commitment derivation (`Poseidon(npk, ZKBTC_TOKEN_ID, amount)`).
-- SDK public API surface (`PrivacyCoinClient`, `createNonInteractiveDeposit`, `createDepositFromConfig`). Same names; the *value* of the custody pubkey passed through changes.
+- SDK public API surface (`UTXOpiaClient`, `createNonInteractiveDeposit`, `createDepositFromConfig`). Same names; the *value* of the custody pubkey passed through changes.
 
 ## For pool operators
 
@@ -29,14 +29,14 @@
    Run the DKG flow against Ika devnet at `pre-alpha-dev-1.ika.ika-network.net:443` to create a SECP256K1 dWallet. (The setup script `scripts/ika-setup/` is on the roadmap; for the hackathon we follow `dwallet-labs/ika-pre-alpha`'s `chains/solana/examples/_shared/ika-setup.ts:setupDWallet` pattern manually.) Capture the dWallet account address and its compressed-x x-only pubkey.
 
 2. **Transfer authority.**
-   Use the Ika `transfer_dwallet` instruction (discriminator 24) to transfer the dWallet's authority from your Sui-side payer to your Privacy Coin program's CPI authority PDA: `find_program_address(&[b"__ika_cpi_authority"], &privacy_coin_program_id)`.
+   Use the Ika `transfer_dwallet` instruction (discriminator 24) to transfer the dWallet's authority from your Sui-side payer to your UTXOpia program's CPI authority PDA: `find_program_address(&[b"__ika_cpi_authority"], &utxopia_program_id)`.
 
 3. **Update the state JSON.**
    Edit `scripts/devnet-state.json` (or `localnet-state.json` after re-running the e2e setup) to set `ika.dwallet` and `ika.dwalletXOnlyPubkey` to the values from Step 1, and `ika.cpiAuthorityBump` to the bump from Step 2.
 
 4. **Re-sync env files.**
    ```bash
-   PRIVACY_COIN_NETWORK=devnet ./scripts/sync-env.sh
+   UTXOPIA_NETWORK=devnet ./scripts/sync-env.sh
    ```
    This propagates the Ika fields to `backend/.env.devnet` and `web/src/lib/networks.json`.
 

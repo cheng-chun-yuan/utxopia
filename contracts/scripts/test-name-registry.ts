@@ -5,10 +5,10 @@
 
 import { Connection, Keypair, PublicKey, Transaction, TransactionInstruction, SystemProgram, sendAndConfirmTransaction } from "@solana/web3.js";
 import {
-  PRIVACY_COIN_PROGRAM_ID,
+  UTXOPIA_PROGRAM_ID,
   buildRegisterNameData,
   hashName,
-} from "@privacy-coin/sdk";
+} from "@utxopia/sdk";
 import * as fs from "fs";
 
 const RPC_URL = "https://api.devnet.solana.com";
@@ -28,7 +28,7 @@ async function main() {
   const authority = loadKeypair("~/.config/solana/id.json");
 
   console.log(`\nAuthority: ${authority.publicKey.toBase58()}`);
-  console.log(`Program: ${PRIVACY_COIN_PROGRAM_ID}`);
+  console.log(`Program: ${UTXOPIA_PROGRAM_ID}`);
 
   // Test name
   const testName = "test_user_" + Date.now().toString().slice(-6);
@@ -50,7 +50,7 @@ async function main() {
   const nameHash = hashName(testName);
   const [nameRegistryPDA] = PublicKey.findProgramAddressSync(
     [Buffer.from("zkey"), Buffer.from(nameHash)],
-    new PublicKey(PRIVACY_COIN_PROGRAM_ID as string)
+    new PublicKey(UTXOPIA_PROGRAM_ID as string)
   );
   console.log(`Name Registry PDA: ${nameRegistryPDA.toBase58()}`);
 
@@ -61,7 +61,7 @@ async function main() {
       { pubkey: authority.publicKey, isSigner: true, isWritable: true },
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
-    programId: new PublicKey(PRIVACY_COIN_PROGRAM_ID as string),
+    programId: new PublicKey(UTXOPIA_PROGRAM_ID as string),
     data: Buffer.from(instructionData),
   });
 

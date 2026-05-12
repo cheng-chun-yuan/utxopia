@@ -5,8 +5,8 @@ import { render, fireEvent, screen, cleanup } from "@testing-library/react";
 afterEach(cleanup);
 
 // Stub the hooks the form depends on so the test stays unit-scoped.
-mock.module("@/hooks/use-privacy-coin", () => ({
-  usePrivacyCoin: () => ({
+mock.module("@/hooks/use-utxopia", () => ({
+  useUTXOpia: () => ({
     keys: null,
     stealthAddress: null,
     hasKeys: false,

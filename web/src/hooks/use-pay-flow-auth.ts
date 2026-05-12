@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { usePasskey } from "@/hooks/use-passkey";
-import { usePrivacyCoinStore } from "@/stores/privacy-coin-store";
+import { useUTXOpiaStore } from "@/stores/utxopia-store";
 
 export function usePayFlowAuth(hasKeys: boolean) {
   const {
@@ -13,7 +13,7 @@ export function usePayFlowAuth(hasKeys: boolean) {
     register: registerPasskey,
     authenticate: authenticatePasskey,
   } = usePasskey();
-  const deriveKeysFromPasskeySeed = usePrivacyCoinStore((s) => s.deriveKeysFromPasskeySeed);
+  const deriveKeysFromPasskeySeed = useUTXOpiaStore((s) => s.deriveKeysFromPasskeySeed);
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
   const handlePasskeyRegister = async () => {

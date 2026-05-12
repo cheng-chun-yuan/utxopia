@@ -1,8 +1,8 @@
-# Privacy Coin — Bridgeless, Private Bitcoin on Solana
+# UTXOpia — Bridgeless, Private Bitcoin on Solana
 
 **Native BTC custody held by an [Ika](https://ika.xyz) dWallet whose authority is a Solana PDA — withdrawal signing is policy-gated by an on-chain program, not by an off-chain signer cluster.**
 
-Privacy Coin is a privacy-preserving Bitcoin-to-Solana bridge using Groth16 ZK proofs. Users deposit BTC and receive **shielded commitments** in a Merkle tree on Solana. All transfers use JoinSplit(N,M) proofs — there is no public zkBTC token on-chain, and amount is revealed only at BTC withdrawal time. Custody of the pool's BTC has been moved off a 2-of-3 FROST committee and onto an Ika dWallet whose owner is a PDA of the Privacy Coin program itself.
+UTXOpia is a privacy-preserving Bitcoin-to-Solana bridge using Groth16 ZK proofs. Users deposit BTC and receive **shielded commitments** in a Merkle tree on Solana. All transfers use JoinSplit(N,M) proofs — there is no public zkBTC token on-chain, and amount is revealed only at BTC withdrawal time. Custody of the pool's BTC has been moved off a 2-of-3 FROST committee and onto an Ika dWallet whose owner is a PDA of the UTXOpia program itself.
 
 > **Hackathon track:** Encrypt + Ika (Bridgeless Capital Markets). This README documents the live devnet deployment of the FROST → Ika pivot.
 
@@ -20,7 +20,7 @@ The headline change: **the Solana program is the policy gate.** There is no huma
         └──────────┘                        │
               │                             ▼
               │                   ┌─────────────────────┐
-              │  request_redeem ▶ │  Privacy Coin       │   on-chain policy gate
+              │  request_redeem ▶ │  UTXOpia       │   on-chain policy gate
               └─────────────────▶ │  G1bj9Vw9...3ixUy   │   (amount cap, fee cap,
                                   │  (Solana program)   │    paused-state, sighash)
                                   └─────────────────────┘
@@ -49,7 +49,7 @@ The headline change: **the Solana program is the policy gate.** There is no huma
 
 ### Why Ika specifically
 
-Traditional threshold-signing custody puts the policy in an off-chain signer's config file. Whoever operates the signer cluster decides what gets co-signed. Ika inverts this: the dWallet's `approve_message` only fires when called by an authority — and we set that authority to a PDA that no human owns. The signing predicate is therefore **whatever the Solana program enforces in its `process_complete_redemption` handler**. Today that's amount/fee caps, paused-state, and BIP-341 Taproot key-spend sighash binding (`programs/privacy-coin/src/utils/policy.rs`, ported on-chain from the old `frost_server/policy.rs`). Tomorrow it can be a JoinSplit proof verifier, a per-recipient KYT check, a TWAP guard — anything expressible as a Solana instruction.
+Traditional threshold-signing custody puts the policy in an off-chain signer's config file. Whoever operates the signer cluster decides what gets co-signed. Ika inverts this: the dWallet's `approve_message` only fires when called by an authority — and we set that authority to a PDA that no human owns. The signing predicate is therefore **whatever the Solana program enforces in its `process_complete_redemption` handler**. Today that's amount/fee caps, paused-state, and BIP-341 Taproot key-spend sighash binding (`programs/utxopia/src/utils/policy.rs`, ported on-chain from the old `frost_server/policy.rs`). Tomorrow it can be a JoinSplit proof verifier, a per-recipient KYT check, a TWAP guard — anything expressible as a Solana instruction.
 
 This also collapses the operational surface. v1 required running a 2-of-3 FROST signer cluster (`frost_server/`, three signing nodes, an off-chain DKG ceremony, network coordination). v2 requires a single backend that polls Solana RPC for a `Sign` PDA.
 
@@ -59,7 +59,7 @@ This also collapses the operational surface. v1 required running a 2-of-3 FROST 
 
 | Component | Address |
 |---|---|
-| Privacy Coin program | [`G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy`](https://explorer.solana.com/address/G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy?cluster=devnet) |
+| UTXOpia program | [`G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy`](https://explorer.solana.com/address/G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy?cluster=devnet) |
 | BTC Light Client program | [`C8JoSKzondM7X1ESwrBSodGMrXWtEWNmawXyjh9zEWJZ`](https://explorer.solana.com/address/C8JoSKzondM7X1ESwrBSodGMrXWtEWNmawXyjh9zEWJZ?cluster=devnet) |
 | Ika dWallet program | [`87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY`](https://explorer.solana.com/address/87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY?cluster=devnet) |
 | Pool's Ika dWallet PDA | [`DmZfRVeZHnFZ1ARVHRPJn88VCcJB2QhXLmSe8RuzFMfq`](https://explorer.solana.com/address/DmZfRVeZHnFZ1ARVHRPJn88VCcJB2QhXLmSe8RuzFMfq?cluster=devnet) |
@@ -93,11 +93,11 @@ bun install
 To re-run the Ika dWallet setup (one-shot, idempotent):
 
 ```bash
-PRIVACY_COIN_PROGRAM_ID=G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy \
+UTXOPIA_PROGRAM_ID=G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy \
   PAYER_KEYPAIR_PATH=~/.config/solana/id.json \
   bun run scripts/ika-setup/dkg.ts --network devnet
 
-PRIVACY_COIN_PROGRAM_ID=G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy \
+UTXOPIA_PROGRAM_ID=G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy \
   PAYER_KEYPAIR_PATH=~/.config/solana/id.json \
   node --experimental-strip-types scripts/ika-setup/set-pool-config.ts --network devnet
 ```
@@ -111,10 +111,10 @@ Full operational guide: [docs/RUNNING.md](docs/RUNNING.md).
 We are shipping against `dwallet-labs/ika-pre-alpha`. A few things judges should know up-front rather than discover mid-demo:
 
 - **Ika devnet uses a mock signer, not real distributed MPC.** The CPI surface (`approve_message`, disc 8), the dWallet account format, the authority transfer, the on-chain CPI from our program — all real. The cryptographic backend that fills the `Sign` PDA is a single mock node until Ika mainnet. We surface this in the demo.
-- **Backend dispatch is Ika by default.** `PRIVACY_COIN_SIGNING_MODE=ika` is the default in `sync-env.sh`, and `backend/src/main.rs::create_ika_service` constructs an `IkaSigner` that polls the `MessageApproval` PDA on Solana and assembles the Taproot witness. One known limitation: the exact byte offset of the Schnorr signature inside `MessageApproval` is "trailing 64 bytes" — correct for many layouts but to be pinned during the first live exercise. Deposit sweeps (`backend/src/deposit_tracker/sweeper.rs`) auto-select single-key signing when `SIGNING_MODE != frost`; Ika-based sweep signing is a follow-up.
+- **Backend dispatch is Ika by default.** `UTXOPIA_SIGNING_MODE=ika` is the default in `sync-env.sh`, and `backend/src/main.rs::create_ika_service` constructs an `IkaSigner` that polls the `MessageApproval` PDA on Solana and assembles the Taproot witness. One known limitation: the exact byte offset of the Schnorr signature inside `MessageApproval` is "trailing 64 bytes" — correct for many layouts but to be pinned during the first live exercise. Deposit sweeps (`backend/src/deposit_tracker/sweeper.rs`) auto-select single-key signing when `SIGNING_MODE != frost`; Ika-based sweep signing is a follow-up.
 - **FROST `group_pub_key` is still populated in `PoolConfig`** for now — it's vestigial since the backend never enters the FROST signing path with `SIGNING_MODE=ika`, but the on-chain field is preserved so any pre-Ika deposits would still validate against the legacy verifier if we re-enabled it. Zeroing it is a one-line follow-up.
 - **`frost_server/` has been decommissioned.** The cluster, the Docker stack, the DKG scripts, and the standalone test binaries are gone. Backend still contains dead FROST code paths (`MpcSigner`, `create_frost_service`, `SigningMode::Frost` config variant, `deposit_tracker/sweeper.rs::SigningMode::Frost`) because `backend/src/bitcoin/frost_client.rs` exports shared types (`SolanaVerification`, `PrevoutInfo`, `SigningContext`) used by the Ika path too. Extracting those into a neutral module is a clean follow-up.
-- **Pinocchio version mismatch.** Upstream `ika-dwallet-pinocchio` pins Pinocchio 0.10; we're on 0.9. Our `contracts/programs/privacy-coin/src/cpi/ika.rs` hand-builds the CPI to avoid the dep. The CPI bytes are byte-equivalent — when we upgrade Pinocchio, the helper can be swapped for the upstream crate without callsite changes.
+- **Pinocchio version mismatch.** Upstream `ika-dwallet-pinocchio` pins Pinocchio 0.10; we're on 0.9. Our `contracts/programs/utxopia/src/cpi/ika.rs` hand-builds the CPI to avoid the dep. The CPI bytes are byte-equivalent — when we upgrade Pinocchio, the helper can be swapped for the upstream crate without callsite changes.
 - **Devnet wipes.** Per the upstream README, Ika's Solana coordinator is wiped periodically and fully reset at the Ika Alpha 1 transition. Our `scripts/ika-setup/` is idempotent and re-runnable on demo day.
 
 ---
@@ -146,7 +146,7 @@ Bitcoin's transparent blockchain makes privacy challenging:
 - Cross-chain bridges expose user activity on both chains
 - DeFi participation requires revealing transaction history
 
-**Privacy Coin solves this** by creating a privacy layer between Bitcoin and Solana using zero-knowledge proofs — with no public token, no transaction graph, and (now) no off-chain custodian.
+**UTXOpia solves this** by creating a privacy layer between Bitcoin and Solana using zero-knowledge proofs — with no public token, no transaction graph, and (now) no off-chain custodian.
 
 ---
 
@@ -219,13 +219,13 @@ Share the viewing key with accountants or compliance without risk of fund loss.
 
 ### 4. Ika dWallet Custody (Bridgeless BTC)
 
-See [The Ika integration](#the-ika-integration) above. The headline: BTC custody authority is a PDA of the Privacy Coin program. The signing predicate is whatever the program enforces in `process_complete_redemption`.
+See [The Ika integration](#the-ika-integration) above. The headline: BTC custody authority is a PDA of the UTXOpia program. The signing predicate is whatever the program enforces in `process_complete_redemption`.
 
 When a user redeems shielded zkBTC for native BTC:
 
 1. The pipeline submits `complete_redemption` (instruction discriminator 17). The instruction data carries the BIP-341 Taproot key-spend sighash for the unsigned withdrawal tx.
-2. The on-chain program runs the policy gate (amount cap, fee cap, paused-state — ported on-chain from `frost_server/policy.rs` to `programs/privacy-coin/src/utils/policy.rs`).
-3. The program **CPIs into the Ika dWallet program** calling `approve_message` (disc 8). Our CPI helper at `contracts/programs/privacy-coin/src/cpi/ika.rs` constructs the call by hand. The CPI seeds the signing authority via `["__ika_cpi_authority"]`.
+2. The on-chain program runs the policy gate (amount cap, fee cap, paused-state — ported on-chain from `frost_server/policy.rs` to `programs/utxopia/src/utils/policy.rs`).
+3. The program **CPIs into the Ika dWallet program** calling `approve_message` (disc 8). Our CPI helper at `contracts/programs/utxopia/src/cpi/ika.rs` constructs the call by hand. The CPI seeds the signing authority via `["__ika_cpi_authority"]`.
 4. The Ika network's mock signer (pre-alpha) asynchronously fills a `Sign` PDA. The backend watcher (`backend/src/redemption/signer.rs::IkaSigner`) polls for it, decodes the 64-byte Schnorr signature, assembles the Taproot witness, and broadcasts to Bitcoin testnet.
 
 Architecturally the design extends to any chain Ika supports (Ethereum, Sui, Cardano via EdDSA, …). This hackathon ships BTC only; multi-chain is a config change, not a redesign.
@@ -245,9 +245,9 @@ await sendPrivate(config, myNote, meta.stealthMetaAddress);
 ## Project Structure
 
 ```
-privacy-coin/
+utxopia/
 ├── contracts/                  # Solana programs (Pinocchio)
-│   ├── programs/privacy-coin/  # Main program (15 instructions; src/cpi/ika.rs hosts the Ika CPI helper)
+│   ├── programs/utxopia/  # Main program (15 instructions; src/cpi/ika.rs hosts the Ika CPI helper)
 │   └── programs/btc-light-client/ # Bitcoin header tracking (standalone)
 ├── circuits/                   # Zero-knowledge circuits (circom)
 │   ├── circom/joinsplit.circom # Parameterized JoinSplit(N,M,16) template
@@ -288,13 +288,13 @@ privacy-coin/
 
 ---
 
-## SDK Usage (`@privacy-coin/sdk`)
+## SDK Usage (`@utxopia/sdk`)
 
 ```typescript
-import { PrivacyCoinClient } from '@privacy-coin/sdk';
+import { UTXOpiaClient } from '@utxopia/sdk';
 
 // High-level client (recommended)
-const client = await PrivacyCoinClient.init({ network: "devnet" });
+const client = await UTXOpiaClient.init({ network: "devnet" });
 await client.loginWithSeed(seed);
 const notes = await client.getNotes(tokens);
 ```
@@ -307,7 +307,7 @@ import {
   generateJoinSplitProof,
   buildTransactInstruction,
   scanUnifiedNotes,
-} from '@privacy-coin/sdk';
+} from '@utxopia/sdk';
 
 // 1. DEPOSIT: Generate npk-based deposit (user sends any amount)
 const deposit = await createNonInteractiveDeposit(recipientMeta, ikaDwalletXOnlyPubkey);

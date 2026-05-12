@@ -146,7 +146,7 @@ pub struct TransferItem {
     pub status: String,
     /// NullifierOperationType: 0=FullWithdrawal (unshield/redeem), 2=PrivateTransfer
     pub operation_type: i64,
-    /// Privacy Coin instruction discriminator: 14=transact, 15=unshield
+    /// UTXOpia instruction discriminator: 14=transact, 15=unshield
     #[serde(skip_serializing_if = "Option::is_none")]
     pub instruction_disc: Option<i64>,
     /// Token transfer amount in sats (unshield txs only)

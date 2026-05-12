@@ -1,13 +1,13 @@
-# @privacy-coin/sdk
+# @utxopia/sdk
 
-TypeScript SDK for interacting with the Privacy Coin protocol - a privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs.
+TypeScript SDK for interacting with the UTXOpia protocol - a privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs.
 
 ## Installation
 
 ```bash
-bun add @privacy-coin/sdk
+bun add @utxopia/sdk
 # or
-npm install @privacy-coin/sdk
+npm install @utxopia/sdk
 ```
 
 ## Quick Start
@@ -18,7 +18,7 @@ import {
   createStealthDeposit,
   scanAnnouncements,
   resolveSnsName,
-} from '@privacy-coin/sdk';
+} from '@utxopia/sdk';
 
 // 1. Derive keys from wallet
 const keys = await deriveKeysFromWallet(walletAdapter);
@@ -40,9 +40,9 @@ const notes = await scanAnnouncements(keys, announcements);
 Derive spending and viewing keys from a Solana wallet signature (RAILGUN-style):
 
 ```typescript
-import { deriveKeysFromWallet, type PrivacyCoinKeys } from '@privacy-coin/sdk';
+import { deriveKeysFromWallet, type UTXOpiaKeys } from '@utxopia/sdk';
 
-const keys: PrivacyCoinKeys = await deriveKeysFromWallet(walletAdapter);
+const keys: UTXOpiaKeys = await deriveKeysFromWallet(walletAdapter);
 // keys.spendingPubKey - for receiving funds
 // keys.viewingPubKey  - for scanning deposits
 // keys.spendingPrivKey - for claiming (keep secret!)
@@ -58,7 +58,7 @@ import {
   createStealthDeposit,
   scanAnnouncements,
   prepareClaimInputs,
-} from '@privacy-coin/sdk';
+} from '@utxopia/sdk';
 
 // Sender: Create stealth deposit
 const deposit = await createStealthDeposit(recipientMeta, amountSats);
@@ -84,7 +84,7 @@ import {
   getPoolStatePDASeeds,
   getCommitmentTreePDASeeds,
   DEMO_INSTRUCTION,
-} from '@privacy-coin/sdk';
+} from '@utxopia/sdk';
 
 // Build demo note instruction data
 const noteData = buildAddDemoNoteData(secret); // 32-byte secret
@@ -111,7 +111,7 @@ import {
   deriveNote,
   createClaimLink,
   parseClaimLink,
-} from '@privacy-coin/sdk';
+} from '@utxopia/sdk';
 
 // Generate random note
 const note = generateNote(100000n);
@@ -131,7 +131,7 @@ const parsed = parseClaimLink(link);
 Generate BTC deposit addresses:
 
 ```typescript
-import { deriveTaprootAddress, verifyTaprootAddress } from '@privacy-coin/sdk';
+import { deriveTaprootAddress, verifyTaprootAddress } from '@utxopia/sdk';
 
 // Derive taproot address from commitment
 const address = deriveTaprootAddress(commitment, 'testnet');
@@ -149,7 +149,7 @@ import {
   createMerkleProof,
   proofToNoirFormat,
   TREE_DEPTH,
-} from '@privacy-coin/sdk';
+} from '@utxopia/sdk';
 
 const proof = createMerkleProof(leaves, leafIndex);
 const noirProof = proofToNoirFormat(proof);
@@ -193,7 +193,7 @@ const noirProof = proofToNoirFormat(proof);
 
 ```typescript
 // Program IDs
-PRIVACY_COIN_PROGRAM_ID        // Main Privacy Coin program (devnet)
+UTXOPIA_PROGRAM_ID        // Main UTXOpia program (devnet)
 CHADBUFFER_PROGRAM_ID    // ChadBuffer for SPV proofs
 
 // Merkle Tree
@@ -208,10 +208,10 @@ DEMO_INSTRUCTION.ADD_DEMO_STEALTH // 22
 
 ## Types
 
-### PrivacyCoinKeys
+### UTXOpiaKeys
 
 ```typescript
-interface PrivacyCoinKeys {
+interface UTXOpiaKeys {
   spendingPubKey: BabyJubPoint;
   spendingPrivKey: bigint;
   viewingPubKey: Uint8Array;

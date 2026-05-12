@@ -1,5 +1,5 @@
 /**
- * Note (shielded commitment) utilities for Privacy Coin
+ * Note (shielded commitment) utilities for UTXOpia
  *
  * A Note represents a shielded deposit with:
  * - nullifier: Random secret for spending

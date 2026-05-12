@@ -1,7 +1,7 @@
 /**
- * Explorer utilities for PRIVACY_COIN
+ * Explorer utilities for UTXOPIA
  *
- * Types, parsers, and fetchers for browsing on-chain Privacy Coin activity:
+ * Types, parsers, and fetchers for browsing on-chain UTXOpia activity:
  * - Deposits (from event indexer)
  * - Transfers (from event indexer)
  * - Redemptions (RedemptionRequest accounts)

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Privacy Coin is a privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs. Users deposit BTC, which becomes shielded commitments in a Merkle tree. All transfers use JoinSplit(N,M) proofs — no public tokens ever exist. Amount is revealed only at BTC withdrawal.
+UTXOpia is a privacy-preserving Bitcoin-to-Solana bridge using Zero-Knowledge Proofs. Users deposit BTC, which becomes shielded commitments in a Merkle tree. All transfers use JoinSplit(N,M) proofs — no public tokens ever exist. Amount is revealed only at BTC withdrawal.
 
 **Key Technologies**: Pinocchio (Solana), circom circuits (Groth16 JoinSplit proofs), Taproot (BTC deposits), Baby Jubjub + Ed25519 (stealth addresses), Ika dWallet (Solana-native 2PC-MPC custody, CPI-gated)
 
@@ -43,11 +43,11 @@ cargo test               # Run tests
 ### Ika dWallet Setup - `/scripts/ika-setup`
 ```bash
 # DKG ceremony against Ika devnet (Secp256k1 + Taproot)
-PRIVACY_COIN_PROGRAM_ID=<pid> PAYER_KEYPAIR_PATH=<path> \
+UTXOPIA_PROGRAM_ID=<pid> PAYER_KEYPAIR_PATH=<path> \
   node --experimental-strip-types scripts/ika-setup/dkg.ts --network devnet
 
 # Pin the dWallet on-chain by calling set_pool_config (disc 2)
-PRIVACY_COIN_PROGRAM_ID=<pid> PAYER_KEYPAIR_PATH=<path> \
+UTXOPIA_PROGRAM_ID=<pid> PAYER_KEYPAIR_PATH=<path> \
   node --experimental-strip-types scripts/ika-setup/set-pool-config.ts --network devnet
 ```
 
@@ -98,10 +98,10 @@ SOL/USDC/USDT → Shield (disc=29) ───┤──► Poseidon(npk, token_id,
 
 | Directory | Purpose | Language |
 |-----------|---------|----------|
-| `contracts/programs/privacy-coin` | Main Solana program (21 instructions, incl. Ika CPI in `complete_redemption`) | Rust (Pinocchio) |
+| `contracts/programs/utxopia` | Main Solana program (21 instructions, incl. Ika CPI in `complete_redemption`) | Rust (Pinocchio) |
 | `contracts/programs/btc-light-client` | Bitcoin header tracking (standalone program) | Rust (Pinocchio) |
 | `circuits` | JoinSplit Groth16 ZK circuits | circom |
-| `sdk` | TypeScript SDK (@privacy-coin/sdk) | TypeScript |
+| `sdk` | TypeScript SDK (@utxopia/sdk) | TypeScript |
 | `scripts/ika-setup` | One-shot DKG + transfer_dwallet + set_pool_config | TypeScript |
 | `backend` | API server + deposit tracker + redemption (Ika watcher) + header relayer | Rust + TypeScript |
 | `web` | Web interface (`/send` unified flow) | Next.js + React |
@@ -144,7 +144,7 @@ Spending Key (Baby Jubjub) ─► Signs JoinSplit transactions (EdDSA-Poseidon)
 
 ### On-chain policy gate (Ika v2)
 
-The signing policy now lives **on-chain** in `contracts/programs/privacy-coin/src/utils/policy.rs` (ported from the old off-chain `frost_server/policy.rs`): sighash binding, UTXO + destination checks, amount/fee caps, paused-state. `complete_redemption` (disc 17) runs the gate and then CPIs into `ika_dwallet::approve_message` (disc 8). The dWallet's authority is `find_program_address(["__ika_cpi_authority"], privacy_coin_program_id)` so only our program can fire the approval.
+The signing policy now lives **on-chain** in `contracts/programs/utxopia/src/utils/policy.rs` (ported from the old off-chain `frost_server/policy.rs`): sighash binding, UTXO + destination checks, amount/fee caps, paused-state. `complete_redemption` (disc 17) runs the gate and then CPIs into `ika_dwallet::approve_message` (disc 8). The dWallet's authority is `find_program_address(["__ika_cpi_authority"], utxopia_program_id)` so only our program can fire the approval.
 
 ### Backend Modules
 
@@ -160,12 +160,12 @@ The signing policy now lives **on-chain** in `contracts/programs/privacy-coin/sr
 1. **Commitment**: `Poseidon(npk, token, amount)` — 3-field Poseidon hash
 2. **ZK Proof**: Groth16 via circom/snarkjs (client-side, 256 byte proofs)
 3. **Stealth**: Baby Jubjub ECDH + Ed25519 viewing keys
-4. **Redemption**: Ika dWallet (2PC-MPC, Taproot Schnorr) — `approve_message` CPI from the Privacy Coin program
+4. **Redemption**: Ika dWallet (2PC-MPC, Taproot Schnorr) — `approve_message` CPI from the UTXOpia program
 5. **DKG Security**: X25519 ECDH + AES-256-GCM for encrypted key shares
 
 ## Key Program IDs
 
-- **Privacy Coin (devnet)**: `AjbX243s2JMFG2uhfTjKkadjPvQEPgcuyV3vfLJv36MT`
+- **UTXOpia (devnet)**: `AjbX243s2JMFG2uhfTjKkadjPvQEPgcuyV3vfLJv36MT`
 - **BTC Light Client**: `859B7kw1xDyY8rzSXY6pAPNxaAsPWrsaAPJk3iivd43g`
 
 ## On-Chain Instructions
@@ -183,13 +183,13 @@ The signing policy now lives **on-chain** in `contracts/programs/privacy-coin/sr
 | 22 | `execute_pool_update` | Permissionless execute after timelock expires |
 | 23 | `cancel_pool_update` | Authority cancels pending proposal |
 
-## SDK Usage (@privacy-coin/sdk)
+## SDK Usage (@utxopia/sdk)
 
 ```typescript
-import { PrivacyCoinClient } from '@privacy-coin/sdk';
+import { UTXOpiaClient } from '@utxopia/sdk';
 
 // High-level client (recommended)
-const client = await PrivacyCoinClient.init({ network: "devnet" });
+const client = await UTXOpiaClient.init({ network: "devnet" });
 await client.loginWithSeed(seed);
 const notes = await client.getNotes(tokens);
 ```
@@ -202,7 +202,7 @@ import {
   generateJoinSplitProof,
   buildTransactInstruction,
   scanUnifiedNotes,
-} from '@privacy-coin/sdk';
+} from '@utxopia/sdk';
 
 // 1. DEPOSIT: Generate npk-based deposit (user sends any amount)
 const deposit = await createNonInteractiveDeposit(recipientMeta, groupPubKey);
@@ -246,7 +246,7 @@ State files are the single source of truth per network:
 `sync-env.sh` reads the state file and generates ALL config:
 ```bash
 ./scripts/sync-env.sh                           # defaults to localnet
-PRIVACY_COIN_NETWORK=devnet ./scripts/sync-env.sh       # switch to devnet
+UTXOPIA_NETWORK=devnet ./scripts/sync-env.sh       # switch to devnet
 ```
 
 Generated files:
@@ -272,7 +272,7 @@ cd backend && cargo run --bin zkbtc-api -- tracker
 ### Top up stealth address (all tokens)
 ```bash
 # From web/ dir (needs SDK):
-bun run scripts/topup-all.ts pcoin:<stealth_address>
+bun run scripts/topup-all.ts utxo:<stealth_address>
 ```
 
 ## Development Notes
@@ -287,5 +287,5 @@ bun run scripts/topup-all.ts pcoin:<stealth_address>
 - **Tree Depth**: 16 (65,536 leaves max)
 - **snarkjs + bun**: Use Node.js subprocess fallback for proof generation
 - **ECDH stealth**: Use `@noble/curves` (SDK) for Ed25519→X25519 conversion, NOT Node.js `crypto.convertKey` (produces different scalars)
-- **PRIVACY_COIN_PROGRAM_ID**: Required env var — backend fails fast if missing (no hardcoded fallback)
+- **UTXOPIA_PROGRAM_ID**: Required env var — backend fails fast if missing (no hardcoded fallback)
 - **Reconciler**: Seeds leaves from `localnet-state.json` when on localnet with empty DB (handles validator `--reset`)

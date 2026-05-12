@@ -55,7 +55,7 @@ export function ComparisonTable() {
       <div className="hidden sm:grid grid-cols-3 gap-4 pb-3 mb-2 border-b border-gray/10">
         <span className="text-[11px] font-mono uppercase tracking-wider text-gray/40">Aspect</span>
         <span className="text-[11px] font-mono uppercase tracking-wider text-gray/40">Traditional Bridges</span>
-        <span className="text-[11px] font-mono uppercase tracking-wider text-privacy/50">Privacy Coin</span>
+        <span className="text-[11px] font-mono uppercase tracking-wider text-privacy/50">UTXOpia</span>
       </div>
       {/* Mobile header */}
       <div className="sm:hidden pb-3 mb-2 border-b border-gray/10">

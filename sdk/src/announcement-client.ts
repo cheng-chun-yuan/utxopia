@@ -21,7 +21,7 @@ export interface AnnouncementClientConfig {
   backendWsUrl?: string;
   /** Solana RPC URL (for direct RPC fallback) */
   solanaRpcUrl: string;
-  /** Privacy Coin program ID base58 (for direct RPC fallback) */
+  /** UTXOpia program ID base58 (for direct RPC fallback) */
   programId: string;
   /** Commitment tree PDA base58 — query this instead of program ID for fewer results */
   commitmentTreeAddress?: string;

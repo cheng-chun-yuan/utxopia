@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "programs/privacy-coin",
+    "programs/utxopia",
     "programs/btc-light-client",
 ]
 exclude = [

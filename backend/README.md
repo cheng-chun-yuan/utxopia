@@ -1,4 +1,4 @@
-# Privacy Coin Backend
+# UTXOpia Backend
 
 Rust backend for the privacy-preserving BTC-to-Solana bridge.
 

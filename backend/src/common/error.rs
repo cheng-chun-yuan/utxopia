@@ -1,12 +1,12 @@
-//! Common Error Types for Privacy Coin Backend
+//! Common Error Types for UTXOpia Backend
 //!
 //! Provides unified error handling across all modules.
 
 use thiserror::Error;
 
-/// Root error type for Privacy Coin backend
+/// Root error type for UTXOpia backend
 #[derive(Debug, Error)]
-pub enum PrivacyCoinError {
+pub enum UTXOpiaError {
     /// Configuration errors
     #[error("configuration error: {0}")]
     Config(#[from] crate::config::ConfigError),
@@ -48,7 +48,7 @@ pub enum PrivacyCoinError {
     Io(#[from] std::io::Error),
 }
 
-impl PrivacyCoinError {
+impl UTXOpiaError {
     /// Create a Bitcoin error
     pub fn bitcoin(msg: impl Into<String>) -> Self {
         Self::Bitcoin(msg.into())
@@ -88,32 +88,32 @@ impl PrivacyCoinError {
     pub fn is_retryable(&self) -> bool {
         matches!(
             self,
-            PrivacyCoinError::Bitcoin(_)
-                | PrivacyCoinError::Solana(_)
-                | PrivacyCoinError::Storage(_)
-                | PrivacyCoinError::Io(_)
+            UTXOpiaError::Bitcoin(_)
+                | UTXOpiaError::Solana(_)
+                | UTXOpiaError::Storage(_)
+                | UTXOpiaError::Io(_)
         )
     }
 
     /// Get error code for API responses
     pub fn error_code(&self) -> &'static str {
         match self {
-            PrivacyCoinError::Config(_) => "CONFIG_ERROR",
-            PrivacyCoinError::Logging(_) => "LOGGING_ERROR",
-            PrivacyCoinError::Bitcoin(_) => "BITCOIN_ERROR",
-            PrivacyCoinError::Solana(_) => "SOLANA_ERROR",
-            PrivacyCoinError::Storage(_) => "STORAGE_ERROR",
-            PrivacyCoinError::Api(_) => "API_ERROR",
-            PrivacyCoinError::Service(_) => "SERVICE_ERROR",
-            PrivacyCoinError::Validation(_) => "VALIDATION_ERROR",
-            PrivacyCoinError::Internal(_) => "INTERNAL_ERROR",
-            PrivacyCoinError::Io(_) => "IO_ERROR",
+            UTXOpiaError::Config(_) => "CONFIG_ERROR",
+            UTXOpiaError::Logging(_) => "LOGGING_ERROR",
+            UTXOpiaError::Bitcoin(_) => "BITCOIN_ERROR",
+            UTXOpiaError::Solana(_) => "SOLANA_ERROR",
+            UTXOpiaError::Storage(_) => "STORAGE_ERROR",
+            UTXOpiaError::Api(_) => "API_ERROR",
+            UTXOpiaError::Service(_) => "SERVICE_ERROR",
+            UTXOpiaError::Validation(_) => "VALIDATION_ERROR",
+            UTXOpiaError::Internal(_) => "INTERNAL_ERROR",
+            UTXOpiaError::Io(_) => "IO_ERROR",
         }
     }
 }
 
-/// Result type alias using PrivacyCoinError
-pub type Result<T> = std::result::Result<T, PrivacyCoinError>;
+/// Result type alias using UTXOpiaError
+pub type Result<T> = std::result::Result<T, UTXOpiaError>;
 
 #[cfg(test)]
 mod tests {
@@ -121,15 +121,15 @@ mod tests {
 
     #[test]
     fn test_error_creation() {
-        let err = PrivacyCoinError::bitcoin("connection failed");
+        let err = UTXOpiaError::bitcoin("connection failed");
         assert!(err.to_string().contains("connection failed"));
         assert_eq!(err.error_code(), "BITCOIN_ERROR");
     }
 
     #[test]
     fn test_retryable_errors() {
-        assert!(PrivacyCoinError::bitcoin("timeout").is_retryable());
-        assert!(PrivacyCoinError::solana("rpc failed").is_retryable());
-        assert!(!PrivacyCoinError::validation("invalid input").is_retryable());
+        assert!(UTXOpiaError::bitcoin("timeout").is_retryable());
+        assert!(UTXOpiaError::solana("rpc failed").is_retryable());
+        assert!(!UTXOpiaError::validation("invalid input").is_retryable());
     }
 }

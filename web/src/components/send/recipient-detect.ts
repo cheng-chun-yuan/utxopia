@@ -21,7 +21,7 @@ export type DetectionResult = {
 };
 
 const SNS_SUFFIX = ".btcpro.sol";
-const STEALTH_META_PREFIX = "pcoin:";
+const STEALTH_META_PREFIX = "utxo:";
 const STEALTH_META_HEX_LEN = 64 + 64;
 
 const BECH32_PREFIXES = ["bc1", "tb1", "bcrt1"];

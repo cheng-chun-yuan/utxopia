@@ -1,7 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 
 /**
- * Program ID for Privacy Coin Pinocchio.
+ * Program ID for UTXOpia Pinocchio.
  * Update this after deployment if the program ID changes.
  */
 export const PROGRAM_ID = new PublicKey(

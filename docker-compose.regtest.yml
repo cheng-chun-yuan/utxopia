@@ -6,7 +6,7 @@
 services:
   esplora:
     image: blockstream/esplora
-    container_name: privacy-coin-esplora-regtest
+    container_name: utxopia-esplora-regtest
     command: ["/srv/explorer/run.sh", "bitcoin-regtest", "explorer"]
     ports:
       - "3002:80"

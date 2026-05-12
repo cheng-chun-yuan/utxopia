@@ -7,11 +7,11 @@
 | Task | Surface | Commit(s) |
 |---|---|---|
 | 0 — Recon brief | `docs/recon/2026-05-09-ika-sdk-brief.md` | `c3e4452` |
-| 1 — `pool_config` Ika fields | `programs/privacy-coin/src/state/pool_config.rs`, `instructions/set_pool_config.rs` | `06c3e96` |
+| 1 — `pool_config` Ika fields | `programs/utxopia/src/state/pool_config.rs`, `instructions/set_pool_config.rs` | `06c3e96` |
 | 2 — SDK address helper | `sdk/src/bitcoin/ika.ts` | `7d6de5d` |
 | 3 — Deposit dispatch | `sdk/src/stealth.ts`, `sdk/src/config.ts` | `d452a48` |
-| 4a — CPI helper | `programs/privacy-coin/src/cpi/ika.rs` | `a10237a` |
-| 4b — `complete_redemption` CPIs Ika | `programs/privacy-coin/src/instructions/complete_redemption.rs`, `utils/policy.rs`, `error.rs`; `sdk/src/instructions.ts` | `8e9581e`, `7d3c27e`, `035be94`, `590f78e` |
+| 4a — CPI helper | `programs/utxopia/src/cpi/ika.rs` | `a10237a` |
+| 4b — `complete_redemption` CPIs Ika | `programs/utxopia/src/instructions/complete_redemption.rs`, `utils/policy.rs`, `error.rs`; `sdk/src/instructions.ts` | `8e9581e`, `7d3c27e`, `035be94`, `590f78e` |
 | 5 — `IkaSigner` in backend | `backend/src/redemption/signer.rs`, `redemption/mod.rs`, `config.rs`, `main.rs`, `Cargo.toml [features]` | `5d73f0a`, `a63a9a3` |
 | 6 — Config plumbing | `scripts/devnet-state.json`, `scripts/sync-env.sh`, `web/src/lib/networks.json` | `05255b0` |
 | 9 — Web UX | `web/src/app/docs/page.tsx`, `components/docs/comparison-table.tsx` | `48cf0d1` |
@@ -34,7 +34,7 @@ This is the canonical acceptance gate. Run it whenever the Ika devnet is reachab
 
 ```bash
 # 1. Set up payer + program
-export PRIVACY_COIN_PROGRAM_ID=$(jq -r .privacyCoinProgramId scripts/e2e/localnet-state.json)
+export UTXOPIA_PROGRAM_ID=$(jq -r .privacyCoinProgramId scripts/e2e/localnet-state.json)
 export PAYER_KEYPAIR_PATH=~/.config/solana/id.json
 solana airdrop 5 --keypair $PAYER_KEYPAIR_PATH  # devnet only
 
@@ -59,23 +59,23 @@ The Ika program's `transfer_dwallet` ix (discriminator 24) moves authority to ou
 ```bash
 cd ~/private_coin/scripts/ika-setup
 bun install
-PRIVACY_COIN_PROGRAM_ID=... \
+UTXOPIA_PROGRAM_ID=... \
 PAYER_KEYPAIR_PATH=... \
 IKA_DWALLET_ID=<from-7.1> \
 IKA_DWALLET_PUBKEY_HEX=<from-7.1> \
 bun run setup --network localnet  # or devnet
 
-PRIVACY_COIN_NETWORK=localnet ../sync-env.sh
+UTXOPIA_NETWORK=localnet ../sync-env.sh
 # Verify the new fields land:
 grep IKA_ ../../backend/.env.localnet
 ```
 
 ### Step 7.4 — Set the Ika fields on-chain via `set_pool_config`
 
-The Privacy Coin program's `set_pool_config` (instruction discriminator 27) accepts the new Ika fields append-only. From the SDK:
+The UTXOpia program's `set_pool_config` (instruction discriminator 27) accepts the new Ika fields append-only. From the SDK:
 
 ```typescript
-import { initConfig } from "@privacy-coin/sdk";
+import { initConfig } from "@utxopia/sdk";
 // the SDK already supports ikaDwalletXOnlyPubkey override
 const config = await initConfig({
   network: "localnet",
@@ -89,7 +89,7 @@ Or call `set_pool_config` directly with the instruction-data layout: `pool_scrip
 
 ```bash
 # In backend/.env.localnet, change:
-PRIVACY_COIN_SIGNING_MODE=ika
+UTXOPIA_SIGNING_MODE=ika
 # Restart the backend (cargo run --bin zkbtc-api)
 ```
 
@@ -173,9 +173,9 @@ bun run scripts/e2e/run-all.ts
 
 | Gate | How to verify |
 |---|---|
-| Contracts unit tests green | `cd contracts && cargo test -p privacy-coin` → 115/115 |
+| Contracts unit tests green | `cd contracts && cargo test -p utxopia` → 115/115 |
 | Backend tests green relative to baseline | `cd backend && cargo test` → 155+/1-baseline-fail |
-| SBF build clean | `cargo build-sbf --features localnet --manifest-path contracts/programs/privacy-coin/Cargo.toml` |
+| SBF build clean | `cargo build-sbf --features localnet --manifest-path contracts/programs/utxopia/Cargo.toml` |
 | SDK tsc build | `cd sdk && bun run build` |
 | Web build | `cd web && bun run build` |
 | E2E ×3 green | Step 7.6 |

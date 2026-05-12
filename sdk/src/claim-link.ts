@@ -1,5 +1,5 @@
 /**
- * Claim link utilities for Privacy Coin
+ * Claim link utilities for UTXOpia
  *
  * Claim links encode a seed phrase in a URL fragment (#note=...) so the
  * secret is never sent to the server (fragments are client-side only).

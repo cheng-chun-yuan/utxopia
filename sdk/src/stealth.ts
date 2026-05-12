@@ -1,5 +1,5 @@
 /**
- * Stealth address utilities for PRIVACY_COIN
+ * Stealth address utilities for UTXOPIA
  *
  * Dual-curve stealth flow (Railgun-style):
  *
@@ -64,7 +64,7 @@ import {
   encryptAmountEd25519,
   decryptAmountEd25519,
 } from "./crypto-ed25519";
-import type { StealthMetaAddress, PrivacyCoinKeys, WalletSignerAdapter } from "./keys";
+import type { StealthMetaAddress, UTXOpiaKeys, WalletSignerAdapter } from "./keys";
 import { deriveKeysFromWallet, parseStealthMetaAddress, constantTimeCompare } from "./keys";
 import {
   poseidonHashSync,
@@ -98,7 +98,7 @@ export { encryptNoteData, decryptNoteData } from "./crypto-ed25519";
 // ========== Type Guard ==========
 
 /**
- * Type guard to distinguish between WalletSignerAdapter and PrivacyCoinKeys
+ * Type guard to distinguish between WalletSignerAdapter and UTXOpiaKeys
  */
 export function isWalletAdapter(source: unknown): source is WalletSignerAdapter {
   return (
@@ -190,7 +190,7 @@ export interface OnChainStealthAnnouncement {
 /** Domain separator for stealth key derivation.
  *  "Aegis-stealth-v1" is LOAD-BEARING — every existing stealth address was
  *  derived using this exact byte sequence. The project's name is now
- *  "Privacy Coin"; this string stays as-is. A v2 would bump the suffix. */
+ *  "UTXOpia"; this string stays as-is. A v2 would bump the suffix. */
 const STEALTH_KEY_DOMAIN = new TextEncoder().encode("Aegis-stealth-v1");
 
 // tokenId removed — use computeTokenId(mintBytes) from poseidon.ts instead
@@ -494,7 +494,7 @@ export function pickCustodyInternalKey(config: {
  * Scan announcements using viewing key only
  */
 export async function scanAnnouncements(
-  source: WalletSignerAdapter | PrivacyCoinKeys,
+  source: WalletSignerAdapter | UTXOpiaKeys,
   announcements: {
     ephemeralPub: Uint8Array;
     encryptedAmount: Uint8Array;
@@ -660,9 +660,9 @@ export async function scanAnnouncementsViewOnly(
 }
 
 /**
- * Export view-only keys from full PrivacyCoinKeys
+ * Export view-only keys from full UTXOpiaKeys
  */
-export function exportViewOnlyKeys(keys: PrivacyCoinKeys): ViewOnlyKeys {
+export function exportViewOnlyKeys(keys: UTXOpiaKeys): ViewOnlyKeys {
   return {
     viewingPrivKey: keys.viewingPrivKey,
     spendingPubKey: keys.spendingPubKey,
@@ -705,7 +705,7 @@ export function decodeViewOnlyKeys(encoded: string): ViewOnlyKeys {
  * Prepare claim inputs for ZK proof generation
  */
 export async function prepareClaimInputs(
-  source: WalletSignerAdapter | PrivacyCoinKeys,
+  source: WalletSignerAdapter | UTXOpiaKeys,
   note: ScannedNote,
   merkleProof: {
     root: bigint;
@@ -767,7 +767,7 @@ export async function prepareClaimInputs(
  * For transfers, we verify the decrypted amount is in a valid range.
  */
 export async function scanUnifiedNotes(
-  source: WalletSignerAdapter | PrivacyCoinKeys,
+  source: WalletSignerAdapter | UTXOpiaKeys,
   announcements: OnChainStealthAnnouncement[],
   tokenId: bigint,
 ): Promise<ScannedNote[]> {
@@ -930,7 +930,7 @@ export function unpackEncryptedAmountWithSign(packed: bigint): { encryptedAmount
  * Create stealth output data for a self-send (change output)
  */
 export async function createStealthOutput(
-  keys: PrivacyCoinKeys,
+  keys: UTXOpiaKeys,
   amountSats: bigint,
   tokenId: bigint,
 ): Promise<StealthOutputData> {
@@ -956,7 +956,7 @@ export async function createStealthOutput(
  * Create stealth output with npk for JoinSplit circuit input
  */
 export async function createStealthOutputWithKeys(
-  keys: PrivacyCoinKeys,
+  keys: UTXOpiaKeys,
   amountSats: bigint,
   tokenId: bigint,
 ): Promise<StealthOutputWithKeys> {
@@ -984,7 +984,7 @@ export async function createStealthOutputWithKeys(
  * Create stealth output data with pre-computed commitment
  */
 export async function createStealthOutputForCommitment(
-  keys: PrivacyCoinKeys,
+  keys: UTXOpiaKeys,
   amountSats: bigint,
   existingCommitment: Uint8Array
 ): Promise<StealthOutputData> {
@@ -1006,7 +1006,7 @@ export async function createStealthOutputForCommitment(
  * Compute nullifier hash for a scanned note
  */
 export function computeNullifierHashForNote(
-  keys: PrivacyCoinKeys,
+  keys: UTXOpiaKeys,
   note: ScannedNote
 ): Uint8Array {
   // In JoinSplit model, nullifier = Poseidon(nullifyingKey, leafIndex)

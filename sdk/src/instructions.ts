@@ -1,7 +1,7 @@
 /**
- * PRIVACY_COIN Instruction Builders (JoinSplit Architecture)
+ * UTXOPIA Instruction Builders (JoinSplit Architecture)
  *
- * Low-level instruction building for PRIVACY_COIN operations.
+ * Low-level instruction building for UTXOPIA operations.
  * All Groth16 proofs are verified inline using BN254 pairing syscalls.
  *
  * @module instructions
@@ -32,7 +32,7 @@ export interface Instruction {
 // Constants
 // =============================================================================
 
-/** Instruction discriminators — sequential 0-19 (must match contracts/programs/privacy-coin/src/lib.rs) */
+/** Instruction discriminators — sequential 0-19 (must match contracts/programs/utxopia/src/lib.rs) */
 const INSTRUCTION = {
   // Core (0-2)
   INITIALIZE: 0,
@@ -344,7 +344,7 @@ export interface CompleteRedemptionInstructionOptions {
   consumedUtxoCount: number;
   /** BIP-341 taproot key-spend sighash (32 bytes) for the *unsigned* withdrawal tx.
    *  Forwarded as-is to Ika `approve_message` as `message_digest`. The on-chain
-   *  Privacy Coin program does NOT recompute this. */
+   *  UTXOpia program does NOT recompute this. */
   btcSighash: Uint8Array;
   /** Account addresses */
   accounts: {
@@ -374,7 +374,7 @@ export interface CompleteRedemptionInstructionOptions {
     ikaMessageApproval: Address;
     /** dWallet account (owned by Ika program) */
     ikaDwallet: Address;
-    /** This Privacy Coin program's program-account (executable) */
+    /** This UTXOpia program's program-account (executable) */
     callerProgram: Address;
     /** CPI authority PDA (seeds: ["__ika_cpi_authority"]) */
     cpiAuthority: Address;
@@ -1326,11 +1326,11 @@ export function buildVerifyTransactionInstructionData(params: {
 }
 
 // =============================================================================
-// Privacy Coin Verify Stealth Deposit (disc=11)
+// UTXOpia Verify Stealth Deposit (disc=11)
 // =============================================================================
 
 /**
- * Build privacy-coin verify_stealth_deposit instruction data (disc=11)
+ * Build utxopia verify_stealth_deposit instruction data (disc=11)
  *
  * npk + ephemeral_pub are extracted ON-CHAIN from the deposit TX OP_RETURN.
  * Amount is extracted from the SPV-verified sweep TX.

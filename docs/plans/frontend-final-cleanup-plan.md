@@ -17,7 +17,7 @@ Remove or gate ~85 debug console statements across 24 files. Production users sh
 - `src/components/btc-widget/pay-flow.tsx` (6)
 - `src/components/btc-widget/manual-verify.tsx` (6)
 - `src/hooks/use-sns-name.tsx` (5)
-- `src/stores/privacy-coin-store.ts` (4)
+- `src/stores/utxopia-store.ts` (4)
 - `src/app/api/verify/route.ts` (13) — server-side, keep as structured logs
 - `src/app/api/relay/route.ts` (8) — server-side, keep
 - `src/app/api/merkle/proof/route.ts` (6) — server-side, keep

@@ -29,7 +29,7 @@ bun main.ts $IKA_PROGRAM_ID $VOTING_EXAMPLE_PROGRAM_ID 2>&1 | tee /tmp/ika-dkg.l
 
 # 4. Run this script to compute the CPI authority bump and write the state JSON.
 cd /Users/chengchunyuan/project/hackathon/private_coin/scripts/ika-setup
-PRIVACY_COIN_PROGRAM_ID=<your_program_id> \
+UTXOPIA_PROGRAM_ID=<your_program_id> \
 PAYER_KEYPAIR_PATH=/path/to/keypair.json \
 IKA_DWALLET_ID=<from-step-3> \
 IKA_DWALLET_PUBKEY_HEX=<from-step-3> \
@@ -40,10 +40,10 @@ bun run setup --network devnet
 #    one-off ix wrapper).
 
 # 6. Re-sync env files.
-PRIVACY_COIN_NETWORK=devnet ../sync-env.sh
+UTXOPIA_NETWORK=devnet ../sync-env.sh
 
-# 7. Restart the backend; it now picks up Ika via PRIVACY_COIN_SIGNING_MODE=ika
-#    + the PRIVACY_COIN_IKA_* env vars in backend/.env.
+# 7. Restart the backend; it now picks up Ika via UTXOPIA_SIGNING_MODE=ika
+#    + the UTXOPIA_IKA_* env vars in backend/.env.
 ```
 
 ## Devnet wipe note

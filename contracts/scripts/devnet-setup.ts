@@ -1,5 +1,5 @@
 /**
- * Devnet Setup Script for Privacy Coin
+ * Devnet Setup Script for UTXOpia
  *
  * This script:
  * 1. Initializes the pool state
@@ -217,7 +217,7 @@ function buildRecordDepositInstruction(
 
 async function main() {
   console.log("\n========================================");
-  console.log("Privacy Coin Devnet Setup");
+  console.log("UTXOpia Devnet Setup");
   console.log("========================================\n");
 
   // Connect to devnet

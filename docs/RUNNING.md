@@ -1,6 +1,6 @@
-# Privacy Coin — How to Run
+# UTXOpia — How to Run
 
-Complete guide for running all Privacy Coin services locally and on devnet.
+Complete guide for running all UTXOpia services locally and on devnet.
 
 ---
 
@@ -98,7 +98,7 @@ cd frost_server && cargo build --release && cd ..
 ```bash
 cd contracts
 
-# Deploy both privacy-coin and btc-light-client programs
+# Deploy both utxopia and btc-light-client programs
 bun run scripts/deploy-localnet.ts
 
 # Or deploy to devnet:
@@ -130,7 +130,7 @@ POOL_SIGNING_KEY=<hex_private_key> cargo run -- redemption
 ### Step 5: Start Frontend
 
 ```bash
-cd privacy-coin-app
+cd utxopia-app
 bun install
 bun run dev
 # Open http://localhost:3000
@@ -146,7 +146,7 @@ Two on-chain programs:
 
 | Program | ID (devnet) | Purpose |
 |---------|-------------|---------|
-| Privacy Coin | `4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1` | Main bridge logic (14 instructions) |
+| UTXOpia | `4Gt66pJd6N3hYEVWnaWTSLfxotsPvShYEWYvbUB9Ubx1` | Main bridge logic (14 instructions) |
 | BTC Light Client | `Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq` | Bitcoin header verification |
 
 ```bash
@@ -318,11 +318,11 @@ POOL_SIGNING_KEY=<hex_private_key> cargo run -- redemption [--interval <secs>] [
 
 **For FROST signing mode:**
 ```bash
-PRIVACY_COIN_SIGNING_MODE=frost \
-PRIVACY_COIN_FROST_THRESHOLD=2 \
-PRIVACY_COIN_FROST_PARTICIPANTS=3 \
-PRIVACY_COIN_FROST_KEY_SHARE=<encrypted_share> \
-PRIVACY_COIN_FROST_SIGNER_URLS=http://localhost:9001,http://localhost:9002,http://localhost:9003 \
+UTXOPIA_SIGNING_MODE=frost \
+UTXOPIA_FROST_THRESHOLD=2 \
+UTXOPIA_FROST_PARTICIPANTS=3 \
+UTXOPIA_FROST_KEY_SHARE=<encrypted_share> \
+UTXOPIA_FROST_SIGNER_URLS=http://localhost:9001,http://localhost:9002,http://localhost:9003 \
 cargo run -- redemption
 ```
 
@@ -400,7 +400,7 @@ bun run e2e
 ### 3.9 Frontend (Next.js)
 
 ```bash
-cd privacy-coin-app
+cd utxopia-app
 bun install
 bun run dev       # Development (port 3000)
 bun run build     # Production build
@@ -416,23 +416,23 @@ bun run test      # bun test (was vitest)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PRIVACY_COIN_NETWORK` | `devnet` | Network: mainnet, testnet, devnet |
-| `PRIVACY_COIN_SOLANA_RPC` | (per network) | Solana RPC endpoint |
-| `PRIVACY_COIN_BITCOIN_RPC` | (per network) | Esplora API endpoint |
-| `PRIVACY_COIN_PROGRAM_ID` | (devnet default) | Privacy Coin program ID |
-| `PRIVACY_COIN_POOL_STATE` | (devnet default) | Pool state PDA |
-| `PRIVACY_COIN_COMMITMENT_TREE` | (devnet default) | Commitment tree PDA |
-| `PRIVACY_COIN_ZKBTC_MINT` | (devnet default) | zkBTC mint address |
-| `PRIVACY_COIN_SIGNING_MODE` | `single` (devnet) | `single` or `frost` |
-| `PRIVACY_COIN_BTC_SIGNER_KEY` | — | Hex BTC private key (single mode) |
-| `PRIVACY_COIN_FROST_THRESHOLD` | — | FROST threshold (e.g., 2) |
-| `PRIVACY_COIN_FROST_PARTICIPANTS` | — | FROST total signers (e.g., 3) |
-| `PRIVACY_COIN_FROST_KEY_SHARE` | — | Encrypted key share |
-| `PRIVACY_COIN_FROST_SIGNER_URLS` | — | Comma-separated signer URLs |
-| `PRIVACY_COIN_FROST_API_KEY` | — | Optional API key for FROST servers |
-| `PRIVACY_COIN_DEPOSIT_LIMIT_SATS` | (per network) | Max deposit amount |
-| `PRIVACY_COIN_DEMO_MODE` | `0` | Enable demo instructions (devnet only) |
-| `PRIVACY_COIN_LOG_LEVEL` | `info` | Log level |
+| `UTXOPIA_NETWORK` | `devnet` | Network: mainnet, testnet, devnet |
+| `UTXOPIA_SOLANA_RPC` | (per network) | Solana RPC endpoint |
+| `UTXOPIA_BITCOIN_RPC` | (per network) | Esplora API endpoint |
+| `UTXOPIA_PROGRAM_ID` | (devnet default) | UTXOpia program ID |
+| `UTXOPIA_POOL_STATE` | (devnet default) | Pool state PDA |
+| `UTXOPIA_COMMITMENT_TREE` | (devnet default) | Commitment tree PDA |
+| `UTXOPIA_ZKBTC_MINT` | (devnet default) | zkBTC mint address |
+| `UTXOPIA_SIGNING_MODE` | `single` (devnet) | `single` or `frost` |
+| `UTXOPIA_BTC_SIGNER_KEY` | — | Hex BTC private key (single mode) |
+| `UTXOPIA_FROST_THRESHOLD` | — | FROST threshold (e.g., 2) |
+| `UTXOPIA_FROST_PARTICIPANTS` | — | FROST total signers (e.g., 3) |
+| `UTXOPIA_FROST_KEY_SHARE` | — | Encrypted key share |
+| `UTXOPIA_FROST_SIGNER_URLS` | — | Comma-separated signer URLs |
+| `UTXOPIA_FROST_API_KEY` | — | Optional API key for FROST servers |
+| `UTXOPIA_DEPOSIT_LIMIT_SATS` | (per network) | Max deposit amount |
+| `UTXOPIA_DEMO_MODE` | `0` | Enable demo instructions (devnet only) |
+| `UTXOPIA_LOG_LEVEL` | `info` | Log level |
 | `API_PORT` | `3001` | API server port |
 | `POOL_SIGNING_KEY` | — | Hex BTC key for sweeper/redemption |
 | `POOL_RECEIVE_ADDRESS` | — | Pool BTC address |
@@ -518,14 +518,14 @@ Full deposit → claim flow with real Groth16 proof generation. Requires compile
 
 ### Security
 
-- [ ] Switch to `PRIVACY_COIN_SIGNING_MODE=frost` (single-key is POC only)
+- [ ] Switch to `UTXOPIA_SIGNING_MODE=frost` (single-key is POC only)
 - [ ] Run DKG ceremony with real distributed signers (not test keys)
 - [ ] Store FROST key shares in HSM or encrypted at rest
-- [ ] Set `PRIVACY_COIN_DEMO_MODE=0` (demo instructions disabled on mainnet)
-- [ ] Set `PRIVACY_COIN_NETWORK=mainnet`
+- [ ] Set `UTXOPIA_DEMO_MODE=0` (demo instructions disabled on mainnet)
+- [ ] Set `UTXOPIA_NETWORK=mainnet`
 - [ ] Deploy without `--features devnet` flag
 - [ ] Use private RPC endpoints (not public devnet/mainnet RPCs)
-- [ ] Set appropriate `PRIVACY_COIN_DEPOSIT_LIMIT_SATS`
+- [ ] Set appropriate `UTXOPIA_DEPOSIT_LIMIT_SATS`
 
 ### Infrastructure
 
@@ -563,7 +563,7 @@ Full deposit → claim flow with real Groth16 proof generation. Requires compile
 ┌──────────────────┐  ┌─────────────────────┐  ┌────────────────┐
 │  Backend API     │  │  Solana Programs     │  │  Bitcoin       │
 │  (:3001)         │  │                      │  │  Network       │
-│                  │  │  Privacy Coin (12 ix)      │  │                │
+│                  │  │  UTXOpia (12 ix)      │  │                │
 │  - Deposit addr  │  │  BTC Light Client    │  │  - Taproot     │
 │  - Status check  │  │                      │  │    deposits    │
 │  - Redemption    │  │  State:              │  │  - FROST-signed│
@@ -619,7 +619,7 @@ Full deposit → claim flow with real Groth16 proof generation. Requires compile
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Privacy Coin Program (12 ix) | Fully implemented | Pinocchio, all instructions working |
+| UTXOpia Program (12 ix) | Fully implemented | Pinocchio, all instructions working |
 | BTC Light Client | Fully implemented | Header storage + validation |
 | FROST Server | Fully implemented | DKG, signing, keystore with AES-256-GCM |
 | Backend API | Fully implemented | 14+ endpoints, CORS, combined server |

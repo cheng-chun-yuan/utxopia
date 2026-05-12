@@ -2,9 +2,9 @@
  * Solana PDA Derivation & Config Helpers (web3.js)
  *
  * Thin wrapper that provides @solana/web3.js PublicKey constants and
- * synchronous PDA derivation using seed constants from @privacy-coin/sdk.
+ * synchronous PDA derivation using seed constants from @utxopia/sdk.
  *
- * All instruction data building lives in @privacy-coin/sdk — this file only
+ * All instruction data building lives in @utxopia/sdk — this file only
  * bridges SDK config → web3.js types for wallet-adapter compatibility.
  *
  * @module solana/pdas
@@ -12,13 +12,13 @@
 
 import { PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
-import { getConfig, PDA_SEEDS } from "@privacy-coin/sdk";
+import { getConfig, PDA_SEEDS } from "@utxopia/sdk";
 
 // =============================================================================
 // Program IDs as web3.js PublicKeys (lazy, from SDK config)
 // =============================================================================
 
-export function getPrivacyCoinProgramId(): PublicKey {
+export function getUTXOpiaProgramId(): PublicKey {
   return new PublicKey(getConfig().privacyCoinProgramId);
 }
 
@@ -57,7 +57,7 @@ export function getChadbufferProgramId(): PublicKey {
 // =============================================================================
 
 export function derivePoolStatePDA(
-  programId: PublicKey = getPrivacyCoinProgramId()
+  programId: PublicKey = getUTXOpiaProgramId()
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from(PDA_SEEDS.POOL_STATE)],
@@ -66,7 +66,7 @@ export function derivePoolStatePDA(
 }
 
 export function deriveCommitmentTreePDA(
-  programId: PublicKey = getPrivacyCoinProgramId()
+  programId: PublicKey = getUTXOpiaProgramId()
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from(PDA_SEEDS.COMMITMENT_TREE)],
@@ -76,7 +76,7 @@ export function deriveCommitmentTreePDA(
 
 export function deriveNullifierPDA(
   nullifierHash: Uint8Array,
-  programId: PublicKey = getPrivacyCoinProgramId()
+  programId: PublicKey = getUTXOpiaProgramId()
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from(PDA_SEEDS.NULLIFIER), nullifierHash],
@@ -106,7 +106,7 @@ export function deriveBlockHeaderPDA(
 export function deriveVkRegistryPDA(
   nInputs: number,
   nOutputs: number,
-  programId: PublicKey = getPrivacyCoinProgramId()
+  programId: PublicKey = getUTXOpiaProgramId()
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from(PDA_SEEDS.VK_REGISTRY), new Uint8Array([nInputs]), new Uint8Array([nOutputs])],
@@ -117,7 +117,7 @@ export function deriveVkRegistryPDA(
 export function deriveRedemptionRequestPDA(
   userPubkey: PublicKey,
   nonce: bigint,
-  programId: PublicKey = getPrivacyCoinProgramId()
+  programId: PublicKey = getUTXOpiaProgramId()
 ): [PublicKey, number] {
   const nonceBytes = new Uint8Array(8);
   new DataView(nonceBytes.buffer).setBigUint64(0, nonce, true);
@@ -140,7 +140,7 @@ export function deriveVerifiedTransactionPDA(
 
 export function deriveDepositReceiptPDA(
   depositTxid: Uint8Array,
-  programId: PublicKey = getPrivacyCoinProgramId()
+  programId: PublicKey = getUTXOpiaProgramId()
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from("deposit_receipt"), Buffer.from(depositTxid)],
@@ -150,7 +150,7 @@ export function deriveDepositReceiptPDA(
 
 export function deriveTokenConfigPDA(
   mint: PublicKey,
-  programId: PublicKey = getPrivacyCoinProgramId()
+  programId: PublicKey = getUTXOpiaProgramId()
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [Buffer.from(PDA_SEEDS.TOKEN_CONFIG), mint.toBuffer()],
@@ -163,7 +163,7 @@ export function deriveTokenConfigPDA(
 // =============================================================================
 
 export function derivePoolVaultATA(
-  programId: PublicKey = getPrivacyCoinProgramId()
+  programId: PublicKey = getUTXOpiaProgramId()
 ): PublicKey {
   const [poolState] = derivePoolStatePDA(programId);
   return getAssociatedTokenAddressSync(

@@ -3,8 +3,8 @@
  * Top up a stealth address with all registered tokens.
  *
  * Usage:
- *   PRIVACY_COIN_NETWORK=devnet bun run scripts/topup-all.ts pcoin:<address>
- *   bun run scripts/topup-all.ts pcoin:<address>   # defaults to devnet
+ *   UTXOPIA_NETWORK=devnet bun run scripts/topup-all.ts utxo:<address>
+ *   bun run scripts/topup-all.ts utxo:<address>   # defaults to devnet
  */
 
 import {
@@ -14,7 +14,7 @@ import {
   computeTokenId,
   buildShieldInstructionData,
   bigintTo32Bytes,
-} from "@privacy-coin/sdk";
+} from "@utxopia/sdk";
 import {
   PublicKey,
   SystemProgram,
@@ -34,15 +34,15 @@ import {
 } from "@solana/spl-token";
 import { setupScript } from "./lib/common.ts";
 
-const network = (process.env.PRIVACY_COIN_NETWORK || "devnet") as "localnet" | "devnet";
-const { conn, authority, programId: PRIVACY_COIN, state } = setupScript(network);
+const network = (process.env.UTXOPIA_NETWORK || "devnet") as "localnet" | "devnet";
+const { conn, authority, programId: UTXOPIA, state } = setupScript(network);
 
 // Derive constant PDAs once
-const [poolState] = PublicKey.findProgramAddressSync([Buffer.from("pool_state")], PRIVACY_COIN);
-const [commitmentTree] = PublicKey.findProgramAddressSync([Buffer.from("commitment_tree")], PRIVACY_COIN);
+const [poolState] = PublicKey.findProgramAddressSync([Buffer.from("pool_state")], UTXOPIA);
+const [commitmentTree] = PublicKey.findProgramAddressSync([Buffer.from("commitment_tree")], UTXOPIA);
 
 function tokenConfigPDA(mint: PublicKey) {
-  return PublicKey.findProgramAddressSync([Buffer.from("token_config"), mint.toBuffer()], PRIVACY_COIN)[0];
+  return PublicKey.findProgramAddressSync([Buffer.from("token_config"), mint.toBuffer()], UTXOPIA)[0];
 }
 
 function shieldKeys(userAta: PublicKey, vault: PublicKey, mint: PublicKey, tokenProgram: PublicKey) {
@@ -74,7 +74,7 @@ async function shieldToken2022(
   const userAta = getAssociatedTokenAddressSync(mint, authority.publicKey, false, TOKEN_2022_PROGRAM_ID);
   const tx = new Transaction().add(new TransactionInstruction({
     keys: shieldKeys(userAta, vault, mint, TOKEN_2022_PROGRAM_ID),
-    programId: PRIVACY_COIN,
+    programId: UTXOPIA,
     data: buildShieldData(stealth, amount),
   }));
   tx.feePayer = authority.publicKey;
@@ -97,7 +97,7 @@ async function shieldNativeSOL(
     createSyncNativeInstruction(wsolAta, TOKEN_PROGRAM_ID),
     new TransactionInstruction({
       keys: shieldKeys(wsolAta, vault, NATIVE_MINT, TOKEN_PROGRAM_ID),
-      programId: PRIVACY_COIN,
+      programId: UTXOPIA,
       data: buildShieldData(stealth, amount),
     }),
     createCloseAccountInstruction(wsolAta, authority.publicKey, authority.publicKey, [], TOKEN_PROGRAM_ID),
@@ -122,8 +122,8 @@ async function mintTokens(mint: PublicKey, amount: number, label: string) {
 
 async function main() {
   const addr = process.argv[2];
-  if (!addr?.startsWith("pcoin:")) {
-    console.error("Usage: bun run scripts/topup-all.ts pcoin:<stealth_address>");
+  if (!addr?.startsWith("utxo:")) {
+    console.error("Usage: bun run scripts/topup-all.ts utxo:<stealth_address>");
     process.exit(1);
   }
 
@@ -132,7 +132,7 @@ async function main() {
 
   console.log(`=== Top-up All Tokens (${network}) ===`);
   console.log("Recipient:", addr.slice(0, 30) + "...");
-  console.log("Program:", PRIVACY_COIN.toBase58());
+  console.log("Program:", UTXOPIA.toBase58());
   console.log("Authority:", authority.publicKey.toBase58());
   console.log();
 

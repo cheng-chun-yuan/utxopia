@@ -7,7 +7,7 @@
  *
  * Prerequisites:
  *   solana-test-validator --clone-feature-set --url devnet --reset
- *   Deploy: privacy-coin, btc-light-client, chadbuffer
+ *   Deploy: utxopia, btc-light-client, chadbuffer
  *
  * Usage:
  *   bun run scripts/e2e-mock-spv.ts
@@ -27,7 +27,7 @@ import { bytesToHex, doubleSha256 } from "../src/crypto";
 // Program IDs (override via env)
 // =============================================================================
 
-const PRIVACY_COIN = new PublicKey(process.env.PRIVACY_COIN_PROGRAM_ID || "zKeyrLmpT8W9o8iRvhizuSihLAFLhfAGBvfM638Pbw8");
+const UTXOPIA = new PublicKey(process.env.UTXOPIA_PROGRAM_ID || "zKeyrLmpT8W9o8iRvhizuSihLAFLhfAGBvfM638Pbw8");
 const BTC_LIGHT_CLIENT = new PublicKey(process.env.BTC_LIGHT_CLIENT_PROGRAM_ID || "Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq");
 const CHADBUFFER = new PublicKey(process.env.CHADBUFFER_PROGRAM_ID || "EgWyMVFZewHmjJ9GGvVBTyaC376Xp7qu7CAFjWYPYYDv");
 const TOKEN_2022 = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
@@ -124,8 +124,8 @@ function buildMockHeader(prevHash: Uint8Array, merkleRoot: Uint8Array): Uint8Arr
 // =============================================================================
 
 async function initPoolIfNeeded(conn: Connection, auth: Keypair) {
-  const [poolState, poolBump] = pda(["pool_state"], PRIVACY_COIN);
-  const [commitTree, treeBump] = pda(["commitment_tree"], PRIVACY_COIN);
+  const [poolState, poolBump] = pda(["pool_state"], UTXOPIA);
+  const [commitTree, treeBump] = pda(["commitment_tree"], UTXOPIA);
   const info = await conn.getAccountInfo(poolState);
 
   if (info && info.data.length > 0 && info.data[0] === 0x01) {
@@ -171,7 +171,7 @@ async function initPoolIfNeeded(conn: Connection, auth: Keypair) {
   const initData = Buffer.alloc(3);
   initData[0] = 0; initData[1] = poolBump; initData[2] = treeBump;
   await send(conn, auth, new TransactionInstruction({
-    programId: PRIVACY_COIN, data: initData,
+    programId: UTXOPIA, data: initData,
     keys: [
       { pubkey: poolState, isSigner: false, isWritable: true },
       { pubkey: commitTree, isSigner: false, isWritable: true },
@@ -375,8 +375,8 @@ async function main() {
   const commitment = await computeCommitment(npk, AMOUNT_SATS);
 
   // 8. Call verify_stealth_deposit
-  const [depositRec] = pda(["deposit", txid], PRIVACY_COIN);
-  const [stealthAnn] = pda(["stealth", ephemeralPub], PRIVACY_COIN);
+  const [depositRec] = pda(["deposit", txid], UTXOPIA);
+  const [stealthAnn] = pda(["stealth", ephemeralPub], UTXOPIA);
 
   // Merkle proof for single-tx block: txid + 41 zero bytes (path_bits=0, path_len=0, tx_index=0)
   const merkleProof = new Uint8Array(41);
@@ -394,7 +394,7 @@ async function main() {
   ixData.set(merkleProof, off);
 
   const sig = await send(conn, auth, new TransactionInstruction({
-    programId: PRIVACY_COIN, data: ixData,
+    programId: UTXOPIA, data: ixData,
     keys: [
       { pubkey: poolState, isSigner: false, isWritable: true },
       { pubkey: lcPDA, isSigner: false, isWritable: false },

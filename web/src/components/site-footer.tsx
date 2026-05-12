@@ -22,7 +22,7 @@ export function SiteFooter() {
             <Shield className="w-3 h-3 text-privacy" />
           </div>
           <span className="text-sm font-medium tracking-tight text-foreground group-hover:text-privacy transition-colors">
-            Privacy Coin
+            UTXOpia
           </span>
         </Link>
 

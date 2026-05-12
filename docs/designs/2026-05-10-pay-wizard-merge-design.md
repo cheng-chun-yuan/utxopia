@@ -52,7 +52,7 @@ This spec covers only the pay-wizard merge — the highest-leverage piece. Dashb
 
 - **`web/src/app/settings/page.tsx`** — preferences list.
 - **`web/src/components/settings/preferences-form.tsx`** — toggle UI.
-- **`web/src/hooks/use-ui-mode.ts`** — `pcoin-ui-mode` localStorage key with React context broadcast. Exposes `{ mode: "lite" | "advanced", setMode, isAdvanced }`.
+- **`web/src/hooks/use-ui-mode.ts`** — `utxopia-ui-mode` localStorage key with React context broadcast. Exposes `{ mode: "lite" | "advanced", setMode, isAdvanced }`.
 - **`web/src/components/ui/advanced-mode-badge.tsx`** — small chip in the header user-area when Advanced is active.
 - **`web/src/components/site-header.tsx`** — modified: gear icon → `/settings`; mount badge slot.
 
@@ -69,7 +69,7 @@ This spec covers only the pay-wizard merge — the highest-leverage piece. Dashb
 
 - `web/src/components/btc-widget/{deposit-flow.tsx, balance-view, manual-verify, withdrawal-status, widget.tsx}` — Receive-side pieces, untouched.
 - `web/src/components/shield-flow.tsx` — `/vault/deposit` keeps using this.
-- Hooks: `usePayFlowAuth` (rename → `useSendAuth`), `useProver`, `usePrivacyCoin`, `usePayFlowNotes` (rename → `useSendNotes`), `useStealthInbox`, `useTokenBalance`, `useTokenPrices`.
+- Hooks: `usePayFlowAuth` (rename → `useSendAuth`), `useProver`, `useUTXOpia`, `usePayFlowNotes` (rename → `useSendNotes`), `useStealthInbox`, `useTokenBalance`, `useTokenPrices`.
 - `note-links.tsx`, `proving-steps.tsx`, `output-row-card.tsx` — lifted out of the deleted `pay-flow/` directory before deletion. Keep their working state.
 - `HoldButton` (`web/src/components/ui/hold-button.tsx`) — used in review modal.
 - `AuthModal` — used unchanged when auth not initialized at signing time.
@@ -111,7 +111,7 @@ Disabled state shows tooltip: *"Bitcoin addresses can only receive zkBTC. To sen
 
 ## Advanced (Pro) mode
 
-Stored as `pcoin-ui-mode = "advanced"` in localStorage; toggled at `/settings`. Default `lite`. Phased delivery (separate commits / reviewable slices recommended in the implementation plan):
+Stored as `utxopia-ui-mode = "advanced"` in localStorage; toggled at `/settings`. Default `lite`. Phased delivery (separate commits / reviewable slices recommended in the implementation plan):
 
 1. **Lite-only ship.** New `/send`, deletes old routes, header gear stub. `/settings` exists with the toggle disabled and labeled "Coming soon."
 2. **Advanced multi-output** + mode badge.

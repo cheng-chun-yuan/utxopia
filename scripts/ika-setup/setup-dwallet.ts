@@ -3,7 +3,7 @@
 // One-shot Ika dWallet setup.
 //
 // Runs the DKG flow once against Ika devnet, transfers authority of the
-// resulting dWallet to our Privacy Coin program's CPI authority PDA, and
+// resulting dWallet to our UTXOpia program's CPI authority PDA, and
 // writes the dWallet ID + x-only pubkey + CPI authority bump into the
 // state JSON for the chosen network.
 //
@@ -11,7 +11,7 @@
 //   bun run setup-dwallet.ts [--network localnet|devnet]
 //
 // Environment:
-//   PRIVACY_COIN_PROGRAM_ID    The Solana account address of our program
+//   UTXOPIA_PROGRAM_ID    The Solana account address of our program
 //   IKA_GRPC_URL               (optional) Override the Ika gRPC endpoint
 //   PAYER_KEYPAIR_PATH         Path to a funded Solana keypair JSON
 //
@@ -51,9 +51,9 @@ const CPI_AUTHORITY_SEED = Buffer.from("__ika_cpi_authority");
 
 // ── 1. Validate prerequisites ──────────────────────────────────────────────
 
-const programIdStr = process.env.PRIVACY_COIN_PROGRAM_ID;
+const programIdStr = process.env.UTXOPIA_PROGRAM_ID;
 if (!programIdStr) {
-  console.error("error: PRIVACY_COIN_PROGRAM_ID required");
+  console.error("error: UTXOPIA_PROGRAM_ID required");
   process.exit(1);
 }
 const privacyCoinProgramId = new PublicKey(programIdStr);
@@ -80,7 +80,7 @@ console.log("\n═══ Ika dWallet Setup ═══");
 console.log(`Network:           ${NETWORK}`);
 console.log(`Solana RPC:        ${RPC_URL}`);
 console.log(`Ika program:       ${IKA_PROGRAM_ID.toBase58()}`);
-console.log(`Privacy Coin pid:  ${privacyCoinProgramId.toBase58()}`);
+console.log(`UTXOpia pid:  ${privacyCoinProgramId.toBase58()}`);
 console.log(`Payer:             ${payer.publicKey.toBase58()}`);
 console.log(`State file:        ${STATE_FILE}`);
 console.log();
@@ -168,7 +168,7 @@ console.log(`    [2] dwallet        = ${dwalletPda.toBase58()} (writable)`);
 console.log(`  new_authority = ${cpiAuthorityPda.toBase58()}`);
 console.log("");
 console.log(
-  "(This step requires our Privacy Coin program to expose a `transfer_ika_dwallet_authority` ix or to do the transfer at pool init. For the hackathon we recommend doing it once via a one-shot test program or by extending set_pool_config.)"
+  "(This step requires our UTXOpia program to expose a `transfer_ika_dwallet_authority` ix or to do the transfer at pool init. For the hackathon we recommend doing it once via a one-shot test program or by extending set_pool_config.)"
 );
 
 // ── 5. Write back to state JSON ────────────────────────────────────────────

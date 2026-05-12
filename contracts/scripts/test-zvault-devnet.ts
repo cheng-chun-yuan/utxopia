@@ -1,5 +1,5 @@
 /**
- * PRIVACY_COIN Devnet Test Script
+ * UTXOPIA Devnet Test Script
  *
  * Tests all 6 main functions:
  * 1. deposit - Generate credentials
@@ -27,7 +27,7 @@ import * as fs from "fs";
 // Import from SDK
 import {
   createClient,
-  PRIVACY_COIN_PROGRAM_ID,
+  UTXOPIA_PROGRAM_ID,
   deposit,
   sendLink,
   generateNote,
@@ -45,7 +45,7 @@ import {
 // ============================================================================
 
 const RPC_URL = "https://api.devnet.solana.com";
-const PROGRAM_ID = PRIVACY_COIN_PROGRAM_ID;
+const PROGRAM_ID = UTXOPIA_PROGRAM_ID;
 
 // Instruction discriminators
 const INSTRUCTION = {
@@ -295,7 +295,7 @@ function testSendLink() {
 function testDeriveNote() {
   console.log("\n--- Test 3: DERIVE_NOTE (deterministic) ---");
 
-  const seed = "test-wallet-pcoin-2024";
+  const seed = "test-wallet-utxopia-2024";
 
   // Derive multiple notes from same seed
   const note0 = deriveNote(seed, 0, 100_000n);
@@ -403,7 +403,7 @@ interface TestResult {
 
 async function main() {
   console.log("\n" + "=".repeat(60));
-  console.log("        PRIVACY_COIN DEVNET TEST");
+  console.log("        UTXOPIA DEVNET TEST");
   console.log("=".repeat(60));
 
   const results: TestResult[] = [];

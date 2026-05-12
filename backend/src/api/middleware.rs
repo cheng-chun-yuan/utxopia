@@ -1,6 +1,6 @@
 //! API Middleware - Input Validation and Rate Limiting
 //!
-//! Provides security middleware for the Privacy Coin API:
+//! Provides security middleware for the UTXOpia API:
 //! - Input validation for request parameters
 //! - Rate limiting per IP/API key
 //! - Request size limits

@@ -26,7 +26,7 @@ async function main() {
   console.log("✓ Poseidon initialized\n");
   
   // Step 1: Generate keys
-  console.log("Step 1: Generate PRIVACY_COIN keys");
+  console.log("Step 1: Generate UTXOPIA keys");
   const seed = new Uint8Array(32);
   seed[0] = 42; // Deterministic seed
   const keys = await deriveKeysFromSeed(seed);

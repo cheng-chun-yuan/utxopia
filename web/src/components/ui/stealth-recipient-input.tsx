@@ -10,7 +10,7 @@ import {
   resolveSnsName,
   getConfig,
   type StealthMetaAddress,
-} from "@privacy-coin/sdk";
+} from "@utxopia/sdk";
 
 interface StealthRecipientInputProps {
   onResolved: (meta: StealthMetaAddress | null, name: string | null) => void;
@@ -73,8 +73,8 @@ export function StealthRecipientInput({
         return;
       }
 
-      // Detect stealth address: pcoin: prefix or long hex (50+ chars)
-      const isStealthAddress = trimmed.startsWith("pcoin:") || /^[0-9a-fA-F]{50,}$/.test(trimmed);
+      // Detect stealth address: utxo: prefix or long hex (50+ chars)
+      const isStealthAddress = trimmed.startsWith("utxo:") || /^[0-9a-fA-F]{50,}$/.test(trimmed);
 
       if (isStealthAddress) {
         const meta = decodeStealthMetaAddress(trimmed);
@@ -103,7 +103,7 @@ export function StealthRecipientInput({
         .toLowerCase();
 
       if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(subdomain) || subdomain.length < 1) {
-        onError(`Invalid name — enter a .${parentDomain}.sol name or pcoin: stealth address`);
+        onError(`Invalid name — enter a .${parentDomain}.sol name or utxo: stealth address`);
         return;
       }
 
@@ -161,7 +161,7 @@ export function StealthRecipientInput({
             type="text"
             value={recipient}
             onChange={(e) => handleInputChange(e.target.value)}
-            placeholder={`alice.${parentDomain}.sol or pcoin:...`}
+            placeholder={`alice.${parentDomain}.sol or utxo:...`}
             className={cn(
               "w-full bg-muted text-body2 font-mono text-foreground placeholder:text-gray/40 outline-none transition-shadow",
               compact ? "py-2.5 rounded-[8px]" : "py-3 rounded-[10px] border border-gray/20 focus:border-purple/40",
@@ -180,10 +180,10 @@ export function StealthRecipientInput({
                     : ""
             )}
             onBlur={() => {
-              // Only auto-resolve stealth addresses (pcoin: prefix or long hex)
+              // Only auto-resolve stealth addresses (utxo: prefix or long hex)
               // SNS names require explicit Enter/button to avoid false positives
               const trimmed = recipient.trim();
-              const isStealthFormat = trimmed.startsWith("pcoin:") || /^[0-9a-fA-F]{50,}$/.test(trimmed);
+              const isStealthFormat = trimmed.startsWith("utxo:") || /^[0-9a-fA-F]{50,}$/.test(trimmed);
               if (isStealthFormat && !resolvedMeta && !resolving) {
                 resolveRecipient();
               }

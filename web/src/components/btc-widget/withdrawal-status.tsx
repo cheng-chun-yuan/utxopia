@@ -3,8 +3,8 @@
 import { Clock, CheckCircle2, Loader2, AlertCircle, ExternalLink, Bitcoin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBtc, truncateMiddle } from "@/lib/utils/formatting";
-import { usePrivacyCoinStore, type ActiveWithdrawal, type WithdrawalStatus } from "@/stores/privacy-coin-store";
-import { getConfig } from "@privacy-coin/sdk";
+import { useUTXOpiaStore, type ActiveWithdrawal, type WithdrawalStatus } from "@/stores/utxopia-store";
+import { getConfig } from "@utxopia/sdk";
 import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 
 const STATUS_CONFIG: Record<WithdrawalStatus, {
@@ -119,7 +119,7 @@ function WithdrawalCard({ withdrawal }: { withdrawal: ActiveWithdrawal }) {
 }
 
 export function WithdrawalStatusList() {
-  const withdrawals = usePrivacyCoinStore((s) => s.activeWithdrawals);
+  const withdrawals = useUTXOpiaStore((s) => s.activeWithdrawals);
 
   if (withdrawals.length === 0) return null;
 

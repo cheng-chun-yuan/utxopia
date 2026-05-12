@@ -1,5 +1,5 @@
 import { PublicKey } from "@solana/web3.js";
-import { PDA_SEEDS, getConfig } from "@privacy-coin/sdk";
+import { PDA_SEEDS, getConfig } from "@utxopia/sdk";
 import { getSolanaRpcUrl } from "@/lib/api/constants";
 
 /** Derive nullifier PDA address (base58) from nullifier hash hex */

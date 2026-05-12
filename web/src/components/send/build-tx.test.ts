@@ -26,7 +26,7 @@ describe("buildSendIntent", () => {
   it("dispatches stealth_meta to transact kind", () => {
     const intent = buildSendIntent({
       recipientType: "stealth_meta",
-      recipientValue: "pcoin:" + "01".repeat(32) + "02".repeat(32),
+      recipientValue: "utxo:" + "01".repeat(32) + "02".repeat(32),
       sourceToken: "zkBTC",
       amount: "0.001",
     });

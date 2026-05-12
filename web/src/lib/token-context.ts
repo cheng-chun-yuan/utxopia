@@ -5,7 +5,7 @@
  * Supports switching between whitelisted tokens.
  */
 
-import { getConfig, computeTokenId } from "@privacy-coin/sdk";
+import { getConfig, computeTokenId } from "@utxopia/sdk";
 import { PublicKey } from "@solana/web3.js";
 
 // ============================================================================
@@ -110,7 +110,7 @@ export function registerDefaultToken(): void {
   const tokenId = computeTokenId(mintBytes);
 
   registerToken({
-    name: "Privacy Coin Shielded BTC",
+    name: "UTXOpia Shielded BTC",
     symbol: "zkBTC",
     mint: config.zkbtcMint,
     decimals: 0, // satoshis

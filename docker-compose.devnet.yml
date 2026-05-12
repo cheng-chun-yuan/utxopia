@@ -1,4 +1,4 @@
-# Privacy Coin Devnet Stack — Backend
+# UTXOpia Devnet Stack — Backend
 #
 # Frontend runs separately (Vercel, standalone Docker, or `bun run dev`)
 # Custody is held by an Ika dWallet (see backend Ika env vars below).
@@ -14,7 +14,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: privacy-coin-backend
+    container_name: utxopia-backend
     command: ["/app/zkbtc-api", "tracker", "--interval", "60", "--confirmations", "1"]
     ports:
       - "3001:3001"
@@ -26,24 +26,24 @@ services:
     environment:
       RUST_LOG: info,zkbtc=debug
       ALLOWED_ORIGIN: "${ALLOWED_ORIGIN:-https://aegis.amidoggy.xyz}"
-      PRIVACY_COIN_NETWORK: devnet
-      PRIVACY_COIN_BITCOIN_NETWORK: testnet4
-      PRIVACY_COIN_SOLANA_RPC: https://api.devnet.solana.com
-      PRIVACY_COIN_BITCOIN_RPC: https://mempool.space/testnet4/api
+      UTXOPIA_NETWORK: devnet
+      UTXOPIA_BITCOIN_NETWORK: testnet4
+      UTXOPIA_SOLANA_RPC: https://api.devnet.solana.com
+      UTXOPIA_BITCOIN_RPC: https://mempool.space/testnet4/api
       # ─── Ika dWallet custody (replaces FROST) ─────────────────────
-      PRIVACY_COIN_SIGNING_MODE: ika
-      PRIVACY_COIN_IKA_PROGRAM_ID: 87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY
-      PRIVACY_COIN_IKA_GRPC_ENDPOINT: pre-alpha-dev-1.ika.ika-network.net:443
-      PRIVACY_COIN_IKA_DWALLET: DmZfRVeZHnFZ1ARVHRPJn88VCcJB2QhXLmSe8RuzFMfq
-      PRIVACY_COIN_IKA_DWALLET_XONLY_PUBKEY: 87a1014ea16e42c825026889874902875aec7650b39c2b334a4d04d49b904c76
-      PRIVACY_COIN_IKA_CPI_AUTHORITY_BUMP: "255"
+      UTXOPIA_SIGNING_MODE: ika
+      UTXOPIA_IKA_PROGRAM_ID: 87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY
+      UTXOPIA_IKA_GRPC_ENDPOINT: pre-alpha-dev-1.ika.ika-network.net:443
+      UTXOPIA_IKA_DWALLET: DmZfRVeZHnFZ1ARVHRPJn88VCcJB2QhXLmSe8RuzFMfq
+      UTXOPIA_IKA_DWALLET_XONLY_PUBKEY: 87a1014ea16e42c825026889874902875aec7650b39c2b334a4d04d49b904c76
+      UTXOPIA_IKA_CPI_AUTHORITY_BUMP: "255"
       # ─── Programs (current live devnet IDs) ───────────────────────
-      PRIVACY_COIN_PROGRAM_ID: G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy
-      PRIVACY_COIN_ZKBTC_MINT: CDqY9mTzbWma7GzCULTJMMZzyVothKEXtr7AnXdpD6v8
+      UTXOPIA_PROGRAM_ID: G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy
+      UTXOPIA_ZKBTC_MINT: CDqY9mTzbWma7GzCULTJMMZzyVothKEXtr7AnXdpD6v8
       BTC_LIGHT_CLIENT_PROGRAM_ID: C8JoSKzondM7X1ESwrBSodGMrXWtEWNmawXyjh9zEWJZ
       POOL_RECEIVE_ADDRESS: tb1p99y96qcldtg6krzv5uvrhmmvh88zmy2dp0kgmjzz56tz7r7vxd3qqn2q95
       # ─── Operational ─────────────────────────────────────────────
-      PRIVACY_COIN_DEMO_MODE: "1"
+      UTXOPIA_DEMO_MODE: "1"
       ESPLORA_URL: https://mempool.space/testnet4/api
       SOLANA_RPC_URL: https://api.devnet.solana.com
       DEPOSIT_DB_PATH: /app/data/deposits.db
@@ -53,7 +53,7 @@ services:
       MEMPOOL_WS_ENABLED: "true"
       MEMPOOL_WS_URL: wss://mempool.space/testnet4/api/v1/ws
       HEADER_RELAY_ENABLED: "true"
-      PRIVACY_COIN_BROADCAST_MODE: real
+      UTXOPIA_BROADCAST_MODE: real
       HEADER_BATCH_SIZE: "5"
       SERVICE_FEE_SATS: "500"
       RELAYER_FEE_SATS: "500"

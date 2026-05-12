@@ -11,7 +11,7 @@
  *   - write ika_dwallet, ika_dwallet_xonly_pubkey, cpi_authority_bump
  *
  * Usage:
- *   PRIVACY_COIN_PROGRAM_ID=<pid> PAYER_KEYPAIR_PATH=<path> \
+ *   UTXOPIA_PROGRAM_ID=<pid> PAYER_KEYPAIR_PATH=<path> \
  *     node --experimental-strip-types set-pool-config.ts --network devnet
  */
 
@@ -40,8 +40,8 @@ const RPC_URL =
     ? "http://localhost:8899"
     : "https://api.devnet.solana.com";
 
-const programIdStr = process.env.PRIVACY_COIN_PROGRAM_ID;
-if (!programIdStr) throw new Error("PRIVACY_COIN_PROGRAM_ID required");
+const programIdStr = process.env.UTXOPIA_PROGRAM_ID;
+if (!programIdStr) throw new Error("UTXOPIA_PROGRAM_ID required");
 const PROGRAM_ID = new PublicKey(programIdStr);
 
 const payerPath = process.env.PAYER_KEYPAIR_PATH;

@@ -47,7 +47,7 @@ export async function buildTokenIdMap(): Promise<Map<string, string>> {
 
   // Try Poseidon for any additional mints (env-specified localnet mints, etc.)
   try {
-    const { computeTokenId, initPoseidon, getConfig } = await import("@privacy-coin/sdk");
+    const { computeTokenId, initPoseidon, getConfig } = await import("@utxopia/sdk");
     const { PublicKey } = await import("@solana/web3.js");
     await initPoseidon();
 

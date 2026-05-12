@@ -67,7 +67,7 @@ function generateProofViaNode(
   if (!fs.existsSync(wasmPath)) throw new Error(`WASM not found: ${wasmPath}`);
   if (!fs.existsSync(zkeyPath)) throw new Error(`zkey not found: ${zkeyPath}`);
 
-  const tmpDir = fs.mkdtempSync("/tmp/pcoin-proof-");
+  const tmpDir = fs.mkdtempSync("/tmp/utxopia-proof-");
   const tmpInput = path.join(tmpDir, "input.json");
   const tmpProof = path.join(tmpDir, "proof.json");
   const tmpPublic = path.join(tmpDir, "public.json");
@@ -123,9 +123,9 @@ function serializeGroth16Proof(proof: any): Uint8Array {
 async function main() {
   const state = loadState();
   const authority = loadAuthority();
-  const PRIVACY_COIN = new PublicKey(state.privacyCoinProgramId);
-  const [poolState] = derivePoolStatePDA(PRIVACY_COIN);
-  const [commitmentTree] = deriveCommitmentTreePDA(PRIVACY_COIN);
+  const UTXOPIA = new PublicKey(state.privacyCoinProgramId);
+  const [poolState] = derivePoolStatePDA(UTXOPIA);
+  const [commitmentTree] = deriveCommitmentTreePDA(UTXOPIA);
 
   if (!state.wsolNote || !state.tWsolMint) {
     throw new Error("wSOL note not found. Run step5 first.");
@@ -151,7 +151,7 @@ async function main() {
   // wSOL note uses NATIVE_MINT_2022 (step5 shieldSOL), not tWsolMint from step2
   const NATIVE_MINT_2022 = new PublicKey("9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP");
   const wsolMint = NATIVE_MINT_2022;
-  const [tokenConfig] = deriveTokenConfigPDA(PRIVACY_COIN, wsolMint);
+  const [tokenConfig] = deriveTokenConfigPDA(UTXOPIA, wsolMint);
   const tcInfo = await connection.getAccountInfo(tokenConfig);
   if (!tcInfo) throw new Error("wSOL TokenConfig not found");
   const tcData = parseTokenConfig(Buffer.from(tcInfo.data))!;
@@ -268,8 +268,8 @@ async function main() {
   // Accounts (disc=14, multi-output):
   // 0-7: fixed, 8-9: recipients (same ATA twice), 10: nullifier
   const nullifierBytes0 = bigintToBytes32BE(nullifier0);
-  const [nullifierPDA0] = deriveNullifierPDA(PRIVACY_COIN, nullifierBytes0);
-  const [vkRegistry1x2] = deriveVkRegistryPDA(PRIVACY_COIN, 1, 2);
+  const [nullifierPDA0] = deriveNullifierPDA(UTXOPIA, nullifierBytes0);
+  const [vkRegistry1x2] = deriveVkRegistryPDA(UTXOPIA, 1, 2);
 
   // Ensure user ATA exists for NATIVE_MINT_2022
   const { createAssociatedTokenAccountIdempotentInstruction } = await import("@solana/spl-token");
@@ -303,7 +303,7 @@ async function main() {
       // Nullifier
       { pubkey: nullifierPDA0, isSigner: false, isWritable: true },
     ],
-    programId: PRIVACY_COIN,
+    programId: UTXOPIA,
     data: txData,
   });
 

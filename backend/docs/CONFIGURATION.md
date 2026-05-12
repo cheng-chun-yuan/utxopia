@@ -1,6 +1,6 @@
-# Privacy Coin Backend Configuration
+# UTXOpia Backend Configuration
 
-This document describes all configuration options for the Privacy Coin backend services.
+This document describes all configuration options for the UTXOpia backend services.
 
 ## Configuration Methods
 
@@ -20,10 +20,10 @@ Priority: CLI args > Environment variables > `.env` file > Defaults
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `PRIVACY_COIN_NETWORK` | No | `devnet` | Network mode: `mainnet`, `testnet`, `devnet` |
-| `PRIVACY_COIN_DEMO_MODE` | No | `false` | Enable demo mode (`"1"` to enable; devnet/testnet only) |
-| `PRIVACY_COIN_LOG_LEVEL` | No | `info` | Log level: `debug`, `info`, `warn`, `error` |
-| `PRIVACY_COIN_DEPOSIT_LIMIT_SATS` | No | network-based* | Maximum deposit per transaction |
+| `UTXOPIA_NETWORK` | No | `devnet` | Network mode: `mainnet`, `testnet`, `devnet` |
+| `UTXOPIA_DEMO_MODE` | No | `false` | Enable demo mode (`"1"` to enable; devnet/testnet only) |
+| `UTXOPIA_LOG_LEVEL` | No | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| `UTXOPIA_DEPOSIT_LIMIT_SATS` | No | network-based* | Maximum deposit per transaction |
 | `API_PORT` | No | `3001` | REST API server port |
 
 *Deposit limit defaults: mainnet=1,000,000,000 (10 BTC), testnet=10,000,000,000, devnet=100,000,000,000.
@@ -32,26 +32,26 @@ Priority: CLI args > Environment variables > `.env` file > Defaults
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `PRIVACY_COIN_BITCOIN_RPC` | No | network-based* | Esplora/Blockstream API endpoint |
+| `UTXOPIA_BITCOIN_RPC` | No | network-based* | Esplora/Blockstream API endpoint |
 | `POOL_SIGNING_KEY` | Yes** | - | Hex-encoded private key for BTC signing (legacy) |
 | `POOL_RECEIVE_ADDRESS` | No | testnet faucet | Pool wallet address for swept funds |
 | `ESPLORA_URL` | No | `https://mempool.space/testnet/api` | Esplora API endpoint (tracker) |
 
 *Bitcoin API defaults: mainnet=`https://mempool.space/api`, testnet=`https://mempool.space/testnet/api`, devnet=`https://mempool.space/testnet4/api`.
 
-**Required for redemption service, optional for deposit tracker (uses simulated mode). Prefer `PRIVACY_COIN_BTC_SIGNER_KEY` in FROST config.
+**Required for redemption service, optional for deposit tracker (uses simulated mode). Prefer `UTXOPIA_BTC_SIGNER_KEY` in FROST config.
 
 ### Solana Configuration
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `PRIVACY_COIN_SOLANA_RPC` | No | network-based* | Solana RPC endpoint |
+| `UTXOPIA_SOLANA_RPC` | No | network-based* | Solana RPC endpoint |
 | `SOLANA_RPC_URL` | No | `https://api.devnet.solana.com` | Solana RPC (tracker service) |
 | `VERIFIER_KEYPAIR` | Yes** | - | Path to Solana keypair JSON file |
-| `PRIVACY_COIN_PROGRAM_ID` | No*** | `AtztELZfz3GHA8hFQCv7aT9Mt47Xhknv3ZCNb3fmXsgf` | Privacy Coin program ID |
-| `PRIVACY_COIN_POOL_STATE` | No*** | `8bbcVecB619HHsHn2TQMraJ8R8WjQjApdZY7h9JCJW7b` | Pool state PDA |
-| `PRIVACY_COIN_COMMITMENT_TREE` | No*** | `HtfDXZ5mBQNBdZrDxJMbXCDkyUqFdTDj7zAqo3aqrqiA` | Commitment tree PDA |
-| `PRIVACY_COIN_ZKBTC_MINT` | No*** | `HiDyAcEBTS7SRiLA49BZ5B6XMBAksgwLEAHpvteR8vbV` | zkBTC mint address |
+| `UTXOPIA_PROGRAM_ID` | No*** | `AtztELZfz3GHA8hFQCv7aT9Mt47Xhknv3ZCNb3fmXsgf` | UTXOpia program ID |
+| `UTXOPIA_POOL_STATE` | No*** | `8bbcVecB619HHsHn2TQMraJ8R8WjQjApdZY7h9JCJW7b` | Pool state PDA |
+| `UTXOPIA_COMMITMENT_TREE` | No*** | `HtfDXZ5mBQNBdZrDxJMbXCDkyUqFdTDj7zAqo3aqrqiA` | Commitment tree PDA |
+| `UTXOPIA_ZKBTC_MINT` | No*** | `HiDyAcEBTS7SRiLA49BZ5B6XMBAksgwLEAHpvteR8vbV` | zkBTC mint address |
 
 *Solana RPC defaults: devnet=`https://api.devnet.solana.com`, testnet=`https://api.testnet.solana.com`, mainnet=`https://api.mainnet-beta.solana.com`.
 
@@ -84,18 +84,18 @@ Priority: CLI args > Environment variables > `.env` file > Defaults
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `PRIVACY_COIN_SIGNING_MODE` | No | `single` (devnet) | Signing mode: `single` or `frost` |
-| `PRIVACY_COIN_BTC_SIGNER_KEY` | Yes* | — | Hex BTC private key (single-key mode) |
-| `PRIVACY_COIN_FROST_THRESHOLD` | Yes** | — | FROST threshold (e.g., 2) |
-| `PRIVACY_COIN_FROST_PARTICIPANTS` | Yes** | — | Total signers (e.g., 3) |
-| `PRIVACY_COIN_FROST_KEY_SHARE` | Yes** | — | Encrypted key share |
-| `PRIVACY_COIN_FROST_SIGNER_URLS` | Yes** | — | Comma-separated signer URLs |
-| `PRIVACY_COIN_FROST_API_KEY` | No | — | Optional API key for FROST servers |
-| `PRIVACY_COIN_FROST_GROUP_PUBKEY` | Yes** | — | Hex x-only group public key (64 chars) |
+| `UTXOPIA_SIGNING_MODE` | No | `single` (devnet) | Signing mode: `single` or `frost` |
+| `UTXOPIA_BTC_SIGNER_KEY` | Yes* | — | Hex BTC private key (single-key mode) |
+| `UTXOPIA_FROST_THRESHOLD` | Yes** | — | FROST threshold (e.g., 2) |
+| `UTXOPIA_FROST_PARTICIPANTS` | Yes** | — | Total signers (e.g., 3) |
+| `UTXOPIA_FROST_KEY_SHARE` | Yes** | — | Encrypted key share |
+| `UTXOPIA_FROST_SIGNER_URLS` | Yes** | — | Comma-separated signer URLs |
+| `UTXOPIA_FROST_API_KEY` | No | — | Optional API key for FROST servers |
+| `UTXOPIA_FROST_GROUP_PUBKEY` | Yes** | — | Hex x-only group public key (64 chars) |
 
-*Required when `PRIVACY_COIN_SIGNING_MODE=single`. **Required when `PRIVACY_COIN_SIGNING_MODE=frost`.
+*Required when `UTXOPIA_SIGNING_MODE=single`. **Required when `UTXOPIA_SIGNING_MODE=frost`.
 
-> **Note**: On mainnet, `PRIVACY_COIN_SIGNING_MODE` defaults to `frost`. Single-key mode is rejected by `validate_for_production()`.
+> **Note**: On mainnet, `UTXOPIA_SIGNING_MODE` defaults to `frost`. Single-key mode is rejected by `validate_for_production()`.
 
 For FROST signer server configuration, see [FROST Server Documentation](../../docs/FROST.md).
 
@@ -105,7 +105,7 @@ For FROST signer server configuration, see [FROST Server Documentation](../../do
 |----------|----------|---------|-------------|
 | `RUST_LOG` | No | `info` | Log level filter (trace, debug, info, warn, error) |
 | `LOG_FORMAT` | No | `json` | Log format: `json` or `pretty` |
-| `LOG_TARGET` | No | - | Filter to specific module (e.g., `pcoin::deposit_tracker`) |
+| `LOG_TARGET` | No | - | Filter to specific module (e.g., `utxopia::deposit_tracker`) |
 
 ---
 
@@ -152,7 +152,7 @@ Create a `.env` file in the backend directory:
 
 ```bash
 # Network
-PRIVACY_COIN_NETWORK=testnet
+UTXOPIA_NETWORK=testnet
 
 # Bitcoin
 POOL_SIGNING_KEY=your_private_key_hex
@@ -179,8 +179,8 @@ LOG_FORMAT=pretty
 
 ```bash
 # .env.development
-PRIVACY_COIN_NETWORK=testnet
-PRIVACY_COIN_DEMO_MODE=false
+UTXOPIA_NETWORK=testnet
+UTXOPIA_DEMO_MODE=false
 API_PORT=3001
 
 ESPLORA_URL=https://mempool.space/testnet/api
@@ -198,8 +198,8 @@ LOG_FORMAT=pretty
 
 ```bash
 # .env.production
-PRIVACY_COIN_NETWORK=mainnet
-PRIVACY_COIN_DEMO_MODE=false
+UTXOPIA_NETWORK=mainnet
+UTXOPIA_DEMO_MODE=false
 API_PORT=8080
 
 POOL_SIGNING_KEY=${VAULT_BTC_KEY}  # Use secret manager
@@ -207,9 +207,9 @@ POOL_RECEIVE_ADDRESS=bc1q...
 
 ESPLORA_URL=https://mempool.space/api
 SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
-VERIFIER_KEYPAIR=/etc/privacy-coin/verifier.json
+VERIFIER_KEYPAIR=/etc/utxopia/verifier.json
 
-DEPOSIT_DB_PATH=/var/lib/privacy-coin/deposits.db
+DEPOSIT_DB_PATH=/var/lib/utxopia/deposits.db
 DEPOSIT_POLL_INTERVAL_SECS=30
 DEPOSIT_REQUIRED_CONFIRMATIONS=6
 
@@ -221,8 +221,8 @@ LOG_FORMAT=json
 
 ```bash
 # .env.demo
-PRIVACY_COIN_NETWORK=testnet
-PRIVACY_COIN_DEMO_MODE=true
+UTXOPIA_NETWORK=testnet
+UTXOPIA_DEMO_MODE=true
 API_PORT=3001
 
 # No signing key needed in demo mode
@@ -278,7 +278,7 @@ LOG_FORMAT=pretty
 
 ```bash
 # Example: Load from Vault
-export POOL_SIGNING_KEY=$(vault kv get -field=key secret/privacy-coin/btc)
+export POOL_SIGNING_KEY=$(vault kv get -field=key secret/utxopia/btc)
 ```
 
 ### Key Rotation
@@ -297,8 +297,8 @@ export POOL_SIGNING_KEY=$(vault kv get -field=key secret/privacy-coin/btc)
 
 ```bash
 # Secure keypair file
-chmod 600 /etc/privacy-coin/verifier.json
-chown privacy-coin:privacy-coin /etc/privacy-coin/verifier.json
+chmod 600 /etc/utxopia/verifier.json
+chown utxopia:utxopia /etc/utxopia/verifier.json
 ```
 
 ---
@@ -323,7 +323,7 @@ The configuration is validated at startup. Invalid configurations will cause the
 cargo run -- demo
 
 # Check environment loading
-env | grep -E "^(PRIVACY_COIN|POOL|SOLANA|DEPOSIT)"
+env | grep -E "^(UTXOPIA|POOL|SOLANA|DEPOSIT)"
 ```
 
 ---
@@ -333,11 +333,11 @@ env | grep -E "^(PRIVACY_COIN|POOL|SOLANA|DEPOSIT)"
 Configuration can also be created programmatically in Rust:
 
 ```rust
-use zkbtc::common::PRIVACY_COINConfig;
+use zkbtc::common::UTXOPIAConfig;
 use zkbtc::deposit_tracker::TrackerConfig;
 
 // Load from environment
-let config = PRIVACY_COINConfig::from_env()?;
+let config = UTXOPIAConfig::from_env()?;
 
 // Or create manually
 let tracker_config = TrackerConfig {

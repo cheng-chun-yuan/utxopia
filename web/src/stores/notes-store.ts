@@ -79,7 +79,7 @@ export const useNotesStore = create<NotesState>()(
       },
     }),
     {
-      name: "pcoin-notes",
+      name: "utxopia-notes",
     }
   )
 );

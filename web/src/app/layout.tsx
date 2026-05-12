@@ -27,7 +27,7 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Privacy Coin | Privacy for Every Token on Solana",
+  title: "UTXOpia | Privacy for Every Token on Solana",
   description: "Shield any Solana token with zero-knowledge proofs. Private transfers, stealth addresses, and ZK commitments. Powered by Zeus Network.",
 };
 

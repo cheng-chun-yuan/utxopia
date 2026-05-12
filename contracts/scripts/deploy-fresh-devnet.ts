@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Deploy Fresh Privacy Coin to Devnet
+ * Deploy Fresh UTXOpia to Devnet
  *
  * Creates a completely new deployment with:
  * - New program ID (fresh keypair)
@@ -90,7 +90,7 @@ const envArg = process.argv.find((a) => a.startsWith("--env="))?.split("=")[1]
 
 async function main() {
   console.log("=".repeat(60));
-  console.log(`Deploy Fresh Privacy Coin to Devnet (env: ${envArg})`);
+  console.log(`Deploy Fresh UTXOpia to Devnet (env: ${envArg})`);
   console.log("=".repeat(60));
   console.log();
   console.log("This will:");
@@ -149,7 +149,7 @@ async function main() {
       `--url ${RPC_URL} ` +
       `--program-id ${programKeypairPath} ` +
       `--keypair ~/.config/solana/johnny.json ` +
-      `target/deploy/privacy_coin.so`,
+      `target/deploy/utxopia.so`,
       { cwd: path.join(__dirname, ".."), stdio: "inherit" }
     );
   } catch (error) {
@@ -209,8 +209,8 @@ async function main() {
   );
   console.log(`✓ Frost Vault: ${frostVaultAccount.address.toBase58()}`);
 
-  // Initialize Privacy Coin
-  console.log("\nInitializing Privacy Coin pool...");
+  // Initialize UTXOpia
+  console.log("\nInitializing UTXOpia pool...");
   const ix = buildInitializeIx(
     poolStatePda,
     commitmentTreePda,
@@ -227,7 +227,7 @@ async function main() {
   const sig = await sendAndConfirmTransaction(connection, tx, [authority], {
     commitment: "confirmed",
   });
-  console.log(`✓ Privacy Coin initialized: ${sig}`);
+  console.log(`✓ UTXOpia initialized: ${sig}`);
 
   // Verify commitment tree size
   const treeInfo = await connection.getAccountInfo(commitmentTreePda);
@@ -238,7 +238,7 @@ async function main() {
     network: "devnet",
     rpcUrl: RPC_URL,
     programs: {
-      PrivacyCoin: programId.toBase58(),
+      UTXOpia: programId.toBase58(),
       groth16Verifier: GROTH16_VERIFIER_ID.toBase58(),
       chadbuffer: CHADBUFFER_ID.toBase58(),
     },
@@ -271,16 +271,16 @@ async function main() {
   console.log();
   console.log("Set these env vars to use this deployment:");
   console.log();
-  console.log("  # Frontend (privacy-coin-app/.env.local):");
-  console.log(`  NEXT_PUBLIC_PRIVACY_COIN_PROGRAM_ID=${programId.toBase58()}`);
+  console.log("  # Frontend (utxopia-app/.env.local):");
+  console.log(`  NEXT_PUBLIC_UTXOPIA_PROGRAM_ID=${programId.toBase58()}`);
   console.log(`  NEXT_PUBLIC_ZKBTC_MINT=${zkbtcMint.toBase58()}`);
   console.log();
   console.log("  # Backend (.env):");
-  console.log(`  PRIVACY_COIN_PROGRAM_ID=${programId.toBase58()}`);
-  console.log(`  PRIVACY_COIN_ZKBTC_MINT=${zkbtcMint.toBase58()}`);
+  console.log(`  UTXOPIA_PROGRAM_ID=${programId.toBase58()}`);
+  console.log(`  UTXOPIA_ZKBTC_MINT=${zkbtcMint.toBase58()}`);
   console.log();
   console.log("  # Scripts:");
-  console.log(`  PRIVACY_COIN_PROGRAM_ID=${programId.toBase58()}`);
+  console.log(`  UTXOPIA_PROGRAM_ID=${programId.toBase58()}`);
 }
 
 main().catch((err) => {

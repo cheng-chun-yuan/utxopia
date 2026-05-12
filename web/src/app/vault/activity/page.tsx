@@ -15,9 +15,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ErrorBoundary } from "@/components/error-boundary";
-import { usePrivacyCoinKeys, useStealthInbox } from "@/hooks/use-privacy-coin";
+import { useUTXOpiaKeys, useStealthInbox } from "@/hooks/use-utxopia";
 import { usePasskey } from "@/hooks/use-passkey";
-import { usePrivacyCoinStore } from "@/stores/privacy-coin-store";
+import { useUTXOpiaStore } from "@/stores/utxopia-store";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { AuthModal } from "@/components/auth-modal";
@@ -25,7 +25,7 @@ import { EmptyInbox } from "@/components/stealth-inbox";
 
 import { SUPPORTED_TOKENS, getTokenBySymbol, type SupportedToken } from "@/lib/supported-tokens";
 import { useTokenPrices } from "@/hooks/use-token-prices";
-import type { InboxNote } from "@/stores/privacy-coin-store";
+import type { InboxNote } from "@/stores/utxopia-store";
 
 function getToken(sym: string): SupportedToken {
   return getTokenBySymbol(sym) || SUPPORTED_TOKENS[0];
@@ -264,7 +264,7 @@ function ActivityFeed() {
 }
 
 function ActivityContent() {
-  const { hasKeys, isLoading: keysLoading, deriveKeys } = usePrivacyCoinKeys();
+  const { hasKeys, isLoading: keysLoading, deriveKeys } = useUTXOpiaKeys();
 
   // Auth modal state
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -278,7 +278,7 @@ function ActivityContent() {
     register: passkeyRegister,
     authenticate: passkeyAuthenticate,
   } = usePasskey();
-  const deriveKeysFromPasskeySeed = usePrivacyCoinStore((s) => s.deriveKeysFromPasskeySeed);
+  const deriveKeysFromPasskeySeed = useUTXOpiaStore((s) => s.deriveKeysFromPasskeySeed);
 
   const handlePasskeyRegister = async () => {
     const seed = await passkeyRegister();
@@ -391,7 +391,7 @@ export default function ActivityPage() {
 
           {/* Footer inside card */}
           <div className="flex flex-row justify-between items-center gap-2 mt-2 text-gray px-2 pt-2">
-            <a href="/docs" className="hover:text-gray-light transition-colors text-caption">Privacy Coin</a>
+            <a href="/docs" className="hover:text-gray-light transition-colors text-caption">UTXOpia</a>
             <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption hover:text-gray-light transition-colors flex items-center gap-1.5">
               Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network
             </a>

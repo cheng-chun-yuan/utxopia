@@ -1,7 +1,7 @@
 {
-  "name": "@privacy-coin/sdk",
+  "name": "@utxopia/sdk",
   "version": "2.0.2",
-  "description": "Privacy Coin SDK - Private Bitcoin on Solana",
+  "description": "UTXOpia SDK - Private Bitcoin on Solana",
   "type": "module",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -127,6 +127,6 @@
     "snarkjs",
     "taproot"
   ],
-  "author": "Privacy Coin Team",
+  "author": "UTXOpia Team",
   "license": "MIT"
 }

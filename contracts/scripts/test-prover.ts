@@ -20,13 +20,13 @@ import {
   cleanup,
   type SpendSplitInputs,
   type ClaimInputs,
-} from "@privacy-coin/sdk/prover";
+} from "@utxopia/sdk/prover";
 
 // Import poseidon for proper commitment computation
 import {
   poseidon2Hash,
   computeUnifiedCommitment,
-} from "@privacy-coin/sdk/poseidon2";
+} from "@utxopia/sdk/poseidon2";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

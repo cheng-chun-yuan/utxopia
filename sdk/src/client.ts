@@ -1,12 +1,12 @@
 /**
- * PrivacyCoinClient — high-level SDK entry point.
+ * UTXOpiaClient — high-level SDK entry point.
  *
  * Initialize once, use simple methods everywhere. Encapsulates config,
  * keys, Poseidon init, token IDs, and note scanning so consumers don't
  * chain low-level SDK calls.
  *
  * ```typescript
- * const client = await PrivacyCoinClient.init({ network: "devnet" });
+ * const client = await UTXOpiaClient.init({ network: "devnet" });
  * await client.loginWithWallet(wallet);
  * const notes = await client.getNotes();
  * const balance = client.getBalance();
@@ -28,8 +28,8 @@ import {
   recreateStealthAddress,
   serializeKeysForStorage,
   deserializeKeysFromStorage,
-  clearPrivacyCoinKeys,
-  type PrivacyCoinKeys,
+  clearUTXOpiaKeys,
+  type UTXOpiaKeys,
   type StealthMetaAddress,
   type WalletSignerAdapter,
   type KeySetupResult,
@@ -54,7 +54,7 @@ import { EventClient } from "./event-client";
 
 // ─── Types ──────────────────────────────────────────────────────────
 
-export interface PrivacyCoinClientConfig {
+export interface UTXOpiaClientConfig {
   network?: NetworkId;
   /** Override backend URL (default: from network config) */
   backendUrl?: string;
@@ -81,10 +81,10 @@ export interface InboxNote {
 
 // ─── Client ─────────────────────────────────────────────────────────
 
-let _instance: PrivacyCoinClient | null = null;
+let _instance: UTXOpiaClient | null = null;
 
-export class PrivacyCoinClient {
-  private _keys: PrivacyCoinKeys | null = null;
+export class UTXOpiaClient {
+  private _keys: UTXOpiaKeys | null = null;
   private _viewOnlyKeys: ViewOnlyKeys | null = null;
   private _isViewOnly = false;
   private _stealthAddress: StealthMetaAddress | null = null;
@@ -103,7 +103,7 @@ export class PrivacyCoinClient {
    * Initialize the SDK. Call once at app startup.
    * Sets up config, initializes Poseidon hash, creates singleton.
    */
-  static async init(opts: PrivacyCoinClientConfig = {}): Promise<PrivacyCoinClient> {
+  static async init(opts: UTXOpiaClientConfig = {}): Promise<UTXOpiaClient> {
     // Init config (reads env vars, sets up network)
     if (opts.network) {
       await initConfig({ network: opts.network });
@@ -114,7 +114,7 @@ export class PrivacyCoinClient {
 
     const config = getConfig();
     const backendUrl = opts.backendUrl || "";
-    const client = new PrivacyCoinClient(backendUrl);
+    const client = new UTXOpiaClient(backendUrl);
 
     _instance = client;
     return client;
@@ -123,9 +123,9 @@ export class PrivacyCoinClient {
   /**
    * Get the initialized singleton. Throws if init() hasn't been called.
    */
-  static instance(): PrivacyCoinClient {
+  static instance(): UTXOpiaClient {
     if (!_instance) {
-      throw new Error("PrivacyCoinClient not initialized. Call PrivacyCoinClient.init() first.");
+      throw new Error("UTXOpiaClient not initialized. Call UTXOpiaClient.init() first.");
     }
     return _instance;
   }
@@ -204,7 +204,7 @@ export class PrivacyCoinClient {
    */
   logout(): void {
     if (this._keys) {
-      clearPrivacyCoinKeys(this._keys);
+      clearUTXOpiaKeys(this._keys);
     }
     this._keys = null;
     this._viewOnlyKeys = null;
@@ -223,7 +223,7 @@ export class PrivacyCoinClient {
 
   // ─── Getters ────────────────────────────────────────────────────
 
-  get keys(): PrivacyCoinKeys | null { return this._keys; }
+  get keys(): UTXOpiaKeys | null { return this._keys; }
   get stealthAddress(): StealthMetaAddress | null { return this._stealthAddress; }
   get stealthAddressEncoded(): string | null { return this._stealthAddressEncoded; }
   get isAuthenticated(): boolean { return this._keys !== null || this._viewOnlyKeys !== null; }
@@ -402,7 +402,7 @@ export class PrivacyCoinClient {
   async prepareShieldOutput(opts: {
     amount: bigint;
     mintAddress: string;
-    recipient?: PrivacyCoinKeys;
+    recipient?: UTXOpiaKeys;
   }): Promise<StealthOutputWithKeys & { tokenId: bigint }> {
     const keys = opts.recipient ?? this._keys;
     if (!keys) throw new Error("No keys (login first or provide recipient)");
@@ -460,7 +460,7 @@ export class PrivacyCoinClient {
    * Hash transaction inputs and sign with EdDSA-Poseidon.
    *
    * @param msgHashInputs - Array of bigints to hash (merkleRoot, boundParamsHash, nullifiers, commitments)
-   * @param eddsaSeed - The EdDSA seed bytes (from PrivacyCoinKeys.eddsaSeed)
+   * @param eddsaSeed - The EdDSA seed bytes (from UTXOpiaKeys.eddsaSeed)
    */
   async signTransaction(
     msgHashInputs: bigint[],

@@ -1,5 +1,5 @@
 /**
- * Stealth Deposit utilities for PRIVACY_COIN
+ * Stealth Deposit utilities for UTXOPIA
  *
  * Combines BTC deposit verification with automatic stealth announcement.
  * Uses Ed25519 ephemeral keys for ECDH and Baby Jubjub for stealth derivation.
@@ -68,7 +68,7 @@ export const STEALTH_OP_RETURN_SIZE = 32;
 /** Instruction discriminator for verify_stealth_deposit */
 export const VERIFY_STEALTH_DEPOSIT_DISCRIMINATOR = 11;
 
-import { PRIVACY_COIN_PROGRAM_ID } from "./pda";
+import { UTXOPIA_PROGRAM_ID } from "./pda";
 import { debug } from "./logger";
 const SYSTEM_PROGRAM_ID: Address = address(
   "11111111111111111111111111111111"
@@ -211,7 +211,7 @@ export async function verifyStealthDeposit(
   transactionSize: number,
   verifiedTransactionPda: Address,
   network: "mainnet" | "testnet" = "testnet",
-  programId: Address = PRIVACY_COIN_PROGRAM_ID
+  programId: Address = UTXOPIA_PROGRAM_ID
 ): Promise<string> {
   debug("stealth", "Verify Stealth Deposit", { txid: btcTxid.slice(0, 12) + "...", sats: expectedValue });
 

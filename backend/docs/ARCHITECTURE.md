@@ -1,14 +1,14 @@
-# Privacy Coin Backend Architecture
+# UTXOpia Backend Architecture
 
 ## Overview
 
-The Privacy Coin backend provides server-side services for the privacy-preserving Bitcoin-to-Solana bridge. It handles operations that cannot run on the client, including Bitcoin transaction signing, SPV verification submission, and real-time deposit tracking.
+The UTXOpia backend provides server-side services for the privacy-preserving Bitcoin-to-Solana bridge. It handles operations that cannot run on the client, including Bitcoin transaction signing, SPV verification submission, and real-time deposit tracking.
 
 ## High-Level Architecture
 
 ```
                                     ┌─────────────────────────────────────────────────────────┐
-                                    │                    Privacy Coin Backend                        │
+                                    │                    UTXOpia Backend                        │
                                     │                                                         │
 ┌──────────────┐                   │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
 │   Frontend   │───HTTP/WS────────▶│  │  API Layer  │  │  Deposit    │  │  Event      │    │
@@ -36,12 +36,12 @@ The Privacy Coin backend provides server-side services for the privacy-preservin
 backend/src/
 ├── lib.rs                    # Library root with re-exports
 ├── main.rs                   # CLI entry point (tracker subcommand)
-├── config.rs                 # PRIVACY_COINConfig (env-based, SigningMode)
+├── config.rs                 # UTXOPIAConfig (env-based, SigningMode)
 ├── api_server.rs             # Combined API server (REST + WS, all routers merged)
 ├── merkle_tree.rs            # Poseidon Merkle tree (depth 16)
 │
 ├── common/                   # Shared Infrastructure
-│   ├── error.rs             # Common error types (PrivacyCoinError)
+│   ├── error.rs             # Common error types (UTXOpiaError)
 │   └── logging.rs           # Structured JSON logging
 │
 ├── bitcoin/                  # Bitcoin Layer
@@ -178,10 +178,10 @@ User                    Frontend/SDK              Backend                 Bitcoi
 
 ## Error Handling
 
-The `PrivacyCoinError` enum provides unified error handling:
+The `UTXOpiaError` enum provides unified error handling:
 
 ```rust
-pub enum PrivacyCoinError {
+pub enum UTXOpiaError {
     BitcoinRpc(String),
     TransactionBuild(String),
     SigningFailed(String),

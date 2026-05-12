@@ -1,11 +1,11 @@
-# @privacy-coin/sdk v3.0 (JoinSplit Architecture)
+# @utxopia/sdk v3.0 (JoinSplit Architecture)
 
 Privacy-preserving BTC to Solana bridge SDK using Groth16 JoinSplit proofs.
 
 ## Installation
 
 ```bash
-bun add @privacy-coin/sdk
+bun add @utxopia/sdk
 ```
 
 ## Quick Start
@@ -17,7 +17,7 @@ import {
   buildTransactInstruction,
   scanUnifiedNotes,
   formatBtc,
-} from '@privacy-coin/sdk';
+} from '@utxopia/sdk';
 
 // 1. DEPOSIT: Generate npk-based deposit (user sends any amount)
 const deposit = await createNonInteractiveDeposit(recipientMeta, groupPubKey);
@@ -105,7 +105,7 @@ Nullifier = Poseidon(nullifyingKey, leafIndex)
 
 ## Import Routes
 
-### Main Entry (`@privacy-coin/sdk`)
+### Main Entry (`@utxopia/sdk`)
 
 ```typescript
 import {
@@ -124,8 +124,8 @@ import {
   buildRedemptionRequestInstruction, // BTC withdrawal request
 
   // === Key Derivation ===
-  deriveKeysFromWallet,             // Wallet → PrivacyCoinKeys
-  deriveKeysFromSeed,               // Seed → PrivacyCoinKeys
+  deriveKeysFromWallet,             // Wallet → UTXOpiaKeys
+  deriveKeysFromSeed,               // Seed → UTXOpiaKeys
   createStealthMetaAddress,         // Keys → StealthMetaAddress
 
   // === Poseidon (JoinSplit) ===
@@ -151,12 +151,12 @@ import {
   type JoinSplitProofInputs,
   type TransactInstructionOptions,
   type JoinSplitNote,
-  type PrivacyCoinKeys,
+  type UTXOpiaKeys,
   type StealthMetaAddress,
   type BoundParams,
   type NonInteractiveDepositResult,
   type ScannedNote,
-} from '@privacy-coin/sdk';
+} from '@utxopia/sdk';
 ```
 
 ---
@@ -210,10 +210,10 @@ interface JoinSplitProofInputs {
 }
 ```
 
-### PrivacyCoinKeys
+### UTXOpiaKeys
 
 ```typescript
-interface PrivacyCoinKeys {
+interface UTXOpiaKeys {
   solanaPublicKey: Uint8Array;          // User identity (32 bytes)
   spendingPrivKey: bigint;              // Baby Jubjub private key
   spendingPubKey: BabyJubPoint;         // BJJ public key
@@ -256,7 +256,7 @@ interface ScannedNote {
 The recommended deposit method. User can send **any amount** of BTC — the commitment is computed on-chain.
 
 ```typescript
-import { createNonInteractiveDeposit, createStealthMetaAddress, initPoseidon } from '@privacy-coin/sdk';
+import { createNonInteractiveDeposit, createStealthMetaAddress, initPoseidon } from '@utxopia/sdk';
 
 await initPoseidon();
 
@@ -274,8 +274,8 @@ console.log('OP_RETURN payload (64 bytes):', deposit.opReturnPayload);
 ### 2. Scan for Incoming Deposits & Transfers
 
 ```typescript
-import { scanUnifiedNotes } from '@privacy-coin/sdk';
-import { AnnouncementClient } from '@privacy-coin/sdk';
+import { scanUnifiedNotes } from '@utxopia/sdk';
+import { AnnouncementClient } from '@utxopia/sdk';
 
 // Fetch stealth announcements from backend indexer (or fallback to RPC log scanning)
 const client = new AnnouncementClient({ backendUrl: 'http://localhost:8080' });
@@ -291,7 +291,7 @@ for (const note of myNotes) {
 ### 3. Legacy Deposit (with fixed amount)
 
 ```typescript
-import { depositToNote, initPoseidon } from '@privacy-coin/sdk';
+import { depositToNote, initPoseidon } from '@utxopia/sdk';
 
 await initPoseidon();
 const deposit = await depositToNote(100_000n, 'testnet');
@@ -304,7 +304,7 @@ console.log('Display:', deposit.displayAmount); // "0.00100000 BTC"
 ### 4. JoinSplit Transfer
 
 ```typescript
-import { generateJoinSplitProof, buildTransactInstruction } from '@privacy-coin/sdk';
+import { generateJoinSplitProof, buildTransactInstruction } from '@utxopia/sdk';
 
 // Generate proof (1 input → 2 outputs split)
 const proof = await generateJoinSplitProof({
@@ -335,7 +335,7 @@ const ix = buildTransactInstruction({ ... });
 ### 5. Stealth Transfer (in-protocol)
 
 ```typescript
-import { createStealthDeposit, scanAnnouncements } from '@privacy-coin/sdk';
+import { createStealthDeposit, scanAnnouncements } from '@utxopia/sdk';
 
 // Sender: Create stealth deposit
 const deposit = await createStealthDeposit(recipientMeta, 50_000n);
@@ -357,7 +357,7 @@ for (const note of notes) {
 Stealth announcements are emitted as `sol_log_data` events (no on-chain PDAs). Both deposits and transfers emit the same event structure:
 
 ```typescript
-import { parseStealthAnnouncementEvent, parseProgramEvents } from '@privacy-coin/sdk';
+import { parseStealthAnnouncementEvent, parseProgramEvents } from '@utxopia/sdk';
 
 // Parse events from transaction logs
 const events = parseProgramEvents(txLogMessages);
@@ -383,7 +383,7 @@ Events are indexed by the backend event indexer and served via REST/WebSocket.
 ## Network Configuration
 
 ```typescript
-import { setConfig } from '@privacy-coin/sdk';
+import { setConfig } from '@utxopia/sdk';
 
 setConfig('devnet');  // or 'localnet', 'mainnet'
 ```
@@ -433,7 +433,7 @@ Derive 3-key set from Solana wallet signature:
 | `createStealthMetaAddress(keys)` | 96-byte shareable stealth address |
 | `serialize/deserializeStealthMetaAddress` | Stealth address encoding |
 | `createDelegatedViewKey(keys, permissions)` | Time-limited view-only key |
-| `clearPrivacyCoinKeys(keys)` | Secure memory clearing |
+| `clearUTXOpiaKeys(keys)` | Secure memory clearing |
 | `extractViewOnlyBundle(keys)` | Export view-only key bundle |
 
 ### Stealth Deposit (`./stealth-deposit`)

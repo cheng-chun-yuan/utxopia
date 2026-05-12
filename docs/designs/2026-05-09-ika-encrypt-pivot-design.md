@@ -1,4 +1,4 @@
-# Privacy Coin v2 — Ika + Encrypt Pivot
+# UTXOpia v2 — Ika + Encrypt Pivot
 
 **Status:** Draft
 **Date:** 2026-05-09
@@ -7,11 +7,11 @@
 
 ## Problem
 
-Solana already has one credible privacy player: Umbra Privacy (mainnet, zkSNARKs + Arcium MPC, Solana-SPL-only). What Solana does **not** have is confidential settlement for **native non-Solana assets** like Bitcoin: held without bridges, traded without leaking flow. Existing BTC-on-Solana paths require a custodial bridge or an off-chain signer committee (Privacy Coin v1 used FROST — a multi-party signer, but operationally heavy).
+Solana already has one credible privacy player: Umbra Privacy (mainnet, zkSNARKs + Arcium MPC, Solana-SPL-only). What Solana does **not** have is confidential settlement for **native non-Solana assets** like Bitcoin: held without bridges, traded without leaking flow. Existing BTC-on-Solana paths require a custodial bridge or an off-chain signer committee (UTXOpia v1 used FROST — a multi-party signer, but operationally heavy).
 
 ## Product
 
-**Privacy Coin v2** — a confidential settlement layer on Solana for native Bitcoin, with an architecture that extends to any Ika-supported chain.
+**UTXOpia v2** — a confidential settlement layer on Solana for native Bitcoin, with an architecture that extends to any Ika-supported chain.
 
 - Native BTC custodied directly by **Ika dWallets**, governed by Solana program logic. No bridge, no relayer, no FROST committee. The architecture is chain-agnostic — adding ETH/SUI later is a config change, not a redesign — but this hackathon submission ships BTC only.
 - Once on-chain, BTC becomes a shielded commitment via the existing JoinSplit ZK system. Per-user transfers stay private with Groth16 proofs (already shipped).
@@ -32,7 +32,7 @@ One-line pitch: *"Umbra showed Solana wants confidential transfers. We extend it
 ```
 ┌──────────────────┐     ┌──────────────────────┐     ┌──────────────────────┐
 │  Bitcoin         │     │   Ika dWallet        │     │  Solana program      │
-│  (native chain)  │◄───►│   (2PC-MPC user +    │◄───►│  privacy-coin        │
+│  (native chain)  │◄───►│   (2PC-MPC user +    │◄───►│  utxopia        │
 │                  │     │    Ika network)      │     │  (Pinocchio)         │
 └──────────────────┘     └──────────────────────┘     └─────────┬────────────┘
                                                                 │
@@ -59,7 +59,7 @@ Privacy boundaries:
 
 ## Ika Solana integration — concrete
 
-Ika's Solana-native pre-alpha exists at `dwallet-labs/ika-pre-alpha`. Devnet program ID: `87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY`. dWallet gRPC: `pre-alpha-dev-1.ika.ika-network.net:443` (pre-alpha mock signer; same shape as Encrypt's plaintext stub). The integration crate is `ika-dwallet-pinocchio` — direct CPI from our existing Pinocchio program. **No Node IPC bridge, no Sui sidecar, no off-chain orchestration of signing.** The Privacy Coin program CPIs `approve_message(...)` (discriminator 8) into the Ika program when redemption is fully validated; an off-chain watcher polls the resulting Sign session and broadcasts the assembled BTC tx.
+Ika's Solana-native pre-alpha exists at `dwallet-labs/ika-pre-alpha`. Devnet program ID: `87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY`. dWallet gRPC: `pre-alpha-dev-1.ika.ika-network.net:443` (pre-alpha mock signer; same shape as Encrypt's plaintext stub). The integration crate is `ika-dwallet-pinocchio` — direct CPI from our existing Pinocchio program. **No Node IPC bridge, no Sui sidecar, no off-chain orchestration of signing.** The UTXOpia program CPIs `approve_message(...)` (discriminator 8) into the Ika program when redemption is fully validated; an off-chain watcher polls the resulting Sign session and broadcasts the assembled BTC tx.
 
 ## Component-by-component changes
 
@@ -68,7 +68,7 @@ Ika's Solana-native pre-alpha exists at `dwallet-labs/ika-pre-alpha`. Devnet pro
 | `frost_server/` | **Delete** | Ika dWallets supersede. Single biggest code deletion. |
 | `contracts/programs/btc-light-client/` | **Keep** | Belt-and-suspenders. Solana still SPV-verifies BTC deposits even if Ika-custodied. Future: can be removed if Ika provides verified deposit attestation. |
 | `circuits/` (JoinSplit) | **Keep, unchanged** | Ships as-is. |
-| `contracts/programs/privacy-coin/` | **Modify** | Add `ika-dwallet-pinocchio` git dep. `complete_redemption` CPIs `DWalletContext::approve_message` with the BTC sighash. CPI authority PDA derives from `[CPI_AUTHORITY_SEED]`. The pool's Ika dWallet authority is set to this PDA at pool init time. Add `confidential_swap_settle` instruction in Phase 2. |
+| `contracts/programs/utxopia/` | **Modify** | Add `ika-dwallet-pinocchio` git dep. `complete_redemption` CPIs `DWalletContext::approve_message` with the BTC sighash. CPI authority PDA derives from `[CPI_AUTHORITY_SEED]`. The pool's Ika dWallet authority is set to this PDA at pool init time. Add `confidential_swap_settle` instruction in Phase 2. |
 | `contracts/programs/confidential_swap/` | **NEW (Phase 2)** | Encrypt-powered sealed-bid batch auction. Uses `encrypt-pinocchio`. |
 | `sdk/` | **Modify** | Add `deriveCustodyAddressFromIkaDWallet` (P2TR from dWallet pubkey). Add helpers for reading Ika `Sign` accounts. Remove FROST DKG client code. |
 | `backend/` | **Slim** | Remove FROST orchestration + DKG ceremony. New thin watcher: poll Ika `Sign` PDAs for completed signatures, assemble + broadcast BTC tx. |
@@ -84,11 +84,11 @@ Estimated diff: ~5k LOC deleted (FROST subsystem), ~1.5k LOC added (Ika CPI wiri
 
 **Goal:** BTC privacy bridge works end-to-end with Ika dWallets in place of FROST.
 
-1. **One-shot dWallet setup**: clone `dwallet-labs/ika-pre-alpha`, run their DKG flow once against Ika devnet (`pre-alpha-dev-1.ika.ika-network.net:443`) to create a SECP256K1 dWallet. Transfer its authority to the Privacy Coin CPI authority PDA. Save dWallet ID + pubkey in `localnet-state.json` / `devnet-state.json`.
-2. Add `ika-dwallet-pinocchio` git dependency to `contracts/programs/privacy-coin/Cargo.toml`. Add `ika_dwallet_id` and `ika_dwallet_pubkey` fields to `pool_config`.
+1. **One-shot dWallet setup**: clone `dwallet-labs/ika-pre-alpha`, run their DKG flow once against Ika devnet (`pre-alpha-dev-1.ika.ika-network.net:443`) to create a SECP256K1 dWallet. Transfer its authority to the UTXOpia CPI authority PDA. Save dWallet ID + pubkey in `localnet-state.json` / `devnet-state.json`.
+2. Add `ika-dwallet-pinocchio` git dependency to `contracts/programs/utxopia/Cargo.toml`. Add `ika_dwallet_id` and `ika_dwallet_pubkey` fields to `pool_config`.
 3. Update `createNonInteractiveDeposit` in SDK: deposit address derives from `pool_config.ika_dwallet_pubkey` (P2TR). OP_RETURN stealth-announcement payload unchanged.
 4. `verify_stealth_deposit` stays as-is (still SPV-verifies via `btc-light-client`); only the *destination* address derivation upstream changes.
-5. Modify `complete_redemption`: after validating the redemption, build the BTC tx → compute taproot sighash → CPI `DWalletContext::approve_message(message_digest = btc_sighash, signature_scheme = ECDSA_secp256k1)`. The Privacy Coin program enforces all signing policy on-chain (amount limits, destination whitelist, paused-state). FROST's `policy.rs` moves into the program.
+5. Modify `complete_redemption`: after validating the redemption, build the BTC tx → compute taproot sighash → CPI `DWalletContext::approve_message(message_digest = btc_sighash, signature_scheme = ECDSA_secp256k1)`. The UTXOpia program enforces all signing policy on-chain (amount limits, destination whitelist, paused-state). FROST's `policy.rs` moves into the program.
 6. Backend gets a slim Ika watcher: poll Ika `Sign` PDAs for completed signatures, assemble the witness on the unsigned BTC tx, broadcast to Bitcoin testnet. Replaces `frost_client.rs`.
 7. Delete `frost_server/`, `backend/src/bitcoin/frost_client.rs`, and FROST-related Docker config.
 8. Update web deposit/withdraw UX. No FROST DKG ceremony at startup.
@@ -126,7 +126,7 @@ Estimated diff: ~5k LOC deleted (FROST subsystem), ~1.5k LOC added (Ika CPI wiri
 
 - Continuous order book (sealed-bid batches only)
 - New ZK circuits (existing 1×2/2×2 JoinSplit is sufficient)
-- Compliance / viewing-key disclosure features beyond what Privacy Coin v1 ships (Umbra has them; we don't compete on that axis for the hackathon)
+- Compliance / viewing-key disclosure features beyond what UTXOpia v1 ships (Umbra has them; we don't compete on that axis for the hackathon)
 - Mobile app
 - Mainnet readiness (devnet only)
 - **Multi-chain assets — BTC only for the hackathon submission.** Architecture is multi-chain-capable via Ika; ETH/SUI is roadmap, not build target.
@@ -135,7 +135,7 @@ Estimated diff: ~5k LOC deleted (FROST subsystem), ~1.5k LOC added (Ika CPI wiri
 
 ## Demo / submission checklist
 
-- [ ] Deployed program IDs (Solana devnet) for `privacy-coin` v2 and `confidential_swap`
+- [ ] Deployed program IDs (Solana devnet) for `utxopia` v2 and `confidential_swap`
 - [ ] Ika dWallet ID(s) used in the demo recorded in README
 - [ ] Public GitHub repo with this spec, an updated `TECHNICAL.md`, and a `MIGRATION_v1_to_v2.md`
 - [ ] README sections: problem, target users (privacy-conscious BTC holders; institutions wanting confidential BTC settlement on Solana), Ika usage, Encrypt usage, build/test instructions, deployed IDs/URLs

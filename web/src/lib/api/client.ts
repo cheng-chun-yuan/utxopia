@@ -21,10 +21,10 @@ import type {
 } from "./types";
 import { ApiError } from "./errors";
 import { API_ENDPOINTS, getBackendUrl } from "./constants";
-import { getConfig } from "@privacy-coin/sdk";
+import { getConfig } from "@utxopia/sdk";
 
 /**
- * Privacy Coin API Client (Minimal - Redemption Only)
+ * UTXOpia API Client (Minimal - Redemption Only)
  *
  * Note: Deposit and claim operations are handled client-side:
  * - Use @/lib/sdk for deposit credential generation

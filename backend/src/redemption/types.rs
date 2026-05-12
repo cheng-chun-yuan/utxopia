@@ -227,7 +227,7 @@ pub struct RedemptionConfig {
 
 impl Default for RedemptionConfig {
     fn default() -> Self {
-        let solana_rpc = std::env::var("PRIVACY_COIN_SOLANA_RPC")
+        let solana_rpc = std::env::var("UTXOPIA_SOLANA_RPC")
             .or_else(|_| std::env::var("SOLANA_RPC_URL"))
             .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string());
         let esplora_url = std::env::var("ESPLORA_URL").unwrap_or_default();

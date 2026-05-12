@@ -155,14 +155,14 @@ close_old_programs() {
   local BEFORE=$(solana balance "$AUTHORITY" --url "$RPC_URL" 2>/dev/null | awk '{print $1}')
   log "Balance before: $BEFORE SOL"
 
-  # Try closing old Privacy Coin program
-  local OLD_PRIVACY_COIN=$(read_state "privacyCoinProgramId")
-  if [ -n "$OLD_PRIVACY_COIN" ]; then
-    log "Closing old Privacy Coin program: $OLD_PRIVACY_COIN"
-    solana program close "$OLD_PRIVACY_COIN" \
+  # Try closing old UTXOpia program
+  local OLD_UTXOPIA=$(read_state "privacyCoinProgramId")
+  if [ -n "$OLD_UTXOPIA" ]; then
+    log "Closing old UTXOpia program: $OLD_UTXOPIA"
+    solana program close "$OLD_UTXOPIA" \
       --url "$RPC_URL" \
       --keypair "$KEYPAIR_PATH" \
-      --bypass-warning 2>&1 || warn "Failed to close $OLD_PRIVACY_COIN (may already be closed)"
+      --bypass-warning 2>&1 || warn "Failed to close $OLD_UTXOPIA (may already be closed)"
   fi
 
   # Try closing old BTC LC program
@@ -211,23 +211,23 @@ run_phase_1() {
   cd "$ROOT"
 
   # Verify .so files
-  local PRIVACY_COIN_SO="$ROOT/contracts/target/deploy/privacy_coin.so"
+  local UTXOPIA_SO="$ROOT/contracts/target/deploy/utxopia.so"
   local BTCLC_SO="$ROOT/contracts/target/deploy/btc_light_client.so"
 
-  if [ ! -f "$PRIVACY_COIN_SO" ]; then err "privacy_coin.so not found"; exit 1; fi
+  if [ ! -f "$UTXOPIA_SO" ]; then err "utxopia.so not found"; exit 1; fi
   if [ ! -f "$BTCLC_SO" ]; then err "btc_light_client.so not found"; exit 1; fi
 
   # Extract program IDs from keypairs
-  local PRIVACY_COIN_KP="$ROOT/contracts/target/deploy/privacy_coin-keypair.json"
+  local UTXOPIA_KP="$ROOT/contracts/target/deploy/utxopia-keypair.json"
   local BTCLC_KP="$ROOT/contracts/target/deploy/btc_light_client-keypair.json"
 
-  local PRIVACY_COIN_ID=$(solana-keygen pubkey "$PRIVACY_COIN_KP" 2>/dev/null)
+  local UTXOPIA_ID=$(solana-keygen pubkey "$UTXOPIA_KP" 2>/dev/null)
   local BTCLC_ID=$(solana-keygen pubkey "$BTCLC_KP" 2>/dev/null)
 
-  log "Privacy Coin program ID: $PRIVACY_COIN_ID"
+  log "UTXOpia program ID: $UTXOPIA_ID"
   log "BTC LC program ID: $BTCLC_ID"
 
-  save_state "privacyCoinProgramId" "$PRIVACY_COIN_ID"
+  save_state "privacyCoinProgramId" "$UTXOPIA_ID"
   save_state "btcLightClientId" "$BTCLC_ID"
 
   save_phase 1
@@ -239,21 +239,21 @@ run_phase_1() {
 run_phase_2() {
   phase 2 "Deploy Programs to Devnet"
 
-  local PRIVACY_COIN_ID=$(read_state "privacyCoinProgramId")
+  local UTXOPIA_ID=$(read_state "privacyCoinProgramId")
   local BTCLC_ID=$(read_state "btcLightClientId")
-  local PRIVACY_COIN_SO="$ROOT/contracts/target/deploy/privacy_coin.so"
+  local UTXOPIA_SO="$ROOT/contracts/target/deploy/utxopia.so"
   local BTCLC_SO="$ROOT/contracts/target/deploy/btc_light_client.so"
-  local PRIVACY_COIN_KP="$ROOT/contracts/target/deploy/privacy_coin-keypair.json"
+  local UTXOPIA_KP="$ROOT/contracts/target/deploy/utxopia-keypair.json"
   local BTCLC_KP="$ROOT/contracts/target/deploy/btc_light_client-keypair.json"
 
-  log "Deploying Privacy Coin ($PRIVACY_COIN_ID)..."
-  solana program deploy "$PRIVACY_COIN_SO" \
-    --program-id "$PRIVACY_COIN_KP" \
+  log "Deploying UTXOpia ($UTXOPIA_ID)..."
+  solana program deploy "$UTXOPIA_SO" \
+    --program-id "$UTXOPIA_KP" \
     --url "$RPC_URL" \
     --keypair "$KEYPAIR_PATH" \
     --with-compute-unit-price 50000 \
-    || { err "Privacy Coin deploy failed"; exit 1; }
-  log "Privacy Coin deployed!"
+    || { err "UTXOpia deploy failed"; exit 1; }
+  log "UTXOpia deployed!"
 
   sleep 3
 
@@ -268,8 +268,8 @@ run_phase_2() {
 
   # Update contracts/config.json
   local tmp=$(mktemp)
-  jq --arg aegis "$PRIVACY_COIN_ID" --arg btclc "$BTCLC_ID" \
-    '.programs.devnet.Privacy Coin = $aegis | .programs.devnet.btc_light_client = $btclc' \
+  jq --arg aegis "$UTXOPIA_ID" --arg btclc "$BTCLC_ID" \
+    '.programs.devnet.UTXOpia = $aegis | .programs.devnet.btc_light_client = $btclc' \
     "$CONFIG_FILE" > "$tmp" && mv "$tmp" "$CONFIG_FILE"
   log "Updated contracts/config.json"
 
@@ -282,10 +282,10 @@ run_phase_2() {
 run_phase_3() {
   phase 3 "Initialize Pool + Register Tokens"
 
-  local PRIVACY_COIN_ID=$(read_state "privacyCoinProgramId")
+  local UTXOPIA_ID=$(read_state "privacyCoinProgramId")
 
   log "Running init-devnet.ts..."
-  local OUTPUT=$(PRIVACY_COIN_PROGRAM_ID="$PRIVACY_COIN_ID" \
+  local OUTPUT=$(UTXOPIA_PROGRAM_ID="$UTXOPIA_ID" \
     RPC_URL="$RPC_URL" \
     KEYPAIR_PATH="$KEYPAIR_PATH" \
     bun run "$ROOT/scripts/init-devnet.ts" 2>&1)
@@ -331,10 +331,10 @@ run_phase_4() {
     return
   fi
 
-  local PRIVACY_COIN_ID=$(read_state "privacyCoinProgramId")
+  local UTXOPIA_ID=$(read_state "privacyCoinProgramId")
 
   log "Registering VK hashes..."
-  PRIVACY_COIN_PROGRAM_ID="$PRIVACY_COIN_ID" \
+  UTXOPIA_PROGRAM_ID="$UTXOPIA_ID" \
     RPC_URL="$RPC_URL" \
     KEYPAIR_PATH="$KEYPAIR_PATH" \
     bun run "$ROOT/scripts/register-vk-hashes.ts" 2>&1
@@ -374,8 +374,8 @@ run_phase_6() {
     return
   fi
 
-  local PRIVACY_COIN_ID=$(read_state "privacyCoinProgramId")
-  if [ -z "$PRIVACY_COIN_ID" ]; then
+  local UTXOPIA_ID=$(read_state "privacyCoinProgramId")
+  if [ -z "$UTXOPIA_ID" ]; then
     warn "privacyCoinProgramId not in state — run earlier phases first"
     save_phase 6
     return
@@ -385,13 +385,13 @@ run_phase_6() {
   (cd "$ROOT/scripts/ika-setup" && bun install >/dev/null 2>&1)
 
   log "Running Ika DKG against Ika devnet (Secp256k1 + Taproot)..."
-  PRIVACY_COIN_PROGRAM_ID="$PRIVACY_COIN_ID" \
+  UTXOPIA_PROGRAM_ID="$UTXOPIA_ID" \
     PAYER_KEYPAIR_PATH="$KEYPAIR_PATH" \
     node --experimental-strip-types --no-warnings \
       "$ROOT/scripts/ika-setup/dkg.ts" --network devnet 2>&1
 
   log "Submitting set_pool_config (disc 2) to pin the dWallet on-chain..."
-  PRIVACY_COIN_PROGRAM_ID="$PRIVACY_COIN_ID" \
+  UTXOPIA_PROGRAM_ID="$UTXOPIA_ID" \
     PAYER_KEYPAIR_PATH="$KEYPAIR_PATH" \
     node --experimental-strip-types --no-warnings \
       "$ROOT/scripts/ika-setup/set-pool-config.ts" --network devnet 2>&1
@@ -413,7 +413,7 @@ run_phase_7() {
 
   # Run env sync
   log "Syncing env files..."
-  PRIVACY_COIN_NETWORK=devnet "$ROOT/scripts/sync-env.sh"
+  UTXOPIA_NETWORK=devnet "$ROOT/scripts/sync-env.sh"
 
   log "Env files synced!"
   log "  backend/.env.devnet"
@@ -456,23 +456,23 @@ run_phase_8() {
   echo "  cd backend && railway up --path-as-root ."
   echo ""
   echo "  Railway env vars to set:"
-  echo "    PRIVACY_COIN_PROGRAM_ID=$(read_state privacyCoinProgramId)"
-  echo "    PRIVACY_COIN_ZKBTC_MINT=$(read_state zkbtcMint)"
+  echo "    UTXOPIA_PROGRAM_ID=$(read_state privacyCoinProgramId)"
+  echo "    UTXOPIA_ZKBTC_MINT=$(read_state zkbtcMint)"
   echo "    BTC_LIGHT_CLIENT_PROGRAM_ID=$(read_state btcLightClientId)"
-  echo "    PRIVACY_COIN_NETWORK=devnet"
+  echo "    UTXOPIA_NETWORK=devnet"
   echo "    POOL_RECEIVE_ADDRESS=$(read_state poolBtcAddress)"
-  echo "    PRIVACY_COIN_SIGNING_MODE=ika"
-  echo "    PRIVACY_COIN_IKA_PROGRAM_ID=$(read_state ika.programId 2>/dev/null || echo)"
-  echo "    PRIVACY_COIN_IKA_DWALLET=$(read_state ika.dwallet 2>/dev/null || echo)"
-  echo "    PRIVACY_COIN_IKA_DWALLET_XONLY_PUBKEY=$(read_state ika.dwalletXOnlyPubkey 2>/dev/null || echo)"
-  echo "    PRIVACY_COIN_IKA_CPI_AUTHORITY_BUMP=$(read_state ika.cpiAuthorityBump 2>/dev/null || echo)"
+  echo "    UTXOPIA_SIGNING_MODE=ika"
+  echo "    UTXOPIA_IKA_PROGRAM_ID=$(read_state ika.programId 2>/dev/null || echo)"
+  echo "    UTXOPIA_IKA_DWALLET=$(read_state ika.dwallet 2>/dev/null || echo)"
+  echo "    UTXOPIA_IKA_DWALLET_XONLY_PUBKEY=$(read_state ika.dwalletXOnlyPubkey 2>/dev/null || echo)"
+  echo "    UTXOPIA_IKA_CPI_AUTHORITY_BUMP=$(read_state ika.cpiAuthorityBump 2>/dev/null || echo)"
   echo "    HEADER_RELAY_ENABLED=true"
   echo "    MEMPOOL_WS_ENABLED=true"
   echo ""
   echo -e "${CYAN}═══ Vercel Frontend ═══${NC}"
   echo ""
   echo "  Env vars to set in Vercel:"
-  echo "    NEXT_PUBLIC_PRIVACY_COIN_PROGRAM_ID=$(read_state privacyCoinProgramId)"
+  echo "    NEXT_PUBLIC_UTXOPIA_PROGRAM_ID=$(read_state privacyCoinProgramId)"
   echo "    NEXT_PUBLIC_ZKBTC_MINT=$(read_state zkbtcMint)"
   echo "    NEXT_PUBLIC_USDC_MINT=$(read_state tUsdcMint)"
   echo "    NEXT_PUBLIC_BACKEND_URL=https://api-aegis.amidoggy.xyz"
@@ -493,7 +493,7 @@ run_phase_8() {
 
 echo -e "${CYAN}"
 echo "  ╔═══════════════════════════════════════════╗"
-echo "  ║  Privacy Coin — Fresh Devnet Deployment          ║"
+echo "  ║  UTXOpia — Fresh Devnet Deployment          ║"
 echo "  ║  Solana devnet + Bitcoin testnet4          ║"
 echo "  ╚═══════════════════════════════════════════╝"
 echo -e "${NC}"
@@ -508,12 +508,12 @@ fi
 if [ "$SKIP_DEPLOY" = true ]; then
   # Use existing program IDs from config.json
   if [ $LAST_PHASE -lt 2 ]; then
-    _PRIVACY_COIN_ID=$(jq -r '.programs.devnet.Aegis' "$CONFIG_FILE")
+    _UTXOPIA_ID=$(jq -r '.programs.devnet.Aegis' "$CONFIG_FILE")
     _BTCLC_ID=$(jq -r '.programs.devnet.btc_light_client' "$CONFIG_FILE")
-    save_state "privacyCoinProgramId" "$_PRIVACY_COIN_ID"
+    save_state "privacyCoinProgramId" "$_UTXOPIA_ID"
     save_state "btcLightClientId" "$_BTCLC_ID"
     log "Using existing program IDs from config.json"
-    log "  Aegis: $_PRIVACY_COIN_ID"
+    log "  Aegis: $_UTXOPIA_ID"
     log "  BTC LC: $_BTCLC_ID"
     save_phase 2
     LAST_PHASE=2
