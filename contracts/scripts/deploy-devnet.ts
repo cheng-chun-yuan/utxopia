@@ -148,7 +148,7 @@ async function fetchTestnet4Block(): Promise<BtcBlock> {
 // =============================================================================
 
 interface DeployResult {
-  privacyCoinProgramId: PublicKey;
+  utxopiaProgramId: PublicKey;
   btcLightClientProgramId: PublicKey;
 }
 
@@ -199,32 +199,32 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
   logSection("Program Deployment");
 
   // Get program IDs from keypairs
-  const pcoinKeypairPath = path.join(TARGET_DIR, "utxopia-keypair.json");
+  const utxopiaKeypairPath = path.join(TARGET_DIR, "utxopia-keypair.json");
   const btclcKeypairPath = path.join(TARGET_DIR, "btc_light_client-keypair.json");
 
-  if (!fs.existsSync(pcoinKeypairPath) || !fs.existsSync(btclcKeypairPath)) {
+  if (!fs.existsSync(utxopiaKeypairPath) || !fs.existsSync(btclcKeypairPath)) {
     throw new Error("Program keypairs not found. Run 'cargo build-sbf' first.");
   }
 
-  const pcoinKeypair = await loadKeypair(pcoinKeypairPath);
+  const utxopiaKeypair = await loadKeypair(utxopiaKeypairPath);
   const btclcKeypair = await loadKeypair(btclcKeypairPath);
 
-  const privacyCoinProgramId = pcoinKeypair.publicKey;
+  const utxopiaProgramId = utxopiaKeypair.publicKey;
   const btcLightClientProgramId = btclcKeypair.publicKey;
 
-  log(`UTXOpia Program ID: ${privacyCoinProgramId.toBase58()}`);
+  log(`UTXOpia Program ID: ${utxopiaProgramId.toBase58()}`);
   log(`BTC Light Client Program ID: ${btcLightClientProgramId.toBase58()}`);
 
   if (skipDeploy) {
     log("Skipping deployment (--skip-deploy or --init-only flag)");
-    return { privacyCoinProgramId, btcLightClientProgramId };
+    return { utxopiaProgramId, btcLightClientProgramId };
   }
 
   // Deploy UTXOpia
   log("Deploying UTXOpia program to devnet...");
   try {
     execSync(
-      `solana program deploy ${TARGET_DIR}/utxopia.so --program-id ${pcoinKeypairPath} -u devnet`,
+      `solana program deploy ${TARGET_DIR}/utxopia.so --program-id ${utxopiaKeypairPath} -u devnet`,
       { stdio: "inherit" }
     );
     log("UTXOpia deployed successfully");
@@ -256,7 +256,7 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
   log("Waiting for programs to be ready...");
   await sleep(5000);
 
-  return { privacyCoinProgramId, btcLightClientProgramId };
+  return { utxopiaProgramId, btcLightClientProgramId };
 }
 
 // =============================================================================
@@ -678,7 +678,7 @@ function saveDevnetConfig(
 
   // Update config.json with devnet values
   config.programs.devnet = {
-    UTXOpia: deployResult.privacyCoinProgramId.toBase58(),
+    UTXOpia: deployResult.utxopiaProgramId.toBase58(),
     btc_light_client: deployResult.btcLightClientProgramId.toBase58(),
   };
 
@@ -690,7 +690,7 @@ function saveDevnetConfig(
     network: "devnet",
     rpcUrl: RPC_URL,
     programs: {
-      UTXOpia: deployResult.privacyCoinProgramId.toBase58(),
+      UTXOpia: deployResult.utxopiaProgramId.toBase58(),
       btcLightClient: deployResult.btcLightClientProgramId.toBase58(),
     },
     accounts: {
@@ -718,7 +718,7 @@ function saveDevnetConfig(
   console.log("Add these to frontend/.env.local:\n");
   console.log(`NEXT_PUBLIC_NETWORK=devnet`);
   console.log(`NEXT_PUBLIC_SOLANA_RPC=https://api.devnet.solana.com`);
-  console.log(`NEXT_PUBLIC_PROGRAM_ID=${deployResult.privacyCoinProgramId.toBase58()}`);
+  console.log(`NEXT_PUBLIC_PROGRAM_ID=${deployResult.utxopiaProgramId.toBase58()}`);
   console.log(`NEXT_PUBLIC_BTC_LIGHT_CLIENT=${deployResult.btcLightClientProgramId.toBase58()}`);
   console.log(`NEXT_PUBLIC_POOL_STATE=${initResult.poolStatePda.toBase58()}`);
   console.log(`NEXT_PUBLIC_COMMITMENT_TREE=${initResult.commitmentTreePda.toBase58()}`);
@@ -794,7 +794,7 @@ async function main() {
   const initResult = await initializeUTXOPIA(
     connection,
     authority,
-    deployResult.privacyCoinProgramId
+    deployResult.utxopiaProgramId
   );
   initResult.btcLightClientPda = btcLightClientPda;
 
@@ -802,7 +802,7 @@ async function main() {
   await addDemoNotes(
     connection,
     authority,
-    deployResult.privacyCoinProgramId,
+    deployResult.utxopiaProgramId,
     initResult.poolStatePda,
     initResult.commitmentTreePda,
     initResult.zkbtcMint,
@@ -816,7 +816,7 @@ async function main() {
   logSection("Deployment Complete!");
 
   console.log("Summary:");
-  console.log(`  UTXOpia Program:       ${deployResult.privacyCoinProgramId.toBase58()}`);
+  console.log(`  UTXOpia Program:       ${deployResult.utxopiaProgramId.toBase58()}`);
   console.log(`  BTC Light Client:     ${deployResult.btcLightClientProgramId.toBase58()}`);
   console.log(`  Pool State PDA:       ${initResult.poolStatePda.toBase58()}`);
   console.log(`  Commitment Tree PDA:  ${initResult.commitmentTreePda.toBase58()}`);

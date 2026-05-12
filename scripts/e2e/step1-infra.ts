@@ -143,18 +143,18 @@ async function main() {
 
   // 2. Get program keypairs for IDs
   const targetDir = path.join(CONTRACTS_DIR, "target/deploy");
-  const pcoinKpPath = path.join(targetDir, "utxopia-keypair.json");
+  const utxopiaKpPath = path.join(targetDir, "utxopia-keypair.json");
   const btclcKpPath = path.join(targetDir, "btc_light_client-keypair.json");
   const chadbufferKpPath = path.join(CONTRACTS_DIR, "programs/chadbuffer/chadbuffer-keypair.json");
   const chadbufferSoPath = path.join(CONTRACTS_DIR, "programs/chadbuffer/chadbuffer.so");
 
-  if (!fs.existsSync(pcoinKpPath) || !fs.existsSync(btclcKpPath)) {
+  if (!fs.existsSync(utxopiaKpPath) || !fs.existsSync(btclcKpPath)) {
     throw new Error("Program keypairs not found. Run 'cargo build-sbf --features devnet' first.");
   }
 
-  const pcoinKp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(pcoinKpPath, "utf-8"))));
+  const utxopiaKp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(utxopiaKpPath, "utf-8"))));
   const btclcKp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(btclcKpPath, "utf-8"))));
-  const UTXOPIA = pcoinKp.publicKey;
+  const UTXOPIA = utxopiaKp.publicKey;
   const BTC_LC = btclcKp.publicKey;
 
   let chadbufferId: PublicKey;
@@ -171,7 +171,7 @@ async function main() {
 
   // 3. Start Surfpool (replaces solana-test-validator)
   log("Starting Surfpool...");
-  const pcoinSo = path.join(targetDir, "utxopia.so");
+  const utxopiaSo = path.join(targetDir, "utxopia.so");
   const btclcSo = path.join(targetDir, "btc_light_client.so");
   const BTC_LC_EFFECTIVE = BTC_LC;
 
@@ -474,7 +474,7 @@ async function main() {
 
   // 13. Write state
   const state: LocalnetState = {
-    privacyCoinProgramId: UTXOPIA.toBase58(),
+    utxopiaProgramId: UTXOPIA.toBase58(),
     btcLightClientId: BTC_LC_EFFECTIVE.toBase58(),
     chadbufferId: chadbufferId.toBase58(),
     zkbtcMint: zkbtcMint.toBase58(),

@@ -15,7 +15,7 @@ export type NetworkId = "devnet" | "testnet" | "mainnet" | "localnet";
 export interface NetworkConfig {
   solana: {
     rpcUrl: string;
-    privacyCoinProgramId: string;
+    utxopiaProgramId: string;
     btcLightClientId: string;
     chadbufferId: string;
   };

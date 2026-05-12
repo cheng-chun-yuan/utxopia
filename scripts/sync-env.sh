@@ -50,7 +50,7 @@ jval() {
 
 # ─── Read all values from state file ──────────────────────────────────────────
 
-PROGRAM_ID=$(jval privacyCoinProgramId)
+PROGRAM_ID=$(jval utxopiaProgramId)
 BTC_LC_ID=$(jval btcLightClientId)
 ZKBTC_MINT=$(jval zkbtcMint)
 POOL_STATE=$(jval poolState)
@@ -235,7 +235,7 @@ else:
 networks["$NETWORK"] = {
     "solana": {
         "rpcUrl": "$SOLANA_RPC",
-        "privacyCoinProgramId": "$PROGRAM_ID",
+        "utxopiaProgramId": "$PROGRAM_ID",
         "btcLightClientId": "$BTC_LC_ID",
         "chadbufferId": "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF"
     },

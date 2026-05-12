@@ -46,7 +46,7 @@ if (!programIdStr) {
   console.error("error: UTXOPIA_PROGRAM_ID required");
   process.exit(1);
 }
-const privacyCoinProgramId = new PublicKey(programIdStr);
+const utxopiaProgramId = new PublicKey(programIdStr);
 
 const payerPath = process.env.PAYER_KEYPAIR_PATH;
 if (!payerPath || !existsSync(payerPath)) {
@@ -70,7 +70,7 @@ console.log("\n═══ Ika dWallet DKG (Secp256k1 + Taproot) ═══");
 console.log(`Network:           ${NETWORK}`);
 console.log(`Solana RPC:        ${RPC_URL}`);
 console.log(`Ika program:       ${IKA_PROGRAM_ID.toBase58()}`);
-console.log(`UTXOpia pid:  ${privacyCoinProgramId.toBase58()}`);
+console.log(`UTXOpia pid:  ${utxopiaProgramId.toBase58()}`);
 console.log(`Payer:             ${payer.publicKey.toBase58()}`);
 console.log(`State file:        ${STATE_FILE}`);
 console.log();
@@ -89,7 +89,7 @@ const result = await setupDWallet(
   connection,
   payer,
   IKA_PROGRAM_ID,
-  privacyCoinProgramId,
+  utxopiaProgramId,
   process.env.IKA_GRPC_URL ?? "pre-alpha-dev-1.ika.ika-network.net:443",
   "Secp256k1",
 );

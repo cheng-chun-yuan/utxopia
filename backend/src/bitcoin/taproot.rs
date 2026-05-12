@@ -92,7 +92,7 @@ impl PoolKeys {
 
                 // Use environment-specific seed (not fully deterministic)
                 let seed_input = format!(
-                    "pcoin_devnet_key_{}",
+                    "utxopia_devnet_key_{}",
                     env::var("HOSTNAME").unwrap_or_else(|_| "local".to_string())
                 );
                 let seed = sha256(seed_input.as_bytes());

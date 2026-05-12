@@ -21,7 +21,7 @@ import { PublicKey } from "@solana/web3.js";
 import { getHeliusConnection } from "./helius-server";
 
 // UTXOpia Program ID from SDK
-const getUTXOpiaProgramId = () => new PublicKey(getConfig().privacyCoinProgramId);
+const getUTXOpiaProgramId = () => new PublicKey(getConfig().utxopiaProgramId);
 
 // Storage path for the commitment index
 const DATA_DIR = process.cwd() + "/data";

@@ -135,7 +135,7 @@ const TEST_BTC_BLOCK = {
 // =============================================================================
 
 interface DeployResult {
-  privacyCoinProgramId: PublicKey;
+  utxopiaProgramId: PublicKey;
   btcLightClientProgramId: PublicKey;
   chadbufferProgramId: PublicKey;
   groth16VerifierProgramId: PublicKey;
@@ -188,17 +188,17 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
   logSection("Program Deployment");
 
   // Get program IDs from keypairs
-  const pcoinKeypairPath = path.join(TARGET_DIR, "utxopia-keypair.json");
+  const utxopiaKeypairPath = path.join(TARGET_DIR, "utxopia-keypair.json");
   const btclcKeypairPath = path.join(TARGET_DIR, "btc_light_client-keypair.json");
   const chadbufferKeypairPath = path.join(CONTRACTS_DIR, "programs/chadbuffer/chadbuffer-keypair.json");
   const groth16KeypairPath = path.join(TARGET_DIR, "groth16_verifier-keypair.json");
   const chadbufferSoPath = path.join(CONTRACTS_DIR, "programs/chadbuffer/chadbuffer.so");
 
-  if (!fs.existsSync(pcoinKeypairPath) || !fs.existsSync(btclcKeypairPath)) {
+  if (!fs.existsSync(utxopiaKeypairPath) || !fs.existsSync(btclcKeypairPath)) {
     throw new Error("Program keypairs not found. Run 'cargo build-sbf' first.");
   }
 
-  const pcoinKeypair = await loadKeypair(pcoinKeypairPath);
+  const utxopiaKeypair = await loadKeypair(utxopiaKeypairPath);
   const btclcKeypair = await loadKeypair(btclcKeypairPath);
 
   // Load chadbuffer and groth16 keypairs
@@ -220,19 +220,19 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
     groth16Keypair = Keypair.generate();
   }
 
-  const privacyCoinProgramId = pcoinKeypair.publicKey;
+  const utxopiaProgramId = utxopiaKeypair.publicKey;
   const btcLightClientProgramId = btclcKeypair.publicKey;
   const chadbufferProgramId = chadbufferKeypair.publicKey;
   const groth16VerifierProgramId = groth16Keypair.publicKey;
 
-  log(`UTXOpia Program ID: ${privacyCoinProgramId.toBase58()}`);
+  log(`UTXOpia Program ID: ${utxopiaProgramId.toBase58()}`);
   log(`BTC Light Client Program ID: ${btcLightClientProgramId.toBase58()}`);
   log(`ChadBuffer Program ID: ${chadbufferProgramId.toBase58()}`);
   log(`Groth16 Verifier Program ID: ${groth16VerifierProgramId.toBase58()}`);
 
   if (skipDeploy) {
     log("Skipping deployment (--skip-deploy flag)");
-    return { privacyCoinProgramId, btcLightClientProgramId, chadbufferProgramId, groth16VerifierProgramId };
+    return { utxopiaProgramId, btcLightClientProgramId, chadbufferProgramId, groth16VerifierProgramId };
   }
 
   // Deploy via surfnet_writeProgram RPC (no Solana CLI needed)
@@ -255,7 +255,7 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
 
   // Deploy UTXOpia
   log("Deploying UTXOpia program...");
-  await deployViaSurfpool(privacyCoinProgramId.toBase58(), `${TARGET_DIR}/utxopia.so`, "UTXOpia");
+  await deployViaSurfpool(utxopiaProgramId.toBase58(), `${TARGET_DIR}/utxopia.so`, "UTXOpia");
 
   // Deploy BTC Light Client
   log("Deploying BTC Light Client program...");
@@ -290,7 +290,7 @@ async function deployPrograms(skipDeploy: boolean): Promise<DeployResult> {
   log("Waiting for programs to be ready...");
   await sleep(3000);
 
-  return { privacyCoinProgramId, btcLightClientProgramId, chadbufferProgramId, groth16VerifierProgramId };
+  return { utxopiaProgramId, btcLightClientProgramId, chadbufferProgramId, groth16VerifierProgramId };
 }
 
 // =============================================================================
@@ -710,7 +710,7 @@ function saveLocalnetConfig(
 
   // Update config.json with localnet values
   config.programs.localnet = {
-    UTXOpia: deployResult.privacyCoinProgramId.toBase58(),
+    UTXOpia: deployResult.utxopiaProgramId.toBase58(),
     btc_light_client: deployResult.btcLightClientProgramId.toBase58(),
     chadbuffer: deployResult.chadbufferProgramId.toBase58(),
     groth16_verifier: deployResult.groth16VerifierProgramId.toBase58(),
@@ -724,7 +724,7 @@ function saveLocalnetConfig(
     network: "localnet",
     rpcUrl: RPC_URL,
     programs: {
-      UTXOpia: deployResult.privacyCoinProgramId.toBase58(),
+      UTXOpia: deployResult.utxopiaProgramId.toBase58(),
       btcLightClient: deployResult.btcLightClientProgramId.toBase58(),
       chadbuffer: deployResult.chadbufferProgramId.toBase58(),
       groth16Verifier: deployResult.groth16VerifierProgramId.toBase58(),
@@ -822,7 +822,7 @@ async function main() {
   const initResult = await initializeUTXOPIA(
     connection,
     authority,
-    deployResult.privacyCoinProgramId
+    deployResult.utxopiaProgramId
   );
   initResult.btcLightClientPda = btcLightClientPda;
 
@@ -833,7 +833,7 @@ async function main() {
     await addDemoNotes(
       connection,
       authority,
-      deployResult.privacyCoinProgramId,
+      deployResult.utxopiaProgramId,
       initResult.poolStatePda,
       initResult.commitmentTreePda,
       initResult.zkbtcMint,
@@ -850,7 +850,7 @@ async function main() {
   logSection("Deployment Complete!");
 
   console.log("Summary:");
-  console.log(`  UTXOpia Program:       ${deployResult.privacyCoinProgramId.toBase58()}`);
+  console.log(`  UTXOpia Program:       ${deployResult.utxopiaProgramId.toBase58()}`);
   console.log(`  BTC Light Client:     ${deployResult.btcLightClientProgramId.toBase58()}`);
   console.log(`  ChadBuffer:           ${deployResult.chadbufferProgramId.toBase58()}`);
   console.log(`  Groth16 Verifier:   ${deployResult.groth16VerifierProgramId.toBase58()}`);

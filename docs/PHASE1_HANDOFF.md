@@ -34,7 +34,7 @@ This is the canonical acceptance gate. Run it whenever the Ika devnet is reachab
 
 ```bash
 # 1. Set up payer + program
-export UTXOPIA_PROGRAM_ID=$(jq -r .privacyCoinProgramId scripts/e2e/localnet-state.json)
+export UTXOPIA_PROGRAM_ID=$(jq -r .utxopiaProgramId scripts/e2e/localnet-state.json)
 export PAYER_KEYPAIR_PATH=~/.config/solana/id.json
 solana airdrop 5 --keypair $PAYER_KEYPAIR_PATH  # devnet only
 

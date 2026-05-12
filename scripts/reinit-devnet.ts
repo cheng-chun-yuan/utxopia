@@ -116,7 +116,7 @@ async function main() {
 
   // 4. Save state
   const state: ScriptState = {
-    privacyCoinProgramId: programId.toBase58(),
+    utxopiaProgramId: programId.toBase58(),
     btcLightClientId: existingState.btcLightClientId,
     zkbtcMint: zkbtcMint.toBase58(),
     poolState: poolState.toBase58(),

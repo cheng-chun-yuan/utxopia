@@ -525,7 +525,7 @@ export class UTXOpiaClient {
       this._eventClient = new EventClient({
         backendUrl: this._backendUrl,
         solanaRpcUrl: config.solanaRpcUrl || "",
-        programId: config.privacyCoinProgramId,
+        programId: config.utxopiaProgramId,
       });
     }
     return this._eventClient;

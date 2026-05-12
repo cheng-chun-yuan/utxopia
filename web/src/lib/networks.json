@@ -2,7 +2,7 @@
   "devnet": {
     "solana": {
       "rpcUrl": "https://api.devnet.solana.com",
-      "privacyCoinProgramId": "G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy",
+      "utxopiaProgramId": "G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy",
       "btcLightClientId": "C8JoSKzondM7X1ESwrBSodGMrXWtEWNmawXyjh9zEWJZ",
       "chadbufferId": "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF"
     },
@@ -32,7 +32,7 @@
   "testnet": {
     "solana": {
       "rpcUrl": "https://api.testnet.solana.com",
-      "privacyCoinProgramId": "",
+      "utxopiaProgramId": "",
       "btcLightClientId": "",
       "chadbufferId": ""
     },
@@ -55,7 +55,7 @@
   "mainnet": {
     "solana": {
       "rpcUrl": "https://api.mainnet-beta.solana.com",
-      "privacyCoinProgramId": "",
+      "utxopiaProgramId": "",
       "btcLightClientId": "",
       "chadbufferId": ""
     },
@@ -78,7 +78,7 @@
   "localnet": {
     "solana": {
       "rpcUrl": "http://localhost:8899",
-      "privacyCoinProgramId": "5DCks2djL9orkUwHS7pcroSXiuMuzEmvAxg3VR831eqK",
+      "utxopiaProgramId": "5DCks2djL9orkUwHS7pcroSXiuMuzEmvAxg3VR831eqK",
       "btcLightClientId": "C8JoSKzondM7X1ESwrBSodGMrXWtEWNmawXyjh9zEWJZ",
       "chadbufferId": "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF"
     },

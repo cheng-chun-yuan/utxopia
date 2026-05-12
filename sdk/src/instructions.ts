@@ -189,7 +189,7 @@ export function buildShieldInstruction(options: ShieldInstructionOptions): Instr
   });
 
   return {
-    programAddress: config.privacyCoinProgramId,
+    programAddress: config.utxopiaProgramId,
     accounts: [
       { address: options.accounts.user, role: AccountRole.WRITABLE_SIGNER },
       { address: options.accounts.userTokenAccount, role: AccountRole.WRITABLE },
@@ -322,7 +322,7 @@ export function buildRedemptionRequestInstruction(
   ];
 
   return {
-    programAddress: config.privacyCoinProgramId,
+    programAddress: config.utxopiaProgramId,
     accounts,
     data,
   };
@@ -503,7 +503,7 @@ export function buildCompleteRedemptionInstruction(
   );
 
   return {
-    programAddress: config.privacyCoinProgramId,
+    programAddress: config.utxopiaProgramId,
     accounts,
     data,
   };
@@ -676,7 +676,7 @@ export function buildTransactInstruction(options: TransactInstructionOptions): I
   }
 
   return {
-    programAddress: config.privacyCoinProgramId,
+    programAddress: config.utxopiaProgramId,
     accounts,
     data,
   };
@@ -1048,7 +1048,7 @@ export function buildUnshieldInstruction(options: UnshieldInstructionOptions): I
   }
 
   return {
-    programAddress: config.privacyCoinProgramId,
+    programAddress: config.utxopiaProgramId,
     accounts,
     data,
   };
@@ -1121,7 +1121,7 @@ export function buildProposePoolUpdateInstruction(options: ProposePoolUpdateOpti
   );
 
   return {
-    programAddress: config.privacyCoinProgramId,
+    programAddress: config.utxopiaProgramId,
     accounts: [
       { address: options.accounts.poolState, role: AccountRole.WRITABLE },
       { address: options.accounts.authority, role: AccountRole.WRITABLE_SIGNER },
@@ -1156,7 +1156,7 @@ export function buildExecutePoolUpdateInstruction(options: ExecutePoolUpdateOpti
   const config = getConfig();
 
   return {
-    programAddress: config.privacyCoinProgramId,
+    programAddress: config.utxopiaProgramId,
     accounts: [
       { address: options.accounts.poolState, role: AccountRole.WRITABLE },
     ],
@@ -1192,7 +1192,7 @@ export function buildCancelPoolUpdateInstruction(options: CancelPoolUpdateOption
   const config = getConfig();
 
   return {
-    programAddress: config.privacyCoinProgramId,
+    programAddress: config.utxopiaProgramId,
     accounts: [
       { address: options.accounts.poolState, role: AccountRole.WRITABLE },
       { address: options.accounts.authority, role: AccountRole.WRITABLE_SIGNER },
@@ -1237,7 +1237,7 @@ export function buildRotateTreeInstruction(options: RotateTreeOptions): Instruct
   const config = getConfig();
 
   return {
-    programAddress: config.privacyCoinProgramId,
+    programAddress: config.utxopiaProgramId,
     accounts: [
       { address: options.accounts.poolState, role: AccountRole.WRITABLE },
       { address: options.accounts.currentTree, role: AccountRole.WRITABLE },

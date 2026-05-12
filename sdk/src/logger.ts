@@ -1,7 +1,7 @@
 /**
  * Conditional debug logger for UTXOPIA SDK.
  *
- * Set `UTXOPIA_DEBUG=1` (Node.js) or `localStorage.privacyCoinDebug = "1"` (browser)
+ * Set `UTXOPIA_DEBUG=1` (Node.js) or `localStorage.utxopiaDebug = "1"` (browser)
  * to enable debug output. All logs are suppressed by default.
  */
 
@@ -18,7 +18,7 @@ function isEnabled(): boolean {
   } catch { /* not Node */ }
   try {
     // Browser
-    if (typeof localStorage !== "undefined" && localStorage.getItem("privacyCoinDebug") === "1") {
+    if (typeof localStorage !== "undefined" && localStorage.getItem("utxopiaDebug") === "1") {
       _enabled = true;
       return true;
     }

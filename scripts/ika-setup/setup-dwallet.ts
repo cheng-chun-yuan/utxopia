@@ -56,7 +56,7 @@ if (!programIdStr) {
   console.error("error: UTXOPIA_PROGRAM_ID required");
   process.exit(1);
 }
-const privacyCoinProgramId = new PublicKey(programIdStr);
+const utxopiaProgramId = new PublicKey(programIdStr);
 
 const payerPath = process.env.PAYER_KEYPAIR_PATH;
 if (!payerPath || !existsSync(payerPath)) {
@@ -80,7 +80,7 @@ console.log("\n═══ Ika dWallet Setup ═══");
 console.log(`Network:           ${NETWORK}`);
 console.log(`Solana RPC:        ${RPC_URL}`);
 console.log(`Ika program:       ${IKA_PROGRAM_ID.toBase58()}`);
-console.log(`UTXOpia pid:  ${privacyCoinProgramId.toBase58()}`);
+console.log(`UTXOpia pid:  ${utxopiaProgramId.toBase58()}`);
 console.log(`Payer:             ${payer.publicKey.toBase58()}`);
 console.log(`State file:        ${STATE_FILE}`);
 console.log();
@@ -89,7 +89,7 @@ console.log();
 
 const [cpiAuthorityPda, cpiAuthorityBump] = PublicKey.findProgramAddressSync(
   [CPI_AUTHORITY_SEED],
-  privacyCoinProgramId
+  utxopiaProgramId
 );
 console.log(
   `CPI authority PDA: ${cpiAuthorityPda.toBase58()} (bump ${cpiAuthorityBump})`
@@ -105,7 +105,7 @@ console.log(
 //
 //   import { setupDWallet } from "../../vendor/ika-pre-alpha/.../ika-setup";
 //   const dwallet = await setupDWallet(
-//     connection, payer, IKA_PROGRAM_ID, privacyCoinProgramId,
+//     connection, payer, IKA_PROGRAM_ID, utxopiaProgramId,
 //     process.env.IKA_GRPC_URL ?? "pre-alpha-dev-1.ika.ika-network.net:443",
 //   );
 //
@@ -162,7 +162,7 @@ console.log(
 );
 console.log("  data: [24, ...new_authority(32)]");
 console.log("  accounts:");
-console.log(`    [0] caller_program = ${privacyCoinProgramId.toBase58()} (read, executable)`);
+console.log(`    [0] caller_program = ${utxopiaProgramId.toBase58()} (read, executable)`);
 console.log(`    [1] cpi_authority  = ${cpiAuthorityPda.toBase58()} (read, signer via PDA)`);
 console.log(`    [2] dwallet        = ${dwalletPda.toBase58()} (writable)`);
 console.log(`  new_authority = ${cpiAuthorityPda.toBase58()}`);

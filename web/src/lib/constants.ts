@@ -12,7 +12,7 @@ let _initPromise: Promise<void> | null = null;
 export function ensureSdkInit(): Promise<void> {
   if (!_initPromise) {
     _initPromise = initConfig({
-      privacyCoinProgramId: networkCfg.solana.privacyCoinProgramId,
+      utxopiaProgramId: networkCfg.solana.utxopiaProgramId,
       zkbtcMint: networkCfg.tokens.zkbtcMint,
       solanaRpcUrl: networkCfg.solana.rpcUrl,
       groupPubKey: networkCfg.bitcoin.groupPubkey,
@@ -40,7 +40,7 @@ export const MIN_WITHDRAWAL_SATS = 1_000;
 export const BTC_ADDRESS_REGEX = /^(bc1|[13]|tb1)[a-zA-HJ-NP-Z0-9]{25,62}$/;
 
 // Dynamic getters — call after ensureSdkInit() resolves
-export const getUTXOpiaProgramId = () => getConfig().privacyCoinProgramId;
+export const getUTXOpiaProgramId = () => getConfig().utxopiaProgramId;
 export const getBtcLightClientId = () => getConfig().btcLightClientProgramId;
 export const getPoolStateAddress = () => getConfig().poolStatePda;
 export const getCommitmentTreeAddress = () => getConfig().commitmentTreePda;

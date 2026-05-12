@@ -111,7 +111,7 @@ async function registerTokenConfig(
 async function main() {
   const state = loadState();
   const authority = loadAuthority();
-  const UTXOPIA = new PublicKey(state.privacyCoinProgramId);
+  const UTXOPIA = new PublicKey(state.utxopiaProgramId);
   const [poolState] = derivePoolStatePDA(UTXOPIA);
 
   // tUSDC (6 decimals)

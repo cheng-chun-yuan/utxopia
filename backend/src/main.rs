@@ -147,9 +147,9 @@ fn create_service(config: RedemptionConfig) -> RedemptionService {
 
 /// Create redemption service with FROST threshold signing
 fn create_frost_service(config: RedemptionConfig) -> Result<RedemptionService, String> {
-    let pcoin_config = UTXOpiaConfig::from_env().map_err(|e| e.to_string())?;
+    let utxopia_config = UTXOpiaConfig::from_env().map_err(|e| e.to_string())?;
 
-    let frost_client = pcoin_config
+    let frost_client = utxopia_config
         .signing
         .frost_client()
         .ok_or("signing mode is not FROST")?;
@@ -165,7 +165,7 @@ fn create_frost_service(config: RedemptionConfig) -> Result<RedemptionService, S
         .map_err(|e| format!("invalid group pubkey: {}", e))?;
 
     let signer = MpcSigner::new(frost_client, group_pubkey);
-    let mut sol_client = zkbtc::solana::client::SolClient::from_config(&pcoin_config)
+    let mut sol_client = zkbtc::solana::client::SolClient::from_config(&utxopia_config)
         .map_err(|e| format!("SolClient config error: {}", e))?;
 
     // Set payer keypair for on-chain transactions (mark_processing, complete_redemption)
@@ -192,9 +192,9 @@ fn create_frost_service(config: RedemptionConfig) -> Result<RedemptionService, S
 /// then asynchronously fills a Sign PDA which the IkaSigner polls for. See
 /// `backend/src/redemption/signer.rs::IkaSigner` for the polling contract.
 fn create_ika_service(config: RedemptionConfig) -> Result<RedemptionService, String> {
-    let pcoin_config = UTXOpiaConfig::from_env().map_err(|e| e.to_string())?;
+    let utxopia_config = UTXOpiaConfig::from_env().map_err(|e| e.to_string())?;
 
-    let (program_id_str, dwallet_str, dwallet_xonly_hex) = match &pcoin_config.signing {
+    let (program_id_str, dwallet_str, dwallet_xonly_hex) = match &utxopia_config.signing {
         zkbtc::config::SigningMode::Ika {
             program_id,
             dwallet,
@@ -216,13 +216,13 @@ fn create_ika_service(config: RedemptionConfig) -> Result<RedemptionService, Str
         .map_err(|e| format!("invalid IKA dwallet xonly pubkey: {}", e))?;
 
     let signer = IkaSigner::new(
-        pcoin_config.solana_rpc.clone(),
+        utxopia_config.solana_rpc.clone(),
         ika_program_id,
         ika_dwallet,
         xonly,
     );
 
-    let mut sol_client = zkbtc::solana::client::SolClient::from_config(&pcoin_config)
+    let mut sol_client = zkbtc::solana::client::SolClient::from_config(&utxopia_config)
         .map_err(|e| format!("SolClient config error: {}", e))?;
 
     if let Ok(keypair_val) = env::var("RELAYER_KEYPAIR").or_else(|_| env::var("VERIFIER_KEYPAIR")) {
@@ -694,9 +694,9 @@ fn configure_frost_sweeper(
     service: deposit_tracker::DepositTrackerService,
     _config: &TrackerConfig,
 ) -> Result<deposit_tracker::DepositTrackerService, String> {
-    let pcoin_config = UTXOpiaConfig::from_env().map_err(|e| e.to_string())?;
+    let utxopia_config = UTXOpiaConfig::from_env().map_err(|e| e.to_string())?;
 
-    let frost_client = pcoin_config
+    let frost_client = utxopia_config
         .signing
         .frost_client()
         .ok_or("signing mode is not FROST")?;
@@ -710,7 +710,7 @@ fn configure_frost_sweeper(
     let group_pubkey = bitcoin::XOnlyPublicKey::from_slice(&group_pubkey_bytes)
         .map_err(|e| format!("invalid group pubkey: {}", e))?;
 
-    let network = pcoin_config.network.bitcoin_network();
+    let network = utxopia_config.network.bitcoin_network();
 
     Ok(service.with_frost_sweeper(frost_client, group_pubkey, network))
 }

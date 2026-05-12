@@ -110,7 +110,7 @@ async function getTreeAndRoot(): Promise<{
           }));
         },
       },
-      getConfig().privacyCoinProgramId,
+      getConfig().utxopiaProgramId,
       maxLeafIndex !== undefined ? { maxLeafIndex } : undefined
     );
 

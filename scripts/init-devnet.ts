@@ -38,7 +38,7 @@ function resolveProgramId(): PublicKey {
   const f = getStateFilePath();
   if (fs.existsSync(f)) {
     const s = JSON.parse(fs.readFileSync(f, "utf-8"));
-    if (s.privacyCoinProgramId) return new PublicKey(s.privacyCoinProgramId);
+    if (s.utxopiaProgramId) return new PublicKey(s.utxopiaProgramId);
   }
   throw new Error("UTXOPIA_PROGRAM_ID required (env var or state file)");
 }

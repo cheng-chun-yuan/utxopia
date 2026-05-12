@@ -131,7 +131,7 @@ export async function getTokenConfig(
   mintAddress: Uint8Array,
 ): Promise<TokenConfigData | null> {
   const config = getConfig();
-  const [configPda] = await deriveTokenConfigPDA(mintAddress, config.privacyCoinProgramId);
+  const [configPda] = await deriveTokenConfigPDA(mintAddress, config.utxopiaProgramId);
 
   const accountInfo = await rpc.getAccountInfo(configPda, { encoding: "base64" });
   if (!accountInfo?.value?.data) return null;
@@ -171,7 +171,7 @@ export async function fetchSupportedTokens(
 ): Promise<TokenConfigData[]> {
   const config = getConfig();
 
-  const accounts = await rpc.getProgramAccounts(config.privacyCoinProgramId, {
+  const accounts = await rpc.getProgramAccounts(config.utxopiaProgramId, {
     filters: [
       { dataSize: TOKEN_CONFIG_LEN },
       { memcmp: { offset: 0, bytes: Buffer.from([TOKEN_CONFIG_DISCRIMINATOR]).toString("base64") } },

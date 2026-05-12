@@ -101,7 +101,7 @@ async function submitHeaders(
 async function main() {
   const state = loadState();
   const authority = loadAuthority();
-  const UTXOPIA = new PublicKey(state.privacyCoinProgramId);
+  const UTXOPIA = new PublicKey(state.utxopiaProgramId);
   const BTC_LC = new PublicKey(state.btcLightClientId);
   const CHADBUFFER_ID = new PublicKey(state.chadbufferId);
   const zkbtcMint = new PublicKey(state.zkbtcMint);

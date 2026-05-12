@@ -128,7 +128,7 @@ export function getEventClient(): EventClient {
       backendUrl,
       backendWsUrl: wsUrl,
       solanaRpcUrl: getSolanaRpcUrl(),
-      programId: UTXOpiaClient.instance().config.privacyCoinProgramId,
+      programId: UTXOpiaClient.instance().config.utxopiaProgramId,
       commitmentTreeAddress: UTXOpiaClient.instance().config.commitmentTreePda,
     });
   }
@@ -468,15 +468,15 @@ export const useUTXOpiaStore = create<UTXOpiaState>((set, get) => ({
         lastAnnouncementCount = announcements.length;
 
         // Build token list with computed tokenIds for multi-token scanning
-        const pcoinClient = UTXOpiaClient.instance();
-        const config = pcoinClient.config;
+        const utxopiaClient = UTXOpiaClient.instance();
+        const config = utxopiaClient.config;
         const tokensToScan: { symbol: string; tokenId: bigint }[] = [];
         for (const token of VAULT_TOKENS) {
           try {
             let mintAddr = token.mint;
             if (!mintAddr && token.symbol === "zkBTC") mintAddr = config.zkbtcMint;
             if (!mintAddr) continue; // skip tokens without mint addresses
-            tokensToScan.push({ symbol: token.shieldedSymbol, tokenId: pcoinClient.getTokenId(mintAddr) });
+            tokensToScan.push({ symbol: token.shieldedSymbol, tokenId: utxopiaClient.getTokenId(mintAddr) });
           } catch (err) { console.error("[UTXOpiaStore] invalid mint for token:", token.symbol, err); }
         }
 
@@ -519,7 +519,7 @@ export const useUTXOpiaStore = create<UTXOpiaState>((set, get) => ({
 
         // Compute nullifier hashes (hex) for each note via UTXOpiaClient
         const nullifierData = scanned.map((note) => {
-          const hashBytes = pcoinClient.computeNullifier(note);
+          const hashBytes = utxopiaClient.computeNullifier(note);
           const hashHex = Buffer.from(hashBytes).toString("hex");
           return { note, hashHex };
         });

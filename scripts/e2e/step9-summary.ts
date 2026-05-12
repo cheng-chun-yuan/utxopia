@@ -26,7 +26,7 @@ stepHeader(9, "Summary");
 
 async function main() {
   const state = loadState();
-  const UTXOPIA = new PublicKey(state.privacyCoinProgramId);
+  const UTXOPIA = new PublicKey(state.utxopiaProgramId);
   const [poolState] = derivePoolStatePDA(UTXOPIA);
   const [commitmentTree] = deriveCommitmentTreePDA(UTXOPIA);
   const zkbtcMint = new PublicKey(state.zkbtcMint);

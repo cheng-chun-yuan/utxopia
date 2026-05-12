@@ -139,7 +139,7 @@ describe("UTXOpiaClient", () => {
     it("exposes network config", async () => {
       const client = await UTXOpiaClient.init();
       const config = client.config;
-      expect(config).toHaveProperty("privacyCoinProgramId");
+      expect(config).toHaveProperty("utxopiaProgramId");
       expect(config).toHaveProperty("zkbtcMint");
       expect(config).toHaveProperty("solanaRpcUrl");
     });

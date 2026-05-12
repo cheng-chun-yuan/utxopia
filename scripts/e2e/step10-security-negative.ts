@@ -80,7 +80,7 @@ async function testCompleteWithoutMarkProcessing() {
 
   const state = loadState();
   const authority = loadAuthority();
-  const UTXOPIA = new PublicKey(state.privacyCoinProgramId);
+  const UTXOPIA = new PublicKey(state.utxopiaProgramId);
   const BTC_LC = new PublicKey(state.btcLightClientId);
   const CHADBUFFER_ID = new PublicKey(state.chadbufferId);
   const zkbtcMint = new PublicKey(state.zkbtcMint);
@@ -194,7 +194,7 @@ async function testCompleteWithWrongTxid() {
 
   const state = loadState();
   const authority = loadAuthority();
-  const UTXOPIA = new PublicKey(state.privacyCoinProgramId);
+  const UTXOPIA = new PublicKey(state.utxopiaProgramId);
   const BTC_LC = new PublicKey(state.btcLightClientId);
   const zkbtcMint = new PublicKey(state.zkbtcMint);
   const [poolState] = derivePoolStatePDA(UTXOPIA);
@@ -276,7 +276,7 @@ async function testDuplicateDeposit() {
 
   const state = loadState();
   const authority = loadAuthority();
-  const UTXOPIA = new PublicKey(state.privacyCoinProgramId);
+  const UTXOPIA = new PublicKey(state.utxopiaProgramId);
   const BTC_LC = new PublicKey(state.btcLightClientId);
   const CHADBUFFER_ID = new PublicKey(state.chadbufferId);
   const zkbtcMint = new PublicKey(state.zkbtcMint);

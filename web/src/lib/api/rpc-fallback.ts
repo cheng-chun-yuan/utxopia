@@ -7,7 +7,7 @@
 
 import { getNetworkConfig } from "../network-config";
 import { SOLANA_RPC_FALLBACK_URL } from "./constants";
-const UTXOPIA_PROGRAM_ID = getNetworkConfig().solana.privacyCoinProgramId;
+const UTXOPIA_PROGRAM_ID = getNetworkConfig().solana.utxopiaProgramId;
 const COMMITMENT_TREE_PDA = "CbaDvGVVQqskcu4cz6Fsu3i2q8eWG8GjeqpZiKgPiCaW";
 
 // Rent-exempt minimum for a 1-byte account (NullifierRecord)

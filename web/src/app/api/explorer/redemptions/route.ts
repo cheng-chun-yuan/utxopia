@@ -116,7 +116,7 @@ export async function GET() {
     const [redemptions, allResp, poolStateResp, transfersResp] = await Promise.all([
       createServerRpc().then(rpc => fetchExplorerRedemptions(
         rpc,
-        getConfig().privacyCoinProgramId,
+        getConfig().utxopiaProgramId,
       )).catch((e) => {
         console.warn("[Redemptions] PDA scan failed:", e.message);
         return [];

@@ -36,7 +36,7 @@ const skipChain = args.has("--skip-chain");
 const keepServices = args.has("--keep-services");
 
 interface LocalnetState {
-  privacyCoinProgramId: string;
+  utxopiaProgramId: string;
   btcLightClientId: string;
   chadbufferId: string;
   zkbtcMint: string;
@@ -248,7 +248,7 @@ function makeBackendEnv(state: LocalnetState): NodeJS.ProcessEnv {
 
   return {
     UTXOPIA_NETWORK: "localnet",
-    UTXOPIA_PROGRAM_ID: state.privacyCoinProgramId,
+    UTXOPIA_PROGRAM_ID: state.utxopiaProgramId,
     UTXOPIA_SOLANA_RPC: SOLANA_RPC_URL,
     SOLANA_RPC_URL,
     BTC_LIGHT_CLIENT_PROGRAM_ID: state.btcLightClientId,
@@ -301,7 +301,7 @@ async function main() {
     }
 
     const state = loadState();
-    log(`Using program ${state.privacyCoinProgramId}`);
+    log(`Using program ${state.utxopiaProgramId}`);
 
     log("Starting backend API/indexer service...");
     const backend = startService(

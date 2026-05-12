@@ -156,7 +156,7 @@ close_old_programs() {
   log "Balance before: $BEFORE SOL"
 
   # Try closing old UTXOpia program
-  local OLD_UTXOPIA=$(read_state "privacyCoinProgramId")
+  local OLD_UTXOPIA=$(read_state "utxopiaProgramId")
   if [ -n "$OLD_UTXOPIA" ]; then
     log "Closing old UTXOpia program: $OLD_UTXOPIA"
     solana program close "$OLD_UTXOPIA" \
@@ -227,7 +227,7 @@ run_phase_1() {
   log "UTXOpia program ID: $UTXOPIA_ID"
   log "BTC LC program ID: $BTCLC_ID"
 
-  save_state "privacyCoinProgramId" "$UTXOPIA_ID"
+  save_state "utxopiaProgramId" "$UTXOPIA_ID"
   save_state "btcLightClientId" "$BTCLC_ID"
 
   save_phase 1
@@ -239,7 +239,7 @@ run_phase_1() {
 run_phase_2() {
   phase 2 "Deploy Programs to Devnet"
 
-  local UTXOPIA_ID=$(read_state "privacyCoinProgramId")
+  local UTXOPIA_ID=$(read_state "utxopiaProgramId")
   local BTCLC_ID=$(read_state "btcLightClientId")
   local UTXOPIA_SO="$ROOT/contracts/target/deploy/utxopia.so"
   local BTCLC_SO="$ROOT/contracts/target/deploy/btc_light_client.so"
@@ -282,7 +282,7 @@ run_phase_2() {
 run_phase_3() {
   phase 3 "Initialize Pool + Register Tokens"
 
-  local UTXOPIA_ID=$(read_state "privacyCoinProgramId")
+  local UTXOPIA_ID=$(read_state "utxopiaProgramId")
 
   log "Running init-devnet.ts..."
   local OUTPUT=$(UTXOPIA_PROGRAM_ID="$UTXOPIA_ID" \
@@ -331,7 +331,7 @@ run_phase_4() {
     return
   fi
 
-  local UTXOPIA_ID=$(read_state "privacyCoinProgramId")
+  local UTXOPIA_ID=$(read_state "utxopiaProgramId")
 
   log "Registering VK hashes..."
   UTXOPIA_PROGRAM_ID="$UTXOPIA_ID" \
@@ -374,9 +374,9 @@ run_phase_6() {
     return
   fi
 
-  local UTXOPIA_ID=$(read_state "privacyCoinProgramId")
+  local UTXOPIA_ID=$(read_state "utxopiaProgramId")
   if [ -z "$UTXOPIA_ID" ]; then
-    warn "privacyCoinProgramId not in state — run earlier phases first"
+    warn "utxopiaProgramId not in state — run earlier phases first"
     save_phase 6
     return
   fi
@@ -433,7 +433,7 @@ run_phase_8() {
   echo -e "${GREEN}════════════════════════════════════════${NC}"
   echo ""
   echo "Program IDs:"
-  echo "  Aegis:          $(read_state privacyCoinProgramId)"
+  echo "  Aegis:          $(read_state utxopiaProgramId)"
   echo "  BTC Light Client: $(read_state btcLightClientId)"
   echo ""
   echo "Addresses:"
@@ -456,7 +456,7 @@ run_phase_8() {
   echo "  cd backend && railway up --path-as-root ."
   echo ""
   echo "  Railway env vars to set:"
-  echo "    UTXOPIA_PROGRAM_ID=$(read_state privacyCoinProgramId)"
+  echo "    UTXOPIA_PROGRAM_ID=$(read_state utxopiaProgramId)"
   echo "    UTXOPIA_ZKBTC_MINT=$(read_state zkbtcMint)"
   echo "    BTC_LIGHT_CLIENT_PROGRAM_ID=$(read_state btcLightClientId)"
   echo "    UTXOPIA_NETWORK=devnet"
@@ -472,7 +472,7 @@ run_phase_8() {
   echo -e "${CYAN}═══ Vercel Frontend ═══${NC}"
   echo ""
   echo "  Env vars to set in Vercel:"
-  echo "    NEXT_PUBLIC_UTXOPIA_PROGRAM_ID=$(read_state privacyCoinProgramId)"
+  echo "    NEXT_PUBLIC_UTXOPIA_PROGRAM_ID=$(read_state utxopiaProgramId)"
   echo "    NEXT_PUBLIC_ZKBTC_MINT=$(read_state zkbtcMint)"
   echo "    NEXT_PUBLIC_USDC_MINT=$(read_state tUsdcMint)"
   echo "    NEXT_PUBLIC_BACKEND_URL=https://api-aegis.amidoggy.xyz"
@@ -510,7 +510,7 @@ if [ "$SKIP_DEPLOY" = true ]; then
   if [ $LAST_PHASE -lt 2 ]; then
     _UTXOPIA_ID=$(jq -r '.programs.devnet.Aegis' "$CONFIG_FILE")
     _BTCLC_ID=$(jq -r '.programs.devnet.btc_light_client' "$CONFIG_FILE")
-    save_state "privacyCoinProgramId" "$_UTXOPIA_ID"
+    save_state "utxopiaProgramId" "$_UTXOPIA_ID"
     save_state "btcLightClientId" "$_BTCLC_ID"
     log "Using existing program IDs from config.json"
     log "  Aegis: $_UTXOPIA_ID"

@@ -451,9 +451,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
       depositTxid: depositTxidInternal,
     });
 
-    const privacyCoinProgramId = getUTXOpiaProgramId();
+    const utxopiaProgramId = getUTXOpiaProgramId();
     const verifyDepositIx = new TransactionInstruction({
-      programId: privacyCoinProgramId,
+      programId: utxopiaProgramId,
       keys: [
         { pubkey: poolStatePDA, isSigner: false, isWritable: true },
         { pubkey: verifiedTxPDA, isSigner: false, isWritable: false },

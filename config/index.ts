@@ -7,7 +7,7 @@
  * Usage:
  *   import { getNetworkConfig } from "@/config";  // or "../../config"
  *   const cfg = getNetworkConfig();  // auto-detects from NEXT_PUBLIC_NETWORK or UTXOPIA_NETWORK
- *   cfg.solana.privacyCoinProgramId
+ *   cfg.solana.utxopiaProgramId
  *   cfg.tokens.zkbtcMint
  *   cfg.bitcoin.poolAddress
  */
@@ -19,7 +19,7 @@ export type NetworkId = "devnet" | "testnet" | "mainnet";
 export interface NetworkConfig {
   solana: {
     rpcUrl: string;
-    privacyCoinProgramId: string;
+    utxopiaProgramId: string;
     btcLightClientId: string;
     chadbufferId: string;
   };

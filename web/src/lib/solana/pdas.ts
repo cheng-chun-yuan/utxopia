@@ -19,7 +19,7 @@ import { getConfig, PDA_SEEDS } from "@utxopia/sdk";
 // =============================================================================
 
 export function getUTXOpiaProgramId(): PublicKey {
-  return new PublicKey(getConfig().privacyCoinProgramId);
+  return new PublicKey(getConfig().utxopiaProgramId);
 }
 
 export function getBtcLightClientProgramId(): PublicKey {

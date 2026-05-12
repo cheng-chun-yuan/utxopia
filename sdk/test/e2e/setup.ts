@@ -307,7 +307,7 @@ export async function createTestContext(): Promise<E2ETestContext> {
     if (localnetConfig && localnetConfig.programs?.UTXOpia && localnetConfig.accounts?.poolState) {
       const customConfig = createConfig(LOCALNET_CONFIG, {
         // Override with actual deployed addresses
-        privacyCoinProgramId: kitAddress(localnetConfig.programs.UTXOpia),
+        utxopiaProgramId: kitAddress(localnetConfig.programs.UTXOpia),
         btcLightClientProgramId: kitAddress(localnetConfig.programs.btcLightClient),
         chadbufferProgramId: localnetConfig.programs.chadbuffer
           ? kitAddress(localnetConfig.programs.chadbuffer)
@@ -400,7 +400,7 @@ export async function createTestContext(): Promise<E2ETestContext> {
     network: NETWORK,
     rpcUrl: RPC_URL,
     programs: {
-      UTXOpia: config.privacyCoinProgramId.toString(),
+      UTXOpia: config.utxopiaProgramId.toString(),
       btcLightClient: config.btcLightClientProgramId.toString(),
       groth16Verifier: config.groth16VerifierProgramId.toString(),
       chadbuffer: config.chadbufferProgramId.toString(),

@@ -11,7 +11,7 @@ export function nullifierHashToPDA(hashHex: string): string {
   }
   const [pda] = PublicKey.findProgramAddressSync(
     [Buffer.from(PDA_SEEDS.NULLIFIER), bytes],
-    new PublicKey(getConfig().privacyCoinProgramId)
+    new PublicKey(getConfig().utxopiaProgramId)
   );
   return pda.toBase58();
 }
@@ -42,7 +42,7 @@ export async function fetchSpentNullifierPDAs(backendUrl: string): Promise<Set<s
           id: 1,
           method: "getProgramAccounts",
           params: [
-            getConfig().privacyCoinProgramId,
+            getConfig().utxopiaProgramId,
             { filters: [{ dataSize: 1 }], encoding: "base64" },
           ],
         }),

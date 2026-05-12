@@ -44,7 +44,7 @@ export interface NetworkConfig {
   // -------------------------------------------------------------------------
 
   /** UTXOpia main program ID */
-  privacyCoinProgramId: Address;
+  utxopiaProgramId: Address;
 
   /** BTC Light Client program ID (manages light client + block headers for SPV) */
   btcLightClientProgramId: Address;
@@ -208,7 +208,7 @@ export const DEVNET_CONFIG: NetworkConfig = {
   network: "devnet",
 
   // Program IDs (devnet deployment 2026-03-25)
-  privacyCoinProgramId: address("AjbX243s2JMFG2uhfTjKkadjPvQEPgcuyV3vfLJv36MT"),
+  utxopiaProgramId: address("AjbX243s2JMFG2uhfTjKkadjPvQEPgcuyV3vfLJv36MT"),
   btcLightClientProgramId: address("859B7kw1xDyY8rzSXY6pAPNxaAsPWrsaAPJk3iivd43g"),
   chadbufferProgramId: CHADBUFFER_PROGRAM_ID,
   token2022ProgramId: TOKEN_2022_PROGRAM_ID,
@@ -278,7 +278,7 @@ export const MAINNET_CONFIG: NetworkConfig = {
   network: "mainnet",
 
   // Program IDs (placeholder - update when deployed)
-  privacyCoinProgramId: address("11111111111111111111111111111111"),
+  utxopiaProgramId: address("11111111111111111111111111111111"),
   btcLightClientProgramId: address("11111111111111111111111111111111"),
   chadbufferProgramId: CHADBUFFER_PROGRAM_ID,
   token2022ProgramId: TOKEN_2022_PROGRAM_ID,
@@ -336,7 +336,7 @@ export const LOCALNET_CONFIG: NetworkConfig = {
   network: "localnet",
 
   // Program IDs
-  privacyCoinProgramId: address("2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV"),
+  utxopiaProgramId: address("2dBmKyfLibkqdxgyEWUhHos3g56oU2wXLVrucY2dCpGV"),
   btcLightClientProgramId: address("Ho6UTeF8yFnRdCK15tSZtcJozvkDABJZWYxkgGyWAfyq"),
   chadbufferProgramId: LOCALNET_CHADBUFFER_PROGRAM_ID,
   token2022ProgramId: TOKEN_2022_PROGRAM_ID,
@@ -406,7 +406,7 @@ if (typeof process !== "undefined") {
   const _pid = process.env?.NEXT_PUBLIC_UTXOPIA_PROGRAM_ID || process.env?.UTXOPIA_PROGRAM_ID;
   const _mint = process.env?.NEXT_PUBLIC_ZKBTC_MINT || process.env?.UTXOPIA_ZKBTC_MINT;
   if (_pid) {
-    currentConfig = { ...currentConfig, privacyCoinProgramId: address(_pid), groth16VerifierProgramId: address(_pid) };
+    currentConfig = { ...currentConfig, utxopiaProgramId: address(_pid), groth16VerifierProgramId: address(_pid) };
   }
   if (_mint) {
     currentConfig = { ...currentConfig, zkbtcMint: address(_mint) };
@@ -468,7 +468,7 @@ export function setConfig(network: NetworkType | NetworkConfig): void {
     }
   } else {
     // Check if custom config is using placeholder mainnet addresses
-    if (network.network === "mainnet" && network.privacyCoinProgramId === MAINNET_CONFIG.privacyCoinProgramId) {
+    if (network.network === "mainnet" && network.utxopiaProgramId === MAINNET_CONFIG.utxopiaProgramId) {
       throw new Error(
         "Cannot use placeholder mainnet configuration. " +
         "Mainnet is not yet deployed."
@@ -498,7 +498,7 @@ export function createConfig(
 /**
  * Initialize SDK configuration with optional overrides.
  *
- * Reads `privacyCoinProgramId` and `zkbtcMint` from params, then env vars, then
+ * Reads `utxopiaProgramId` and `zkbtcMint` from params, then env vars, then
  * falls back to DEVNET_CONFIG defaults. All PDAs are auto-derived from these
  * two values.
  *
@@ -511,13 +511,13 @@ export function createConfig(
  * await initConfig();
  *
  * // Or pass explicitly
- * await initConfig({ privacyCoinProgramId: "...", zkbtcMint: "..." });
+ * await initConfig({ utxopiaProgramId: "...", zkbtcMint: "..." });
  */
 export type NetworkId = "devnet" | "localnet" | "mainnet";
 
 export async function initConfig(overrides?: {
   network?: NetworkId;
-  privacyCoinProgramId?: string;
+  utxopiaProgramId?: string;
   zkbtcMint?: string;
   solanaRpcUrl?: string;
   groupPubKey?: string;
@@ -539,7 +539,7 @@ export async function initConfig(overrides?: {
 
   // Resolve program ID: param > env > base config default
   const programId =
-    overrides?.privacyCoinProgramId ||
+    overrides?.utxopiaProgramId ||
     (typeof process !== "undefined" && (process.env?.NEXT_PUBLIC_UTXOPIA_PROGRAM_ID || process.env?.UTXOPIA_PROGRAM_ID)) ||
     undefined;
 
@@ -556,16 +556,16 @@ export async function initConfig(overrides?: {
     undefined;
 
   if (programId) {
-    config.privacyCoinProgramId = address(programId);
+    config.utxopiaProgramId = address(programId);
     config.groth16VerifierProgramId = address(programId); // same program
 
     // Derive PDAs from program ID
     const [poolStatePda] = await getProgramDerivedAddress({
-      programAddress: config.privacyCoinProgramId,
+      programAddress: config.utxopiaProgramId,
       seeds: [new TextEncoder().encode("pool_state")],
     });
     const [commitmentTreePda] = await getProgramDerivedAddress({
-      programAddress: config.privacyCoinProgramId,
+      programAddress: config.utxopiaProgramId,
       seeds: [new TextEncoder().encode("commitment_tree")],
     });
     config.poolStatePda = poolStatePda;
@@ -636,7 +636,7 @@ export async function initConfig(overrides?: {
 // =============================================================================
 
 /** Default UTXOpia program ID (from current config) */
-export const UTXOPIA_PROGRAM_ID: Address = DEVNET_CONFIG.privacyCoinProgramId;
+export const UTXOPIA_PROGRAM_ID: Address = DEVNET_CONFIG.utxopiaProgramId;
 
 /** BTC Light Client program ID (manages light client + block headers) */
 export const BTC_LIGHT_CLIENT_PROGRAM_ID: Address = DEVNET_CONFIG.btcLightClientProgramId;

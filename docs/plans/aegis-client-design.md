@@ -15,7 +15,7 @@ import { getUTXOpiaProgramId, derivePoolStatePDA } from "@/lib/solana/pdas";
 
 // 15 imports, manual wiring everywhere
 const config = getConfig();
-const programId = new PublicKey(config.privacyCoinProgramId);
+const programId = new PublicKey(config.utxopiaProgramId);
 const tokenId = computeTokenId(mintPubkey.toBuffer());
 const output = await createStealthOutputWithKeys(keys, amount, tokenId);
 // ... 50 more lines

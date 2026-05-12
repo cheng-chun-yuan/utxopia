@@ -72,11 +72,11 @@ export async function buildTransferParams(inputs: TransferUserInputs): Promise<T
   const { mode, amountSats, selectedNotes, keys, selfMeta, relayerMeta, relayerFee, recipient } = inputs;
 
   // 1. Fetch merkle proofs and prepare claim inputs for each note
-  const pcoinClient = UTXOpiaClient.isInitialized
+  const utxopiaClient = UTXOpiaClient.isInitialized
     ? UTXOpiaClient.instance()
     : await UTXOpiaClient.init();
 
-  const merkleProofs = await pcoinClient.fetchMerkleProofs(
+  const merkleProofs = await utxopiaClient.fetchMerkleProofs(
     selectedNotes.map((n) => n.commitmentHex),
   );
 
@@ -212,7 +212,7 @@ export async function buildTransferParams(inputs: TransferUserInputs): Promise<T
   // 7. Sign
   const allNullifiers = inputsData.map((d) => d.claimInputs.nullifier);
   const msgHashInputs = [merkleRoot, boundParamsHash, ...allNullifiers, ...outCommitments];
-  const sig = await pcoinClient.signTransaction(msgHashInputs, keys.eddsaSeed);
+  const sig = await utxopiaClient.signTransaction(msgHashInputs, keys.eddsaSeed);
 
   // 8. Build JoinSplit proof inputs
   const nInputs = selectedNotes.length;

@@ -48,7 +48,7 @@ function getRpcUrl(network?: Network): string {
 // =============================================================================
 
 export interface ScriptState {
-  privacyCoinProgramId: string;
+  utxopiaProgramId: string;
   btcLightClientId?: string;
   chadbufferId?: string;
   zkbtcMint: string;
@@ -130,7 +130,7 @@ export function setupScript(network?: Network): ScriptContext {
   const authority = loadKeypair();
   const pid = process.env.UTXOPIA_PROGRAM_ID
     ? new PublicKey(process.env.UTXOPIA_PROGRAM_ID)
-    : new PublicKey(state.privacyCoinProgramId);
+    : new PublicKey(state.utxopiaProgramId);
   const [poolState, poolBump] = PublicKey.findProgramAddressSync(
     [Buffer.from("pool_state")], pid,
   );

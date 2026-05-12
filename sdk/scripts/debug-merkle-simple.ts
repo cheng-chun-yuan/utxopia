@@ -50,7 +50,7 @@ async function main() {
         }));
       },
     },
-    DEVNET_CONFIG.privacyCoinProgramId
+    DEVNET_CONFIG.utxopiaProgramId
   );
 
   console.log("Tree size:", tree.size());

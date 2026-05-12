@@ -101,7 +101,7 @@ The shim crate (`programs/ika-cpi-shim/`) and the LiteSVM test scaffolding commi
 
 The runbook for Task 7 papers over three independent issues that surface on first contact. Any future session should plan for these:
 
-1. **Voting e2e locks dWallet ownership.** Step 7.1 says "run upstream voting e2e to materialize a dWallet." `setupDWallet()` in `chains/solana/examples/_shared/ika-setup.ts` *internally* calls `IX_TRANSFER_OWNERSHIP=24` to transfer dWallet authority to the **caller_program** the helper was given (the voting program in upstream's case). Re-transferring later would require the new owner (voting program's CPI auth PDA) to sign — which only the voting program can do. Fix: vendor `setupDWallet()` and call it with `privacyCoinProgramId` as the caller_program directly.
+1. **Voting e2e locks dWallet ownership.** Step 7.1 says "run upstream voting e2e to materialize a dWallet." `setupDWallet()` in `chains/solana/examples/_shared/ika-setup.ts` *internally* calls `IX_TRANSFER_OWNERSHIP=24` to transfer dWallet authority to the **caller_program** the helper was given (the voting program in upstream's case). Re-transferring later would require the new owner (voting program's CPI auth PDA) to sign — which only the voting program can do. Fix: vendor `setupDWallet()` and call it with `utxopiaProgramId` as the caller_program directly.
 
 2. **Devnet airdrop cap.** Upstream's `createAndFundKeypair` calls `connection.requestAirdrop(kp.publicKey, 100_000_000_000)` (100 SOL). Public Solana devnet caps airdrops at ~1-2 SOL/day. The voting e2e script will fail at airdrop on shared devnet. Fix: pass a pre-funded payer keypair through, skip the airdrop call.
 
