@@ -1,0 +1,79 @@
+# UTXOpia devnet-regtest hybrid stack — backend that talks to:
+#   - Solana devnet (new utxopia program APrMG4c2... + new BTC LC E3Q7dN...)
+#   - LOCAL regtest BTC (esplora at host port 3002, started via docker-compose.regtest.yml)
+#
+# Use cases:
+#   - Solo iteration: instant BTC blocks + real Ika signing (when Ika DKG done)
+#   - Validating contract changes against real Solana without testnet4 wait
+#
+# Usage:
+#   docker compose -f docker-compose.regtest.yml up -d   # esplora regtest first
+#   docker compose -f docker-compose.hybrid.yml up --build -d
+#   docker compose -f docker-compose.hybrid.yml logs -f
+#
+# Coexists with docker-compose.backend.yml (testnet4 stack) — different container names + ports.
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: utxopia-backend-hybrid:latest
+    container_name: utxopia-backend-hybrid
+    command: ["/app/zkbtc-api", "tracker", "--interval", "60", "--confirmations", "1"]
+    ports:
+      - "3020:3001"   # host 3020 (testnet4 stack uses 3010)
+    volumes:
+      - tracker-data-hybrid:/app/data
+      - ${HOME}/.config/solana/id.json:/app/keypair.json:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      RUST_LOG: info,zkbtc=debug
+      PRIVACY_COIN_NETWORK: devnet
+      UTXOPIA_NETWORK: devnet
+      # BTC side: REGTEST via local esplora (running on host port 3002)
+      UTXOPIA_BITCOIN_NETWORK: regtest
+      UTXOPIA_BITCOIN_RPC: http://host.docker.internal:3002/regtest/api
+      ESPLORA_URL: http://host.docker.internal:3002/regtest/api
+      # Solana side: real devnet
+      UTXOPIA_SOLANA_RPC: https://api.devnet.solana.com
+      SOLANA_RPC_URL: https://api.devnet.solana.com
+      # ─── New hybrid program IDs ─────────────────────────────────────
+      UTXOPIA_PROGRAM_ID: APrMG4c2dBs766hhNvExCuihZN8pPnTAHxuMzh4RHLcm
+      UTXOPIA_ZKBTC_MINT: 7V7Gp2fptGmtFyvDoRaSmNUEFZf5iBFEvTmkQ5bp8ugN
+      BTC_LIGHT_CLIENT_PROGRAM_ID: E3Q7dNDNw9W8oL1ghm62Ecau4zHBZ1W5zxrnNVaoRs6v
+      # ─── Ika dWallet (reuses existing devnet dWallet for now; new DKG TBD) ─
+      UTXOPIA_SIGNING_MODE: ika
+      UTXOPIA_IKA_PROGRAM_ID: 87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY
+      UTXOPIA_IKA_GRPC_ENDPOINT: pre-alpha-dev-1.ika.ika-network.net:443
+      UTXOPIA_IKA_DWALLET: DmZfRVeZHnFZ1ARVHRPJn88VCcJB2QhXLmSe8RuzFMfq
+      UTXOPIA_IKA_DWALLET_XONLY_PUBKEY: 87a1014ea16e42c825026889874902875aec7650b39c2b334a4d04d49b904c76
+      UTXOPIA_IKA_CPI_AUTHORITY_BUMP: "255"
+      # NOTE: This dWallet is bound to the OLD program's PDA, so complete_redemption
+      # via Ika will FAIL on the new program. Run a fresh DKG ceremony to get a
+      # new dWallet whose authority is the new program's __ika_cpi_authority PDA.
+      # Pool BTC address: regtest-flavored (bcrt1p prefix) — must be regenerated.
+      POOL_RECEIVE_ADDRESS: bcrt1pPLACEHOLDER  # regenerate after Ika DKG
+      # ─── Operational ─────────────────────────────────────────────
+      UTXOPIA_DEMO_MODE: "1"
+      DEPOSIT_DB_PATH: /app/data/deposits.db
+      INDEXER_DB_PATH: /app/data/events.db
+      INDEXER_POLL_INTERVAL_SECS: "10"
+      TRACKER_API_PORT: "3001"
+      MEMPOOL_WS_ENABLED: "false"
+      HEADER_RELAY_ENABLED: "true"
+      UTXOPIA_BROADCAST_MODE: real
+      HEADER_BATCH_SIZE: "5"
+      SERVICE_FEE_SATS: "500"
+      RELAYER_FEE_SATS: "500"
+      RELAYER_KEYPAIR: /app/keypair.json
+      VERIFIER_KEYPAIR: /app/keypair.json
+      RELAYER_STEALTH_META: "${RELAYER_STEALTH_META:-}"
+      BACKEND_API_KEY: "${BACKEND_API_KEY:?BACKEND_API_KEY must be set (see .env)}"
+      # CORS: localhost + any utxopia subdomain (frontend may run anywhere)
+      ALLOWED_ORIGIN: "${ALLOWED_ORIGIN_HYBRID:-http://localhost:3000,http://localhost:3002,https://utxopia.com,https://app.utxopia.com,https://hybrid.utxopia.com}"
+    restart: unless-stopped
+
+volumes:
+  tracker-data-hybrid:

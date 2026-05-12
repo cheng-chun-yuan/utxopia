@@ -21,6 +21,11 @@ devnet = []
 # Use SHA256 instead of Poseidon for localnet testing (test validator lacks Poseidon syscall)
 # SECURITY: DO NOT enable in production/devnet builds - only for local testing.
 localnet = []
+# Hybrid: real Solana devnet + local regtest BTC. Reuses devnet ChadBuffer,
+# uses dedicated BTC LC + utxopia program IDs that track regtest headers.
+# For fast iteration with real Ika signing.
+devnet-regtest = ["devnet"]
+mainnet = []
 
 [dependencies]
 pinocchio = "0.9"

@@ -1,0 +1,13 @@
+{
+  "utxopiaProgramId": "APrMG4c2dBs766hhNvExCuihZN8pPnTAHxuMzh4RHLcm",
+  "btcLightClientId": "E3Q7dNDNw9W8oL1ghm62Ecau4zHBZ1W5zxrnNVaoRs6v",
+  "chadbufferId": "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF",
+  "network": "devnet-regtest",
+  "zkbtcMint": "7V7Gp2fptGmtFyvDoRaSmNUEFZf5iBFEvTmkQ5bp8ugN",
+  "poolState": "8xgjw1QnS2GfVT5a2SRFWicRmgnpReiZ3GZY8V12te3L",
+  "commitmentTree": "8WWem5hQxsdtovFsGAuChaF1rCAE93f5kj6GyRwyDsL1",
+  "poolVault": "7TPAzhB8xC9aZ3NQYYDBdgg7KFWVPwUxULes3xqnFceh",
+  "frostVault": "BfvFLUk1ZGw1qMHMXobfazUXvdvs2Gim6L1fpCoB1WYq",
+  "tokenConfigZkbtc": "DbE1mFfZD5KW6GZzU73P9VAeCpx6GAWF4TE4WrEsGecF",
+  "authority": "uFBMJSxoGkHj2NyncPzAkhNWsGSQirQcRjUnGfEfWg1"
+}
