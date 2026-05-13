@@ -21,17 +21,17 @@ export function SiteHeader() {
           transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
         >
           {/* Logo — capybara mark, circle-clipped */}
-          <Link href="/" className="flex items-center gap-2 group shrink-0">
+          <Link href="/" className="flex items-center gap-2.5 group shrink-0">
             <motion.div
-              className="relative w-7 h-7 overflow-hidden rounded-full border border-gray/10 bg-black group-hover:border-privacy/30 transition-all duration-300"
+              className="relative w-9 h-9 overflow-hidden rounded-full border border-gray/10 bg-black group-hover:border-privacy/30 transition-all duration-300"
               whileHover={{ scale: 1.1 }}
               transition={{ type: "spring", stiffness: 400, damping: 20 }}
             >
               <Image
-                src="/brand/logo-64.png"
+                src="/brand/logo-128.png"
                 alt="UTXOpia"
-                width={28}
-                height={28}
+                width={36}
+                height={36}
                 priority
                 className="h-full w-full object-cover"
               />

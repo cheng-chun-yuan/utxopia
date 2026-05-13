@@ -48,5 +48,5 @@ def thicken(src_path: str, dst_path: str, dilate_passes: int, threshold: int = 5
 
 if __name__ == "__main__":
     src = "raw.png"
-    for passes in (1, 2, 3, 4):
+    for passes in (3, 4, 5, 6):
         thicken(src, f"clean-bold{passes}.png", dilate_passes=passes)
