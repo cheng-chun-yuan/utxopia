@@ -47,7 +47,7 @@
       "network": "regtest",
       "poolAddress": "bcrt1psa4u9ws3ckn5g6fyddqzyxsx5ee5rtva6yk2dnnqsqk3c2wfwngszukxjn",
       "groupPubkey": "876bc2ba11c5a74469246b40221a06a67341ad9dd12ca6ce60802d1c29c974d1",
-      "explorerUrl": "http://localhost:3002/regtest"
+      "explorerUrl": "https://btc.utxopia.com/regtest"
     },
     "ika": {
       "programId": "87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY",
