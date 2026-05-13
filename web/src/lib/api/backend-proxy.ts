@@ -36,11 +36,38 @@ export async function proxyToBackend(
       ? await request.text()
       : undefined;
 
-  const res = await fetch(target, {
-    method: request.method,
-    headers,
-    body,
-  });
+  let res: Response;
+  try {
+    res = await fetch(target, {
+      method: request.method,
+      headers,
+      body,
+    });
+  } catch (err) {
+    // Backend unreachable (DNS/TLS/connect failure). Surface as 502 with a
+    // structured body so callers can tell this apart from an app-code 500.
+    const message = err instanceof Error ? err.message : String(err);
+    let host: string | null = null;
+    try {
+      host = new URL(backendUrl).host;
+    } catch {
+      // ignore
+    }
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: "Backend unreachable",
+        code: "BACKEND_UNREACHABLE",
+        network,
+        backendHost: host,
+        message,
+      }),
+      {
+        status: 502,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+  }
 
   return new Response(await res.text(), {
     status: res.status,
