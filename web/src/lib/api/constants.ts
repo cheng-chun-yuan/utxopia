@@ -44,10 +44,21 @@ export function getSolanaRpcUrl(): string {
  * `detectNetworkFromRequest`). Without it we use the build-time / browser-
  * detected default.
  *
- * Priority: env var override > networks.json[network] > localhost fallback
+ * When `network` is given, networks.json is the source of truth — env vars
+ * are only the default when the caller didn't specify (so multi-network
+ * deployments can still pick per-request).
+ *
+ * Priority (no network arg): env var override > networks.json default > localhost
+ * Priority (network arg given): networks.json[network] > env var override > localhost
  */
 export function getBackendUrl(network?: NetworkId): string {
   const cfgUrl = getNetworkConfig(network).backend.url;
+  if (typeof network !== "undefined") {
+    // Caller is explicit about which stack; honor it over the env default.
+    return cfgUrl || (typeof window === "undefined"
+      ? process.env.BACKEND_API_URL
+      : process.env.NEXT_PUBLIC_BACKEND_API_URL) || DEFAULT_API_URL;
+  }
   if (typeof window === "undefined") {
     return process.env.BACKEND_API_URL || cfgUrl || DEFAULT_API_URL;
   }
