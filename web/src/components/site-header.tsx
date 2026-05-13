@@ -20,20 +20,20 @@ export function SiteHeader() {
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
         >
-          {/* Logo — capybara mark, circle-clipped */}
+          {/* Logo — capybara mark, transparent, floats naturally */}
           <Link href="/" className="flex items-center gap-2.5 group shrink-0">
             <motion.div
-              className="relative w-9 h-9 overflow-hidden rounded-full border border-gray/10 bg-black group-hover:border-privacy/30 transition-all duration-300"
-              whileHover={{ scale: 1.1 }}
+              className="relative w-12 h-12 flex items-center justify-center transition-all duration-300 group-hover:drop-shadow-[0_0_8px_rgba(208,173,92,0.4)]"
+              whileHover={{ scale: 1.08 }}
               transition={{ type: "spring", stiffness: 400, damping: 20 }}
             >
               <Image
-                src="/brand/logo-128.png"
+                src="/brand/logo-transparent-192.png"
                 alt="UTXOpia"
-                width={36}
-                height={36}
+                width={48}
+                height={48}
                 priority
-                className="h-full w-full object-cover"
+                className="h-full w-full object-contain"
               />
             </motion.div>
             <span className="text-sm font-semibold tracking-tight text-foreground group-hover:text-privacy transition-colors">
