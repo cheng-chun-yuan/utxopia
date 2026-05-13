@@ -48,8 +48,27 @@ describe("detectRecipient", () => {
   });
 
   it("detects stealth meta-address (hex prefix 'utxo:')", () => {
-    const meta = "utxo:" + "01".repeat(32) + "02".repeat(32);
+    // 96 bytes = spendingPubKey(32) + viewingPubKey(32) + mpk(32)
+    const meta = "utxo:" + "01".repeat(32) + "02".repeat(32) + "03".repeat(32);
     const r = detectRecipient(meta);
+    expect(r.type).toBe("stealth_meta");
+    expect(r.confidence).toBe("high");
+  });
+
+  it("rejects old 64-byte stealth meta-address (pre-mpk format)", () => {
+    // Defensive: the SDK now requires 96 bytes (spending + viewing + mpk).
+    // A 64-byte form would slip through decode and crash downstream.
+    const tooShort = "utxo:" + "01".repeat(32) + "02".repeat(32);
+    const r = detectRecipient(tooShort);
+    expect(r.type).toBe("invalid");
+  });
+
+  it("accepts the real-world 192-hex stealth address from scripts/deposit-for-stealth.ts", () => {
+    const real =
+      "utxo:4ef071c344e4a5b1f57740bcf44015c60df8d41b0953fcef490524a0ea456eac" +
+      "d39603c83b1d5f68f129d3dca76881a100b37fa933f0868b6b57d2000056c58c" +
+      "0491ab4fda32563217868f2739b0b87419ca296729ad6f0c60e203292b54ac7b";
+    const r = detectRecipient(real);
     expect(r.type).toBe("stealth_meta");
     expect(r.confidence).toBe("high");
   });

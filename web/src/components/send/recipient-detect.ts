@@ -22,7 +22,9 @@ export type DetectionResult = {
 
 const SNS_SUFFIX = ".btcpro.sol";
 const STEALTH_META_PREFIX = "utxo:";
-const STEALTH_META_HEX_LEN = 64 + 64;
+// 96 bytes = spendingPubKey(32) + viewingPubKey(32) + mpk(32). See
+// sdk/src/keys.ts::decodeStealthMetaAddress.
+const STEALTH_META_HEX_LEN = 64 + 64 + 64;
 
 const BECH32_PREFIXES = ["bc1", "tb1", "bcrt1"];
 
