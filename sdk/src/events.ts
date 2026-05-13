@@ -18,6 +18,12 @@ export const EVENT_NULLIFIER_SPENT = 0x02;
 export const EVENT_STEALTH_ANNOUNCEMENT = 0x03;
 export const EVENT_NULLIFIERS_BATCH = 0x0b;
 export const EVENT_ANNOUNCEMENTS_BATCH = 0x0c;
+/** Phase 2: sender memo (XChaCha20-Poly1305 AEAD payload). */
+export const EVENT_SENDER_MEMO = 0x12;
+/** Phase 3: association-set root updated by admin. */
+export const EVENT_ASSOCIATION_ROOT_UPDATED = 0x13;
+/** Phase 3: Proof of Innocence attested on chain. */
+export const EVENT_POI_ATTESTED = 0x14;
 
 /** Parsed nullifier spent event */
 export interface NullifierSpentEvent {
@@ -37,9 +43,41 @@ export interface StealthAnnouncementEvent {
   tokenId?: Uint8Array; // 32 bytes (present for deposit/unshield, zero for private transfers)
 }
 
+/** Parsed sender memo event (Phase 2). */
+export interface SenderMemoEvent {
+  type: "sender_memo";
+  /** 24-byte XChaCha20 nonce. */
+  nonce: Uint8Array;
+  /** 56-byte ChaCha20 ciphertext + Poly1305 tag. */
+  ciphertextWithTag: Uint8Array;
+  /** Commitment of the output this memo covers (also AAD). */
+  commitment: Uint8Array;
+  /** Leaf index of the covered output (also AAD). */
+  leafIndex: number;
+}
+
+/** Parsed association-set update event (Phase 3). */
+export interface AssociationRootUpdatedEvent {
+  type: "association_root_updated";
+  newRoot: Uint8Array; // 32 bytes
+  status: number; // 0=active, 1=paused
+  version: bigint;
+}
+
+/** Parsed PoI attestation event (Phase 3). */
+export interface PoIAttestedEvent {
+  type: "poi_attested";
+  associationRoot: Uint8Array;
+  commitment: Uint8Array;
+  version: bigint;
+}
+
 export type ProgramEvent =
   | NullifierSpentEvent
-  | StealthAnnouncementEvent;
+  | StealthAnnouncementEvent
+  | SenderMemoEvent
+  | AssociationRootUpdatedEvent
+  | PoIAttestedEvent;
 
 /**
  * Parse a nullifier spent event from decoded sol_log_data segments.
@@ -103,6 +141,68 @@ export function parseStealthAnnouncementEvent(segments: Uint8Array[]): StealthAn
     leafIndex,
     tokenId,
   };
+}
+
+/**
+ * Parse an association-set update event (Phase 3) from decoded sol_log_data segments.
+ * Layout: disc(1) + new_root(32) + status(1) + version_le(8)
+ */
+export function parseAssociationRootUpdatedEvent(
+  segments: Uint8Array[],
+): AssociationRootUpdatedEvent | null {
+  if (segments.length < 4) return null;
+  if (segments[0].length !== 1 || segments[0][0] !== EVENT_ASSOCIATION_ROOT_UPDATED) return null;
+  const newRoot = segments[1];
+  if (newRoot.length !== 32) return null;
+  const statusSeg = segments[2];
+  if (statusSeg.length !== 1) return null;
+  const vBytes = segments[3];
+  if (vBytes.length !== 8) return null;
+  let version = 0n;
+  for (let i = 7; i >= 0; i--) version = (version << 8n) | BigInt(vBytes[i]);
+  return { type: "association_root_updated", newRoot, status: statusSeg[0], version };
+}
+
+/**
+ * Parse a PoI-attested event (Phase 3) from decoded sol_log_data segments.
+ * Layout: disc(1) + association_root(32) + commitment(32) + version_le(8)
+ */
+export function parsePoIAttestedEvent(segments: Uint8Array[]): PoIAttestedEvent | null {
+  if (segments.length < 4) return null;
+  if (segments[0].length !== 1 || segments[0][0] !== EVENT_POI_ATTESTED) return null;
+  const associationRoot = segments[1];
+  if (associationRoot.length !== 32) return null;
+  const commitment = segments[2];
+  if (commitment.length !== 32) return null;
+  const vBytes = segments[3];
+  if (vBytes.length !== 8) return null;
+  let version = 0n;
+  for (let i = 7; i >= 0; i--) version = (version << 8n) | BigInt(vBytes[i]);
+  return { type: "poi_attested", associationRoot, commitment, version };
+}
+
+/**
+ * Parse a sender memo event (Phase 2) from decoded sol_log_data segments.
+ * Layout: disc(1) + nonce(24) + ciphertext_and_tag(56) + commitment(32) + leaf_index(4)
+ */
+export function parseSenderMemoEvent(segments: Uint8Array[]): SenderMemoEvent | null {
+  if (segments.length < 5) return null;
+  if (segments[0].length !== 1 || segments[0][0] !== EVENT_SENDER_MEMO) return null;
+
+  const nonce = segments[1];
+  if (nonce.length !== 24) return null;
+
+  const ciphertextWithTag = segments[2];
+  if (ciphertextWithTag.length !== 56) return null;
+
+  const commitment = segments[3];
+  if (commitment.length !== 32) return null;
+
+  const liBytes = segments[4];
+  if (liBytes.length !== 4) return null;
+  const leafIndex = new DataView(liBytes.buffer, liBytes.byteOffset, 4).getUint32(0, true);
+
+  return { type: "sender_memo", nonce, ciphertextWithTag, commitment, leafIndex };
 }
 
 /**
@@ -220,6 +320,15 @@ export function parseProgramEvents(logs: string[], programId?: string): ProgramE
       if (event) events.push(event);
     } else if (disc === EVENT_STEALTH_ANNOUNCEMENT) {
       const event = parseStealthAnnouncementEvent(segments);
+      if (event) events.push(event);
+    } else if (disc === EVENT_SENDER_MEMO) {
+      const event = parseSenderMemoEvent(segments);
+      if (event) events.push(event);
+    } else if (disc === EVENT_ASSOCIATION_ROOT_UPDATED) {
+      const event = parseAssociationRootUpdatedEvent(segments);
+      if (event) events.push(event);
+    } else if (disc === EVENT_POI_ATTESTED) {
+      const event = parsePoIAttestedEvent(segments);
       if (event) events.push(event);
     }
   }

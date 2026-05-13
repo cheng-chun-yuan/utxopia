@@ -92,6 +92,7 @@ function rowToAnnouncement(row: BackendAnnouncementRow): OnChainStealthAnnouncem
     commitment: hexToBytes(row.commitment),
     leafIndex: row.leaf_index,
     blockTime: row.block_time ?? 0,
+    slot: row.slot,
   };
 }
 

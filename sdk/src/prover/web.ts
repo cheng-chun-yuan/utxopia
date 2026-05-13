@@ -59,6 +59,12 @@ export interface ProofData {
 
 export type CircuitType = `joinsplit_${number}x${number}`;
 
+/** Names of non-JoinSplit auxiliary circuits (PoI + selective disclosure). */
+export type AuxCircuitName =
+  | "proof_of_innocence"
+  | "ownership"
+  | "range_sum";
+
 // Environment detection
 const isBrowser = typeof window !== "undefined";
 const isNode = typeof process !== "undefined" && process.versions?.node;
@@ -126,7 +132,7 @@ function getCircuitArtifactPaths(circuitType: CircuitType): CircuitArtifact {
   return artifact;
 }
 
-type InputMap = Record<string, string | string[] | number[]>;
+type InputMap = Record<string, string | string[] | number[] | string[][] | number[][]>;
 
 // Detect bun runtime (snarkjs WASM hangs in bun)
 const isBun = typeof process !== "undefined" && !!(process as any).versions?.bun;
@@ -181,8 +187,26 @@ async function generateProofViaNodeSubprocess(
   artifacts: CircuitArtifact,
   inputs: InputMap
 ): Promise<{ proof: any; publicSignals: string[] }> {
-  // Use new Function to prevent bundlers from statically resolving Node.js built-ins
-  const _require = new Function("m", "return require(m)") as (m: string) => any;
+  // Build a CommonJS-aware `require` that works in both CJS and ESM execution
+  // contexts. In ESM, `require` isn't a global; `module.createRequire(url)`
+  // creates one bound to a given module URL.
+  // `import.meta.url` is only valid in ESM modules; in CJS bundles
+  // (`type: "commonjs"`) we fall back to the inherited `require`. Both
+  // bundlers (esbuild / tsc) preserve `import.meta.url` correctly.
+  let _require: (m: string) => any;
+  if (typeof (globalThis as any).require === "function") {
+    _require = (globalThis as any).require;
+  } else {
+    // Hide the dynamic import from webpack so the browser bundle never tries
+    // to resolve `node:module`. This whole code path only fires under Node/bun,
+    // never in the browser.
+    const dynamicImport = new Function(
+      "specifier",
+      "return import(specifier)",
+    ) as (s: string) => Promise<any>;
+    const { createRequire } = await dynamicImport("node:module");
+    _require = createRequire(import.meta.url);
+  }
   const { execFileSync } = _require("child_process");
   const fs = _require("fs");
   const path = _require("path");
@@ -199,10 +223,12 @@ async function generateProofViaNodeSubprocess(
 
   try {
     // Use execFileSync to avoid shell injection via file paths
+    // Take the last 5 argv entries — Node 24's --eval TypeScript transform
+    // can prepend extra paths, so positional destructuring [,, ...] breaks.
     const script = `
       const snarkjs = require('snarkjs');
       const fs = require('fs');
-      const [,, inputPath, wasmP, zkeyP, proofPath, publicPath] = process.argv;
+      const [inputPath, wasmP, zkeyP, proofPath, publicPath] = process.argv.slice(-5);
       (async () => {
         const input = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
         const { proof, publicSignals } = await snarkjs.groth16.fullProve(input, wasmP, zkeyP);
@@ -271,6 +297,47 @@ export async function initProver(): Promise<void> {
   await ensureSnarkjsLoaded();
   proverInitialized = true;
   console.log("[Prover] Groth16 prover initialized and ready");
+}
+
+/**
+ * Generate a Groth16 proof for any circuit by name. Useful for non-JoinSplit
+ * circuits (PoI, ownership, range_sum) that follow the same artifact layout
+ * `<circuitBasePath>/<name>/<name>_js/<name>.wasm` + `<circuitBasePath>/<name>/<name>.zkey`.
+ *
+ * Returns `{ proof: 256 bytes, publicInputs }` matching `ProofData`.
+ */
+export async function generateGenericGroth16Proof(
+  circuitName: string,
+  inputs: Record<string, string | string[] | number[] | string[][] | number[][]>,
+): Promise<ProofData> {
+  // Reuse the same artifact lookup pattern as JoinSplit variants.
+  const artifacts: CircuitArtifact = {
+    wasmPath: `${circuitBasePath}/${circuitName}/${circuitName}_js/${circuitName}.wasm`,
+    zkeyPath: `${circuitBasePath}/${circuitName}/${circuitName}.zkey`,
+  };
+
+  let proof: any;
+  let publicSignals: string[];
+
+  if (isBun && isNode) {
+    const result = await generateProofViaNodeSubprocess(artifacts, inputs);
+    proof = result.proof;
+    publicSignals = result.publicSignals;
+  } else {
+    await ensureSnarkjsLoaded();
+    const result = await snarkjs.groth16.fullProve(
+      inputs,
+      artifacts.wasmPath,
+      artifacts.zkeyPath,
+    );
+    proof = result.proof;
+    publicSignals = result.publicSignals;
+  }
+
+  return {
+    proof: serializeProof(proof),
+    publicInputs: publicSignals,
+  };
 }
 
 /**

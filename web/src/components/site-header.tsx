@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Shield, Rocket, Menu, X, Settings as SettingsIcon } from "lucide-react";
+import Image from "next/image";
+import { Rocket, Menu, X, Settings as SettingsIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AdvancedModeBadge } from "@/components/ui/advanced-mode-badge";
 import { NetworkBadge } from "@/components/ui/network-badge";
@@ -19,14 +20,21 @@ export function SiteHeader() {
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
         >
-          {/* Logo */}
+          {/* Logo — capybara mark, circle-clipped */}
           <Link href="/" className="flex items-center gap-2 group shrink-0">
             <motion.div
-              className="relative w-7 h-7 flex items-center justify-center rounded-full border border-gray/10 bg-gradient-to-br from-privacy/10 to-privacy/20 group-hover:border-privacy/30 transition-all duration-300"
+              className="relative w-7 h-7 overflow-hidden rounded-full border border-gray/10 bg-black group-hover:border-privacy/30 transition-all duration-300"
               whileHover={{ scale: 1.1 }}
               transition={{ type: "spring", stiffness: 400, damping: 20 }}
             >
-              <Shield className="h-3.5 w-3.5 text-privacy privacy-glow" />
+              <Image
+                src="/brand/logo-64.png"
+                alt="UTXOpia"
+                width={28}
+                height={28}
+                priority
+                className="h-full w-full object-cover"
+              />
             </motion.div>
             <span className="text-sm font-semibold tracking-tight text-foreground group-hover:text-privacy transition-colors">
               UTXOpia

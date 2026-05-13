@@ -76,6 +76,79 @@ export {
   type WalletSignerAdapter,
 } from "./keys";
 
+// Delegated viewing keys + auditor toolkit (Phase 1)
+export {
+  ViewPermissions,
+  hasPermission,
+  isDelegatedKeyValid,
+  isSlotInDelegatedRange,
+  createDelegatedViewKey,
+  serializeDelegatedViewKey,
+  deserializeDelegatedViewKey,
+  makeDelegationRecord,
+  fingerprintDelegatedKey,
+  clearDelegatedViewKey,
+  type DelegatedViewKey,
+  type DelegationRecord,
+} from "./keys";
+export {
+  auditScan,
+  auditRecordsToCsv,
+  type AuditDirection,
+  type AuditRecord,
+  type AuditScanAnnouncement,
+  type AuditScanOptions,
+  type AuditScanSummary,
+  type OnChainSenderMemo,
+} from "./auditor";
+
+// Sender memo channel (Phase 2)
+export {
+  encryptSenderMemo,
+  decryptSenderMemo,
+  deriveOutgoingViewingKey,
+  packSenderMemo,
+  unpackSenderMemo,
+  packSenderMemoForInstruction,
+  generateSenderMemoNonce,
+  SENDER_MEMO_AMOUNT_BYTES,
+  SENDER_MEMO_CIPHERTEXT_BYTES,
+  SENDER_MEMO_COMMITMENT_BYTES,
+  SENDER_MEMO_NONCE_BYTES,
+  SENDER_MEMO_PACKED_BYTES,
+  SENDER_MEMO_TAG_BYTES,
+  SENDER_MEMO_TOKEN_BYTES,
+  type SenderMemoPlain,
+  type SenderMemoCiphertext,
+} from "./sender-memo";
+
+// Proof of Innocence (Phase 3)
+export {
+  poiLeafHash,
+  fetchPoIInclusion,
+  generatePoIProof,
+  POI_TREE_DEPTH,
+  type PoIProofInputs,
+  type PoIPublicInputs,
+  type PoIInclusionResponse,
+} from "./poi";
+export {
+  buildUpdateAssociationRootInstructionData,
+  buildAttestPoIInstructionData,
+  ASSOCIATION_SET_SEED,
+} from "./poi-instructions";
+
+// Selective ZK disclosure proofs (Phase 4)
+export {
+  generateOwnershipProof,
+  generateRangeSumProof,
+  RANGE_SUM_N,
+  type OwnershipProofInputs,
+  type OwnershipPublicInputs,
+  type RangeSumProofInputs,
+  type RangeSumPublicInputs,
+} from "./selective-disclosure";
+
 // ==========================================================================
 // Poseidon hash utilities
 // ==========================================================================
@@ -570,12 +643,21 @@ export {
   parseProgramEvents,
   parseNullifierSpentEvent,
   parseStealthAnnouncementEvent,
+  parseSenderMemoEvent,
+  parseAssociationRootUpdatedEvent,
+  parsePoIAttestedEvent,
   EVENT_NULLIFIER_SPENT,
   EVENT_STEALTH_ANNOUNCEMENT,
   EVENT_NULLIFIERS_BATCH,
   EVENT_ANNOUNCEMENTS_BATCH,
+  EVENT_SENDER_MEMO,
+  EVENT_ASSOCIATION_ROOT_UPDATED,
+  EVENT_POI_ATTESTED,
   type NullifierSpentEvent,
   type StealthAnnouncementEvent,
+  type SenderMemoEvent,
+  type AssociationRootUpdatedEvent,
+  type PoIAttestedEvent,
   type ProgramEvent,
 } from "./events";
 

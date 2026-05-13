@@ -85,6 +85,10 @@ pub mod instruction {
     // Tree management (20)
     pub const ROTATE_TREE: u8 = 20;
 
+    // Proof of Innocence (Phase 3 — Privacy-Pools-style compliance attestations)
+    pub const UPDATE_ASSOCIATION_ROOT: u8 = 21;
+    pub const ATTEST_POI: u8 = 22;
+
     // OP_RETURN-free deposits (24-25) — wired to support backend v2 deposit path.
     // Backend's deposit_tracker uses 24 to register a DepositIntent PDA before
     // sweep, then 25 to verify the swept tx against that PDA on chain.
@@ -135,6 +139,11 @@ pub fn process_instruction(
         instruction::CANCEL_REDEMPTION => instructions::process_cancel_redemption(program_id, accounts, data),
         // Tree management (20)
         instruction::ROTATE_TREE => instructions::process_rotate_tree(program_id, accounts, data),
+        // Proof of Innocence (21-22)
+        instruction::UPDATE_ASSOCIATION_ROOT => {
+            instructions::process_update_association_root(program_id, accounts, data)
+        }
+        instruction::ATTEST_POI => instructions::process_attest_poi(program_id, accounts, data),
         // OP_RETURN-free deposits (24-25)
         instruction::REGISTER_DEPOSIT_INTENT => instructions::process_register_deposit_intent(program_id, accounts, data),
         instruction::VERIFY_DEPOSIT_V2 => instructions::process_verify_deposit_v2(program_id, accounts, data),

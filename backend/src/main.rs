@@ -534,10 +534,11 @@ fn spawn_api_server(
     indexer_router: axum::Router,
     redemption_api: RedemptionService,
     stealth: StealthDepositService,
+    poi_service: zkbtc::poi_service::PoIService,
 ) {
     tokio::spawn(async move {
         let deposit_router = deposit_tracker::api::create_deposit_router(api_tracker);
-        let api_router = api::create_combined_router(redemption_api, stealth);
+        let api_router = api::create_combined_router_with_poi(redemption_api, stealth, poi_service);
         let merged = api_router.merge(deposit_router).merge(indexer_router);
 
         let addr = std::net::SocketAddr::from(([0, 0, 0, 0], api_port));
@@ -577,10 +578,16 @@ async fn run_tracker_service(args: &[String]) {
     let config = load_tracker_config(args);
     ensure_data_dir(&config.db_path);
 
+    // Phase 3c: PoI association service shared between the API router and
+    // the deposit tracker's auto-feed. The same handle is cheap to clone
+    // (Arc<RwLock<…>> internally) so both code paths see the same state.
+    let poi_service = api::default_poi_service();
+
     // Build and configure the deposit tracker
     let service = create_tracker_service(&config);
     let service = configure_sweeper(service, &config);
     let service = configure_verifier(service);
+    let service = service.with_poi_service(poi_service.clone());
     let mut service = service;
 
     let api_port: u16 = env_or("TRACKER_API_PORT", 3001);
@@ -652,7 +659,7 @@ async fn run_tracker_service(args: &[String]) {
     });
 
     // Unified API server
-    spawn_api_server(api_port, api_tracker, indexer_router, redemption_api, stealth);
+    spawn_api_server(api_port, api_tracker, indexer_router, redemption_api, stealth, poi_service);
 
     // Run deposit tracker with graceful shutdown on SIGINT/SIGTERM
     let shutdown = tokio::signal::ctrl_c();

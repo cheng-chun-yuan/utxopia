@@ -338,6 +338,19 @@ impl EventIndexerService {
                     let txid_hex = Self::btc_internal_to_hex(&e.txid);
                     tracing::info!(txid = %txid_hex, vout = e.vout, amount = e.amount_sats, "UTXO consumed");
                 }
+                ProgramEvent::SenderMemo(e) => {
+                    // Phase 2: log for now; persistent storage / REST exposure tracked separately.
+                    tracing::info!(leaf_index = e.leaf_index, "SenderMemo event observed");
+                }
+                ProgramEvent::AssociationRootUpdated(e) => {
+                    // Phase 3: log for now; backend will mirror the root for off-chain inclusion proofs.
+                    tracing::info!(status = e.status, version = e.version, "AssociationRoot updated");
+                }
+                ProgramEvent::PoIAttested(e) => {
+                    // Phase 3: log attestation; downstream consumers can subscribe.
+                    tracing::info!(version = e.version, "PoI attested");
+                    let _ = e;
+                }
             }
         }
 

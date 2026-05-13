@@ -139,7 +139,10 @@ export enum ViewPermissions {
 /**
  * Delegated viewing key for auditors/compliance
  *
- * Uses Ed25519 private key for viewing
+ * Uses Ed25519 private key for viewing. Deposit verification additionally
+ * requires `spendingPubKeyCompressed` and `nullifyingKey` so the scanner
+ * can compute MPK; without them, only transfer-type announcements can be
+ * confidently matched.
  */
 export interface DelegatedViewKey {
   /** Ed25519 viewing private key (32 bytes) */
@@ -148,11 +151,46 @@ export interface DelegatedViewKey {
   /** Permission flags */
   permissions: ViewPermissions;
 
+  /** Baby Jubjub spending pubkey, compressed (32 bytes). Needed for deposit verification. */
+  spendingPubKeyCompressed?: Uint8Array;
+
+  /** Nullifying key (BN254 scalar). Needed for deposit verification. */
+  nullifyingKey?: bigint;
+
+  /** Inclusive lower slot bound for audit scope (honor-system on auditor side). */
+  fromSlot?: number;
+
+  /** Inclusive upper slot bound for audit scope. */
+  toSlot?: number;
+
   /** Optional expiration timestamp (Unix ms) */
   expiresAt?: number;
 
   /** Optional label for identification */
   label?: string;
+
+  /** Unix ms when the delegation was created (set by createDelegatedViewKey). */
+  issuedAt?: number;
+
+  /** Stable opaque ID for tracking this delegation in the user's audit trail. */
+  delegationId?: string;
+}
+
+/**
+ * Public record of a delegation that the *user* keeps as their audit trail of
+ * keys they have handed out — never carries the viewing private key itself.
+ */
+export interface DelegationRecord {
+  delegationId: string;
+  fingerprint: string;
+  permissions: ViewPermissions;
+  fromSlot?: number;
+  toSlot?: number;
+  expiresAt?: number;
+  issuedAt: number;
+  label?: string;
+  /** Optional free-form note about who received the key (auditor name, firm, etc.). */
+  recipient?: string;
 }
 
 // ========== Constants ==========
@@ -503,7 +541,9 @@ export function encodeStealthMetaAddress(meta: StealthMetaAddress): string {
  * Decode stealth meta-address from a string (with or without utxo: prefix)
  */
 export function decodeStealthMetaAddress(encoded: string): StealthMetaAddress {
-  const hex = encoded.startsWith("utxo:") ? encoded.slice(6) : encoded;
+  // "utxo:" is 5 chars — slice(5), not slice(6). Off-by-one was eating one
+  // hex character and producing a 47-byte buffer that failed the length check.
+  const hex = encoded.startsWith("utxo:") ? encoded.slice(5) : encoded;
   const bytes = hexToBytes(hex);
   if (bytes.length !== 96) {
     throw new Error("Invalid stealth meta-address length (expected 96 bytes)");
@@ -519,18 +559,94 @@ export function decodeStealthMetaAddress(encoded: string): StealthMetaAddress {
 
 /**
  * Create a delegated viewing key for auditors/compliance
+ *
+ * The returned key carries everything an auditor needs to scan announcements
+ * within the configured slot range, including the spending pubkey and
+ * nullifying key (required for deposit verification — `Poseidon(npk, token, amount)`
+ * must match on-chain commitment). A fresh `delegationId` and `issuedAt` are
+ * generated so the user can keep an [[auditable-disclosure-status]] trail of
+ * who they handed keys to.
  */
 export function createDelegatedViewKey(
   keys: UTXOpiaKeys,
   permissions: ViewPermissions = ViewPermissions.FULL,
-  options: { expiresAt?: number; label?: string } = {}
+  options: {
+    fromSlot?: number;
+    toSlot?: number;
+    expiresAt?: number;
+    label?: string;
+  } = {}
 ): DelegatedViewKey {
+  const issuedAt = Date.now();
+  const delegationId = generateDelegationId();
   return {
     viewingPrivKey: new Uint8Array(keys.viewingPrivKey),
+    spendingPubKeyCompressed: babyJubCompress(keys.spendingPubKey),
+    nullifyingKey: keys.nullifyingKey,
     permissions,
+    fromSlot: options.fromSlot,
+    toSlot: options.toSlot,
     expiresAt: options.expiresAt,
     label: options.label,
+    issuedAt,
+    delegationId,
   };
+}
+
+/**
+ * Build a public-only record of a delegated viewing key for the issuer's
+ * audit trail. Strips the secret material; only carries identifiers + scope.
+ */
+export function makeDelegationRecord(
+  key: DelegatedViewKey,
+  options: { recipient?: string } = {}
+): DelegationRecord {
+  return {
+    delegationId: key.delegationId ?? generateDelegationId(),
+    fingerprint: fingerprintDelegatedKey(key),
+    permissions: key.permissions,
+    fromSlot: key.fromSlot,
+    toSlot: key.toSlot,
+    expiresAt: key.expiresAt,
+    issuedAt: key.issuedAt ?? Date.now(),
+    label: key.label,
+    recipient: options.recipient,
+  };
+}
+
+/**
+ * Compute a stable fingerprint for a delegated viewing key.
+ *
+ * `sha256(viewingPrivKey)[..16]` rendered as hex — short enough to display,
+ * long enough to make collisions astronomically unlikely. Identical viewing
+ * keys produce identical fingerprints, so the user can detect duplicate
+ * delegations across export sessions.
+ */
+export function fingerprintDelegatedKey(key: DelegatedViewKey): string {
+  return bytesToHex(sha256(key.viewingPrivKey).slice(0, 16));
+}
+
+function generateDelegationId(): string {
+  const buf = new Uint8Array(16);
+  crypto.getRandomValues(buf);
+  return bytesToHex(buf);
+}
+
+/**
+ * Decide whether a slot falls within the delegated key's permitted range.
+ * No range bound on a side ⇒ unbounded on that side.
+ */
+export function isSlotInDelegatedRange(
+  key: DelegatedViewKey,
+  slot: number | undefined
+): boolean {
+  if (slot == null) {
+    // Slot unknown — only accept when the key itself has no range constraint.
+    return key.fromSlot == null && key.toSlot == null;
+  }
+  if (key.fromSlot != null && slot < key.fromSlot) return false;
+  if (key.toSlot != null && slot > key.toSlot) return false;
+  return true;
 }
 
 /**
@@ -584,8 +700,8 @@ export async function serializeDelegatedViewKey(
     dataBuffer
   );
 
-  const obj = {
-    version: 1,
+  const obj: Record<string, unknown> = {
+    version: 2,
     encrypted: true,
     salt: bytesToHex(salt),
     nonce: bytesToHex(nonce),
@@ -593,7 +709,18 @@ export async function serializeDelegatedViewKey(
     permissions: key.permissions,
     expiresAt: key.expiresAt,
     label: key.label,
+    delegationId: key.delegationId,
+    issuedAt: key.issuedAt,
+    fromSlot: key.fromSlot,
+    toSlot: key.toSlot,
+    fingerprint: fingerprintDelegatedKey(key),
   };
+  if (key.spendingPubKeyCompressed) {
+    obj.spendingPubKeyCompressed = bytesToHex(key.spendingPubKeyCompressed);
+  }
+  if (key.nullifyingKey != null) {
+    obj.nullifyingKey = key.nullifyingKey.toString(16);
+  }
   return JSON.stringify(obj);
 }
 
@@ -630,7 +757,7 @@ export async function deserializeDelegatedViewKey(
   const ciphertext = hexToBytes(obj.ciphertext);
   const passwordBytes = new TextEncoder().encode(password);
 
-  if (obj.version === 1) {
+  if (obj.version === 1 || obj.version === 2) {
     const iterations = 600_000;
     const encryptionKey = pbkdf2(sha256, passwordBytes, salt, { c: iterations, dkLen: 32 });
 
@@ -661,12 +788,25 @@ export async function deserializeDelegatedViewKey(
         cryptoKey,
         ciphertextBuffer
       );
-      return {
+      const out: DelegatedViewKey = {
         viewingPrivKey: new Uint8Array(plaintext),
         permissions: obj.permissions,
         expiresAt: obj.expiresAt,
         label: obj.label,
       };
+      if (obj.version === 2) {
+        if (typeof obj.spendingPubKeyCompressed === "string") {
+          out.spendingPubKeyCompressed = hexToBytes(obj.spendingPubKeyCompressed);
+        }
+        if (typeof obj.nullifyingKey === "string") {
+          out.nullifyingKey = BigInt("0x" + obj.nullifyingKey);
+        }
+        if (typeof obj.fromSlot === "number") out.fromSlot = obj.fromSlot;
+        if (typeof obj.toSlot === "number") out.toSlot = obj.toSlot;
+        if (typeof obj.issuedAt === "number") out.issuedAt = obj.issuedAt;
+        if (typeof obj.delegationId === "string") out.delegationId = obj.delegationId;
+      }
+      return out;
     } catch {
       throw new Error("Invalid password or corrupted data");
     }
@@ -674,7 +814,7 @@ export async function deserializeDelegatedViewKey(
 
   throw new Error(
     "Unsupported encryption format (version " + obj.version + "). " +
-    "Only version 1 (AES-GCM with Ed25519 keys) is supported."
+    "Supported versions: 1, 2."
   );
 }
 

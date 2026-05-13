@@ -54,6 +54,9 @@ pub mod init_vk_registry;
 // Tree management
 pub mod rotate_tree;
 
+// Proof of Innocence (Phase 3 — Privacy-Pools-style compliance attestations)
+pub mod poi;
+
 // Re-exports
 pub use initialize::*;
 pub use verify_stealth_deposit::*;
@@ -74,3 +77,4 @@ pub use admin_update_pool::*;
 pub use set_pool_config::*;
 pub use init_vk_registry::*;
 pub use rotate_tree::*;
+pub use poi::*;

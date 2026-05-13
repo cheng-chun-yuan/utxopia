@@ -75,6 +75,13 @@ pub struct VerificationResult {
     pub solana_tx: String,
     pub leaf_index: u64,
     pub block_height: u64,
+    /// The on-chain commitment (`Poseidon(npk, token_id, amount)`) extracted
+    /// from the stealth announcement event log emitted by `verify_stealth_deposit`.
+    /// Phase 3c PoI auto-feed uses this to add the leaf to the association set.
+    ///
+    /// `None` if the log could not be parsed (older deployments / RPCs without
+    /// log retention) — callers should treat this as best-effort.
+    pub commitment: Option<[u8; 32]>,
 }
 
 // =============================================================================
@@ -223,13 +230,23 @@ impl SpvVerifier {
 
         let solana_tx = result?;
 
-        // Get leaf index from the transaction's log events
-        let leaf_index = self.get_leaf_index_from_tx(&solana_tx).await?;
+        // Get leaf index + commitment from the transaction's log events
+        let (leaf_index, commitment) = match self.get_announcement_from_tx(&solana_tx).await {
+            Ok(pair) => (pair.0, Some(pair.1)),
+            Err(e) => {
+                // Older callers only required leaf_index. Re-fetch via the
+                // legacy path; if that also fails, propagate.
+                eprintln!("[verifier] announcement parse fallback: {}", e);
+                let li = self.get_leaf_index_from_tx(&solana_tx).await?;
+                (li, None)
+            }
+        };
 
         Ok(VerificationResult {
             solana_tx,
             leaf_index,
             block_height,
+            commitment,
         })
     }
 
@@ -396,12 +413,20 @@ impl SpvVerifier {
         drop(sweep_buffer_keypair);
 
         let solana_tx = result?;
-        let leaf_index = self.get_leaf_index_from_tx(&solana_tx).await?;
+        let (leaf_index, commitment) = match self.get_announcement_from_tx(&solana_tx).await {
+            Ok(pair) => (pair.0, Some(pair.1)),
+            Err(e) => {
+                eprintln!("[verifier-v2] announcement parse fallback: {}", e);
+                let li = self.get_leaf_index_from_tx(&solana_tx).await?;
+                (li, None)
+            }
+        };
 
         Ok(VerificationResult {
             solana_tx,
             leaf_index,
             block_height,
+            commitment,
         })
     }
 
@@ -525,6 +550,21 @@ impl SpvVerifier {
     /// Parses the stealth_announcement event (disc=0x03) emitted by the program.
     /// Event layout: disc(1) + type(1) + ephemeral_pub(32) + encrypted_amount(8) + commitment(32) + leaf_index(4)
     async fn get_leaf_index_from_tx(&self, signature: &str) -> Result<u64, VerifierError> {
+        let (leaf_index, _) = self.get_announcement_from_tx(signature).await?;
+        Ok(leaf_index)
+    }
+
+    /// Parse the stealth announcement event (disc=0x03) emitted by
+    /// `verify_stealth_deposit` / `verify_deposit_v2` and return
+    /// `(leaf_index, commitment)`. Used by Phase 3c PoI auto-feed.
+    ///
+    /// Event layout (base64-encoded "Program data:" segments):
+    ///   disc(1) + type(1) + ephemeral_pub(32) + encrypted_amount(8)
+    ///     + commitment(32) + leaf_index(4)
+    async fn get_announcement_from_tx(
+        &self,
+        signature: &str,
+    ) -> Result<(u64, [u8; 32]), VerifierError> {
         use base64::Engine;
 
         // Use raw JSON-RPC (same approach as event_indexer) to avoid solana-transaction-status dep
@@ -571,11 +611,15 @@ impl SpvVerifier {
                     continue;
                 }
 
+                // commitment is segment[4], 32 bytes
                 // leaf_index is segment[5], 4 bytes LE (u32)
+                let commitment_bytes = &segments[4];
                 let li_bytes = &segments[5];
-                if li_bytes.len() == 4 {
+                if commitment_bytes.len() == 32 && li_bytes.len() == 4 {
+                    let mut commitment = [0u8; 32];
+                    commitment.copy_from_slice(commitment_bytes);
                     let leaf_index = u32::from_le_bytes(li_bytes[..4].try_into().unwrap());
-                    return Ok(leaf_index as u64);
+                    return Ok((leaf_index as u64, commitment));
                 }
             }
         }

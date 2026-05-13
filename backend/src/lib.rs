@@ -33,6 +33,7 @@ pub mod config;
 pub mod deposit_tracker;
 pub mod redemption;
 pub mod stealth;
+pub mod poi_service;
 
 // Re-exports: Configuration
 pub use config::{ConfigError, Network, SigningMode, UTXOpiaConfig};

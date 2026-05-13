@@ -23,6 +23,12 @@
 //! - [..]     nullifiers:      [[u8; 32]; n_inputs]
 //! - [..]     commitments_out: [[u8; 32]; n_outputs]
 //! - [..]     stealth_data:    [ephemeral_pub(32) + encrypted_amount(8) + encrypted_token_id(32)] × n_outputs
+//! - [..]     sender_memos (OPTIONAL): [nonce(24) + ciphertext_and_tag(56)] × n_outputs
+//!
+//! Sender memos are detected by comparing `data.len()` to `expected_len` vs
+//! `expected_len + n_outputs * 80`. Older clients omit the memos; the contract
+//! handles both. Commitment + leafIndex used as AAD inside the memo are filled
+//! in by the contract from the public inputs and tree insertion result.
 //!
 //! Accounts:
 //! 0. pool_state         (writable)
@@ -58,6 +64,11 @@ const MAX_JOINSPLIT_SIZE: usize = crate::constants::MAX_SAFE_JOINSPLIT_SIZE;
 
 /// Stealth data per output: ephemeral_pub (32) + encrypted_amount (8) + encrypted_token_id (32)
 const STEALTH_DATA_PER_OUTPUT: usize = 72;
+
+/// Sender-memo data per output (optional trailing section): nonce (24) + ciphertext_and_tag (56).
+/// The contract fills in `commitment` and `leaf_index` (from public inputs + tree insertion)
+/// when emitting the on-chain event, so the user can't lie about either.
+const SENDER_MEMO_DATA_PER_OUTPUT: usize = 80;
 
 /// Authority prefix size in ChadBuffer accounts
 const CHADBUFFER_AUTHORITY_SIZE: usize = 32;
@@ -149,6 +160,14 @@ pub fn process_transact(
     let stealth_data_start = offset;
     let stealth_data_len = n_outputs * STEALTH_DATA_PER_OUTPUT;
     let stealth_data_end = stealth_data_start + stealth_data_len;
+
+    // Detect optional sender-memo section by exact data length match.
+    // Older clients send no memo bytes (data ends at stealth_data_end); newer
+    // clients append exactly n_outputs * SENDER_MEMO_DATA_PER_OUTPUT bytes.
+    // Anything else trailing is ignored (forward-compat for future extensions).
+    let sender_memos_len = n_outputs * SENDER_MEMO_DATA_PER_OUTPUT;
+    let has_sender_memos = data.len() == stealth_data_end + sender_memos_len;
+    let sender_memos_start = stealth_data_end;
 
     // Verify bound params hash — includes stealth data hash to prevent relayer tampering
     {
@@ -352,6 +371,25 @@ pub fn process_transact(
                 leaf_index as u32,
                 encrypted_token_id,
             );
+
+            // Optionally emit sender memo (Phase 2): user's own outgoing-view
+            // copy of the output. AEAD-encrypted under `ovk`, bound to this
+            // leaf via commitment + leaf_index AAD.
+            if has_sender_memos {
+                let memo_offset = sender_memos_start + i * SENDER_MEMO_DATA_PER_OUTPUT;
+                let memo_nonce: &[u8; 24] = data[memo_offset..memo_offset + 24]
+                    .try_into()
+                    .unwrap();
+                let memo_ct_and_tag: &[u8; 56] = data[memo_offset + 24..memo_offset + 80]
+                    .try_into()
+                    .unwrap();
+                crate::utils::events::emit_sender_memo(
+                    memo_nonce,
+                    memo_ct_and_tag,
+                    commitments_out[i],
+                    leaf_index as u32,
+                );
+            }
         }
     }
 

@@ -62,6 +62,27 @@ const EVENT_UTXO_CONSUMED: u8 = 0x10;
 /// Event discriminator: shield metadata (gross amount + fee for SPL/BTC deposits)
 const EVENT_SHIELD_META: u8 = 0x11;
 
+/// Event discriminator: sender memo (Phase 2 — outgoing visibility for the
+/// sender's own viewing key). Encrypted with XChaCha20-Poly1305 AEAD using
+/// an `ovk = SHA-256(viewingPrivKey || "utxopia.ovk.v1")` outgoing viewing
+/// key. AAD = commitment || leaf_index_le, so the Poly1305 tag binds the
+/// memo to its tree leaf (regulator-grade tamper detection).
+///
+/// Layout:
+///   disc(1) + nonce(24) + ciphertext_and_tag(56) + commitment(32) + leaf_index(4)
+///   = 117 bytes
+pub const EVENT_SENDER_MEMO: u8 = 0x12;
+
+/// Event discriminator: association-set root updated (Phase 3 — admin action).
+///
+/// Layout: disc(1) + new_root(32) + status(1) + version_le(8) = 42 bytes
+pub const EVENT_ASSOCIATION_ROOT_UPDATED: u8 = 0x13;
+
+/// Event discriminator: PoI attestation (Phase 3 — Privacy-Pools style).
+///
+/// Layout: disc(1) + association_root(32) + commitment(32) + version_le(8) = 73 bytes
+pub const EVENT_POI_ATTESTED: u8 = 0x14;
+
 /// Max batch items for stack-allocated buffer (MAX_SAFE_JOINSPLIT_SIZE = 14)
 const MAX_BATCH: usize = 14;
 
@@ -274,6 +295,41 @@ pub fn emit_shield_meta(
     let gross = gross_amount.to_le_bytes();
     let f = fee.to_le_bytes();
     sol_log_data(&[&disc, &gross, &f, token_id]);
+}
+
+/// Emit a sender memo (Phase 2 — outgoing visibility for the sender's own viewing key).
+///
+/// Encrypted with XChaCha20-Poly1305 AEAD using `ovk` derived from the sender's
+/// viewing private key. The Poly1305 tag is included in `ciphertext_and_tag`
+/// (last 16 bytes); AAD = `commitment || leaf_index_le` so the tag binds the
+/// memo to its tree leaf.
+///
+/// Layout: disc(1) + nonce(24) + ciphertext_and_tag(56) + commitment(32) + leaf_index(4)
+///         = 117 bytes
+pub fn emit_sender_memo(
+    nonce: &[u8; 24],
+    ciphertext_and_tag: &[u8; 56],
+    commitment: &[u8; 32],
+    leaf_index: u32,
+) {
+    let disc = [EVENT_SENDER_MEMO];
+    let li = leaf_index.to_le_bytes();
+    sol_log_data(&[&disc, nonce, ciphertext_and_tag, commitment, &li]);
+}
+
+/// Emit when the AssociationSet's current_root is changed by the admin.
+pub fn emit_association_root_updated(new_root: &[u8; 32], status: u8, version: u64) {
+    let disc = [EVENT_ASSOCIATION_ROOT_UPDATED];
+    let status_byte = [status];
+    let version_bytes = version.to_le_bytes();
+    sol_log_data(&[&disc, new_root, &status_byte, &version_bytes]);
+}
+
+/// Emit when a Proof of Innocence is successfully verified on chain.
+pub fn emit_poi_attested(association_root: &[u8; 32], commitment: &[u8; 32], version: u64) {
+    let disc = [EVENT_POI_ATTESTED];
+    let version_bytes = version.to_le_bytes();
+    sol_log_data(&[&disc, association_root, commitment, &version_bytes]);
 }
 
 /// Data for a single announcement in a batch (with token_id)

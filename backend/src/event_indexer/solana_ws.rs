@@ -180,6 +180,9 @@ impl SolanaWsSubscriber {
                 ProgramEvent::UtxoCreated(_) => {} // handled by poll indexer
                 ProgramEvent::UtxoConsumed(_) => {} // handled by poll indexer
                 ProgramEvent::ShieldMeta(_) => {} // handled by poll indexer
+                ProgramEvent::SenderMemo(_) => {} // handled by poll indexer
+                ProgramEvent::AssociationRootUpdated(_) => {} // handled by poll indexer
+                ProgramEvent::PoIAttested(_) => {} // handled by poll indexer
             }
         }
 

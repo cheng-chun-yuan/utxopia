@@ -183,6 +183,8 @@ export interface OnChainStealthAnnouncement {
   leafIndex: number;
   /** Unix timestamp (seconds) from on-chain block_time, 0 if unavailable */
   blockTime?: number;
+  /** Solana slot the announcement was emitted in. Needed for auditor slot-range scoping. */
+  slot?: number;
 }
 
 // ========== Helper Functions ==========

@@ -63,6 +63,9 @@ const INSTRUCTION = {
   CANCEL_REDEMPTION: 19,
   // Tree management (20)
   ROTATE_TREE: 20,
+  // Proof of Innocence (21-22)
+  UPDATE_ASSOCIATION_ROOT: 21,
+  ATTEST_POI: 22,
 } as const;
 
 /** Export instruction discriminators for consumers */
@@ -531,6 +534,12 @@ export interface TransactInstructionOptions {
   commitmentsOut: Uint8Array[];
   /** Per-output stealth data: ephemeral_pub (32) + encrypted_amount (8) */
   stealthData: Uint8Array[];
+  /**
+   * Optional per-output sender memos (Phase 2): 80 bytes each, layout
+   * `nonce(24) || ciphertext_and_tag(56)` from `encryptSenderMemo`. Pass
+   * via `packSenderMemoForInstruction` or pre-slice manually.
+   */
+  senderMemos?: Uint8Array[];
   /** Account addresses */
   accounts: {
     poolState: Address;
@@ -569,8 +578,16 @@ export function buildTransactInstructionData(options: {
   stealthData: Uint8Array[];
   /** 0=inline proof (default), 1=proof in separate ChadBuffer account */
   proofSource?: 0 | 1;
+  /**
+   * Optional Phase 2 sender memos — one per output. Each entry is 80 bytes:
+   * `nonce(24) || ciphertext_and_tag(56)` from `encryptSenderMemo`. When
+   * supplied, the program emits an EVENT_SENDER_MEMO for each output so the
+   * sender can later reconstruct their outgoing history with `ovk`. Omit to
+   * skip the channel entirely.
+   */
+  senderMemos?: Uint8Array[];
 }): Uint8Array {
-  const { nInputs, nOutputs, proofBytes, merkleRoot, boundParamsHash, nullifiers, commitmentsOut, stealthData } = options;
+  const { nInputs, nOutputs, proofBytes, merkleRoot, boundParamsHash, nullifiers, commitmentsOut, stealthData, senderMemos } = options;
   const proofSource = options.proofSource ?? 0;
 
   if (proofSource === 0 && (!proofBytes || proofBytes.length !== 256)) {
@@ -587,8 +604,26 @@ export function buildTransactInstructionData(options: {
   }
 
   const STEALTH_DATA_PER_OUTPUT = 72; // ephemeral_pub(32) + encrypted_amount(8) + encrypted_token_id(32)
+  const SENDER_MEMO_PER_OUTPUT = 80; // nonce(24) + ciphertext_and_tag(56)
+
+  const hasSenderMemos = senderMemos != null;
+  if (hasSenderMemos) {
+    if (senderMemos!.length !== nOutputs) {
+      throw new Error(`Expected ${nOutputs} sender memo entries, got ${senderMemos!.length}`);
+    }
+    for (let i = 0; i < senderMemos!.length; i++) {
+      if (senderMemos![i].length !== SENDER_MEMO_PER_OUTPUT) {
+        throw new Error(
+          `Sender memo ${i} must be ${SENDER_MEMO_PER_OUTPUT} bytes; got ${senderMemos![i].length}`,
+        );
+      }
+    }
+  }
+
   const proofSize = proofSource === 0 ? 256 : 0;
-  const totalSize = 1 + 4 + proofSize + 32 + 32 + (nInputs * 32) + (nOutputs * 32) + (nOutputs * STEALTH_DATA_PER_OUTPUT);
+  const senderMemosSize = hasSenderMemos ? nOutputs * SENDER_MEMO_PER_OUTPUT : 0;
+  const totalSize =
+    1 + 4 + proofSize + 32 + 32 + nInputs * 32 + nOutputs * 32 + nOutputs * STEALTH_DATA_PER_OUTPUT + senderMemosSize;
   const data = new Uint8Array(totalSize);
 
   let offset = 0;
@@ -634,6 +669,14 @@ export function buildTransactInstructionData(options: {
     offset += STEALTH_DATA_PER_OUTPUT;
   }
 
+  // Optional sender memos (Phase 2): nonce(24) + ciphertext_and_tag(56) per output
+  if (hasSenderMemos) {
+    for (const memo of senderMemos!) {
+      data.set(memo, offset);
+      offset += SENDER_MEMO_PER_OUTPUT;
+    }
+  }
+
   return data;
 }
 
@@ -660,6 +703,7 @@ export function buildTransactInstruction(options: TransactInstructionOptions): I
     nullifiers: options.nullifiers,
     commitmentsOut: options.commitmentsOut,
     stealthData: options.stealthData,
+    senderMemos: options.senderMemos,
   });
 
   const accounts: Instruction["accounts"] = [
