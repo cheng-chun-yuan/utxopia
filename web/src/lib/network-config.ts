@@ -59,26 +59,21 @@ export interface NetworkMeta {
 export const NETWORK_META: NetworkMeta[] = [
   {
     id: "devnet",
-    label: "Devnet (production)",
-    tagline: "Real testnet4 BTC + Solana devnet",
-    description:
-      "The live demo stack: Solana devnet program + testnet4 Bitcoin via mempool.space. Full deposit/transact/unshield/redeem with the production Ika dWallet for BTC redemption.",
+    label: "Devnet",
+    tagline: "Solana devnet + Bitcoin testnet4",
+    description: "Live demo stack. Full flow with the production Ika dWallet.",
     caveats: [
-      "Bitcoin testnet4 blocks take ~10 minutes — deposits + redemptions are slow.",
-      "Requires testnet4 BTC from a faucet to send a deposit.",
+      "Testnet4 blocks take ~10 min. Needs testnet4 BTC from a faucet.",
     ],
     enabled: true,
   },
   {
     id: "devnet-regtest",
-    label: "Hybrid (devnet + local regtest)",
-    tagline: "Solana devnet + local regtest BTC — fast iteration",
-    description:
-      "A second UTXOpia program on Solana devnet wired to local regtest Bitcoin. Same on-chain trust model as production, but BTC blocks mine instantly so the deposit → JoinSplit → unshield loop runs in seconds rather than minutes.",
+    label: "Hybrid",
+    tagline: "Solana devnet + local regtest BTC",
+    description: "Same on-chain model as production. Blocks mine instantly — full loop in seconds.",
     caveats: [
-      "Regtest BTC has zero real-world value. State is reset whenever the local docker stack restarts.",
-      "BTC redemption (complete_redemption → Ika CPI) is not yet wired — works with a placeholder demo key for now.",
-      "Backend must be reachable at the configured URL. For local dev, `docker compose -f docker-compose.hybrid.yml up -d` exposes it at localhost:3020.",
+      "Local regtest BTC; state resets with the docker stack.",
     ],
     enabled: true,
   },
