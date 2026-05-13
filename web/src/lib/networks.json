@@ -26,7 +26,7 @@
       "dwalletXOnlyPubkey": "87a1014ea16e42c825026889874902875aec7650b39c2b334a4d04d49b904c76"
     },
     "backend": {
-      "url": "https://api-aegis.amidoggy.xyz"
+      "url": "https://api.utxopia.com"
     }
   },
   "devnet-regtest": {
