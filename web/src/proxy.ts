@@ -75,6 +75,8 @@ function addSecurityHeaders(response: NextResponse) {
     "https://mempool.space",
     "wss://mempool.space",
     "https://*.amidoggy.xyz",
+    // utxopia.com subdomains: api (prod), api-hybrid (devnet+regtest), btc (regtest esplora)
+    "https://*.utxopia.com",
     circuitOrigin,
   ]
     .filter(Boolean)
