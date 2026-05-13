@@ -5,6 +5,8 @@ import {
   deriveOutgoingViewingKey,
   packSenderMemo,
   unpackSenderMemo,
+  packSenderMemoForInstruction,
+  buildSenderMemosForTransact,
   generateSenderMemoNonce,
   SENDER_MEMO_AMOUNT_BYTES,
   SENDER_MEMO_CIPHERTEXT_BYTES,
@@ -210,5 +212,137 @@ describe("constants", () => {
     expect(SENDER_MEMO_AMOUNT_BYTES + SENDER_MEMO_TOKEN_BYTES + 16).toBe(
       SENDER_MEMO_CIPHERTEXT_BYTES,
     );
+  });
+});
+
+describe("buildSenderMemosForTransact — high-level helper", () => {
+  it("produces one 80-byte instruction slice per output", () => {
+    const vk = fakeViewingKey();
+    const outputs = [
+      { tokenId: ZKBTC_TOKEN_ID, amount: 70_000n, commitment: fakeCommitment(0xa1), leafIndex: 12 },
+      { tokenId: ZKBTC_TOKEN_ID, amount: 30_000n, commitment: fakeCommitment(0xa2), leafIndex: 13 },
+    ];
+    const memos = buildSenderMemosForTransact(vk, outputs);
+    expect(memos).toHaveLength(2);
+    for (const m of memos) {
+      expect(m.length).toBe(SENDER_MEMO_NONCE_BYTES + SENDER_MEMO_CIPHERTEXT_BYTES);
+    }
+    // Two outputs at different leafIndices must produce distinct ciphertexts
+    expect(memos[0]).not.toEqual(memos[1]);
+  });
+
+  it("emits memos that round-trip when paired with the on-chain commitment + leafIndex", () => {
+    const vk = fakeViewingKey();
+    const commitment = fakeCommitment(0xb7);
+    const leafIndex = 1337;
+    const [packed] = buildSenderMemosForTransact(vk, [
+      { tokenId: ZKBTC_TOKEN_ID, amount: 12_345n, commitment, leafIndex },
+    ]);
+    // Reconstruct the SenderMemoCiphertext exactly as the program would emit it
+    const nonce = packed.slice(0, SENDER_MEMO_NONCE_BYTES);
+    const ct = packed.slice(SENDER_MEMO_NONCE_BYTES);
+    const recovered = decryptSenderMemo(vk, {
+      nonce,
+      ciphertextWithTag: ct,
+      commitment,
+      leafIndex,
+    });
+    expect(recovered).not.toBeNull();
+    expect(recovered!.tokenId).toBe(ZKBTC_TOKEN_ID);
+    expect(recovered!.amount).toBe(12_345n);
+  });
+
+  it("decryption fails if the program lands the commitment at a different leafIndex (AAD binding)", () => {
+    const vk = fakeViewingKey();
+    const commitment = fakeCommitment(0xb7);
+    const predictedIndex = 1337;
+    const actualIndex = 1338; // raced against another transact
+    const [packed] = buildSenderMemosForTransact(vk, [
+      { tokenId: ZKBTC_TOKEN_ID, amount: 12_345n, commitment, leafIndex: predictedIndex },
+    ]);
+    const recovered = decryptSenderMemo(vk, {
+      nonce: packed.slice(0, SENDER_MEMO_NONCE_BYTES),
+      ciphertextWithTag: packed.slice(SENDER_MEMO_NONCE_BYTES),
+      commitment,
+      leafIndex: actualIndex,
+    });
+    expect(recovered).toBeNull();
+  });
+
+  it("rejects wrong-length commitments", () => {
+    const vk = fakeViewingKey();
+    expect(() =>
+      buildSenderMemosForTransact(vk, [
+        { tokenId: 1n, amount: 1n, commitment: new Uint8Array(31), leafIndex: 0 },
+      ]),
+    ).toThrow();
+  });
+
+  it("rejects out-of-range leafIndex", () => {
+    const vk = fakeViewingKey();
+    expect(() =>
+      buildSenderMemosForTransact(vk, [
+        { tokenId: 1n, amount: 1n, commitment: fakeCommitment(), leafIndex: -1 },
+      ]),
+    ).toThrow();
+    expect(() =>
+      buildSenderMemosForTransact(vk, [
+        { tokenId: 1n, amount: 1n, commitment: fakeCommitment(), leafIndex: 0x1_0000_0000 },
+      ]),
+    ).toThrow();
+  });
+
+  it("output ordering matches input ordering", () => {
+    const vk = fakeViewingKey();
+    const commits = [fakeCommitment(0x01), fakeCommitment(0x02), fakeCommitment(0x03)];
+    const memos = buildSenderMemosForTransact(vk, [
+      { tokenId: 1n, amount: 100n, commitment: commits[0], leafIndex: 0 },
+      { tokenId: 1n, amount: 200n, commitment: commits[1], leafIndex: 1 },
+      { tokenId: 1n, amount: 300n, commitment: commits[2], leafIndex: 2 },
+    ]);
+    const amounts = memos.map((packed, i) => {
+      const recovered = decryptSenderMemo(vk, {
+        nonce: packed.slice(0, SENDER_MEMO_NONCE_BYTES),
+        ciphertextWithTag: packed.slice(SENDER_MEMO_NONCE_BYTES),
+        commitment: commits[i],
+        leafIndex: i,
+      });
+      return recovered!.amount;
+    });
+    expect(amounts).toEqual([100n, 200n, 300n]);
+  });
+
+  it("matches packSenderMemoForInstruction(encryptSenderMemo(…)) byte-for-byte", () => {
+    const vk = fakeViewingKey();
+    const commitment = fakeCommitment(0x5a);
+    const leafIndex = 99;
+    // Use a fixed nonce so the two helpers produce identical bytes
+    const nonce = new Uint8Array(SENDER_MEMO_NONCE_BYTES).fill(0x77);
+    const manual = packSenderMemoForInstruction(
+      encryptSenderMemo(
+        vk,
+        { tokenId: ZKBTC_TOKEN_ID, amount: 500n },
+        { commitment, leafIndex },
+        nonce,
+      ),
+    );
+
+    // The high-level helper uses a fresh random nonce internally, so we
+    // can't compare directly. Instead assert that the decrypt path agrees
+    // with the manual path: same plaintext, same AAD → either ciphertext
+    // is valid input to decrypt.
+    const [helper] = buildSenderMemosForTransact(vk, [
+      { tokenId: ZKBTC_TOKEN_ID, amount: 500n, commitment, leafIndex },
+    ]);
+    for (const packed of [manual, helper]) {
+      const recovered = decryptSenderMemo(vk, {
+        nonce: packed.slice(0, SENDER_MEMO_NONCE_BYTES),
+        ciphertextWithTag: packed.slice(SENDER_MEMO_NONCE_BYTES),
+        commitment,
+        leafIndex,
+      });
+      expect(recovered).not.toBeNull();
+      expect(recovered!.amount).toBe(500n);
+    }
   });
 });

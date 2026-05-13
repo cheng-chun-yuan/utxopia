@@ -217,6 +217,63 @@ export function packSenderMemoForInstruction(memo: SenderMemoCiphertext): Uint8A
   return out;
 }
 
+/**
+ * Per-output input for {@link buildSenderMemosForTransact}.
+ *
+ * - `tokenId` / `amount` are the plaintext payload that lands in the memo.
+ * - `commitment` is the 32-byte output commitment for this leaf — must match
+ *   exactly what the program inserts (it's AAD).
+ * - `leafIndex` is the predicted on-chain leaf index for this output. Get it
+ *   by reading the commitment tree's `next_leaf_index` before signing and
+ *   incrementing for each output in order. If the tx races with another
+ *   `transact` that inserts first, decryption will fail (the AAD won't
+ *   match) — callers should be prepared to skip the failed memo on read
+ *   rather than treat it as fatal.
+ */
+export interface SenderMemoOutput {
+  tokenId: bigint;
+  amount: bigint;
+  commitment: Uint8Array;
+  leafIndex: number;
+}
+
+/**
+ * Build the per-output 80-byte sender-memo slices for a `transact` call.
+ *
+ * Returns one `Uint8Array` per output, each containing
+ * `nonce(24) || ciphertext_and_tag(56)`. Pass the result directly to
+ * {@link buildTransactInstructionData} as `senderMemos`.
+ *
+ * The program emits the commitment + leaf index back as part of
+ * `emit_sender_memo`, so they're omitted from the instruction-data form —
+ * but they remain bound via AAD, so a relayer can't lift a memo onto a
+ * different output.
+ */
+export function buildSenderMemosForTransact(
+  viewingPrivKey: Uint8Array,
+  outputs: ReadonlyArray<SenderMemoOutput>,
+): Uint8Array[] {
+  const out: Uint8Array[] = new Array(outputs.length);
+  for (let i = 0; i < outputs.length; i++) {
+    const o = outputs[i];
+    if (o.commitment.length !== SENDER_MEMO_COMMITMENT_BYTES) {
+      throw new Error(
+        `output ${i} commitment must be ${SENDER_MEMO_COMMITMENT_BYTES} bytes; got ${o.commitment.length}`,
+      );
+    }
+    if (!Number.isInteger(o.leafIndex) || o.leafIndex < 0 || o.leafIndex > 0xffffffff) {
+      throw new RangeError(`output ${i} leafIndex must be a u32; got ${o.leafIndex}`);
+    }
+    const memo = encryptSenderMemo(
+      viewingPrivKey,
+      { tokenId: o.tokenId, amount: o.amount },
+      { commitment: o.commitment, leafIndex: o.leafIndex },
+    );
+    out[i] = packSenderMemoForInstruction(memo);
+  }
+  return out;
+}
+
 /** Deserialize a 116-byte packed memo. */
 export function unpackSenderMemo(bytes: Uint8Array): SenderMemoCiphertext {
   if (bytes.length !== SENDER_MEMO_PACKED_BYTES) {

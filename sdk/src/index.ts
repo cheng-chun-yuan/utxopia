@@ -110,6 +110,7 @@ export {
   packSenderMemo,
   unpackSenderMemo,
   packSenderMemoForInstruction,
+  buildSenderMemosForTransact,
   generateSenderMemoNonce,
   SENDER_MEMO_AMOUNT_BYTES,
   SENDER_MEMO_CIPHERTEXT_BYTES,
@@ -120,6 +121,7 @@ export {
   SENDER_MEMO_TOKEN_BYTES,
   type SenderMemoPlain,
   type SenderMemoCiphertext,
+  type SenderMemoOutput,
 } from "./sender-memo";
 
 // Proof of Innocence (Phase 3)
