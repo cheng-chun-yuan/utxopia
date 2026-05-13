@@ -186,10 +186,24 @@ export function setNetwork(network: NetworkId): void {
   }
 }
 
-export function getNetworkConfig(network?: NetworkId): NetworkConfig {
+export interface GetNetworkConfigOptions {
+  /** When false, skip env-var overrides so networks.json is returned as-is.
+   *  Use this when the caller has already decided which network they want and
+   *  doesn't want BACKEND_API_URL / SOLANA_RPC_URL to silently shadow the
+   *  per-network value (e.g. multi-network deployments via cookie). */
+  applyEnvOverrides?: boolean;
+}
+
+export function getNetworkConfig(
+  network?: NetworkId,
+  options: GetNetworkConfigOptions = {},
+): NetworkConfig {
+  const { applyEnvOverrides = true } = options;
   const net = network ?? detectNetwork();
   const cfg = { ...networks[net] };
   if (!cfg) throw new Error(`Unknown network: ${net}`);
+
+  if (!applyEnvOverrides) return cfg;
 
   // Allow env var overrides for URLs only
   const rpcOverride =

@@ -52,13 +52,17 @@ export function getSolanaRpcUrl(): string {
  * Priority (network arg given): networks.json[network] > env var override > localhost
  */
 export function getBackendUrl(network?: NetworkId): string {
-  const cfgUrl = getNetworkConfig(network).backend.url;
   if (typeof network !== "undefined") {
-    // Caller is explicit about which stack; honor it over the env default.
-    return cfgUrl || (typeof window === "undefined"
+    // Caller is explicit about which stack; read networks.json directly so a
+    // BACKEND_API_URL env var (set for the default stack) doesn't shadow the
+    // per-network value.
+    const rawUrl = getNetworkConfig(network, { applyEnvOverrides: false })
+      .backend.url;
+    return rawUrl || (typeof window === "undefined"
       ? process.env.BACKEND_API_URL
       : process.env.NEXT_PUBLIC_BACKEND_API_URL) || DEFAULT_API_URL;
   }
+  const cfgUrl = getNetworkConfig().backend.url;
   if (typeof window === "undefined") {
     return process.env.BACKEND_API_URL || cfgUrl || DEFAULT_API_URL;
   }

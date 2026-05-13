@@ -5,7 +5,7 @@
  *   - resolved backend URL
  *   - relevant env vars
  *
- * Hit with /api/_debug from the browser to confirm the cookie reaches the
+ * Hit with /api/debug from the browser to confirm the cookie reaches the
  * server and the network resolution does what we expect. Server-side only,
  * no secrets exposed.
  */
