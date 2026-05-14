@@ -3,7 +3,7 @@
 import React, { memo } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Bitcoin, Shield, Zap, Lock, ArrowRight, EyeOff, Fingerprint, ShieldCheck, Loader2, ChevronRight, Layers, Rocket } from "lucide-react";
+import { Bitcoin, Shield, Zap, Lock, ArrowRight, EyeOff, ShieldCheck, Loader2, ChevronRight, Layers, Rocket } from "lucide-react";
 import { usePoolStats } from "@/hooks/use-pool-stats";
 import { useTokenPrices } from "@/hooks/use-token-prices";
 import { tvlToUsd } from "@/lib/supported-tokens";
@@ -249,13 +249,13 @@ export default function Home() {
 
             <ScrollReveal delay={0.1}>
               <h1 className="hero-title text-foreground">
-                Your Tokens. <span className="text-privacy">Shielded.</span>
+                Private. <span className="text-privacy">Audit-ready.</span> Solana.
               </h1>
             </ScrollReveal>
 
             <ScrollReveal delay={0.15}>
-              <p className="mt-6 text-base md:text-lg text-gray font-light max-w-md mx-auto leading-relaxed">
-                Shield any Solana token with ZK proofs. Fully private transfers, hidden balances, stealth addresses.
+              <p className="mt-6 text-base md:text-lg text-gray font-light max-w-lg mx-auto leading-relaxed">
+                One shielded pool for UTXO, SPL, and P-Token assets. Privacy by default, auditable on demand.
               </p>
             </ScrollReveal>
 
@@ -263,15 +263,15 @@ export default function Home() {
               <div className="mt-6 flex flex-wrap items-center justify-center gap-4 text-caption text-gray">
                 <div className="flex items-center gap-1.5">
                   <EyeOff className="w-4 h-4 text-privacy" />
-                  <span>Hidden Amounts</span>
+                  <span>Private by Default</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <Fingerprint className="w-4 h-4 text-sol" />
-                  <span>Anonymous Transfers</span>
+                  <ShieldCheck className="w-4 h-4 text-cyan" />
+                  <span>Auditable on Demand</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <Layers className="w-4 h-4 text-privacy" />
-                  <span>Multi-Token Support</span>
+                  <Layers className="w-4 h-4 text-sol" />
+                  <span>UTXO · SPL · P-Token</span>
                 </div>
               </div>
             </ScrollReveal>
