@@ -56,6 +56,7 @@ pub mod rotate_tree;
 
 // Proof of Innocence (Phase 3 — Privacy-Pools-style compliance attestations)
 pub mod poi;
+pub mod transact_with_poi;
 
 // Re-exports
 pub use initialize::*;
@@ -78,3 +79,4 @@ pub use set_pool_config::*;
 pub use init_vk_registry::*;
 pub use rotate_tree::*;
 pub use poi::*;
+pub use transact_with_poi::*;

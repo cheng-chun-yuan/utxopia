@@ -98,6 +98,12 @@ pub mod instruction {
     // sweep, then 25 to verify the swept tx against that PDA on chain.
     pub const REGISTER_DEPOSIT_INTENT: u8 = 24;
     pub const VERIFY_DEPOSIT_V2: u8 = 25;
+
+    /// Phase 3d-full prototype — co-attestation that pairs with a regular
+    /// `transact` (disc 13) in the same tx and proves the spent commitment
+    /// was in the curated association set. 1x2 variant only for now; other
+    /// (N, M) variants need their own compiled with_poi circuits + VKs.
+    pub const TRANSACT_WITH_POI: u8 = 26;
 }
 
 #[cfg(not(feature = "no-entrypoint"))]
@@ -150,6 +156,9 @@ pub fn process_instruction(
         instruction::ATTEST_POI => instructions::process_attest_poi(program_id, accounts, data),
         instruction::ATTEST_POI_HIDDEN => {
             instructions::process_attest_poi_hidden(program_id, accounts, data)
+        }
+        instruction::TRANSACT_WITH_POI => {
+            instructions::process_transact_with_poi(program_id, accounts, data)
         }
         // OP_RETURN-free deposits (24-25)
         instruction::REGISTER_DEPOSIT_INTENT => instructions::process_register_deposit_intent(program_id, accounts, data),

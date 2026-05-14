@@ -105,6 +105,18 @@ pub const EVENT_BTC_ORIGIN_ATTESTATION: u8 = 0x15;
 /// Layout: disc(1) + association_root(32) + blinded_id(32) + version_le(8) = 73 bytes
 pub const EVENT_POI_HIDDEN_ATTESTED: u8 = 0x16;
 
+/// Event discriminator: transact-with-PoI co-attestation (Phase 3d-full).
+///
+/// Emitted by `transact_with_poi` (disc 26) when the program verifies the
+/// JoinSplit-with-PoI proof for a (1, 2) variant. Downstream consumers pair
+/// this with a matching `transact` (disc 13) event in the same tx — same
+/// `nullifier` + `commitments_out` — to conclude "that transact's input was
+/// in the curated clean set anchored at `association_root`."
+///
+/// Layout: disc(1) + association_root(32) + nullifier(32) + commitment_out_0(32)
+///       + commitment_out_1(32) + version_le(8) = 137 bytes
+pub const EVENT_TRANSACT_WITH_POI: u8 = 0x17;
+
 /// Max batch items for stack-allocated buffer (MAX_SAFE_JOINSPLIT_SIZE = 14)
 const MAX_BATCH: usize = 14;
 
@@ -383,6 +395,29 @@ pub fn emit_poi_hidden_attested(association_root: &[u8; 32], blinded_id: &[u8; 3
     let disc = [EVENT_POI_HIDDEN_ATTESTED];
     let version_bytes = version.to_le_bytes();
     sol_log_data(&[&disc, association_root, blinded_id, &version_bytes]);
+}
+
+/// Emit a transact-with-PoI co-attestation event. Downstream consumers pair
+/// this with a matching `transact` event (matching nullifier + commitments)
+/// in the same Solana transaction to conclude the transact's input was
+/// PoI-clean as of `association_root`.
+pub fn emit_transact_with_poi(
+    association_root: &[u8; 32],
+    nullifier: &[u8; 32],
+    commitment_out_0: &[u8; 32],
+    commitment_out_1: &[u8; 32],
+    version: u64,
+) {
+    let disc = [EVENT_TRANSACT_WITH_POI];
+    let version_bytes = version.to_le_bytes();
+    sol_log_data(&[
+        &disc,
+        association_root,
+        nullifier,
+        commitment_out_0,
+        commitment_out_1,
+        &version_bytes,
+    ]);
 }
 
 /// Data for a single announcement in a batch (with token_id)
