@@ -25,14 +25,59 @@ TARBALL="$BUILD_DIR/circuits-tier2.tar.gz"
 DEFAULT_RELEASE_URL="https://github.com/cheng-chun-yuan/utxopia/releases/latest/download/circuits-tier2.tar.gz"
 RELEASE_URL="${CIRCUIT_RELEASE_URL:-$DEFAULT_RELEASE_URL}"
 
-if [ "${1:-}" = "--rebuild" ]; then
-  echo "Rebuilding circuits from source (requires circom + snarkjs)..."
-  cd "$REPO_ROOT/circuits"
-  bash scripts/compile.sh --tier2
-  bash scripts/setup.sh --tier2
-  echo "Done. Artifacts in $BUILD_DIR/"
-  exit 0
-fi
+# Auxiliary circuits (PoI, selective disclosure) — pulled file-by-file from
+# the R2 public URL rather than the joinsplit tarball, since they're a
+# different family with smaller blast radius. Override the base URL via
+# CIRCUIT_R2_BASE; override the list via AUX_CIRCUITS.
+AUX_R2_BASE="${CIRCUIT_R2_BASE:-https://circuits.utxopia.com}"
+AUX_CIRCUITS="${AUX_CIRCUITS:-proof_of_innocence ownership range_sum range_sum_4}"
+
+# Download wasm + zkey + vkey for a single aux circuit, mirroring the R2
+# layout the SDK expects. Skips files that already exist locally.
+fetch_aux_circuit() {
+  local name="$1"
+  local target_dir="$BUILD_DIR/$name"
+  mkdir -p "$target_dir/${name}_js"
+  for path in "${name}.zkey" "${name}.vkey.json" "${name}_js/${name}.wasm"; do
+    local out="$target_dir/$path"
+    if [ -f "$out" ]; then
+      echo "  ✓ $name/$path (cached)"
+      continue
+    fi
+    echo "  ↓ $name/$path"
+    if ! curl -fL --retry 3 -o "$out" "$AUX_R2_BASE/$name/$path"; then
+      echo "  ✗ failed to fetch $name/$path"
+      return 1
+    fi
+  done
+}
+
+case "${1:-}" in
+  --rebuild)
+    echo "Rebuilding JoinSplit circuits from source (requires circom + snarkjs)..."
+    cd "$REPO_ROOT/circuits"
+    bash scripts/compile.sh --tier2
+    bash scripts/setup.sh --tier2
+    echo "Done. JoinSplit artifacts in $BUILD_DIR/"
+    exit 0
+    ;;
+  --aux)
+    echo "Fetching aux circuits from $AUX_R2_BASE..."
+    failures=0
+    for circuit in $AUX_CIRCUITS; do
+      fetch_aux_circuit "$circuit" || failures=$((failures + 1))
+    done
+    if [ "$failures" -ne 0 ]; then
+      echo ""
+      echo "ERROR: $failures aux circuit(s) failed to download."
+      echo "Either set CIRCUIT_R2_BASE to a valid public URL, or rebuild locally:"
+      echo "  bash circuits/scripts/build-aux.sh <name>"
+      exit 1
+    fi
+    echo "✓ Aux circuits present in $BUILD_DIR"
+    exit 0
+    ;;
+esac
 
 mkdir -p "$BUILD_DIR"
 echo "Fetching circuit artifacts from:"

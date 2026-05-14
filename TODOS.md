@@ -41,6 +41,7 @@ Primitive is fully wired end-to-end: on-chain `transact` (disc 13) detects + emi
 - [x] Compile range-sum N=4 companion. Circuit at `circuits/circom/range_sum_4.circom`, build under `circuits/build/range_sum_4/`. SDK picks the variant automatically via `pickRangeSumVariant(notes.length)`; new builds register in `RANGE_SUM_VARIANTS`.
 - [ ] **N=16 range-sum**: blocked by circomlib's Poseidon-16 limit. The current template hashes `Poseidon(n+1)` for the attestation public input, which exceeds the max arity at N=16. Refactor the template to chunk the attestation hash (e.g. `Poseidon(Poseidon(idx[0..8]), Poseidon(idx[8..16]), viewerNonce)`); this is a wire-format change so N=8 callers need to update too.
 - [ ] Verification surface: separate verifier program endpoint, or a thin web verifier page that consumes `proof.json` + public inputs so auditors don't need bun installed to verify.
+- [ ] **Deploy `range_sum_4.zkey` to R2**: 20 MB, doesn't belong in the repo. Use `bash scripts/upload-circuits-r2.sh --aux range_sum_4` once a bucket alias is wired. Same script handles `proof_of_innocence`, `ownership`, `range_sum` if those move out of `web/public/` later.
 
 ### Additional compliance levers (scaffolds not yet started)
 - [ ] **BTC-deposit origin attestation**: each confirmed deposit emits a signed `(block_height, txid, vout, commitment)` attestation as a `sol_log_data` event so third-party auditors can build their own association sets without trusting us. Complements PoI by giving auditors raw deposit-origin data.
