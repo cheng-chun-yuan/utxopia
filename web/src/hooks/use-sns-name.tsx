@@ -38,10 +38,14 @@ interface UseSnsNameReturn {
   isLoading: boolean;
   isRegistering: boolean;
   error: string | null;
+  /** Compliance-flag byte on the registered SNS subdomain (0 if none). */
+  complianceFlags: number;
   lookupMySnsName: () => Promise<void>;
   lookupSnsName: (name: string) => Promise<SnsStealthAddress | null>;
   registerSnsSubdomain: (name: string) => Promise<boolean>;
   updateSnsStealthData: () => Promise<boolean>;
+  /** Set the compliance-flag byte on the user's registered SNS subdomain. */
+  setComplianceFlag: (value: number) => Promise<boolean>;
 }
 
 /**
@@ -59,6 +63,7 @@ export function useSnsName(): UseSnsNameReturn {
 
   const [registeredSnsName, setRegisteredSnsName] = useState<string | null>(null);
   const [hasRegisteredSnsName, setHasRegisteredSnsName] = useState(false);
+  const [complianceFlags, setComplianceFlags] = useState(0);
   const [needsUpdate, setNeedsUpdate] = useState(false);
   const [registeredSubdomainKey, setRegisteredSubdomainKey] = useState<PublicKey | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -106,6 +111,7 @@ export function useSnsName(): UseSnsNameReturn {
           if (ourViewing === foundViewing) {
             setHasRegisteredSnsName(true);
             setRegisteredSubdomainKey(account.pubkey);
+            setComplianceFlags(parsed.complianceFlags ?? 0);
 
             // Detect if record needs update (old version, zero mpk, or stale mpk)
             const mpkAllZero = parsed.mpk.every((b: number) => b === 0);
@@ -457,6 +463,99 @@ export function useSnsName(): UseSnsNameReturn {
     }
   }, [wallet, stealthAddress, connection, registeredSubdomainKey]);
 
+  /**
+   * Set the compliance-flag byte on the user's registered SNS subdomain.
+   * Reallocs the account to 66 bytes (stealth payload + 1 flag byte) on
+   * first write, then patches the single byte at offset 65 of the payload.
+   * Mirrors `scripts/sns-set-compliance.ts` but uses the wallet adapter
+   * instead of a local keypair.
+   */
+  const setComplianceFlag = useCallback(async (value: number): Promise<boolean> => {
+    if (!wallet.publicKey || !wallet.signTransaction || !registeredSubdomainKey) {
+      setError("Wallet not connected or no SNS subdomain registered");
+      return false;
+    }
+    if (!Number.isInteger(value) || value < 0 || value > 0xff) {
+      setError(`compliance flag must be a u8 in [0..255]; got ${value}`);
+      return false;
+    }
+
+    const config = getConfig();
+    if (!config.snsNameServiceProgramId) {
+      setError("SNS not configured");
+      return false;
+    }
+
+    setIsRegistering(true);
+    setError(null);
+
+    try {
+      const nameServiceProgramId = new PublicKey(config.snsNameServiceProgramId);
+      const ixs: TransactionInstruction[] = [];
+
+      // Account layout: 96-byte header + 65-byte stealth payload + 1-byte flag
+      const targetPayloadSize = STEALTH_DATA_SIZE + 1;
+      const subdomainInfo = await connection.getAccountInfo(registeredSubdomainKey);
+      const currentPayloadSize = subdomainInfo ? subdomainInfo.data.length - 96 : 0;
+
+      if (currentPayloadSize < targetPayloadSize) {
+        const reallocData = new Uint8Array(5);
+        reallocData[0] = SNS_DISC_REALLOC;
+        new DataView(reallocData.buffer).setUint32(1, targetPayloadSize, true);
+        ixs.push(new TransactionInstruction({
+          programId: nameServiceProgramId,
+          keys: [
+            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+            { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
+            { pubkey: registeredSubdomainKey, isSigner: false, isWritable: true },
+            { pubkey: wallet.publicKey, isSigner: true, isWritable: false },
+          ],
+          data: Buffer.from(reallocData),
+        }));
+      }
+
+      // Write the flag byte at offset 65 of the stealth payload.
+      const updateData = new Uint8Array(1 + 4 + 4 + 1);
+      updateData[0] = SNS_DISC_UPDATE;
+      new DataView(updateData.buffer).setUint32(1, STEALTH_DATA_SIZE, true); // offset
+      new DataView(updateData.buffer).setUint32(5, 1, true);                 // length
+      updateData[9] = value;
+
+      ixs.push(new TransactionInstruction({
+        programId: nameServiceProgramId,
+        keys: [
+          { pubkey: registeredSubdomainKey, isSigner: false, isWritable: true },
+          { pubkey: wallet.publicKey, isSigner: true, isWritable: false },
+        ],
+        data: Buffer.from(updateData),
+      }));
+
+      const tx = new Transaction().add(...ixs);
+      tx.feePayer = wallet.publicKey;
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+      tx.recentBlockhash = blockhash;
+
+      const signed = await wallet.signTransaction(tx);
+      const txid = await connection.sendRawTransaction(signed.serialize(), {
+        skipPreflight: false,
+        preflightCommitment: "confirmed",
+      });
+      await connection.confirmTransaction(
+        { signature: txid, blockhash, lastValidBlockHeight },
+        "confirmed",
+      );
+      setComplianceFlags(value);
+      return true;
+    } catch (err) {
+      console.error("Failed to set SNS compliance flag:", err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(errorMessage || "Failed to set compliance flag");
+      return false;
+    } finally {
+      setIsRegistering(false);
+    }
+  }, [wallet, connection, registeredSubdomainKey]);
+
   // Auto-check on mount when wallet connected
   useEffect(() => {
     if (wallet.publicKey && stealthAddress) {
@@ -464,6 +563,7 @@ export function useSnsName(): UseSnsNameReturn {
     } else {
       setRegisteredSnsName(null);
       setHasRegisteredSnsName(false);
+      setComplianceFlags(0);
     }
   }, [wallet.publicKey, stealthAddress, lookupMySnsName]);
 
@@ -474,9 +574,11 @@ export function useSnsName(): UseSnsNameReturn {
     isLoading,
     isRegistering,
     error,
+    complianceFlags,
     lookupMySnsName,
     lookupSnsName,
     registerSnsSubdomain,
     updateSnsStealthData,
+    setComplianceFlag,
   };
 }
