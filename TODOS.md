@@ -29,17 +29,17 @@ follow-ups that turn the "compliance-friendly" claim from partly aspirational in
 a CEX integrations / regulator conversation can defend. Ordered roughly by cost-to-credibility.
 
 ### Phase 2b sender memos — remaining follow-ups
-Primitive is fully wired: on-chain `transact` (disc 13) detects + emits, SDK `buildSenderMemosForTransact` composes client-side, `/api/relay` forwards opaquely, auditor honors `ViewPermissions.INCOMING_ONLY`. The vault UI doesn't yet compose memos when calling the relay — that's the opt-in step below.
-- [ ] **In-app vault opt-in**: when the vault page submits a transact, read `next_leaf_index` from the `commitmentTree` PDA, call `buildSenderMemosForTransact(viewingPrivKey, outputs)`, and attach the hex strings to the `/api/relay` body. Document the race window (concurrent transacts in one slot → loser's memos won't decrypt — non-fatal, just a gap in outgoing history).
+Primitive is fully wired end-to-end: on-chain `transact` (disc 13) detects + emits, SDK `buildSenderMemosForTransact` composes client-side, `/api/relay` forwards opaquely, auditor honors `ViewPermissions.INCOMING_ONLY`. The in-app vault flow (`use-joinsplit-submit.ts`) now reads `next_leaf_index` from the commitmentTree PDA and attaches memos to every transfer by default (kill switch: `NEXT_PUBLIC_DISABLE_SENDER_MEMOS=1`).
 - [ ] **Live E2E**: `scripts/e2e/step-sender-memo.ts` is unit-style today. Extend to submit a real transact with memos to a deployed program and assert the auditor scanner produces an OUT record. Wire into `run-all.ts`.
 
 ### Phase 3 PoI — remaining follow-ups
 - [ ] Phase 3d: merged JoinSplit+PoI circuit so the attestation hides the spent commitment. Today `attest_poi` (disc 22) takes the commitment as a clear public input — fine for the honor-system flow, blocks privacy-sensitive callers.
-- [ ] Frontend `/prove` page: end-user UX for invoking `attest_poi` (today it's CLI-only via `scripts/auditor/attest-poi.ts`).
+- [x] Frontend PoI page lives at `/poi` (collides with the existing `/prove` SPV-verify widget if put under `/prove`). Pipes the user's commitment → backend `/api/poi/inclusion` → browser Groth16 → `/api/attest-poi` (relayer-signed submit of disc 22).
 - [ ] Curation policy for the association set: deposit-confirmation-only today; consider taint-graph propagation à la Railgun PPOI as a v2.
 
 ### Phase 4 selective disclosure — remaining follow-ups
-- [ ] Compile range-sum companions N=4, N=16 (today only N=8 is compiled — see `RANGE_SUM_N` in `sdk/src/selective-disclosure.ts`).
+- [x] Compile range-sum N=4 companion. Circuit at `circuits/circom/range_sum_4.circom`, build under `circuits/build/range_sum_4/`. SDK picks the variant automatically via `pickRangeSumVariant(notes.length)`; new builds register in `RANGE_SUM_VARIANTS`.
+- [ ] **N=16 range-sum**: blocked by circomlib's Poseidon-16 limit. The current template hashes `Poseidon(n+1)` for the attestation public input, which exceeds the max arity at N=16. Refactor the template to chunk the attestation hash (e.g. `Poseidon(Poseidon(idx[0..8]), Poseidon(idx[8..16]), viewerNonce)`); this is a wire-format change so N=8 callers need to update too.
 - [ ] Verification surface: separate verifier program endpoint, or a thin web verifier page that consumes `proof.json` + public inputs so auditors don't need bun installed to verify.
 
 ### Additional compliance levers (scaffolds not yet started)

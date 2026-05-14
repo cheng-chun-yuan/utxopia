@@ -144,7 +144,10 @@ export {
 export {
   generateOwnershipProof,
   generateRangeSumProof,
+  pickRangeSumVariant,
   RANGE_SUM_N,
+  RANGE_SUM_VARIANTS,
+  RANGE_SUM_SIZES,
   type OwnershipProofInputs,
   type OwnershipPublicInputs,
   type RangeSumProofInputs,

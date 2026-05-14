@@ -63,7 +63,8 @@ export type CircuitType = `joinsplit_${number}x${number}`;
 export type AuxCircuitName =
   | "proof_of_innocence"
   | "ownership"
-  | "range_sum";
+  | "range_sum"
+  | "range_sum_4";
 
 // Environment detection
 const isBrowser = typeof window !== "undefined";

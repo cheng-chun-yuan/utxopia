@@ -143,28 +143,60 @@ export interface RangeSumPublicInputs {
   attestation: bigint;
 }
 
-/** Number of notes the v1 range-sum circuit accepts. Fixed at compile time. */
-export const RANGE_SUM_N = 8;
+/**
+ * Compiled range-sum variants and the cardinality each handles. Add new
+ * entries here when you build a new sibling circuit. The `circuit` field
+ * must match the directory name under `circuits/build/`.
+ *
+ * N=16 is intentionally absent: circomlib's Poseidon caps at 16 inputs, so
+ * `Poseidon(n+1)` for the attestation hash blows up at N≥16. Lifting that
+ * requires chunking the attestation in the template (tracked in TODOS.md).
+ */
+export const RANGE_SUM_VARIANTS = [
+  { n: 4, circuit: "range_sum_4" as const },
+  { n: 8, circuit: "range_sum" as const },
+] as const;
+
+/** Number of notes accepted by each compiled variant. */
+export const RANGE_SUM_SIZES = RANGE_SUM_VARIANTS.map((v) => v.n);
 
 /**
- * Generate a range-sum ZK proof (current variant: N=8).
+ * @deprecated Prefer `RANGE_SUM_VARIANTS` / `pickRangeSumVariant`. Retained
+ * for back-compat with older callers that assumed a single N.
+ */
+export const RANGE_SUM_N = 8;
+
+/** Look up the compiled circuit name for a given note cardinality. */
+export function pickRangeSumVariant(n: number): typeof RANGE_SUM_VARIANTS[number] {
+  const v = RANGE_SUM_VARIANTS.find((x) => x.n === n);
+  if (!v) {
+    throw new Error(
+      `range_sum has no compiled variant for N=${n}. Compiled variants: ` +
+        RANGE_SUM_SIZES.join(", ") +
+        ". Pad with zero-value notes or compile a new variant " +
+        "(see circuits/scripts/build-aux.sh).",
+    );
+  }
+  return v;
+}
+
+/**
+ * Generate a range-sum ZK proof. The variant is picked automatically from
+ * `inputs.notes.length` — compile + register new variants in
+ * `RANGE_SUM_VARIANTS` to extend the supported cardinalities.
  *
- * Calls into the generic snarkjs prover with the `range_sum` circuit.
- * Requires the compiled wasm + zkey under `<circuitBasePath>/range_sum/`.
+ * Calls into the generic snarkjs prover with the matching circuit.
+ * Requires the compiled wasm + zkey under
+ * `<circuitBasePath>/<variant.circuit>/`.
  *
  * Public inputs: [leafIndices(N), merkleRoot, ceiling, token, attestation]
  */
 export async function generateRangeSumProof(
   inputs: RangeSumProofInputs,
 ): Promise<ProofData> {
-  if (inputs.notes.length !== RANGE_SUM_N) {
-    throw new Error(
-      `range_sum v1 expects exactly ${RANGE_SUM_N} notes; got ${inputs.notes.length}. ` +
-        "Pad with zero-value notes or recompile a different variant.",
-    );
-  }
+  const variant = pickRangeSumVariant(inputs.notes.length);
   const { generateGenericGroth16Proof } = await import("./prover/web");
-  return generateGenericGroth16Proof("range_sum", {
+  return generateGenericGroth16Proof(variant.circuit, {
     leafIndices: inputs.notes.map((n) => n.leafIndex),
     merkleRoot: inputs.merkleRoot.toString(),
     ceiling: inputs.ceiling.toString(),

@@ -498,6 +498,13 @@ export class UTXOpiaClient {
       stealthData: string[];
       // Transfer-specific
       relayerFeeOutputIndex?: number;
+      /**
+       * Optional Phase 2 sender memos — one 80-byte hex string per output
+       * (nonce(24) || ciphertext_and_tag(56)). Compose with the SDK helper
+       * `buildSenderMemosForTransact(viewingPrivKey, outputs)`. The relay
+       * forwards them opaquely; viewing keys stay client-side.
+       */
+      senderMemos?: string[];
       // Unshield-specific
       unshieldAmounts?: string[];
       recipientAddresses?: string[];

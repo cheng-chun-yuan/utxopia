@@ -3,8 +3,10 @@
  * Selective disclosure CLI — range-sum proof
  *
  * Generates a zero-knowledge proof of "the sum of values across these N notes
- * is ≤ ceiling" without revealing the individual values. Currently fixed at
- * N=8 (the only compiled variant — see RANGE_SUM_N).
+ * is ≤ ceiling" without revealing the individual values. The compiled variant
+ * is picked automatically from `notes.length` — see `RANGE_SUM_SIZES` for
+ * the list of supported cardinalities (today: 4 and 8). Pad with zero-value
+ * notes if your actual cardinality doesn't match a compiled variant.
  *
  * Usage (witness data passed via JSON for brevity):
  *   bun run scripts/auditor/prove-range-sum.ts \
@@ -16,7 +18,7 @@
  *       --viewer-nonce <decimal> \
  *       [--out proof.bin]
  *
- * notes.json shape (array of 8):
+ * notes.json shape (array of N):
  *   [{ "randomIn":"...", "valueIn":"...", "commitment":"...", "leafIndex": N,
  *      "pathElements": ["..." x 16], "pathIndices": [0|1 x 16] }, ...]
  */
@@ -25,7 +27,7 @@ import * as fs from "node:fs";
 import {
   generateRangeSumProof,
   deriveKeysFromSeed,
-  RANGE_SUM_N,
+  RANGE_SUM_SIZES,
 } from "../../sdk/dist/index.js";
 import { setCircuitPath } from "../../sdk/dist/prover/web.js";
 import { buildPoseidon } from "../../circuits/node_modules/circomlibjs/main.js";
@@ -114,8 +116,12 @@ async function main(): Promise<void> {
     pathElements: string[];
     pathIndices: number[];
   }>;
-  if (notesRaw.length !== RANGE_SUM_N) {
-    throw new Error(`expected ${RANGE_SUM_N} notes; got ${notesRaw.length}`);
+  if (!RANGE_SUM_SIZES.includes(notesRaw.length)) {
+    throw new Error(
+      `notes count ${notesRaw.length} has no compiled range_sum variant. ` +
+        `Supported sizes: ${RANGE_SUM_SIZES.join(", ")}. ` +
+        `Pad with zero-value notes or compile a new variant (see circuits/scripts/build-aux.sh).`,
+    );
   }
   const notes = notesRaw.map((n) => ({
     randomIn: BigInt(n.randomIn),

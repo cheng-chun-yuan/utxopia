@@ -105,11 +105,63 @@ export function useJoinSplitSubmit() {
           recipientTokenAccounts: [recipientTokenAccount.toBase58()],
         });
       } else {
+        // Transfer mode: opportunistically attach sender memos so the sender
+        // retains an encrypted, AAD-bound record of their own outgoing
+        // history. Encryption is to the sender's own `ovk` (derived from
+        // their viewing key) — recipients never see it; no third-party can
+        // decrypt without an explicit DelegatedViewKey share. Disable by
+        // setting NEXT_PUBLIC_DISABLE_SENDER_MEMOS=1.
+        let senderMemosHex: string[] | undefined;
+        const memoOptOut = process.env.NEXT_PUBLIC_DISABLE_SENDER_MEMOS === "1";
+        const senderKeys = relayClient.keys;
+        if (!memoOptOut && senderKeys?.viewingPrivKey) {
+          try {
+            const { buildSenderMemosForTransact, fetchCommitmentTree, hexToBytes } =
+              await import("@utxopia/sdk");
+            const { Connection } = await import("@solana/web3.js");
+            const { deriveCommitmentTreePDA } = await import("@/lib/solana/pdas");
+
+            const rpcUrl = getConfig().solanaRpcUrl;
+            if (!rpcUrl) throw new Error("solanaRpcUrl missing from config");
+            const connection = new Connection(rpcUrl, "confirmed");
+            const [treePda] = deriveCommitmentTreePDA();
+
+            // fetchCommitmentTree types its `connection` arg as a duck-typed
+            // shape that returns `{ data: Uint8Array }`. Solana web3.js
+            // Connection returns `{ data: Buffer }`, which is also a
+            // Uint8Array at runtime, so this works — cast through unknown to
+            // shut TS up.
+            const tree = await fetchCommitmentTree(
+              connection as unknown as Parameters<typeof fetchCommitmentTree>[0],
+              treePda,
+            );
+            if (tree == null) throw new Error("commitment tree PDA not found");
+            const nextIndex = Number(tree.nextIndex);
+
+            const tokenId = params.proofInputs.token;
+            const memoOutputs = params.proofInputs.outputs.map((out, i) => ({
+              tokenId,
+              amount: out.value,
+              commitment: hexToBytes(commitmentHexes[i]),
+              leafIndex: nextIndex + i,
+            }));
+            const packed = buildSenderMemosForTransact(senderKeys.viewingPrivKey, memoOutputs);
+            senderMemosHex = packed.map((b: Uint8Array) => bytesToHex(b));
+          } catch (e) {
+            // Sender memos are best-effort: if leaf-index prediction or RPC
+            // fails, drop the memo channel for this tx rather than blocking
+            // the transfer. The user's outgoing history just has a gap.
+            console.warn("[Submit] Skipping sender memos:", e);
+            senderMemosHex = undefined;
+          }
+        }
+
         relayResult = await relayClient.submitToRelay({
           ...commonFields,
           mode: "transfer",
           stealthData: params.stealthDataArrays.map((sd) => bytesToHex(sd)),
           relayerFeeOutputIndex: params.relayerFeeOutputIndex,
+          senderMemos: senderMemosHex,
         });
       }
 
