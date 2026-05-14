@@ -54,6 +54,33 @@ export interface SnsStealthAddress {
 
   /** Data version read from the record */
   version: number;
+
+  /**
+   * Compliance flag bits the recipient has self-published. Defaults to 0
+   * when the SNS record only carries the legacy 65-byte stealth payload.
+   * Check via {@link SnsComplianceFlags} / {@link isAuditorDisclosable}.
+   */
+  complianceFlags: number;
+}
+
+/**
+ * Bit-flags a recipient can opt into on their SNS subdomain. The byte sits
+ * at offset 65 of the stealth payload (i.e. byte 161 of the on-chain
+ * account, after the 96-byte SNS header). Absent → all bits 0.
+ */
+export const SnsComplianceFlags = {
+  /**
+   * Recipient is "auditor-disclosable by default" — they've signalled to
+   * senders that they're OK receiving outgoing audit memos, and likely
+   * already share a `DelegatedViewKey` with a designated auditor
+   * out-of-band.
+   */
+  AUDITOR_DISCLOSABLE: 1 << 0,
+} as const;
+
+/** Returns true if the recipient has set the AUDITOR_DISCLOSABLE bit. */
+export function isAuditorDisclosable(addr: SnsStealthAddress): boolean {
+  return (addr.complianceFlags & SnsComplianceFlags.AUDITOR_DISCLOSABLE) !== 0;
 }
 
 // ========== PDA Derivation ==========
@@ -131,12 +158,18 @@ async function deriveSubdomainKey(
  * - Legacy v2 (97 bytes, version 1): version(1) + spendingPubKey(32) + viewingPubKey(32) + mpk(32)
  * - Legacy v1 (65 bytes, version 1): version(1) + spendingPubKey(32) + viewingPubKey(32) — mpk missing
  *
+ * Optional trailing byte (offset 65 of the stealth payload, byte 161 of the
+ * account) carries `complianceFlags: u8` — see {@link SnsComplianceFlags}.
+ * When absent, the parsed result has `complianceFlags = 0` (back-compat).
+ *
  * @param accountData - Raw account data (including 96-byte header)
- * @returns Parsed stealth keys or null if invalid
+ * @returns Parsed stealth keys + compliance flags, or null if invalid
  */
 export function parseSnsStealthData(
   accountData: Uint8Array,
-): { viewingPubKey: Uint8Array; mpk: Uint8Array; version: number } | null {
+):
+  | { viewingPubKey: Uint8Array; mpk: Uint8Array; version: number; complianceFlags: number }
+  | null {
   // Need at least header + 65 bytes of stealth data
   if (accountData.length < SNS_HEADER_SIZE + SNS_STEALTH_DATA_SIZE) {
     return null;
@@ -145,6 +178,12 @@ export function parseSnsStealthData(
   const data = accountData.slice(SNS_HEADER_SIZE);
   const version = data[0];
   const allZero = (buf: Uint8Array) => buf.every((b) => b === 0);
+
+  // The compliance flag byte lives right after the 65-byte stealth payload.
+  // Recipients without the toggle published produce accounts at the legacy
+  // 65-byte payload size, so we treat absence as "all bits zero."
+  const complianceFlags =
+    data.length > SNS_STEALTH_DATA_SIZE ? data[SNS_STEALTH_DATA_SIZE] : 0;
 
   // Current format (version 2): version(1) + viewingPubKey(32) + mpk(32)
   if (version === 2) {
@@ -159,6 +198,7 @@ export function parseSnsStealthData(
       viewingPubKey: new Uint8Array(viewingPubKey),
       mpk: new Uint8Array(mpk),
       version,
+      complianceFlags,
     };
   }
 
@@ -177,6 +217,7 @@ export function parseSnsStealthData(
         viewingPubKey: new Uint8Array(viewingPubKey),
         mpk: new Uint8Array(mpk),
         version,
+        complianceFlags,
       };
     }
   }
@@ -188,6 +229,7 @@ export function parseSnsStealthData(
       viewingPubKey: new Uint8Array(viewingPubKey),
       mpk: new Uint8Array(32), // No MPK — deposits will fail (user must re-register)
       version,
+      complianceFlags,
     };
   }
 
@@ -259,6 +301,7 @@ export async function resolveSnsName(
       viewingPubKey: parsed.viewingPubKey,
       mpk: parsed.mpk,
       version: parsed.version,
+      complianceFlags: parsed.complianceFlags,
     };
   } catch (err) {
     console.error(`Failed to resolve SNS name "${name}":`, err);

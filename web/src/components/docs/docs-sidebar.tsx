@@ -47,6 +47,7 @@ export const NAV_ITEMS: NavItem[] = [
       { id: "sender-memo-channel", label: "Sender Memos" },
       { id: "proof-of-innocence-flow", label: "Proof of Innocence" },
       { id: "selective-disclosure-proofs", label: "Selective Disclosure" },
+      { id: "compliance-toggle", label: "Compliance Toggle" },
     ],
   },
   { id: "security", label: "Security & Compliance" },

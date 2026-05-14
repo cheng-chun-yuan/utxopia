@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducer, useState, useMemo, useCallback } from "react";
+import { useReducer, useState, useMemo, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { Send, Link as LinkIcon, Loader2 } from "lucide-react";
@@ -28,6 +28,8 @@ import {
   deriveMasterKey,
   deriveKeysFromSeedCircuit,
   createStealthMetaAddress,
+  isAuditorDisclosable,
+  type SnsStealthAddress,
   type StealthMetaAddress,
 } from "@utxopia/sdk";
 
@@ -98,6 +100,35 @@ export function SendForm() {
   const router = useRouter();
   const tokenPrices = useTokenPrices();
   const usdPerUnit = tokenPrices.btc ?? null;
+
+  // Preview-resolve `.btcpro.sol` recipients so we can surface the
+  // "auditor-disclosable" chip before the user clicks Send. Resolution is
+  // best-effort: failures (network, missing record) just leave the chip off.
+  // The resolution is debounced via the dependency on `state.recipient` —
+  // React's useEffect only re-runs when the input or detection type changes.
+  const [resolvedSns, setResolvedSns] = useState<SnsStealthAddress | null>(null);
+  useEffect(() => {
+    if (detection.type !== "stealth_sns") {
+      setResolvedSns(null);
+      return;
+    }
+    const sub = state.recipient.trim().toLowerCase().replace(/\.btcpro\.sol$/, "");
+    if (!sub) {
+      setResolvedSns(null);
+      return;
+    }
+    let cancelled = false;
+    void lookupSnsName(sub).then((r) => {
+      if (!cancelled) setResolvedSns(r ?? null);
+    }).catch(() => {
+      if (!cancelled) setResolvedSns(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [detection.type, state.recipient, lookupSnsName]);
+
+  const showAuditorBadge = resolvedSns != null && isAuditorDisclosable(resolvedSns);
 
   const selectedPayToken = useMemo(
     () =>
@@ -327,6 +358,13 @@ export function SendForm() {
         value={state.recipient}
         onChange={(v) => dispatch({ type: "set_recipient", value: v })}
       />
+
+      {showAuditorBadge && (
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-success/30 bg-success/5 text-[11px] text-success font-mono">
+          <span className="w-1.5 h-1.5 rounded-full bg-success" />
+          Recipient is auditor-disclosable
+        </div>
+      )}
 
       {recipientValid && (
         <>

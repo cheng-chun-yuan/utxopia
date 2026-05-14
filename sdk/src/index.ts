@@ -534,6 +534,8 @@ export {
   resolveStealthName,
   parseSnsStealthData,
   isSnsStealthAddress,
+  isAuditorDisclosable,
+  SnsComplianceFlags,
   deriveParentDomainKey,
   SNS_STEALTH_DATA_SIZE,
   SNS_STEALTH_DATA_SIZE_LEGACY_V1,

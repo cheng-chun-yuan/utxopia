@@ -370,8 +370,16 @@ const DISCLOSURE_ITEMS: DisclosureItem[] = [
     icon: ListChecks,
     title: "Selective Disclosure Proofs",
     status: "shipped",
-    desc: "Prove statements about your shielded holdings without revealing values: ownership-with-threshold (you control commitment X for at least amount Y of token T) and range-sum (sum across N notes ≤ ceiling). Circuits compiled, prover wired into the SDK, CLIs ship in scripts/auditor/. Today the range-sum circuit is fixed at N=8; N=4 and N=16 companion variants are tracked follow-ups.",
+    desc: "Prove statements about your shielded holdings without revealing values: ownership-with-threshold (you control commitment X for at least amount Y of token T) and range-sum (sum across N notes ≤ ceiling, with N ∈ {4, 8, 16}). Circuits compiled, prover wired into the SDK, CLIs ship in scripts/auditor/. range-sum N=16 uses a chunked Poseidon attestation since circomlib's hash caps at arity 16.",
     detail: "circuits/build/ownership · scripts/auditor/prove-ownership.ts · scripts/auditor/prove-range-sum.ts",
+  },
+  {
+    id: "compliance-toggle",
+    icon: ShieldCheck,
+    title: "Per-stealth-address compliance toggle",
+    status: "shipped",
+    desc: "Recipients can self-publish a `complianceFlags` byte on their `.btcpro.sol` SNS subdomain (bit 0 = AUDITOR_DISCLOSABLE). Senders see an \"Auditor-disclosable\" chip in the Send wizard when they enter such a name, signalling that the recipient has opted into receiving outgoing audit memos. Owners set / clear the flag via the CLI; the SDK reader is back-compat with legacy 65-byte records (flags default to 0).",
+    detail: "sdk/src/sns-resolver.ts · scripts/sns-set-compliance.ts · components/send/send-form.tsx",
   },
 ];
 
