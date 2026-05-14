@@ -64,7 +64,8 @@ export type AuxCircuitName =
   | "proof_of_innocence"
   | "ownership"
   | "range_sum"
-  | "range_sum_4";
+  | "range_sum_4"
+  | "range_sum_16";
 
 // Environment detection
 const isBrowser = typeof window !== "undefined";

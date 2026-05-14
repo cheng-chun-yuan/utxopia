@@ -24,12 +24,14 @@ type KnownCircuit =
   | "ownership"
   | "range_sum"
   | "range_sum_4"
+  | "range_sum_16"
   | "custom";
 
 const KNOWN_CIRCUITS: { value: KnownCircuit; label: string }[] = [
   { value: "ownership", label: "ownership — Phase 4 threshold proof" },
-  { value: "range_sum", label: "range_sum — N=8 range-sum" },
-  { value: "range_sum_4", label: "range_sum_4 — N=4 range-sum" },
+  { value: "range_sum_4", label: "range_sum_4 — N=4 (flat hash)" },
+  { value: "range_sum", label: "range_sum — N=8 (flat hash)" },
+  { value: "range_sum_16", label: "range_sum_16 — N=16 (chunked hash)" },
   { value: "proof_of_innocence", label: "proof_of_innocence — PoI" },
   { value: "custom", label: "Custom — upload your own vkey.json" },
 ];

@@ -144,17 +144,28 @@ export interface RangeSumPublicInputs {
 }
 
 /**
+ * How the variant computes `attestation` from `(leafIndices, viewerNonce)`.
+ *
+ *   - "flat"    — `Poseidon(leafIndices ++ [viewerNonce])`. Cheap; requires
+ *                 N+1 ≤ 16 because circomlib's Poseidon caps at arity 16.
+ *   - "chunked" — `Poseidon(Poseidon(leafIndices[0..N/2]),
+ *                           Poseidon(leafIndices[N/2..N]),
+ *                           viewerNonce)`. Needed at N=16 where the flat
+ *                 form would require Poseidon(17). Only one nesting level
+ *                 ships today (N=16); deeper variants would extend the
+ *                 same pattern.
+ */
+export type RangeSumAttestationStyle = "flat" | "chunked";
+
+/**
  * Compiled range-sum variants and the cardinality each handles. Add new
  * entries here when you build a new sibling circuit. The `circuit` field
  * must match the directory name under `circuits/build/`.
- *
- * N=16 is intentionally absent: circomlib's Poseidon caps at 16 inputs, so
- * `Poseidon(n+1)` for the attestation hash blows up at N≥16. Lifting that
- * requires chunking the attestation in the template (tracked in TODOS.md).
  */
 export const RANGE_SUM_VARIANTS = [
-  { n: 4, circuit: "range_sum_4" as const },
-  { n: 8, circuit: "range_sum" as const },
+  { n: 4, circuit: "range_sum_4" as const, attestation: "flat" as const },
+  { n: 8, circuit: "range_sum" as const, attestation: "flat" as const },
+  { n: 16, circuit: "range_sum_16" as const, attestation: "chunked" as const },
 ] as const;
 
 /** Number of notes accepted by each compiled variant. */
@@ -178,6 +189,63 @@ export function pickRangeSumVariant(n: number): typeof RANGE_SUM_VARIANTS[number
     );
   }
   return v;
+}
+
+/**
+ * Compute the range-sum attestation public input the way each compiled
+ * circuit expects. SDK + CLI must agree on this exactly or the verifier
+ * rejects the proof.
+ *
+ *   - flat:    Poseidon(leafIndices ++ [viewerNonce])
+ *   - chunked: Poseidon(Poseidon(leafIndices[0..N/2]),
+ *                       Poseidon(leafIndices[N/2..N]),
+ *                       viewerNonce)
+ *
+ * `style` defaults to the cardinality's compiled variant; pass it
+ * explicitly if you're computing the value without going through
+ * `generateRangeSumProof` (e.g. inside a CLI that lays out witness data
+ * up front).
+ */
+export async function computeRangeSumAttestation(
+  leafIndices: ReadonlyArray<number | bigint>,
+  viewerNonce: bigint,
+  style?: RangeSumAttestationStyle,
+): Promise<bigint> {
+  // Only consult the variants registry when the caller didn't pick a style
+  // explicitly. The explicit-style path is for tests / parity checks that
+  // want to compute the hash without first compiling a variant.
+  const resolvedStyle: RangeSumAttestationStyle =
+    style ?? pickRangeSumVariant(leafIndices.length).attestation;
+
+  // circomlibjs's Poseidon caps at the same arity (16) as the circom-side
+  // hash. Importing the heavy circomlibjs module lazily keeps the SDK
+  // bundle slim for callers that never compute an attestation.
+  const { buildPoseidon } = await import("circomlibjs");
+  // circomlibjs is untyped; cast to a minimal shape so downstream code
+  // doesn't drown in `unknown`s. Field elements are opaque to TypeScript
+  // (they're internally Uint8Arrays representing BN254 elements).
+  type FieldElement = unknown;
+  interface Poseidon {
+    (inputs: FieldElement[]): FieldElement;
+    F: { e: (x: bigint) => FieldElement; toObject: (x: FieldElement) => bigint };
+  }
+  const poseidon = (await buildPoseidon()) as Poseidon;
+  const F = poseidon.F;
+  const indicesAsField: FieldElement[] = leafIndices.map((i) => F.e(BigInt(i)));
+
+  if (resolvedStyle === "flat") {
+    return F.toObject(poseidon([...indicesAsField, F.e(viewerNonce)]));
+  }
+  // chunked: split in half, hash each half, then hash the two digests + nonce.
+  const half = leafIndices.length / 2;
+  if (!Number.isInteger(half)) {
+    throw new Error(
+      `chunked attestation requires an even cardinality; got N=${leafIndices.length}`,
+    );
+  }
+  const chunk1: FieldElement = poseidon(indicesAsField.slice(0, half));
+  const chunk2: FieldElement = poseidon(indicesAsField.slice(half));
+  return F.toObject(poseidon([chunk1, chunk2, F.e(viewerNonce)]));
 }
 
 /**

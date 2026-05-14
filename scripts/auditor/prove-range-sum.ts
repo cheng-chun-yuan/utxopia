@@ -27,10 +27,10 @@ import * as fs from "node:fs";
 import {
   generateRangeSumProof,
   deriveKeysFromSeed,
+  computeRangeSumAttestation,
   RANGE_SUM_SIZES,
 } from "../../sdk/dist/index.js";
 import { setCircuitPath } from "../../sdk/dist/prover/web.js";
-import { buildPoseidon } from "../../circuits/node_modules/circomlibjs/main.js";
 
 interface CliArgs {
   seedHex: string;
@@ -132,12 +132,14 @@ async function main(): Promise<void> {
     pathIndices: n.pathIndices,
   }));
 
-  // Compute the attestation public input: Poseidon(leafIndices ++ [viewerNonce]).
-  // The verifier independently recomputes this and rejects on mismatch.
-  const p = await buildPoseidon();
-  const F = p.F;
-  const inputs = [...notes.map((n) => F.e(BigInt(n.leafIndex))), F.e(args.viewerNonce)];
-  const attestation = F.toObject(p(inputs)) as bigint;
+  // Compute the attestation public input. Style (flat vs chunked) is picked
+  // from the variant registry — N=16 chunks because circomlib's Poseidon
+  // caps at arity 16. The verifier independently recomputes this from
+  // (leafIndices, viewerNonce) and rejects on mismatch.
+  const attestation = await computeRangeSumAttestation(
+    notes.map((n) => n.leafIndex),
+    args.viewerNonce,
+  );
 
   process.stderr.write(`[range-sum] attestation: ${attestation.toString()}\n`);
   process.stderr.write(`[range-sum] generating proof…\n`);

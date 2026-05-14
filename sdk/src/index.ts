@@ -144,12 +144,14 @@ export {
 export {
   generateOwnershipProof,
   generateRangeSumProof,
+  computeRangeSumAttestation,
   pickRangeSumVariant,
   RANGE_SUM_N,
   RANGE_SUM_VARIANTS,
   RANGE_SUM_SIZES,
   type OwnershipProofInputs,
   type OwnershipPublicInputs,
+  type RangeSumAttestationStyle,
   type RangeSumProofInputs,
   type RangeSumPublicInputs,
 } from "./selective-disclosure";

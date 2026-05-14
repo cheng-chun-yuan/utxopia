@@ -8,6 +8,9 @@ import {
 import {
   generateOwnershipProof,
   generateRangeSumProof,
+  pickRangeSumVariant,
+  computeRangeSumAttestation,
+  RANGE_SUM_VARIANTS,
 } from "../../src/selective-disclosure";
 
 describe("PoI module — skeleton", () => {
@@ -67,7 +70,8 @@ describe("PoI module — skeleton", () => {
 });
 
 describe("Selective disclosure module — skeleton", () => {
-  it("generateRangeSumProof rejects wrong note count", async () => {
+  it("generateRangeSumProof rejects an uncompiled cardinality", async () => {
+    // Zero-length input has no compiled variant, so the dispatcher refuses.
     await expect(
       generateRangeSumProof({
         notes: [],
@@ -79,7 +83,7 @@ describe("Selective disclosure module — skeleton", () => {
         viewerNonce: 0n,
         attestation: 0n,
       }),
-    ).rejects.toThrow(/exactly 8 notes/);
+    ).rejects.toThrow(/no compiled variant/);
   });
 
   // generateOwnershipProof exists and accepts shaped input; we don't run the
@@ -88,5 +92,72 @@ describe("Selective disclosure module — skeleton", () => {
   // end-to-end proof generation.
   it("generateOwnershipProof is a real function", () => {
     expect(typeof generateOwnershipProof).toBe("function");
+  });
+});
+
+describe("Range-sum variants registry", () => {
+  it("registers N=4 flat, N=8 flat, N=16 chunked", () => {
+    expect(RANGE_SUM_VARIANTS.map((v) => v.n)).toEqual([4, 8, 16]);
+    expect(pickRangeSumVariant(4).attestation).toBe("flat");
+    expect(pickRangeSumVariant(8).attestation).toBe("flat");
+    expect(pickRangeSumVariant(16).attestation).toBe("chunked");
+  });
+
+  it("circuit name matches the directory layout", () => {
+    expect(pickRangeSumVariant(4).circuit).toBe("range_sum_4");
+    expect(pickRangeSumVariant(8).circuit).toBe("range_sum");
+    expect(pickRangeSumVariant(16).circuit).toBe("range_sum_16");
+  });
+
+  it("throws a helpful error for unknown N", () => {
+    expect(() => pickRangeSumVariant(7)).toThrow(/no compiled variant/);
+    expect(() => pickRangeSumVariant(32)).toThrow(/Compiled variants: 4, 8, 16/);
+  });
+});
+
+describe("computeRangeSumAttestation", () => {
+  const leafIndices8 = [10, 20, 30, 40, 50, 60, 70, 80];
+  const leafIndices16 = [
+    1, 2, 3, 4, 5, 6, 7, 8,
+    9, 10, 11, 12, 13, 14, 15, 16,
+  ];
+  const nonce = 999n;
+
+  it("is deterministic for flat N=8", async () => {
+    const a = await computeRangeSumAttestation(leafIndices8, nonce);
+    const b = await computeRangeSumAttestation(leafIndices8, nonce);
+    expect(a).toBe(b);
+  });
+
+  it("is deterministic for chunked N=16", async () => {
+    const a = await computeRangeSumAttestation(leafIndices16, nonce);
+    const b = await computeRangeSumAttestation(leafIndices16, nonce);
+    expect(a).toBe(b);
+  });
+
+  it("differs across different viewer nonces (binding)", async () => {
+    const a = await computeRangeSumAttestation(leafIndices8, 1n);
+    const b = await computeRangeSumAttestation(leafIndices8, 2n);
+    expect(a).not.toBe(b);
+  });
+
+  it("differs across different leaf-index sets (binding)", async () => {
+    const a = await computeRangeSumAttestation(leafIndices8, nonce);
+    const b = await computeRangeSumAttestation([...leafIndices8.slice(0, 7), 999], nonce);
+    expect(a).not.toBe(b);
+  });
+
+  it("flat and chunked produce distinct values for the same N when both styles are valid", async () => {
+    // N=8 fits both styles; the registry says flat, but the helper accepts
+    // an explicit style override.
+    const flat = await computeRangeSumAttestation(leafIndices8, nonce, "flat");
+    const chunked = await computeRangeSumAttestation(leafIndices8, nonce, "chunked");
+    expect(flat).not.toBe(chunked);
+  });
+
+  it("chunked rejects odd cardinalities", async () => {
+    await expect(
+      computeRangeSumAttestation([1, 2, 3], 0n, "chunked"),
+    ).rejects.toThrow(/even cardinality/);
   });
 });
