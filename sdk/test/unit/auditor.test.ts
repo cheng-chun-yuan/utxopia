@@ -136,6 +136,38 @@ describe("v2 serialize/deserialize roundtrip", () => {
     const blob = await serializeDelegatedViewKey(original, "right");
     await expect(deserializeDelegatedViewKey(blob, "wrong")).rejects.toThrow();
   });
+
+  it("refuses v1 keys at parse time by default", async () => {
+    // Synthesize a v1 blob by mutating a serialized v2 blob.
+    const keys = deriveKeysFromSeed(new Uint8Array(32).fill(0x42));
+    const original = createDelegatedViewKey(keys);
+    const v2blob = await serializeDelegatedViewKey(original, "pw");
+    const obj = JSON.parse(v2blob);
+    obj.version = 1;
+    delete obj.spendingPubKeyCompressed;
+    delete obj.nullifyingKey;
+    const v1blob = JSON.stringify(obj);
+
+    await expect(deserializeDelegatedViewKey(v1blob, "pw")).rejects.toThrow(/v1/);
+  });
+
+  it("accepts v1 keys when acceptV1=true (migration path)", async () => {
+    const keys = deriveKeysFromSeed(new Uint8Array(32).fill(0x42));
+    const original = createDelegatedViewKey(keys);
+    const v2blob = await serializeDelegatedViewKey(original, "pw");
+    const obj = JSON.parse(v2blob);
+    obj.version = 1;
+    delete obj.spendingPubKeyCompressed;
+    delete obj.nullifyingKey;
+    const v1blob = JSON.stringify(obj);
+
+    const restored = await deserializeDelegatedViewKey(v1blob, "pw", { acceptV1: true });
+    expect(restored.viewingPrivKey).toEqual(original.viewingPrivKey);
+    // v1 keys decrypt but lack the v2 fields — that's the whole point of
+    // the migration flag. auditScan will still reject them downstream.
+    expect(restored.spendingPubKeyCompressed).toBeUndefined();
+    expect(restored.nullifyingKey).toBeUndefined();
+  });
 });
 
 describe("makeDelegationRecord", () => {

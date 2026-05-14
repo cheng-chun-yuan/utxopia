@@ -7,12 +7,15 @@ import {
   parseProgramEvents,
   parseNullifierSpentEvent,
   parseStealthAnnouncementEvent,
+  parseBtcOriginAttestationEvent,
   EVENT_NULLIFIER_SPENT,
   EVENT_STEALTH_ANNOUNCEMENT,
   EVENT_NULLIFIERS_BATCH,
   EVENT_ANNOUNCEMENTS_BATCH,
+  EVENT_BTC_ORIGIN_ATTESTATION,
   type NullifierSpentEvent,
   type StealthAnnouncementEvent,
+  type BtcOriginAttestationEvent,
 } from "../../src/events";
 
 // =============================================================================
@@ -595,5 +598,105 @@ describe("parseProgramEvents — mixed event types", () => {
     expect(events[0].type).toBe("nullifier_spent");
     expect(events[1].type).toBe("nullifier_spent");
     expect(events[2].type).toBe("stealth_announcement");
+  });
+});
+
+// =============================================================================
+// parseBtcOriginAttestationEvent
+// =============================================================================
+
+describe("parseBtcOriginAttestationEvent", () => {
+  /** Build a synthetic disc 0x15 event matching the Rust emit layout. */
+  function buildBtcOriginAttestation(opts: {
+    blockHeight: bigint;
+    depositTxid: Uint8Array;
+    sweepVout: number;
+    commitment: Uint8Array;
+    amountSats: bigint;
+  }): Uint8Array[] {
+    const disc = new Uint8Array([EVENT_BTC_ORIGIN_ATTESTATION]);
+    const bh = new Uint8Array(8);
+    new DataView(bh.buffer).setBigUint64(0, opts.blockHeight, true);
+    const vout = new Uint8Array(4);
+    new DataView(vout.buffer).setUint32(0, opts.sweepVout, true);
+    const amt = new Uint8Array(8);
+    new DataView(amt.buffer).setBigUint64(0, opts.amountSats, true);
+    return [disc, bh, opts.depositTxid, vout, opts.commitment, amt];
+  }
+
+  test("round-trips all fields", () => {
+    const segments = buildBtcOriginAttestation({
+      blockHeight: 850_123n,
+      depositTxid: bytes32(0xab),
+      sweepVout: 7,
+      commitment: bytes32(0xcd),
+      amountSats: 12_345_678n,
+    });
+
+    const event = parseBtcOriginAttestationEvent(segments);
+    expect(event).not.toBeNull();
+    expect(event!.type).toBe("btc_origin_attestation");
+    expect(event!.blockHeight).toBe(850_123n);
+    expect(event!.sweepVout).toBe(7);
+    expect(event!.amountSats).toBe(12_345_678n);
+    expect(event!.depositTxid).toEqual(bytes32(0xab));
+    expect(event!.commitment).toEqual(bytes32(0xcd));
+  });
+
+  test("handles 64-bit boundary values", () => {
+    const max = (1n << 64n) - 1n;
+    const segments = buildBtcOriginAttestation({
+      blockHeight: max,
+      depositTxid: bytes32(0x00),
+      sweepVout: 0xffffffff,
+      commitment: bytes32(0x00),
+      amountSats: max,
+    });
+    const event = parseBtcOriginAttestationEvent(segments);
+    expect(event!.blockHeight).toBe(max);
+    expect(event!.amountSats).toBe(max);
+    expect(event!.sweepVout).toBe(0xffffffff);
+  });
+
+  test("rejects wrong discriminator", () => {
+    const segments = buildBtcOriginAttestation({
+      blockHeight: 1n,
+      depositTxid: bytes32(0x11),
+      sweepVout: 0,
+      commitment: bytes32(0x22),
+      amountSats: 100n,
+    });
+    segments[0] = new Uint8Array([0xff]);
+    expect(parseBtcOriginAttestationEvent(segments)).toBeNull();
+  });
+
+  test("rejects malformed segment lengths", () => {
+    const segments = buildBtcOriginAttestation({
+      blockHeight: 1n,
+      depositTxid: bytes32(0x11),
+      sweepVout: 0,
+      commitment: bytes32(0x22),
+      amountSats: 100n,
+    });
+    // wrong-length depositTxid
+    const tampered = [...segments];
+    tampered[2] = new Uint8Array(31);
+    expect(parseBtcOriginAttestationEvent(tampered)).toBeNull();
+  });
+
+  test("parseProgramEvents picks it out of a mixed log stream", () => {
+    const segments = buildBtcOriginAttestation({
+      blockHeight: 42n,
+      depositTxid: bytes32(0xaa),
+      sweepVout: 1,
+      commitment: bytes32(0xbb),
+      amountSats: 500_000n,
+    });
+    const log = buildProgramDataLog(...segments);
+    const events = parseProgramEvents([log]);
+    expect(events.length).toBe(1);
+    expect(events[0].type).toBe("btc_origin_attestation");
+    const e = events[0] as BtcOriginAttestationEvent;
+    expect(e.amountSats).toBe(500_000n);
   });
 });

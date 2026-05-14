@@ -25,6 +25,8 @@ export const EVENT_ASSOCIATION_ROOT_UPDATED = 0x13;
 /** Phase 3: Proof of Innocence attested on chain. */
 export const EVENT_POI_ATTESTED = 0x14;
 
+export const EVENT_BTC_ORIGIN_ATTESTATION = 0x15;
+
 /** Parsed nullifier spent event */
 export interface NullifierSpentEvent {
   type: "nullifier_spent";
@@ -72,12 +74,34 @@ export interface PoIAttestedEvent {
   version: bigint;
 }
 
+/**
+ * BTC origin attestation, emitted alongside every SPV-verified deposit.
+ * Lets third-party auditors build their own association sets keyed on
+ * commitment without trusting our backend.
+ *
+ * Layout matches the Rust `emit_btc_origin_attestation` in
+ * `contracts/programs/utxopia/src/utils/events.rs`.
+ */
+export interface BtcOriginAttestationEvent {
+  type: "btc_origin_attestation";
+  blockHeight: bigint;
+  /** Bitcoin deposit txid in internal byte order (same as `verify_stealth_deposit` instruction data). */
+  depositTxid: Uint8Array;
+  /** Sweep transaction's output index that paid the pool. */
+  sweepVout: number;
+  /** Commitment inserted into the JoinSplit tree for this deposit. */
+  commitment: Uint8Array;
+  /** Pool-received amount in satoshis (after sweep fees). */
+  amountSats: bigint;
+}
+
 export type ProgramEvent =
   | NullifierSpentEvent
   | StealthAnnouncementEvent
   | SenderMemoEvent
   | AssociationRootUpdatedEvent
-  | PoIAttestedEvent;
+  | PoIAttestedEvent
+  | BtcOriginAttestationEvent;
 
 /**
  * Parse a nullifier spent event from decoded sol_log_data segments.
@@ -179,6 +203,51 @@ export function parsePoIAttestedEvent(segments: Uint8Array[]): PoIAttestedEvent 
   let version = 0n;
   for (let i = 7; i >= 0; i--) version = (version << 8n) | BigInt(vBytes[i]);
   return { type: "poi_attested", associationRoot, commitment, version };
+}
+
+/**
+ * Parse a BTC origin attestation event from decoded sol_log_data segments.
+ * Layout: disc(1) + block_height(8 LE) + deposit_txid(32) + sweep_vout(4 LE)
+ *       + commitment(32) + amount_sats(8 LE)
+ */
+export function parseBtcOriginAttestationEvent(
+  segments: Uint8Array[],
+): BtcOriginAttestationEvent | null {
+  if (segments.length < 6) return null;
+  if (segments[0].length !== 1 || segments[0][0] !== EVENT_BTC_ORIGIN_ATTESTATION) return null;
+
+  const bhBytes = segments[1];
+  if (bhBytes.length !== 8) return null;
+  let blockHeight = 0n;
+  for (let i = 7; i >= 0; i--) blockHeight = (blockHeight << 8n) | BigInt(bhBytes[i]);
+
+  const depositTxid = segments[2];
+  if (depositTxid.length !== 32) return null;
+
+  const voutBytes = segments[3];
+  if (voutBytes.length !== 4) return null;
+  const sweepVout = new DataView(
+    voutBytes.buffer,
+    voutBytes.byteOffset,
+    4,
+  ).getUint32(0, true);
+
+  const commitment = segments[4];
+  if (commitment.length !== 32) return null;
+
+  const amtBytes = segments[5];
+  if (amtBytes.length !== 8) return null;
+  let amountSats = 0n;
+  for (let i = 7; i >= 0; i--) amountSats = (amountSats << 8n) | BigInt(amtBytes[i]);
+
+  return {
+    type: "btc_origin_attestation",
+    blockHeight,
+    depositTxid,
+    sweepVout,
+    commitment,
+    amountSats,
+  };
 }
 
 /**
@@ -329,6 +398,9 @@ export function parseProgramEvents(logs: string[], programId?: string): ProgramE
       if (event) events.push(event);
     } else if (disc === EVENT_POI_ATTESTED) {
       const event = parsePoIAttestedEvent(segments);
+      if (event) events.push(event);
+    } else if (disc === EVENT_BTC_ORIGIN_ATTESTATION) {
+      const event = parseBtcOriginAttestationEvent(segments);
       if (event) events.push(event);
     }
   }

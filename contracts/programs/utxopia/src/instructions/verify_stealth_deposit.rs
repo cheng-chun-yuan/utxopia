@@ -377,6 +377,18 @@ pub fn process_verify_stealth_deposit(
         original_deposit_sats,
     );
 
+    // Emit BTC origin attestation so third-party auditors can build their
+    // own association sets without trusting our backend. Includes the
+    // commitment + sweep output index so consumers don't have to re-derive
+    // them from raw chain data.
+    crate::utils::events::emit_btc_origin_attestation(
+        ix_data.block_height,
+        &ix_data.deposit_txid,
+        sweep_vout,
+        &commitment,
+        amount_sats,
+    );
+
     // Emit shield metadata (sweep amount + total fee) for indexer
     crate::utils::events::emit_shield_meta(amount_sats, total_fee, &token_id);
 

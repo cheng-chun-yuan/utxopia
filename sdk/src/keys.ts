@@ -725,11 +725,18 @@ export async function serializeDelegatedViewKey(
 }
 
 /**
- * Deserialize a delegated viewing key from JSON
+ * Deserialize a delegated viewing key from JSON.
+ *
+ * v1 keys are refused at parse time by default (they lack
+ * `spendingPubKeyCompressed`/`nullifyingKey`, so `auditScan` would error out
+ * downstream anyway — failing early gives callers a clearer message and
+ * avoids partial setup). Set `acceptV1: true` to opt in for migration
+ * tools that need to crack open old blobs to re-issue them as v2.
  */
 export async function deserializeDelegatedViewKey(
   json: string,
-  password?: string
+  password?: string,
+  options: { acceptV1?: boolean } = {},
 ): Promise<DelegatedViewKey> {
   let obj;
   try {
@@ -750,6 +757,18 @@ export async function deserializeDelegatedViewKey(
 
   if (!password) {
     throw new Error("Password required to decrypt viewing key");
+  }
+
+  // Refuse v1 unless explicitly opted in. v1 keys decrypt fine but lack the
+  // spendingPubKey + nullifyingKey material needed by auditScan, so they
+  // produce a confusing late-stage failure. Better to surface it here.
+  if (obj.version === 1 && !options.acceptV1) {
+    throw new Error(
+      "Delegated view key is v1 (pre-mpk format). v1 keys can no longer scan " +
+        "deposits — re-issue as v2 via createDelegatedViewKey + " +
+        "encryptDelegatedViewKey. Pass { acceptV1: true } if you're running " +
+        "a one-shot migration.",
+    );
   }
 
   const salt = hexToBytes(obj.salt);

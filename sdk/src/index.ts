@@ -651,6 +651,7 @@ export {
   parseSenderMemoEvent,
   parseAssociationRootUpdatedEvent,
   parsePoIAttestedEvent,
+  parseBtcOriginAttestationEvent,
   EVENT_NULLIFIER_SPENT,
   EVENT_STEALTH_ANNOUNCEMENT,
   EVENT_NULLIFIERS_BATCH,
@@ -658,11 +659,13 @@ export {
   EVENT_SENDER_MEMO,
   EVENT_ASSOCIATION_ROOT_UPDATED,
   EVENT_POI_ATTESTED,
+  EVENT_BTC_ORIGIN_ATTESTATION,
   type NullifierSpentEvent,
   type StealthAnnouncementEvent,
   type SenderMemoEvent,
   type AssociationRootUpdatedEvent,
   type PoIAttestedEvent,
+  type BtcOriginAttestationEvent,
   type ProgramEvent,
 } from "./events";
 

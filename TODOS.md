@@ -43,10 +43,10 @@ Primitive is fully wired end-to-end: on-chain `transact` (disc 13) detects + emi
 - [x] **Web verifier page** at `/verify-proof`: pure client-side Groth16 verifier (snarkjs lazy-loaded via `verifyGroth16Proof` from the SDK). Pick a known circuit from the dropdown and the page fetches the vkey from the CDN; for one-off VKs, switch to "Custom" and paste/upload the JSON. Nothing is sent to a server.
 - [ ] **Deploy `range_sum_4.zkey` to R2**: 20 MB, doesn't belong in the repo. Use `bash scripts/upload-circuits-r2.sh --aux range_sum_4` once a bucket alias is wired. Same script handles `proof_of_innocence`, `ownership`, `range_sum` if those move out of `web/public/` later.
 
-### Additional compliance levers (scaffolds not yet started)
-- [ ] **BTC-deposit origin attestation**: each confirmed deposit emits a signed `(block_height, txid, vout, commitment)` attestation as a `sol_log_data` event so third-party auditors can build their own association sets without trusting us. Complements PoI by giving auditors raw deposit-origin data.
+### Additional compliance levers
+- [x] **BTC-deposit origin attestation**: every successful `verify_stealth_deposit` now emits `EVENT_BTC_ORIGIN_ATTESTATION` (disc 0x15) carrying `(block_height, deposit_txid, sweep_vout, commitment, amount_sats)`. SDK parser + dispatch + 5 dedicated tests in `events.test.ts`. Third-party auditors can subscribe and build their own association sets without trusting our backend.
+- [x] **DelegatedViewKey v1→v2 forced migration**: `deserializeDelegatedViewKey` refuses v1 blobs at parse time with a clear error. Migration tooling can opt in via `{ acceptV1: true }`. Two new tests pin both branches.
 - [ ] **Per-stealth-address compliance toggle**: SNS subdomain record carries an optional encrypted `DelegatedViewKey` v2 stub — when set, payers know the address is "auditor-disclosable by default" and the sender wallet can attach a memo aimed at the receiver's pre-registered auditor.
-- [ ] **DelegatedViewKey v1 → v2 forced migration**: refuse v1 keys past a deprecation slot; today they deserialize but `auditScan` errors out at use time.
 - [ ] **Audit trail sync**: `~/.utxopia/delegations.json` is per-machine — optional encrypted cloud sync for users issuing keys from multiple devices.
 
 ## Regtest / hybrid stack — remaining follow-ups

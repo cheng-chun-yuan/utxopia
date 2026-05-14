@@ -83,6 +83,19 @@ pub const EVENT_ASSOCIATION_ROOT_UPDATED: u8 = 0x13;
 /// Layout: disc(1) + association_root(32) + commitment(32) + version_le(8) = 73 bytes
 pub const EVENT_POI_ATTESTED: u8 = 0x14;
 
+/// Event discriminator: BTC deposit origin attestation.
+///
+/// Emitted alongside `EVENT_DEPOSIT_VERIFIED` for every successful
+/// `verify_stealth_deposit`. Complements PoI by giving third-party auditors
+/// the raw BTC origin data they need to build their own association sets
+/// without trusting our backend. Anyone running an indexer can subscribe
+/// to disc 0x15 events, validate them against the chain (the program
+/// already enforced SPV before emitting), and aggregate the commitments.
+///
+/// Layout: disc(1) + block_height(8 LE) + deposit_txid(32, internal order)
+///       + sweep_vout(4 LE) + commitment(32) + amount_sats(8 LE) = 85 bytes
+pub const EVENT_BTC_ORIGIN_ATTESTATION: u8 = 0x15;
+
 /// Max batch items for stack-allocated buffer (MAX_SAFE_JOINSPLIT_SIZE = 14)
 const MAX_BATCH: usize = 14;
 
@@ -236,6 +249,28 @@ pub fn emit_deposit_verified(
     let li = leaf_index.to_le_bytes();
     let orig = original_amount.to_le_bytes();
     sol_log_data(&[&disc, sweep_txid, deposit_txid, &amt, &li, &orig]);
+}
+
+/// Emit a BTC origin attestation for every SPV-verified deposit.
+///
+/// Layout: disc(1) + block_height(8 LE) + deposit_txid(32) + sweep_vout(4 LE)
+///       + commitment(32) + amount_sats(8 LE) = 85 bytes.
+///
+/// This complements `EVENT_DEPOSIT_VERIFIED` by including the on-chain
+/// commitment + sweep output index, so a third-party auditor can build an
+/// association set keyed on commitment hashes without re-deriving them.
+pub fn emit_btc_origin_attestation(
+    block_height: u64,
+    deposit_txid: &[u8; 32],
+    sweep_vout: u32,
+    commitment: &[u8; 32],
+    amount_sats: u64,
+) {
+    let disc = [EVENT_BTC_ORIGIN_ATTESTATION];
+    let bh = block_height.to_le_bytes();
+    let vout = sweep_vout.to_le_bytes();
+    let amt = amount_sats.to_le_bytes();
+    sol_log_data(&[&disc, &bh, deposit_txid, &vout, commitment, &amt]);
 }
 
 /// Emit unshield/redeem metadata so indexer doesn't need to parse instruction data.
