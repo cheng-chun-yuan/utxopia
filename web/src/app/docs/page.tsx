@@ -1,23 +1,18 @@
 "use client";
 
 /**
- * DocsPage — technical documentation for the Private Bitcoin protocol.
+ * DocsPage — technical documentation for the UTXOpia protocol.
  *
  * Sections:
- * - Overview: comparison table (traditional bridges vs Private Bitcoin)
+ * - Overview: comparison table (traditional bridges vs UTXOpia)
  * - Protocol Flow: 6-step journey with FlowDiagram visualization
- * - Cryptography: commitment scheme, nullifiers, MPK, JoinSplit, EdDSA, stealth
- * - Key Model: spending key (Baby Jubjub) + viewing key (Ed25519)
- * - Security & Compliance: OFAC, threshold custody, SPV, double-spend, audit
- *
- * Sub-components (inline):
- * - Card: generic card wrapper
- * - SectionHeading: section title with label
- * - StepCard: numbered protocol step
- * - CryptoCard: formula + description
- * - SecurityCard: icon + description
- * - KeyCard: key type with features list
- * - ComparisonTable: responsive traditional vs private comparison
+ * - Cryptography: commitments, nullifiers, MPK, JoinSplit, EdDSA, DKSAP,
+ *   sender memo, Proof of Innocence
+ * - Key Model: dual-key — spending (Baby Jubjub) + viewing (Ed25519);
+ *   nullifier secret is derived from the spending key
+ * - Auditable Disclosure: Phase 1–4 compliance layers with deployment status
+ *   (auditor toolkit, sender memos, PoI, selective disclosure)
+ * - Security & Compliance: policy gate, custody, SPV, double-spend, audit trail
  */
 
 import Link from "next/link";
@@ -36,6 +31,10 @@ import {
   GitBranch,
   ChevronRight,
   AlertTriangle,
+  FileCheck,
+  Send,
+  ListChecks,
+  ScrollText,
 } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
@@ -123,6 +122,32 @@ function CryptoCard({ title, formula, desc }: { title: string; formula: string; 
         {formula}
       </code>
       <p className="text-xs sm:text-sm text-gray font-light leading-relaxed">{desc}</p>
+    </Card>
+  );
+}
+
+/* ── Disclosure card ── */
+
+function DisclosureCard({ icon: Icon, title, status, desc, detail }: DisclosureItem) {
+  return (
+    <Card className="h-full">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg border border-gray/10 bg-background/50">
+            <Icon className="w-4 h-4 text-gray-light" />
+          </div>
+          <h3 className="text-sm sm:text-base font-semibold text-foreground">{title}</h3>
+        </div>
+        <span
+          className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-full border text-[10px] font-mono uppercase tracking-wider ${STATUS_STYLE[status]}`}
+        >
+          {STATUS_LABEL[status]}
+        </span>
+      </div>
+      <p className="text-xs sm:text-sm text-gray font-light leading-relaxed mb-3">{desc}</p>
+      <div className="pt-2 border-t border-gray/5">
+        <span className="text-[10px] font-mono text-gray/30 break-all">{detail}</span>
+      </div>
     </Card>
   );
 }
@@ -222,7 +247,7 @@ const PROTOCOL_STEPS = [
   {
     id: "shield-tokens", num: "01", icon: Shield, title: "Shield Any Token",
     desc: "Deposit BTC via Taproot, or shield SOL/USDC/USDT directly from your Solana wallet. Every token enters the same privacy pool — a shared Merkle tree where all commitments look identical regardless of token type or amount.",
-    detail: "BTC: Taproot + SPV · SPL: Shield (disc=29)",
+    detail: "BTC: Taproot + SPV · SPL: Shield (disc=12)",
   },
   {
     id: "spv-verification", num: "02", icon: GitBranch, title: "BTC SPV Verification",
@@ -241,8 +266,8 @@ const PROTOCOL_STEPS = [
   },
   {
     id: "stealth-receive", num: "05", icon: Eye, title: "Stealth Receive",
-    desc: "Recipients use one-time stealth addresses generated via X25519 Diffie-Hellman key agreement. Each deposit or transfer creates a fresh address. The recipient scans announcements with their viewing key to find their notes — even repeat payments are unlinkable.",
-    detail: "X25519 ECDH · Ed25519 viewing keys",
+    desc: "Recipients use one-time stealth addresses generated via the Dual-Key Stealth Address Protocol (EIP-5564) — X25519 ECDH against the recipient's viewing public key. Each deposit or transfer creates a fresh, unlinkable address. The recipient scans announcements with their viewing key to find their notes; senders can opt-in to a separate XChaCha20-Poly1305 memo so they retain their own outgoing history.",
+    detail: "DKSAP · X25519 ECDH · Ed25519 viewing keys",
   },
   {
     id: "unshield-withdraw", num: "06", icon: Network, title: "Unshield or Withdraw",
@@ -259,28 +284,94 @@ const CRYPTO_ITEMS = [
   },
   {
     id: "nullifier-generation", title: "Nullifier Generation",
-    formula: "Poseidon(nullifyingKey, leafIndex)",
-    desc: "When spending a note, the nullifier is derived from the nullifying key (itself derived from the spending key) and the note's Merkle leaf index. Publishing a nullifier prevents double-spending without revealing which note was consumed.",
+    formula: "Poseidon(nullSecret(spendKey), leafIndex)",
+    desc: "When spending a note, the nullifier is derived from a per-wallet null-secret (deterministically derived from your spending key) and the note's Merkle leaf index. You manage the spending key; the null-secret is generated for you. Publishing a nullifier prevents double-spending without revealing which note was consumed.",
   },
   {
     id: "master-public-key", title: "Master Public Key",
-    formula: "Poseidon(spendPub.x, spendPub.y, nullKey)",
-    desc: "The MPK combines the Baby Jubjub spending public key coordinates with the nullifying key. This is used to derive per-note public keys: NPK = Poseidon(MPK, random), ensuring each note has a unique cryptographic identity.",
+    formula: "MPK = Poseidon(spendPub, derivedNullSecret)",
+    desc: "The MPK binds the Baby Jubjub spending public key to the wallet's derived null-secret. Per-note public keys come from NPK = Poseidon(MPK, random), giving each note a unique cryptographic identity. Both inputs ultimately trace back to a single spending key — you never manage the null-secret directly.",
   },
   {
     id: "joinsplit-circuit", title: "JoinSplit Circuit",
     formula: "JoinSplit(N, M, depth=16)",
-    desc: "A single parameterized circom template handles all transfer types. Inputs: N note nullifiers + Merkle proofs. Outputs: M new commitments. The circuit verifies balance (Σin = Σout), nullifier validity, Merkle membership, and EdDSA-Poseidon signatures — all in one Groth16 proof.",
+    desc: "A single parameterized circom template handles all transfer types. Inputs: N note nullifiers + Merkle proofs. Outputs: M new commitments. The circuit verifies balance (Σin = Σout), nullifier validity, Merkle membership, and EdDSA-Poseidon signatures — all in one Groth16 proof. Each variant (1×1, 1×2, 2×1, 2×2, etc.) is a separate Groth16 setup; N + M ≤ 14.",
   },
   {
     id: "eddsa-signatures", title: "EdDSA-Poseidon Signatures",
     formula: "Sign(spendingKey, message)",
-    desc: "Transaction authorization uses EdDSA over the Poseidon hash function on the Baby Jubjub curve. The message includes the Merkle root, bound parameters hash, all nullifiers, and all output commitments — binding the proof to a specific state.",
+    desc: "Transaction authorization uses EdDSA over the Poseidon hash function on the Baby Jubjub curve. The message includes the Merkle root, bound parameters hash, all nullifiers, and all output commitments — binding the proof to a specific state and preventing a relayer from re-targeting it.",
   },
   {
-    id: "stealth-key-agreement", title: "Stealth Key Agreement",
-    formula: "sharedSecret = ECDH(ephemeral, viewKey)",
-    desc: "Senders generate a random ephemeral keypair and compute a shared secret with the recipient's viewing public key. This derives the one-time note public key. Only the recipient can scan announcements using their viewing private key to detect incoming notes.",
+    id: "stealth-key-agreement", title: "Stealth Key Agreement (DKSAP)",
+    formula: "sharedSecret = X25519(ephemeral, viewKey)",
+    desc: "Following the Dual-Key Stealth Address Protocol (EIP-5564). Senders generate a random ephemeral keypair and compute a shared secret with the recipient's viewing public key — derived from your viewing key via Ed25519→X25519 conversion. The shared secret derives the one-time note public key. Only the recipient can scan announcements using their viewing private key to detect incoming notes; even repeat payments are unlinkable on-chain.",
+  },
+  {
+    id: "sender-memo", title: "Sender Memo Channel",
+    formula: "XChaCha20-Poly1305(ovk, plaintext, AAD = commitment || leafIdx)",
+    desc: "An opt-in second event per output, encrypted under the sender's outgoing viewing key (ovk = SHA-256(viewKey ‖ \"utxopia.ovk.v1\")). Lets the sender (or an auditor holding ovk) later recover their own outgoing history — recipient-only encryption alone wouldn't allow this. AAD binds each memo to its tree leaf: any tamper or re-targeting attempt fails the Poly1305 tag cleanly.",
+  },
+  {
+    id: "proof-of-innocence", title: "Proof of Innocence",
+    formula: "Groth16 over depth-20 association-set Merkle tree",
+    desc: "User submits attest_poi (disc 22) referencing one of their commitments + a Groth16 proof of inclusion in the current admin-curated association root. On-chain verification emits an attestation event downstream consumers (CEXes, regulators) can consume. The proof's public inputs include the commitment in clear — a small privacy trade for an honor-system attestation that's verifiable on-chain.",
+  },
+];
+
+type DisclosureStatus = "shipped" | "in-progress";
+
+const STATUS_STYLE: Record<DisclosureStatus, string> = {
+  shipped: "text-success border-success/30 bg-success/5",
+  "in-progress": "text-warning border-warning/30 bg-warning/5",
+};
+
+const STATUS_LABEL: Record<DisclosureStatus, string> = {
+  shipped: "Live",
+  "in-progress": "Wiring",
+};
+
+interface DisclosureItem {
+  id: string;
+  icon: LucideIcon;
+  title: string;
+  status: DisclosureStatus;
+  desc: string;
+  detail: string;
+}
+
+const DISCLOSURE_ITEMS: DisclosureItem[] = [
+  {
+    id: "auditor-toolkit",
+    icon: ScrollText,
+    title: "Auditor Toolkit (DelegatedViewKey)",
+    status: "shipped",
+    desc: "Issue a slot-scoped, encrypted viewing key for your accountant or auditor. They drop it into the in-browser audit page, decrypt client-side, and walk away with a CSV of IN/OUT records over a chosen slot range. PBKDF2 + AES-GCM at rest; each issuance is tagged with a delegation ID so you keep a record of who you handed which key to.",
+    detail: "scripts/auditor/issue.ts · sdk/src/auditor.ts · /audit",
+  },
+  {
+    id: "sender-memo-channel",
+    icon: Send,
+    title: "Outgoing Sender Memos",
+    status: "shipped",
+    desc: "Per-output XChaCha20-Poly1305 envelopes encrypted to the sender's outgoing viewing key. AAD = commitment || leafIndex prevents move-the-memo attacks. Rust transact (disc 13) emits per output when memos are attached; SDK helper buildSenderMemosForTransact composes them client-side; /api/relay forwards them opaquely (viewing keys never leave the client); auditor honors ViewPermissions.INCOMING_ONLY to suppress OUT records when the delegation forbids them.",
+    detail: "sdk/src/sender-memo.ts · web/src/app/api/relay/route.ts · sdk/src/auditor.ts",
+  },
+  {
+    id: "proof-of-innocence-flow",
+    icon: FileCheck,
+    title: "Proof of Innocence",
+    status: "shipped",
+    desc: "Two-instruction PoI pipeline lives on-chain: update_association_root (disc 21, admin-curated clean set) and attest_poi (disc 22, user-submitted Groth16 against the current depth-20 root). The chain emits an attestation event tagging a commitment as innocent; compliance-sensitive recipients (CEXes, regulators) consume it without trusting the user. Phase 3d (merged JoinSplit+PoI that hides the commitment) is a tracked follow-up.",
+    detail: "contracts/utxopia/instructions/poi.rs · backend/src/poi_service · scripts/auditor/attest-poi.ts",
+  },
+  {
+    id: "selective-disclosure-proofs",
+    icon: ListChecks,
+    title: "Selective Disclosure Proofs",
+    status: "shipped",
+    desc: "Prove statements about your shielded holdings without revealing values: ownership-with-threshold (you control commitment X for at least amount Y of token T) and range-sum (sum across N notes ≤ ceiling). Circuits compiled, prover wired into the SDK, CLIs ship in scripts/auditor/. Today the range-sum circuit is fixed at N=8; N=4 and N=16 companion variants are tracked follow-ups.",
+    detail: "circuits/build/ownership · scripts/auditor/prove-ownership.ts · scripts/auditor/prove-range-sum.ts",
   },
 ];
 
@@ -289,7 +380,6 @@ const SECURITY_ITEMS = [
   { icon: Network, title: "Ika dWallet Custody", desc: "BTC is held by an Ika dWallet whose authority is a PDA derived from this Solana program (`[\"__ika_cpi_authority\"]`). 2PC-MPC means the Ika network and our program must both participate in every signature — no single key, no off-chain signer committee. Pre-alpha runs a single mock signer; real distributed MPC ships at Ika mainnet." },
   { icon: GitBranch, title: "Trustless Verification", desc: "Bitcoin deposits are verified on-chain via SPV proofs against a light client tracking BTC block headers. The Solana program validates Merkle inclusion directly — no oracle or trusted third party." },
   { icon: Lock, title: "Double-Spend Prevention", desc: "Each note can only be spent once. Publishing a nullifier (derived from spending key + leaf index) marks the note as consumed. The on-chain program rejects duplicate nullifiers permanently." },
-  { icon: Eye, title: "Selective Disclosure", desc: "Share your viewing key with auditors, accountants, or compliance officers. They gain read-only access to your transaction history and balances — without any ability to spend or transfer your funds." },
   { icon: AlertTriangle, title: "Auditable CPI Trail", desc: "Every redemption emits an `approve_message` CPI on-chain, with the sighash, dWallet ID, and signature scheme recorded as inner instructions in the Solana transaction. The full signing history is reconstructable from RPC alone — no separate audit log to operate." },
 ];
 
@@ -323,7 +413,8 @@ export default function DocsPage() {
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 xl:px-12">
 
             {/* ── Hero ── */}
-            <section className="pt-8 sm:pt-10 lg:pt-12 pb-8 sm:pb-10">
+            {/* Top padding clears the fixed `top-4` nav pill (~64px tall). */}
+            <section className="pt-24 sm:pt-28 lg:pt-32 pb-8 sm:pb-10">
               <div className="space-y-3 sm:space-y-4">
                 <div className="flex">
                   <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray/15 bg-muted/20">
@@ -394,30 +485,47 @@ export default function DocsPage() {
               <SectionHeading
                 label="Key Architecture"
                 title="Dual-Key Model"
-                subtitle="Two keys give you full control: one to spend, one to observe. The nullifying key is derived automatically from your spending key — you never manage it directly."
+                subtitle="Two keys give you full control: one to spend, one to observe. The nullifier secret used during proving is derived automatically from your spending key — you never see it, copy it, or back it up separately."
               />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <KeyCard
                   icon={KeyRound}
                   title="Spending Key"
-                  desc="Baby Jubjub elliptic curve keypair. Signs all JoinSplit transactions using EdDSA-Poseidon. The nullifying key is deterministically derived from this key — it generates the nullifier hash that prevents double-spending."
+                  desc="Baby Jubjub elliptic curve keypair. Signs all JoinSplit transactions using EdDSA-Poseidon. The nullifier secret used inside the circuit is deterministically derived from this key, so a single 32-byte seed is enough to back up the entire wallet."
                   features={[
                     "Signs transactions (EdDSA-Poseidon)",
-                    "Derives nullifying key automatically",
-                    "Generates master public key (MPK)",
+                    "Derives the nullifier secret",
+                    "Generates the Master Public Key (MPK)",
                   ]}
                 />
                 <KeyCard
                   icon={Eye}
                   title="Viewing Key"
-                  desc="Ed25519 keypair used exclusively for scanning stealth announcements. Can detect incoming notes by matching the note public key (NPK). Share with auditors or compliance officers — they can see your balance history but never spend your funds."
+                  desc="Ed25519 keypair used exclusively for scanning stealth announcements. Detects incoming notes by matching the note public key (NPK). Derives the outgoing-viewing key (ovk) used for sender-memo decryption, so a single export key recovers both incoming and outgoing history. Share with auditors or compliance officers — they can read your transaction history but never spend your funds."
                   features={[
-                    "Scans stealth announcements",
-                    "Read-only access to balances",
+                    "Scans stealth announcements (incoming)",
+                    "Derives ovk for sender-memo (outgoing)",
                     "Shareable for selective disclosure",
                   ]}
                 />
+              </div>
+            </DocsSection>
+
+            {/* ── Auditable Disclosure ── */}
+            <DocsSection id="disclosure" className="py-12 sm:py-16 border-t border-gray/10">
+              <SectionHeading
+                label="Auditable Disclosure"
+                title="Privacy with Receipts"
+                subtitle="UTXOpia isn't an unaccountable mixer. Compliance tooling is built into the protocol — across four layers — so users can prove what they need to prove without surrendering custody. Each layer has its own deployment status."
+              />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {DISCLOSURE_ITEMS.map((item) => (
+                  <DocsSection key={item.id} id={item.id}>
+                    <DisclosureCard {...item} />
+                  </DocsSection>
+                ))}
               </div>
             </DocsSection>
 

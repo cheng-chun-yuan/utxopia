@@ -34,9 +34,21 @@ export const NAV_ITEMS: NavItem[] = [
       { id: "joinsplit-circuit", label: "JoinSplit Circuit" },
       { id: "eddsa-signatures", label: "EdDSA Signatures" },
       { id: "stealth-key-agreement", label: "Stealth Key Agreement" },
+      { id: "sender-memo", label: "Sender Memo Channel" },
+      { id: "proof-of-innocence", label: "Proof of Innocence" },
     ],
   },
   { id: "key-model", label: "Key Model" },
+  {
+    id: "disclosure",
+    label: "Auditable Disclosure",
+    children: [
+      { id: "auditor-toolkit", label: "Auditor Toolkit" },
+      { id: "sender-memo-channel", label: "Sender Memos" },
+      { id: "proof-of-innocence-flow", label: "Proof of Innocence" },
+      { id: "selective-disclosure-proofs", label: "Selective Disclosure" },
+    ],
+  },
   { id: "security", label: "Security & Compliance" },
 ];
 

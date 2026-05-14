@@ -342,6 +342,49 @@ describe("auditScan — sender memos (Phase 2)", () => {
     });
     expect(result.records).toHaveLength(0);
   });
+
+  it("INCOMING_ONLY delegation produces zero OUT records even when memos are provided", async () => {
+    const sender = deriveKeysFromSeed(new Uint8Array(32).fill(0x42));
+    const delegated = createDelegatedViewKey(
+      sender,
+      ViewPermissions.SCAN | ViewPermissions.INCOMING_ONLY,
+    );
+
+    const commitment = new Uint8Array(32).fill(0xcc);
+    const memo = encryptSenderMemo(
+      sender.viewingPrivKey,
+      { tokenId: ZKBTC_TOKEN_ID, amount: 70_000n },
+      { commitment, leafIndex: 12 },
+    );
+    const senderMemo: OnChainSenderMemo = { ...memo, slot: 555 };
+
+    const result = await auditScan(delegated, [], {
+      tokenIds: [ZKBTC_TOKEN_ID],
+      senderMemos: [senderMemo],
+    });
+    // The memo is decryptable, slot is in range, token matches — but the
+    // delegation forbids OUT records, so the auditor must not emit one.
+    expect(result.records).toHaveLength(0);
+  });
+
+  it("FULL delegation still emits OUT records when INCOMING_ONLY is not set", async () => {
+    // Sibling assertion to lock in the contrast: same data, different
+    // permissions, different result.
+    const sender = deriveKeysFromSeed(new Uint8Array(32).fill(0x42));
+    const delegated = createDelegatedViewKey(sender, ViewPermissions.FULL);
+    const memo = encryptSenderMemo(
+      sender.viewingPrivKey,
+      { tokenId: ZKBTC_TOKEN_ID, amount: 70_000n },
+      { commitment: new Uint8Array(32).fill(0xcc), leafIndex: 12 },
+    );
+    const senderMemo: OnChainSenderMemo = { ...memo, slot: 555 };
+    const result = await auditScan(delegated, [], {
+      tokenIds: [ZKBTC_TOKEN_ID],
+      senderMemos: [senderMemo],
+    });
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].direction).toBe("OUT");
+  });
 });
 
 describe("auditRecordsToCsv", () => {

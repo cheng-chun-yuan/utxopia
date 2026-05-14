@@ -153,10 +153,13 @@ export async function auditScan(
     nullifyingKey: key.nullifyingKey,
   };
 
-  // Honor INCOMING_ONLY: today this is a no-op because outgoing memos (Phase 2)
-  // don't exist yet. Recording the intent so the bit is enforced when they ship.
-  const _incomingOnly = hasPermission(key, ViewPermissions.INCOMING_ONLY);
-  void _incomingOnly;
+  // Honor INCOMING_ONLY: when set, skip OUT records derived from sender memos.
+  // The auditor still scans incoming announcements; just doesn't produce
+  // outgoing-direction rows. Enforcement is honor-system (the key holder could
+  // run auditScan locally with this branch removed), but the issuance contract
+  // is that an INCOMING_ONLY delegation produces no OUT records under the
+  // canonical SDK path.
+  const incomingOnly = hasPermission(key, ViewPermissions.INCOMING_ONLY);
 
   const records: AuditRecord[] = [];
   const seenLeafIndex = new Set<number>();
@@ -196,7 +199,8 @@ export async function auditScan(
   const notForViewerSkipped = inScope.length - seenLeafIndex.size;
 
   // Sender memos (Phase 2): produce OUT records the user emitted.
-  if (options.senderMemos && options.senderMemos.length > 0) {
+  // Skipped entirely when the delegation is INCOMING_ONLY.
+  if (!incomingOnly && options.senderMemos && options.senderMemos.length > 0) {
     for (const memo of options.senderMemos) {
       if (effectiveFromSlot != null || effectiveToSlot != null) {
         if (memo.slot == null) {

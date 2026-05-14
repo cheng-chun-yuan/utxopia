@@ -91,6 +91,17 @@ interface RelayRequest {
   btcScripts?: string[];
   /** Redeem: unique request nonces (one per public output) */
   requestNonces?: string[];
+  /**
+   * Transfer mode (optional): per-output XChaCha20-Poly1305 sender memo
+   * envelopes, 80-byte hex each (`nonce(24) || ciphertext_and_tag(56)`).
+   * The client computes these via `buildSenderMemosForTransact`, predicting
+   * leaf indices from the commitment tree's `next_leaf_index` before signing.
+   * The relay forwards the bytes opaquely — viewing keys never leave the client.
+   * If the client's leaf-index prediction races a concurrent transact, the
+   * memo lands on-chain but decrypts to `null` (AAD mismatch); the caller's
+   * outgoing-history simply has a gap. Omit to skip the channel entirely.
+   */
+  senderMemos?: string[];
 }
 
 // =============================================================================
@@ -434,6 +445,26 @@ export async function POST(request: NextRequest) {
 
     } else {
       // ── TRANSFER (disc=13) ─────────────────────────────────────────
+      // Optional Phase 2 sender memos: client encrypts per-output (80B each)
+      // with viewingPrivKey and predicted leaf index; relay just forwards.
+      let senderMemoBytes: Uint8Array[] | undefined;
+      if (body.senderMemos) {
+        if (body.senderMemos.length !== nOutputs) {
+          return NextResponse.json(
+            { success: false, error: `Expected ${nOutputs} senderMemos, got ${body.senderMemos.length}` },
+            { status: 400 },
+          );
+        }
+        senderMemoBytes = body.senderMemos.map((s, i) => {
+          const bytes = hexToBytes(s);
+          if (bytes.length !== 80) {
+            throw new Error(`senderMemos[${i}]: expected 80 bytes, got ${bytes.length}`);
+          }
+          return bytes;
+        });
+        console.log(`[Relay] Attaching ${senderMemoBytes.length} sender memos`);
+      }
+
       ixData = buildTransactInstructionData({
         nInputs, nOutputs,
         merkleRoot: merkleRootBytes,
@@ -441,6 +472,7 @@ export async function POST(request: NextRequest) {
         nullifiers: nullifierBytes,
         commitmentsOut: commitmentBytes,
         stealthData: stealthDataBytes,
+        senderMemos: senderMemoBytes,
         proofSource: 1,
       });
 

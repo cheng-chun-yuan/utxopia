@@ -106,21 +106,36 @@ docker compose -f docker-compose.hybrid.yml up --build -d
   );
 }
 
+type DripResult =
+  | { kind: "ok"; txid: string; blocksMined?: number; warning?: string }
+  | { kind: "cooldown"; retryAfterSec: number; message: string }
+  | { kind: "err"; message: string };
+
 function FaucetForm() {
   const [address, setAddress] = useState("");
   const [amountSats, setAmountSats] = useState(1_000_000);
   const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<
-    | { kind: "ok"; txid: string }
-    | { kind: "err"; message: string }
-    | null
-  >(null);
+  const [result, setResult] = useState<DripResult | null>(null);
 
   useEffect(() => {
     setResult(null);
   }, [address, amountSats]);
 
-  const validAddress = address.trim().startsWith("bcrt1");
+  // Live cooldown countdown so the user sees the seconds tick down.
+  const [cooldownLeft, setCooldownLeft] = useState(0);
+  useEffect(() => {
+    if (result?.kind !== "cooldown") {
+      setCooldownLeft(0);
+      return;
+    }
+    setCooldownLeft(result.retryAfterSec);
+    const iv = setInterval(() => {
+      setCooldownLeft((s) => (s > 0 ? s - 1 : 0));
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [result]);
+
+  const validAddress = /^bcrt1[a-z0-9]{38,90}$/.test(address.trim());
 
   async function handleDrip() {
     setSubmitting(true);
@@ -131,11 +146,29 @@ function FaucetForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address: address.trim(), amountSats }),
       });
-      const body = (await res.json()) as { ok: boolean; txid?: string; error?: string };
-      if (!res.ok || !body.ok) {
+      const body = (await res.json()) as {
+        ok: boolean;
+        txid?: string;
+        blocksMined?: number;
+        warning?: string;
+        retryAfterSec?: number;
+        error?: string;
+      };
+      if (res.status === 429 && typeof body.retryAfterSec === "number") {
+        setResult({
+          kind: "cooldown",
+          retryAfterSec: body.retryAfterSec,
+          message: body.error ?? `cooldown active — try again in ${body.retryAfterSec}s`,
+        });
+      } else if (!res.ok || !body.ok) {
         setResult({ kind: "err", message: body.error ?? `HTTP ${res.status}` });
       } else {
-        setResult({ kind: "ok", txid: body.txid ?? "" });
+        setResult({
+          kind: "ok",
+          txid: body.txid ?? "",
+          blocksMined: body.blocksMined,
+          warning: body.warning,
+        });
       }
     } catch (e) {
       setResult({ kind: "err", message: e instanceof Error ? e.message : String(e) });
@@ -143,6 +176,9 @@ function FaucetForm() {
       setSubmitting(false);
     }
   }
+
+  const cooldownActive = result?.kind === "cooldown" && cooldownLeft > 0;
+  const disabled = !validAddress || submitting || amountSats <= 0 || cooldownActive;
 
   return (
     <div className="space-y-4">
@@ -190,16 +226,31 @@ function FaucetForm() {
 
       <button
         onClick={handleDrip}
-        disabled={!validAddress || submitting || amountSats <= 0}
+        disabled={disabled}
         className="btn-primary w-full"
       >
         <Droplets className="w-5 h-5" />
-        {submitting ? "Dripping…" : "Send regtest BTC"}
+        {submitting
+          ? "Dripping…"
+          : cooldownActive
+            ? `Wait ${cooldownLeft}s`
+            : "Send regtest BTC"}
       </button>
 
       {result?.kind === "ok" && (
-        <div className="p-3 rounded-[10px] border border-success/30 bg-success/5 text-caption text-success">
-          Sent. txid: <span className="font-mono break-all">{result.txid || "(see backend log)"}</span>
+        <div className="p-3 rounded-[10px] border border-success/30 bg-success/5 text-caption text-success space-y-1">
+          <div>
+            Sent + confirmed{result.blocksMined != null ? ` (${result.blocksMined} block${result.blocksMined === 1 ? "" : "s"} mined)` : ""}.
+          </div>
+          <div className="font-mono break-all">{result.txid || "(see backend log)"}</div>
+          {result.warning && (
+            <div className="text-warning pt-1 border-t border-success/10">⚠ {result.warning}</div>
+          )}
+        </div>
+      )}
+      {result?.kind === "cooldown" && (
+        <div className="p-3 rounded-[10px] border border-warning/30 bg-warning/5 text-caption text-warning">
+          {cooldownLeft > 0 ? `Cooldown — try again in ${cooldownLeft}s` : "Cooldown cleared, try again."}
         </div>
       )}
       {result?.kind === "err" && (
