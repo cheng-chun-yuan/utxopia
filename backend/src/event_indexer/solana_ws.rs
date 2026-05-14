@@ -183,6 +183,10 @@ impl SolanaWsSubscriber {
                 ProgramEvent::SenderMemo(_) => {} // handled by poll indexer
                 ProgramEvent::AssociationRootUpdated(_) => {} // handled by poll indexer
                 ProgramEvent::PoIAttested(_) => {} // handled by poll indexer
+                ProgramEvent::BtcOriginAttestation(_) => {}
+                // Curation runs from deposit_tracker (`maybe_auto_feed_poi`)
+                // when the backend itself verifies a deposit. Third-party
+                // indexers consume this event directly via the SDK parser.
             }
         }
 

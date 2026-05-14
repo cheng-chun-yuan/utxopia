@@ -30,6 +30,7 @@ const EVENT_SHIELD_META: u8 = 0x11;
 const EVENT_SENDER_MEMO: u8 = 0x12;
 const EVENT_ASSOCIATION_ROOT_UPDATED: u8 = 0x13;
 const EVENT_POI_ATTESTED: u8 = 0x14;
+const EVENT_BTC_ORIGIN_ATTESTATION: u8 = 0x15;
 
 /// Parsed nullifier spent event
 #[derive(Debug, Clone)]
@@ -150,6 +151,22 @@ pub struct PoIAttestedEvent {
     pub version: u64,
 }
 
+/// Parsed BTC origin attestation event — emitted alongside every
+/// SPV-verified deposit. Carries enough to build a PoI association set
+/// without trusting the backend.
+///
+/// Layout (matches `emit_btc_origin_attestation` in `utils/events.rs`):
+///   disc(1) + block_height(8 LE) + deposit_txid(32) + sweep_vout(4 LE)
+///     + commitment(32) + amount_sats(8 LE)
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BtcOriginAttestationEvent {
+    pub block_height: u64,
+    pub deposit_txid: [u8; 32],
+    pub sweep_vout: u32,
+    pub commitment: [u8; 32],
+    pub amount_sats: u64,
+}
+
 /// Parsed UTXO event (created or consumed)
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct UtxoEvent {
@@ -174,6 +191,7 @@ pub enum ProgramEvent {
     SenderMemo(SenderMemoEvent),
     AssociationRootUpdated(AssociationRootUpdatedEvent),
     PoIAttested(PoIAttestedEvent),
+    BtcOriginAttestation(BtcOriginAttestationEvent),
 }
 
 /// Parse program events from transaction log messages.
@@ -328,6 +346,11 @@ pub fn parse_program_events(logs: &[String]) -> Vec<ProgramEvent> {
                     events.push(ProgramEvent::PoIAttested(event));
                 }
             }
+            EVENT_BTC_ORIGIN_ATTESTATION => {
+                if let Some(event) = parse_btc_origin_attestation(&segments) {
+                    events.push(ProgramEvent::BtcOriginAttestation(event));
+                }
+            }
             _ => {}
         }
     }
@@ -381,6 +404,35 @@ fn parse_poi_attested(segments: &[Vec<u8>]) -> Option<PoIAttestedEvent> {
     v.copy_from_slice(&segments[3]);
     let version = u64::from_le_bytes(v);
     Some(PoIAttestedEvent { association_root, commitment, version })
+}
+
+fn parse_btc_origin_attestation(segments: &[Vec<u8>]) -> Option<BtcOriginAttestationEvent> {
+    if segments.len() < 6 { return None; }
+    if segments[1].len() != 8 { return None; }
+    if segments[2].len() != 32 { return None; }
+    if segments[3].len() != 4 { return None; }
+    if segments[4].len() != 32 { return None; }
+    if segments[5].len() != 8 { return None; }
+    let mut bh = [0u8; 8];
+    bh.copy_from_slice(&segments[1]);
+    let block_height = u64::from_le_bytes(bh);
+    let mut deposit_txid = [0u8; 32];
+    deposit_txid.copy_from_slice(&segments[2]);
+    let mut vout_bytes = [0u8; 4];
+    vout_bytes.copy_from_slice(&segments[3]);
+    let sweep_vout = u32::from_le_bytes(vout_bytes);
+    let mut commitment = [0u8; 32];
+    commitment.copy_from_slice(&segments[4]);
+    let mut amt = [0u8; 8];
+    amt.copy_from_slice(&segments[5]);
+    let amount_sats = u64::from_le_bytes(amt);
+    Some(BtcOriginAttestationEvent {
+        block_height,
+        deposit_txid,
+        sweep_vout,
+        commitment,
+        amount_sats,
+    })
 }
 
 /// Parse nullifier event(s) from either single or batch format.

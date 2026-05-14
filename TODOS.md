@@ -35,7 +35,8 @@ Primitive is fully wired end-to-end: on-chain `transact` (disc 13) detects + emi
 ### Phase 3 PoI — remaining follow-ups
 - [ ] Phase 3d: merged JoinSplit+PoI circuit so the attestation hides the spent commitment. Today `attest_poi` (disc 22) takes the commitment as a clear public input — fine for the honor-system flow, blocks privacy-sensitive callers.
 - [x] Frontend PoI page lives at `/poi` (collides with the existing `/prove` SPV-verify widget if put under `/prove`). Pipes the user's commitment → backend `/api/poi/inclusion` → browser Groth16 → `/api/attest-poi` (relayer-signed submit of disc 22).
-- [ ] Curation policy for the association set: deposit-confirmation-only today; consider taint-graph propagation à la Railgun PPOI as a v2.
+- [x] **Curation policy v1 — deposit-confirmation-only**: every SPV-verified deposit is auto-fed into the PoI association set. Backend `deposit_tracker::service::maybe_auto_feed_poi` runs on every successful verify; the new on-chain `EVENT_BTC_ORIGIN_ATTESTATION` (disc 0x15) is now parsed by `event_indexer/parser.rs` and routed through `service.rs` (logged) + `solana_ws.rs` (acknowledged as poll-indexer-owned), so third-party indexers can mirror the curation without trusting our backend.
+- [ ] Curation policy v2: taint-graph propagation à la Railgun PPOI — a commitment is innocent iff *all* its input commitments are innocent. Requires consuming `EVENT_NULLIFIER_SPENT` lineage and propagating cleanness through `transact` joins.
 
 ### Phase 4 selective disclosure — remaining follow-ups
 - [x] Compile range-sum N=4 companion. Circuit at `circuits/circom/range_sum_4.circom`, build under `circuits/build/range_sum_4/`. SDK picks the variant automatically via `pickRangeSumVariant(notes.length)`; new builds register in `RANGE_SUM_VARIANTS`.

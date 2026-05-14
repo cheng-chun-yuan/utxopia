@@ -351,6 +351,19 @@ impl EventIndexerService {
                     tracing::info!(version = e.version, "PoI attested");
                     let _ = e;
                 }
+                ProgramEvent::BtcOriginAttestation(e) => {
+                    // Phase 3c: log for now. PoI auto-feed runs from
+                    // deposit_tracker::service::maybe_auto_feed_poi when the
+                    // backend itself drives the verify; this branch covers
+                    // attestations observed via WS for which we didn't
+                    // originate the verify (third-party indexers' code path).
+                    tracing::info!(
+                        block_height = e.block_height,
+                        amount_sats = e.amount_sats,
+                        commitment = hex::encode(e.commitment),
+                        "BTC origin attestation"
+                    );
+                }
             }
         }
 
