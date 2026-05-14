@@ -255,7 +255,7 @@ export default function Home() {
 
             <ScrollReveal delay={0.15}>
               <p className="mt-6 text-base md:text-lg text-gray font-light max-w-lg mx-auto leading-relaxed">
-                One shielded pool for UTXO, SPL, and P-Token assets. Privacy by default, auditable on demand.
+                One shielded pool for Bitcoin and any Solana token. Privacy by default, auditable on demand.
               </p>
             </ScrollReveal>
 
@@ -271,7 +271,7 @@ export default function Home() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Layers className="w-4 h-4 text-sol" />
-                  <span>UTXO · SPL · P-Token</span>
+                  <span>BTC + Any Solana Token</span>
                 </div>
               </div>
             </ScrollReveal>
