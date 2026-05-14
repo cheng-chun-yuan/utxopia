@@ -131,10 +131,10 @@ const ComplianceViz = () => (
     </div>
     <div className="w-full space-y-2.5 z-10">
       {[
-        { label: "Address Screening", status: "pass", checked: true },
-        { label: "Amount Validation", status: "pass", checked: true },
-        { label: "OFAC SDN List", status: "pending", checked: false },
-      ].map((item, i) => (
+        { label: "Origin Attested", status: "on-chain", checked: true },
+        { label: "View Key Delegated", status: "scoped", checked: true },
+        { label: "Audit Trail", status: "on-demand", checked: false },
+      ].map((item) => (
         <div
           key={item.label}
           className="flex items-center justify-between px-3 py-2 rounded-lg bg-background/40 border border-cyan/10"
@@ -159,7 +159,7 @@ const ComplianceViz = () => (
     </div>
     <div className="flex items-center gap-2 z-10 mt-1">
       <ShieldCheck className="w-3 h-3 text-cyan/50" />
-      <span className="text-[9px] font-mono text-cyan/40">regulatory compliance layer</span>
+      <span className="text-[9px] font-mono text-cyan/40">selective disclosure toolkit</span>
     </div>
   </div>
 );
@@ -194,9 +194,9 @@ FeatureCard.displayName = "FeatureCard";
 
 const FEATURE_CARDS = [
   { icon: EyeOff, title: "ZK Private", description: "Amounts & addresses hidden by zero-knowledge proofs", iconColor: "text-privacy", hoverGlow: "rgba(20, 241, 149, 0.12)", step: "01", visualization: PrivacyViz },
-  { icon: Layers, title: "Token Shielding", description: "Any SPL token shielded as private commitments", iconColor: "text-privacy", hoverGlow: "rgba(20, 241, 149, 0.12)", step: "02", visualization: BackedViz },
+  { icon: Layers, title: "Cross-Chain Shielding", description: "Bitcoin and any Solana token shielded into one pool", iconColor: "text-privacy", hoverGlow: "rgba(20, 241, 149, 0.12)", step: "02", visualization: BackedViz },
   { icon: Zap, title: "Instant", description: "Auto-confirmed deposits, sub-second settlement", iconColor: "text-sol", hoverGlow: "rgba(153, 69, 255, 0.12)", step: "03", visualization: SpeedViz },
-  { icon: ShieldCheck, title: "Compliant", description: "OFAC screening without compromising privacy", iconColor: "text-cyan", hoverGlow: "rgba(0, 255, 255, 0.08)", step: "04", visualization: ComplianceViz },
+  { icon: ShieldCheck, title: "Audit-Ready", description: "Selective disclosure on demand. Your viewing keys, your control.", iconColor: "text-cyan", hoverGlow: "rgba(0, 255, 255, 0.08)", step: "04", visualization: ComplianceViz },
 ];
 
 function FeatureCarousel() {
