@@ -39,12 +39,19 @@ function PoIPageInner() {
   const clusterParam = cfg?.solana.rpcUrl?.includes("devnet") ? "?cluster=devnet" : "";
 
   const [commitmentInput, setCommitmentInput] = useState("");
+  const [hideCommitment, setHideCommitment] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [stage, setStage] = useState<
     "idle" | "fetching" | "proving" | "submitting" | "done"
   >("idle");
   const [result, setResult] = useState<
-    | { kind: "ok"; signature: string; associationRoot: string }
+    | {
+        kind: "ok";
+        signature: string;
+        associationRoot: string;
+        /** Only set when the user attested with hidden mode. */
+        hidden?: { blindedId: string; nonce: string };
+      }
     | { kind: "err"; message: string }
     | null
   >(null);
@@ -77,7 +84,14 @@ function PoIPageInner() {
 
       // 1. Fetch inclusion proof
       setStage("fetching");
-      const { fetchPoIInclusion, generatePoIProof, bytesToHex } = await import("@utxopia/sdk");
+      const {
+        fetchPoIInclusion,
+        generatePoIProof,
+        generateHiddenPoIProof,
+        generateHiddenPoINonce,
+        computeBlindedId,
+        bytesToHex,
+      } = await import("@utxopia/sdk");
       const inclusion = await fetchPoIInclusion(backendUrl, commitment);
       if (!inclusion) {
         throw new Error(
@@ -86,24 +100,47 @@ function PoIPageInner() {
         );
       }
 
-      // 2. Generate Groth16 PoI proof in-browser
+      // 2. Generate Groth16 PoI proof in-browser. Hidden mode swaps the
+      //    public commitment input for a Poseidon(commitment, nonce) blind
+      //    so chain watchers can't link the attestation back to a specific
+      //    commitment.
       setStage("proving");
-      const proofData = await generatePoIProof({
-        associationRoot: inclusion.associationRoot,
-        commitment,
-        pathElements: inclusion.pathElements,
-        pathIndices: inclusion.pathIndices,
-      });
+      let proofBytesHex: string;
+      let attestPayload: { commitment: string; proofBytes: string } | { blindedId: string; proofBytes: string };
+      let nonceHex: string | undefined;
+      let blindedIdHex: string | undefined;
+      if (hideCommitment) {
+        const nonce = generateHiddenPoINonce();
+        const proofData = await generateHiddenPoIProof({
+          associationRoot: inclusion.associationRoot,
+          commitment,
+          nonce,
+          pathElements: inclusion.pathElements,
+          pathIndices: inclusion.pathIndices,
+        });
+        const blindedId = await computeBlindedId(commitment, nonce);
+        proofBytesHex = bytesToHex(proofData.proof);
+        blindedIdHex = blindedId.toString(16).padStart(64, "0");
+        nonceHex = nonce.toString(16).padStart(64, "0");
+        attestPayload = { blindedId: blindedIdHex, proofBytes: proofBytesHex };
+      } else {
+        const proofData = await generatePoIProof({
+          associationRoot: inclusion.associationRoot,
+          commitment,
+          pathElements: inclusion.pathElements,
+          pathIndices: inclusion.pathIndices,
+        });
+        proofBytesHex = bytesToHex(proofData.proof);
+        attestPayload = { commitment: bigintToHex32(commitment), proofBytes: proofBytesHex };
+      }
 
       // 3. Submit via relayer
       setStage("submitting");
-      const resp = await fetch("/api/attest-poi", {
+      const endpoint = hideCommitment ? "/api/attest-poi-hidden" : "/api/attest-poi";
+      const resp = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          commitment: bigintToHex32(commitment),
-          proofBytes: bytesToHex(proofData.proof),
-        }),
+        body: JSON.stringify(attestPayload),
       });
       const body = (await resp.json()) as {
         ok: boolean;
@@ -119,6 +156,10 @@ function PoIPageInner() {
         kind: "ok",
         signature: body.signature ?? "",
         associationRoot: inclusion.associationRoot.toString(16).padStart(64, "0"),
+        hidden:
+          hideCommitment && blindedIdHex && nonceHex
+            ? { blindedId: blindedIdHex, nonce: nonceHex }
+            : undefined,
       });
     } catch (e) {
       setStage("idle");
@@ -191,6 +232,37 @@ function PoIPageInner() {
             </p>
           </div>
 
+          {/* Hide-commitment toggle */}
+          <div className="flex items-start justify-between gap-3 p-3 rounded-[12px] border border-gray/15 bg-muted/10">
+            <div className="flex-1 min-w-0">
+              <div className="text-body2 text-foreground">Hide commitment</div>
+              <div className="text-caption text-gray mt-0.5">
+                Publish only a Poseidon-blinded ID instead of the
+                commitment itself. Share the nonce with your auditor so
+                they can verify the binding off-chain.
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={hideCommitment}
+              onClick={() => setHideCommitment((v) => !v)}
+              disabled={submitting}
+              className={cn(
+                "shrink-0 w-10 h-6 rounded-full p-0.5 transition-colors",
+                hideCommitment ? "bg-success" : "bg-muted",
+                submitting && "cursor-not-allowed",
+              )}
+            >
+              <span
+                className={cn(
+                  "block w-5 h-5 rounded-full bg-background transition-transform",
+                  hideCommitment ? "translate-x-4" : "translate-x-0",
+                )}
+              />
+            </button>
+          </div>
+
           <button
             onClick={handleProve}
             disabled={!commitmentInput.trim() || submitting}
@@ -229,6 +301,29 @@ function PoIPageInner() {
                   {result.associationRoot}
                 </div>
               </div>
+              {result.hidden && (
+                <div className="pt-2 mt-2 border-t border-success/10 space-y-2">
+                  <div className="text-gray">
+                    <div className="text-[10px] uppercase tracking-wider text-gray/50 mb-1">
+                      blinded ID (on-chain public input)
+                    </div>
+                    <div className="font-mono break-all text-foreground/70">
+                      {result.hidden.blindedId}
+                    </div>
+                  </div>
+                  <div className="text-gray">
+                    <div className="text-[10px] uppercase tracking-wider text-warning/80 mb-1">
+                      nonce — share with your auditor to verify
+                    </div>
+                    <div className="font-mono break-all text-warning/90 select-all">
+                      {result.hidden.nonce}
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-gray/60">
+                    Auditor verification: <code className="font-mono">computeBlindedId(commitment, nonce)</code> should equal the blinded ID above.
+                  </p>
+                </div>
+              )}
             </div>
           )}
           {result?.kind === "err" && (

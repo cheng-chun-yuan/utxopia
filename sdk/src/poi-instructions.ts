@@ -11,6 +11,7 @@
 
 const INSTRUCTION_UPDATE_ASSOCIATION_ROOT = 21;
 const INSTRUCTION_ATTEST_POI = 22;
+const INSTRUCTION_ATTEST_POI_HIDDEN = 23;
 const GROTH16_PROOF_BYTES = 256;
 
 /** PDA seed for the association-set account. Must match `ASSOCIATION_SET_SEED` in Rust. */
@@ -58,6 +59,35 @@ export function buildAttestPoIInstructionData(options: {
   const out = new Uint8Array(1 + 32 + GROTH16_PROOF_BYTES);
   out[0] = INSTRUCTION_ATTEST_POI;
   out.set(options.commitment, 1);
+  out.set(options.proofBytes, 1 + 32);
+  return out;
+}
+
+/**
+ * Build instruction data for `attest_poi_hidden` (disc 23).
+ *
+ * Same shape as the clear `attest_poi` builder, but the 32-byte public
+ * input is the blinded ID = `Poseidon(commitment, nonce)` rather than the
+ * commitment itself. Pair with {@link computeBlindedId} to derive the ID
+ * the proof should commit to.
+ *
+ * Layout: disc(1) + blinded_id(32) + proof_bytes(256) = 289 bytes
+ */
+export function buildAttestPoIHiddenInstructionData(options: {
+  blindedId: Uint8Array;
+  proofBytes: Uint8Array;
+}): Uint8Array {
+  if (options.blindedId.length !== 32) {
+    throw new Error(`blindedId must be 32 bytes; got ${options.blindedId.length}`);
+  }
+  if (options.proofBytes.length !== GROTH16_PROOF_BYTES) {
+    throw new Error(
+      `proofBytes must be ${GROTH16_PROOF_BYTES} bytes; got ${options.proofBytes.length}`,
+    );
+  }
+  const out = new Uint8Array(1 + 32 + GROTH16_PROOF_BYTES);
+  out[0] = INSTRUCTION_ATTEST_POI_HIDDEN;
+  out.set(options.blindedId, 1);
   out.set(options.proofBytes, 1 + 32);
   return out;
 }

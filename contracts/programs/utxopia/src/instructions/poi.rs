@@ -33,7 +33,9 @@ use crate::error::UTXOpiaError;
 use crate::state::{
     AssociationSet, PoolState, ASSOCIATION_SET_SEED,
 };
-use crate::utils::groth16::{verify_groth16_poi_proof, GROTH16_PROOF_SIZE};
+use crate::utils::groth16::{
+    verify_groth16_poi_hidden_proof, verify_groth16_poi_proof, GROTH16_PROOF_SIZE,
+};
 use crate::utils::{
     create_pda_account, validate_account_writable, validate_program_owner,
     validate_system_program,
@@ -170,5 +172,54 @@ pub fn process_attest_poi(
     verify_groth16_poi_proof(proof_bytes, &association_root, commitment)?;
 
     crate::utils::events::emit_poi_attested(&association_root, commitment, set.version);
+    Ok(())
+}
+
+/// User-facing PoI attestation with a blinded commitment (Phase 3d-lite).
+///
+/// Identical to `process_attest_poi` except the public input is
+/// `blinded_id = Poseidon(commitment, nonce)` instead of the commitment in
+/// clear. Chain watchers see only the blinded ID; the auditor receiving
+/// the attestation must obtain `nonce` out-of-band to verify the binding.
+///
+/// Instruction data layout:
+///   - blinded_id      :: [u8; 32]    (Poseidon(commitment, nonce))
+///   - proof_bytes     :: [u8; 256]   (Groth16 hidden-PoI proof)
+///
+/// Accounts:
+///   0. association_set (read PDA)
+///   1. payer           (signer)
+pub fn process_attest_poi_hidden(
+    program_id: &Pubkey,
+    accounts: &[AccountInfo],
+    data: &[u8],
+) -> ProgramResult {
+    if data.len() < 32 + GROTH16_PROOF_SIZE {
+        return Err(ProgramError::InvalidInstructionData);
+    }
+    if accounts.len() < 2 {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    }
+    let association_info = &accounts[0];
+    let payer = &accounts[1];
+
+    validate_program_owner(association_info, program_id)?;
+    if !payer.is_signer() {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    let blinded_id: &[u8; 32] = data[0..32].try_into().unwrap();
+    let proof_bytes = &data[32..32 + GROTH16_PROOF_SIZE];
+
+    let association_data = association_info.try_borrow_data()?;
+    let set = AssociationSet::from_bytes(&association_data)?;
+    if set.status != 0 {
+        return Err(UTXOpiaError::PoolPaused.into());
+    }
+    let association_root = set.current_root;
+
+    verify_groth16_poi_hidden_proof(proof_bytes, &association_root, blinded_id)?;
+
+    crate::utils::events::emit_poi_hidden_attested(&association_root, blinded_id, set.version);
     Ok(())
 }

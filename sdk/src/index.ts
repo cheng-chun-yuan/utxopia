@@ -124,19 +124,25 @@ export {
   type SenderMemoOutput,
 } from "./sender-memo";
 
-// Proof of Innocence (Phase 3)
+// Proof of Innocence (Phase 3 + Phase 3d-lite hidden variant)
 export {
   poiLeafHash,
   fetchPoIInclusion,
   generatePoIProof,
+  generateHiddenPoIProof,
+  generateHiddenPoINonce,
+  computeBlindedId,
   POI_TREE_DEPTH,
+  HIDDEN_POI_NONCE_BYTES,
   type PoIProofInputs,
   type PoIPublicInputs,
   type PoIInclusionResponse,
+  type HiddenPoIProofInputs,
 } from "./poi";
 export {
   buildUpdateAssociationRootInstructionData,
   buildAttestPoIInstructionData,
+  buildAttestPoIHiddenInstructionData,
   ASSOCIATION_SET_SEED,
 } from "./poi-instructions";
 

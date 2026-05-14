@@ -62,6 +62,7 @@ export type CircuitType = `joinsplit_${number}x${number}`;
 /** Names of non-JoinSplit auxiliary circuits (PoI + selective disclosure). */
 export type AuxCircuitName =
   | "proof_of_innocence"
+  | "attest_poi_hidden"
   | "ownership"
   | "range_sum"
   | "range_sum_4"

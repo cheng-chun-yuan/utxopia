@@ -4,7 +4,13 @@ import {
   poiLeafHash,
   generatePoIProof,
   fetchPoIInclusion,
+  computeBlindedId,
+  generateHiddenPoINonce,
+  HIDDEN_POI_NONCE_BYTES,
 } from "../../src/poi";
+import {
+  buildAttestPoIHiddenInstructionData,
+} from "../../src/poi-instructions";
 import {
   generateOwnershipProof,
   generateRangeSumProof,
@@ -159,5 +165,66 @@ describe("computeRangeSumAttestation", () => {
     await expect(
       computeRangeSumAttestation([1, 2, 3], 0n, "chunked"),
     ).rejects.toThrow(/even cardinality/);
+  });
+});
+
+describe("Hidden-commitment PoI (Phase 3d-lite)", () => {
+  it("computeBlindedId is deterministic", async () => {
+    const a = await computeBlindedId(0x42n, 0x99n);
+    const b = await computeBlindedId(0x42n, 0x99n);
+    expect(a).toBe(b);
+    // and the result is a valid BN254 field element
+    const BN254_PRIME = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+    expect(a).toBeLessThan(BN254_PRIME);
+    expect(a).toBeGreaterThan(0n);
+  });
+
+  it("computeBlindedId binds the commitment to the nonce", async () => {
+    const c1 = await computeBlindedId(1n, 99n);
+    const c2 = await computeBlindedId(2n, 99n);   // same nonce, different commitment
+    const c3 = await computeBlindedId(1n, 100n);  // different nonce, same commitment
+    expect(c1).not.toBe(c2);
+    expect(c1).not.toBe(c3);
+    expect(c2).not.toBe(c3);
+  });
+
+  it("generateHiddenPoINonce produces 240-bit values", () => {
+    const n = generateHiddenPoINonce();
+    expect(n).toBeGreaterThanOrEqual(0n);
+    expect(n).toBeLessThan(1n << BigInt(HIDDEN_POI_NONCE_BYTES * 8));
+    // Almost surely > 0 unless we drew the all-zero bytes, which has
+    // probability 2^-240. Sanity check:
+    expect(n).not.toBe(0n);
+  });
+
+  it("generateHiddenPoINonce returns different values across calls", () => {
+    const a = generateHiddenPoINonce();
+    const b = generateHiddenPoINonce();
+    expect(a).not.toBe(b);
+  });
+
+  it("buildAttestPoIHiddenInstructionData encodes 289 bytes with disc 23", () => {
+    const blindedId = new Uint8Array(32).fill(0xab);
+    const proofBytes = new Uint8Array(256).fill(0xcd);
+    const data = buildAttestPoIHiddenInstructionData({ blindedId, proofBytes });
+    expect(data.length).toBe(1 + 32 + 256);
+    expect(data[0]).toBe(23); // ATTEST_POI_HIDDEN discriminator
+    expect(data.slice(1, 33)).toEqual(blindedId);
+    expect(data.slice(33).every((b) => b === 0xcd)).toBe(true);
+  });
+
+  it("buildAttestPoIHiddenInstructionData rejects malformed inputs", () => {
+    expect(() =>
+      buildAttestPoIHiddenInstructionData({
+        blindedId: new Uint8Array(31),
+        proofBytes: new Uint8Array(256),
+      }),
+    ).toThrow(/blindedId/);
+    expect(() =>
+      buildAttestPoIHiddenInstructionData({
+        blindedId: new Uint8Array(32),
+        proofBytes: new Uint8Array(255),
+      }),
+    ).toThrow(/proofBytes/);
   });
 });
