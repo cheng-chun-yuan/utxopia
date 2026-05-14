@@ -536,6 +536,8 @@ export {
   isSnsStealthAddress,
   isAuditorDisclosable,
   SnsComplianceFlags,
+  SNS_COMPLIANCE_AUDITOR_OFFSET,
+  SNS_COMPLIANCE_AUDITOR_BYTES,
   deriveParentDomainKey,
   SNS_STEALTH_DATA_SIZE,
   SNS_STEALTH_DATA_SIZE_LEGACY_V1,

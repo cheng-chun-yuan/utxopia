@@ -40,12 +40,17 @@ interface UseSnsNameReturn {
   error: string | null;
   /** Compliance-flag byte on the registered SNS subdomain (0 if none). */
   complianceFlags: number;
+  /** Optional 32-byte auditor Solana pubkey published on the user's SNS. */
+  auditorPubkey: Uint8Array | null;
   lookupMySnsName: () => Promise<void>;
   lookupSnsName: (name: string) => Promise<SnsStealthAddress | null>;
   registerSnsSubdomain: (name: string) => Promise<boolean>;
   updateSnsStealthData: () => Promise<boolean>;
   /** Set the compliance-flag byte on the user's registered SNS subdomain. */
   setComplianceFlag: (value: number) => Promise<boolean>;
+  /** Set or clear the 32-byte auditor pubkey on the user's SNS subdomain.
+   *  Pass null to zero out the slot. */
+  setAuditorPubkey: (value: PublicKey | null) => Promise<boolean>;
 }
 
 /**
@@ -64,6 +69,7 @@ export function useSnsName(): UseSnsNameReturn {
   const [registeredSnsName, setRegisteredSnsName] = useState<string | null>(null);
   const [hasRegisteredSnsName, setHasRegisteredSnsName] = useState(false);
   const [complianceFlags, setComplianceFlags] = useState(0);
+  const [auditorPubkey, setAuditorPubkeyState] = useState<Uint8Array | null>(null);
   const [needsUpdate, setNeedsUpdate] = useState(false);
   const [registeredSubdomainKey, setRegisteredSubdomainKey] = useState<PublicKey | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -112,6 +118,7 @@ export function useSnsName(): UseSnsNameReturn {
             setHasRegisteredSnsName(true);
             setRegisteredSubdomainKey(account.pubkey);
             setComplianceFlags(parsed.complianceFlags ?? 0);
+            setAuditorPubkeyState(parsed.auditorPubkey ?? null);
 
             // Detect if record needs update (old version, zero mpk, or stale mpk)
             const mpkAllZero = parsed.mpk.every((b: number) => b === 0);
@@ -556,6 +563,92 @@ export function useSnsName(): UseSnsNameReturn {
     }
   }, [wallet, connection, registeredSubdomainKey]);
 
+  /**
+   * Set or clear the 32-byte auditor pubkey hint at offset 66 of the
+   * stealth payload. Pass `null` to write 32 zero bytes (parser treats
+   * all-zero as "not set"). Reallocs to 98 bytes if needed.
+   */
+  const setAuditorPubkey = useCallback(async (value: PublicKey | null): Promise<boolean> => {
+    if (!wallet.publicKey || !wallet.signTransaction || !registeredSubdomainKey) {
+      setError("Wallet not connected or no SNS subdomain registered");
+      return false;
+    }
+    const config = getConfig();
+    if (!config.snsNameServiceProgramId) {
+      setError("SNS not configured");
+      return false;
+    }
+
+    setIsRegistering(true);
+    setError(null);
+
+    try {
+      const nameServiceProgramId = new PublicKey(config.snsNameServiceProgramId);
+      const ixs: TransactionInstruction[] = [];
+
+      // Payload layout: stealth(65) + flag(1) + auditor(32) = 98 bytes
+      const targetPayloadSize = STEALTH_DATA_SIZE + 1 + 32;
+      const subdomainInfo = await connection.getAccountInfo(registeredSubdomainKey);
+      const currentPayloadSize = subdomainInfo ? subdomainInfo.data.length - 96 : 0;
+
+      if (currentPayloadSize < targetPayloadSize) {
+        const reallocData = new Uint8Array(5);
+        reallocData[0] = SNS_DISC_REALLOC;
+        new DataView(reallocData.buffer).setUint32(1, targetPayloadSize, true);
+        ixs.push(new TransactionInstruction({
+          programId: nameServiceProgramId,
+          keys: [
+            { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+            { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
+            { pubkey: registeredSubdomainKey, isSigner: false, isWritable: true },
+            { pubkey: wallet.publicKey, isSigner: true, isWritable: false },
+          ],
+          data: Buffer.from(reallocData),
+        }));
+      }
+
+      // Write 32 bytes at offset 66 of the stealth payload.
+      const pubkeyBytes = value ? value.toBytes() : new Uint8Array(32);
+      const updateData = new Uint8Array(1 + 4 + 4 + 32);
+      updateData[0] = SNS_DISC_UPDATE;
+      new DataView(updateData.buffer).setUint32(1, STEALTH_DATA_SIZE + 1, true); // offset 66
+      new DataView(updateData.buffer).setUint32(5, 32, true);                    // length
+      updateData.set(pubkeyBytes, 9);
+
+      ixs.push(new TransactionInstruction({
+        programId: nameServiceProgramId,
+        keys: [
+          { pubkey: registeredSubdomainKey, isSigner: false, isWritable: true },
+          { pubkey: wallet.publicKey, isSigner: true, isWritable: false },
+        ],
+        data: Buffer.from(updateData),
+      }));
+
+      const tx = new Transaction().add(...ixs);
+      tx.feePayer = wallet.publicKey;
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+      tx.recentBlockhash = blockhash;
+      const signed = await wallet.signTransaction(tx);
+      const txid = await connection.sendRawTransaction(signed.serialize(), {
+        skipPreflight: false,
+        preflightCommitment: "confirmed",
+      });
+      await connection.confirmTransaction(
+        { signature: txid, blockhash, lastValidBlockHeight },
+        "confirmed",
+      );
+      setAuditorPubkeyState(value ? new Uint8Array(value.toBytes()) : null);
+      return true;
+    } catch (err) {
+      console.error("Failed to set SNS auditor pubkey:", err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(errorMessage || "Failed to set auditor pubkey");
+      return false;
+    } finally {
+      setIsRegistering(false);
+    }
+  }, [wallet, connection, registeredSubdomainKey]);
+
   // Auto-check on mount when wallet connected
   useEffect(() => {
     if (wallet.publicKey && stealthAddress) {
@@ -564,6 +657,7 @@ export function useSnsName(): UseSnsNameReturn {
       setRegisteredSnsName(null);
       setHasRegisteredSnsName(false);
       setComplianceFlags(0);
+      setAuditorPubkeyState(null);
     }
   }, [wallet.publicKey, stealthAddress, lookupMySnsName]);
 
@@ -575,10 +669,12 @@ export function useSnsName(): UseSnsNameReturn {
     isRegistering,
     error,
     complianceFlags,
+    auditorPubkey,
     lookupMySnsName,
     lookupSnsName,
     registerSnsSubdomain,
     updateSnsStealthData,
     setComplianceFlag,
+    setAuditorPubkey,
   };
 }

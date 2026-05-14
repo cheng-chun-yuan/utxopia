@@ -78,6 +78,27 @@ function generateClaimSecret(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/** Render a 32-byte Solana pubkey as `abc…xyz` for compact UI display.
+ *  Uses base58 via @solana/web3.js's PublicKey since the project already
+ *  pulls that dep — avoids a separate `bs58` import. */
+function bs58Truncated(bytes: Uint8Array): string {
+  // Lazy require so the dep isn't pulled into the bundle if this code path
+  // never executes for a given user session.
+  try {
+    /* eslint-disable @typescript-eslint/no-require-imports */
+    const { PublicKey } = require("@solana/web3.js") as typeof import("@solana/web3.js");
+    /* eslint-enable @typescript-eslint/no-require-imports */
+    const b58 = new PublicKey(bytes).toBase58();
+    return b58.length > 16 ? `${b58.slice(0, 6)}…${b58.slice(-6)}` : b58;
+  } catch {
+    // Fall back to hex if PublicKey balks for some reason.
+    return Array.from(bytes.slice(0, 4), (b) => b.toString(16).padStart(2, "0"))
+      .join("") +
+      "…" +
+      Array.from(bytes.slice(-4), (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+}
+
 export function SendForm() {
   const [state, dispatch] = useReducer(reducer, initial);
   const [linkOpen, setLinkOpen] = useState(false);
@@ -360,9 +381,16 @@ export function SendForm() {
       />
 
       {showAuditorBadge && (
-        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-success/30 bg-success/5 text-[11px] text-success font-mono">
-          <span className="w-1.5 h-1.5 rounded-full bg-success" />
-          Recipient is auditor-disclosable
+        <div className="inline-flex flex-col items-start gap-1 px-3 py-1.5 rounded-lg border border-success/30 bg-success/5 text-[11px] text-success">
+          <div className="inline-flex items-center gap-1.5 font-mono">
+            <span className="w-1.5 h-1.5 rounded-full bg-success" />
+            Recipient is auditor-disclosable
+          </div>
+          {resolvedSns?.auditorPubkey && (
+            <div className="font-mono text-[10px] text-success/80 break-all pl-3">
+              auditor: {bs58Truncated(resolvedSns.auditorPubkey)}
+            </div>
+          )}
         </div>
       )}
 

@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { Loader2 } from "lucide-react";
+import { PublicKey } from "@solana/web3.js";
 import { useUiMode } from "@/hooks/use-ui-mode";
 import { useSnsName } from "@/hooks/use-sns-name";
 import { cn } from "@/lib/utils";
@@ -60,6 +62,109 @@ export function PreferencesForm() {
       </div>
 
       <AuditorDisclosableToggle />
+      <AuditorPubkeyField />
+    </div>
+  );
+}
+
+/**
+ * Pubkey hint for the recipient's designated auditor. Optional — only
+ * meaningful when AUDITOR_DISCLOSABLE is set; the pubkey itself is just
+ * a public Solana address (no secret material), telling senders who the
+ * recipient discloses to. Distribution of the actual DelegatedViewKey
+ * remains out-of-band.
+ */
+function AuditorPubkeyField() {
+  const sns = useSnsName();
+  const currentBase58 = sns.auditorPubkey
+    ? new PublicKey(sns.auditorPubkey).toBase58()
+    : "";
+  const [value, setValue] = useState(currentBase58);
+  const [parseError, setParseError] = useState<string | null>(null);
+
+  const disabled = !sns.hasRegisteredSnsName || sns.isRegistering || sns.isLoading;
+  const dirty = value.trim() !== currentBase58;
+
+  async function handleSave() {
+    setParseError(null);
+    const trimmed = value.trim();
+    if (trimmed === "") {
+      await sns.setAuditorPubkey(null);
+      return;
+    }
+    let pubkey: PublicKey;
+    try {
+      pubkey = new PublicKey(trimmed);
+    } catch {
+      setParseError("Must be a base58 Solana pubkey (32 bytes).");
+      return;
+    }
+    await sns.setAuditorPubkey(pubkey);
+  }
+
+  return (
+    <div
+      className={cn(
+        "p-4 rounded-xl border border-gray/15 bg-muted/20 space-y-3",
+        disabled && "opacity-70",
+      )}
+    >
+      <div>
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-medium">Designated auditor (optional)</h3>
+          {sns.isRegistering && (
+            <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">
+          Public Solana pubkey of the auditor you've issued a
+          DelegatedViewKey to (off-chain). Senders see this in the badge
+          when they enter your name, so they know who you've granted
+          read-only access to. Leave blank to publish only the flag bit.
+        </p>
+      </div>
+
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        disabled={disabled}
+        placeholder="Base58 Solana pubkey (e.g. 9WzDXwB…WWM)"
+        className={cn(
+          "w-full px-3 py-2 rounded-lg bg-background border border-gray/15",
+          "text-[11px] font-mono outline-none focus:border-privacy/40",
+          disabled && "cursor-not-allowed",
+        )}
+      />
+
+      {parseError && (
+        <p className="text-xs text-error font-mono">{parseError}</p>
+      )}
+
+      <div className="flex items-center justify-end gap-2">
+        {dirty && (
+          <button
+            type="button"
+            onClick={() => { setValue(currentBase58); setParseError(null); }}
+            disabled={disabled}
+            className="px-3 py-1.5 text-xs rounded-lg border border-gray/15 hover:bg-muted/30"
+          >
+            Reset
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={disabled || !dirty}
+          className={cn(
+            "px-3 py-1.5 text-xs rounded-lg",
+            "bg-privacy text-background hover:opacity-90",
+            (disabled || !dirty) && "opacity-50 cursor-not-allowed",
+          )}
+        >
+          {value.trim() === "" ? "Clear" : "Save"}
+        </button>
+      </div>
     </div>
   );
 }

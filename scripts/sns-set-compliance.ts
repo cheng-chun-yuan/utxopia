@@ -49,8 +49,13 @@ const HASH_PREFIX = "SPL Name Service";
 const SNS_HEADER_SIZE = 96;
 const STEALTH_PAYLOAD_SIZE = 65;
 const FLAG_OFFSET_IN_PAYLOAD = 65;
+const AUDITOR_OFFSET_IN_PAYLOAD = 66;
+const AUDITOR_BYTES = 32;
 const FLAG_OFFSET_IN_ACCOUNT = SNS_HEADER_SIZE + FLAG_OFFSET_IN_PAYLOAD;
-const TARGET_ACCOUNT_SIZE = SNS_HEADER_SIZE + STEALTH_PAYLOAD_SIZE + 1;
+/** Payload size when both flag + auditor pubkey are present. */
+const TARGET_PAYLOAD_SIZE_WITH_AUDITOR = STEALTH_PAYLOAD_SIZE + 1 + AUDITOR_BYTES;
+/** Payload size when only the flag byte is present. */
+const TARGET_PAYLOAD_SIZE_FLAG_ONLY = STEALTH_PAYLOAD_SIZE + 1;
 
 type NetworkKey = keyof typeof networks;
 
@@ -59,6 +64,10 @@ interface Args {
   network: NetworkKey;
   keypairPath: string;
   flagValue: number;
+  /** When set, write a 32-byte auditor pubkey at offset 66 of the payload. */
+  auditorPubkey?: PublicKey;
+  /** When true, clear the auditor pubkey (write 32 zero bytes). */
+  clearAuditor: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -67,6 +76,8 @@ function parseArgs(argv: string[]): Args {
   let network: NetworkKey = "devnet";
   let keypairPath = path.join(process.env.HOME ?? "", ".config/solana/id.json");
   let flagValue: number | undefined;
+  let auditorPubkey: PublicKey | undefined;
+  let clearAuditor = false;
 
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -79,6 +90,15 @@ function parseArgs(argv: string[]): Args {
         throw new Error(`--raw must be a u8 in [0..255]; got ${next}`);
       }
       flagValue = v;
+    } else if (a === "--auditor") {
+      const next = args[++i];
+      try {
+        auditorPubkey = new PublicKey(next);
+      } catch {
+        throw new Error(`--auditor must be a base58 Solana pubkey; got "${next}"`);
+      }
+    } else if (a === "--clear-auditor") {
+      clearAuditor = true;
     } else if (a === "--network" || a === "-n") {
       const n = args[++i];
       if (!(n in networks)) throw new Error(`unknown network "${n}"`);
@@ -98,27 +118,32 @@ function parseArgs(argv: string[]): Args {
     printUsage();
     throw new Error("subdomain is required (first positional arg)");
   }
-  if (flagValue === undefined) {
+  if (flagValue === undefined && auditorPubkey === undefined && !clearAuditor) {
     printUsage();
-    throw new Error("one of --enable / --disable / --raw <N> is required");
+    throw new Error(
+      "one of --enable / --disable / --raw <N> / --auditor <pubkey> / --clear-auditor is required",
+    );
   }
-  return { subdomain, network, keypairPath, flagValue };
+  return { subdomain, network, keypairPath, flagValue: flagValue ?? -1, auditorPubkey, clearAuditor };
 }
 
 function printUsage(): void {
   console.error(
     [
-      "Usage: bun run scripts/sns-set-compliance.ts <subdomain> --enable|--disable|--raw <N>",
+      "Usage: bun run scripts/sns-set-compliance.ts <subdomain> [flag op] [auditor op]",
       "",
       "Required:",
-      "  <subdomain>          The subdomain name (e.g., \"alice\" for alice.btcpro.sol)",
-      "  --enable             Set AUDITOR_DISCLOSABLE (bit 0)",
-      "  --disable            Clear all flag bits",
-      "  --raw <u8>           Write an arbitrary flag byte (decimal or 0x-hex)",
+      "  <subdomain>            The subdomain name (e.g., \"alice\" for alice.btcpro.sol)",
+      "  At least one of:",
+      "    --enable             Set AUDITOR_DISCLOSABLE (bit 0)",
+      "    --disable            Clear all flag bits",
+      "    --raw <u8>           Write an arbitrary flag byte (decimal or 0x-hex)",
+      "    --auditor <base58>   Write a 32-byte auditor pubkey at offset 66",
+      "    --clear-auditor      Zero out the auditor pubkey",
       "",
       "Optional:",
-      "  --network <name>     Network from networks.json (default: devnet)",
-      "  --keypair <path>     Owner keypair (default: ~/.config/solana/id.json)",
+      "  --network <name>       Network from networks.json (default: devnet)",
+      "  --keypair <path>       Owner keypair (default: ~/.config/solana/id.json)",
     ].join("\n"),
   );
 }
@@ -167,7 +192,14 @@ async function main(): Promise<void> {
   console.log(`Signer: ${keypair.publicKey.toBase58()}`);
   console.log(`Network: ${args.network} (${cfg.solana.rpcUrl})`);
   console.log(`Subdomain: ${args.subdomain}.${parentDomain}.sol`);
-  console.log(`Flag byte: 0x${args.flagValue.toString(16).padStart(2, "0")}`);
+  if (args.flagValue >= 0) {
+    console.log(`Flag byte: 0x${args.flagValue.toString(16).padStart(2, "0")}`);
+  }
+  if (args.auditorPubkey) {
+    console.log(`Auditor: ${args.auditorPubkey.toBase58()}`);
+  } else if (args.clearAuditor) {
+    console.log(`Auditor: <cleared>`);
+  }
 
   const connection = new Connection(cfg.solana.rpcUrl, "confirmed");
   const programId = new PublicKey(snsProgramId);
@@ -192,12 +224,18 @@ async function main(): Promise<void> {
 
   const ixs: TransactionInstruction[] = [];
 
-  // Realloc if the account isn't big enough to hold the flag byte yet.
-  if (info.data.length < TARGET_ACCOUNT_SIZE) {
-    console.log(`Reallocating ${info.data.length} → ${TARGET_ACCOUNT_SIZE} bytes`);
+  // Target size depends on whether we're writing the auditor pubkey too.
+  const needsAuditorSlot = args.auditorPubkey != null || args.clearAuditor;
+  const targetPayloadSize = needsAuditorSlot
+    ? TARGET_PAYLOAD_SIZE_WITH_AUDITOR
+    : TARGET_PAYLOAD_SIZE_FLAG_ONLY;
+  const targetAccountSize = SNS_HEADER_SIZE + targetPayloadSize;
+
+  if (info.data.length < targetAccountSize) {
+    console.log(`Reallocating ${info.data.length} → ${targetAccountSize} bytes`);
     const reallocData = Buffer.alloc(5);
     reallocData[0] = SNS_DISC_REALLOC;
-    reallocData.writeUInt32LE(TARGET_ACCOUNT_SIZE - SNS_HEADER_SIZE, 1); // u32: new payload size
+    reallocData.writeUInt32LE(targetPayloadSize, 1); // u32: new payload size
     ixs.push(new TransactionInstruction({
       programId,
       keys: [
@@ -210,20 +248,47 @@ async function main(): Promise<void> {
     }));
   }
 
-  // Write the flag byte at offset 65 of the stealth payload.
-  const updateData = Buffer.alloc(1 + 4 + 4 + 1);
-  updateData[0] = SNS_DISC_UPDATE;
-  updateData.writeUInt32LE(FLAG_OFFSET_IN_PAYLOAD, 1); // offset within the stealth payload
-  updateData.writeUInt32LE(1, 5);                      // length
-  updateData[9] = args.flagValue;
-  ixs.push(new TransactionInstruction({
-    programId,
-    keys: [
-      { pubkey: subdomainKey, isSigner: false, isWritable: true },
-      { pubkey: keypair.publicKey, isSigner: true, isWritable: false },
-    ],
-    data: updateData,
-  }));
+  // Write the flag byte at offset 65 if the caller asked to.
+  if (args.flagValue >= 0) {
+    const updateData = Buffer.alloc(1 + 4 + 4 + 1);
+    updateData[0] = SNS_DISC_UPDATE;
+    updateData.writeUInt32LE(FLAG_OFFSET_IN_PAYLOAD, 1);
+    updateData.writeUInt32LE(1, 5);
+    updateData[9] = args.flagValue;
+    ixs.push(new TransactionInstruction({
+      programId,
+      keys: [
+        { pubkey: subdomainKey, isSigner: false, isWritable: true },
+        { pubkey: keypair.publicKey, isSigner: true, isWritable: false },
+      ],
+      data: updateData,
+    }));
+  }
+
+  // Write the auditor pubkey at offset 66 if the caller provided one.
+  // `--clear-auditor` writes 32 zero bytes (the parser treats all-zero as
+  // "not set"). When neither was requested, leave whatever's there alone.
+  if (args.auditorPubkey || args.clearAuditor) {
+    const payload = args.auditorPubkey ? args.auditorPubkey.toBuffer() : Buffer.alloc(AUDITOR_BYTES);
+    const updateData = Buffer.alloc(1 + 4 + 4 + AUDITOR_BYTES);
+    updateData[0] = SNS_DISC_UPDATE;
+    updateData.writeUInt32LE(AUDITOR_OFFSET_IN_PAYLOAD, 1);
+    updateData.writeUInt32LE(AUDITOR_BYTES, 5);
+    payload.copy(updateData, 9);
+    ixs.push(new TransactionInstruction({
+      programId,
+      keys: [
+        { pubkey: subdomainKey, isSigner: false, isWritable: true },
+        { pubkey: keypair.publicKey, isSigner: true, isWritable: false },
+      ],
+      data: updateData,
+    }));
+  }
+
+  if (ixs.length === 0) {
+    console.log("Nothing to do.");
+    return;
+  }
 
   const tx = new Transaction().add(...ixs);
   console.log(`Submitting ${ixs.length}-instruction transaction…`);
@@ -232,8 +297,13 @@ async function main(): Promise<void> {
   });
   console.log(`✓ tx: ${sig}`);
   console.log(
-    `Verify via SDK: resolveSnsName(rpc, "${args.subdomain}") ` +
-      `→ .complianceFlags === 0x${args.flagValue.toString(16).padStart(2, "0")}`,
+    `Verify via SDK: resolveSnsName(rpc, "${args.subdomain}")` +
+      (args.flagValue >= 0
+        ? ` → .complianceFlags === 0x${args.flagValue.toString(16).padStart(2, "0")}`
+        : "") +
+      (args.auditorPubkey
+        ? ` → .auditorPubkey === ${args.auditorPubkey.toBase58()}`
+        : ""),
   );
 }
 
