@@ -271,7 +271,7 @@ export default function Home() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Layers className="w-4 h-4 text-sol" />
-                  <span>BTC + Any Solana Token</span>
+                  <span>Cross-Chain Assets</span>
                 </div>
               </div>
             </ScrollReveal>
