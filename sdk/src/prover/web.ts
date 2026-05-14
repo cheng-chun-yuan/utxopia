@@ -353,6 +353,27 @@ export async function isProverAvailable(): Promise<boolean> {
   }
 }
 
+/**
+ * Verify a Groth16 proof against a verifying key + public signals.
+ *
+ * Accepts the snarkjs-native shapes:
+ *   - `vkey`:           the JSON emitted by `snarkjs zkey export verificationkey`
+ *   - `publicSignals`:  array of decimal strings
+ *   - `proof`:          `{ pi_a, pi_b, pi_c, protocol, curve }` as produced by `snarkjs.groth16.fullProve`
+ *
+ * Lazy-loads snarkjs so calling code doesn't pay the bundle cost unless it
+ * verifies. Returns true on a valid proof, false on an invalid one; throws
+ * if snarkjs is missing or the inputs are structurally malformed.
+ */
+export async function verifyGroth16Proof(
+  vkey: unknown,
+  publicSignals: ReadonlyArray<string>,
+  proof: unknown,
+): Promise<boolean> {
+  await ensureSnarkjsLoaded();
+  return snarkjs.groth16.verify(vkey, publicSignals, proof);
+}
+
 // ==========================================================================
 // JoinSplit Proof Generation (Railgun-aligned)
 // ==========================================================================

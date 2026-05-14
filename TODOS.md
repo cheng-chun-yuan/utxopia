@@ -40,7 +40,7 @@ Primitive is fully wired end-to-end: on-chain `transact` (disc 13) detects + emi
 ### Phase 4 selective disclosure — remaining follow-ups
 - [x] Compile range-sum N=4 companion. Circuit at `circuits/circom/range_sum_4.circom`, build under `circuits/build/range_sum_4/`. SDK picks the variant automatically via `pickRangeSumVariant(notes.length)`; new builds register in `RANGE_SUM_VARIANTS`.
 - [ ] **N=16 range-sum**: blocked by circomlib's Poseidon-16 limit. The current template hashes `Poseidon(n+1)` for the attestation public input, which exceeds the max arity at N=16. Refactor the template to chunk the attestation hash (e.g. `Poseidon(Poseidon(idx[0..8]), Poseidon(idx[8..16]), viewerNonce)`); this is a wire-format change so N=8 callers need to update too.
-- [ ] Verification surface: separate verifier program endpoint, or a thin web verifier page that consumes `proof.json` + public inputs so auditors don't need bun installed to verify.
+- [x] **Web verifier page** at `/verify-proof`: pure client-side Groth16 verifier (snarkjs lazy-loaded via `verifyGroth16Proof` from the SDK). Pick a known circuit from the dropdown and the page fetches the vkey from the CDN; for one-off VKs, switch to "Custom" and paste/upload the JSON. Nothing is sent to a server.
 - [ ] **Deploy `range_sum_4.zkey` to R2**: 20 MB, doesn't belong in the repo. Use `bash scripts/upload-circuits-r2.sh --aux range_sum_4` once a bucket alias is wired. Same script handles `proof_of_innocence`, `ownership`, `range_sum` if those move out of `web/public/` later.
 
 ### Additional compliance levers (scaffolds not yet started)
@@ -50,5 +50,4 @@ Primitive is fully wired end-to-end: on-chain `transact` (disc 13) detects + emi
 - [ ] **Audit trail sync**: `~/.utxopia/delegations.json` is per-machine — optional encrypted cloud sync for users issuing keys from multiple devices.
 
 ## Regtest / hybrid stack — remaining follow-ups
-The `/api/faucet/regtest` route is feature-complete for dev/hybrid use: `docker exec` → bitcoin-cli, per-address in-memory cooldown, auto-bootstrap (mines 101 blocks on first drip if the wallet is empty), optional `X-API-Key` auth gate via `REGTEST_FAUCET_API_KEY`. Outstanding:
-- [ ] **Persistent cooldown store**: today the cooldown map lives in-process and resets on Next.js restart. Move to a small file-backed store (or Redis if you grow one) once the faucet is internet-reachable.
+The `/api/faucet/regtest` route is feature-complete for dev/hybrid use: `docker exec` → bitcoin-cli, file-backed per-address cooldown (`.faucet-cooldown.json` — survives Next.js restarts, prunes entries older than 2× the cooldown window), auto-bootstrap (mines 101 blocks on first drip if the wallet is empty), optional `X-API-Key` auth gate via `REGTEST_FAUCET_API_KEY`. No outstanding regtest TODOs — graduate to per-IP rate limit + Redis store if/when this gets exposed publicly.

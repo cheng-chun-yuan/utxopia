@@ -62,3 +62,6 @@ next-env.d.ts
 !/public/circuits/groth16/joinsplit_4x1/
 .env*.local
 images/
+
+# Faucet cooldown state — per-deployment runtime data, never committed.
+.faucet-cooldown.json

@@ -29,6 +29,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 const exec = promisify(execFile);
 
@@ -47,14 +49,54 @@ const AUTOMINE = process.env.REGTEST_FAUCET_AUTOMINE !== "0";
 // 100 make it spendable).
 const BOOTSTRAP_BLOCKS = 101;
 
-// In-memory per-address cooldown. Lives for the lifetime of the Next.js
-// server process — fine for a dev/regtest faucet, not a primitive you'd
-// reach for in production.
-const lastDripMs: Map<string, number> = (() => {
-  const g = globalThis as unknown as { __utxopiaFaucetCooldown?: Map<string, number> };
-  if (!g.__utxopiaFaucetCooldown) g.__utxopiaFaucetCooldown = new Map();
+// File-backed per-address cooldown. Survives Next.js process restarts so
+// a hot-reload or redeploy doesn't reset everyone's cooldown to zero. The
+// map is loaded lazily on first access and written back after each drip.
+//
+// Path defaults to `.faucet-cooldown.json` in the web project root; override
+// via REGTEST_FAUCET_COOLDOWN_PATH if the deployment has a writable mount.
+const COOLDOWN_PATH = process.env.REGTEST_FAUCET_COOLDOWN_PATH
+  || path.join(process.cwd(), ".faucet-cooldown.json");
+
+interface CooldownStore {
+  /** address → unix ms of last drip */
+  entries: Map<string, number>;
+}
+
+function loadCooldownStore(): CooldownStore {
+  try {
+    const raw = fs.readFileSync(COOLDOWN_PATH, "utf8");
+    const obj = JSON.parse(raw) as Record<string, number>;
+    return { entries: new Map(Object.entries(obj)) };
+  } catch {
+    return { entries: new Map() };
+  }
+}
+
+function saveCooldownStore(store: CooldownStore): void {
+  // Prune stale entries — anything older than 2× the cooldown window is
+  // useless and keeps the file bounded under load.
+  const cutoffMs = Date.now() - COOLDOWN_SECS * 2_000;
+  const live: Record<string, number> = {};
+  for (const [addr, ts] of store.entries) {
+    if (ts > cutoffMs) live[addr] = ts;
+  }
+  try {
+    fs.writeFileSync(COOLDOWN_PATH, JSON.stringify(live) + "\n", { mode: 0o600 });
+  } catch (e) {
+    // Disk failure → fall through; the in-memory map still works for this
+    // process. Worst case: a restart resets the cooldown for affected
+    // addresses.
+    console.warn("[Faucet] Failed to persist cooldown store:", e);
+  }
+}
+
+const cooldownStore: CooldownStore = (() => {
+  const g = globalThis as unknown as { __utxopiaFaucetCooldown?: CooldownStore };
+  if (!g.__utxopiaFaucetCooldown) g.__utxopiaFaucetCooldown = loadCooldownStore();
   return g.__utxopiaFaucetCooldown;
 })();
+const lastDripMs = cooldownStore.entries;
 
 // Once we've confirmed the wallet has spendable balance (either it always
 // did, or we just bootstrapped it), skip the balance check on future drips.
@@ -240,6 +282,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Record cooldown only on full success — if it failed before mining, the
   // user can retry without waiting (their address didn't actually get funds).
   lastDripMs.set(address, Date.now());
+  saveCooldownStore(cooldownStore);
 
   return NextResponse.json({
     ok: true,

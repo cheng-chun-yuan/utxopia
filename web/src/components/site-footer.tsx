@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Shield } from "lucide-react";
+import Image from "next/image";
 import { motion } from "framer-motion";
 
 export function SiteFooter() {
@@ -18,21 +18,26 @@ export function SiteFooter() {
         transition={{ duration: 0.5 }}
       >
         <Link href="/" className="flex items-center gap-2 group">
-          <div className="w-6 h-6 flex items-center justify-center rounded-full bg-gradient-to-br from-privacy/20 to-privacy/30 group-hover:scale-110 transition-transform">
-            <Shield className="w-3 h-3 text-privacy" />
+          <div className="relative w-6 h-6 flex items-center justify-center transition-transform group-hover:scale-110">
+            <Image
+              src="/brand/logo-transparent-128.png"
+              alt="UTXOpia"
+              width={24}
+              height={24}
+              className="h-full w-full object-contain"
+            />
           </div>
           <span className="text-sm font-medium tracking-tight text-foreground group-hover:text-privacy transition-colors">
             UTXOpia
           </span>
         </Link>
 
-        <div className="flex items-center gap-2 text-caption text-gray">
-          <Shield className="w-3.5 h-3.5 text-privacy" />
-          <span>ZK Privacy for Every Token on Solana</span>
+        <div className="text-caption text-gray">
+          ZK Privacy for Every Token on Solana
         </div>
 
         <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption text-gray/60 hover:text-gray-light transition-all hover:-translate-y-0.5 flex items-center gap-1.5">
-          Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network
+          Powered by <Image src="/zeus_network.svg" alt="Zeus Network" width={16} height={16} className="w-4 h-4" />Zeus Network
         </a>
       </motion.div>
     </footer>
