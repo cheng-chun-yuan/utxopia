@@ -59,7 +59,7 @@ function Card({ children, className = "" }: { children: React.ReactNode; classNa
 
 /* ── Section heading ── */
 
-function SectionHeading({ label, title, subtitle }: { label: string; title: React.ReactNode; subtitle?: string }) {
+function SectionHeading({ label, title, subtitle }: { label: string; title: React.ReactNode; subtitle?: React.ReactNode }) {
   return (
     <div className="mb-8">
       <div className="flex items-center gap-3 mb-4">
@@ -525,7 +525,12 @@ export default function DocsPage() {
               <SectionHeading
                 label="Auditable Disclosure"
                 title="Privacy with Receipts"
-                subtitle="UTXOpia isn't an unaccountable mixer. Compliance tooling is built into the protocol — across four layers — so users can prove what they need to prove without surrendering custody. Each layer has its own deployment status."
+                subtitle={
+                  <>
+                    UTXOpia isn&apos;t an unaccountable mixer. Compliance tooling is built into the protocol &mdash; across four layers &mdash; so users can prove what they need to prove without surrendering custody. Each layer has its own deployment status; check your own posture at{" "}
+                    <Link href="/compliance" className="text-privacy hover:underline">/compliance</Link>.
+                  </>
+                }
               />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
