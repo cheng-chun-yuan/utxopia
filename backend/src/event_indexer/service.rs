@@ -58,6 +58,8 @@ struct TransactionData {
     btc_sweep_txid: Option<String>,
     /// Original BTC deposit amount in sats (fetched from mempool)
     btc_deposit_amount_sats: Option<i64>,
+    /// BTC block height where the sweep tx confirmed (fetched from mempool).
+    btc_sweep_block_height: Option<i64>,
     /// UTXOpia instruction discriminator (first byte of instruction data)
     instruction_disc: Option<u8>,
 }
@@ -308,6 +310,7 @@ impl EventIndexerService {
         let mut deposit_verified: Option<super::parser::DepositVerifiedEvent> = None;
         let mut unshield_metas: Vec<UnshieldMetaEvent> = Vec::new();
         let mut shield_meta: Option<super::parser::ShieldMetaEvent> = None;
+        let mut btc_deposit_block_height: Option<i64> = None;
 
         for event in events {
             match event {
@@ -354,6 +357,7 @@ impl EventIndexerService {
                         commitment = hex::encode(e.commitment),
                         "BTC origin attestation"
                     );
+                    btc_deposit_block_height = Some(e.block_height as i64);
                 }
             }
         }
@@ -413,6 +417,8 @@ impl EventIndexerService {
                 btc_deposit_txid: btc_deposit_txid.as_deref(),
                 btc_sweep_txid: btc_sweep_txid.as_deref(),
                 btc_deposit_amount_sats,
+                btc_deposit_block_height,
+                btc_sweep_block_height: tx_data.btc_sweep_block_height,
                 deposit_gross_amount: shield_meta.as_ref().map(|sm| sm.gross_amount as i64),
                 deposit_fee: shield_meta.as_ref().map(|sm| sm.fee as i64),
             })?;
@@ -676,13 +682,14 @@ impl EventIndexerService {
             })
             .unwrap_or((None, None));
 
-        // Fetch original BTC deposit amount from mempool using the sweep tx.
+        // Fetch original BTC deposit amount + sweep block height from mempool.
         // The sweep tx's input spends the deposit output, so vin[].prevout.value
-        // gives us the exact deposit amount (not all P2TR outputs which includes change).
-        let btc_deposit_amount_sats = if let Some(ref sweep_txid) = btc_sweep_txid {
+        // gives the exact deposit amount, and status.block_height gives the
+        // sweep confirmation height for live confirmation counting.
+        let (btc_deposit_amount_sats, btc_sweep_block_height) = if let Some(ref sweep_txid) = btc_sweep_txid {
             self.fetch_btc_deposit_amount_from_sweep(sweep_txid, btc_deposit_txid.as_deref()).await
         } else {
-            None
+            (None, None)
         };
 
         // Extract UTXOpia instruction discriminator (first byte of instruction data)
@@ -696,7 +703,7 @@ impl EventIndexerService {
         // NOT from parsing raw instruction bytes. This avoids garbage values from layout mismatches.
         // instruction_disc is still extracted for metadata, but never used for amount/recipient extraction.
 
-        Ok(TransactionData { logs, block_time, btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats, instruction_disc })
+        Ok(TransactionData { logs, block_time, btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats, btc_sweep_block_height, instruction_disc })
     }
 }
 
@@ -728,47 +735,50 @@ impl EventIndexerService {
             .ok_or_else(|| format!("getBlockTime returned null for slot {}", slot))
     }
 
-    /// Fetch the original BTC deposit amount using the sweep transaction.
+    /// Fetch deposit amount + sweep block height from the sweep transaction.
     ///
-    /// The sweep tx spends the deposit output, so we look at its inputs:
-    /// - Find the vin that references the deposit_txid
-    /// - Return vin.prevout.value — the exact amount deposited to the pool address
-    ///
-    /// This avoids the bug of summing all P2TR outputs from the deposit tx
-    /// (which includes the sender's change output).
+    /// The sweep tx spends the deposit output, so:
+    /// - `vin[].prevout.value` → exact deposit amount (avoids summing all P2TR
+    ///   outputs from the deposit tx, which includes sender change)
+    /// - `status.block_height` → block where the sweep confirmed
     async fn fetch_btc_deposit_amount_from_sweep(
         &self,
         sweep_txid: &str,
         deposit_txid: Option<&str>,
-    ) -> Option<i64> {
+    ) -> (Option<i64>, Option<i64>) {
         let url = format!("{}/tx/{}", mempool_api_url(), sweep_txid);
-        let resp = self.http.get(&url).send().await.ok()?;
-        if !resp.status().is_success() {
-            tracing::debug!(txid = sweep_txid, "Mempool fetch failed for sweep tx");
-            return None;
-        }
-        let json: serde_json::Value = resp.json().await.ok()?;
-        let vins = json["vin"].as_array()?;
+        let resp = match self.http.get(&url).send().await {
+            Ok(r) if r.status().is_success() => r,
+            _ => {
+                tracing::debug!(txid = sweep_txid, "Mempool fetch failed for sweep tx");
+                return (None, None);
+            }
+        };
+        let json: serde_json::Value = match resp.json().await {
+            Ok(j) => j,
+            Err(_) => return (None, None),
+        };
 
-        // If we have the deposit txid, find the exact input that spends it
-        if let Some(dep_txid) = deposit_txid {
-            for vin in vins {
-                if vin["txid"].as_str() == Some(dep_txid) {
-                    let amount = vin["prevout"]["value"].as_i64()?;
-                    tracing::debug!(sweep = sweep_txid, deposit = dep_txid, amount, "Got deposit amount from sweep vin");
-                    return Some(amount);
+        let sweep_block = json["status"]["block_height"].as_i64();
+
+        let amount = (|| {
+            let vins = json["vin"].as_array()?;
+            // Prefer the vin that references the deposit txid.
+            if let Some(dep_txid) = deposit_txid {
+                for vin in vins {
+                    if vin["txid"].as_str() == Some(dep_txid) {
+                        return vin["prevout"]["value"].as_i64();
+                    }
                 }
             }
-        }
+            // Fallback: single-input sweep — use its prevout value.
+            if vins.len() == 1 {
+                return vins[0]["prevout"]["value"].as_i64();
+            }
+            None
+        })();
 
-        // Fallback: if only one input, use its prevout value
-        if vins.len() == 1 {
-            let amount = vins[0]["prevout"]["value"].as_i64()?;
-            tracing::debug!(sweep = sweep_txid, amount, "Got deposit amount from single sweep vin");
-            return Some(amount);
-        }
-
-        None
+        (amount, sweep_block)
     }
 
     /// Extract BTC deposit_txid and sweep_txid from verify_stealth_deposit instruction data.

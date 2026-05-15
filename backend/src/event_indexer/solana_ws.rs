@@ -209,6 +209,8 @@ impl SolanaWsSubscriber {
                 btc_deposit_txid: None,
                 btc_sweep_txid: None,
                 btc_deposit_amount_sats: None,
+                btc_deposit_block_height: None,
+                btc_sweep_block_height: None,
                 deposit_gross_amount: None,
                 deposit_fee: None,
             }) {

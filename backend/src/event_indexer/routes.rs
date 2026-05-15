@@ -776,6 +776,10 @@ async fn get_explorer_transactions(
                     "depositAmountSats": a.btc_deposit_amount_sats,
                     "sweepFeeSats": miner_fee,
                     "mintedSats": amount,
+                    // Block heights for live confirmation count
+                    // (tip − height + 1) on the frontend.
+                    "depositBlockHeight": a.btc_deposit_block_height,
+                    "sweepBlockHeight": a.btc_sweep_block_height,
                     "confirmations": serde_json::Value::Null,
                     "sweepConfirmations": serde_json::Value::Null,
                     "taprootAddress": serde_json::Value::Null,

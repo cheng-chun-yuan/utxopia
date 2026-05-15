@@ -39,6 +39,13 @@ pub struct InsertAnnouncementParams<'a> {
     pub btc_deposit_txid: Option<&'a str>,
     pub btc_sweep_txid: Option<&'a str>,
     pub btc_deposit_amount_sats: Option<i64>,
+    /// BTC block height in which the deposit tx confirmed (from
+    /// BtcOriginAttestation event). Used by the explorer to compute
+    /// confirmations live: tip - deposit_block + 1.
+    pub btc_deposit_block_height: Option<i64>,
+    /// BTC block height in which the sweep tx confirmed (from esplora
+    /// `/tx/{id}/status`). Same use as the deposit height.
+    pub btc_sweep_block_height: Option<i64>,
     pub deposit_gross_amount: Option<i64>,
     pub deposit_fee: Option<i64>,
 }
@@ -134,6 +141,12 @@ pub struct AnnouncementRow {
     /// Original BTC deposit amount in sats (from mempool, before sweep fee)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub btc_deposit_amount_sats: Option<i64>,
+    /// BTC block height where the deposit tx confirmed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub btc_deposit_block_height: Option<i64>,
+    /// BTC block height where the sweep tx confirmed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub btc_sweep_block_height: Option<i64>,
     /// Token ID hex (32 bytes, from on-chain event)
     pub token_id: String,
     /// Gross deposit amount (before fee deduction, from ShieldMeta event)
@@ -327,6 +340,15 @@ impl EventStore {
         // Add BTC deposit amount column (original amount before sweep fee)
         let _ = conn.execute_batch(
             "ALTER TABLE stealth_announcements ADD COLUMN btc_deposit_amount_sats INTEGER",
+        );
+
+        // Add BTC block-height columns so the frontend can compute
+        // confirmations live as the chain advances (tip - height + 1).
+        let _ = conn.execute_batch(
+            "ALTER TABLE stealth_announcements ADD COLUMN btc_deposit_block_height INTEGER",
+        );
+        let _ = conn.execute_batch(
+            "ALTER TABLE stealth_announcements ADD COLUMN btc_sweep_block_height INTEGER",
         );
 
         // Add deposit fee columns (gross amount + fee from ShieldMeta event)
@@ -875,14 +897,16 @@ impl EventStore {
         // Also update BTC txids and deposit amount if provided (non-null wins over null).
         let result = conn.execute(
             "INSERT INTO stealth_announcements
-             (leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot, block_time, is_verified, btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats, token_id, deposit_gross_amount, deposit_fee)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+             (leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot, block_time, is_verified, btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats, btc_deposit_block_height, btc_sweep_block_height, token_id, deposit_gross_amount, deposit_fee)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
              ON CONFLICT(leaf_index) DO UPDATE SET
                 is_verified = MAX(stealth_announcements.is_verified, excluded.is_verified),
                 block_time = CASE WHEN excluded.block_time > 0 THEN excluded.block_time ELSE stealth_announcements.block_time END,
                 btc_deposit_txid = COALESCE(excluded.btc_deposit_txid, stealth_announcements.btc_deposit_txid),
                 btc_sweep_txid = COALESCE(excluded.btc_sweep_txid, stealth_announcements.btc_sweep_txid),
                 btc_deposit_amount_sats = COALESCE(excluded.btc_deposit_amount_sats, stealth_announcements.btc_deposit_amount_sats),
+                btc_deposit_block_height = COALESCE(excluded.btc_deposit_block_height, stealth_announcements.btc_deposit_block_height),
+                btc_sweep_block_height = COALESCE(excluded.btc_sweep_block_height, stealth_announcements.btc_sweep_block_height),
                 token_id = COALESCE(excluded.token_id, stealth_announcements.token_id),
                 deposit_gross_amount = COALESCE(excluded.deposit_gross_amount, stealth_announcements.deposit_gross_amount),
                 deposit_fee = COALESCE(excluded.deposit_fee, stealth_announcements.deposit_fee)",
@@ -899,6 +923,8 @@ impl EventStore {
                 params.btc_deposit_txid,
                 params.btc_sweep_txid,
                 params.btc_deposit_amount_sats,
+                params.btc_deposit_block_height,
+                params.btc_sweep_block_height,
                 params.event.token_id.as_slice(),
                 params.deposit_gross_amount,
                 params.deposit_fee,
@@ -915,7 +941,7 @@ impl EventStore {
         if let Some(since) = since_leaf_index {
             let mut stmt = conn
                 .prepare(
-                    "SELECT leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot, COALESCE(block_time, 0), COALESCE(is_verified, 0), btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats, token_id, deposit_gross_amount, deposit_fee
+                    "SELECT leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot, COALESCE(block_time, 0), COALESCE(is_verified, 0), btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats, token_id, deposit_gross_amount, deposit_fee, btc_deposit_block_height, btc_sweep_block_height
                      FROM stealth_announcements WHERE leaf_index > ?1 ORDER BY leaf_index",
                 )
                 .map_err(|e| format!("query error: {}", e))?;
@@ -926,7 +952,7 @@ impl EventStore {
         } else {
             let mut stmt = conn
                 .prepare(
-                    "SELECT leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot, COALESCE(block_time, 0), COALESCE(is_verified, 0), btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats, token_id, deposit_gross_amount, deposit_fee
+                    "SELECT leaf_index, announcement_type, ephemeral_pub, encrypted_amount, commitment, tx_signature, slot, COALESCE(block_time, 0), COALESCE(is_verified, 0), btc_deposit_txid, btc_sweep_txid, btc_deposit_amount_sats, token_id, deposit_gross_amount, deposit_fee, btc_deposit_block_height, btc_sweep_block_height
                      FROM stealth_announcements ORDER BY leaf_index",
                 )
                 .map_err(|e| format!("query error: {}", e))?;
@@ -1313,6 +1339,8 @@ impl EventStore {
             token_id: hex::encode(&token_id_blob),
             deposit_gross_amount: row.get::<_, Option<i64>>(13).unwrap_or(None),
             deposit_fee: row.get::<_, Option<i64>>(14).unwrap_or(None),
+            btc_deposit_block_height: row.get::<_, Option<i64>>(15).unwrap_or(None),
+            btc_sweep_block_height: row.get::<_, Option<i64>>(16).unwrap_or(None),
         })
     }
 }
@@ -1368,6 +1396,8 @@ mod tests {
             btc_deposit_txid: None,
             btc_sweep_txid: None,
             btc_deposit_amount_sats: None,
+            btc_deposit_block_height: None,
+            btc_sweep_block_height: None,
             deposit_gross_amount: None,
             deposit_fee: None,
         }).unwrap());
@@ -1382,6 +1412,8 @@ mod tests {
             btc_deposit_txid: None,
             btc_sweep_txid: None,
             btc_deposit_amount_sats: None,
+            btc_deposit_block_height: None,
+            btc_sweep_block_height: None,
             deposit_gross_amount: None,
             deposit_fee: None,
         }).unwrap();

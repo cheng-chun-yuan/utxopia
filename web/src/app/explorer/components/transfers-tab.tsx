@@ -20,6 +20,7 @@ import type { StatusDotVariant } from "./shared";
 import { SUPPORTED_TOKENS, formatTokenAmount, getTokenBySymbol } from "@/lib/supported-tokens";
 import { resolveTokenSymbolSync } from "@/lib/token-map";
 import { TransferDetails } from "./transfer-details";
+import { useBtcTipHeight, confirmationsFromHeight } from "@/hooks/use-btc-tip-height";
 
 // =============================================================================
 // Transfer Row — single unified table row + expandable detail
@@ -75,6 +76,9 @@ export function TransferRow({
   const isUnshieldOrWithdraw = kind === "unshield" || kind === "withdraw";
   const tokenSym = tx.tokenSymbol ?? (tx.tokenId ? resolveTokenSymbolSync(tx.tokenId) : null);
   const token = tokenSym ? getTokenBySymbol(tokenSym) ?? SUPPORTED_TOKENS[0] : SUPPORTED_TOKENS[0];
+  const btcTip = useBtcTipHeight();
+  const liveDepositConfs = confirmationsFromHeight(tx.btcMeta?.depositBlockHeight, btcTip)
+    ?? tx.btcMeta?.confirmations;
 
   return (
     <Fragment>
@@ -116,7 +120,7 @@ export function TransferRow({
             <FlowCell
               from={{ icon: token.isBtcNative ? "/tokens/btc.png" : token.logo, label: token.symbol }}
               to={{ icon: "shield", label: "Shielded" }}
-              meta={tx.btcMeta && tx.btcMeta.confirmations != null ? `${tx.btcMeta.confirmations} conf` : undefined}
+              meta={liveDepositConfs != null ? `${liveDepositConfs} conf` : undefined}
             />
           ) : isUnshieldOrWithdraw ? (
             <FlowCell

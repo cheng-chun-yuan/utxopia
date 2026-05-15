@@ -12,11 +12,18 @@ export interface BtcDepositMeta {
   depositTxid: string | null;
   sweepTxid: string | null;
   taprootAddress: string | null;
-  confirmations: number;
-  sweepConfirmations: number;
+  /** Mempool conf count from the tracker (pending deposits only). Null
+   *  once landed — use depositBlockHeight + the live tip height instead. */
+  confirmations: number | null;
+  sweepConfirmations: number | null;
   sweepFeeSats: number | null;
   mintedSats: number | null;
   depositAmountSats: number | null;
+  /** BTC block where the deposit tx confirmed. Frontend computes
+   *  `tip − depositBlockHeight + 1` for live confirmations. */
+  depositBlockHeight: number | null;
+  /** BTC block where the sweep tx confirmed. */
+  sweepBlockHeight: number | null;
   trackerError: string | null;
 }
 

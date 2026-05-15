@@ -7,6 +7,7 @@ import { truncate } from "../helpers";
 import { SUPPORTED_TOKENS, formatTokenAmount, getTokenBySymbol } from "@/lib/supported-tokens";
 import { resolveTokenSymbolSync } from "@/lib/token-map";
 import { CommitmentRow, type TransferTx } from "./detail-helpers";
+import { useBtcTipHeight, confirmationsFromHeight } from "@/hooks/use-btc-tip-height";
 
 export function ShieldDetails({ tx }: { tx: TransferTx }) {
   const tokenSym = tx.tokenSymbol ?? (tx.tokenId ? resolveTokenSymbolSync(tx.tokenId) : null);
@@ -18,6 +19,14 @@ export function ShieldDetails({ tx }: { tx: TransferTx }) {
   const fee = tx.inputs?.[0]?.fee ?? 0;
   const hasFee = fee > 0 && grossAmount !== netAmount;
   const btcMeta = tx.btcMeta;
+  // Live BTC confirmations — prefer the (immutable) block height stored in
+  // btcMeta and recompute against the current tip, fall back to the tracker's
+  // mempool conf count for still-pending deposits.
+  const tipHeight = useBtcTipHeight();
+  const liveDepositConfs = confirmationsFromHeight(btcMeta?.depositBlockHeight, tipHeight)
+    ?? btcMeta?.confirmations;
+  const liveSweepConfs = confirmationsFromHeight(btcMeta?.sweepBlockHeight, tipHeight)
+    ?? btcMeta?.sweepConfirmations;
 
   return (
     <div className="mx-4 my-3 rounded-[10px] bg-linear-to-b from-gray/6 to-transparent border border-gray/10 overflow-hidden">
@@ -66,11 +75,11 @@ export function ShieldDetails({ tx }: { tx: TransferTx }) {
             <div className="px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 text-caption text-gray/60 space-y-1">
               <div className="flex justify-between">
                 <span>Confirmations</span>
-                <span className="font-mono">{btcMeta.confirmations == null ? "—" : btcMeta.confirmations}</span>
+                <span className="font-mono">{liveDepositConfs == null ? "—" : liveDepositConfs}</span>
               </div>
               {btcMeta.sweepTxid && <div className="flex justify-between"><span>Sweep</span><span className="font-mono text-foreground/80">{truncate(btcMeta.sweepTxid, 6, 4)}</span></div>}
-              {btcMeta.sweepConfirmations != null && (
-                <div className="flex justify-between"><span>Sweep Conf</span><span className="font-mono">{btcMeta.sweepConfirmations}</span></div>
+              {liveSweepConfs != null && (
+                <div className="flex justify-between"><span>Sweep Conf</span><span className="font-mono">{liveSweepConfs}</span></div>
               )}
             </div>
           )}
