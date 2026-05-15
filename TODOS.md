@@ -22,13 +22,13 @@
 - ✅ 10 SDK tests including 4 cross-language vector tests (Rust hex == SDK hex)
 - ✅ Fixed test-env SHA256: Rust tests now use real `sha2` crate (was XOR-based fake hash)
 
-## Passive Attestation — New primary compliance path (NEXT)
+## Passive Attestation — Sole compliance path (NEXT)
 
-The PoI ZK route (Phase 3 / 3d) is now positioned as **advanced/backup**. The
-default compliance path is passive attestation by registered third-party
-screeners. User stays unaware of compliance plumbing; CEX queries a simple
-on-chain attestation status. See `docs/COMPLIANCE.md` §2.1 + §5 for the
-canonical spec.
+Passive attestation by registered third-party screeners is now the **only**
+compliance path. The on-chain PoI variants (`attest_poi`, `attest_poi_hidden`,
+`update_association_root`, and the abandoned `transact_with_poi`) have been
+removed from the program, backend, SDK, and web. See `docs/COMPLIANCE.md` §2 +
+§5 for the canonical spec.
 
 - [ ] **ScreenerRegistry PDA** with admin-controlled add/remove of screener pubkeys
 - [ ] **`register_screener` (disc 27)** + **`revoke_screener` (disc 28)** admin instructions
@@ -36,7 +36,6 @@ canonical spec.
 - [ ] **Backend daemon** that subscribes to `EVENT_BTC_ORIGIN_ATTESTATION` (disc 0x15) + `EVENT_SHIELD_META` (disc 0x11), calls Chainalysis (or other screener API), and submits attestations
 - [ ] **CEX integration SDK** with `checkAttestation({ commitment, acceptedScreeners, maxAgeSecs })`
 - [ ] **Solana shield origin attestation** — analog of `EVENT_BTC_ORIGIN_ATTESTATION` for SPL deposits so passive attestation covers the SPL flow too
-- [ ] Demote PoI page out of main nav (move to Settings → Advanced); reflect "advanced/backup" framing in docs
 
 Estimated total: ~2 weeks engineering once the legal + screener contracts are
 in motion.
@@ -51,18 +50,24 @@ a CEX integrations / regulator conversation can defend. Ordered roughly by cost-
 Primitive is fully wired end-to-end: on-chain `transact` (disc 13) detects + emits, SDK `buildSenderMemosForTransact` composes client-side, `/api/relay` forwards opaquely, auditor honors `ViewPermissions.INCOMING_ONLY`. The in-app vault flow (`use-joinsplit-submit.ts`) now reads `next_leaf_index` from the commitmentTree PDA and attaches memos to every transfer by default (kill switch: `NEXT_PUBLIC_DISABLE_SENDER_MEMOS=1`).
 - [ ] **Live E2E**: `scripts/e2e/step-sender-memo.ts` is unit-style today. Extend to submit a real transact with memos to a deployed program and assert the auditor scanner produces an OUT record. Wire into `run-all.ts`.
 
-### Phase 3 PoI — remaining follow-ups
-- [x] **Phase 3d-lite — hidden-commitment PoI**: new circuit `attest_poi_hidden.circom` swaps the public commitment for `blinded_id = Poseidon(commitment, nonce)`. On-chain instruction `attest_poi_hidden` (disc 23) verifies the proof; new event `EVENT_POI_HIDDEN_ATTESTED` (disc 0x16) emits `(association_root, blinded_id, version)` — no commitment. SDK: `generateHiddenPoIProof` + `computeBlindedId` + `buildAttestPoIHiddenInstructionData`. Frontend `/poi` has a "Hide commitment" toggle that surfaces the nonce in the success card for share-with-auditor. Routed via new `/api/attest-poi-hidden` endpoint.
-- **Phase 3d-full (removed)**: the 1x2 `transact_with_poi` prototype was reverted. Co-attestation via JoinSplit+PoI requires per-variant ceremony work (~91 compiled zkeys for the full circuit set) and the resulting compliance outcome is already achieved by passive attestation (signed origin attestation from a registered screener) at far lower UX + engineering cost. The template `joinsplit_with_poi.circom` and the on-chain `transact_with_poi` instruction were deleted; the VK module and discriminator 26 are now reserved/unused. Multi-hop lineage stays a research item — see `docs/COMPLIANCE.md` §10 for the honest disclosure.
-- [x] Frontend PoI page lives at `/poi` (collides with the existing `/prove` SPV-verify widget if put under `/prove`). Pipes the user's commitment → backend `/api/poi/inclusion` → browser Groth16 → `/api/attest-poi` (clear) or `/api/attest-poi-hidden` (blinded).
-- [x] **Curation policy v1 — deposit-confirmation-only**: every SPV-verified deposit is auto-fed into the PoI association set. Backend `deposit_tracker::service::maybe_auto_feed_poi` runs on every successful verify; the new on-chain `EVENT_BTC_ORIGIN_ATTESTATION` (disc 0x15) is now parsed by `event_indexer/parser.rs` and routed through `service.rs` (logged) + `solana_ws.rs` (acknowledged as poll-indexer-owned), so third-party indexers can mirror the curation without trusting our backend.
-- [ ] Curation policy v2: taint-graph propagation à la Railgun PPOI. Backend-only can't do this (nullifier→commitment is one-way without user keys). With Phase 3d-full removed, the practical alternatives are: (a) passive attestation re-runs at each unshield, treating each exit as a fresh decision rather than tracking lineage; (b) user-cooperated audit trails via Layer 3. Defer to actual demand.
+### Phase 3 PoI — fully removed
+All on-chain PoI infrastructure was deleted in favor of passive attestation:
+the `attest_poi` (disc 22) / `attest_poi_hidden` (disc 23) /
+`update_association_root` (disc 21) instructions, the abandoned
+`transact_with_poi` (disc 26) prototype, the `EVENT_POI_ATTESTED` (0x14) /
+`EVENT_POI_HIDDEN_ATTESTED` (0x16) / `EVENT_ASSOCIATION_ROOT_UPDATED` (0x13)
+events, the corresponding circom circuits, the `/poi` frontend page,
+`backend/src/poi_service`, and `sdk/src/poi.ts` + `sdk/src/poi-instructions.ts`
+are all gone. Discriminators 21–23 + 26 and event discs 0x13 / 0x14 / 0x16 are
+reserved-unused. The remaining "BTC origin attestation" primitive
+(`EVENT_BTC_ORIGIN_ATTESTATION`, disc 0x15) stays — it's the input passive
+attestation consumes, not a PoI-specific artifact.
 
 ### Phase 4 selective disclosure — remaining follow-ups
 - [x] Compile range-sum N=4 companion. Circuit at `circuits/circom/range_sum_4.circom`, build under `circuits/build/range_sum_4/`. SDK picks the variant automatically via `pickRangeSumVariant(notes.length)`; new builds register in `RANGE_SUM_VARIANTS`.
 - [x] **N=16 range-sum** with chunked attestation hash. `circuits/circom/range_sum_16.circom` is a standalone template (not derived from `range_sum_template.circom`) because circomlib's Poseidon caps at arity 16. SDK helper `computeRangeSumAttestation` + variant registry dispatch on `attestation: "flat" | "chunked"`. Only the vkey is committed to `web/public/`; the 81 MB zkey goes to R2.
 - [x] **Web verifier page** at `/verify-proof`: pure client-side Groth16 verifier (snarkjs lazy-loaded via `verifyGroth16Proof` from the SDK). Pick a known circuit from the dropdown and the page fetches the vkey from the CDN; for one-off VKs, switch to "Custom" and paste/upload the JSON. Nothing is sent to a server.
-- [ ] **Deploy `range_sum_4.zkey` (20 MB) + `range_sum_16.zkey` (81 MB) to R2**: too big to commit. Run `bash scripts/upload-circuits-r2.sh --aux range_sum_4 && bash scripts/upload-circuits-r2.sh --aux range_sum_16` once a bucket alias is wired. Same script handles `proof_of_innocence`, `ownership`, `range_sum` if those move out of `web/public/` later.
+- [ ] **Deploy `range_sum_4.zkey` (20 MB) + `range_sum_16.zkey` (81 MB) to R2**: too big to commit. Run `bash scripts/upload-circuits-r2.sh --aux range_sum_4 && bash scripts/upload-circuits-r2.sh --aux range_sum_16` once a bucket alias is wired. Same script handles `ownership` + `range_sum` if those move out of `web/public/` later.
 
 ### Additional compliance levers
 - [x] **BTC-deposit origin attestation**: every successful `verify_stealth_deposit` now emits `EVENT_BTC_ORIGIN_ATTESTATION` (disc 0x15) carrying `(block_height, deposit_txid, sweep_vout, commitment, amount_sats)`. SDK parser + dispatch + 5 dedicated tests in `events.test.ts`. Third-party auditors can subscribe and build their own association sets without trusting our backend.

@@ -124,28 +124,6 @@ export {
   type SenderMemoOutput,
 } from "./sender-memo";
 
-// Proof of Innocence (Phase 3 + Phase 3d-lite hidden variant)
-export {
-  poiLeafHash,
-  fetchPoIInclusion,
-  generatePoIProof,
-  generateHiddenPoIProof,
-  generateHiddenPoINonce,
-  computeBlindedId,
-  POI_TREE_DEPTH,
-  HIDDEN_POI_NONCE_BYTES,
-  type PoIProofInputs,
-  type PoIPublicInputs,
-  type PoIInclusionResponse,
-  type HiddenPoIProofInputs,
-} from "./poi";
-export {
-  buildUpdateAssociationRootInstructionData,
-  buildAttestPoIInstructionData,
-  buildAttestPoIHiddenInstructionData,
-  ASSOCIATION_SET_SEED,
-} from "./poi-instructions";
-
 // Selective ZK disclosure proofs (Phase 4)
 export {
   generateOwnershipProof,
@@ -661,22 +639,16 @@ export {
   parseNullifierSpentEvent,
   parseStealthAnnouncementEvent,
   parseSenderMemoEvent,
-  parseAssociationRootUpdatedEvent,
-  parsePoIAttestedEvent,
   parseBtcOriginAttestationEvent,
   EVENT_NULLIFIER_SPENT,
   EVENT_STEALTH_ANNOUNCEMENT,
   EVENT_NULLIFIERS_BATCH,
   EVENT_ANNOUNCEMENTS_BATCH,
   EVENT_SENDER_MEMO,
-  EVENT_ASSOCIATION_ROOT_UPDATED,
-  EVENT_POI_ATTESTED,
   EVENT_BTC_ORIGIN_ATTESTATION,
   type NullifierSpentEvent,
   type StealthAnnouncementEvent,
   type SenderMemoEvent,
-  type AssociationRootUpdatedEvent,
-  type PoIAttestedEvent,
   type BtcOriginAttestationEvent,
   type ProgramEvent,
 } from "./events";

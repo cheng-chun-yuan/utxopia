@@ -384,43 +384,9 @@ async fn handle_relayer_meta(
     })
 }
 
-/// Build the default PoI service used by `create_combined_router`.
-///
-/// Path is configurable via `POI_DB_PATH`; defaults to `./poi.sqlite`. If
-/// opening the SQLite DB fails for any reason we fall back to an in-memory
-/// service so the API still serves status/inclusion queries (just without
-/// persistence) — this matches the older behavior.
-pub fn default_poi_service() -> crate::poi_service::PoIService {
-    let poi_path = std::env::var("POI_DB_PATH").unwrap_or_else(|_| "./poi.sqlite".to_string());
-    match crate::poi_service::PoIService::new_with_db(&poi_path) {
-        Ok(s) => {
-            println!("[poi] using SQLite-backed PoIService at {}", poi_path);
-            s
-        }
-        Err(e) => {
-            eprintln!(
-                "[poi] failed to open SQLite at {}: {} — falling back to in-memory",
-                poi_path, e
-            );
-            crate::poi_service::PoIService::new()
-        }
-    }
-}
-
 pub fn create_combined_router(
     redemption: RedemptionService,
     stealth: StealthDepositService,
-) -> Router {
-    create_combined_router_with_poi(redemption, stealth, default_poi_service())
-}
-
-/// Like `create_combined_router` but lets the caller pass in a pre-built
-/// `PoIService` so the same instance can be shared with the deposit tracker's
-/// auto-feed (Phase 3c, Task B).
-pub fn create_combined_router_with_poi(
-    redemption: RedemptionService,
-    stealth: StealthDepositService,
-    poi_service: crate::poi_service::PoIService,
 ) -> Router {
     let state = Arc::new(CombinedAppState {
         redemption: Arc::new(RwLock::new(redemption)),
@@ -440,12 +406,9 @@ pub fn create_combined_router_with_poi(
         .route("/api/relayer/meta", get(handle_relayer_meta))
         .with_state(state.clone());
 
-    let poi = crate::poi_service::routes::router(poi_service);
-
     Router::new()
         .merge(authed)
         .merge(public)
-        .merge(poi)
         .layer(axum::middleware::from_fn_with_state(
             rate_limiter,
             rate_limit_middleware,

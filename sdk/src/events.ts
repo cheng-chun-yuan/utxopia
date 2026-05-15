@@ -20,11 +20,6 @@ export const EVENT_NULLIFIERS_BATCH = 0x0b;
 export const EVENT_ANNOUNCEMENTS_BATCH = 0x0c;
 /** Phase 2: sender memo (XChaCha20-Poly1305 AEAD payload). */
 export const EVENT_SENDER_MEMO = 0x12;
-/** Phase 3: association-set root updated by admin. */
-export const EVENT_ASSOCIATION_ROOT_UPDATED = 0x13;
-/** Phase 3: Proof of Innocence attested on chain. */
-export const EVENT_POI_ATTESTED = 0x14;
-
 export const EVENT_BTC_ORIGIN_ATTESTATION = 0x15;
 
 /** Parsed nullifier spent event */
@@ -58,26 +53,10 @@ export interface SenderMemoEvent {
   leafIndex: number;
 }
 
-/** Parsed association-set update event (Phase 3). */
-export interface AssociationRootUpdatedEvent {
-  type: "association_root_updated";
-  newRoot: Uint8Array; // 32 bytes
-  status: number; // 0=active, 1=paused
-  version: bigint;
-}
-
-/** Parsed PoI attestation event (Phase 3). */
-export interface PoIAttestedEvent {
-  type: "poi_attested";
-  associationRoot: Uint8Array;
-  commitment: Uint8Array;
-  version: bigint;
-}
-
 /**
  * BTC origin attestation, emitted alongside every SPV-verified deposit.
- * Lets third-party auditors build their own association sets keyed on
- * commitment without trusting our backend.
+ * Lets third-party auditors anchor commitments to their on-chain BTC
+ * origin without trusting our backend.
  *
  * Layout matches the Rust `emit_btc_origin_attestation` in
  * `contracts/programs/utxopia/src/utils/events.rs`.
@@ -99,8 +78,6 @@ export type ProgramEvent =
   | NullifierSpentEvent
   | StealthAnnouncementEvent
   | SenderMemoEvent
-  | AssociationRootUpdatedEvent
-  | PoIAttestedEvent
   | BtcOriginAttestationEvent;
 
 /**
@@ -171,40 +148,6 @@ export function parseStealthAnnouncementEvent(segments: Uint8Array[]): StealthAn
  * Parse an association-set update event (Phase 3) from decoded sol_log_data segments.
  * Layout: disc(1) + new_root(32) + status(1) + version_le(8)
  */
-export function parseAssociationRootUpdatedEvent(
-  segments: Uint8Array[],
-): AssociationRootUpdatedEvent | null {
-  if (segments.length < 4) return null;
-  if (segments[0].length !== 1 || segments[0][0] !== EVENT_ASSOCIATION_ROOT_UPDATED) return null;
-  const newRoot = segments[1];
-  if (newRoot.length !== 32) return null;
-  const statusSeg = segments[2];
-  if (statusSeg.length !== 1) return null;
-  const vBytes = segments[3];
-  if (vBytes.length !== 8) return null;
-  let version = 0n;
-  for (let i = 7; i >= 0; i--) version = (version << 8n) | BigInt(vBytes[i]);
-  return { type: "association_root_updated", newRoot, status: statusSeg[0], version };
-}
-
-/**
- * Parse a PoI-attested event (Phase 3) from decoded sol_log_data segments.
- * Layout: disc(1) + association_root(32) + commitment(32) + version_le(8)
- */
-export function parsePoIAttestedEvent(segments: Uint8Array[]): PoIAttestedEvent | null {
-  if (segments.length < 4) return null;
-  if (segments[0].length !== 1 || segments[0][0] !== EVENT_POI_ATTESTED) return null;
-  const associationRoot = segments[1];
-  if (associationRoot.length !== 32) return null;
-  const commitment = segments[2];
-  if (commitment.length !== 32) return null;
-  const vBytes = segments[3];
-  if (vBytes.length !== 8) return null;
-  let version = 0n;
-  for (let i = 7; i >= 0; i--) version = (version << 8n) | BigInt(vBytes[i]);
-  return { type: "poi_attested", associationRoot, commitment, version };
-}
-
 /**
  * Parse a BTC origin attestation event from decoded sol_log_data segments.
  * Layout: disc(1) + block_height(8 LE) + deposit_txid(32) + sweep_vout(4 LE)
@@ -392,12 +335,6 @@ export function parseProgramEvents(logs: string[], programId?: string): ProgramE
       if (event) events.push(event);
     } else if (disc === EVENT_SENDER_MEMO) {
       const event = parseSenderMemoEvent(segments);
-      if (event) events.push(event);
-    } else if (disc === EVENT_ASSOCIATION_ROOT_UPDATED) {
-      const event = parseAssociationRootUpdatedEvent(segments);
-      if (event) events.push(event);
-    } else if (disc === EVENT_POI_ATTESTED) {
-      const event = parsePoIAttestedEvent(segments);
       if (event) events.push(event);
     } else if (disc === EVENT_BTC_ORIGIN_ATTESTATION) {
       const event = parseBtcOriginAttestationEvent(segments);

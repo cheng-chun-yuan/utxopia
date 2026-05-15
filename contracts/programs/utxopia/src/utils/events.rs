@@ -73,15 +73,8 @@ const EVENT_SHIELD_META: u8 = 0x11;
 ///   = 117 bytes
 pub const EVENT_SENDER_MEMO: u8 = 0x12;
 
-/// Event discriminator: association-set root updated (Phase 3 — admin action).
-///
-/// Layout: disc(1) + new_root(32) + status(1) + version_le(8) = 42 bytes
-pub const EVENT_ASSOCIATION_ROOT_UPDATED: u8 = 0x13;
-
-/// Event discriminator: PoI attestation (Phase 3 — Privacy-Pools style).
-///
-/// Layout: disc(1) + association_root(32) + commitment(32) + version_le(8) = 73 bytes
-pub const EVENT_POI_ATTESTED: u8 = 0x14;
+// Event discriminators 0x13 (ASSOCIATION_ROOT_UPDATED) and 0x14 (POI_ATTESTED)
+// were previously PoI machinery. Removed alongside the on-chain PoI instructions.
 
 /// Event discriminator: BTC deposit origin attestation.
 ///
@@ -96,18 +89,10 @@ pub const EVENT_POI_ATTESTED: u8 = 0x14;
 ///       + sweep_vout(4 LE) + commitment(32) + amount_sats(8 LE) = 85 bytes
 pub const EVENT_BTC_ORIGIN_ATTESTATION: u8 = 0x15;
 
-/// Event discriminator: hidden-commitment PoI attestation (Phase 3d-lite).
-///
-/// Emitted by `attest_poi_hidden` (disc 23) once the program verifies the
-/// Groth16 hidden-PoI proof. Same payload shape as `EVENT_POI_ATTESTED`
-/// except the public commitment is replaced by a blinded ID.
-///
-/// Layout: disc(1) + association_root(32) + blinded_id(32) + version_le(8) = 73 bytes
-pub const EVENT_POI_HIDDEN_ATTESTED: u8 = 0x16;
-
-// Event discriminator 0x17 was previously EVENT_TRANSACT_WITH_POI (Phase 3d-full
-// 1x2 prototype). Removed in favor of passive attestation — the co-attestation
-// pattern wasn't worth the per-variant ceremony cost.
+// Event discriminators 0x16 (POI_HIDDEN_ATTESTED) and 0x17 (TRANSACT_WITH_POI)
+// were PoI machinery, now removed. The compliance event stream is built on
+// disc 0x15 (EVENT_BTC_ORIGIN_ATTESTATION) plus a planned 0x18
+// (EVENT_ORIGIN_SCREENED) for passive attestation — see docs/COMPLIANCE.md.
 
 /// Max batch items for stack-allocated buffer (MAX_SAFE_JOINSPLIT_SIZE = 14)
 const MAX_BATCH: usize = 14;
@@ -363,30 +348,6 @@ pub fn emit_sender_memo(
     let disc = [EVENT_SENDER_MEMO];
     let li = leaf_index.to_le_bytes();
     sol_log_data(&[&disc, nonce, ciphertext_and_tag, commitment, &li]);
-}
-
-/// Emit when the AssociationSet's current_root is changed by the admin.
-pub fn emit_association_root_updated(new_root: &[u8; 32], status: u8, version: u64) {
-    let disc = [EVENT_ASSOCIATION_ROOT_UPDATED];
-    let status_byte = [status];
-    let version_bytes = version.to_le_bytes();
-    sol_log_data(&[&disc, new_root, &status_byte, &version_bytes]);
-}
-
-/// Emit when a Proof of Innocence is successfully verified on chain.
-pub fn emit_poi_attested(association_root: &[u8; 32], commitment: &[u8; 32], version: u64) {
-    let disc = [EVENT_POI_ATTESTED];
-    let version_bytes = version.to_le_bytes();
-    sol_log_data(&[&disc, association_root, commitment, &version_bytes]);
-}
-
-/// Emit when a hidden-commitment PoI is successfully verified on chain.
-/// Same shape as `emit_poi_attested` but the `commitment` slot carries the
-/// blinded ID instead.
-pub fn emit_poi_hidden_attested(association_root: &[u8; 32], blinded_id: &[u8; 32], version: u64) {
-    let disc = [EVENT_POI_HIDDEN_ATTESTED];
-    let version_bytes = version.to_le_bytes();
-    sol_log_data(&[&disc, association_root, blinded_id, &version_bytes]);
 }
 
 /// Data for a single announcement in a batch (with token_id)

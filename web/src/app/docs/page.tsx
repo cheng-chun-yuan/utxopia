@@ -7,11 +7,11 @@
  * - Overview: comparison table (traditional bridges vs UTXOpia)
  * - Protocol Flow: 6-step journey with FlowDiagram visualization
  * - Cryptography: commitments, nullifiers, MPK, JoinSplit, EdDSA, DKSAP,
- *   sender memo, Proof of Innocence
+ *   sender memo
  * - Key Model: dual-key — spending (Baby Jubjub) + viewing (Ed25519);
  *   nullifier secret is derived from the spending key
  * - Auditable Disclosure: Phase 1–4 compliance layers with deployment status
- *   (auditor toolkit, sender memos, PoI, selective disclosure)
+ *   (auditor toolkit, sender memos, selective disclosure)
  * - Security & Compliance: policy gate, custody, SPV, double-spend, audit trail
  */
 
@@ -31,7 +31,6 @@ import {
   GitBranch,
   ChevronRight,
   AlertTriangle,
-  FileCheck,
   Send,
   ListChecks,
   ScrollText,
@@ -312,11 +311,6 @@ const CRYPTO_ITEMS = [
     formula: "XChaCha20-Poly1305(ovk, plaintext, AAD = commitment || leafIdx)",
     desc: "An opt-in second event per output, encrypted under the sender's outgoing viewing key (ovk = SHA-256(viewKey ‖ \"utxopia.ovk.v1\")). Lets the sender (or an auditor holding ovk) later recover their own outgoing history — recipient-only encryption alone wouldn't allow this. AAD binds each memo to its tree leaf: any tamper or re-targeting attempt fails the Poly1305 tag cleanly.",
   },
-  {
-    id: "proof-of-innocence", title: "Proof of Innocence",
-    formula: "Groth16 over depth-20 association-set Merkle tree",
-    desc: "User submits attest_poi (disc 22) referencing one of their commitments + a Groth16 proof of inclusion in the current admin-curated association root. On-chain verification emits an attestation event downstream consumers (CEXes, regulators) can consume. The proof's public inputs include the commitment in clear — a small privacy trade for an honor-system attestation that's verifiable on-chain.",
-  },
 ];
 
 type DisclosureStatus = "shipped" | "in-progress";
@@ -356,14 +350,6 @@ const DISCLOSURE_ITEMS: DisclosureItem[] = [
     status: "shipped",
     desc: "Per-output XChaCha20-Poly1305 envelopes encrypted to the sender's outgoing viewing key. AAD = commitment || leafIndex prevents move-the-memo attacks. Rust transact (disc 13) emits per output when memos are attached; SDK helper buildSenderMemosForTransact composes them client-side; /api/relay forwards them opaquely (viewing keys never leave the client); auditor honors ViewPermissions.INCOMING_ONLY to suppress OUT records when the delegation forbids them.",
     detail: "sdk/src/sender-memo.ts · web/src/app/api/relay/route.ts · sdk/src/auditor.ts",
-  },
-  {
-    id: "proof-of-innocence-flow",
-    icon: FileCheck,
-    title: "Proof of Innocence",
-    status: "shipped",
-    desc: "Two-instruction PoI pipeline lives on-chain: update_association_root (disc 21, admin-curated clean set) and attest_poi (disc 22, user-submitted Groth16 against the current depth-20 root). The chain emits an attestation event tagging a commitment as innocent; compliance-sensitive recipients (CEXes, regulators) consume it without trusting the user. Phase 3d (merged JoinSplit+PoI that hides the commitment) is a tracked follow-up.",
-    detail: "contracts/utxopia/instructions/poi.rs · backend/src/poi_service · scripts/auditor/attest-poi.ts",
   },
   {
     id: "selective-disclosure-proofs",

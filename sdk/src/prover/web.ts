@@ -59,10 +59,8 @@ export interface ProofData {
 
 export type CircuitType = `joinsplit_${number}x${number}`;
 
-/** Names of non-JoinSplit auxiliary circuits (PoI + selective disclosure). */
+/** Names of non-JoinSplit auxiliary circuits (selective disclosure). */
 export type AuxCircuitName =
-  | "proof_of_innocence"
-  | "attest_poi_hidden"
   | "ownership"
   | "range_sum"
   | "range_sum_4"
@@ -304,7 +302,7 @@ export async function initProver(): Promise<void> {
 
 /**
  * Generate a Groth16 proof for any circuit by name. Useful for non-JoinSplit
- * circuits (PoI, ownership, range_sum) that follow the same artifact layout
+ * circuits (ownership, range_sum) that follow the same artifact layout
  * `<circuitBasePath>/<name>/<name>_js/<name>.wasm` + `<circuitBasePath>/<name>/<name>.zkey`.
  *
  * Returns `{ proof: 256 bytes, publicInputs }` matching `ProofData`.

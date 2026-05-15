@@ -17,7 +17,6 @@
 //! | `light_client_tip_height` | Read tip height from btc-light-client LightClient |
 
 // Core state
-pub mod association_set;
 pub mod commitment_tree;
 pub mod completion_receipt;
 pub mod deposit_intent;
@@ -32,7 +31,6 @@ pub mod verified_tx_reader;
 pub mod vk_registry;
 
 // Re-exports
-pub use association_set::*;
 pub use commitment_tree::*;
 pub use completion_receipt::*;
 pub use deposit_intent::*;

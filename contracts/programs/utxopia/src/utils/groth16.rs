@@ -608,220 +608,13 @@ pub fn verify_groth16_spend_partial_public_proof(
     )
 }
 
-/// Verify a Proof of Innocence Groth16 proof (Phase 3).
-///
-/// Public inputs (2): [association_root, commitment]
-pub fn verify_groth16_poi_proof(
-    proof_bytes: &[u8],
-    association_root: &[u8; 32],
-    commitment: &[u8; 32],
-) -> Result<(), ProgramError> {
-    let public_inputs: [&[u8; 32]; 2] = [association_root, commitment];
-    verify_groth16_proof(
-        proof_bytes,
-        &public_inputs,
-        &common_vk::ALPHA_G1,
-        &common_vk::BETA_G2,
-        &common_vk::GAMMA_G2,
-        &proof_of_innocence_vk::DELTA_G2,
-        &proof_of_innocence_vk::IC,
-    )
-}
+// `verify_groth16_poi_proof` was removed alongside the PoI instructions
+// (discriminators 21-23). Compliance is handled by off-chain passive
+// attestation; see docs/COMPLIANCE.md.
 
-/// Verify a hidden-commitment PoI Groth16 proof (Phase 3d).
-///
-/// Public inputs (2): [association_root, blinded_id]
-/// Blinded ID = `Poseidon(commitment, nonce)`. Chain watchers see only the
-/// blinded ID; the auditor receiving the attestation must obtain `nonce`
-/// out-of-band to re-derive and verify the binding.
-pub fn verify_groth16_poi_hidden_proof(
-    proof_bytes: &[u8],
-    association_root: &[u8; 32],
-    blinded_id: &[u8; 32],
-) -> Result<(), ProgramError> {
-    let public_inputs: [&[u8; 32]; 2] = [association_root, blinded_id];
-    verify_groth16_proof(
-        proof_bytes,
-        &public_inputs,
-        &common_vk::ALPHA_G1,
-        &common_vk::BETA_G2,
-        &common_vk::GAMMA_G2,
-        &attest_poi_hidden_vk::DELTA_G2,
-        &attest_poi_hidden_vk::IC,
-    )
-}
+// PoI hidden + transact_with_poi verifiers were here. Removed in full PoI
+// cleanup; passive attestation replaces all of these compliance paths.
 
-// `verify_groth16_transact_1x2_with_poi_proof` was here. Removed alongside
-// `transact_with_poi` (disc 26) — see TODOS.md and the lib.rs note. Passive
-// attestation handles the same compliance use case without the 91-variant
-// ceremony cost.
-
-// =============================================================================
-// Proof of Innocence VK (Phase 3 — Tornado-Nova-style association set inclusion)
-// Generated from proof_of_innocence.vkey.json
-// Trusted setup: Hermez ptau (powersOfTau28_hez_final_18) + single-party Phase 2.
-// =============================================================================
-
-/// Verification key for proof_of_innocence
-/// Generated from proof_of_innocence.vkey.json
-/// DO NOT EDIT - regenerate with: node scripts/export-vk-rust.js proof_of_innocence
-pub mod proof_of_innocence_vk {
-    /// Number of public inputs
-    pub const NUM_PUBLIC_INPUTS: usize = 2;
-
-    /// VK delta (G2 point, 128 bytes)
-    pub const DELTA_G2: [u8; 128] = [
-        0x05, 0x74, 0x3b, 0x0c, 0x90, 0x99, 0xf2, 0xda,
-        0x6c, 0x86, 0xd8, 0xbf, 0xf9, 0xb1, 0x6a, 0xdb,
-        0xca, 0x0c, 0x62, 0xb8, 0x7e, 0x93, 0x80, 0x8b,
-        0x0c, 0xa2, 0x57, 0x28, 0x22, 0xb2, 0xbd, 0xd9,
-        0x02, 0xf7, 0xb2, 0x99, 0x39, 0xe0, 0xaa, 0x34,
-        0x64, 0x82, 0x99, 0x67, 0xe5, 0x9c, 0x14, 0xbc,
-        0x64, 0xaa, 0x52, 0x39, 0xc7, 0xda, 0x54, 0xb6,
-        0x8d, 0xe0, 0x75, 0x96, 0xe8, 0xfc, 0xfd, 0xa2,
-        0x0f, 0xf0, 0xbe, 0x1f, 0x3e, 0x6b, 0xe0, 0x27,
-        0x21, 0xeb, 0x55, 0x18, 0xe2, 0x42, 0x93, 0x65,
-        0x69, 0x5c, 0x96, 0xa5, 0xea, 0xb2, 0xb8, 0xb4,
-        0x24, 0xec, 0x1e, 0xdc, 0xb3, 0xf3, 0x57, 0x5f,
-        0x03, 0xf8, 0x5e, 0x91, 0x95, 0x4b, 0x16, 0x3f,
-        0xc6, 0x06, 0x5e, 0x6b, 0x95, 0x8a, 0xc4, 0x8e,
-        0x07, 0xad, 0xf1, 0xa7, 0xef, 0xf6, 0xac, 0x8d,
-        0x53, 0xf2, 0x14, 0xeb, 0x1c, 0x92, 0xc3, 0x42,
-    ];
-
-    /// IC points (3 G1 points: 1 base + 2 public inputs)
-    pub const IC: [[u8; 64]; 3] = [
-        // IC[0]
-        [
-            0x21, 0x5b, 0x2d, 0x04, 0xa5, 0xb0, 0x6b, 0x26,
-            0x5e, 0xe4, 0xb6, 0x1a, 0x3e, 0xf1, 0x21, 0x30,
-            0x6a, 0x76, 0xfe, 0x3c, 0x0d, 0xc0, 0x11, 0xef,
-            0x9c, 0x87, 0x59, 0x89, 0xd5, 0xfa, 0x48, 0xfa,
-            0x1a, 0x48, 0xb5, 0x74, 0x60, 0x48, 0x73, 0x32,
-            0xf5, 0x74, 0x9f, 0xdb, 0x1f, 0xb1, 0x2f, 0xbd,
-            0x77, 0x75, 0xaa, 0x2f, 0xc1, 0x6a, 0x27, 0x30,
-            0x76, 0xf5, 0x66, 0xa4, 0x31, 0x61, 0xe0, 0xf1,
-        ],
-        // IC[1]
-        [
-            0x0a, 0xd8, 0x4c, 0x53, 0x98, 0x5b, 0xc9, 0x3f,
-            0x0b, 0x08, 0x8f, 0x8c, 0xd1, 0xfd, 0x01, 0xee,
-            0x5f, 0x5d, 0xc4, 0x2c, 0xcb, 0x4e, 0xdf, 0x46,
-            0x72, 0xc4, 0xc1, 0x5f, 0x5e, 0xc1, 0x34, 0xc3,
-            0x16, 0x18, 0x3e, 0x27, 0xcc, 0x47, 0x29, 0xe9,
-            0x50, 0x8d, 0x79, 0x4f, 0xa8, 0x8d, 0x2d, 0xa8,
-            0x89, 0x9e, 0xcf, 0x7c, 0xa4, 0x39, 0x7e, 0xec,
-            0x10, 0x84, 0xae, 0xdc, 0xb3, 0x2e, 0xfd, 0x32,
-        ],
-        // IC[2]
-        [
-            0x1a, 0xab, 0x19, 0x85, 0xdb, 0x52, 0xfb, 0xec,
-            0xc8, 0xcb, 0xf4, 0xcb, 0x7b, 0xe2, 0xe3, 0x24,
-            0x45, 0x63, 0x43, 0xac, 0x30, 0xa1, 0x5f, 0xc5,
-            0xa8, 0x99, 0x90, 0x6e, 0x4d, 0xc9, 0x0b, 0x77,
-            0x05, 0x87, 0x0f, 0x3d, 0xe2, 0xf3, 0xd6, 0xf8,
-            0x32, 0x68, 0x54, 0x60, 0x64, 0x68, 0x6e, 0x13,
-            0x21, 0x7e, 0x4d, 0x3b, 0x57, 0x34, 0x03, 0xa6,
-            0xb6, 0xd6, 0x1c, 0xad, 0xa1, 0xa1, 0x9b, 0x10,
-        ],
-    ];
-}
-
-/// Load JoinSplit VK components by (N, M) dimensions.
-/// Returns (delta_g2, ic_slice) for tier-1 and tier-2 variants.
-pub fn load_joinsplit_vk(n_inputs: u8, n_outputs: u8)
-    -> Result<(&'static [u8; 128], &'static [[u8; 64]]), ProgramError>
-{
-    match (n_inputs, n_outputs) {
-        // Tier-1
-        (1, 1) => Ok((&joinsplit_1x1_vk::DELTA_G2, &joinsplit_1x1_vk::IC)),
-        (1, 2) => Ok((&joinsplit_1x2_vk::DELTA_G2, &joinsplit_1x2_vk::IC)),
-        (2, 1) => Ok((&joinsplit_2x1_vk::DELTA_G2, &joinsplit_2x1_vk::IC)),
-        (2, 2) => Ok((&joinsplit_2x2_vk::DELTA_G2, &joinsplit_2x2_vk::IC)),
-        // Tier-2
-        (1, 3) => Ok((&joinsplit_1x3_vk::DELTA_G2, &joinsplit_1x3_vk::IC)),
-        (3, 1) => Ok((&joinsplit_3x1_vk::DELTA_G2, &joinsplit_3x1_vk::IC)),
-        (2, 3) => Ok((&joinsplit_2x3_vk::DELTA_G2, &joinsplit_2x3_vk::IC)),
-        (3, 2) => Ok((&joinsplit_3x2_vk::DELTA_G2, &joinsplit_3x2_vk::IC)),
-        (1, 4) => Ok((&joinsplit_1x4_vk::DELTA_G2, &joinsplit_1x4_vk::IC)),
-        (4, 1) => Ok((&joinsplit_4x1_vk::DELTA_G2, &joinsplit_4x1_vk::IC)),
-        // Extended variants
-        (1, 5) => Ok((&joinsplit_1x5_vk::DELTA_G2, &joinsplit_1x5_vk::IC)),
-        (1, 6) => Ok((&joinsplit_1x6_vk::DELTA_G2, &joinsplit_1x6_vk::IC)),
-        (1, 7) => Ok((&joinsplit_1x7_vk::DELTA_G2, &joinsplit_1x7_vk::IC)),
-        (1, 8) => Ok((&joinsplit_1x8_vk::DELTA_G2, &joinsplit_1x8_vk::IC)),
-        (2, 4) => Ok((&joinsplit_2x4_vk::DELTA_G2, &joinsplit_2x4_vk::IC)),
-        (2, 5) => Ok((&joinsplit_2x5_vk::DELTA_G2, &joinsplit_2x5_vk::IC)),
-        (3, 3) => Ok((&joinsplit_3x3_vk::DELTA_G2, &joinsplit_3x3_vk::IC)),
-        (3, 4) => Ok((&joinsplit_3x4_vk::DELTA_G2, &joinsplit_3x4_vk::IC)),
-        (3, 5) => Ok((&joinsplit_3x5_vk::DELTA_G2, &joinsplit_3x5_vk::IC)),
-        (4, 2) => Ok((&joinsplit_4x2_vk::DELTA_G2, &joinsplit_4x2_vk::IC)),
-        (4, 3) => Ok((&joinsplit_4x3_vk::DELTA_G2, &joinsplit_4x3_vk::IC)),
-        (4, 4) => Ok((&joinsplit_4x4_vk::DELTA_G2, &joinsplit_4x4_vk::IC)),
-        (5, 1) => Ok((&joinsplit_5x1_vk::DELTA_G2, &joinsplit_5x1_vk::IC)),
-        (5, 2) => Ok((&joinsplit_5x2_vk::DELTA_G2, &joinsplit_5x2_vk::IC)),
-        (5, 3) => Ok((&joinsplit_5x3_vk::DELTA_G2, &joinsplit_5x3_vk::IC)),
-        (6, 1) => Ok((&joinsplit_6x1_vk::DELTA_G2, &joinsplit_6x1_vk::IC)),
-        (6, 2) => Ok((&joinsplit_6x2_vk::DELTA_G2, &joinsplit_6x2_vk::IC)),
-        (7, 1) => Ok((&joinsplit_7x1_vk::DELTA_G2, &joinsplit_7x1_vk::IC)),
-        (7, 2) => Ok((&joinsplit_7x2_vk::DELTA_G2, &joinsplit_7x2_vk::IC)),
-        (8, 1) => Ok((&joinsplit_8x1_vk::DELTA_G2, &joinsplit_8x1_vk::IC)),
-        (8, 2) => Ok((&joinsplit_8x2_vk::DELTA_G2, &joinsplit_8x2_vk::IC)),
-        (9, 1) => Ok((&joinsplit_9x1_vk::DELTA_G2, &joinsplit_9x1_vk::IC)),
-        (10, 1) => Ok((&joinsplit_10x1_vk::DELTA_G2, &joinsplit_10x1_vk::IC)),
-        (10, 2) => Ok((&joinsplit_10x2_vk::DELTA_G2, &joinsplit_10x2_vk::IC)),
-        (10, 3) => Ok((&joinsplit_10x3_vk::DELTA_G2, &joinsplit_10x3_vk::IC)),
-        (10, 4) => Ok((&joinsplit_10x4_vk::DELTA_G2, &joinsplit_10x4_vk::IC)),
-        (11, 1) => Ok((&joinsplit_11x1_vk::DELTA_G2, &joinsplit_11x1_vk::IC)),
-        (11, 2) => Ok((&joinsplit_11x2_vk::DELTA_G2, &joinsplit_11x2_vk::IC)),
-        (11, 3) => Ok((&joinsplit_11x3_vk::DELTA_G2, &joinsplit_11x3_vk::IC)),
-        (12, 1) => Ok((&joinsplit_12x1_vk::DELTA_G2, &joinsplit_12x1_vk::IC)),
-        (12, 2) => Ok((&joinsplit_12x2_vk::DELTA_G2, &joinsplit_12x2_vk::IC)),
-        (13, 1) => Ok((&joinsplit_13x1_vk::DELTA_G2, &joinsplit_13x1_vk::IC)),
-        // All remaining N+M <= 14
-        (1, 9) => Ok((&joinsplit_1x9_vk::DELTA_G2, &joinsplit_1x9_vk::IC)),
-        (1, 10) => Ok((&joinsplit_1x10_vk::DELTA_G2, &joinsplit_1x10_vk::IC)),
-        (1, 11) => Ok((&joinsplit_1x11_vk::DELTA_G2, &joinsplit_1x11_vk::IC)),
-        (1, 12) => Ok((&joinsplit_1x12_vk::DELTA_G2, &joinsplit_1x12_vk::IC)),
-        (2, 6) => Ok((&joinsplit_2x6_vk::DELTA_G2, &joinsplit_2x6_vk::IC)),
-        (2, 7) => Ok((&joinsplit_2x7_vk::DELTA_G2, &joinsplit_2x7_vk::IC)),
-        (2, 8) => Ok((&joinsplit_2x8_vk::DELTA_G2, &joinsplit_2x8_vk::IC)),
-        (2, 9) => Ok((&joinsplit_2x9_vk::DELTA_G2, &joinsplit_2x9_vk::IC)),
-        (2, 10) => Ok((&joinsplit_2x10_vk::DELTA_G2, &joinsplit_2x10_vk::IC)),
-        (2, 11) => Ok((&joinsplit_2x11_vk::DELTA_G2, &joinsplit_2x11_vk::IC)),
-        (3, 6) => Ok((&joinsplit_3x6_vk::DELTA_G2, &joinsplit_3x6_vk::IC)),
-        (3, 7) => Ok((&joinsplit_3x7_vk::DELTA_G2, &joinsplit_3x7_vk::IC)),
-        (3, 8) => Ok((&joinsplit_3x8_vk::DELTA_G2, &joinsplit_3x8_vk::IC)),
-        (3, 9) => Ok((&joinsplit_3x9_vk::DELTA_G2, &joinsplit_3x9_vk::IC)),
-        (3, 10) => Ok((&joinsplit_3x10_vk::DELTA_G2, &joinsplit_3x10_vk::IC)),
-        (4, 5) => Ok((&joinsplit_4x5_vk::DELTA_G2, &joinsplit_4x5_vk::IC)),
-        (4, 6) => Ok((&joinsplit_4x6_vk::DELTA_G2, &joinsplit_4x6_vk::IC)),
-        (4, 7) => Ok((&joinsplit_4x7_vk::DELTA_G2, &joinsplit_4x7_vk::IC)),
-        (4, 8) => Ok((&joinsplit_4x8_vk::DELTA_G2, &joinsplit_4x8_vk::IC)),
-        (4, 9) => Ok((&joinsplit_4x9_vk::DELTA_G2, &joinsplit_4x9_vk::IC)),
-        (5, 4) => Ok((&joinsplit_5x4_vk::DELTA_G2, &joinsplit_5x4_vk::IC)),
-        (5, 5) => Ok((&joinsplit_5x5_vk::DELTA_G2, &joinsplit_5x5_vk::IC)),
-        (5, 6) => Ok((&joinsplit_5x6_vk::DELTA_G2, &joinsplit_5x6_vk::IC)),
-        (5, 7) => Ok((&joinsplit_5x7_vk::DELTA_G2, &joinsplit_5x7_vk::IC)),
-        (5, 8) => Ok((&joinsplit_5x8_vk::DELTA_G2, &joinsplit_5x8_vk::IC)),
-        (6, 3) => Ok((&joinsplit_6x3_vk::DELTA_G2, &joinsplit_6x3_vk::IC)),
-        (6, 4) => Ok((&joinsplit_6x4_vk::DELTA_G2, &joinsplit_6x4_vk::IC)),
-        (6, 5) => Ok((&joinsplit_6x5_vk::DELTA_G2, &joinsplit_6x5_vk::IC)),
-        (6, 6) => Ok((&joinsplit_6x6_vk::DELTA_G2, &joinsplit_6x6_vk::IC)),
-        (6, 7) => Ok((&joinsplit_6x7_vk::DELTA_G2, &joinsplit_6x7_vk::IC)),
-        (7, 3) => Ok((&joinsplit_7x3_vk::DELTA_G2, &joinsplit_7x3_vk::IC)),
-        (7, 4) => Ok((&joinsplit_7x4_vk::DELTA_G2, &joinsplit_7x4_vk::IC)),
-        (7, 5) => Ok((&joinsplit_7x5_vk::DELTA_G2, &joinsplit_7x5_vk::IC)),
-        (7, 6) => Ok((&joinsplit_7x6_vk::DELTA_G2, &joinsplit_7x6_vk::IC)),
-        (8, 3) => Ok((&joinsplit_8x3_vk::DELTA_G2, &joinsplit_8x3_vk::IC)),
-        (8, 4) => Ok((&joinsplit_8x4_vk::DELTA_G2, &joinsplit_8x4_vk::IC)),
-        (8, 5) => Ok((&joinsplit_8x5_vk::DELTA_G2, &joinsplit_8x5_vk::IC)),
-        (9, 2) => Ok((&joinsplit_9x2_vk::DELTA_G2, &joinsplit_9x2_vk::IC)),
-        (9, 3) => Ok((&joinsplit_9x3_vk::DELTA_G2, &joinsplit_9x3_vk::IC)),
-        (9, 4) => Ok((&joinsplit_9x4_vk::DELTA_G2, &joinsplit_9x4_vk::IC)),
-        _ => Err(ProgramError::InvalidArgument),
-    }
-}
 
 // =============================================================================
 // JoinSplit Circuit Verification Keys
@@ -15167,67 +14960,99 @@ pub mod joinsplit_9x4_vk {
 
 
 
-/// Verification key for attest_poi_hidden
-/// Generated from attest_poi_hidden.vkey.json
-/// DO NOT EDIT - regenerate with: node scripts/export-vk-rust.js attest_poi_hidden
-pub mod attest_poi_hidden_vk {
-    /// Number of public inputs
-    pub const NUM_PUBLIC_INPUTS: usize = 2;
-
-    /// VK delta (G2 point, 128 bytes)
-    pub const DELTA_G2: [u8; 128] = [
-    0x13, 0x7d, 0x6f, 0xb1, 0x61, 0x54, 0x8c, 0xfe,
-    0x62, 0xdd, 0xca, 0x98, 0x17, 0x9b, 0x5b, 0xd7,
-    0x42, 0x9f, 0xb6, 0x31, 0x02, 0x2d, 0xe3, 0x6d,
-    0x5f, 0xcc, 0x6b, 0x9f, 0x27, 0x6b, 0xb0, 0x1a,
-    0x09, 0x9a, 0xc4, 0xd5, 0x4e, 0x9b, 0xf8, 0xba,
-    0x51, 0xc1, 0xee, 0x63, 0x16, 0x80, 0xaf, 0xe2,
-    0xcd, 0xd6, 0x1b, 0x4f, 0x75, 0x10, 0xe0, 0x41,
-    0x1e, 0x14, 0x66, 0xe9, 0x72, 0xb8, 0xc4, 0xcb,
-    0x22, 0xd7, 0x96, 0x0e, 0x5e, 0xb5, 0xa2, 0xaf,
-    0xa0, 0x00, 0x6c, 0xfe, 0xd0, 0xf8, 0xd1, 0xc9,
-    0x68, 0x92, 0x4a, 0x1b, 0x09, 0xd3, 0x51, 0x57,
-    0x63, 0x3c, 0x12, 0x5b, 0x53, 0x53, 0xfc, 0x8a,
-    0x1f, 0xad, 0x70, 0xc3, 0xa7, 0x8d, 0x43, 0x17,
-    0xba, 0x84, 0x45, 0x2f, 0x73, 0xf8, 0x1a, 0x49,
-    0x12, 0x49, 0x6b, 0xd1, 0x1c, 0x00, 0x6f, 0x9d,
-    0xe2, 0x44, 0xa1, 0xd5, 0x23, 0x7b, 0x0e, 0xe0,
-    ];
-
-    /// IC points (3 G1 points: 1 base + 2 public inputs)
-    pub const IC: [[u8; 64]; 3] = [
-        // IC[0]
-        [
-            0x20, 0x2d, 0x90, 0x58, 0xc9, 0xe6, 0x92, 0x25,
-            0x41, 0xdc, 0x35, 0x22, 0x41, 0x13, 0x04, 0xb3,
-            0x98, 0x97, 0x73, 0x8b, 0xbe, 0xdb, 0x2c, 0xf7,
-            0x4c, 0x07, 0x87, 0xf0, 0xdc, 0xb8, 0x07, 0x28,
-            0x09, 0x3f, 0x84, 0xb9, 0xbf, 0x2c, 0x4e, 0xfe,
-            0x81, 0xe6, 0x86, 0xdc, 0x58, 0x96, 0xa5, 0x94,
-            0x25, 0xb1, 0x66, 0x0d, 0x04, 0x30, 0xe7, 0xca,
-            0x86, 0x4a, 0xd2, 0x42, 0x37, 0x22, 0xff, 0xc8,
-        ],
-        // IC[1]
-        [
-            0x2d, 0xe9, 0xdc, 0xee, 0x81, 0xb3, 0x9e, 0x56,
-            0x3e, 0xf1, 0x5d, 0x7b, 0xbc, 0x0a, 0xbf, 0x8b,
-            0x03, 0xe4, 0xde, 0xcd, 0x86, 0xee, 0x10, 0x85,
-            0x64, 0x2f, 0x70, 0xbb, 0xaf, 0xa7, 0x46, 0x67,
-            0x28, 0x6e, 0x49, 0x55, 0x2f, 0x9d, 0x3d, 0xf1,
-            0x20, 0xdc, 0xcd, 0x84, 0x1f, 0xe5, 0x5d, 0x8b,
-            0x91, 0xcf, 0x1a, 0x79, 0x0f, 0xd5, 0x98, 0xd0,
-            0x54, 0x49, 0xf4, 0xed, 0xc4, 0x54, 0xbd, 0x9f,
-        ],
-        // IC[2]
-        [
-            0x28, 0xcf, 0xee, 0xeb, 0x55, 0xd1, 0x5e, 0x1d,
-            0x30, 0x3d, 0x26, 0x4b, 0xd9, 0x73, 0x14, 0xc1,
-            0x78, 0xda, 0x89, 0x5f, 0xbd, 0x5f, 0x98, 0x70,
-            0x3d, 0xc4, 0x49, 0xca, 0x35, 0x96, 0x66, 0x71,
-            0x25, 0xde, 0xe6, 0xc4, 0x93, 0xcc, 0x57, 0x48,
-            0xa6, 0x35, 0x7d, 0x6a, 0x09, 0xa8, 0x92, 0x00,
-            0x11, 0x3e, 0xcb, 0x19, 0x2c, 0x97, 0x95, 0xc0,
-            0xf8, 0xbe, 0x68, 0x4a, 0x36, 0xa4, 0x23, 0x73,
-        ],
-    ];
+/// Load JoinSplit VK components by (N, M) dimensions.
+/// Returns (delta_g2, ic_slice) for tier-1 and tier-2 variants.
+pub fn load_joinsplit_vk(n_inputs: u8, n_outputs: u8)
+    -> Result<(&'static [u8; 128], &'static [[u8; 64]]), ProgramError>
+{
+    match (n_inputs, n_outputs) {
+        // Tier-1
+        (1, 1) => Ok((&joinsplit_1x1_vk::DELTA_G2, &joinsplit_1x1_vk::IC)),
+        (1, 2) => Ok((&joinsplit_1x2_vk::DELTA_G2, &joinsplit_1x2_vk::IC)),
+        (2, 1) => Ok((&joinsplit_2x1_vk::DELTA_G2, &joinsplit_2x1_vk::IC)),
+        (2, 2) => Ok((&joinsplit_2x2_vk::DELTA_G2, &joinsplit_2x2_vk::IC)),
+        // Tier-2
+        (1, 3) => Ok((&joinsplit_1x3_vk::DELTA_G2, &joinsplit_1x3_vk::IC)),
+        (3, 1) => Ok((&joinsplit_3x1_vk::DELTA_G2, &joinsplit_3x1_vk::IC)),
+        (2, 3) => Ok((&joinsplit_2x3_vk::DELTA_G2, &joinsplit_2x3_vk::IC)),
+        (3, 2) => Ok((&joinsplit_3x2_vk::DELTA_G2, &joinsplit_3x2_vk::IC)),
+        (1, 4) => Ok((&joinsplit_1x4_vk::DELTA_G2, &joinsplit_1x4_vk::IC)),
+        (4, 1) => Ok((&joinsplit_4x1_vk::DELTA_G2, &joinsplit_4x1_vk::IC)),
+        // Extended variants
+        (1, 5) => Ok((&joinsplit_1x5_vk::DELTA_G2, &joinsplit_1x5_vk::IC)),
+        (1, 6) => Ok((&joinsplit_1x6_vk::DELTA_G2, &joinsplit_1x6_vk::IC)),
+        (1, 7) => Ok((&joinsplit_1x7_vk::DELTA_G2, &joinsplit_1x7_vk::IC)),
+        (1, 8) => Ok((&joinsplit_1x8_vk::DELTA_G2, &joinsplit_1x8_vk::IC)),
+        (2, 4) => Ok((&joinsplit_2x4_vk::DELTA_G2, &joinsplit_2x4_vk::IC)),
+        (2, 5) => Ok((&joinsplit_2x5_vk::DELTA_G2, &joinsplit_2x5_vk::IC)),
+        (3, 3) => Ok((&joinsplit_3x3_vk::DELTA_G2, &joinsplit_3x3_vk::IC)),
+        (3, 4) => Ok((&joinsplit_3x4_vk::DELTA_G2, &joinsplit_3x4_vk::IC)),
+        (3, 5) => Ok((&joinsplit_3x5_vk::DELTA_G2, &joinsplit_3x5_vk::IC)),
+        (4, 2) => Ok((&joinsplit_4x2_vk::DELTA_G2, &joinsplit_4x2_vk::IC)),
+        (4, 3) => Ok((&joinsplit_4x3_vk::DELTA_G2, &joinsplit_4x3_vk::IC)),
+        (4, 4) => Ok((&joinsplit_4x4_vk::DELTA_G2, &joinsplit_4x4_vk::IC)),
+        (5, 1) => Ok((&joinsplit_5x1_vk::DELTA_G2, &joinsplit_5x1_vk::IC)),
+        (5, 2) => Ok((&joinsplit_5x2_vk::DELTA_G2, &joinsplit_5x2_vk::IC)),
+        (5, 3) => Ok((&joinsplit_5x3_vk::DELTA_G2, &joinsplit_5x3_vk::IC)),
+        (6, 1) => Ok((&joinsplit_6x1_vk::DELTA_G2, &joinsplit_6x1_vk::IC)),
+        (6, 2) => Ok((&joinsplit_6x2_vk::DELTA_G2, &joinsplit_6x2_vk::IC)),
+        (7, 1) => Ok((&joinsplit_7x1_vk::DELTA_G2, &joinsplit_7x1_vk::IC)),
+        (7, 2) => Ok((&joinsplit_7x2_vk::DELTA_G2, &joinsplit_7x2_vk::IC)),
+        (8, 1) => Ok((&joinsplit_8x1_vk::DELTA_G2, &joinsplit_8x1_vk::IC)),
+        (8, 2) => Ok((&joinsplit_8x2_vk::DELTA_G2, &joinsplit_8x2_vk::IC)),
+        (9, 1) => Ok((&joinsplit_9x1_vk::DELTA_G2, &joinsplit_9x1_vk::IC)),
+        (10, 1) => Ok((&joinsplit_10x1_vk::DELTA_G2, &joinsplit_10x1_vk::IC)),
+        (10, 2) => Ok((&joinsplit_10x2_vk::DELTA_G2, &joinsplit_10x2_vk::IC)),
+        (10, 3) => Ok((&joinsplit_10x3_vk::DELTA_G2, &joinsplit_10x3_vk::IC)),
+        (10, 4) => Ok((&joinsplit_10x4_vk::DELTA_G2, &joinsplit_10x4_vk::IC)),
+        (11, 1) => Ok((&joinsplit_11x1_vk::DELTA_G2, &joinsplit_11x1_vk::IC)),
+        (11, 2) => Ok((&joinsplit_11x2_vk::DELTA_G2, &joinsplit_11x2_vk::IC)),
+        (11, 3) => Ok((&joinsplit_11x3_vk::DELTA_G2, &joinsplit_11x3_vk::IC)),
+        (12, 1) => Ok((&joinsplit_12x1_vk::DELTA_G2, &joinsplit_12x1_vk::IC)),
+        (12, 2) => Ok((&joinsplit_12x2_vk::DELTA_G2, &joinsplit_12x2_vk::IC)),
+        (13, 1) => Ok((&joinsplit_13x1_vk::DELTA_G2, &joinsplit_13x1_vk::IC)),
+        // All remaining N+M <= 14
+        (1, 9) => Ok((&joinsplit_1x9_vk::DELTA_G2, &joinsplit_1x9_vk::IC)),
+        (1, 10) => Ok((&joinsplit_1x10_vk::DELTA_G2, &joinsplit_1x10_vk::IC)),
+        (1, 11) => Ok((&joinsplit_1x11_vk::DELTA_G2, &joinsplit_1x11_vk::IC)),
+        (1, 12) => Ok((&joinsplit_1x12_vk::DELTA_G2, &joinsplit_1x12_vk::IC)),
+        (2, 6) => Ok((&joinsplit_2x6_vk::DELTA_G2, &joinsplit_2x6_vk::IC)),
+        (2, 7) => Ok((&joinsplit_2x7_vk::DELTA_G2, &joinsplit_2x7_vk::IC)),
+        (2, 8) => Ok((&joinsplit_2x8_vk::DELTA_G2, &joinsplit_2x8_vk::IC)),
+        (2, 9) => Ok((&joinsplit_2x9_vk::DELTA_G2, &joinsplit_2x9_vk::IC)),
+        (2, 10) => Ok((&joinsplit_2x10_vk::DELTA_G2, &joinsplit_2x10_vk::IC)),
+        (2, 11) => Ok((&joinsplit_2x11_vk::DELTA_G2, &joinsplit_2x11_vk::IC)),
+        (3, 6) => Ok((&joinsplit_3x6_vk::DELTA_G2, &joinsplit_3x6_vk::IC)),
+        (3, 7) => Ok((&joinsplit_3x7_vk::DELTA_G2, &joinsplit_3x7_vk::IC)),
+        (3, 8) => Ok((&joinsplit_3x8_vk::DELTA_G2, &joinsplit_3x8_vk::IC)),
+        (3, 9) => Ok((&joinsplit_3x9_vk::DELTA_G2, &joinsplit_3x9_vk::IC)),
+        (3, 10) => Ok((&joinsplit_3x10_vk::DELTA_G2, &joinsplit_3x10_vk::IC)),
+        (4, 5) => Ok((&joinsplit_4x5_vk::DELTA_G2, &joinsplit_4x5_vk::IC)),
+        (4, 6) => Ok((&joinsplit_4x6_vk::DELTA_G2, &joinsplit_4x6_vk::IC)),
+        (4, 7) => Ok((&joinsplit_4x7_vk::DELTA_G2, &joinsplit_4x7_vk::IC)),
+        (4, 8) => Ok((&joinsplit_4x8_vk::DELTA_G2, &joinsplit_4x8_vk::IC)),
+        (4, 9) => Ok((&joinsplit_4x9_vk::DELTA_G2, &joinsplit_4x9_vk::IC)),
+        (5, 4) => Ok((&joinsplit_5x4_vk::DELTA_G2, &joinsplit_5x4_vk::IC)),
+        (5, 5) => Ok((&joinsplit_5x5_vk::DELTA_G2, &joinsplit_5x5_vk::IC)),
+        (5, 6) => Ok((&joinsplit_5x6_vk::DELTA_G2, &joinsplit_5x6_vk::IC)),
+        (5, 7) => Ok((&joinsplit_5x7_vk::DELTA_G2, &joinsplit_5x7_vk::IC)),
+        (5, 8) => Ok((&joinsplit_5x8_vk::DELTA_G2, &joinsplit_5x8_vk::IC)),
+        (6, 3) => Ok((&joinsplit_6x3_vk::DELTA_G2, &joinsplit_6x3_vk::IC)),
+        (6, 4) => Ok((&joinsplit_6x4_vk::DELTA_G2, &joinsplit_6x4_vk::IC)),
+        (6, 5) => Ok((&joinsplit_6x5_vk::DELTA_G2, &joinsplit_6x5_vk::IC)),
+        (6, 6) => Ok((&joinsplit_6x6_vk::DELTA_G2, &joinsplit_6x6_vk::IC)),
+        (6, 7) => Ok((&joinsplit_6x7_vk::DELTA_G2, &joinsplit_6x7_vk::IC)),
+        (7, 3) => Ok((&joinsplit_7x3_vk::DELTA_G2, &joinsplit_7x3_vk::IC)),
+        (7, 4) => Ok((&joinsplit_7x4_vk::DELTA_G2, &joinsplit_7x4_vk::IC)),
+        (7, 5) => Ok((&joinsplit_7x5_vk::DELTA_G2, &joinsplit_7x5_vk::IC)),
+        (7, 6) => Ok((&joinsplit_7x6_vk::DELTA_G2, &joinsplit_7x6_vk::IC)),
+        (8, 3) => Ok((&joinsplit_8x3_vk::DELTA_G2, &joinsplit_8x3_vk::IC)),
+        (8, 4) => Ok((&joinsplit_8x4_vk::DELTA_G2, &joinsplit_8x4_vk::IC)),
+        (8, 5) => Ok((&joinsplit_8x5_vk::DELTA_G2, &joinsplit_8x5_vk::IC)),
+        (9, 2) => Ok((&joinsplit_9x2_vk::DELTA_G2, &joinsplit_9x2_vk::IC)),
+        (9, 3) => Ok((&joinsplit_9x3_vk::DELTA_G2, &joinsplit_9x3_vk::IC)),
+        (9, 4) => Ok((&joinsplit_9x4_vk::DELTA_G2, &joinsplit_9x4_vk::IC)),
+        _ => Err(ProgramError::InvalidArgument),
+    }
 }
+

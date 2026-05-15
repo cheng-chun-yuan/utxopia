@@ -85,24 +85,20 @@ pub mod instruction {
     // Tree management (20)
     pub const ROTATE_TREE: u8 = 20;
 
-    // Proof of Innocence (Phase 3 — Privacy-Pools-style compliance attestations)
-    pub const UPDATE_ASSOCIATION_ROOT: u8 = 21;
-    pub const ATTEST_POI: u8 = 22;
-    /// Phase 3d-lite — same as ATTEST_POI but the commitment is blinded by a
-    /// user-chosen nonce, so chain watchers can't link the attestation back
-    /// to a specific commitment.
-    pub const ATTEST_POI_HIDDEN: u8 = 23;
+    // Discriminators 21–23 + 26 were previously PoI / transact-with-PoI:
+    //   21 = UPDATE_ASSOCIATION_ROOT
+    //   22 = ATTEST_POI
+    //   23 = ATTEST_POI_HIDDEN
+    //   26 = TRANSACT_WITH_POI (Phase 3d-full prototype)
+    // All removed in favor of passive attestation (third-party screener
+    // signs per-commitment verdicts; chain stores a screener registry).
+    // The compliance design is documented in docs/COMPLIANCE.md.
 
     // OP_RETURN-free deposits (24-25) — wired to support backend v2 deposit path.
     // Backend's deposit_tracker uses 24 to register a DepositIntent PDA before
     // sweep, then 25 to verify the swept tx against that PDA on chain.
     pub const REGISTER_DEPOSIT_INTENT: u8 = 24;
     pub const VERIFY_DEPOSIT_V2: u8 = 25;
-
-    // Discriminator 26 was previously TRANSACT_WITH_POI (Phase 3d-full 1x2
-    // prototype). Removed in favor of passive attestation (handled by a
-    // separate screener service that signs origin attestations) — the
-    // co-attestation pattern was overbuilt for the actual UX need.
 }
 
 #[cfg(not(feature = "no-entrypoint"))]
@@ -148,14 +144,6 @@ pub fn process_instruction(
         instruction::CANCEL_REDEMPTION => instructions::process_cancel_redemption(program_id, accounts, data),
         // Tree management (20)
         instruction::ROTATE_TREE => instructions::process_rotate_tree(program_id, accounts, data),
-        // Proof of Innocence (21-22)
-        instruction::UPDATE_ASSOCIATION_ROOT => {
-            instructions::process_update_association_root(program_id, accounts, data)
-        }
-        instruction::ATTEST_POI => instructions::process_attest_poi(program_id, accounts, data),
-        instruction::ATTEST_POI_HIDDEN => {
-            instructions::process_attest_poi_hidden(program_id, accounts, data)
-        }
         // OP_RETURN-free deposits (24-25)
         instruction::REGISTER_DEPOSIT_INTENT => instructions::process_register_deposit_intent(program_id, accounts, data),
         instruction::VERIFY_DEPOSIT_V2 => instructions::process_verify_deposit_v2(program_id, accounts, data),

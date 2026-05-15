@@ -84,27 +84,6 @@ No party in this list trusts every other party. The cryptography enforces the pr
 - The auditor sees this user's incoming/outgoing **amounts**, but cannot trivially identify the *other party* in a private transfer — that side of the audit needs the counterparty's cooperation or their own viewing key
 - An `INCOMING_ONLY` permission bit suppresses OUT records (useful for limited disclosures)
 
-### Layer 3 (advanced / user-driven) — Proof of Innocence
-
-**Purpose**: in rare cases where the screener cannot or will not attest (registry compromised, screener offline, user wants a self-sovereign proof for a non-CEX counterparty), the user can prove via ZK that their commitment is in the curated association set.
-
-**Variants shipped**:
-
-- `attest_poi` (disc 22) — clear-text PoI: public input is the commitment in clear. Useful when the user is OK revealing which commitment they're attesting.
-- `attest_poi_hidden` (disc 23) — blinded PoI: public input is `Poseidon(commitment, nonce)`. The user shares the nonce with their counterparty out-of-band; chain watchers see only the blinded ID.
-
-**When this matters**:
-- Multi-screener disputes (user wants to prove cleanness against a curator the CEX doesn't trust)
-- Backup when the passive attestation service is unavailable
-- Self-sovereign use cases (user doesn't want any screener involved)
-- Specific regulatory regimes that require user-driven proofs of source-of-funds
-
-**Limits**:
-- Multi-hop lineage (Railgun PPOI–style automatic propagation) is **not** shipped. A PoI proof attests a specific commitment's inclusion in the association set. If that commitment was created by a private transfer (not a direct deposit), the user needs upstream cooperation to construct a complete proof chain.
-- ZK proof generation in the browser takes ~30 seconds and requires ~6 MB of artifacts (wasm + zkey) — meaningful UX cost compared to passive attestation.
-
-This layer is intentionally positioned as advanced/optional in the user interface. Most users will never need it.
-
 ---
 
 ## 3. Sanctions screening — who decides
@@ -148,7 +127,7 @@ BTC enters via a Taproot deposit address derived from the user's stealth meta-ad
 
 ### 4.3 UTXO assets — other (roadmap)
 
-DOGE, LTC, and BCH share the BTC architecture (PoW UTXO chains, Bitcoin-derived consensus rules). Each requires its own light-client program, its own Ika dWallet DKG, and a per-chain origin attestation event. The protocol-level work (shielded pool, transact circuit, PoI, DVK, sender memos) is asset-agnostic and requires no per-chain changes.
+DOGE, LTC, and BCH share the BTC architecture (PoW UTXO chains, Bitcoin-derived consensus rules). Each requires its own light-client program, its own Ika dWallet DKG, and a per-chain origin attestation event. The protocol-level work (shielded pool, transact circuit, DVK, sender memos) is asset-agnostic and requires no per-chain changes.
 
 ---
 
@@ -170,14 +149,11 @@ This section is the canonical reference for integrating teams.
 
 | Disc | Name | Purpose |
 |---|---|---|
-| 21 | `update_association_root` | Admin: update the curated association set's Merkle root |
-| 22 | `attest_poi` | User: prove a commitment is in the association set (clear) |
-| 23 | `attest_poi_hidden` | User: prove a commitment is in the association set (blinded) |
 | *27 (planned)* | `register_screener` | Admin: register a screener pubkey in the on-chain registry |
 | *28 (planned)* | `revoke_screener` | Admin: revoke a screener |
 | *29 (planned)* | `attest_origin` | Anyone (signed by registered screener): submit a per-commitment passive attestation |
 
-Discriminator 26 was previously reserved for a `transact_with_poi` co-attestation experiment; that approach was removed in favor of passive attestation, which addresses the same compliance need without per-variant trusted-setup overhead.
+Discriminators 21–23 (clear / hidden PoI + association-root admin) and 26 (`transact_with_poi`) were previously reserved for on-chain Proof of Innocence variants. They have been removed in favor of passive attestation, which addresses the same compliance need without per-variant trusted-setup overhead or browser-side proving cost.
 
 ### 5.3 Event surface (consumed by indexers, CEXes, auditors)
 
@@ -186,11 +162,10 @@ Discriminator 26 was previously reserved for a `transact_with_poi` co-attestatio
 | 0x03 | `EVENT_STEALTH_ANNOUNCEMENT` | Stealth deposit / transfer announcements (encrypted to recipient viewing key) |
 | 0x0D | `EVENT_DEPOSIT_VERIFIED` | BTC deposit SPV-verified |
 | 0x12 | `EVENT_SENDER_MEMO` | Outgoing audit memo (Phase 2; encrypted under sender's ovk) |
-| 0x13 | `EVENT_ASSOCIATION_ROOT_UPDATED` | Association root rotation |
-| 0x14 | `EVENT_POI_ATTESTED` | Clear PoI attestation |
 | 0x15 | `EVENT_BTC_ORIGIN_ATTESTATION` | **Critical for compliance**: BTC origin data published on every deposit |
-| 0x16 | `EVENT_POI_HIDDEN_ATTESTED` | Blinded PoI attestation |
 | *0x18 (planned)* | `EVENT_ORIGIN_SCREENED` | Passive attestation event (verdict + screener pubkey) |
+
+Discriminators 0x13, 0x14, and 0x16 were previously reserved for `EVENT_ASSOCIATION_ROOT_UPDATED` and the two `EVENT_POI_*` events. They are no longer emitted; see §5.2.
 
 ---
 
@@ -215,8 +190,7 @@ A user with funds from a sanctioned origin **can** deposit them into the shielde
 
 1. **The deposit emits an origin attestation publicly.** Any screener watching can flag the resulting commitment.
 2. **Without a valid screener attestation, exits to compliant CEXes will be refused** by the CEX's integration kit.
-3. **Self-sovereign PoI proofs require the commitment to be in the curated association set** — which it won't be if the screener has flagged the origin.
-4. **The shielded pool's `nullifier` set prevents double-spending.** Once the dirty funds are spent in a transact, the resulting output commitments inherit the same compliance status: not in the association set → not exitable.
+3. **The shielded pool's `nullifier` set prevents double-spending.** Once the dirty funds are spent in a transact, the resulting output commitments inherit the same compliance status: an unscreened or flagged origin remains unscreened or flagged for every downstream commitment that traces back to it.
 
 **Net effect**: dirty money can enter the pool but cannot leave it through a compliant exit. It can be used for internal private transfers among users who accept it, but the protocol-mediated exit path is gated.
 
@@ -249,7 +223,7 @@ This document does not constitute legal advice. Integrating venues should obtain
 
 ### 9.1 For a CEX accepting UTXOpia exits
 
-1. **Subscribe to the chain event stream** — index `EVENT_ORIGIN_SCREENED` (passive attestation; planned) and `EVENT_POI_ATTESTED` / `EVENT_POI_HIDDEN_ATTESTED` (PoI; live).
+1. **Subscribe to the chain event stream** — index `EVENT_BTC_ORIGIN_ATTESTATION` (live) and `EVENT_ORIGIN_SCREENED` (planned, the passive-attestation verdict event).
 2. **Maintain a local map** `commitment → attestation_status`.
 3. **Configure your accepted screener set** — list of screener pubkeys you trust (e.g. `[chainalysis, trm-labs]`).
 4. **On unshield request**: check the commitment's attestation status against your accepted set. If attested clean by an acceptable screener within the freshness window, credit. Otherwise queue for review or reject.
@@ -293,8 +267,8 @@ const status = await utxopiaSDK.checkAttestation({
 
 We are committed to honest disclosure of what the system does *not* yet do:
 
-- **Multi-hop PoI lineage** is not shipped. PoI attestations cover direct deposit origins, not transitively through private transfers. If multi-hop is required for your use case, contact us — we have a design (`docs/PPOI_DESIGN.md`, in draft) but are not building it speculatively.
-- **Multi-screener attestation** (N-of-M trust) is on the roadmap; today the registry supports multiple screeners but CEXes integrate against individual ones.
+- **Multi-hop lineage** is not shipped. Passive attestations cover direct deposit origins, not transitively through private transfers. If multi-hop is required for your use case, contact us — we have an internal design sketch but are not building it speculatively.
+- **Multi-screener attestation** (N-of-M trust) is on the roadmap; the planned registry supports multiple screeners but CEXes will integrate against individual ones at launch.
 - **Solana-native shield origin attestation** — analogous to `EVENT_BTC_ORIGIN_ATTESTATION` but for `shield` instead of BTC deposits — is on the roadmap. Today shield events carry amount/token/recipient but not the funder identity in a screener-friendly format.
 - **Live mainnet** — the protocol has been deployed to Solana devnet (program ID `G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy`); mainnet deployment is pending security audit completion.
 

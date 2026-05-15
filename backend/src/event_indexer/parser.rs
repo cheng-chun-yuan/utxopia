@@ -28,8 +28,6 @@ const EVENT_UTXO_CREATED: u8 = 0x0F;
 const EVENT_UTXO_CONSUMED: u8 = 0x10;
 const EVENT_SHIELD_META: u8 = 0x11;
 const EVENT_SENDER_MEMO: u8 = 0x12;
-const EVENT_ASSOCIATION_ROOT_UPDATED: u8 = 0x13;
-const EVENT_POI_ATTESTED: u8 = 0x14;
 const EVENT_BTC_ORIGIN_ATTESTATION: u8 = 0x15;
 
 /// Parsed nullifier spent event
@@ -135,25 +133,9 @@ pub struct SenderMemoEvent {
     pub leaf_index: u32,
 }
 
-/// Parsed association-set update event (Phase 3).
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct AssociationRootUpdatedEvent {
-    pub new_root: [u8; 32],
-    pub status: u8,
-    pub version: u64,
-}
-
-/// Parsed PoI attestation event (Phase 3).
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct PoIAttestedEvent {
-    pub association_root: [u8; 32],
-    pub commitment: [u8; 32],
-    pub version: u64,
-}
-
 /// Parsed BTC origin attestation event — emitted alongside every
-/// SPV-verified deposit. Carries enough to build a PoI association set
-/// without trusting the backend.
+/// SPV-verified deposit. Carries the data needed to anchor a
+/// commitment to its on-chain BTC origin without trusting the backend.
 ///
 /// Layout (matches `emit_btc_origin_attestation` in `utils/events.rs`):
 ///   disc(1) + block_height(8 LE) + deposit_txid(32) + sweep_vout(4 LE)
@@ -189,8 +171,6 @@ pub enum ProgramEvent {
     UtxoConsumed(UtxoEvent),
     ShieldMeta(ShieldMetaEvent),
     SenderMemo(SenderMemoEvent),
-    AssociationRootUpdated(AssociationRootUpdatedEvent),
-    PoIAttested(PoIAttestedEvent),
     BtcOriginAttestation(BtcOriginAttestationEvent),
 }
 
@@ -336,16 +316,6 @@ pub fn parse_program_events(logs: &[String]) -> Vec<ProgramEvent> {
                     events.push(ProgramEvent::SenderMemo(event));
                 }
             }
-            EVENT_ASSOCIATION_ROOT_UPDATED => {
-                if let Some(event) = parse_association_root_updated(&segments) {
-                    events.push(ProgramEvent::AssociationRootUpdated(event));
-                }
-            }
-            EVENT_POI_ATTESTED => {
-                if let Some(event) = parse_poi_attested(&segments) {
-                    events.push(ProgramEvent::PoIAttested(event));
-                }
-            }
             EVENT_BTC_ORIGIN_ATTESTATION => {
                 if let Some(event) = parse_btc_origin_attestation(&segments) {
                     events.push(ProgramEvent::BtcOriginAttestation(event));
@@ -375,35 +345,6 @@ fn parse_sender_memo(segments: &[Vec<u8>]) -> Option<SenderMemoEvent> {
         segments[4][0], segments[4][1], segments[4][2], segments[4][3],
     ]);
     Some(SenderMemoEvent { nonce, ciphertext_and_tag: ct, commitment, leaf_index })
-}
-
-fn parse_association_root_updated(segments: &[Vec<u8>]) -> Option<AssociationRootUpdatedEvent> {
-    if segments.len() < 4 { return None; }
-    if segments[1].len() != 32 { return None; }
-    if segments[2].len() != 1 { return None; }
-    if segments[3].len() != 8 { return None; }
-    let mut new_root = [0u8; 32];
-    new_root.copy_from_slice(&segments[1]);
-    let status = segments[2][0];
-    let mut v = [0u8; 8];
-    v.copy_from_slice(&segments[3]);
-    let version = u64::from_le_bytes(v);
-    Some(AssociationRootUpdatedEvent { new_root, status, version })
-}
-
-fn parse_poi_attested(segments: &[Vec<u8>]) -> Option<PoIAttestedEvent> {
-    if segments.len() < 4 { return None; }
-    if segments[1].len() != 32 { return None; }
-    if segments[2].len() != 32 { return None; }
-    if segments[3].len() != 8 { return None; }
-    let mut association_root = [0u8; 32];
-    association_root.copy_from_slice(&segments[1]);
-    let mut commitment = [0u8; 32];
-    commitment.copy_from_slice(&segments[2]);
-    let mut v = [0u8; 8];
-    v.copy_from_slice(&segments[3]);
-    let version = u64::from_le_bytes(v);
-    Some(PoIAttestedEvent { association_root, commitment, version })
 }
 
 fn parse_btc_origin_attestation(segments: &[Vec<u8>]) -> Option<BtcOriginAttestationEvent> {

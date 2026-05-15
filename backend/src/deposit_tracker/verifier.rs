@@ -77,7 +77,6 @@ pub struct VerificationResult {
     pub block_height: u64,
     /// The on-chain commitment (`Poseidon(npk, token_id, amount)`) extracted
     /// from the stealth announcement event log emitted by `verify_stealth_deposit`.
-    /// Phase 3c PoI auto-feed uses this to add the leaf to the association set.
     ///
     /// `None` if the log could not be parsed (older deployments / RPCs without
     /// log retention) — callers should treat this as best-effort.
@@ -556,7 +555,7 @@ impl SpvVerifier {
 
     /// Parse the stealth announcement event (disc=0x03) emitted by
     /// `verify_stealth_deposit` / `verify_deposit_v2` and return
-    /// `(leaf_index, commitment)`. Used by Phase 3c PoI auto-feed.
+    /// `(leaf_index, commitment)`.
     ///
     /// Event layout (base64-encoded "Program data:" segments):
     ///   disc(1) + type(1) + ephemeral_pub(32) + encrypted_amount(8)

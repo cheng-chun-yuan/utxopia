@@ -27,7 +27,6 @@ use super::verifier::{SpvVerifier, VerifierError};
 use super::watcher::{AddressWatcher, WatcherError};
 use super::websocket::{DepositUpdatePublisher, SharedWebSocketState};
 use super::ws_listener::{MempoolWsListener, WsEvent};
-use crate::poi_service::PoIService;
 
 /// Deposit tracker service errors
 #[derive(Debug, thiserror::Error)]
@@ -75,11 +74,6 @@ pub struct DepositTrackerService {
     last_scanned_height: AtomicU64,
     /// Header relayer (shared with WS listener for on-demand sync)
     header_relayer: Option<Arc<HeaderRelayer>>,
-    /// Optional Phase 3c PoI association service. When wired in, every
-    /// successful SPV verification auto-feeds the commitment into the
-    /// PoI association set. When `None` (older deployments / tests) the
-    /// tracker keeps working — the auto-feed simply doesn't run.
-    poi_service: Option<PoIService>,
 }
 
 impl DepositTrackerService {
@@ -98,7 +92,6 @@ impl DepositTrackerService {
             publisher: None,
             last_scanned_height: AtomicU64::new(0),
             header_relayer: None,
-            poi_service: None,
         }
     }
 
@@ -117,7 +110,6 @@ impl DepositTrackerService {
             publisher: None,
             last_scanned_height: AtomicU64::new(0),
             header_relayer: None,
-            poi_service: None,
         }
     }
 
@@ -177,39 +169,6 @@ impl DepositTrackerService {
     pub fn with_websocket(mut self, ws_state: SharedWebSocketState) -> Self {
         self.publisher = Some(DepositUpdatePublisher::new(ws_state));
         self
-    }
-
-    /// Phase 3c: attach a PoI association service so that every successful
-    /// SPV verification auto-feeds the commitment into the clean-set tree.
-    ///
-    /// `PoIService` is cheap to clone (it's `Arc<RwLock<...>>` internally),
-    /// so callers typically clone the same handle that's already wired into
-    /// the API router.
-    pub fn with_poi_service(mut self, poi: PoIService) -> Self {
-        self.poi_service = Some(poi);
-        self
-    }
-
-    /// Auto-feed a commitment into the PoI association set if one is wired
-    /// in. The PoIService API is sync but cheap (Poseidon hash + SQLite
-    /// INSERT OR IGNORE), so we run it in a `spawn_blocking` to keep the
-    /// async deposit tracker tick non-blocking. The call is fire-and-forget:
-    /// failures are logged but never bubble back to the caller — the PoI
-    /// service is best-effort by design (admin can re-add manually).
-    fn maybe_auto_feed_poi(&self, record_id: &str, commitment: [u8; 32]) {
-        let poi = match &self.poi_service {
-            Some(p) => p.clone(),
-            None => return,
-        };
-        let record_id = record_id.to_string();
-        tokio::task::spawn_blocking(move || {
-            poi.add_commitment(commitment);
-            println!(
-                "[{}] PoI auto-feed: added commitment {} to association set",
-                record_id,
-                hex::encode(commitment),
-            );
-        });
     }
 
     /// Register a new deposit for tracking.
@@ -1335,14 +1294,6 @@ impl DepositTrackerService {
             record_id, result.solana_tx, result.leaf_index
         );
 
-        // Phase 3c: at this point the commitment lives in the on-chain Merkle
-        // tree (verify_stealth_deposit emitted a stealth announcement). If a
-        // PoI service is wired in, mirror that commitment into the off-chain
-        // association set so PoI proofs can be generated against it.
-        if let Some(commitment) = result.commitment {
-            self.maybe_auto_feed_poi(&record_id, commitment);
-        }
-
         Ok(())
     }
 
@@ -1454,49 +1405,4 @@ mod tests {
         assert_eq!(stats.total_deposits, 0);
     }
 
-    /// Phase 3c, Task B: when a PoIService is wired in and a deposit reaches
-    /// the "verified / commitment in tree" point, the tracker auto-feeds the
-    /// commitment into the association set. This test simulates the exact
-    /// call the verification path makes (`maybe_auto_feed_poi`) and asserts
-    /// the commitment lands in the PoI tree.
-    ///
-    /// We avoid spinning up a real Solana RPC by exercising the auto-feed
-    /// helper directly — that's the contract the verify code depends on.
-    #[tokio::test(flavor = "multi_thread")]
-    async fn poi_auto_feed_adds_commitment() {
-        let config = test_config();
-        let poi = PoIService::new(); // in-memory variant — sufficient for the test
-        let service = DepositTrackerService::new_testnet(config)
-            .with_poi_service(poi.clone());
-
-        // Sanity: nothing in the PoI set yet.
-        assert_eq!(poi.len(), 0);
-
-        let commitment = [0xAAu8; 32];
-        service.maybe_auto_feed_poi("dep_test", commitment);
-
-        // The auto-feed spawns a blocking task; give it a tick to land.
-        for _ in 0..20 {
-            if poi.len() == 1 {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
-        }
-        assert_eq!(poi.len(), 1, "PoIService did not receive the commitment");
-
-        // Idempotency: re-feeding the same commitment must not double-count.
-        service.maybe_auto_feed_poi("dep_test", commitment);
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        assert_eq!(poi.len(), 1, "auto-feed not idempotent");
-    }
-
-    /// If no PoIService is wired in, the tracker is a no-op on the auto-feed
-    /// path (tracker still works for older deployments).
-    #[tokio::test(flavor = "multi_thread")]
-    async fn poi_auto_feed_is_optional() {
-        let config = test_config();
-        let service = DepositTrackerService::new_testnet(config); // no poi_service
-        // Should be silently fine — no panic, no error.
-        service.maybe_auto_feed_poi("dep_test", [0x11u8; 32]);
-    }
 }

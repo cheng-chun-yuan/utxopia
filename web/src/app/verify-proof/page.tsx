@@ -9,8 +9,7 @@ import { cn } from "@/lib/utils";
  * In-browser Groth16 proof verifier.
  *
  * Lets auditors verify selective-disclosure proofs (ownership, range_sum)
- * or PoI proofs without installing bun + snarkjs locally. The page accepts
- * either:
+ * without installing bun + snarkjs locally. The page accepts either:
  *   - a known circuit name (vkey fetched from the local /circuits CDN), or
  *   - a custom uploaded vkey JSON
  *
@@ -20,7 +19,6 @@ import { cn } from "@/lib/utils";
  */
 
 type KnownCircuit =
-  | "proof_of_innocence"
   | "ownership"
   | "range_sum"
   | "range_sum_4"
@@ -32,7 +30,6 @@ const KNOWN_CIRCUITS: { value: KnownCircuit; label: string }[] = [
   { value: "range_sum_4", label: "range_sum_4 — N=4 (flat hash)" },
   { value: "range_sum", label: "range_sum — N=8 (flat hash)" },
   { value: "range_sum_16", label: "range_sum_16 — N=16 (chunked hash)" },
-  { value: "proof_of_innocence", label: "proof_of_innocence — PoI" },
   { value: "custom", label: "Custom — upload your own vkey.json" },
 ];
 
@@ -140,7 +137,7 @@ export default function VerifyProofPage() {
           <div>
             <h1 className="text-heading6 text-foreground">Verify a Groth16 proof</h1>
             <p className="text-caption text-gray">
-              Auditor tool — checks ownership / range-sum / PoI proofs without bun + snarkjs locally.
+              Auditor tool — checks ownership / range-sum proofs without bun + snarkjs locally.
             </p>
           </div>
         </div>
