@@ -145,7 +145,6 @@ export {
   buildAttestPoIHiddenInstructionData,
   ASSOCIATION_SET_SEED,
 } from "./poi-instructions";
-export { buildTransactWithPoIInstructionData } from "./transact-with-poi";
 
 // Selective ZK disclosure proofs (Phase 4)
 export {

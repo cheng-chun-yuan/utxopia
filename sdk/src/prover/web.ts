@@ -59,16 +59,14 @@ export interface ProofData {
 
 export type CircuitType = `joinsplit_${number}x${number}`;
 
-/** Names of non-JoinSplit auxiliary circuits (PoI + selective disclosure +
- *  Phase 3d-full prototype variants). */
+/** Names of non-JoinSplit auxiliary circuits (PoI + selective disclosure). */
 export type AuxCircuitName =
   | "proof_of_innocence"
   | "attest_poi_hidden"
   | "ownership"
   | "range_sum"
   | "range_sum_4"
-  | "range_sum_16"
-  | "joinsplit_1x2_with_poi";
+  | "range_sum_16";
 
 // Environment detection
 const isBrowser = typeof window !== "undefined";

@@ -1,13 +1,15 @@
 //! Association set state (Phase 3 — Proof of Innocence)
 //!
 //! Stores the current root of the off-chain-curated association tree of
-//! "clean" commitments. The operator updates this root via a privileged
-//! instruction (not yet defined here — see plan). A `transact_with_poi` /
-//! `unshield_with_poi` / `redeem_with_poi` instruction will read the current
-//! root and verify the user-supplied PoI Groth16 proof against it.
+//! "clean" commitments. The operator updates this root via
+//! `update_association_root` (disc 21). The user-facing `attest_poi` (disc
+//! 22) and `attest_poi_hidden` (disc 23) instructions read this root and
+//! verify the user-supplied PoI Groth16 proof against it.
 //!
-//! Phase 3 status: data layout frozen, instruction wire-in not yet built.
-//! No live consumer touches this PDA, so adding it is safe (additive only).
+//! The passive-attestation flow (registered screeners signing per-commitment
+//! verdicts) is a complementary path — it doesn't read this PDA, but the
+//! association root is still useful for the user-driven PoI fallback path
+//! and for backwards compatibility with consumers that index PoI events.
 
 use core::mem::size_of;
 
