@@ -64,9 +64,14 @@ export function ShieldDetails({ tx }: { tx: TransferTx }) {
           </div>
           {btcMeta && (
             <div className="px-3 py-2 rounded-[8px] bg-gray/4 border border-gray/8 text-caption text-gray/60 space-y-1">
-              <div className="flex justify-between"><span>Confirmations</span><span className="font-mono">{btcMeta.confirmations ?? 0}</span></div>
+              <div className="flex justify-between">
+                <span>Confirmations</span>
+                <span className="font-mono">{btcMeta.confirmations == null ? "—" : btcMeta.confirmations}</span>
+              </div>
               {btcMeta.sweepTxid && <div className="flex justify-between"><span>Sweep</span><span className="font-mono text-foreground/80">{truncate(btcMeta.sweepTxid, 6, 4)}</span></div>}
-              {(btcMeta.sweepConfirmations ?? 0) > 0 && <div className="flex justify-between"><span>Sweep Conf</span><span className="font-mono">{btcMeta.sweepConfirmations}</span></div>}
+              {btcMeta.sweepConfirmations != null && (
+                <div className="flex justify-between"><span>Sweep Conf</span><span className="font-mono">{btcMeta.sweepConfirmations}</span></div>
+              )}
             </div>
           )}
         </div>

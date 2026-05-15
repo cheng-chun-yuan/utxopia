@@ -758,6 +758,32 @@ async fn get_explorer_transactions(
                 .map(|b| u64::from_le_bytes(b[..8].try_into().unwrap_or([0; 8])))
                 .unwrap_or(0);
 
+            // For BTC deposits, surface a btcMeta block so the explorer can
+            // show the deposit → sweep → mint timeline + the miner-fee
+            // breakdown (original − gross). For SPL deposits this stays null.
+            let btc_meta = if a.btc_deposit_txid.is_some() {
+                // ShieldMeta isn't emitted by verify_stealth_deposit, so
+                // deposit_gross_amount is usually None for BTC. Fall back to
+                // the announcement amount (= post-sweep value minted into
+                // the commitment) to compute the miner fee.
+                let post_sweep = a.deposit_gross_amount.unwrap_or(amount as i64);
+                let miner_fee = a.btc_deposit_amount_sats.and_then(|orig| {
+                    if orig > post_sweep { Some(orig - post_sweep) } else { None }
+                });
+                serde_json::json!({
+                    "depositTxid": a.btc_deposit_txid,
+                    "sweepTxid": a.btc_sweep_txid,
+                    "depositAmountSats": a.btc_deposit_amount_sats,
+                    "sweepFeeSats": miner_fee,
+                    "mintedSats": amount,
+                    "confirmations": serde_json::Value::Null,
+                    "sweepConfirmations": serde_json::Value::Null,
+                    "taprootAddress": serde_json::Value::Null,
+                })
+            } else {
+                serde_json::Value::Null
+            };
+
             transactions.push(serde_json::json!({
                 "txSignature": a.tx_signature,
                 "type": "shield",
@@ -770,6 +796,7 @@ async fn get_explorer_transactions(
                     "netAmount": amount,
                     "btcDepositTxid": a.btc_deposit_txid,
                     "btcSweepTxid": a.btc_sweep_txid,
+                    "depositAmountSats": a.btc_deposit_amount_sats,
                 }],
                 "outputs": [{
                     "type": "commitment",
@@ -777,6 +804,7 @@ async fn get_explorer_transactions(
                     "leafIndex": a.leaf_index,
                     "amount": amount,
                 }],
+                "btcMeta": btc_meta,
             }));
         }
     }

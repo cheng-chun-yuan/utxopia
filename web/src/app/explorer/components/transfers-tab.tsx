@@ -116,7 +116,7 @@ export function TransferRow({
             <FlowCell
               from={{ icon: token.isBtcNative ? "/tokens/btc.png" : token.logo, label: token.symbol }}
               to={{ icon: "shield", label: "Shielded" }}
-              meta={tx.btcMeta ? `${tx.btcMeta.confirmations ?? 0} conf` : undefined}
+              meta={tx.btcMeta && tx.btcMeta.confirmations != null ? `${tx.btcMeta.confirmations} conf` : undefined}
             />
           ) : isUnshieldOrWithdraw ? (
             <FlowCell

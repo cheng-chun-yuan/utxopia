@@ -103,6 +103,30 @@ function DepositDetails({ deposit, config, isBtc }: { deposit: DepositRecord; co
                 </div>
               </div>
             )}
+            {d.btcMeta?.depositTxid && (
+              <div className="group flex items-center gap-2">
+                <span className="text-[10px] text-gray/50 shrink-0 w-12">Deposit</span>
+                <code className="text-caption font-mono text-foreground/80 truncate">{truncate(d.btcMeta.depositTxid, 8, 6)}</code>
+                <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                  <CopyButton text={d.btcMeta.depositTxid} label="BTC Tx" variant="default" iconSize="sm" />
+                  <a href={`${getMempoolExplorerUrl()}/tx/${d.btcMeta.depositTxid}`} target="_blank" rel="noopener noreferrer" className="text-btc hover:text-btc/80 transition-colors p-0.5">
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+            )}
+            {d.btcMeta?.sweepTxid && (
+              <div className="group flex items-center gap-2">
+                <span className="text-[10px] text-gray/50 shrink-0 w-12">Sweep</span>
+                <code className="text-caption font-mono text-foreground/80 truncate">{truncate(d.btcMeta.sweepTxid, 8, 6)}</code>
+                <div className="flex items-center gap-1 ml-auto shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                  <CopyButton text={d.btcMeta.sweepTxid} label="Sweep Tx" variant="default" iconSize="sm" />
+                  <a href={`${getMempoolExplorerUrl()}/tx/${d.btcMeta.sweepTxid}`} target="_blank" rel="noopener noreferrer" className="text-btc hover:text-btc/80 transition-colors p-0.5">
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+              </div>
+            )}
             {/* Fee breakdown */}
             {(serviceFee > 0 || minerFee > 0) && (
               <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[10px] text-gray/50 font-mono pt-1 border-t border-green-500/8">

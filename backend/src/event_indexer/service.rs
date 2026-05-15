@@ -62,9 +62,14 @@ struct TransactionData {
     instruction_disc: Option<u8>,
 }
 
-/// Mempool/Esplora API base URL — configurable via MEMPOOL_API_URL env var
+/// Mempool/Esplora API base URL — prefers `MEMPOOL_API_URL`, falls back to
+/// `ESPLORA_URL` (which the rest of the backend uses), then to testnet4.
+/// Lets hybrid (regtest) deployments share one env var with the rest of the
+/// stack instead of needing a separate MEMPOOL_API_URL override.
 fn mempool_api_url() -> String {
-    std::env::var("MEMPOOL_API_URL").unwrap_or_else(|_| "https://mempool.space/testnet4/api".to_string())
+    std::env::var("MEMPOOL_API_URL")
+        .or_else(|_| std::env::var("ESPLORA_URL"))
+        .unwrap_or_else(|_| "https://mempool.space/testnet4/api".to_string())
 }
 
 impl EventIndexerService {

@@ -48,8 +48,19 @@ export function getUnisatFallbackNetwork(): string {
   return getConfig().bitcoinNetwork === "mainnet" ? "livenet" : "testnet";
 }
 
-/** mempool.space explorer base URL (for <a href> links, no /api suffix) */
+/** BTC block explorer base URL (for <a href> links, no /api suffix).
+ *  Reads `bitcoin.explorerUrl` from the active network config, so hybrid
+ *  surfaces `btc.utxopia.com/regtest` instead of localhost. Falls back to
+ *  per-network mempool.space defaults if no config is loaded yet. */
 export function getMempoolExplorerUrl(): string {
+  // Lazy-require to avoid pulling network-config into SDK consumers.
+  try {
+    const { getNetworkConfig } = require("./network-config") as typeof import("./network-config");
+    const url = getNetworkConfig().bitcoin.explorerUrl;
+    if (url) return url;
+  } catch {
+    /* fall through to legacy switch */
+  }
   const net = getConfig().bitcoinNetwork;
   switch (net) {
     case "mainnet":
@@ -61,7 +72,7 @@ export function getMempoolExplorerUrl(): string {
     case "signet":
       return "https://mempool.space/signet";
     case "regtest":
-      return "http://localhost:3002/regtest";
+      return "https://btc.utxopia.com/regtest";
     default:
       return "https://mempool.space/testnet4";
   }
