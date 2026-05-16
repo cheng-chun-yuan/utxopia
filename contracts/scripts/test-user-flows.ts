@@ -3,7 +3,7 @@
  * E2E User Flow Test — 4 Parts (Bitcoin regtest)
  *
  * Exercises the 4 main UTXOpia user flows, each building on the previous:
- *   Part 1: Deposit      — VERIFY_STEALTH_DEPOSIT (disc=1) with real BTC regtest + SPV
+ *   Part 1: Deposit      — COMPLETE_DEPOSIT (disc=1) with real BTC regtest + SPV
  *   Part 2: Private Send  — JoinSplit 1x1 TRANSACT (disc=14)
  *   Part 3: Split         — JoinSplit 1x2 TRANSACT (disc=14)
  *   Part 4: Withdraw      — REQUEST_REDEMPTION (disc=5)
@@ -113,7 +113,7 @@ const BN254_FIELD_PRIME = 218882428718392752222464057452572750885483644004160343
 
 // Instruction discriminators
 const Instruction = {
-  VERIFY_STEALTH_DEPOSIT: 1,
+  COMPLETE_DEPOSIT: 1,
   INIT_VK_REGISTRY: 11,
   ADD_DEMO_STEALTH: 13,
   TRANSACT: 14,
@@ -459,7 +459,7 @@ function buildInitVkRegistryIx(
 }
 
 /**
- * Build verify_stealth_deposit instruction (disc=1)
+ * Build complete_deposit instruction (disc=1)
  *
  * Data layout (116 bytes + merkle proof):
  *   [0-31]   txid              (32 bytes)
@@ -512,7 +512,7 @@ function buildVerifyStealthDepositIx(
   const data = Buffer.alloc(dataLen);
   let off = 0;
 
-  data[off++] = Instruction.VERIFY_STEALTH_DEPOSIT;
+  data[off++] = Instruction.COMPLETE_DEPOSIT;
 
   // txid (32)
   Buffer.from(params.txid).copy(data, off); off += 32;
@@ -755,14 +755,14 @@ async function main() {
   const leafIndex0 = Number(treeBefore1.nextIndex);
 
   if (NETWORK === "devnet") {
-    // ---- Devnet: VERIFY_STEALTH_DEPOSIT with real SPV ----
+    // ---- Devnet: COMPLETE_DEPOSIT with real SPV ----
     // Two modes:
     //   A) TESTNET_TXID set → use pre-existing testnet tx from mempool.space
     //   B) USE_REGTEST=1   → create tx on local regtest, submit to devnet Solana
     const useRegtest = process.env.USE_REGTEST === "1";
     const btcSource = useRegtest ? "regtest" : "testnet";
     console.log("\n" + "=".repeat(60));
-    console.log(`PART 1: DEPOSIT — VERIFY_STEALTH_DEPOSIT (devnet+${btcSource} SPV)`);
+    console.log(`PART 1: DEPOSIT — COMPLETE_DEPOSIT (devnet+${btcSource} SPV)`);
     console.log("=".repeat(60));
 
     let txid: string;
@@ -848,7 +848,7 @@ async function main() {
     const bufferKeypair = await createTxBufferAccount(connection, authority, rawSweepTx, CHADBUFFER_ID);
     console.log(`  ChadBuffer: ${bufferKeypair.publicKey.toBase58().slice(0, 20)}...`);
 
-    // 5. Call verify_stealth_deposit
+    // 5. Call complete_deposit
     const [depositRecord] = deriveDepositStealthPDA(PROGRAM_ID, txHash);
     console.log(`  Deposit record PDA: ${depositRecord.toBase58().slice(0, 20)}...`);
 
@@ -894,9 +894,9 @@ async function main() {
     console.log(`  Commitment at leaf ${leafIndex0} (computed on-chain via SPV)`);
     console.log("  PART 1 PASSED");
   } else {
-    // ---- Localnet: VERIFY_STEALTH_DEPOSIT with real BTC regtest + SPV ----
+    // ---- Localnet: COMPLETE_DEPOSIT with real BTC regtest + SPV ----
     console.log("\n" + "=".repeat(60));
-    console.log("PART 1: DEPOSIT — VERIFY_STEALTH_DEPOSIT (25,000 sats)");
+    console.log("PART 1: DEPOSIT — COMPLETE_DEPOSIT (25,000 sats)");
     console.log("=".repeat(60));
     console.log(`  npk0: ${npk0.toString(16).slice(0, 16)}...`);
     console.log(`  Expected commitment0: ${commitment0.toString(16).slice(0, 16)}...`);

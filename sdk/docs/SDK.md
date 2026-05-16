@@ -445,7 +445,7 @@ Direct BTC deposit with stealth data:
 | `prepareStealthDeposit(meta, groupPubKey, network)` | Build complete deposit transaction data |
 | `buildStealthOpReturn(ephemeralPub, npk)` | Build 64-byte OP_RETURN script |
 | `parseStealthOpReturn(script)` | Parse OP_RETURN to extract stealth data |
-| `verifyStealthDeposit(data)` | Verify deposit data integrity |
+| `completeDeposit(data)` | Verify deposit data integrity |
 | `STEALTH_OP_RETURN_SIZE` | 64 bytes |
 
 ### PSBT Builder (`./psbt`)

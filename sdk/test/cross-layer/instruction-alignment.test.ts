@@ -61,7 +61,7 @@ const CONTRACT = {
       "system_program (read)",
     ],
   },
-  verifyStealthDeposit: {
+  completeDeposit: {
     disc: 1,
     dataLen: 80, // sweep_txid(32) + block_height(8) + sweep_tx_size(4) + deposit_tx_size(4) + deposit_txid(32)
     accountCount: 14,
@@ -199,7 +199,7 @@ describe("Cross-layer: instruction alignment", () => {
     });
   });
 
-  describe("verify_stealth_deposit (disc=1)", () => {
+  describe("complete_deposit (disc=1)", () => {
     it("has correct data layout: 80 bytes total", () => {
       const sweepTxid = new Uint8Array(32).fill(0xaa);
       const blockHeight = 2311n;
@@ -208,7 +208,7 @@ describe("Cross-layer: instruction alignment", () => {
       const depositTxid = new Uint8Array(32).fill(0xbb);
 
       const data = new Uint8Array(81);
-      data[0] = CONTRACT.verifyStealthDeposit.disc;
+      data[0] = CONTRACT.completeDeposit.disc;
       data.set(sweepTxid, 1);
       const view = new DataView(data.buffer);
       view.setBigUint64(33, blockHeight, true);
@@ -217,11 +217,11 @@ describe("Cross-layer: instruction alignment", () => {
       data.set(depositTxid, 49);
 
       const contractData = data.slice(1);
-      expect(contractData.length).toBe(CONTRACT.verifyStealthDeposit.dataLen);
+      expect(contractData.length).toBe(CONTRACT.completeDeposit.dataLen);
     });
 
     it("requires exactly 14 accounts", () => {
-      expect(CONTRACT.verifyStealthDeposit.accountCount).toBe(14);
+      expect(CONTRACT.completeDeposit.accountCount).toBe(14);
     });
   });
 

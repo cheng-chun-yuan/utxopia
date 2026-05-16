@@ -238,7 +238,7 @@ Prints a Taproot BTC address + 64-byte OP_RETURN. Send testnet BTC via Sparrow W
 | Disc | Instruction |
 |---|---|
 | 0 | `initialize` (pool state + tree) |
-| 1 | `verify_stealth_deposit` |
+| 1 | `complete_deposit` |
 | 2 | `set_pool_config` |
 | 5 | `request_redemption` |
 | 6 | `init_vk_registry` |

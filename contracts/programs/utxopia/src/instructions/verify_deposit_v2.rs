@@ -51,7 +51,7 @@ use crate::utils::{
     validate_token_owner, validate_any_token_program_key, validate_account_writable,
 };
 
-use super::verify_stealth_deposit::DEMO_REQUIRED_CONFIRMATIONS;
+use super::complete_deposit::DEMO_REQUIRED_CONFIRMATIONS;
 
 /// Instruction data for verify_deposit_v2 (OP_RETURN-free)
 pub struct VerifyDepositV2Data {

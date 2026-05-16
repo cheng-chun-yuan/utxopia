@@ -139,7 +139,7 @@ This section is the canonical reference for integrating teams.
 
 | Disc | Name | Purpose |
 |---|---|---|
-| 11 | `verify_stealth_deposit` | SPV-verify a confirmed BTC deposit and insert the commitment into the JoinSplit tree |
+| 11 | `complete_deposit` | SPV-verify a confirmed BTC deposit and insert the commitment into the JoinSplit tree |
 | 12 | `shield` | Deposit any SPL/Token-2022 token into the shielded pool |
 | 13 | `transact` | Private N-to-M JoinSplit transfer (the core privacy primitive) |
 | 14 | `unshield` | Withdraw shielded tokens back to a public Solana token account |

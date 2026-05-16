@@ -6,7 +6,7 @@
  *
  * 1. complete_redemption without mark_processing → should fail (status=Pending, not Processing)
  * 2. complete_redemption with wrong BTC txid → should fail (VerifiedTransaction PDA mismatch)
- * 3. verify_stealth_deposit with duplicate txid → should fail (deposit_receipt PDA exists)
+ * 3. complete_deposit with duplicate txid → should fail (deposit_receipt PDA exists)
  *
  * Prerequisites: run-all.ts (steps 1-8b) must have completed successfully.
  * The localnet-state.json must contain btcNote1/btcNote2 deposit data.
@@ -267,11 +267,11 @@ async function testCompleteWithWrongTxid() {
 }
 
 // =============================================================================
-// Test 3: verify_stealth_deposit with duplicate txid (deposit_receipt)
+// Test 3: complete_deposit with duplicate txid (deposit_receipt)
 // =============================================================================
 
 async function testDuplicateDeposit() {
-  log("\n--- Test 3: verify_stealth_deposit with duplicate txid ---");
+  log("\n--- Test 3: complete_deposit with duplicate txid ---");
   log("Expected: Reject because deposit_receipt PDA already exists for this deposit txid");
 
   const state = loadState();
@@ -340,12 +340,12 @@ async function testDuplicateDeposit() {
   const sweepVout = btcNote1.sweepVout ?? 0;
   const [utxoPDA] = deriveUtxoPDA(UTXOPIA, sweepTxidBytes, sweepVout);
 
-  // Build verify_stealth_deposit instruction with the SAME txids
+  // Build complete_deposit instruction with the SAME txids
   // Layout (80 bytes):
   //   disc(1) + sweep_txid(32) + block_height(8) + sweep_tx_size(4) + deposit_tx_size(4) + deposit_txid(32)
   const ixData = Buffer.alloc(1 + 32 + 8 + 4 + 4 + 32);
   let off = 0;
-  ixData[off++] = Disc.VERIFY_STEALTH_DEPOSIT;
+  ixData[off++] = Disc.COMPLETE_DEPOSIT;
   sweepTxidBytes.copy(ixData, off); off += 32;
   ixData.writeBigUInt64LE(BigInt(blockHeight), off); off += 8;
   ixData.writeUInt32LE(200, off); off += 4; // fake sweep_tx_size
@@ -380,12 +380,12 @@ async function testDuplicateDeposit() {
   const errMsg = await expectTxFail(
     [vsdIx],
     [authority],
-    "verify_stealth_deposit with duplicate deposit_txid",
+    "complete_deposit with duplicate deposit_txid",
   );
 
   // The error should indicate duplicate deposit (DuplicateDeposit error or
   // already-initialized account error)
-  log("  PASS: verify_stealth_deposit correctly rejected duplicate deposit");
+  log("  PASS: complete_deposit correctly rejected duplicate deposit");
 }
 
 // =============================================================================

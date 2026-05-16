@@ -18,7 +18,7 @@
 
 - JoinSplit ZK circuits (Groth16, BN254). Same `1x2`, `2x2`, `2x1`, `1x1` variants.
 - Stealth address protocol (Baby Jubjub + Ed25519 ECDH; EIP-5564/DKSAP).
-- `verify_stealth_deposit` SPV path (still uses `btc-light-client`).
+- `complete_deposit` SPV path (still uses `btc-light-client`).
 - OP_RETURN payload format (`ephemeralPub(32) || npk(32) = 64 bytes`).
 - Commitment derivation (`Poseidon(npk, ZKBTC_TOKEN_ID, amount)`).
 - SDK public API surface (`UTXOpiaClient`, `createNonInteractiveDeposit`, `createDepositFromConfig`). Same names; the *value* of the custody pubkey passed through changes.

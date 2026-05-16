@@ -8,7 +8,7 @@
  * 2. Fetch raw tx from mempool.space
  * 3. Strip SegWit witness data
  * 4. Upload to ChadBuffer
- * 5. Build verify_transaction + verify_stealth_deposit instructions
+ * 5. Build verify_transaction + complete_deposit instructions
  * 6. Submit both in one Solana transaction
  * 7. Close ChadBuffer to reclaim rent
  * 8. Read back the StealthAnnouncement to verify extracted amount
@@ -416,7 +416,7 @@ async function main() {
   });
 
   // =========================================================================
-  // Step 5: Build verify_stealth_deposit instruction (utxopia, disc=1)
+  // Step 5: Build complete_deposit instruction (utxopia, disc=1)
   //         Amount is NO LONGER in instruction data — extracted on-chain from raw tx
   // =========================================================================
 

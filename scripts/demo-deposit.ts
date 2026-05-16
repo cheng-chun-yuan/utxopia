@@ -101,7 +101,7 @@ async function main() {
   console.log(`    https://mempool.space/testnet4/address/${deposit.btcAddress}`);
   console.log(`\nBackend polls every 60s. After 1 confirmation it will:`);
   console.log(`  → SPV-verify the tx + on-demand sync the BTC header`);
-  console.log(`  → call utxopia's verify_stealth_deposit (disc=1)`);
+  console.log(`  → call utxopia's complete_deposit (disc=1)`);
   console.log(`  → on-chain Poseidon(npk, ZKBTC, amount) commitment lands in the tree`);
   console.log(`\nPolling for tree.size > ${tree0.size}. Ctrl+C to stop (deposit still processes).\n`);
 

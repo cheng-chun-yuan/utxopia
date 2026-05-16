@@ -9,7 +9,7 @@
  *
  * BTC txids come from:
  *  1. Deposit tracker (if running and matched)
- *  2. Backend event indexer (extracted from verify_stealth_deposit instruction data)
+ *  2. Backend event indexer (extracted from complete_deposit instruction data)
  */
 
 import { NextResponse } from "next/server";
@@ -282,7 +282,7 @@ export async function GET(request: Request) {
       const txMetas = await fetchAnnouncementsFromRpc(0); // type=0 = deposits
       const deposits: ExplorerDeposit[] = [];
 
-      // disc=1 is verify_stealth_deposit (real BTC)
+      // disc=1 is complete_deposit (real BTC)
       const VERIFY_DISC = 1;
 
       for (const tx of txMetas) {

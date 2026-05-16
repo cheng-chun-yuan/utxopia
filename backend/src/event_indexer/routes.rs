@@ -762,7 +762,7 @@ async fn get_explorer_transactions(
             // show the deposit → sweep → mint timeline + the miner-fee
             // breakdown (original − gross). For SPL deposits this stays null.
             let btc_meta = if a.btc_deposit_txid.is_some() {
-                // ShieldMeta isn't emitted by verify_stealth_deposit, so
+                // ShieldMeta isn't emitted by complete_deposit, so
                 // deposit_gross_amount is usually None for BTC. Fall back to
                 // the announcement amount (= post-sweep value minted into
                 // the commitment) to compute the miner fee.

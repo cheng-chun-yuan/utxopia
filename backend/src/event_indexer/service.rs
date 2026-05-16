@@ -52,9 +52,9 @@ struct TransactionData {
     block_time: i64,
     /// Whether the tx references the BTC light client program (SPV-verified deposit)
 
-    /// BTC deposit txid (extracted from verify_stealth_deposit instruction data)
+    /// BTC deposit txid (extracted from complete_deposit instruction data)
     btc_deposit_txid: Option<String>,
-    /// BTC sweep txid (extracted from verify_stealth_deposit instruction data)
+    /// BTC sweep txid (extracted from complete_deposit instruction data)
     btc_sweep_txid: Option<String>,
     /// Original BTC deposit amount in sats (fetched from mempool)
     btc_deposit_amount_sats: Option<i64>,
@@ -297,7 +297,7 @@ impl EventIndexerService {
 
         let block_time = tx_data.block_time;
         // Determine is_verified from instruction discriminator or DepositVerified event:
-        //   disc 11 (verify_stealth_deposit) or 25 (verify_deposit_v2) = real SPV deposit
+        //   disc 11 (complete_deposit) or 25 (verify_deposit_v2) = real SPV deposit
         //   Also: DepositVerified event presence is authoritative (event-first)
         let has_deposit_verified = events.iter().any(|e| matches!(e, ProgramEvent::DepositVerified(_)));
         let is_verified = has_deposit_verified || matches!(tx_data.instruction_disc, Some(11) | Some(25));
@@ -667,7 +667,7 @@ impl EventIndexerService {
         }
         let account_keys: Vec<&str> = account_keys_owned.iter().map(|s| s.as_str()).collect();
 
-        // Extract BTC txids from verify_stealth_deposit instruction data (disc=0x01, 81 bytes)
+        // Extract BTC txids from complete_deposit instruction data (disc=0x01, 81 bytes)
         let (btc_deposit_txid, btc_sweep_txid) = Self::extract_btc_txids(&json["result"]["transaction"]["message"]["instructions"], &account_keys, &self.config.program_id)
             .or_else(|| {
                 // Also check inner instructions
@@ -781,7 +781,7 @@ impl EventIndexerService {
         (amount, sweep_block)
     }
 
-    /// Extract BTC deposit_txid and sweep_txid from verify_stealth_deposit instruction data.
+    /// Extract BTC deposit_txid and sweep_txid from complete_deposit instruction data.
     ///
     /// Instruction layout (after 1-byte discriminator 0x01):
     ///   [0..32]  sweep_txid      (internal byte order)
@@ -802,7 +802,7 @@ impl EventIndexerService {
             }
             let data_b58 = ix["data"].as_str()?;
             let data = bs58::decode(data_b58).into_vec().ok()?;
-            // disc(1) + 80 bytes = 81 total, disc must be 0x01 (verify_stealth_deposit)
+            // disc(1) + 80 bytes = 81 total, disc must be 0x01 (complete_deposit)
             if data.len() < 81 || data[0] != 0x01 {
                 continue;
             }

@@ -347,7 +347,7 @@ async function verifyDeposit(
     data: verifyTxData,
   });
 
-  // --- Build verify_stealth_deposit (utxopia, disc=11) ---
+  // --- Build complete_deposit (utxopia, disc=11) ---
   // disc(1) + sweep_txid(32) + block_height(8) + sweep_tx_size(4) + deposit_tx_size(4) + deposit_txid(32) = 81
   const verifyDepositData = Buffer.alloc(81);
   let doff = 0;

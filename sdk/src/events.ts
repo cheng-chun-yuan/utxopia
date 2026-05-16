@@ -64,7 +64,7 @@ export interface SenderMemoEvent {
 export interface BtcOriginAttestationEvent {
   type: "btc_origin_attestation";
   blockHeight: bigint;
-  /** Bitcoin deposit txid in internal byte order (same as `verify_stealth_deposit` instruction data). */
+  /** Bitcoin deposit txid in internal byte order (same as `complete_deposit` instruction data). */
   depositTxid: Uint8Array;
   /** Sweep transaction's output index that paid the pool. */
   sweepVout: number;

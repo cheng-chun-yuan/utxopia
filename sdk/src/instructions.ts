@@ -50,7 +50,7 @@ const INSTRUCTION = {
   UPDATE_TOKEN_CONFIG: 9,
   CLAIM_FEES: 10,
   // Deposit (11-12)
-  VERIFY_STEALTH_DEPOSIT: 11,
+  COMPLETE_DEPOSIT: 11,
   SHIELD: 12,
   // JoinSplit (13-15) — all share n_in + n_out + n_pub + proof_source header
   TRANSACT: 13,
@@ -1374,7 +1374,7 @@ export function buildVerifyTransactionInstructionData(params: {
 // =============================================================================
 
 /**
- * Build utxopia verify_stealth_deposit instruction data (disc=11)
+ * Build utxopia complete_deposit instruction data (disc=11)
  *
  * npk + ephemeral_pub are extracted ON-CHAIN from the deposit TX OP_RETURN.
  * Amount is extracted from the SPV-verified sweep TX.
@@ -1393,7 +1393,7 @@ export function buildVerifyStealthDepositInstructionData(params: {
   const view = new DataView(data.buffer);
   let offset = 0;
 
-  data[offset++] = INSTRUCTION.VERIFY_STEALTH_DEPOSIT;
+  data[offset++] = INSTRUCTION.COMPLETE_DEPOSIT;
   data.set(params.sweepTxid, offset); offset += 32;
   view.setBigUint64(offset, BigInt(params.blockHeight), true); offset += 8;
   view.setUint32(offset, params.sweepTxSize, true); offset += 4;

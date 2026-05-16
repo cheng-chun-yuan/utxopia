@@ -173,7 +173,7 @@ The signing policy now lives **on-chain** in `contracts/programs/utxopia/src/uti
 | Discriminator | Instruction | Purpose |
 |---------------|-------------|---------|
 | 0 | `initialize` | Setup pool state and commitment tree |
-| 1 | `verify_stealth_deposit` | Verify BTC via SPV, compute commitment on-chain (npk-based, 11 accounts) |
+| 1 | `complete_deposit` | Verify BTC via SPV, compute commitment on-chain (npk-based, 11 accounts) |
 | 5 | `request_redemption` | Burn zkBTC, queue BTC withdrawal |
 | 6 | `complete_redemption` | Relayer marks redemption complete |
 | 7 | `set_paused` | Admin pause/unpause |

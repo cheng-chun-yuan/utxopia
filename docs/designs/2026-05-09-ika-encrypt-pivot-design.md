@@ -87,7 +87,7 @@ Estimated diff: ~5k LOC deleted (FROST subsystem), ~1.5k LOC added (Ika CPI wiri
 1. **One-shot dWallet setup**: clone `dwallet-labs/ika-pre-alpha`, run their DKG flow once against Ika devnet (`pre-alpha-dev-1.ika.ika-network.net:443`) to create a SECP256K1 dWallet. Transfer its authority to the UTXOpia CPI authority PDA. Save dWallet ID + pubkey in `localnet-state.json` / `devnet-state.json`.
 2. Add `ika-dwallet-pinocchio` git dependency to `contracts/programs/utxopia/Cargo.toml`. Add `ika_dwallet_id` and `ika_dwallet_pubkey` fields to `pool_config`.
 3. Update `createNonInteractiveDeposit` in SDK: deposit address derives from `pool_config.ika_dwallet_pubkey` (P2TR). OP_RETURN stealth-announcement payload unchanged.
-4. `verify_stealth_deposit` stays as-is (still SPV-verifies via `btc-light-client`); only the *destination* address derivation upstream changes.
+4. `complete_deposit` stays as-is (still SPV-verifies via `btc-light-client`); only the *destination* address derivation upstream changes.
 5. Modify `complete_redemption`: after validating the redemption, build the BTC tx → compute taproot sighash → CPI `DWalletContext::approve_message(message_digest = btc_sighash, signature_scheme = ECDSA_secp256k1)`. The UTXOpia program enforces all signing policy on-chain (amount limits, destination whitelist, paused-state). FROST's `policy.rs` moves into the program.
 6. Backend gets a slim Ika watcher: poll Ika `Sign` PDAs for completed signatures, assemble the witness on the unsigned BTC tx, broadcast to Bitcoin testnet. Replaces `frost_client.rs`.
 7. Delete `frost_server/`, `backend/src/bitcoin/frost_client.rs`, and FROST-related Docker config.

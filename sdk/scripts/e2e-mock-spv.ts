@@ -374,7 +374,7 @@ async function main() {
   const ephemeralPub = new Uint8Array(32); crypto.getRandomValues(ephemeralPub);
   const commitment = await computeCommitment(npk, AMOUNT_SATS);
 
-  // 8. Call verify_stealth_deposit
+  // 8. Call complete_deposit
   const [depositRec] = pda(["deposit", txid], UTXOPIA);
   const [stealthAnn] = pda(["stealth", ephemeralPub], UTXOPIA);
 
@@ -410,7 +410,7 @@ async function main() {
       { pubkey: TOKEN_2022, isSigner: false, isWritable: false },
     ],
   }));
-  console.log(`verify_stealth_deposit: ${sig.slice(0, 20)}...`);
+  console.log(`complete_deposit: ${sig.slice(0, 20)}...`);
 
   // 9. Verify on-chain state
   const dr = await conn.getAccountInfo(depositRec);

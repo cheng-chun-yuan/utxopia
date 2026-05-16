@@ -79,7 +79,7 @@ pub const EVENT_SENDER_MEMO: u8 = 0x12;
 /// Event discriminator: BTC deposit origin attestation.
 ///
 /// Emitted alongside `EVENT_DEPOSIT_VERIFIED` for every successful
-/// `verify_stealth_deposit`. Complements PoI by giving third-party auditors
+/// `complete_deposit`. Complements PoI by giving third-party auditors
 /// the raw BTC origin data they need to build their own association sets
 /// without trusting our backend. Anyone running an indexer can subscribe
 /// to disc 0x15 events, validate them against the chain (the program

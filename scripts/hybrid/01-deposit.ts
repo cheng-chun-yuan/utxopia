@@ -7,7 +7,7 @@
  *       → bitcoin-cli createOpReturnTx + broadcast
  *         → mine 1 conf for detection, then 6 for sweep
  *           → backend sweeps to demo pool address
- *             → backend SPV-verifies, calls verify_stealth_deposit
+ *             → backend SPV-verifies, calls complete_deposit
  *               → on-chain Poseidon → leaf in commitment tree
  *
  * Persists the deposit seed at scripts/hybrid/.demo-seed.json so 02-transact

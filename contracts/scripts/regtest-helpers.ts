@@ -351,7 +351,7 @@ export function stripWitnessData(rawTx: Buffer): Buffer {
 
 /**
  * Serialize an Esplora merkle proof into the on-chain format expected by
- * the BTC light client's verify_stealth_deposit instruction.
+ * the BTC light client's complete_deposit instruction.
  *
  * On-chain format:
  *   txid       (32 bytes) — internal byte order

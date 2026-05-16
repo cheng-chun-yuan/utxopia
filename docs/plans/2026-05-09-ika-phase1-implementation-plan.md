@@ -1161,7 +1161,7 @@ EOF
 **Spec coverage** (against `docs/designs/2026-05-09-ika-encrypt-pivot-design.md` Phase 1 acceptance):
 - Phase 1 step "Stand up Ika devnet integration" → Task 0
 - "Update `createNonInteractiveDeposit` in SDK" → Task 3
-- "Update deposit verification path" → no Solana program change needed; `verify_stealth_deposit` still SPV-verifies, only the destination address derivation upstream changes (Tasks 1-3 cover this)
+- "Update deposit verification path" → no Solana program change needed; `complete_deposit` still SPV-verifies, only the destination address derivation upstream changes (Tasks 1-3 cover this)
 - "Replace withdrawal flow" → Task 5
 - "Backend `redemption/` worker" → Task 5 (signer swap), Task 6 (config), Task 7 (E2E)
 - "Delete `frost_server/`" → Task 8

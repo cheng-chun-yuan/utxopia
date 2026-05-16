@@ -132,7 +132,7 @@ This ensures commitments are **token-specific**: `Poseidon(npk, token_id, amount
 
 | Token | Entry Method | Instruction |
 |-------|-------------|-------------|
-| **BTC** | Taproot deposit → SPV verification → on-chain commitment | `verify_stealth_deposit` (disc=1) |
+| **BTC** | Taproot deposit → SPV verification → on-chain commitment | `complete_deposit` (disc=1) |
 | **SOL** | Wrap to wSOL → shield into pool | `shield` (disc=29) |
 | **USDC** | Transfer SPL to pool vault → shield | `shield` (disc=29) |
 | **USDT** | Transfer SPL to pool vault → shield | `shield` (disc=29) |
@@ -322,7 +322,7 @@ SENDER (Wallet)                                      SOLANA (On-Chain)
                                                               │
                                                               ▼
                                             ┌─────────────────────────────────┐
-                                            │ verify_stealth_deposit (ix 1)   │
+                                            │ complete_deposit (ix 1)   │
                                             │                                 │
                                             │ 1. Validate SPV proof           │
                                             │ 2. Extract amount from UTXO     │
@@ -390,7 +390,7 @@ Frontend falls back to RPC log scanning when indexer is unavailable.
 | Disc | Name | Purpose |
 |------|------|---------|
 | 0 | `INITIALIZE` | Initialize pool state and commitment tree |
-| 1 | `VERIFY_STEALTH_DEPOSIT` | Verify BTC via SPV, compute commitment on-chain |
+| 1 | `COMPLETE_DEPOSIT` | Verify BTC via SPV, compute commitment on-chain |
 | 5 | `REQUEST_REDEMPTION` | Burn zkBTC, request BTC withdrawal |
 | 6 | `COMPLETE_REDEMPTION` | Relayer marks redemption complete |
 | 7 | `SET_PAUSED` | Admin pause/unpause |

@@ -239,7 +239,7 @@ export function formatMerkleProofForChain(
  * The endpoint handles:
  * 1. Fetching raw tx from mempool.space
  * 2. Uploading to ChadBuffer
- * 3. Building verify_transaction + verify_stealth_deposit instructions
+ * 3. Building verify_transaction + complete_deposit instructions
  * 4. Submitting and confirming on Solana
  */
 export async function submitSPVVerification(

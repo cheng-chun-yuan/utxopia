@@ -1,14 +1,14 @@
 /**
  * Verify API — On-chain SPV deposit verification
  *
- * Triggers btc-light-client verify_transaction + utxopia verify_stealth_deposit
+ * Triggers btc-light-client verify_transaction + utxopia complete_deposit
  * for a confirmed BTC sweep transaction.
  *
  * Flow:
  * 1. Fetch raw tx hex from mempool.space
  * 2. Upload raw tx to ChadBuffer
  * 3. Build verify_transaction instruction (btc-light-client)
- * 4. Build verify_stealth_deposit instruction (utxopia)
+ * 4. Build complete_deposit instruction (utxopia)
  * 5. Submit both in one Solana transaction
  * 6. Close buffer and reclaim rent
  *
@@ -442,7 +442,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<VerifyRes
       data: Buffer.from(verifyTxData),
     });
 
-    // 7. Build verify_stealth_deposit instruction
+    // 7. Build complete_deposit instruction
     const verifyDepositData = buildVerifyStealthDepositInstructionData({
       sweepTxid: sweepTxidInternal,
       blockHeight,

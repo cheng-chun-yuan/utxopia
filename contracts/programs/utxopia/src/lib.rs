@@ -68,7 +68,7 @@ pub mod instruction {
     pub const CLAIM_FEES: u8 = 10;
 
     // Deposit (11-12)
-    pub const VERIFY_STEALTH_DEPOSIT: u8 = 11;
+    pub const COMPLETE_DEPOSIT: u8 = 11;
     pub const SHIELD: u8 = 12;
 
     // JoinSplit (13-15) — all share n_in + n_out + n_pub + proof_source header
@@ -131,7 +131,7 @@ pub fn process_instruction(
         instruction::UPDATE_TOKEN_CONFIG => instructions::process_update_token_config(program_id, accounts, data),
         instruction::CLAIM_FEES => instructions::process_claim_fees(program_id, accounts, data),
         // Deposit (11-12)
-        instruction::VERIFY_STEALTH_DEPOSIT => instructions::process_verify_stealth_deposit(program_id, accounts, data),
+        instruction::COMPLETE_DEPOSIT => instructions::process_complete_deposit(program_id, accounts, data),
         instruction::SHIELD => instructions::process_shield(program_id, accounts, data),
         // JoinSplit (13-15)
         instruction::TRANSACT => instructions::process_transact(program_id, accounts, data),
@@ -214,7 +214,7 @@ mod tests {
             instruction::REGISTER_TOKEN,
             instruction::UPDATE_TOKEN_CONFIG,
             instruction::CLAIM_FEES,
-            instruction::VERIFY_STEALTH_DEPOSIT,
+            instruction::COMPLETE_DEPOSIT,
             instruction::SHIELD,
             instruction::TRANSACT,
             instruction::UNSHIELD,

@@ -311,7 +311,7 @@ export function getShieldType(d: DepositRecord): "btc" | "sol" | "usdc" | "usdt"
     if (sym === "JUPUSD") return "usdc"; // same decimals/display as USDC
     return "spl";
   }
-  if (d.instructionDisc === 1) return "btc"; // verify_stealth_deposit
+  if (d.instructionDisc === 1) return "btc"; // complete_deposit
   if (d.instructionDisc === 29) return "spl"; // SPL shield without token info
   return "btc"; // fallback
 }

@@ -56,12 +56,12 @@ pub const DEMO_REQUIRED_CONFIRMATIONS: u64 = 1;
 #[cfg(not(feature = "devnet"))]
 pub const DEMO_REQUIRED_CONFIRMATIONS: u64 = 6;
 
-/// Instruction data for verify_stealth_deposit (trustless npk extraction)
+/// Instruction data for complete_deposit (trustless npk extraction)
 ///
 /// The commitment is computed ON-CHAIN: Poseidon(npk, ZKBTC_TOKEN_ID, amount)
 /// npk + ephemeral_pub are extracted ON-CHAIN from the deposit TX's OP_RETURN.
 /// Amount is extracted from the SPV-verified sweep TX.
-pub struct VerifyStealthDepositData {
+pub struct CompleteDepositData {
     pub sweep_txid: [u8; 32],
     pub block_height: u64,
     pub sweep_tx_size: u32,
@@ -69,7 +69,7 @@ pub struct VerifyStealthDepositData {
     pub deposit_txid: [u8; 32],
 }
 
-impl VerifyStealthDepositData {
+impl CompleteDepositData {
     pub const HEADER_SIZE: usize = 32 + 8 + 4 + 4 + 32; // 80 bytes
 
     pub fn from_bytes(data: &[u8]) -> Result<Self, ProgramError> {
@@ -120,8 +120,8 @@ impl VerifyStealthDepositData {
 /// 13. `[writable]` TokenConfig PDA (for token_id, fees, total_shielded tracking)
 ///
 /// # Instruction data
-/// - VerifyStealthDepositData (80 bytes, fixed)
-pub fn process_verify_stealth_deposit(
+/// - CompleteDepositData (80 bytes, fixed)
+pub fn process_complete_deposit(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     data: &[u8],
@@ -146,7 +146,7 @@ pub fn process_verify_stealth_deposit(
     let token_config_info = &accounts[13];
 
     // Parse instruction data (no trailing merkle proof)
-    let ix_data = VerifyStealthDepositData::from_bytes(data)?;
+    let ix_data = CompleteDepositData::from_bytes(data)?;
 
     // Validate account owners
     validate_program_owner(pool_state_info, program_id)?;

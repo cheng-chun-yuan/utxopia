@@ -15,7 +15,7 @@
 //! | 8 | `register_token` | Multi-token |
 //! | 9 | `update_token_config` | Multi-token |
 //! | 10 | `claim_fees` | Multi-token |
-//! | 11 | `verify_stealth_deposit` | Deposit |
+//! | 11 | `complete_deposit` | Deposit |
 //! | 12 | `shield` | Deposit |
 //! | 13 | `transact` | JoinSplit |
 //! | 14 | `unshield` | JoinSplit (multi-output) |
@@ -27,7 +27,7 @@
 
 // Core operations
 pub mod initialize;
-pub mod verify_stealth_deposit;
+pub mod complete_deposit;
 pub mod register_deposit_intent;
 pub mod verify_deposit_v2;
 pub mod transact;
@@ -59,7 +59,7 @@ pub mod rotate_tree;
 
 // Re-exports
 pub use initialize::*;
-pub use verify_stealth_deposit::*;
+pub use complete_deposit::*;
 pub use register_deposit_intent::*;
 pub use verify_deposit_v2::*;
 pub use transact::*;

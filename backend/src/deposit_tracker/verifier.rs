@@ -2,7 +2,7 @@
 //!
 //! Submits sweep transactions for SPV verification on Solana.
 //! Uses btc-light-client's verify_transaction to create a VerifiedTransaction PDA,
-//! then calls utxopia's verify_stealth_deposit with that PDA.
+//! then calls utxopia's complete_deposit with that PDA.
 //!
 //! Raw Bitcoin transactions are uploaded to ChadBuffer accounts before verification.
 //! Core SPV utilities (ChadBuffer upload/close, strip_witness, etc.) live in
@@ -76,7 +76,7 @@ pub struct VerificationResult {
     pub leaf_index: u64,
     pub block_height: u64,
     /// The on-chain commitment (`Poseidon(npk, token_id, amount)`) extracted
-    /// from the stealth announcement event log emitted by `verify_stealth_deposit`.
+    /// from the stealth announcement event log emitted by `complete_deposit`.
     ///
     /// `None` if the log could not be parsed (older deployments / RPCs without
     /// log retention) — callers should treat this as best-effort.
@@ -144,7 +144,7 @@ impl SpvVerifier {
     /// Verify a Bitcoin deposit via SPV proof on Solana.
     ///
     /// Uploads raw sweep + deposit transactions to ChadBuffer accounts, then sends
-    /// two instructions: btc-light-client verify_transaction + utxopia verify_stealth_deposit.
+    /// two instructions: btc-light-client verify_transaction + utxopia complete_deposit.
     pub async fn verify_deposit(
         &self,
         sweep_txid: &str,
@@ -263,7 +263,7 @@ impl SpvVerifier {
     }
 
     /// Check if a deposit has already been verified by looking up the
-    /// deposit receipt PDA (created by verify_stealth_deposit on-chain).
+    /// deposit receipt PDA (created by complete_deposit on-chain).
     pub async fn is_already_verified(
         &self,
         deposit_txid: &str,
@@ -544,7 +544,7 @@ impl SpvVerifier {
     // Verification Transaction
     // =========================================================================
 
-    /// Get leaf index from a verify_stealth_deposit transaction's log events.
+    /// Get leaf index from a complete_deposit transaction's log events.
     ///
     /// Parses the stealth_announcement event (disc=0x03) emitted by the program.
     /// Event layout: disc(1) + type(1) + ephemeral_pub(32) + encrypted_amount(8) + commitment(32) + leaf_index(4)
@@ -554,7 +554,7 @@ impl SpvVerifier {
     }
 
     /// Parse the stealth announcement event (disc=0x03) emitted by
-    /// `verify_stealth_deposit` / `verify_deposit_v2` and return
+    /// `complete_deposit` / `verify_deposit_v2` and return
     /// `(leaf_index, commitment)`.
     ///
     /// Event layout (base64-encoded "Program data:" segments):
@@ -631,7 +631,7 @@ impl SpvVerifier {
     /// Send the verify_deposit transaction to Solana (two instructions).
     ///
     /// 1. btc-light-client verify_transaction (disc 2) — creates VerifiedTransaction PDA
-    /// 2. utxopia verify_stealth_deposit (disc 1) — reads ChadBuffer accounts, extracts npk
+    /// 2. utxopia complete_deposit (disc 1) — reads ChadBuffer accounts, extracts npk
     #[allow(clippy::too_many_arguments)]
     async fn send_verify_deposit_tx(
         &self,
@@ -692,7 +692,7 @@ impl SpvVerifier {
             sweep_buffer,
         )?;
 
-        // --- Instruction 2: utxopia verify_stealth_deposit (disc 1) ---
+        // --- Instruction 2: utxopia complete_deposit (disc 1) ---
         // Layout: disc(1) + sweep_txid(32) + block_height(8) + sweep_tx_size(4) + deposit_tx_size(4) + deposit_txid(32)
         let mut deposit_data = Vec::with_capacity(81);
         deposit_data.push(1u8); // discriminator
@@ -717,7 +717,7 @@ impl SpvVerifier {
             &self.program_id,
         );
 
-        // 13 accounts for verify_stealth_deposit
+        // 13 accounts for complete_deposit
         let deposit_accounts = vec![
             AccountMeta::new(pool_state, false),                        // 0: pool_state
             AccountMeta::new_readonly(verified_tx_pda, false),          // 1: verified_tx

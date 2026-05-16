@@ -85,7 +85,7 @@ const PROGRAM_ID = loadProgramId();
 // Instruction discriminators (must match lib.rs)
 const Instruction = {
   INITIALIZE: 0,
-  VERIFY_STEALTH_DEPOSIT: 1,
+  COMPLETE_DEPOSIT: 1,
   REQUEST_REDEMPTION: 5,
   COMPLETE_REDEMPTION: 6,
   SET_PAUSED: 7,

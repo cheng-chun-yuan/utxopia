@@ -17,7 +17,7 @@
 
 ## HIGH (Fix This Sprint)
 
-- [x] **H1** ChadBuffer owner not validated in verify_stealth_deposit
+- [x] **H1** ChadBuffer owner not validated in complete_deposit
 - [x] **H2** Complete redemption TX buffer owner not validated
 - [x] **H3** mark_processing missing writable validation
 - [x] **H4** XOR amount encryption: deterministic, unauthenticated, 64-bit key

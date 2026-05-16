@@ -671,7 +671,7 @@ function generateDepositWithdrawFlow() {
     })
   );
   els.push(
-    text(45, 405, "Phase 3: SPV Verification via btc-light-client Program (verify_stealth_deposit instruction)", {
+    text(45, 405, "Phase 3: SPV Verification via btc-light-client Program (complete_deposit instruction)", {
       fontSize: 14,
       strokeColor: "#1b5e20",
       textAlign: "left",
@@ -1787,7 +1787,7 @@ function generateStealthAnnouncement() {
     })
   );
   els.push(
-    text(50, compY + 65, "• Created by: verify_stealth_deposit\n• amount_bytes: plaintext u64 LE\n• PDA seed: [\"stealth\", btc_txid]\n• Scanning: read amount directly\n• Source: SPV-verified BTC deposit", {
+    text(50, compY + 65, "• Created by: complete_deposit\n• amount_bytes: plaintext u64 LE\n• PDA seed: [\"stealth\", btc_txid]\n• Scanning: read amount directly\n• Source: SPV-verified BTC deposit", {
       fontSize: 10,
       strokeColor: "#333",
       textAlign: "left",
@@ -1886,7 +1886,7 @@ function generateDepositLifecycleExample() {
         "Upload non-witness tx to ChadBuffer (212 bytes)",
         "Merkle proof: 1 sibling, tx_index: 1",
         "verify_transaction: validates in btc-light-client",
-        "verify_stealth_deposit:",
+        "complete_deposit:",
         "  commitment = Poseidon(npk, 0x7a627463, 10000)",
         "  → 0x09310e6e53c316...",
       ],

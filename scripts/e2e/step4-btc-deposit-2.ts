@@ -223,7 +223,7 @@ async function main() {
     ],
   })], [authority], 600_000);
 
-  // 5. verify_stealth_deposit
+  // 5. complete_deposit
   log("Uploading deposit TX to ChadBuffer...");
   const depositRawBuf = await fetchRawTx(depositTxid, ESPLORA_URL);
   const strippedDeposit = stripWitnessData(depositRawBuf);
@@ -237,7 +237,7 @@ async function main() {
 
   const vsdData = Buffer.alloc(1 + 80);
   off = 0;
-  vsdData[off++] = Disc.VERIFY_STEALTH_DEPOSIT;
+  vsdData[off++] = Disc.COMPLETE_DEPOSIT;
   Buffer.from(sweepTxHash).copy(vsdData, off); off += 32;
   vsdData.writeBigUInt64LE(BigInt(sweepBlockHeight), off); off += 8;
   vsdData.writeUInt32LE(strippedSweep.length, off); off += 4;
@@ -263,7 +263,7 @@ async function main() {
     ],
     programId: UTXOPIA, data: vsdData,
   })], [authority], 600_000);
-  log(`verify_stealth_deposit: ${vsdSig.slice(0, 20)}...`);
+  log(`complete_deposit: ${vsdSig.slice(0, 20)}...`);
 
   // 6. Read EXACT commitment + amount from on-chain tx logs
   const txResult = await connection.getTransaction(vsdSig, { maxSupportedTransactionVersion: 0 });

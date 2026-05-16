@@ -65,8 +65,8 @@ import {
  */
 export const STEALTH_OP_RETURN_SIZE = 32;
 
-/** Instruction discriminator for verify_stealth_deposit */
-export const VERIFY_STEALTH_DEPOSIT_DISCRIMINATOR = 11;
+/** Instruction discriminator for complete_deposit */
+export const COMPLETE_DEPOSIT_DISCRIMINATOR = 11;
 
 import { UTXOPIA_PROGRAM_ID } from "./pda";
 import { debug } from "./logger";
@@ -198,7 +198,7 @@ export function parseStealthOpReturn(
  * @param verifiedTransactionPda - Address of the btc-light-client VerifiedTransaction PDA
  * @param blockHash - Block hash (32 bytes) used to derive the VerifiedTransaction PDA
  */
-export async function verifyStealthDeposit(
+export async function completeDeposit(
   rpc: Rpc<SolanaRpcApi>,
   rpcSubscriptions: RpcSubscriptions<SolanaRpcSubscriptionsApi>,
   payer: KeyPairSigner,
@@ -285,7 +285,7 @@ export async function verifyStealthDeposit(
 }
 
 /**
- * Build instruction data for verify_stealth_deposit
+ * Build instruction data for complete_deposit
  *
  * Layout (117 bytes = 1 disc + 116 data):
  * - discriminator: 1 byte
@@ -308,7 +308,7 @@ function buildVerifyStealthDepositData(params: {
   const data = new Uint8Array(1 + 32 + 8 + 8 + 4 + 32 + 32);
   let offset = 0;
 
-  data[offset++] = VERIFY_STEALTH_DEPOSIT_DISCRIMINATOR;
+  data[offset++] = COMPLETE_DEPOSIT_DISCRIMINATOR;
 
   data.set(params.txid, offset);
   offset += 32;

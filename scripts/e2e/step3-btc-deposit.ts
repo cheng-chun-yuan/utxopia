@@ -10,7 +10,7 @@
  *   5. Init light client, submit headers
  *   6. Upload sweep TX to ChadBuffer → call verify_transaction (creates VerifiedTransaction PDA)
  *   7. Upload deposit TX to ChadBuffer
- *   8. Call verify_stealth_deposit (14 accounts)
+ *   8. Call complete_deposit (14 accounts)
  */
 
 import {
@@ -362,9 +362,9 @@ async function main() {
   log(`Deposit ChadBuffer: ${depositBuffer.publicKey.toBase58().slice(0, 16)}...`);
 
   // =========================================================================
-  // 8. Call verify_stealth_deposit (14 accounts)
+  // 8. Call complete_deposit (14 accounts)
   // =========================================================================
-  log("Calling verify_stealth_deposit...");
+  log("Calling complete_deposit...");
 
   // Compute deposit txid in internal order
   const depositTxidBytes = Buffer.from(depositTxid, "hex");
@@ -389,7 +389,7 @@ async function main() {
   // Instruction data: sweep_txid(32) + block_height(8) + sweep_tx_size(4) + deposit_tx_size(4) + deposit_txid(32) = 80 bytes
   const vsdData = Buffer.alloc(1 + 80);
   off = 0;
-  vsdData[off++] = Disc.VERIFY_STEALTH_DEPOSIT;
+  vsdData[off++] = Disc.COMPLETE_DEPOSIT;
   Buffer.from(sweepTxHash).copy(vsdData, off); off += 32;
   vsdData.writeBigUInt64LE(BigInt(sweepBlockHeight), off); off += 8;
   vsdData.writeUInt32LE(strippedSweep.length, off); off += 4;
@@ -418,7 +418,7 @@ async function main() {
   });
 
   const vsdSig = await sendIx([vsdIx], [authority], 600_000);
-  log(`verify_stealth_deposit: ${vsdSig.slice(0, 20)}...`);
+  log(`complete_deposit: ${vsdSig.slice(0, 20)}...`);
 
   // Read EXACT commitment + shielded amount from on-chain tx logs
   // (amount after deposit fees, matching what Poseidon hashed into the commitment)

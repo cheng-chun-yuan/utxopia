@@ -276,7 +276,7 @@ utxopia/
 | 3–5 | Pool-update timelock | `PROPOSE` / `EXECUTE` / `CANCEL` (48h delay) |
 | 6–7 | VK registry | Init/update Groth16 verification-key hashes |
 | 8–10 | Multi-token admin | `REGISTER_TOKEN`, `UPDATE_TOKEN_CONFIG`, `CLAIM_FEES` |
-| 11 | `VERIFY_STEALTH_DEPOSIT` | Verify BTC deposit via SPV, compute commitment on-chain |
+| 11 | `COMPLETE_DEPOSIT` | Verify BTC deposit via SPV, compute commitment on-chain |
 | 12 | `SHIELD` | Shield SPL tokens (zkSOL / zkUSDC / zkUSDT) into the pool |
 | 13 | `TRANSACT` | JoinSplit N-to-M private transfer (Groth16) |
 | 14 | `UNSHIELD` | JoinSplit transfer with SPL token output (privacy → public) |

@@ -140,9 +140,9 @@ Frontend displays: Request → Processing → BTC Sent → Complete (with all tx
 | 0x0A | RedemptionProcessing | requester + amount + request_id + slot | mark_processing |
 | 0x0B | NullifiersBatch | count + op_type + ix_disc + hashes[] | transact, unshield |
 | 0x0C | AnnouncementsBatch | count + announcements[] | transact (multi-output) |
-| 0x0D | DepositVerified | sweep_txid + deposit_txid + amount + leaf | verify_stealth_deposit |
+| 0x0D | DepositVerified | sweep_txid + deposit_txid + amount + leaf | complete_deposit |
 | 0x0E | UnshieldMeta | amount + recipient + token_id | unshield |
-| 0x0F | UtxoCreated | txid + vout + amount | verify_stealth_deposit, complete_redemption |
+| 0x0F | UtxoCreated | txid + vout + amount | complete_deposit, complete_redemption |
 | 0x10 | UtxoConsumed | txid + vout + amount | complete_redemption |
 
 ## NullifierOperationType Enum

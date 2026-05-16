@@ -142,7 +142,7 @@ async function main() {
   // =========================================================================
   // 1. mark_processing (disc=2) with UTXO reservation
   // =========================================================================
-  // The withdrawal uses btcNote2's deposit UTXO (created by verify_stealth_deposit in step4).
+  // The withdrawal uses btcNote2's deposit UTXO (created by complete_deposit in step4).
   // Derive the UTXO PDA from the sweep txid (internal byte order) and vout.
   const btcNote2 = state.btcNote2;
   if (!btcNote2?.sweepTxid) {
