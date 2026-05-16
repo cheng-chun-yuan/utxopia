@@ -127,23 +127,31 @@ function DepositDetails({ deposit, config, isBtc }: { deposit: DepositRecord; co
                 </div>
               </div>
             )}
-            {/* Fee breakdown */}
-            {(serviceFee > 0 || minerFee > 0) && (
-              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[10px] text-gray/50 font-mono pt-1 border-t border-green-500/8">
-                {serviceFee > 0 && (
-                  <>
-                    <span>Service fee</span>
-                    <span>{fmtAmount(serviceFee)} {config.unit}</span>
-                  </>
-                )}
-                {minerFee > 0 && (
-                  <>
-                    <span>Miner fee</span>
-                    <span>{fmtAmount(minerFee)} {config.unit}</span>
-                  </>
-                )}
-              </div>
-            )}
+            {/* Fee breakdown — for BTC the delta is a few hundred sats,
+                which vanishes in 8-decimal BTC display. Render fees in
+                their natural unit (sats) regardless of the amount unit. */}
+            {(serviceFee > 0 || minerFee > 0) && (() => {
+              const feeUnit = isBtc ? "sats" : config.unit;
+              const fmtFee = (n: number) => isBtc
+                ? n.toLocaleString()
+                : fmtAmount(n);
+              return (
+                <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[10px] text-gray/50 font-mono pt-1 border-t border-green-500/8">
+                  {serviceFee > 0 && (
+                    <>
+                      <span>Service fee</span>
+                      <span>−{fmtFee(serviceFee)} {feeUnit}</span>
+                    </>
+                  )}
+                  {minerFee > 0 && (
+                    <>
+                      <span>Miner fee</span>
+                      <span>−{fmtFee(minerFee)} {feeUnit}</span>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
