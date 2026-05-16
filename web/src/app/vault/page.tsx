@@ -651,13 +651,8 @@ export default function VaultPage() {
                 notifyCopied("Viewing key");
                 setViewKeyModalOpen(false);
               }}
-              holdDuration={1500}
-              className={cn(
-                "w-full flex items-center justify-center gap-2 px-4 py-3 rounded-[12px]",
-                "bg-btc/10 hover:bg-btc/20 border border-btc/20",
-                "text-body2 text-btc font-medium transition-all cursor-pointer"
-              )}
-              progressClassName="bg-btc"
+              variant="warning"
+              className="w-full"
               title="Hold to copy viewing key"
             >
               {viewKeyCopied ? <Check className="w-4 h-4" /> : <Eye className="w-4 h-4" />}

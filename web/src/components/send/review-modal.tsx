@@ -56,7 +56,8 @@ export function ReviewModal({
           <div className="mt-5">
             <HoldButton
               onComplete={onConfirm}
-              className="w-full px-4 py-3 rounded-lg bg-privacy text-background text-sm font-medium"
+              variant="primary"
+              className="w-full"
             >
               Hold to send
             </HoldButton>

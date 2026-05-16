@@ -123,32 +123,40 @@ export function SendForm() {
   const usdPerUnit = tokenPrices.btc ?? null;
 
   // Preview-resolve `.btcpro.sol` recipients so we can surface the
-  // "auditor-disclosable" chip before the user clicks Send. Resolution is
-  // best-effort: failures (network, missing record) just leave the chip off.
-  // The resolution is debounced via the dependency on `state.recipient` —
-  // React's useEffect only re-runs when the input or detection type changes.
-  const [resolvedSns, setResolvedSns] = useState<SnsStealthAddress | null>(null);
+  // "auditor-disclosable" chip + block Send if the name doesn't exist.
+  // Tri-state: idle (not an SNS input) / resolving / found / not_found.
+  type SnsState =
+    | { kind: "idle" }
+    | { kind: "resolving" }
+    | { kind: "found"; resolved: SnsStealthAddress }
+    | { kind: "not_found" };
+  const [snsState, setSnsState] = useState<SnsState>({ kind: "idle" });
   useEffect(() => {
     if (detection.type !== "stealth_sns") {
-      setResolvedSns(null);
+      setSnsState({ kind: "idle" });
       return;
     }
     const sub = state.recipient.trim().toLowerCase().replace(/\.btcpro\.sol$/, "");
     if (!sub) {
-      setResolvedSns(null);
+      setSnsState({ kind: "idle" });
       return;
     }
+    setSnsState({ kind: "resolving" });
     let cancelled = false;
-    void lookupSnsName(sub).then((r) => {
-      if (!cancelled) setResolvedSns(r ?? null);
-    }).catch(() => {
-      if (!cancelled) setResolvedSns(null);
-    });
+    void lookupSnsName(sub)
+      .then((r) => {
+        if (cancelled) return;
+        setSnsState(r ? { kind: "found", resolved: r } : { kind: "not_found" });
+      })
+      .catch(() => {
+        if (!cancelled) setSnsState({ kind: "not_found" });
+      });
     return () => {
       cancelled = true;
     };
   }, [detection.type, state.recipient, lookupSnsName]);
 
+  const resolvedSns = snsState.kind === "found" ? snsState.resolved : null;
   const showAuditorBadge = resolvedSns != null && isAuditorDisclosable(resolvedSns);
 
   const selectedPayToken = useMemo(
@@ -170,7 +178,11 @@ export function SendForm() {
   const recipientValid =
     detection.type !== "empty" &&
     detection.type !== "invalid" &&
-    detection.type !== "ambiguous";
+    detection.type !== "ambiguous" &&
+    // SNS names must actually resolve on-chain before we let the rest of
+    // the form unlock — otherwise the user wastes time picking notes for
+    // a recipient that doesn't exist.
+    (detection.type !== "stealth_sns" || snsState.kind === "found");
 
   // Narrowed alias used by JSX + buildSendIntent; only meaningful when
   // recipientValid is true (the JSX gates on that before reading it).
@@ -378,6 +390,7 @@ export function SendForm() {
       <RecipientInput
         value={state.recipient}
         onChange={(v) => dispatch({ type: "set_recipient", value: v })}
+        snsStatus={snsState.kind}
       />
 
       {showAuditorBadge && (

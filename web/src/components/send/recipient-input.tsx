@@ -5,30 +5,47 @@ import { useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { detectRecipient, type DetectionResult } from "./recipient-detect";
 
+/**
+ * SNS resolution state, fed in from the parent form so the input can
+ * surface "Resolving…" / "Cannot find …btcpro.sol" / valid messaging
+ * without owning the lookup itself.
+ */
+export type SnsStatus = "idle" | "resolving" | "found" | "not_found";
+
 export interface RecipientInputProps {
   value: string;
   onChange: (next: string) => void;
-  /** True while async resolution (SNS) is in flight. */
-  resolving?: boolean;
+  /** SNS resolve state from the parent (only meaningful for stealth_sns). */
+  snsStatus?: SnsStatus;
   className?: string;
 }
 
 function statusFor(
   value: string,
-  resolving: boolean,
+  snsStatus: SnsStatus,
 ): {
   detection: DetectionResult;
   tone: "neutral" | "ok" | "warn" | "bad";
   label: string;
 } {
-  if (resolving) {
-    return {
-      detection: { type: "empty", confidence: "low" },
-      tone: "warn",
-      label: "Resolving SNS name…",
-    };
-  }
   const detection = detectRecipient(value);
+  // SNS-specific states override the generic detection feedback, since
+  // a syntactically-valid `.btcpro.sol` name can still point to nothing.
+  if (detection.type === "stealth_sns") {
+    if (snsStatus === "resolving") {
+      return { detection, tone: "warn", label: "Looking up .btcpro.sol record…" };
+    }
+    if (snsStatus === "not_found") {
+      return {
+        detection,
+        tone: "bad",
+        label: "Cannot find this .btcpro.sol — name not registered",
+      };
+    }
+    if (snsStatus === "found") {
+      return { detection, tone: "ok", label: "Resolved" };
+    }
+  }
   if (detection.type === "empty") {
     return { detection, tone: "neutral", label: "" };
   }
@@ -52,10 +69,10 @@ function statusFor(
 export function RecipientInput({
   value,
   onChange,
-  resolving = false,
+  snsStatus = "idle",
   className,
 }: RecipientInputProps) {
-  const { tone, label } = statusFor(value, resolving);
+  const { tone, label } = statusFor(value, snsStatus);
 
   const onPasteFromClipboard = useCallback(async () => {
     try {

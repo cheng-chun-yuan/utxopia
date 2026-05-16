@@ -1,9 +1,8 @@
 "use client";
 
 import { useMemo, useState, useSyncExternalStore } from "react";
-import { Check, AlertTriangle, ExternalLink } from "lucide-react";
+import { AlertTriangle, ExternalLink, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { InfoTip } from "@/components/ui/info-tip";
 import {
   detectNetwork,
   setNetwork,
@@ -13,17 +12,21 @@ import {
   type NetworkMeta,
 } from "@/lib/network-config";
 
-// Subscription helper: re-render the picker when localStorage changes in
-// another tab. The detect call happens on every render but is cheap.
+// Re-render when localStorage flips in another tab.
 function subscribe(onChange: () => void) {
   if (typeof window === "undefined") return () => {};
   window.addEventListener("storage", onChange);
   return () => window.removeEventListener("storage", onChange);
 }
 
+/**
+ * Network selector — flat radio-style rows, not fat cards. The active
+ * network gets a filled privacy-green indicator dot; inactive rows show
+ * a hairline ring. Description + caveats are kept behind a per-row
+ * Details disclosure so the list scans like a contact list, not a wall
+ * of cards.
+ */
 export function NetworkSelector() {
-  // useSyncExternalStore avoids the lint-flagged setState-in-useEffect
-  // pattern while staying SSR-safe (server snapshot returns a fixed default).
   const active = useSyncExternalStore<NetworkId>(
     subscribe,
     () => detectNetwork(),
@@ -35,23 +38,15 @@ export function NetworkSelector() {
     if (id === active) return;
     setPending(id);
     setNetwork(id);
-    // Hard reload — many singletons read network config at module load.
+    // Hard reload — most singletons read network config at module load.
     setTimeout(() => window.location.reload(), 50);
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <h3 className="text-sm font-medium">Network</h3>
-        <InfoTip label="About Network">
-          Which UTXOpia stack the app talks to. Stored per-browser; reloads
-          on switch.
-        </InfoTip>
-      </div>
-
-      <div className="space-y-2.5">
+      <ul className="divide-y divide-gray/10 border-y border-gray/10">
         {NETWORK_META.filter((n) => n.enabled).map((meta) => (
-          <NetworkCard
+          <NetworkRow
             key={meta.id}
             meta={meta}
             active={active === meta.id}
@@ -59,12 +54,13 @@ export function NetworkSelector() {
             onSelect={() => handleSelect(meta.id)}
           />
         ))}
-      </div>
+      </ul>
 
       {active && (
-        <details className="text-xs">
-          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
-            Show effective config
+        <details className="text-[11px] text-gray group" >
+          <summary className="list-none cursor-pointer inline-flex items-center gap-1 hover:text-foreground transition-colors">
+            <ChevronDown className="w-3 h-3 transition-transform group-open:rotate-180" />
+            Effective config
           </summary>
           <ConfigReadout networkId={active} />
         </details>
@@ -73,7 +69,7 @@ export function NetworkSelector() {
   );
 }
 
-function NetworkCard({
+function NetworkRow({
   meta,
   active,
   pending,
@@ -85,75 +81,100 @@ function NetworkCard({
   onSelect: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      disabled={pending}
-      className={cn(
-        "w-full text-left rounded-xl border p-4 transition-all",
-        active
-          ? "border-privacy/40 bg-privacy/5"
-          : "border-gray/15 bg-muted/20 hover:border-privacy/30 hover:bg-privacy/[0.03]",
-        pending ? "opacity-50 cursor-wait" : "cursor-pointer",
-      )}
-    >
-      <div className="flex items-start gap-3">
-        <div
-          className={cn(
-            "mt-0.5 h-5 w-5 rounded-full border flex items-center justify-center shrink-0",
-            active
-              ? "border-privacy bg-privacy text-background"
-              : "border-gray/30",
-          )}
-        >
-          {active && <Check className="h-3 w-3" strokeWidth={3} />}
-        </div>
+    <li>
+      <div
+        className={cn(
+          "group relative py-3 px-1 transition-colors",
+          active ? "bg-privacy/[0.03]" : "hover:bg-muted/20",
+          pending && "opacity-50",
+        )}
+      >
+        <div className="flex items-start gap-3">
+          {/* Radio indicator — filled privacy-green when active */}
+          <button
+            type="button"
+            onClick={onSelect}
+            disabled={pending}
+            aria-pressed={active}
+            aria-label={`Switch to ${meta.label}`}
+            className={cn(
+              "shrink-0 mt-1 h-3.5 w-3.5 rounded-full transition-all duration-200",
+              "flex items-center justify-center",
+              active
+                ? "bg-privacy ring-2 ring-privacy/30 ring-offset-2 ring-offset-background"
+                : "border border-gray/40 hover:border-foreground/60",
+              pending ? "cursor-wait" : "cursor-pointer",
+            )}
+          />
 
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium text-sm">{meta.label}</span>
-            <span className="text-[11px] text-muted-foreground font-mono">
-              {meta.id}
-            </span>
-            {active && (
-              <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-privacy/15 text-privacy font-semibold">
-                Active
-              </span>
+          <div className="flex-1 min-w-0">
+            {/* Click target spans the label area too */}
+            <button
+              type="button"
+              onClick={onSelect}
+              disabled={pending}
+              className="block w-full text-left disabled:cursor-wait"
+            >
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <span
+                  className={cn(
+                    "text-sm transition-colors",
+                    active
+                      ? "text-foreground font-semibold"
+                      : "text-foreground/85 font-medium group-hover:text-foreground",
+                  )}
+                >
+                  {meta.label}
+                </span>
+                <span className="text-[11px] text-gray font-mono">
+                  {meta.id}
+                </span>
+                {active && (
+                  <span className="text-[9px] uppercase tracking-[0.15em] text-privacy font-semibold">
+                    Active
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-gray mt-0.5 truncate">
+                {meta.tagline}
+              </p>
+            </button>
+
+            {(meta.description || meta.caveats.length > 0) && (
+              <details
+                className="mt-1.5 group/d"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <summary className="list-none cursor-pointer inline-flex items-center gap-1 text-[11px] text-gray/80 hover:text-foreground transition-colors">
+                  <ChevronDown className="w-3 h-3 transition-transform group-open/d:rotate-180" />
+                  Details
+                </summary>
+                <div className="mt-2 space-y-2 pl-1">
+                  {meta.description && (
+                    <p className="text-[12px] text-gray leading-relaxed max-w-[60ch]">
+                      {meta.description}
+                    </p>
+                  )}
+                  {meta.caveats.length > 0 && (
+                    <ul className="space-y-1">
+                      {meta.caveats.map((c, i) => (
+                        <li
+                          key={i}
+                          className="text-[11px] text-gray flex items-start gap-1.5"
+                        >
+                          <AlertTriangle className="h-3 w-3 mt-0.5 text-warning shrink-0" />
+                          <span>{c}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </details>
             )}
           </div>
-          <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-            {meta.tagline}
-          </p>
-
-          {(meta.description || meta.caveats.length > 0) && (
-            <details
-              className="mt-1.5"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <summary className="list-none cursor-pointer inline-block text-[11px] text-muted-foreground hover:text-foreground transition-colors">
-                Details
-              </summary>
-              <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                {meta.description}
-              </p>
-              {meta.caveats.length > 0 && (
-                <ul className="mt-2 space-y-1">
-                  {meta.caveats.map((c, i) => (
-                    <li
-                      key={i}
-                      className="text-[11px] text-muted-foreground flex items-start gap-1.5"
-                    >
-                      <AlertTriangle className="h-3 w-3 mt-0.5 text-amber-500 shrink-0" />
-                      <span>{c}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </details>
-          )}
         </div>
       </div>
-    </button>
+    </li>
   );
 }
 
@@ -179,7 +200,7 @@ function ConfigReadout({ networkId }: { networkId: NetworkId }) {
   ];
 
   return (
-    <div className="mt-2 rounded-lg border border-gray/10 bg-muted/10 overflow-hidden">
+    <div className="mt-2 rounded-md bg-muted/20 overflow-hidden">
       {rows.map(([label, value, link], i) => (
         <div
           key={label}
@@ -188,23 +209,23 @@ function ConfigReadout({ networkId }: { networkId: NetworkId }) {
             i > 0 && "border-t border-gray/5",
           )}
         >
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground w-24 shrink-0">
+          <span className="text-[10px] uppercase tracking-[0.12em] text-gray w-24 shrink-0">
             {label}
           </span>
-          <span className="font-mono text-[11px] break-all">
+          <span className="font-mono text-[11px] break-all text-foreground/85">
             {link ? (
               <a
                 href={link}
                 target="_blank"
                 rel="noreferrer"
-                className="hover:text-privacy inline-flex items-center gap-1"
+                className="hover:text-privacy inline-flex items-center gap-1 transition-colors"
               >
                 {value}
                 <ExternalLink className="h-2.5 w-2.5 shrink-0" />
               </a>
             ) : (
               value || (
-                <span className="text-muted-foreground italic">unset</span>
+                <span className="text-gray italic">unset</span>
               )
             )}
           </span>
