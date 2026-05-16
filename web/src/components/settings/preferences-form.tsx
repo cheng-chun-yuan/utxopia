@@ -7,6 +7,7 @@ import { useUiMode } from "@/hooks/use-ui-mode";
 import { useSnsName } from "@/hooks/use-sns-name";
 import { cn } from "@/lib/utils";
 import { NetworkSelector } from "@/components/settings/network-selector";
+import { InfoTip } from "@/components/ui/info-tip";
 import { SnsComplianceFlags } from "@utxopia/sdk";
 
 export function PreferencesForm() {
@@ -22,43 +23,42 @@ export function PreferencesForm() {
 
       <div
         className={cn(
-          "flex items-start justify-between gap-4 p-4 rounded-xl border",
-          "border-gray/15 bg-muted/20",
+          "p-4 rounded-xl border border-gray/15 bg-muted/20",
           advancedDisabled && "opacity-70",
         )}
       >
-        <div>
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2 min-w-0">
             <h3 className="text-sm font-medium">Advanced send</h3>
             {advancedDisabled && (
               <span className="text-[10px] uppercase tracking-wide text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
                 Coming soon
               </span>
             )}
+            <InfoTip label="About Advanced send">
+              Multi-output sends (batch to multiple recipients in one ZK proof),
+              custom Bitcoin fee rate, and manual coin selection.
+            </InfoTip>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Multi-output sends (batch to multiple recipients in one ZK proof),
-            custom Bitcoin fee rate, and manual coin selection.
-          </p>
-        </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={isAdvanced}
-          disabled={advancedDisabled}
-          className={cn(
-            "shrink-0 w-10 h-6 rounded-full p-0.5 transition-colors",
-            isAdvanced ? "bg-privacy" : "bg-muted",
-            advancedDisabled && "cursor-not-allowed",
-          )}
-        >
-          <span
+          <button
+            type="button"
+            role="switch"
+            aria-checked={isAdvanced}
+            disabled={advancedDisabled}
             className={cn(
-              "block w-5 h-5 rounded-full bg-background transition-transform",
-              isAdvanced ? "translate-x-4" : "translate-x-0",
+              "shrink-0 w-10 h-6 rounded-full p-0.5 transition-colors",
+              isAdvanced ? "bg-privacy" : "bg-muted",
+              advancedDisabled && "cursor-not-allowed",
             )}
-          />
-        </button>
+          >
+            <span
+              className={cn(
+                "block w-5 h-5 rounded-full bg-background transition-transform",
+                isAdvanced ? "translate-x-4" : "translate-x-0",
+              )}
+            />
+          </button>
+        </div>
       </div>
 
       <AuditorDisclosableToggle />
@@ -109,19 +109,17 @@ function AuditorPubkeyField() {
         disabled && "opacity-70",
       )}
     >
-      <div>
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-medium">Designated auditor (optional)</h3>
-          {sns.isRegistering && (
-            <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground mt-1">
+      <div className="flex items-center gap-2">
+        <h3 className="text-sm font-medium">Designated auditor (optional)</h3>
+        {sns.isRegistering && (
+          <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
+        )}
+        <InfoTip label="About Designated auditor">
           Public Solana pubkey of the auditor you've issued a
           DelegatedViewKey to (off-chain). Senders see this in the badge
           when they enter your name, so they know who you've granted
           read-only access to. Leave blank to publish only the flag bit.
-        </p>
+        </InfoTip>
       </div>
 
       <input
@@ -193,13 +191,12 @@ function AuditorDisclosableToggle() {
   return (
     <div
       className={cn(
-        "flex items-start justify-between gap-4 p-4 rounded-xl border",
-        "border-gray/15 bg-muted/20",
+        "p-4 rounded-xl border border-gray/15 bg-muted/20",
         disabled && "opacity-70",
       )}
     >
-      <div>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2 min-w-0 flex-wrap">
           <h3 className="text-sm font-medium">Auditor-disclosable</h3>
           {!sns.hasRegisteredSnsName && (
             <span className="text-[10px] uppercase tracking-wide text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
@@ -209,37 +206,37 @@ function AuditorDisclosableToggle() {
           {sns.isRegistering && (
             <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
           )}
+          <InfoTip label="About Auditor-disclosable">
+            Publishes a public signal on your `.btcpro.sol` record that you're
+            OK receiving outgoing audit memos. Senders see an "Auditor-disclosable"
+            chip when they enter your name. Your viewing keys are NOT shared by
+            this flag — you still issue DelegatedViewKeys to specific auditors
+            separately.
+          </InfoTip>
         </div>
-        <p className="text-xs text-muted-foreground mt-1">
-          Publishes a public signal on your `.btcpro.sol` record that you're
-          OK receiving outgoing audit memos. Senders see an "Auditor-disclosable"
-          chip when they enter your name. Your viewing keys are NOT shared by
-          this flag — you still issue DelegatedViewKeys to specific auditors
-          separately.
-        </p>
-        {sns.error && (
-          <p className="text-xs text-error mt-2 font-mono break-all">{sns.error}</p>
-        )}
-      </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={enabled}
-        disabled={disabled}
-        onClick={handleToggle}
-        className={cn(
-          "shrink-0 w-10 h-6 rounded-full p-0.5 transition-colors",
-          enabled ? "bg-success" : "bg-muted",
-          disabled && "cursor-not-allowed",
-        )}
-      >
-        <span
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          disabled={disabled}
+          onClick={handleToggle}
           className={cn(
-            "block w-5 h-5 rounded-full bg-background transition-transform",
-            enabled ? "translate-x-4" : "translate-x-0",
+            "shrink-0 w-10 h-6 rounded-full p-0.5 transition-colors",
+            enabled ? "bg-success" : "bg-muted",
+            disabled && "cursor-not-allowed",
           )}
-        />
-      </button>
+        >
+          <span
+            className={cn(
+              "block w-5 h-5 rounded-full bg-background transition-transform",
+              enabled ? "translate-x-4" : "translate-x-0",
+            )}
+          />
+        </button>
+      </div>
+      {sns.error && (
+        <p className="text-xs text-error mt-2 font-mono break-all">{sns.error}</p>
+      )}
     </div>
   );
 }

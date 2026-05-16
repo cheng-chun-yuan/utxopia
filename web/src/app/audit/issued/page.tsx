@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { InfoTip } from "@/components/ui/info-tip";
 import {
   createDelegatedViewKey,
   deriveKeysFromSeed,
@@ -73,7 +74,16 @@ export default function IssuedDelegationsPage() {
       <SiteHeader />
       <main className="mx-auto max-w-5xl px-4 py-12">
         <div className="flex items-baseline justify-between gap-4">
-          <h1 className="text-3xl font-semibold tracking-tight">Issued delegations</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-3xl font-semibold tracking-tight">Issued delegations</h1>
+            <InfoTip label="About Issued delegations">
+              Your record of every delegated viewing key you've handed out — the
+              secret key material itself is never stored here, only public
+              metadata. Revoke is local-only (it just marks the record; the
+              recipient's copy of the key still works until the wall-clock
+              expiry).
+            </InfoTip>
+          </div>
           <div className="flex gap-2">
             <button
               type="button"
@@ -101,14 +111,6 @@ export default function IssuedDelegationsPage() {
             />
           </div>
         </div>
-        <p className="mt-2 max-w-2xl text-sm text-zinc-400">
-          Your record of every delegated viewing key you've handed out — the
-          secret key material itself is never stored here, only public
-          metadata. Revoke is local-only (it just marks the record; the
-          recipient's copy of the key still works until the wall-clock
-          expiry).
-        </p>
-
         {records.length === 0 ? (
           <div className="mt-10 rounded-xl border border-zinc-800 bg-zinc-900/40 p-8 text-center text-sm text-zinc-400">
             No delegations recorded yet. Issue one with{" "}

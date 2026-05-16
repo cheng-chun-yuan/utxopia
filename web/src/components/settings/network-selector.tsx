@@ -3,6 +3,7 @@
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { Check, AlertTriangle, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { InfoTip } from "@/components/ui/info-tip";
 import {
   detectNetwork,
   setNetwork,
@@ -39,13 +40,13 @@ export function NetworkSelector() {
   }
 
   return (
-    <div className="space-y-4">
-      <div>
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
         <h3 className="text-sm font-medium">Network</h3>
-        <p className="text-xs text-muted-foreground mt-1">
+        <InfoTip label="About Network">
           Which UTXOpia stack the app talks to. Stored per-browser; reloads
           on switch.
-        </p>
+        </InfoTip>
       </div>
 
       <div className="space-y-2.5">
@@ -111,31 +112,44 @@ function NetworkCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium text-sm">{meta.label}</span>
+            <span className="text-[11px] text-muted-foreground font-mono">
+              {meta.id}
+            </span>
             {active && (
               <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-privacy/15 text-privacy font-semibold">
                 Active
               </span>
             )}
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5 font-mono">
-            {meta.id}
-          </p>
-          <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-            {meta.description}
+          <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+            {meta.tagline}
           </p>
 
-          {meta.caveats.length > 0 && (
-            <ul className="mt-2.5 space-y-1">
-              {meta.caveats.map((c, i) => (
-                <li
-                  key={i}
-                  className="text-[11px] text-muted-foreground flex items-start gap-1.5"
-                >
-                  <AlertTriangle className="h-3 w-3 mt-0.5 text-amber-500 shrink-0" />
-                  <span>{c}</span>
-                </li>
-              ))}
-            </ul>
+          {(meta.description || meta.caveats.length > 0) && (
+            <details
+              className="mt-1.5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <summary className="list-none cursor-pointer inline-block text-[11px] text-muted-foreground hover:text-foreground transition-colors">
+                Details
+              </summary>
+              <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                {meta.description}
+              </p>
+              {meta.caveats.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {meta.caveats.map((c, i) => (
+                    <li
+                      key={i}
+                      className="text-[11px] text-muted-foreground flex items-start gap-1.5"
+                    >
+                      <AlertTriangle className="h-3 w-3 mt-0.5 text-amber-500 shrink-0" />
+                      <span>{c}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </details>
           )}
         </div>
       </div>

@@ -14,6 +14,7 @@ import {
 } from "@utxopia/sdk";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { InfoTip } from "@/components/ui/info-tip";
 import { getBackendUrl } from "@/lib/api/constants";
 import { getNetworkConfig } from "@/lib/network-config";
 
@@ -103,12 +104,14 @@ export default function AuditPage() {
     <div className="min-h-screen bg-gradient-to-b from-black to-zinc-950 text-white">
       <SiteHeader />
       <main className="mx-auto max-w-5xl px-4 py-12">
-        <h1 className="text-3xl font-semibold tracking-tight">Audit mode</h1>
-        <p className="mt-2 max-w-2xl text-sm text-zinc-400">
-          Decrypt a delegated viewing key in your browser and produce a CSV report.
-          Nothing leaves your device — the key is decrypted in-browser, announcements
-          are fetched directly from the public backend.
-        </p>
+        <div className="flex items-center gap-2">
+          <h1 className="text-3xl font-semibold tracking-tight">Audit mode</h1>
+          <InfoTip label="About Audit mode">
+            Decrypt a delegated viewing key in your browser and produce a CSV report.
+            Nothing leaves your device — the key is decrypted in-browser, announcements
+            are fetched directly from the public backend.
+          </InfoTip>
+        </div>
 
         <section className="mt-8 rounded-xl border border-zinc-800 bg-zinc-900/40 p-6">
           <h2 className="text-sm font-medium uppercase tracking-wider text-zinc-400">
