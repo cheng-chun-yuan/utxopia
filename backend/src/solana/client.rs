@@ -661,11 +661,11 @@ impl SolClient {
     // Redemption Instructions
     // ========================================================================
 
-    /// Fetch all on-chain RedemptionRequest PDAs (98-byte accounts with discriminator 0x04)
+    /// Fetch all on-chain RedemptionRequest PDAs (106-byte accounts with discriminator 0x04).
     pub fn fetch_redemption_pdas(&self) -> Result<Vec<ParsedRedemption>, SolError> {
         let config = RpcProgramAccountsConfig {
             filters: Some(vec![
-                RpcFilterType::DataSize(98),
+                RpcFilterType::DataSize(106),
                 RpcFilterType::Memcmp(Memcmp::new_raw_bytes(0, vec![0x04])),
             ]),
             account_config: solana_client::rpc_config::RpcAccountInfoConfig {
@@ -683,7 +683,7 @@ impl SolClient {
         let mut results = Vec::new();
         for (pubkey, account) in accounts {
             let data = &account.data;
-            if data.len() < 98 {
+            if data.len() < 106 {
                 continue;
             }
 
@@ -705,8 +705,10 @@ impl SolClient {
                 data[56], data[57], data[58], data[59],
                 data[60], data[61], data[62], data[63],
             ]);
-            let script_end = 64 + btc_script_len.min(34);
-            let btc_script = data[64..script_end].to_vec();
+            // Layout includes total_input_sats at 64..72; btc_script starts at 72.
+            let script_start = 72;
+            let script_end = script_start + btc_script_len.min(34);
+            let btc_script = data[script_start..script_end].to_vec();
 
             results.push(ParsedRedemption {
                 pda_address: pubkey.to_string(),
@@ -813,14 +815,16 @@ impl SolClient {
         &self,
         redemption_pda: &Pubkey,
         utxo_pdas: &[Pubkey],
+        total_input_sats: u64,
     ) -> Result<String, SolError> {
         let payer = self.payer.as_ref().ok_or(SolError::NoPayerSet)?;
 
         // Data: disc(1) + utxo_count(1)
         let mut data = vec![18u8, utxo_pdas.len() as u8];
         if utxo_pdas.is_empty() {
-            // Backward compat: just disc byte
-            data.truncate(1);
+            // Backward compat: no UTXO PDA records available. The program
+            // accepts utxo_count=0 plus total_input_sats for pre-record pools.
+            data.extend_from_slice(&total_input_sats.to_le_bytes());
         }
 
         let mut accounts = vec![

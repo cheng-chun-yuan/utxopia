@@ -619,7 +619,7 @@ impl RedemptionService {
             .map_err(|e| ServiceError::BuildError(e.to_string()))?;
 
         // Step 2: Match builder-selected UTXOs to on-chain UTXO PDAs
-        let utxo_pdas: Vec<solana_sdk::pubkey::Pubkey> = unsigned.utxos.iter()
+        let derived_utxo_pdas: Vec<solana_sdk::pubkey::Pubkey> = unsigned.utxos.iter()
             .filter_map(|u| {
                 let txid_internal = crate::solana::spv::txid_to_internal(&u.txid).ok()?;
                 Some(crate::solana::client::SolClient::derive_utxo_pda(
@@ -630,9 +630,24 @@ impl RedemptionService {
             })
             .collect();
 
+        let known_utxo_pdas = self
+            .sol_client
+            .fetch_unspent_utxos()
+            .map(|records| {
+                let known: std::collections::HashSet<_> =
+                    records.into_iter().map(|u| u.pda_address).collect();
+                derived_utxo_pdas
+                    .iter()
+                    .copied()
+                    .filter(|p| known.contains(p))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let total_input_sats: u64 = unsigned.utxos.iter().map(|u| u.amount_sats).sum();
+
         // Step 3: Mark processing on-chain with only the selected UTXO PDAs
         self.sol_client
-            .send_mark_processing(&pda_pubkey, &utxo_pdas)
+            .send_mark_processing(&pda_pubkey, &known_utxo_pdas, total_input_sats)
             .await
             .map_err(|e| ServiceError::BuildError(format!("send_mark_processing: {}", e)))?;
 
@@ -640,11 +655,11 @@ impl RedemptionService {
             "[redemption] Marked PDA {} as Processing (amount={}, utxos={})",
             &pda.pda_address[..8],
             pda.amount_sats,
-            utxo_pdas.len(),
+            known_utxo_pdas.len(),
         );
 
         // Step 4: Sign and broadcast (reuses pre-built unsigned tx)
-        self.sign_broadcast_with_tx(pda, &request, unsigned, &utxo_pdas).await
+        self.sign_broadcast_with_tx(pda, &request, unsigned, &known_utxo_pdas).await
     }
 
     /// Build, sign, and broadcast a BTC transaction for a PDA already marked Processing.
