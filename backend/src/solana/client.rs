@@ -52,6 +52,13 @@ pub struct CompleteRedemptionParams<'a> {
     pub change_utxo_pda: Option<&'a Pubkey>,
 }
 
+/// Parameters for pre-broadcast Ika signing approval.
+pub struct ApproveRedemptionSigningParams<'a> {
+    pub redemption_pda: &'a Pubkey,
+    pub btc_sighash: &'a [u8; 32],
+    pub miner_fee_sats: u64,
+}
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -810,7 +817,7 @@ impl SolClient {
         let payer = self.payer.as_ref().ok_or(SolError::NoPayerSet)?;
 
         // Data: disc(1) + utxo_count(1)
-        let mut data = vec![0x02u8, utxo_pdas.len() as u8];
+        let mut data = vec![18u8, utxo_pdas.len() as u8];
         if utxo_pdas.is_empty() {
             // Backward compat: just disc byte
             data.truncate(1);
@@ -826,6 +833,75 @@ impl SolClient {
         for utxo_pda in utxo_pdas {
             accounts.push(AccountMeta::new(*utxo_pda, false));
         }
+
+        let ix = Instruction {
+            program_id: self.program_id,
+            accounts,
+            data,
+        };
+
+        self.send_transaction(&[ix], &[payer]).await
+    }
+
+    /// Send approve_redemption_signing instruction (disc=27).
+    ///
+    /// This creates the Ika MessageApproval PDA before the BTC transaction is
+    /// signed and broadcast.
+    pub async fn send_approve_redemption_signing(
+        &self,
+        params: &ApproveRedemptionSigningParams<'_>,
+    ) -> Result<String, SolError> {
+        let payer = self.payer.as_ref().ok_or(SolError::NoPayerSet)?;
+
+        let ika_program = std::env::var("UTXOPIA_IKA_PROGRAM_ID")
+            .map_err(|_| SolError::InvalidAddress("UTXOPIA_IKA_PROGRAM_ID missing".into()))?
+            .parse::<Pubkey>()
+            .map_err(|e| SolError::InvalidAddress(format!("parse UTXOPIA_IKA_PROGRAM_ID: {}", e)))?;
+        let ika_dwallet = std::env::var("UTXOPIA_IKA_DWALLET")
+            .map_err(|_| SolError::InvalidAddress("UTXOPIA_IKA_DWALLET missing".into()))?
+            .parse::<Pubkey>()
+            .map_err(|e| SolError::InvalidAddress(format!("parse UTXOPIA_IKA_DWALLET: {}", e)))?;
+        let xonly_hex = std::env::var("UTXOPIA_IKA_DWALLET_XONLY_PUBKEY")
+            .map_err(|_| SolError::InvalidAddress("UTXOPIA_IKA_DWALLET_XONLY_PUBKEY missing".into()))?;
+        let xonly = hex::decode(&xonly_hex)
+            .map_err(|e| SolError::InvalidAddress(format!("decode Ika x-only pubkey: {}", e)))?;
+        if xonly.len() != 32 {
+            return Err(SolError::InvalidAddress("Ika x-only pubkey must be 32 bytes".into()));
+        }
+
+        let (ika_coordinator, _) = Pubkey::find_program_address(&[b"dwallet_coordinator"], &ika_program);
+        let (cpi_authority, _) = Pubkey::find_program_address(&[b"__ika_cpi_authority"], &self.program_id);
+        let ika_message_approval = derive_ika_message_approval_pda(
+            &ika_program,
+            &ika_dwallet,
+            &xonly,
+            params.btc_sighash,
+        )?;
+
+        let (pool_config_pda, _) = Pubkey::find_program_address(
+            &[b"pool_config"],
+            &self.program_id,
+        );
+
+        let mut data = Vec::with_capacity(1 + 32 + 8);
+        data.push(27u8);
+        data.extend_from_slice(params.btc_sighash);
+        data.extend_from_slice(&params.miner_fee_sats.to_le_bytes());
+
+        let accounts = vec![
+            AccountMeta::new_readonly(self.pool_state, false),
+            AccountMeta::new_readonly(*params.redemption_pda, false),
+            AccountMeta::new_readonly(payer.pubkey(), true),
+            AccountMeta::new_readonly(pool_config_pda, false),
+            AccountMeta::new_readonly(ika_program, false),
+            AccountMeta::new_readonly(ika_coordinator, false),
+            AccountMeta::new(ika_message_approval, false),
+            AccountMeta::new_readonly(ika_dwallet, false),
+            AccountMeta::new_readonly(self.program_id, false),
+            AccountMeta::new_readonly(cpi_authority, false),
+            AccountMeta::new(payer.pubkey(), true),
+            AccountMeta::new_readonly(solana_sdk::system_program::ID, false),
+        ];
 
         let ix = Instruction {
             program_id: self.program_id,
@@ -852,7 +928,7 @@ impl SolClient {
 
         // Data: disc(1) + btc_txid(32) + tx_size(4) + pool_script_len(1) + pool_script(0-34) + consumed_utxo_count(1)
         let mut data = Vec::with_capacity(1 + 32 + 4 + 1 + params.pool_script.len() + 1);
-        data.push(0x06u8);
+        data.push(17u8);
         data.extend_from_slice(params.btc_txid);
         data.extend_from_slice(&params.tx_size.to_le_bytes());
         data.push(params.pool_script.len() as u8);
@@ -1002,4 +1078,44 @@ pub fn load_keypair_from_file(path: &str) -> Result<Keypair, SolError> {
         .map_err(|e| SolError::InvalidKeypair(e.to_string()))?;
     Keypair::try_from(bytes.as_slice())
         .map_err(|e| SolError::InvalidKeypair(e.to_string()))
+}
+
+fn derive_ika_message_approval_pda(
+    ika_program: &Pubkey,
+    ika_dwallet: &Pubkey,
+    xonly_pubkey: &[u8],
+    sighash: &[u8; 32],
+) -> Result<Pubkey, SolError> {
+    const SIG_SCHEME_TAPROOT_SHA256: u16 = 3;
+    let scheme_le = SIG_SCHEME_TAPROOT_SHA256.to_le_bytes();
+
+    for parity in [0x02u8, 0x03u8] {
+        let mut payload = [0u8; 35];
+        payload[0..2].copy_from_slice(&0u16.to_le_bytes());
+        payload[2] = parity;
+        payload[3..].copy_from_slice(xonly_pubkey);
+
+        let dwallet_seeds: [&[u8]; 3] = [b"dwallet", &payload[..32], &payload[32..]];
+        let (candidate_dwallet, _) = Pubkey::find_program_address(&dwallet_seeds, ika_program);
+        if &candidate_dwallet != ika_dwallet {
+            continue;
+        }
+
+        let (message_approval, _) = Pubkey::find_program_address(
+            &[
+                b"dwallet",
+                &payload[..32],
+                &payload[32..],
+                b"message_approval",
+                &scheme_le,
+                sighash,
+            ],
+            ika_program,
+        );
+        return Ok(message_approval);
+    }
+
+    Err(SolError::InvalidAddress(
+        "Ika dWallet PDA does not match x-only pubkey with either parity".into(),
+    ))
 }

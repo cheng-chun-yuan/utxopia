@@ -34,7 +34,6 @@ use crate::utils::{
     validate_account_writable, validate_program_owner,
     validate_token_owner, validate_any_token_program_key,
 };
-use crate::cpi::ika::{approve_message, ApproveMessageAccounts, SIG_SCHEME_TAPROOT_SHA256};
 use crate::utils::policy::check_redemption_signing;
 
 /// Required BTC confirmations before completing redemption
@@ -54,26 +53,18 @@ const MAX_CONSUMED_UTXOS: usize = 20;
 /// - pool_script_len:       1 byte  - Length of pool scriptPubKey (0 = no change tracking)
 /// - pool_script:          0-34 bytes - P2TR scriptPubKey of pool address
 /// - consumed_utxo_count:   1 byte  - Number of consumed UTXO PDAs in remaining accounts
-/// - btc_sighash:          32 bytes - BIP-341 taproot key-spend sighash for the *unsigned*
-///                                    withdrawal tx. Forwarded opaquely to Ika's
-///                                    `approve_message` CPI as `message_digest`. The
-///                                    on-chain program does NOT recompute it; the trust
-///                                    boundary is the existing settled-tx SPV check
-///                                    + redemption PDA constraints.
 pub struct CompleteRedemptionData {
     pub btc_txid: [u8; 32],
     pub tx_size: u32,
     pub pool_script_len: u8,
     pub pool_script: [u8; 34],
     pub consumed_utxo_count: u8,
-    pub btc_sighash: [u8; 32],
 }
 
 impl CompleteRedemptionData {
-    /// 32 (txid) + 4 (tx_size) + 1 (script_len) + 1 (consumed_count) + 32 (sighash).
-    /// `pool_script` (0..=34 bytes) sits between `script_len` and `consumed_count`,
-    /// so this is the no-script case.
-    pub const MIN_SIZE: usize = 32 + 4 + 1 + 1 + 32; // 70 bytes minimum
+    /// 32 (txid) + 4 (tx_size) + 1 (script_len) + 1 (consumed_count).
+    /// `pool_script` (0..=34 bytes) sits between `script_len` and `consumed_count`.
+    pub const MIN_SIZE: usize = 32 + 4 + 1 + 1;
 
     pub fn from_bytes(data: &[u8]) -> Result<Self, ProgramError> {
         if data.len() < Self::MIN_SIZE {
@@ -103,14 +94,6 @@ impl CompleteRedemptionData {
             return Err(ProgramError::InvalidInstructionData);
         }
         let consumed_utxo_count = data[offset];
-        offset += 1;
-
-        // btc_sighash is the trailing 32 bytes.
-        if data.len() < offset + 32 {
-            return Err(ProgramError::InvalidInstructionData);
-        }
-        let mut btc_sighash = [0u8; 32];
-        btc_sighash.copy_from_slice(&data[offset..offset + 32]);
 
         Ok(Self {
             btc_txid,
@@ -118,7 +101,6 @@ impl CompleteRedemptionData {
             pool_script_len,
             pool_script,
             consumed_utxo_count,
-            btc_sighash,
         })
     }
 }
@@ -132,45 +114,39 @@ mod data_tests {
         tx_size: u32,
         pool_script: &[u8],
         consumed_count: u8,
-        sighash: &[u8; 32],
     ) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(70 + pool_script.len());
+        let mut buf = Vec::with_capacity(38 + pool_script.len());
         buf.extend_from_slice(txid);
         buf.extend_from_slice(&tx_size.to_le_bytes());
         buf.push(pool_script.len() as u8);
         buf.extend_from_slice(pool_script);
         buf.push(consumed_count);
-        buf.extend_from_slice(sighash);
         buf
     }
 
     #[test]
     fn parses_no_script_no_consumed() {
         let txid = [0x11u8; 32];
-        let sighash = [0x22u8; 32];
-        let data = build_ix_data(&txid, 200, &[], 0, &sighash);
-        assert_eq!(data.len(), 70);
+        let data = build_ix_data(&txid, 200, &[], 0);
+        assert_eq!(data.len(), 38);
         let parsed = CompleteRedemptionData::from_bytes(&data).unwrap();
         assert_eq!(parsed.btc_txid, txid);
         assert_eq!(parsed.tx_size, 200);
         assert_eq!(parsed.pool_script_len, 0);
         assert_eq!(parsed.consumed_utxo_count, 0);
-        assert_eq!(parsed.btc_sighash, sighash);
     }
 
     #[test]
     fn parses_with_pool_script_and_consumed_utxos() {
         let txid = [0x33u8; 32];
-        let sighash = [0x44u8; 32];
         let mut p2tr = vec![0x51u8, 0x20u8];
         p2tr.extend_from_slice(&[0xAAu8; 32]);
-        let data = build_ix_data(&txid, 250, &p2tr, 3, &sighash);
-        assert_eq!(data.len(), 70 + 34);
+        let data = build_ix_data(&txid, 250, &p2tr, 3);
+        assert_eq!(data.len(), 38 + 34);
         let parsed = CompleteRedemptionData::from_bytes(&data).unwrap();
         assert_eq!(parsed.pool_script_len, 34);
         assert_eq!(&parsed.pool_script[..34], p2tr.as_slice());
         assert_eq!(parsed.consumed_utxo_count, 3);
-        assert_eq!(parsed.btc_sighash, sighash);
     }
 
     #[test]
@@ -180,14 +156,12 @@ mod data_tests {
     }
 
     #[test]
-    fn rejects_truncated_sighash() {
+    fn rejects_missing_consumed_count() {
         let txid = [0u8; 32];
         let mut data = Vec::new();
         data.extend_from_slice(&txid);
         data.extend_from_slice(&100u32.to_le_bytes());
         data.push(0); // pool_script_len
-        data.push(0); // consumed_utxo_count
-        // missing 32-byte sighash
         assert!(CompleteRedemptionData::from_bytes(&data).is_err());
     }
 }
@@ -211,15 +185,6 @@ mod data_tests {
 /// 13. `[writable]` Change UTXO record PDA (if change exists; else system program as placeholder)
 /// 14..14+N `[writable]` Consumed UTXO PDAs (for closing, N = consumed_utxo_count)
 ///
-/// Ika dWallet CPI tail (positions are append-only, after consumed UTXOs):
-/// Let `B = (pool_script_len > 0 ? 14 : 13) + consumed_utxo_count`.
-/// B+0. `[]`         Ika dWallet program (executable; the CPI target)
-/// B+1. `[]`         DWalletCoordinator PDA (owned by Ika program)
-/// B+2. `[writable]` MessageApproval PDA (created by the CPI; seeds: ["message_approval", dwallet, sighash])
-/// B+3. `[]`         dWallet account (owned by Ika program; authority must equal our cpi_authority PDA)
-/// B+4. `[]`         This program's account (executable; the Ika program checks)
-/// B+5. `[signer]`   CPI authority PDA (seeds: ["__ika_cpi_authority"]; signer via invoke_signed)
-/// B+6. `[writable, signer]` Payer for MessageApproval rent
 pub fn process_complete_redemption(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
@@ -567,78 +532,6 @@ pub fn process_complete_redemption(
             close_account_securely(consumed_utxo_info, rent_recipient)?;
         }
     }
-
-    // --- Ika `approve_message` CPI ---
-    // Accounts beyond the consumed-UTXO tail are the Ika CPI inputs:
-    //   [base + 0] ika_program        (read, executable)
-    //   [base + 1] ika_coordinator    (read, owned by Ika program)
-    //   [base + 2] message_approval   (write, will be created)
-    //   [base + 3] ika_dwallet        (read, owned by Ika program)
-    //   [base + 4] caller_program     (read; this UTXOpia program account)
-    //   [base + 5] cpi_authority      (read, signer via invoke_signed; PDA)
-    //   [base + 6] ika_payer          (write, signer)
-    // The system program at index 11 is reused for the CPI.
-    let ika_base = consumed_start + consumed_count;
-    if accounts.len() < ika_base + 7 {
-        return Err(UTXOpiaError::IkaCpiAccountsMissing.into());
-    }
-    let ika_program = &accounts[ika_base];
-    let ika_coordinator = &accounts[ika_base + 1];
-    let ika_message_approval = &accounts[ika_base + 2];
-    let ika_dwallet = &accounts[ika_base + 3];
-    let caller_program = &accounts[ika_base + 4];
-    let cpi_authority = &accounts[ika_base + 5];
-    let ika_payer = &accounts[ika_base + 6];
-    let ika_system_program = &accounts[11]; // shared with the existing system_program slot
-
-    // Read cached CPI authority bump from PoolConfig.
-    let cpi_authority_bump = {
-        let cfg_data = pool_config_info.try_borrow_data()?;
-        if cfg_data.len() < PoolConfig::LEN || cfg_data[0] != POOL_CONFIG_DISCRIMINATOR {
-            return Err(UTXOpiaError::IkaCpiAccountsMissing.into());
-        }
-        let cfg = PoolConfig::from_bytes(&cfg_data)?;
-        cfg.get_cpi_authority_bump()
-    };
-
-    // Derive MessageApproval PDA bump on-chain.
-    // Seeds (per upstream voting example): ["message_approval", dwallet, message_hash].
-    let (expected_ma_pda, ma_bump) = find_program_address(
-        &[
-            b"message_approval",
-            ika_dwallet.key().as_ref(),
-            ix_data.btc_sighash.as_ref(),
-        ],
-        ika_program.key(),
-    );
-    if ika_message_approval.key() != &expected_ma_pda {
-        return Err(ProgramError::InvalidSeeds);
-    }
-
-    // We echo `btc_sighash` back as `user_pubkey` so the off-chain watcher
-    // can correlate completed Sign sessions to in-flight redemptions without
-    // an extra index. The Ika program treats this as opaque metadata.
-    let user_pubkey: [u8; 32] = ix_data.btc_sighash;
-    let metadata_zero: [u8; 32] = [0u8; 32];
-
-    approve_message(
-        ApproveMessageAccounts {
-            coordinator: ika_coordinator,
-            message_approval: ika_message_approval,
-            dwallet: ika_dwallet,
-            caller_program,
-            cpi_authority,
-            payer: ika_payer,
-            system_program: ika_system_program,
-            dwallet_program: ika_program,
-        },
-        &ix_data.btc_sighash,
-        &metadata_zero,
-        &user_pubkey,
-        SIG_SCHEME_TAPROOT_SHA256,
-        ma_bump,
-        cpi_authority_bump,
-    )?;
 
     // --- Update pool state with exact accounting ---
     let clock = Clock::get()?;

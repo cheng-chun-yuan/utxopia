@@ -3,12 +3,10 @@
  * Submit `set_pool_config` (disc 2) on devnet to write the Ika fields
  * into the on-chain PoolConfig PDA.
  *
- * Reads the existing PDA first to discover current pool_script + group_pub_key
- * so we don't accidentally overwrite them. The migration intent is:
- *   - keep pool_script as-is
- *   - keep group_pub_key (FROST) populated until sweep is complete
- *     (per docs/MIGRATION_v1_to_v2.md step 6)
- *   - write ika_dwallet, ika_dwallet_xonly_pubkey, cpi_authority_bump
+ * Reads the existing PDA first, then applies state-file overrides. Hybrid
+ * deployments can keep the deposit derivation key (`btcXOnlyPubKey`) separate
+ * from the pool custody key (`poolReceiveXOnlyPubKey`): deposits are still
+ * swept by the legacy/demo key, but the swept pool UTXO is owned by Ika.
  *
  * Usage:
  *   UTXOPIA_PROGRAM_ID=<pid> PAYER_KEYPAIR_PATH=<path> \
@@ -82,6 +80,19 @@ console.log(`pool_config PDA:   ${poolConfigPda.toBase58()}`);
 
 // Read existing PoolConfig if present
 const existing = await conn.getAccountInfo(poolConfigPda);
+function xonlyFromState(name: string, value?: string): Buffer | null {
+  if (!value) return null;
+  const buf = Buffer.from(value, "hex");
+  if (buf.length !== 32) {
+    throw new Error(`${name} must be 32 bytes`);
+  }
+  return buf;
+}
+
+function p2trScript(xonly: Buffer): Buffer {
+  return Buffer.concat([Buffer.from([0x51, 0x20]), xonly]);
+}
+
 let poolScript: Buffer;
 let groupPubKey: Buffer;
 
@@ -98,21 +109,34 @@ if (existing) {
   console.log(`existing script:   ${poolScript.toString("hex")} (${scriptLen} bytes)`);
   console.log(`existing group_pk: ${groupPubKey.toString("hex")}`);
 } else {
-  // First-time init — derive pool_script from the pool's x-only pubkey
-  // (P2TR: 0x5120 + xonly). For Ika-mode pools (no prior FROST), the
-  // dWallet's x-only IS the pool signer; fall back to it.
-  const xonlyHex = state.btcXOnlyPubKey ?? state.ika?.dwalletXOnlyPubkey;
-  if (!xonlyHex) {
+  const xonly = xonlyFromState(
+    "state.poolReceiveXOnlyPubKey/state.btcXOnlyPubKey/state.ika.dwalletXOnlyPubkey",
+    state.poolReceiveXOnlyPubKey ?? state.btcXOnlyPubKey ?? state.ika?.dwalletXOnlyPubkey,
+  );
+  if (!xonly) {
     throw new Error(
       "Need state.btcXOnlyPubKey or state.ika.dwalletXOnlyPubkey to derive pool_script",
     );
   }
-  const xonly = Buffer.from(xonlyHex, "hex");
-  if (xonly.length !== 32) throw new Error("x-only pubkey must be 32 bytes");
-  poolScript = Buffer.concat([Buffer.from([0x51, 0x20]), xonly]);
+  poolScript = p2trScript(xonly);
   groupPubKey = xonly;
   console.log(`new script:        ${poolScript.toString("hex")}`);
   console.log(`new group_pk:      ${groupPubKey.toString("hex")}`);
+}
+
+const poolReceiveXonly = xonlyFromState(
+  "state.poolReceiveXOnlyPubKey",
+  state.poolReceiveXOnlyPubKey,
+);
+if (poolReceiveXonly) {
+  poolScript = p2trScript(poolReceiveXonly);
+  console.log(`override script:   ${poolScript.toString("hex")} (poolReceiveXOnlyPubKey)`);
+}
+
+const depositXonly = xonlyFromState("state.btcXOnlyPubKey", state.btcXOnlyPubKey);
+if (depositXonly) {
+  groupPubKey = depositXonly;
+  console.log(`override group_pk: ${groupPubKey.toString("hex")} (btcXOnlyPubKey)`);
 }
 
 const ikaDwallet = new PublicKey(state.ika.dwallet).toBuffer();

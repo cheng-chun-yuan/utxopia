@@ -302,16 +302,61 @@ impl IkaSigner {
         }
     }
 
-    /// Derive the `MessageApproval` PDA for a given sighash.
+    /// Derive the canonical `MessageApproval` PDA candidates for a given sighash.
     ///
-    /// Seeds (per upstream voting example): `["message_approval", dwallet, sighash]`
-    /// against the Ika program.
-    pub fn message_approval_pda(
+    /// Ika derives approval PDAs from the dWallet PDA seed material, not from the
+    /// dWallet account address:
+    ///
+    /// ```text
+    /// "dwallet"
+    /// + chunks(curve_u16_le || compressed_sec1_pubkey)
+    /// + "message_approval"
+    /// + signature_scheme_u16_le
+    /// + message_hash
+    /// ```
+    ///
+    /// UTXOpia stores only the BIP-340 x-only pubkey, so we derive both possible
+    /// compressed secp256k1 parities. The on-chain program uses the same
+    /// candidate set when validating the caller-supplied MessageApproval PDA.
+    pub fn message_approval_pda_candidates(
         &self,
         sighash: &[u8; 32],
+    ) -> [solana_sdk::pubkey::Pubkey; 2] {
+        [
+            self.message_approval_pda_for_parity(sighash, 0x02),
+            self.message_approval_pda_for_parity(sighash, 0x03),
+        ]
+    }
+
+    /// Backward-compatible helper returning the even-parity candidate.
+    ///
+    /// Prefer [`message_approval_pda_candidates`] when polling, because the
+    /// compressed pubkey parity is not available from the x-only key alone.
+    pub fn message_approval_pda(&self, sighash: &[u8; 32]) -> solana_sdk::pubkey::Pubkey {
+        self.message_approval_pda_candidates(sighash)[0]
+    }
+
+    fn message_approval_pda_for_parity(
+        &self,
+        sighash: &[u8; 32],
+        parity: u8,
     ) -> solana_sdk::pubkey::Pubkey {
+        let scheme_le = SIG_SCHEME_TAPROOT_SHA256.to_le_bytes();
+        let xonly = self.xonly_pubkey.serialize();
+        let mut payload = [0u8; 35];
+        payload[..2].copy_from_slice(&CURVE_SECP256K1_LE);
+        payload[2] = parity;
+        payload[3..].copy_from_slice(&xonly);
+
         let (pda, _bump) = solana_sdk::pubkey::Pubkey::find_program_address(
-            &[b"message_approval", self.ika_dwallet.as_ref(), sighash],
+            &[
+                b"dwallet",
+                &payload[..32],
+                &payload[32..],
+                b"message_approval",
+                &scheme_le,
+                sighash,
+            ],
             &self.ika_program_id,
         );
         pda
@@ -354,10 +399,9 @@ impl TxSigner for IkaSigner {
                 .map_err(|e| SignerError::SigningFailed(e.to_string()))?;
             let sighash_bytes: [u8; 32] = sighash.to_byte_array();
 
-            // 2. Poll the MessageApproval PDA for this sighash.
-            let ma_pda = self.message_approval_pda(&sighash_bytes);
+            // 2. Poll the canonical MessageApproval PDA candidates for this sighash.
             let sig_bytes = self
-                .poll_signature(&ma_pda)
+                .poll_signature_candidates(&self.message_approval_pda_candidates(&sighash_bytes))
                 .await?;
 
             // 3. Build the Schnorr Taproot signature.
@@ -386,35 +430,30 @@ impl TxSigner for IkaSigner {
 }
 
 impl IkaSigner {
-    /// Poll the given MessageApproval PDA on Solana RPC until its account data
-    /// contains a 64-byte Schnorr signature. The precise byte offset of the
-    /// signature inside the Ika `MessageApproval` account is **deferred to live
-    /// recon** per `docs/recon/2026-05-09-ika-sdk-brief.md` ("Sign session
-    /// readback"). We currently look for a 64-byte run that decodes as a valid
-    /// secp256k1 Schnorr signature; once Task 7 E2E pins down the exact offset
-    /// this becomes a single-byte-range slice with no scanning.
-    async fn poll_signature(
+    async fn poll_signature_candidates(
         &self,
-        ma_pda: &solana_sdk::pubkey::Pubkey,
+        ma_pdas: &[solana_sdk::pubkey::Pubkey],
     ) -> Result<[u8; 64], SignerError> {
         let rpc = solana_client::nonblocking::rpc_client::RpcClient::new(self.rpc_url.clone());
         let deadline = std::time::Instant::now() + self.poll_timeout;
 
         while std::time::Instant::now() < deadline {
-            match rpc.get_account_data(ma_pda).await {
-                Ok(data) => {
-                    if let Some(sig) = extract_schnorr_signature(&data) {
-                        return Ok(sig);
+            for ma_pda in ma_pdas {
+                match rpc.get_account_data(ma_pda).await {
+                    Ok(data) => {
+                        if let Some(sig) = extract_schnorr_signature(&data) {
+                            return Ok(sig);
+                        }
                     }
-                }
-                Err(e) => {
-                    // Account-not-found is the common case before the mock signer
-                    // populates it. Anything else we surface as RPC error.
-                    let msg = e.to_string();
-                    if !msg.contains("could not find account")
-                        && !msg.contains("AccountNotFound")
-                    {
-                        return Err(SignerError::IkaRpcError(msg));
+                    Err(e) => {
+                        // Account-not-found is the common case before the mock signer
+                        // populates it. Anything else we surface as RPC error.
+                        let msg = e.to_string();
+                        if !msg.contains("could not find account")
+                            && !msg.contains("AccountNotFound")
+                        {
+                            return Err(SignerError::IkaRpcError(msg));
+                        }
                     }
                 }
             }
@@ -426,28 +465,56 @@ impl IkaSigner {
 }
 
 /// Extract the 64-byte Schnorr signature from a populated `MessageApproval`
-/// account.
+/// account, per the on-chain layout documented at
+/// `solana-pre-alpha.ika.xyz/on-chain/message-approval`:
 ///
-/// **Layout TODO:** the upstream recon brief documented the account discriminator
-/// (DISC_MESSAGE_APPROVAL=14, total len 287) and two header fields
-/// (MA_DWALLET at offset 2, MA_MESSAGE_HASH at offset 34). The exact byte
-/// offset of the resulting Schnorr signature is **deferred to live exercise**
-/// (Task 7 E2E surfaces it). Until then, we take the trailing 64 bytes —
-/// which is correct for many Solana account layouts where variable trailers
-/// terminate the data — and return `None` if the data isn't large enough
-/// or the witness still appears unpopulated (all-zeros).
+/// ```text
+/// offset   0   disc            (1)  = 14
+/// offset   1   version         (1)  = 1
+/// offset   2   dwallet         (32)
+/// offset  34   message_digest  (32)
+/// offset  66   metadata_digest (32)
+/// offset  98   approver        (32)
+/// offset 130   user_pubkey     (32)
+/// offset 162   scheme          (2, u16 LE)
+/// offset 164   epoch           (8, u64 LE)
+/// offset 172   status          (1)  0=Pending, 1=Signed
+/// offset 173   signature_len   (2, u16 LE)
+/// offset 175   signature       (128, padded)  ← what we want
+/// offset 303   bump            (1)
+/// offset 304   _reserved       (8)
+/// total      312
+/// ```
+///
+/// The Ika network calls `CommitSignature` (disc 43) on Solana to populate
+/// the signature bytes in place once MPC completes — same PDA, in-place
+/// write. We poll the PDA until `status == 1`, then read `signature_len`
+/// bytes from offset 175. Schnorr/Taproot signatures are always 64 bytes;
+/// other schemes (e.g. ECDSA) can be up to 128.
+const MA_STATUS_OFFSET: usize = 172;
+const MA_SIG_LEN_OFFSET: usize = 173;
+const MA_SIG_OFFSET: usize = 175;
+const MA_TOTAL_LEN: usize = 312;
+const MA_STATUS_SIGNED: u8 = 1;
+const SCHNORR_SIG_LEN: usize = 64;
+const CURVE_SECP256K1_LE: [u8; 2] = [0x00, 0x00];
+const SIG_SCHEME_TAPROOT_SHA256: u16 = 3;
+
 fn extract_schnorr_signature(data: &[u8]) -> Option<[u8; 64]> {
-    if data.len() < 64 {
+    if data.len() < MA_TOTAL_LEN {
         return None;
     }
-    let start = data.len() - 64;
-    let tail = &data[start..];
-    if tail.iter().all(|&b| b == 0) {
-        // Account exists but the off-chain mock signer hasn't filled it yet.
+    if data[MA_STATUS_OFFSET] != MA_STATUS_SIGNED {
+        // Pending — `CommitSignature` hasn't fired yet.
         return None;
     }
-    let mut out = [0u8; 64];
-    out.copy_from_slice(tail);
+    let sig_len = u16::from_le_bytes([data[MA_SIG_LEN_OFFSET], data[MA_SIG_LEN_OFFSET + 1]]) as usize;
+    if sig_len != SCHNORR_SIG_LEN {
+        // We only know how to unpack 64-byte Schnorr/Taproot signatures here.
+        return None;
+    }
+    let mut out = [0u8; SCHNORR_SIG_LEN];
+    out.copy_from_slice(&data[MA_SIG_OFFSET..MA_SIG_OFFSET + SCHNORR_SIG_LEN]);
     Some(out)
 }
 
@@ -469,7 +536,7 @@ pub enum SignerError {
     #[error("MPC session error: {0}")]
     MpcSessionError(String),
 
-    #[error("Ika signing not yet wired — Sign PDA layout pending live recon (Task 5 follow-up)")]
+    #[error("Ika signing not yet wired — pre-alpha mock signer never calls CommitSignature on chain")]
     IkaSigningNotWired,
 
     #[error("Ika RPC error: {0}")]
@@ -542,12 +609,44 @@ mod tests {
     fn ika_signer_message_approval_pda_is_deterministic() {
         let s = test_ika_signer();
         let sighash = [0xab; 32];
-        let pda1 = s.message_approval_pda(&sighash);
-        let pda2 = s.message_approval_pda(&sighash);
-        assert_eq!(pda1, pda2);
-        // Different sighash → different PDA.
-        let other = s.message_approval_pda(&[0xcd; 32]);
-        assert_ne!(pda1, other);
+        let pdas1 = s.message_approval_pda_candidates(&sighash);
+        let pdas2 = s.message_approval_pda_candidates(&sighash);
+        assert_eq!(pdas1, pdas2);
+        assert_eq!(pdas1[0], s.message_approval_pda(&sighash));
+        assert_ne!(pdas1[0], pdas1[1]);
+        // Different sighash → different PDA candidates.
+        let other = s.message_approval_pda_candidates(&[0xcd; 32]);
+        assert_ne!(pdas1[0], other[0]);
+        assert_ne!(pdas1[1], other[1]);
+    }
+
+    #[test]
+    fn ika_signer_message_approval_pda_uses_canonical_dwallet_seeds() {
+        let s = test_ika_signer();
+        let sighash = [0x42; 32];
+        let candidates = s.message_approval_pda_candidates(&sighash);
+
+        for (candidate, parity) in candidates.iter().zip([0x02u8, 0x03u8]) {
+            let scheme_le = SIG_SCHEME_TAPROOT_SHA256.to_le_bytes();
+            let xonly = s.xonly_pubkey.serialize();
+            let mut payload = [0u8; 35];
+            payload[..2].copy_from_slice(&CURVE_SECP256K1_LE);
+            payload[2] = parity;
+            payload[3..].copy_from_slice(&xonly);
+
+            let (expected, _) = solana_sdk::pubkey::Pubkey::find_program_address(
+                &[
+                    b"dwallet",
+                    &payload[..32],
+                    &payload[32..],
+                    b"message_approval",
+                    &scheme_le,
+                    &sighash,
+                ],
+                &s.ika_program_id,
+            );
+            assert_eq!(*candidate, expected);
+        }
     }
 
     #[tokio::test]
@@ -573,31 +672,55 @@ mod tests {
         assert_eq!(signed.input.len(), 0);
     }
 
+    /// Build a synthetic MessageApproval account body with the documented
+    /// layout. Caller supplies status + signature; everything else is zeroed.
+    fn synthetic_message_approval(status: u8, sig: Option<&[u8]>) -> Vec<u8> {
+        let mut data = vec![0u8; MA_TOTAL_LEN];
+        data[0] = 14; // disc
+        data[1] = 1; // version
+        data[MA_STATUS_OFFSET] = status;
+        if let Some(sig) = sig {
+            let len = sig.len() as u16;
+            data[MA_SIG_LEN_OFFSET..MA_SIG_LEN_OFFSET + 2].copy_from_slice(&len.to_le_bytes());
+            data[MA_SIG_OFFSET..MA_SIG_OFFSET + sig.len()].copy_from_slice(sig);
+        }
+        data
+    }
+
+    const SCHNORR_FIXTURE: [u8; 64] = [
+        0xE9, 0x07, 0x83, 0x1F, 0x80, 0x84, 0x8D, 0x10, 0x69, 0xA5, 0x37, 0x1B, 0x40, 0x24, 0x10,
+        0x36, 0x4B, 0xDF, 0x1C, 0x5F, 0x83, 0x07, 0xB0, 0x08, 0x4C, 0x55, 0xF1, 0xCE, 0x2D, 0xCA,
+        0x82, 0x15, 0x25, 0xF6, 0x6A, 0x4A, 0x85, 0xEA, 0x8B, 0x71, 0xE4, 0x82, 0xA7, 0x4F, 0x38,
+        0x2D, 0x2C, 0xE5, 0xEB, 0xEE, 0xE8, 0xFD, 0xB2, 0x17, 0x2F, 0x47, 0x7D, 0xF4, 0x90, 0x0D,
+        0x31, 0x05, 0x36, 0xC0,
+    ];
+
     #[test]
-    fn extract_schnorr_signature_takes_trailing_64() {
-        let valid: [u8; 64] = [
-            0xE9, 0x07, 0x83, 0x1F, 0x80, 0x84, 0x8D, 0x10, 0x69, 0xA5, 0x37, 0x1B, 0x40, 0x24,
-            0x10, 0x36, 0x4B, 0xDF, 0x1C, 0x5F, 0x83, 0x07, 0xB0, 0x08, 0x4C, 0x55, 0xF1, 0xCE,
-            0x2D, 0xCA, 0x82, 0x15, 0x25, 0xF6, 0x6A, 0x4A, 0x85, 0xEA, 0x8B, 0x71, 0xE4, 0x82,
-            0xA7, 0x4F, 0x38, 0x2D, 0x2C, 0xE5, 0xEB, 0xEE, 0xE8, 0xFD, 0xB2, 0x17, 0x2F, 0x47,
-            0x7D, 0xF4, 0x90, 0x0D, 0x31, 0x05, 0x36, 0xC0,
-        ];
-        // Simulate a MessageApproval account: 2-byte disc/version + header + sig at tail.
-        let mut data = vec![0u8; 100]; // header
-        data.extend_from_slice(&valid);
+    fn extract_signature_at_documented_offset() {
+        let data = synthetic_message_approval(MA_STATUS_SIGNED, Some(&SCHNORR_FIXTURE));
         let extracted = extract_schnorr_signature(&data).expect("should extract");
-        assert_eq!(extracted, valid);
+        assert_eq!(extracted, SCHNORR_FIXTURE);
     }
 
     #[test]
-    fn extract_schnorr_signature_rejects_too_short() {
-        assert!(extract_schnorr_signature(&[0u8; 32]).is_none());
+    fn extract_signature_rejects_pending_status() {
+        // Status=Pending: CommitSignature hasn't fired yet, even if some bytes exist.
+        let data = synthetic_message_approval(0, Some(&SCHNORR_FIXTURE));
+        assert!(extract_schnorr_signature(&data).is_none());
     }
 
     #[test]
-    fn extract_schnorr_signature_rejects_all_zero_tail() {
-        // Account exists but mock signer hasn't filled it yet → looks unpopulated.
-        let data = vec![0u8; 200];
+    fn extract_signature_rejects_too_short() {
+        // Anything shorter than the full 312-byte account body is malformed.
+        assert!(extract_schnorr_signature(&[0u8; MA_TOTAL_LEN - 1]).is_none());
+    }
+
+    #[test]
+    fn extract_signature_rejects_wrong_length() {
+        // ECDSA-style 70-byte signature isn't something we know how to put in
+        // a Taproot witness; the schema should reject it.
+        let ecdsa = [0xAAu8; 70];
+        let data = synthetic_message_approval(MA_STATUS_SIGNED, Some(&ecdsa));
         assert!(extract_schnorr_signature(&data).is_none());
     }
 }

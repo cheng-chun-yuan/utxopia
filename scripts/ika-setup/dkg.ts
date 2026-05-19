@@ -129,6 +129,14 @@ state.ika = {
   dwallet: result.dwalletPda.toBase58(),
   dwalletXOnlyPubkey: xOnlyHex,
   cpiAuthorityBump: result.cpiAuthorityBump,
+  // DKG attestation bundle — needed to drive future `Sign` gRPC requests.
+  // We persist hex strings (JSON-friendly) and re-hydrate to Uint8Array on read.
+  attestation: {
+    attestationData: Buffer.from(result.attestation.attestationData).toString("hex"),
+    networkSignature: Buffer.from(result.attestation.networkSignature).toString("hex"),
+    networkPubkey: Buffer.from(result.attestation.networkPubkey).toString("hex"),
+    epoch: result.attestation.epoch.toString(),
+  },
 };
 
 writeFileSync(STATE_FILE, JSON.stringify(state, null, 2) + "\n");

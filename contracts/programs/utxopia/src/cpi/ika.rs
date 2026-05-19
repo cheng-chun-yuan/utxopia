@@ -94,6 +94,58 @@ pub struct ApproveMessageAccounts<'a> {
     pub dwallet_program: &'a AccountInfo,
 }
 
+/// Curve byte for Secp256k1 in the canonical MessageApproval payload.
+const CURVE_SECP256K1_LE: [u8; 2] = [0x00, 0x00];
+
+/// Derive the canonical MessageApproval PDA bump for our dWallet.
+///
+/// Matches the upstream voting example (`findMessageApprovalPda` in
+/// `scripts/ika-setup/lib/ika-setup-vendored.ts`):
+///
+/// ```text
+/// seeds = "dwallet"
+///       || payload[..32] || payload[32..]    where payload = curve_le(2) || compressed_pubkey(33)
+///       || "message_approval"
+///       || signature_scheme_le(2)
+///       || message_hash(32)
+/// ```
+///
+/// We don't store the compressed-pubkey parity prefix on chain (PoolConfig
+/// only has the 32-byte x-only key), so we try both BIP-340 parities and
+/// return the bump of whichever matches the caller-supplied account. Two
+/// `find_program_address` calls worst case (~10k CU) — rounding error
+/// against the rest of the withdraw path.
+pub fn find_message_approval_pda_bump(
+    ika_program: &Pubkey,
+    dwallet_xonly_pubkey: &[u8; 32],
+    sighash: &[u8; 32],
+    expected: &Pubkey,
+    signature_scheme: u16,
+) -> Result<u8, ProgramError> {
+    let scheme_le = signature_scheme.to_le_bytes();
+    for parity in [0x02u8, 0x03u8] {
+        let mut payload = [0u8; 35];
+        payload[..2].copy_from_slice(&CURVE_SECP256K1_LE);
+        payload[2] = parity;
+        payload[3..].copy_from_slice(dwallet_xonly_pubkey);
+        let (pda, bump) = pinocchio::pubkey::find_program_address(
+            &[
+                b"dwallet",
+                &payload[..32],
+                &payload[32..],
+                b"message_approval",
+                &scheme_le,
+                sighash,
+            ],
+            ika_program,
+        );
+        if &pda == expected {
+            return Ok(bump);
+        }
+    }
+    Err(ProgramError::InvalidSeeds)
+}
+
 /// Issue the `approve_message` CPI to the Ika dWallet program.
 #[allow(clippy::too_many_arguments)]
 pub fn approve_message(

@@ -24,6 +24,7 @@
 //! | 17 | `complete_redemption` | Redemption |
 //! | 18 | `mark_processing` | Redemption |
 //! | 19 | `cancel_redemption` | Redemption |
+//! | 27 | `approve_redemption_signing` | Redemption |
 
 // Core operations
 pub mod initialize;
@@ -34,6 +35,7 @@ pub mod transact;
 pub mod redeem;
 pub mod request_redemption;
 pub mod mark_processing;
+pub mod approve_redemption_signing;
 pub mod cancel_redemption;
 pub mod complete_redemption;
 
@@ -66,6 +68,7 @@ pub use transact::*;
 pub use redeem::*;
 pub use request_redemption::*;
 pub use mark_processing::*;
+pub use approve_redemption_signing::*;
 pub use cancel_redemption::*;
 pub use complete_redemption::*;
 pub use register_token::*;

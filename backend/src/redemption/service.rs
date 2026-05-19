@@ -28,7 +28,7 @@ use crate::redemption::signer::{SingleKeySigner, TxSigner};
 use crate::redemption::tracking::TrackingStore;
 use crate::redemption::types::*;
 use crate::redemption::watcher::RedemptionScanner;
-use crate::solana::client::SolClient;
+use crate::solana::client::{ApproveRedemptionSigningParams, SolClient};
 
 /// Get current Unix timestamp in seconds.
 fn now_secs() -> u64 {
@@ -36,6 +36,41 @@ fn now_secs() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs()
+}
+
+fn compute_taproot_sighashes(
+    unsigned: &crate::redemption::builder::UnsignedTx,
+) -> Result<Vec<[u8; 32]>, ServiceError> {
+    use bitcoin::{
+        hashes::Hash,
+        sighash::{Prevouts, SighashCache, TapSighashType},
+        Amount, TxOut,
+    };
+
+    let prevouts: Vec<TxOut> = unsigned
+        .utxos
+        .iter()
+        .map(|utxo| {
+            let script_pubkey = hex::decode(&utxo.script_pubkey)
+                .map(bitcoin::ScriptBuf::from_bytes)
+                .unwrap_or_else(|_| bitcoin::ScriptBuf::new());
+            TxOut {
+                value: Amount::from_sat(utxo.amount_sats),
+                script_pubkey,
+            }
+        })
+        .collect();
+    let prevouts_ref = Prevouts::All(&prevouts);
+
+    let mut out = Vec::with_capacity(unsigned.tx.input.len());
+    for i in 0..unsigned.tx.input.len() {
+        let mut sighash_cache = SighashCache::new(&unsigned.tx);
+        let sighash = sighash_cache
+            .taproot_key_spend_signature_hash(i, &prevouts_ref, TapSighashType::Default)
+            .map_err(|e| ServiceError::BuildError(format!("taproot sighash: {}", e)))?;
+        out.push(sighash.to_byte_array());
+    }
+    Ok(out)
 }
 
 /// Convert raw BTC scriptPubKey bytes to a bech32 address string.
@@ -707,6 +742,24 @@ impl RedemptionService {
                     expected_btc_address: btc_script_hex,
                     utxo_inputs,
                 });
+        }
+
+        if self.signer.signer_type() == "ika-dwallet" {
+            let pda_pubkey = pda
+                .pda_address
+                .parse::<solana_sdk::pubkey::Pubkey>()
+                .map_err(|e| ServiceError::BuildError(format!("invalid PDA pubkey: {}", e)))?;
+            let sighashes = compute_taproot_sighashes(&unsigned)?;
+            for sighash in &sighashes {
+                self.sol_client
+                    .send_approve_redemption_signing(&ApproveRedemptionSigningParams {
+                        redemption_pda: &pda_pubkey,
+                        btc_sighash: sighash,
+                        miner_fee_sats: unsigned.fee,
+                    })
+                    .await
+                    .map_err(|e| ServiceError::BuildError(format!("approve_redemption_signing: {}", e)))?;
+            }
         }
 
         // Sign

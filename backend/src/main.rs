@@ -187,10 +187,9 @@ fn create_frost_service(config: RedemptionConfig) -> Result<RedemptionService, S
 /// Create redemption service backed by an Ika dWallet (v2).
 ///
 /// The IkaSigner does not produce signatures synchronously the way FROST does.
-/// Instead, the UTXOpia program's `complete_redemption` instruction CPIs
-/// `approve_message` on the Ika program; the Ika network's mock signer (pre-alpha)
-/// then asynchronously fills a Sign PDA which the IkaSigner polls for. See
-/// `backend/src/redemption/signer.rs::IkaSigner` for the polling contract.
+/// Instead, the backend asks the UTXOpia program to run `approve_redemption_signing`,
+/// which CPIs `approve_message` on Ika before broadcast; the Ika network's
+/// pre-alpha signer then fills a MessageApproval PDA that `IkaSigner` polls.
 fn create_ika_service(config: RedemptionConfig) -> Result<RedemptionService, String> {
     let utxopia_config = UTXOpiaConfig::from_env().map_err(|e| e.to_string())?;
 

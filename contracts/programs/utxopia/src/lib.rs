@@ -99,6 +99,9 @@ pub mod instruction {
     // sweep, then 25 to verify the swept tx against that PDA on chain.
     pub const REGISTER_DEPOSIT_INTENT: u8 = 24;
     pub const VERIFY_DEPOSIT_V2: u8 = 25;
+
+    // Ika pre-broadcast signing approval (27)
+    pub const APPROVE_REDEMPTION_SIGNING: u8 = 27;
 }
 
 #[cfg(not(feature = "no-entrypoint"))]
@@ -147,6 +150,8 @@ pub fn process_instruction(
         // OP_RETURN-free deposits (24-25)
         instruction::REGISTER_DEPOSIT_INTENT => instructions::process_register_deposit_intent(program_id, accounts, data),
         instruction::VERIFY_DEPOSIT_V2 => instructions::process_verify_deposit_v2(program_id, accounts, data),
+        // Ika pre-broadcast signing approval (27)
+        instruction::APPROVE_REDEMPTION_SIGNING => instructions::process_approve_redemption_signing(program_id, accounts, data),
         _ => Err(ProgramError::InvalidInstructionData),
     }
 }

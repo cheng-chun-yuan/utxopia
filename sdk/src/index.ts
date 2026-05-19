@@ -563,6 +563,8 @@ export {
   type ShieldInstructionOptions,
   buildRedemptionRequestInstructionData,
   buildRedemptionRequestInstruction,
+  buildApproveRedemptionSigningInstructionData,
+  buildApproveRedemptionSigningInstruction,
   bigintTo32Bytes,
   bytes32ToBigint,
   // JoinSplit transact instruction
@@ -591,6 +593,7 @@ export {
   deriveRedemptionRequestPDA as deriveRedemptionRequestPDAFromInstruction,
   type Instruction,
   type RedemptionRequestInstructionOptions,
+  type ApproveRedemptionSigningInstructionOptions,
   type TransactInstructionOptions,
   type UnshieldInstructionOptions,
   type ProposePoolUpdateOptions,

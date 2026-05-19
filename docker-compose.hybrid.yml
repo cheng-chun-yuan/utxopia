@@ -47,26 +47,20 @@ services:
       UTXOPIA_PROGRAM_ID: APrMG4c2dBs766hhNvExCuihZN8pPnTAHxuMzh4RHLcm
       UTXOPIA_ZKBTC_MINT: 7V7Gp2fptGmtFyvDoRaSmNUEFZf5iBFEvTmkQ5bp8ugN
       BTC_LIGHT_CLIENT_PROGRAM_ID: E3Q7dNDNw9W8oL1ghm62Ecau4zHBZ1W5zxrnNVaoRs6v
-      # ─── Ika dWallet (reuses existing devnet dWallet for now; new DKG TBD) ─
+      # ─── Ika dWallet ────────────────────────────────────────────────
       UTXOPIA_SIGNING_MODE: ika
       UTXOPIA_IKA_PROGRAM_ID: 87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY
       UTXOPIA_IKA_GRPC_ENDPOINT: pre-alpha-dev-1.ika.ika-network.net:443
-      UTXOPIA_IKA_DWALLET: DmZfRVeZHnFZ1ARVHRPJn88VCcJB2QhXLmSe8RuzFMfq
-      UTXOPIA_IKA_DWALLET_XONLY_PUBKEY: 87a1014ea16e42c825026889874902875aec7650b39c2b334a4d04d49b904c76
-      UTXOPIA_IKA_CPI_AUTHORITY_BUMP: "255"
-      # NOTE: This dWallet is bound to the OLD program's PDA, so complete_redemption
-      # via Ika will FAIL on the new program. Run a fresh DKG ceremony to get a
-      # new dWallet whose authority is the new program's __ika_cpi_authority PDA.
-      # Pool BTC address: demo-mode key (Ika devnet was unreachable when this
-      # was generated, so we ship a real secp256k1 P2TR we control instead of
-      # a true Ika-controlled address). Private key + xonly are persisted in
-      # scripts/devnet-regtest-state.json under `demoPool.*`. Regenerate via
-      # bun run scripts/ika-setup/gen-demo-pool-key.ts. Replace with a true
-      # Ika-derived address once dkg.ts can complete (see set-pool-config.ts).
-      POOL_RECEIVE_ADDRESS: bcrt1psa4u9ws3ckn5g6fyddqzyxsx5ee5rtva6yk2dnnqsqk3c2wfwngszukxjn
-      # Demo-mode pool secret matching POOL_RECEIVE_ADDRESS above. Throwaway —
-      # see scripts/devnet-regtest-state.json `demoPool.privKey`. Activates the
-      # SingleKey sweeper path so deposits to the bcrt1p address can be swept.
+      UTXOPIA_IKA_DWALLET: 7U8ZMHS2S5jERhhQcoyPW9pERydCTGt7fWpopvfLt34t
+      UTXOPIA_IKA_DWALLET_XONLY_PUBKEY: fee6779b254c746ae4b691ddb650756ab4bfb7a47cdc4416464c76f15e25291d
+      UTXOPIA_IKA_CPI_AUTHORITY_BUMP: "254"
+      # Deposit addresses are still derived from/swept by the demo key below.
+      # Sweeps land in this Ika-owned Taproot address, so redemption can prove
+      # that Ika pre-alpha signs and moves regtest BTC.
+      POOL_RECEIVE_ADDRESS: bcrt1plmn80xe9f36x4e9kj8wmv5r4d26tlday0nwyg9jxf3m0zh399ywscet7ef
+      UTXOPIA_FROST_GROUP_PUBKEY: 876bc2ba11c5a74469246b40221a06a67341ad9dd12ca6ce60802d1c29c974d1
+      # Demo-mode deposit sweep secret. Throwaway — see
+      # scripts/devnet-regtest-state.json `demoPool.privKey`.
       POOL_SIGNING_KEY: 04edfd60b32f55849a8a66f97f5d2033b359e67568e00e63831402cc931d0f78
       # ─── Operational ─────────────────────────────────────────────
       UTXOPIA_DEMO_MODE: "1"

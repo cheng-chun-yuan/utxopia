@@ -48,14 +48,14 @@ const ChainId = bcs.enum("ChainId", {
   Sui: null,
 });
 
-const DWalletCurve = bcs.enum("DWalletCurve", {
+export const DWalletCurve = bcs.enum("DWalletCurve", {
   Secp256k1: null,
   Secp256r1: null,
   Curve25519: null,
   Ristretto: null,
 });
 
-const DWalletSignatureAlgorithm = bcs.enum("DWalletSignatureAlgorithm", {
+export const DWalletSignatureAlgorithm = bcs.enum("DWalletSignatureAlgorithm", {
   ECDSASecp256k1: null,
   ECDSASecp256r1: null,
   Taproot: null,
@@ -248,7 +248,7 @@ export const VersionedDWalletDataAttestation = bcs.enum("VersionedDWalletDataAtt
 });
 
 // Presign results: decode with `VersionedPresignDataAttestation.parse(...)`.
-const VersionedPresignDataAttestation = bcs.enum("VersionedPresignDataAttestation", {
+export const VersionedPresignDataAttestation = bcs.enum("VersionedPresignDataAttestation", {
   V1: bcs.struct("PresignDataAttestationV1", {
     session_identifier: bcs.fixedArray(32, bcs.u8()),
     epoch: bcs.u64(),
@@ -350,6 +350,14 @@ export interface DWalletSetup {
   cpiAuthority: PublicKey;
   cpiAuthorityBump: number;
   grpcClient: any;
+  /** Raw `NetworkSignedAttestation` bundle the network returned at DKG time.
+   *  Must be persisted to drive subsequent `Sign` gRPC requests. */
+  attestation: {
+    attestationData: Uint8Array;
+    networkSignature: Uint8Array;
+    networkPubkey: Uint8Array;
+    epoch: bigint;
+  };
 }
 
 /**
@@ -494,6 +502,12 @@ export async function setupDWallet(
     cpiAuthority,
     cpiAuthorityBump,
     grpcClient,
+    attestation: {
+      attestationData: new Uint8Array(attestation.attestation_data),
+      networkSignature: new Uint8Array(attestation.network_signature),
+      networkPubkey: new Uint8Array(attestation.network_pubkey),
+      epoch: BigInt(attestation.epoch),
+    },
   };
 }
 

@@ -66,6 +66,7 @@ const INSTRUCTION = {
   // Proof of Innocence (21-22)
   UPDATE_ASSOCIATION_ROOT: 21,
   ATTEST_POI: 22,
+  APPROVE_REDEMPTION_SIGNING: 27,
 } as const;
 
 /** Export instruction discriminators for consumers */
@@ -345,10 +346,6 @@ export interface CompleteRedemptionInstructionOptions {
   poolScript: Uint8Array;
   /** Number of consumed UTXO PDAs in remaining accounts */
   consumedUtxoCount: number;
-  /** BIP-341 taproot key-spend sighash (32 bytes) for the *unsigned* withdrawal tx.
-   *  Forwarded as-is to Ika `approve_message` as `message_digest`. The on-chain
-   *  UTXOpia program does NOT recompute this. */
-  btcSighash: Uint8Array;
   /** Account addresses */
   accounts: {
     poolState: Address;
@@ -368,26 +365,74 @@ export interface CompleteRedemptionInstructionOptions {
     tokenProgram?: Address;
     /** Consumed UTXO PDAs to close */
     consumedUtxos?: Address[];
-    /** Ika dWallet program (executable; CPI target) */
+  };
+}
+
+export interface ApproveRedemptionSigningInstructionOptions {
+  /** BIP-341 taproot key-spend sighash for the unsigned BTC transaction. */
+  btcSighash: Uint8Array;
+  /** Miner fee in satoshis, checked by the on-chain signing policy. */
+  minerFeeSats: bigint | number;
+  accounts: {
+    poolState: Address;
+    redemptionRequest: Address;
+    authority: Address;
+    poolConfig: Address;
     ikaProgram: Address;
-    /** Ika DWalletCoordinator PDA */
     ikaCoordinator: Address;
-    /** MessageApproval PDA — created by the CPI, seeds:
-     *  ["message_approval", dwallet, sighash] against ikaProgram */
     ikaMessageApproval: Address;
-    /** dWallet account (owned by Ika program) */
     ikaDwallet: Address;
-    /** This UTXOpia program's program-account (executable) */
     callerProgram: Address;
-    /** CPI authority PDA (seeds: ["__ika_cpi_authority"]) */
     cpiAuthority: Address;
-    /** Payer for MessageApproval rent (writable signer) */
     ikaPayer: Address;
   };
 }
 
+export function buildApproveRedemptionSigningInstructionData(options: {
+  btcSighash: Uint8Array;
+  minerFeeSats: bigint | number;
+}): Uint8Array {
+  if (options.btcSighash.length !== 32) {
+    throw new Error("btcSighash must be exactly 32 bytes");
+  }
+  const data = new Uint8Array(1 + 32 + 8);
+  const view = new DataView(data.buffer);
+  let offset = 0;
+  data[offset++] = INSTRUCTION.APPROVE_REDEMPTION_SIGNING;
+  data.set(options.btcSighash, offset); offset += 32;
+  view.setBigUint64(offset, BigInt(options.minerFeeSats), true);
+  return data;
+}
+
+export function buildApproveRedemptionSigningInstruction(
+  options: ApproveRedemptionSigningInstructionOptions
+): Instruction {
+  const config = getConfig();
+  return {
+    programAddress: config.utxopiaProgramId,
+    accounts: [
+      { address: options.accounts.poolState, role: AccountRole.READONLY },
+      { address: options.accounts.redemptionRequest, role: AccountRole.READONLY },
+      { address: options.accounts.authority, role: AccountRole.READONLY_SIGNER },
+      { address: options.accounts.poolConfig, role: AccountRole.READONLY },
+      { address: options.accounts.ikaProgram, role: AccountRole.READONLY },
+      { address: options.accounts.ikaCoordinator, role: AccountRole.READONLY },
+      { address: options.accounts.ikaMessageApproval, role: AccountRole.WRITABLE },
+      { address: options.accounts.ikaDwallet, role: AccountRole.READONLY },
+      { address: options.accounts.callerProgram, role: AccountRole.READONLY },
+      { address: options.accounts.cpiAuthority, role: AccountRole.READONLY },
+      { address: options.accounts.ikaPayer, role: AccountRole.WRITABLE_SIGNER },
+      { address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY },
+    ],
+    data: buildApproveRedemptionSigningInstructionData({
+      btcSighash: options.btcSighash,
+      minerFeeSats: options.minerFeeSats,
+    }),
+  };
+}
+
 /**
- * Build instruction data for COMPLETE_REDEMPTION (disc 6)
+ * Build instruction data for COMPLETE_REDEMPTION (disc 17)
  *
  * Layout (after disc stripped):
  * - btc_txid: [u8; 32]
@@ -395,21 +440,16 @@ export interface CompleteRedemptionInstructionOptions {
  * - pool_script_len: u8
  * - pool_script: [u8; 0-34]
  * - consumed_utxo_count: u8
- * - btc_sighash: [u8; 32]   (forwarded to Ika `approve_message`)
  */
 export function buildCompleteRedemptionInstructionData(options: {
   btcTxid: Uint8Array;
   txSize: number;
   poolScript: Uint8Array;
   consumedUtxoCount: number;
-  btcSighash: Uint8Array;
 }): Uint8Array {
-  const { btcTxid, txSize, poolScript, consumedUtxoCount, btcSighash } = options;
-  if (btcSighash.length !== 32) {
-    throw new Error("btcSighash must be exactly 32 bytes");
-  }
+  const { btcTxid, txSize, poolScript, consumedUtxoCount } = options;
 
-  const totalLen = 1 + 32 + 4 + 1 + poolScript.length + 1 + 32;
+  const totalLen = 1 + 32 + 4 + 1 + poolScript.length + 1;
   const data = new Uint8Array(totalLen);
   const view = new DataView(data.buffer);
 
@@ -423,7 +463,6 @@ export function buildCompleteRedemptionInstructionData(options: {
     data.set(poolScript, offset); offset += poolScript.length;
   }
   data[offset++] = consumedUtxoCount;
-  data.set(btcSighash, offset); offset += 32;
 
   return data;
 }
@@ -431,7 +470,7 @@ export function buildCompleteRedemptionInstructionData(options: {
 /**
  * Build a complete redemption instruction
  *
- * Accounts (13 base + variable + 7 Ika tail):
+ * Accounts (13 base + variable):
  * 0.  pool_state (writable)
  * 1.  redemption_request (writable)
  * 2.  authority (signer)
@@ -447,15 +486,6 @@ export function buildCompleteRedemptionInstructionData(options: {
  * 12. pool_config (readonly)
  * 13. change_utxo (writable)
  * 14..14+N consumed_utxos (writable)
- *
- * Ika tail (positions B..B+7 where B = (poolScript.length > 0 ? 14 : 13) + consumedUtxoCount):
- * B+0. ika_program (readonly, executable)
- * B+1. ika_coordinator (readonly)
- * B+2. ika_message_approval (writable)
- * B+3. ika_dwallet (readonly)
- * B+4. caller_program (readonly)
- * B+5. cpi_authority (readonly, signer via invoke_signed)
- * B+6. ika_payer (writable signer)
  */
 export function buildCompleteRedemptionInstruction(
   options: CompleteRedemptionInstructionOptions
@@ -467,7 +497,6 @@ export function buildCompleteRedemptionInstruction(
     txSize: options.txSize,
     poolScript: options.poolScript,
     consumedUtxoCount: options.consumedUtxoCount,
-    btcSighash: options.btcSighash,
   });
 
   const accounts: Instruction["accounts"] = [
@@ -493,17 +522,6 @@ export function buildCompleteRedemptionInstruction(
       accounts.push({ address: utxo, role: AccountRole.WRITABLE });
     }
   }
-
-  // Append the seven Ika CPI tail accounts in fixed order.
-  accounts.push(
-    { address: options.accounts.ikaProgram, role: AccountRole.READONLY },
-    { address: options.accounts.ikaCoordinator, role: AccountRole.READONLY },
-    { address: options.accounts.ikaMessageApproval, role: AccountRole.WRITABLE },
-    { address: options.accounts.ikaDwallet, role: AccountRole.READONLY },
-    { address: options.accounts.callerProgram, role: AccountRole.READONLY },
-    { address: options.accounts.cpiAuthority, role: AccountRole.READONLY },
-    { address: options.accounts.ikaPayer, role: AccountRole.WRITABLE_SIGNER },
-  );
 
   return {
     programAddress: config.utxopiaProgramId,

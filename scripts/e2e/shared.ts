@@ -199,6 +199,7 @@ export const Disc = {
   COMPLETE_REDEMPTION: 17,
   MARK_PROCESSING: 18,
   CANCEL_REDEMPTION: 19,
+  APPROVE_REDEMPTION_SIGNING: 27,
 } as const;
 
 // PDA seeds
