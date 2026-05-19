@@ -13,6 +13,7 @@ import {
 import { bcs } from "@mysten/bcs";
 import * as grpc from "@grpc/grpc-js";
 import * as protoLoader from "@grpc/proto-loader";
+import bs58 from "bs58";
 import path from "path";
 import { sendTx, pda, pollUntil, ok, val, log } from "./helpers.ts";
 
@@ -517,25 +518,19 @@ export async function setupDWallet(
 export async function requestPresign(
   grpcClient: any,
   payer: Keypair,
-  dwalletAddr: Uint8Array,
+  dwalletPublicKey: Uint8Array,
+  dwalletAttestation: DWalletSetup["attestation"],
 ): Promise<Uint8Array> {
   const data = SignedRequestData.serialize({
-    session_identifier_preimage: Array.from(dwalletAddr),
+    session_identifier_preimage: Array.from(dwalletPublicKey.slice(0, 32)),
     epoch: 1n,
     chain_id: { Solana: true },
     intended_chain_sender: Array.from(payer.publicKey.toBytes()),
     request: {
-      PresignForDWallet: {
+      Presign: {
         dwallet_network_encryption_public_key: Array.from(new Uint8Array(32)),
-        dwallet_public_key: Array.from(dwalletAddr),
-        dwallet_attestation: {
-          attestation_data: Array.from(new Uint8Array(32)),
-          network_signature: Array.from(new Uint8Array(64)),
-          network_pubkey: Array.from(new Uint8Array(32)),
-          epoch: 1n,
-        },
-        curve: { Curve25519: true },
-        signature_algorithm: { EdDSA: true },
+        curve: { Secp256k1: true },
+        signature_algorithm: { Taproot: true },
       },
     },
   }).toBytes();
@@ -567,34 +562,38 @@ export async function requestPresign(
 export async function requestSign(
   grpcClient: any,
   payer: Keypair,
-  dwalletAddr: Uint8Array,
+  dwalletPublicKey: Uint8Array,
+  dwalletAttestation: DWalletSetup["attestation"],
   message: Uint8Array,
   presignId: Uint8Array,
   txSignature: string,
+  txSlot: bigint,
 ): Promise<Uint8Array> {
+  const approvalSigBytes =
+    process.env.IKA_APPROVAL_SIG_ENCODING === "utf8"
+      ? new TextEncoder().encode(txSignature)
+      : bs58.decode(txSignature);
   const data = SignedRequestData.serialize({
-    session_identifier_preimage: Array.from(dwalletAddr),
+    session_identifier_preimage: Array.from(dwalletPublicKey.slice(0, 32)),
     epoch: 1n,
     chain_id: { Solana: true },
     intended_chain_sender: Array.from(payer.publicKey.toBytes()),
     request: {
       Sign: {
         message: Array.from(message),
-        message_metadata: [],
+        message_metadata: Array.from(new Uint8Array(32)),
         presign_session_identifier: Array.from(presignId),
         message_centralized_signature: Array.from(new Uint8Array(64)),
         dwallet_attestation: {
-          attestation_data: Array.from(new Uint8Array(32)),
-          network_signature: Array.from(new Uint8Array(64)),
-          network_pubkey: Array.from(new Uint8Array(32)),
-          epoch: 1n,
+          attestation_data: Array.from(dwalletAttestation.attestationData),
+          network_signature: Array.from(dwalletAttestation.networkSignature),
+          network_pubkey: Array.from(dwalletAttestation.networkPubkey),
+          epoch: dwalletAttestation.epoch,
         },
         approval_proof: {
           Solana: {
-            transaction_signature: Array.from(
-              Buffer.from(txSignature, "base64"),
-            ),
-            slot: 0n,
+            transaction_signature: Array.from(approvalSigBytes),
+            slot: txSlot,
           },
         },
       },

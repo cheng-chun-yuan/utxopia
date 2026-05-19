@@ -28,24 +28,51 @@ use crate::utils::{
 
 /// Instruction data:
 /// - btc_sighash: [u8; 32] — BIP-341 key-spend sighash for the unsigned BTC tx
+/// - ika_message_digest_override: optional [u8; 32] — exact digest Ika's signer
+///   uses for MessageApproval lookup
 /// - miner_fee_sats: u64 LE — backend-computed fee, bounded by policy
 pub struct ApproveRedemptionSigningData {
     pub btc_sighash: [u8; 32],
+    pub ika_message_digest_override: Option<[u8; 32]>,
+    pub signature_scheme_override: Option<u16>,
     pub miner_fee_sats: u64,
 }
 
 impl ApproveRedemptionSigningData {
     pub const LEN: usize = 32 + 8;
+    pub const LEN_WITH_IKA_DIGEST: usize = 32 + 32 + 8;
+    pub const LEN_WITH_IKA_DIGEST_AND_SCHEME: usize = 32 + 32 + 2 + 8;
 
     pub fn from_bytes(data: &[u8]) -> Result<Self, ProgramError> {
-        if data.len() != Self::LEN {
+        if data.len() != Self::LEN
+            && data.len() != Self::LEN_WITH_IKA_DIGEST
+            && data.len() != Self::LEN_WITH_IKA_DIGEST_AND_SCHEME
+        {
             return Err(ProgramError::InvalidInstructionData);
         }
         let mut btc_sighash = [0u8; 32];
         btc_sighash.copy_from_slice(&data[..32]);
-        let miner_fee_sats = u64::from_le_bytes(data[32..40].try_into().unwrap());
+        let (ika_message_digest_override, signature_scheme_override, miner_fee_offset) =
+            if data.len() == Self::LEN_WITH_IKA_DIGEST
+                || data.len() == Self::LEN_WITH_IKA_DIGEST_AND_SCHEME
+            {
+                let mut digest = [0u8; 32];
+                digest.copy_from_slice(&data[32..64]);
+                if data.len() == Self::LEN_WITH_IKA_DIGEST_AND_SCHEME {
+                    let scheme = u16::from_le_bytes(data[64..66].try_into().unwrap());
+                    (Some(digest), Some(scheme), 66)
+                } else {
+                    (Some(digest), None, 64)
+                }
+            } else {
+                (None, None, 32)
+            };
+        let miner_fee_sats =
+            u64::from_le_bytes(data[miner_fee_offset..miner_fee_offset + 8].try_into().unwrap());
         Ok(Self {
             btc_sighash,
+            ika_message_digest_override,
+            signature_scheme_override,
             miner_fee_sats,
         })
     }
@@ -131,12 +158,23 @@ pub fn process_approve_redemption_signing(
         (*cfg.get_ika_dwallet_xonly_pubkey(), cfg.get_cpi_authority_bump())
     };
 
+    // We still policy-check the original BIP-341 sighash above, but approve
+    // the digest Ika will actually request. The override is needed for the
+    // Solana pre-alpha gRPC path, where the digest is produced from the
+    // off-chain Sign payload rather than by hashing the BTC sighash directly.
+    let ika_message_digest = ix_data
+        .ika_message_digest_override
+        .unwrap_or_else(|| crate::utils::bitcoin::sha256(&ix_data.btc_sighash));
+    let signature_scheme = ix_data
+        .signature_scheme_override
+        .unwrap_or(SIG_SCHEME_TAPROOT_SHA256);
+
     let ma_bump = crate::cpi::ika::find_message_approval_pda_bump(
         ika_program.key(),
         &dwallet_xonly,
-        &ix_data.btc_sighash,
+        &ika_message_digest,
         ika_message_approval.key(),
-        SIG_SCHEME_TAPROOT_SHA256,
+        signature_scheme,
     )?;
 
     let metadata_zero = [0u8; 32];
@@ -152,10 +190,10 @@ pub fn process_approve_redemption_signing(
             system_program,
             dwallet_program: ika_program,
         },
-        &ix_data.btc_sighash,
+        &ika_message_digest,
         &metadata_zero,
         &user_pubkey,
-        SIG_SCHEME_TAPROOT_SHA256,
+        signature_scheme,
         ma_bump,
         cpi_authority_bump,
     )?;

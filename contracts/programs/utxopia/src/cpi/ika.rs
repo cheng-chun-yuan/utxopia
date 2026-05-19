@@ -47,7 +47,7 @@ pub const APPROVE_MESSAGE_IX_DATA_LEN: usize = 100;
 /// ```text
 /// [ 0     ] u8     discriminator       = IX_APPROVE_MESSAGE (8)
 /// [ 1     ] u8     bump                = MessageApproval PDA bump
-/// [ 2..34 ] [u8;32] message_digest      = the Bitcoin (or other) sighash to sign
+/// [ 2..34 ] [u8;32] message_digest      = Ika's digest of the message to sign
 /// [34..66 ] [u8;32] message_metadata    = scheme-specific metadata; zeros for Taproot
 /// [66..98 ] [u8;32] user_pubkey         = a 32-byte tag the Ika program echoes back
 /// [98..100] u16 LE  signature_scheme    = e.g. SIG_SCHEME_TAPROOT_SHA256
@@ -118,7 +118,7 @@ const CURVE_SECP256K1_LE: [u8; 2] = [0x00, 0x00];
 pub fn find_message_approval_pda_bump(
     ika_program: &Pubkey,
     dwallet_xonly_pubkey: &[u8; 32],
-    sighash: &[u8; 32],
+    message_digest: &[u8; 32],
     expected: &Pubkey,
     signature_scheme: u16,
 ) -> Result<u8, ProgramError> {
@@ -135,7 +135,7 @@ pub fn find_message_approval_pda_bump(
                 &payload[32..],
                 b"message_approval",
                 &scheme_le,
-                sighash,
+                message_digest,
             ],
             ika_program,
         );
