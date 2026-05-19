@@ -786,10 +786,10 @@ impl SpvVerifier {
             sweep_buffer,
         )?;
 
-        // --- Instruction 2: utxopia complete_deposit (disc 1) ---
+        // --- Instruction 2: utxopia complete_deposit (disc 11) ---
         // Layout: disc(1) + sweep_txid(32) + block_height(8) + sweep_tx_size(4) + deposit_tx_size(4) + deposit_txid(32)
         let mut deposit_data = Vec::with_capacity(81);
-        deposit_data.push(1u8); // discriminator
+        deposit_data.push(11u8); // complete_deposit discriminator
         deposit_data.extend_from_slice(sweep_txid);
         deposit_data.extend_from_slice(&block_height.to_le_bytes());
         deposit_data.extend_from_slice(&sweep_tx_size.to_le_bytes());
@@ -841,18 +841,41 @@ impl SpvVerifier {
         };
 
         // Get recent blockhash and send
-        let recent_blockhash = self
+        let mut recent_blockhash = self
             .rpc
             .get_latest_blockhash()
             .map_err(|e| VerifierError::RpcError(format!("Failed to get blockhash: {}", e)))?;
 
+        // Send SPV verification separately from complete_deposit. This makes
+        // retries idempotent and avoids coupling PDA creation in the light
+        // client with the UTXOpia state transition in one Solana transaction.
+        let verified_exists = self
+            .rpc
+            .get_account(&verified_tx_pda)
+            .map(|account| !account.data.is_empty())
+            .unwrap_or(false);
+        if !verified_exists {
+            let verify_tx = Transaction::new_signed_with_payer(
+                &[verify_tx_ix],
+                Some(&payer.pubkey()),
+                &[payer],
+                recent_blockhash,
+            );
+            self.rpc
+                .send_and_confirm_transaction(&verify_tx)
+                .map_err(|e| VerifierError::RpcError(format!("SPV transaction failed: {}", e)))?;
+            recent_blockhash = self
+                .rpc
+                .get_latest_blockhash()
+                .map_err(|e| VerifierError::RpcError(format!("Failed to get blockhash: {}", e)))?;
+        }
+
         let tx = Transaction::new_signed_with_payer(
-            &[verify_tx_ix, deposit_ix],
+            &[deposit_ix],
             Some(&payer.pubkey()),
             &[payer],
             recent_blockhash,
         );
-
         let sig = self
             .rpc
             .send_and_confirm_transaction(&tx)
