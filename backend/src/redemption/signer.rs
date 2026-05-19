@@ -342,8 +342,8 @@ impl IkaSigner {
         parity: u8,
     ) -> solana_sdk::pubkey::Pubkey {
         let scheme_le = SIG_SCHEME_TAPROOT_SHA256.to_le_bytes();
-        use sha2::{Digest, Sha256};
-        let ika_message_digest: [u8; 32] = Sha256::digest(sighash).into();
+        use sha3::{Digest, Keccak256};
+        let ika_message_digest: [u8; 32] = Keccak256::digest(sighash).into();
         let xonly = self.xonly_pubkey.serialize();
         let mut payload = [0u8; 35];
         payload[..2].copy_from_slice(&CURVE_SECP256K1_LE);
@@ -630,8 +630,8 @@ mod tests {
 
         for (candidate, parity) in candidates.iter().zip([0x02u8, 0x03u8]) {
             let scheme_le = SIG_SCHEME_TAPROOT_SHA256.to_le_bytes();
-            use sha2::{Digest, Sha256};
-            let ika_message_digest: [u8; 32] = Sha256::digest(sighash).into();
+            use sha3::{Digest, Keccak256};
+            let ika_message_digest: [u8; 32] = Keccak256::digest(sighash).into();
             let xonly = s.xonly_pubkey.serialize();
             let mut payload = [0u8; 35];
             payload[..2].copy_from_slice(&CURVE_SECP256K1_LE);

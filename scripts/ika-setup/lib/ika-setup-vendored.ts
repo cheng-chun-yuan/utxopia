@@ -581,7 +581,7 @@ export async function requestSign(
     request: {
       Sign: {
         message: Array.from(message),
-        message_metadata: Array.from(new Uint8Array(32)),
+        message_metadata: [],
         presign_session_identifier: Array.from(presignId),
         message_centralized_signature: Array.from(new Uint8Array(64)),
         dwallet_attestation: {

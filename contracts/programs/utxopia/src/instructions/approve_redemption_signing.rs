@@ -158,13 +158,12 @@ pub fn process_approve_redemption_signing(
         (*cfg.get_ika_dwallet_xonly_pubkey(), cfg.get_cpi_authority_bump())
     };
 
-    // We still policy-check the original BIP-341 sighash above, but approve
-    // the digest Ika will actually request. The override is needed for the
-    // Solana pre-alpha gRPC path, where the digest is produced from the
-    // off-chain Sign payload rather than by hashing the BTC sighash directly.
+    // We still policy-check the original BIP-341 sighash above, but Ika's
+    // MessageApproval PDA is keyed by keccak256(message), where message is the
+    // exact byte payload sent to gRPC Sign.
     let ika_message_digest = ix_data
         .ika_message_digest_override
-        .unwrap_or_else(|| crate::utils::bitcoin::sha256(&ix_data.btc_sighash));
+        .unwrap_or_else(|| crate::utils::bitcoin::keccak256(&ix_data.btc_sighash));
     let signature_scheme = ix_data
         .signature_scheme_override
         .unwrap_or(SIG_SCHEME_TAPROOT_SHA256);

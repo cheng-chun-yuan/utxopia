@@ -1092,8 +1092,8 @@ fn derive_ika_message_approval_pda(
 ) -> Result<Pubkey, SolError> {
     const SIG_SCHEME_TAPROOT_SHA256: u16 = 3;
     let scheme_le = SIG_SCHEME_TAPROOT_SHA256.to_le_bytes();
-    use sha2::{Digest, Sha256};
-    let ika_message_digest: [u8; 32] = Sha256::digest(sighash).into();
+    use sha3::{Digest, Keccak256};
+    let ika_message_digest: [u8; 32] = Keccak256::digest(sighash).into();
 
     for parity in [0x02u8, 0x03u8] {
         let mut payload = [0u8; 35];

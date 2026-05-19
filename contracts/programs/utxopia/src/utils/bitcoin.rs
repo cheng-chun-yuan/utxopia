@@ -65,6 +65,32 @@ pub fn sha256(data: &[u8]) -> [u8; 32] {
     result
 }
 
+/// Keccak-256 hash using Solana's syscall.
+pub fn keccak256(data: &[u8]) -> [u8; 32] {
+    let mut result = [0u8; 32];
+
+    #[cfg(target_os = "solana")]
+    {
+        unsafe {
+            extern "C" {
+                fn sol_keccak256(vals: *const u8, val_len: u64, hash_result: *mut u8) -> u64;
+            }
+
+            let slice_desc = [data.as_ptr(), data.len() as *const u8];
+            sol_keccak256(slice_desc.as_ptr() as *const u8, 1, result.as_mut_ptr());
+        }
+    }
+
+    #[cfg(not(target_os = "solana"))]
+    {
+        use sha3::{Digest, Keccak256};
+        let hash = Keccak256::digest(data);
+        result.copy_from_slice(&hash);
+    }
+
+    result
+}
+
 /// Double SHA256 hash of two 32-byte values concatenated
 /// Used for Bitcoin merkle tree computation
 pub fn double_sha256_pair(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
