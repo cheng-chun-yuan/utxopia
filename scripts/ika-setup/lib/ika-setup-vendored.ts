@@ -521,8 +521,14 @@ export async function requestPresign(
   dwalletPublicKey: Uint8Array,
   dwalletAttestation: DWalletSetup["attestation"],
 ): Promise<Uint8Array> {
+  const dkgPayload = VersionedDWalletDataAttestation.parse(
+    new Uint8Array(dwalletAttestation.attestationData),
+  );
+  if (!dkgPayload.V1) {
+    throw new Error(`unexpected dWallet payload variant: ${JSON.stringify(dkgPayload)}`);
+  }
   const data = SignedRequestData.serialize({
-    session_identifier_preimage: Array.from(dwalletPublicKey.slice(0, 32)),
+    session_identifier_preimage: Array.from(dkgPayload.V1.session_identifier),
     epoch: 1n,
     chain_id: { Solana: true },
     intended_chain_sender: Array.from(payer.publicKey.toBytes()),
@@ -569,12 +575,18 @@ export async function requestSign(
   txSignature: string,
   txSlot: bigint,
 ): Promise<Uint8Array> {
+  const dkgPayload = VersionedDWalletDataAttestation.parse(
+    new Uint8Array(dwalletAttestation.attestationData),
+  );
+  if (!dkgPayload.V1) {
+    throw new Error(`unexpected dWallet payload variant: ${JSON.stringify(dkgPayload)}`);
+  }
   const approvalSigBytes =
     process.env.IKA_APPROVAL_SIG_ENCODING === "utf8"
       ? new TextEncoder().encode(txSignature)
       : bs58.decode(txSignature);
   const data = SignedRequestData.serialize({
-    session_identifier_preimage: Array.from(dwalletPublicKey.slice(0, 32)),
+    session_identifier_preimage: Array.from(dkgPayload.V1.session_identifier),
     epoch: 1n,
     chain_id: { Solana: true },
     intended_chain_sender: Array.from(payer.publicKey.toBytes()),
