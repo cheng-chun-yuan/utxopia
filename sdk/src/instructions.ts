@@ -371,6 +371,8 @@ export interface CompleteRedemptionInstructionOptions {
 export interface ApproveRedemptionSigningInstructionOptions {
   /** BIP-341 taproot key-spend sighash for the unsigned BTC transaction. */
   btcSighash: Uint8Array;
+  /** Optional keccak256(Sign.message), where Sign.message is the TapSighash preimage. */
+  ikaMessageDigest?: Uint8Array;
   /** Miner fee in satoshis, checked by the on-chain signing policy. */
   minerFeeSats: bigint | number;
   accounts: {
@@ -390,16 +392,23 @@ export interface ApproveRedemptionSigningInstructionOptions {
 
 export function buildApproveRedemptionSigningInstructionData(options: {
   btcSighash: Uint8Array;
+  ikaMessageDigest?: Uint8Array;
   minerFeeSats: bigint | number;
 }): Uint8Array {
   if (options.btcSighash.length !== 32) {
     throw new Error("btcSighash must be exactly 32 bytes");
   }
-  const data = new Uint8Array(1 + 32 + 8);
+  if (options.ikaMessageDigest && options.ikaMessageDigest.length !== 32) {
+    throw new Error("ikaMessageDigest must be exactly 32 bytes");
+  }
+  const data = new Uint8Array(1 + 32 + (options.ikaMessageDigest ? 32 : 0) + 8);
   const view = new DataView(data.buffer);
   let offset = 0;
   data[offset++] = INSTRUCTION.APPROVE_REDEMPTION_SIGNING;
   data.set(options.btcSighash, offset); offset += 32;
+  if (options.ikaMessageDigest) {
+    data.set(options.ikaMessageDigest, offset); offset += 32;
+  }
   view.setBigUint64(offset, BigInt(options.minerFeeSats), true);
   return data;
 }
@@ -426,6 +435,7 @@ export function buildApproveRedemptionSigningInstruction(
     ],
     data: buildApproveRedemptionSigningInstructionData({
       btcSighash: options.btcSighash,
+      ikaMessageDigest: options.ikaMessageDigest,
       minerFeeSats: options.minerFeeSats,
     }),
   };

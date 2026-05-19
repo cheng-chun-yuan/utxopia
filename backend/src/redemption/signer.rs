@@ -5,11 +5,13 @@
 
 use async_trait::async_trait;
 use bitcoin::{
+    consensus::encode,
     hashes::Hash,
     secp256k1::{self, Message, Secp256k1, SecretKey},
     sighash::{Prevouts, SighashCache, TapSighashType},
     Amount, TapTweakHash, Transaction, TxOut, Witness, XOnlyPublicKey,
 };
+use sha2::Digest as Sha2Digest;
 
 use crate::bitcoin::frost_client::{FrostClient, PrevoutInfo, SigningContext};
 use crate::redemption::builder::UnsignedTx;
@@ -302,7 +304,7 @@ impl IkaSigner {
         }
     }
 
-    /// Derive the canonical `MessageApproval` PDA candidates for a given sighash.
+    /// Derive the canonical `MessageApproval` PDA candidates for a given Ika message digest.
     ///
     /// Ika derives approval PDAs from the dWallet PDA seed material, not from the
     /// dWallet account address:
@@ -318,14 +320,25 @@ impl IkaSigner {
     /// UTXOpia stores only the BIP-340 x-only pubkey, so we derive both possible
     /// compressed secp256k1 parities. The on-chain program uses the same
     /// candidate set when validating the caller-supplied MessageApproval PDA.
+    pub fn message_approval_pda_candidates_for_digest(
+        &self,
+        ika_message_digest: &[u8; 32],
+    ) -> [solana_sdk::pubkey::Pubkey; 2] {
+        [
+            self.message_approval_pda_for_parity(ika_message_digest, 0x02),
+            self.message_approval_pda_for_parity(ika_message_digest, 0x03),
+        ]
+    }
+
+    /// Backward-compatible helper for older call-sites that keyed Ika approvals
+    /// as `keccak256(btc_sighash)`. New Taproot flows should use
+    /// [`message_approval_pda_candidates_for_digest`] with
+    /// `keccak256(tap_sighash_preimage)`.
     pub fn message_approval_pda_candidates(
         &self,
         sighash: &[u8; 32],
     ) -> [solana_sdk::pubkey::Pubkey; 2] {
-        [
-            self.message_approval_pda_for_parity(sighash, 0x02),
-            self.message_approval_pda_for_parity(sighash, 0x03),
-        ]
+        self.message_approval_pda_candidates_for_digest(&ika_message_digest(sighash))
     }
 
     /// Backward-compatible helper returning the even-parity candidate.
@@ -338,12 +351,10 @@ impl IkaSigner {
 
     fn message_approval_pda_for_parity(
         &self,
-        sighash: &[u8; 32],
+        ika_message_digest: &[u8; 32],
         parity: u8,
     ) -> solana_sdk::pubkey::Pubkey {
         let scheme_le = SIG_SCHEME_TAPROOT_SHA256.to_le_bytes();
-        use sha3::{Digest, Keccak256};
-        let ika_message_digest: [u8; 32] = Keccak256::digest(sighash).into();
         let xonly = self.xonly_pubkey.serialize();
         let mut payload = [0u8; 35];
         payload[..2].copy_from_slice(&CURVE_SECP256K1_LE);
@@ -357,7 +368,7 @@ impl IkaSigner {
                 &payload[32..],
                 b"message_approval",
                 &scheme_le,
-                &ika_message_digest,
+                ika_message_digest,
             ],
             &self.ika_program_id,
         );
@@ -394,16 +405,28 @@ impl TxSigner for IkaSigner {
         let prevouts_ref = Prevouts::All(&prevouts);
 
         for i in 0..tx.input.len() {
-            // 1. Compute the taproot key-spend sighash for input i.
+            // 1. Compute the Taproot key-spend preimage that Ika signs and
+            //    the final BTC sighash that goes into Schnorr verification.
             let mut sighash_cache = SighashCache::new(&tx);
             let sighash = sighash_cache
                 .taproot_key_spend_signature_hash(i, &prevouts_ref, TapSighashType::Default)
                 .map_err(|e| SignerError::SigningFailed(e.to_string()))?;
             let sighash_bytes: [u8; 32] = sighash.to_byte_array();
+            let preimage = taproot_key_spend_sighash_preimage(&tx, &prevouts, i)
+                .map_err(|e| SignerError::SigningFailed(e.to_string()))?;
+            let preimage_hash = sha256_array(&preimage);
+            if preimage_hash != sighash_bytes {
+                return Err(SignerError::SigningFailed(format!(
+                    "taproot preimage mismatch: sha256(preimage)={} sighash={}",
+                    hex::encode(preimage_hash),
+                    hex::encode(sighash_bytes)
+                )));
+            }
+            let ika_digest = ika_message_digest(&preimage);
 
-            // 2. Poll the canonical MessageApproval PDA candidates for this sighash.
+            // 2. Poll the MessageApproval PDA candidates keyed by keccak256(preimage).
             let sig_bytes = self
-                .poll_signature_candidates(&self.message_approval_pda_candidates(&sighash_bytes))
+                .poll_signature_candidates(&self.message_approval_pda_candidates_for_digest(&ika_digest))
                 .await?;
 
             // 3. Build the Schnorr Taproot signature.
@@ -415,6 +438,15 @@ impl TxSigner for IkaSigner {
                 signature: sig,
                 sighash_type: TapSighashType::Default,
             };
+            let msg = Message::from_digest(sighash_bytes);
+            Secp256k1::verification_only()
+                .verify_schnorr(&signature.signature, &msg, &self.xonly_pubkey)
+                .map_err(|e| {
+                    SignerError::SigningFailed(format!(
+                        "Ika signature did not verify against BTC sighash: {}",
+                        e
+                    ))
+                })?;
 
             tx.input[i].witness = Witness::from_slice(&[signature.to_vec()]);
         }
@@ -501,6 +533,100 @@ const MA_STATUS_SIGNED: u8 = 1;
 const SCHNORR_SIG_LEN: usize = 64;
 const CURVE_SECP256K1_LE: [u8; 2] = [0x00, 0x00];
 const SIG_SCHEME_TAPROOT_SHA256: u16 = 3;
+
+pub fn ika_message_digest(message: &[u8]) -> [u8; 32] {
+    use sha3::{Digest, Keccak256};
+    Keccak256::digest(message).into()
+}
+
+fn sha256_array(data: &[u8]) -> [u8; 32] {
+    sha2::Sha256::digest(data).into()
+}
+
+fn compact_size(n: usize) -> Vec<u8> {
+    if n < 0xfd {
+        vec![n as u8]
+    } else if n <= 0xffff {
+        let mut out = vec![0xfd];
+        out.extend_from_slice(&(n as u16).to_le_bytes());
+        out
+    } else if n <= 0xffff_ffff {
+        let mut out = vec![0xfe];
+        out.extend_from_slice(&(n as u32).to_le_bytes());
+        out
+    } else {
+        let mut out = vec![0xff];
+        out.extend_from_slice(&(n as u64).to_le_bytes());
+        out
+    }
+}
+
+fn serialize_scriptpubkey_for_tapsighash(script: &bitcoin::ScriptBuf) -> Vec<u8> {
+    let bytes = script.as_bytes();
+    let mut out = compact_size(bytes.len());
+    out.extend_from_slice(bytes);
+    out
+}
+
+/// Build the exact bytes sent to Ika `Sign.message` for Taproot key-spend.
+///
+/// Ika's TaprootSha256 path hashes `Sign.message` with SHA256 before signing.
+/// For BIP-341 this message must therefore be the tagged TapSighash preimage:
+/// `sha256(preimage)` equals bitcoin-rust's final key-spend sighash.
+pub fn taproot_key_spend_sighash_preimage(
+    tx: &Transaction,
+    prevouts: &[TxOut],
+    input_index: usize,
+) -> Result<Vec<u8>, SignerError> {
+    if input_index >= tx.input.len() {
+        return Err(SignerError::SigningFailed("input index out of range".into()));
+    }
+    if prevouts.len() != tx.input.len() {
+        return Err(SignerError::SigningFailed(
+            "prevout count must match input count".into(),
+        ));
+    }
+
+    let mut outpoints = Vec::new();
+    let mut amounts = Vec::new();
+    let mut scriptpubkeys = Vec::new();
+    let mut sequences = Vec::new();
+    let mut outputs = Vec::new();
+
+    for input in &tx.input {
+        outpoints.extend_from_slice(&encode::serialize(&input.previous_output));
+        sequences.extend_from_slice(&input.sequence.to_consensus_u32().to_le_bytes());
+    }
+    for prevout in prevouts {
+        amounts.extend_from_slice(&prevout.value.to_sat().to_le_bytes());
+        scriptpubkeys.extend_from_slice(&serialize_scriptpubkey_for_tapsighash(
+            &prevout.script_pubkey,
+        ));
+    }
+    for output in &tx.output {
+        outputs.extend_from_slice(&encode::serialize(output));
+    }
+
+    let mut msg = Vec::with_capacity(1 + 1 + 4 + 4 + 32 * 5 + 1 + 4);
+    msg.push(0x00); // epoch
+    msg.push(0x00); // SIGHASH_DEFAULT
+    msg.extend_from_slice(&tx.version.0.to_le_bytes());
+    msg.extend_from_slice(&tx.lock_time.to_consensus_u32().to_le_bytes());
+    msg.extend_from_slice(&sha256_array(&outpoints));
+    msg.extend_from_slice(&sha256_array(&amounts));
+    msg.extend_from_slice(&sha256_array(&scriptpubkeys));
+    msg.extend_from_slice(&sha256_array(&sequences));
+    msg.extend_from_slice(&sha256_array(&outputs));
+    msg.push(0x00); // spend_type: key-path, no annex
+    msg.extend_from_slice(&(input_index as u32).to_le_bytes());
+
+    let tag_hash = sha256_array(b"TapSighash");
+    let mut preimage = Vec::with_capacity(64 + msg.len());
+    preimage.extend_from_slice(&tag_hash);
+    preimage.extend_from_slice(&tag_hash);
+    preimage.extend_from_slice(&msg);
+    Ok(preimage)
+}
 
 fn extract_schnorr_signature(data: &[u8]) -> Option<[u8; 64]> {
     if data.len() < MA_TOTAL_LEN {
@@ -651,6 +777,57 @@ mod tests {
             );
             assert_eq!(*candidate, expected);
         }
+    }
+
+    #[test]
+    fn taproot_preimage_hash_matches_bitcoin_sighash() {
+        use bitcoin::{
+            absolute::LockTime,
+            transaction::Version,
+            Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid, Witness,
+        };
+        use std::str::FromStr;
+
+        let prevout = TxOut {
+            value: Amount::from_sat(50_000),
+            script_pubkey: ScriptBuf::from_hex(
+                "5120fee6779b254c746ae4b691ddb650756ab4bfb7a47cdc4416464c76f15e25291d",
+            )
+            .unwrap(),
+        };
+        let tx = Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![TxIn {
+                previous_output: OutPoint {
+                    txid: Txid::from_str(
+                        "1111111111111111111111111111111111111111111111111111111111111111",
+                    )
+                    .unwrap(),
+                    vout: 0,
+                },
+                script_sig: ScriptBuf::new(),
+                sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+                witness: Witness::new(),
+            }],
+            output: vec![TxOut {
+                value: Amount::from_sat(45_000),
+                script_pubkey: ScriptBuf::from_hex(
+                    "5120aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                )
+                .unwrap(),
+            }],
+        };
+        let prevouts = vec![prevout];
+        let prevouts_ref = Prevouts::All(&prevouts);
+        let sighash = SighashCache::new(&tx)
+            .taproot_key_spend_signature_hash(0, &prevouts_ref, TapSighashType::Default)
+            .unwrap()
+            .to_byte_array();
+        let preimage = taproot_key_spend_sighash_preimage(&tx, &prevouts, 0).unwrap();
+
+        assert_eq!(sha256_array(&preimage), sighash);
+        assert_eq!(preimage.len(), 64 + 175);
     }
 
     #[tokio::test]

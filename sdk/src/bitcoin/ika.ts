@@ -2,9 +2,9 @@
  * Ika dWallet → Bitcoin P2TR address derivation.
  *
  * UTXOpia v2 custody is held by an Ika dWallet on Solana. The dWallet's
- * compressed secp256k1 public key (or its x-only form) is the BIP-341 internal
- * key for a Taproot output with no script tree. Spending happens via key-path
- * only — Ika produces a Schnorr signature over the BTC sighash on demand.
+ * compressed secp256k1 public key (or its x-only form) identifies the Bitcoin
+ * key that Ika can sign for. Ika pre-alpha signs for the raw x-only key; it
+ * does not currently produce signatures for UTXOpia's per-deposit tweaked keys.
  */
 
 import { taggedHash, hexToBytes, bytesToHex } from "../crypto";
@@ -56,6 +56,25 @@ export function deriveCustodyAddressFromIkaDWallet(
     network === "mainnet" ? "bc" : network === "regtest" ? "bcrt" : "tb";
   const words = bech32m.toWords(outputKey);
   return bech32m.encode(hrp, [1, ...words]);
+}
+
+/**
+ * Encode a raw x-only public key as a P2TR witness program.
+ *
+ * This intentionally does not apply BIP-341's no-script TapTweak. It is the
+ * direct-vault address used by the current Ika pre-alpha mock signer, because
+ * the signer returns Schnorr signatures for the dWallet's raw x-only key.
+ */
+export function deriveRawXOnlyP2TRAddress(
+  xonlyPubkey: Uint8Array,
+  network: "mainnet" | "testnet" | "regtest"
+): string {
+  if (xonlyPubkey.length !== 32) {
+    throw new Error("xonlyPubkey must be 32 bytes");
+  }
+  const hrp =
+    network === "mainnet" ? "bc" : network === "regtest" ? "bcrt" : "tb";
+  return bech32m.encode(hrp, [1, ...bech32m.toWords(xonlyPubkey)]);
 }
 
 function extractXOnly(ref: IkaDWalletRef): Uint8Array {

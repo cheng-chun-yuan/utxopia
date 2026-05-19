@@ -390,6 +390,7 @@ export {
   computeNullifierBytes,
   parseAnnouncementsFromHex,
   createDepositFromConfig,
+  createDirectVaultDeposit,
   isDepositForViewer,
   isDepositForViewerHex,
   ANNOUNCEMENT_TYPE_DEPOSIT,
@@ -405,6 +406,8 @@ export {
   type ViewOnlyKeys,
   type ViewOnlyScannedNote,
   createNonInteractiveDeposit,
+  isDirectVaultDepositMode,
+  pickIkaCustodyKey,
   type NonInteractiveDepositResult,
   type NonInteractiveDepositWithRefundResult,
 } from "./stealth";

@@ -1,5 +1,8 @@
 import { describe, it, expect } from "bun:test";
-import { deriveCustodyAddressFromIkaDWallet } from "../../src/bitcoin/ika";
+import {
+  deriveCustodyAddressFromIkaDWallet,
+  deriveRawXOnlyP2TRAddress,
+} from "../../src/bitcoin/ika";
 import { hexToBytes } from "../../src/crypto";
 
 // secp256k1 generator point — well-known x-only.
@@ -84,5 +87,16 @@ describe("deriveCustodyAddressFromIkaDWallet", () => {
     );
     expect(tweaked).toBe(tweakedAgain); // determinism
     expect(tweaked.length).toBeGreaterThan("tb1p".length);
+  });
+
+  it("can encode the raw x-only direct Ika vault address", () => {
+    const tweaked = deriveCustodyAddressFromIkaDWallet(
+      { type: "literal-xonly", xonlyPubkey: G_XONLY },
+      "regtest"
+    );
+    const raw = deriveRawXOnlyP2TRAddress(G_XONLY, "regtest");
+
+    expect(raw).toMatch(/^bcrt1p[a-z0-9]{58}$/);
+    expect(raw).not.toBe(tweaked);
   });
 });

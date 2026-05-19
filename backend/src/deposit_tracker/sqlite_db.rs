@@ -143,6 +143,71 @@ impl SqliteDepositStore {
             ).ok();
         }
 
+        // Migration: direct-to-vault mode reuses the same pool address for many
+        // deposits, so taproot_address can no longer be UNIQUE. Older DBs were
+        // created with `taproot_address TEXT NOT NULL UNIQUE`; rebuild once.
+        let create_sql: Option<String> = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='deposits'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if create_sql
+            .as_deref()
+            .is_some_and(|sql| sql.contains("taproot_address TEXT NOT NULL UNIQUE"))
+        {
+            conn.execute_batch(
+                r#"
+                ALTER TABLE deposits RENAME TO deposits_old_unique_addr;
+                CREATE TABLE deposits (
+                    id TEXT PRIMARY KEY,
+                    taproot_address TEXT NOT NULL,
+                    commitment TEXT NOT NULL,
+                    amount_sats INTEGER NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    confirmations INTEGER DEFAULT 0,
+                    deposit_txid TEXT,
+                    deposit_vout INTEGER,
+                    deposit_block_height INTEGER,
+                    sweep_txid TEXT,
+                    sweep_confirmations INTEGER DEFAULT 0,
+                    sweep_block_height INTEGER,
+                    pool_address TEXT,
+                    solana_tx TEXT,
+                    leaf_index INTEGER,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    error TEXT,
+                    retry_count INTEGER DEFAULT 0,
+                    last_retry_at INTEGER,
+                    ephemeral_pub TEXT,
+                    encrypted_amount_hex TEXT,
+                    auto_detected INTEGER DEFAULT 0,
+                    npk TEXT,
+                    sweep_fee_sats INTEGER
+                );
+                INSERT OR IGNORE INTO deposits (
+                    id, taproot_address, commitment, amount_sats, status,
+                    confirmations, deposit_txid, deposit_vout, deposit_block_height,
+                    sweep_txid, sweep_confirmations, sweep_block_height, pool_address,
+                    solana_tx, leaf_index, created_at, updated_at, error,
+                    retry_count, last_retry_at, ephemeral_pub, encrypted_amount_hex,
+                    auto_detected, npk, sweep_fee_sats
+                )
+                SELECT
+                    id, taproot_address, commitment, amount_sats, status,
+                    confirmations, deposit_txid, deposit_vout, deposit_block_height,
+                    sweep_txid, sweep_confirmations, sweep_block_height, pool_address,
+                    solana_tx, leaf_index, created_at, updated_at, error,
+                    retry_count, last_retry_at, ephemeral_pub, encrypted_amount_hex,
+                    auto_detected, npk, sweep_fee_sats
+                FROM deposits_old_unique_addr;
+                DROP TABLE deposits_old_unique_addr;
+                "#,
+            )?;
+        }
+
         // Migration: add unique index on deposit_txid to prevent duplicate processing
         conn.execute_batch(
             r#"
@@ -180,7 +245,7 @@ impl SqliteDepositStore {
         Ok(())
     }
 
-    /// Insert a new deposit record, ignoring conflicts on taproot_address or deposit_txid.
+    /// Insert a new deposit record, ignoring conflicts on id or deposit_txid.
     ///
     /// Returns `true` if the row was inserted, `false` if it already existed (conflict).
     /// This eliminates TOCTOU races between get_by_address() and insert().
@@ -543,22 +608,31 @@ mod tests {
     }
 
     #[test]
-    fn test_duplicate_address_ignored() {
+    fn test_duplicate_address_allowed_but_duplicate_txid_ignored() {
         let store = SqliteDepositStore::in_memory().unwrap();
 
-        let record1 = create_test_record("test1", "tb1p_same");
-        let record2 = create_test_record("test2", "tb1p_same");
+        let mut record1 = create_test_record("test1", "tb1p_same");
+        record1.deposit_txid = Some("txid_same".to_string());
+        let mut record2 = create_test_record("test2", "tb1p_same");
+        record2.deposit_txid = Some("txid_other".to_string());
+        let mut record3 = create_test_record("test3", "tb1p_same");
+        record3.deposit_txid = Some("txid_same".to_string());
 
         let inserted = store.insert(&record1).unwrap();
         assert!(inserted);
 
-        // Second insert with same address is silently ignored
+        // Direct Ika vault mode reuses the same address for many deposits.
         let inserted2 = store.insert(&record2).unwrap();
-        assert!(!inserted2);
+        assert!(inserted2);
 
-        // Original record is preserved
+        // The txid unique index still prevents processing the same BTC tx twice.
+        let inserted3 = store.insert(&record3).unwrap();
+        assert!(!inserted3);
+
         let retrieved = store.get_by_address("tb1p_same").unwrap().unwrap();
         assert_eq!(retrieved.id, "test1");
+        let by_txid = store.get_by_deposit_txid("txid_other").unwrap().unwrap();
+        assert_eq!(by_txid.id, "test2");
     }
 
     #[test]

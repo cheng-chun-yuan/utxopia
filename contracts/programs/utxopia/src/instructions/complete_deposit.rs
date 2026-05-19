@@ -2,7 +2,8 @@
 //!
 //! Trustless npk-based deposit flow:
 //! 1. User generates npk client-side, sends BTC with OP_RETURN(ephemeralPub || npk)
-//! 2. Backend detects deposit, sweeps UTXO to pool wallet
+//! 2. Backend detects deposit, then either sweeps UTXO to pool wallet or verifies
+//!    direct-to-pool deposits in-place
 //! 3. Backend calls btc-light-client's verify_transaction to create VerifiedTransaction PDA
 //! 4. Backend uploads BOTH sweep TX and deposit TX to ChadBuffer accounts
 //! 5. Backend calls this instruction — npk + ephemeral_pub extracted ON-CHAIN from deposit TX
@@ -10,9 +11,12 @@
 //! This instruction:
 //! - Checks VerifiedTransaction PDA exists (btc-light-client already verified SPV for sweep TX)
 //! - Verifies sufficient confirmations via light client tip height
-//! - Reads deposit TX from its ChadBuffer, extracts npk + ephemeral_pub from OP_RETURN
-//! - Verifies sweep TX has an input spending from the deposit TX (proves linkage)
-//! - Extracts deposit amount trustlessly from the SPV-verified sweep raw transaction
+//! - Reads deposit TX from its ChadBuffer, extracts npk + ephemeral_pub from OP_RETURN.
+//!   For direct-to-pool deposits, `deposit_tx_size = 0` and the SPV-verified tx
+//!   itself is treated as the deposit tx.
+//! - Verifies sweep TX has an input spending from the deposit TX (proves linkage),
+//!   unless direct-to-pool mode is used.
+//! - Extracts credited amount trustlessly from the SPV-verified transaction output.
 //! - Computes commitment ON-CHAIN: Poseidon(npk, ZKBTC_TOKEN_ID, amount)
 //! - Inserts commitment into Merkle tree
 //! - Emits stealth announcement as sol_log_data event (type=0, plaintext amount)
@@ -35,9 +39,10 @@ use pinocchio::{
 
 use crate::error::UTXOpiaError;
 use crate::state::{
-    CommitmentTree, DepositReceipt, PoolState, TokenConfig, UtxoRecord,
+    CommitmentTree, DepositReceipt, PoolConfig, PoolState, TokenConfig, UtxoRecord,
     VerifiedTransactionView, light_client_tip_height,
     deposit_receipt::DEPOSIT_RECEIPT_DISCRIMINATOR,
+    pool_config::POOL_CONFIG_DISCRIMINATOR,
 };
 use crate::utils::events::ANNOUNCEMENT_TYPE_DEPOSIT;
 use crate::utils::crypto::compute_commitment;
@@ -118,6 +123,7 @@ impl CompleteDepositData {
 /// 11. `[writable]` Deposit receipt PDA (prevents duplicate verification)
 /// 12. `[writable]` UTXO record PDA (tracks pool BTC UTXO)
 /// 13. `[writable]` TokenConfig PDA (for token_id, fees, total_shielded tracking)
+/// 14. `[]` PoolConfig PDA (optional, enforces sweep output is pool-controlled)
 ///
 /// # Instruction data
 /// - CompleteDepositData (80 bytes, fixed)
@@ -288,26 +294,49 @@ pub fn process_complete_deposit(
         .map_err(|_| UTXOpiaError::InvalidSpvProof)?;
 
     // --- Read and verify deposit TX from ChadBuffer ---
-    crate::utils::chadbuffer::validate_chadbuffer_owner(deposit_tx_buffer_info)?;
-    let deposit_buffer_data = deposit_tx_buffer_info
-        .try_borrow_data()
-        .map_err(|_| UTXOpiaError::InvalidBlockHeader)?;
+    // Direct-to-pool mode: deposit_tx_size == 0 means the SPV-verified tx is
+    // itself the deposit tx, so no second ChadBuffer is needed.
+    let direct_to_pool = ix_data.deposit_tx_size == 0;
+    let deposit_buffer_data = if direct_to_pool {
+        None
+    } else {
+        crate::utils::chadbuffer::validate_chadbuffer_owner(deposit_tx_buffer_info)?;
+        Some(
+            deposit_tx_buffer_info
+                .try_borrow_data()
+                .map_err(|_| UTXOpiaError::InvalidBlockHeader)?,
+        )
+    };
+    let deposit_raw_tx = if direct_to_pool {
+        if ix_data.deposit_txid != ix_data.sweep_txid {
+            return Err(UTXOpiaError::InvalidSpvProof.into());
+        }
+        sweep_raw_tx
+    } else {
+        let raw = read_transaction_from_buffer(
+            deposit_buffer_data
+                .as_ref()
+                .ok_or(UTXOpiaError::InvalidBlockHeader)?,
+            ix_data.deposit_tx_size as usize,
+        )?;
 
-    let deposit_raw_tx = read_transaction_from_buffer(&deposit_buffer_data, ix_data.deposit_tx_size as usize)?;
-
-    // Verify deposit transaction hash matches deposit_txid
-    let computed_deposit_hash = compute_tx_hash(deposit_raw_tx);
-    if computed_deposit_hash != ix_data.deposit_txid {
-        return Err(UTXOpiaError::InvalidSpvProof.into());
-    }
+        // Verify deposit transaction hash matches deposit_txid
+        let computed_deposit_hash = compute_tx_hash(raw);
+        if computed_deposit_hash != ix_data.deposit_txid {
+            return Err(UTXOpiaError::InvalidSpvProof.into());
+        }
+        raw
+    };
 
     // Parse deposit TX
     let deposit_parsed = ParsedTransaction::parse(deposit_raw_tx)
         .map_err(|_| UTXOpiaError::InvalidSpvProof)?;
 
     // --- Verify sweep TX spends from deposit TX (input linkage) ---
-    // This proves the chain: deposit TX -> sweep TX (SPV-verified)
-    if !sweep_parsed.find_input_with_prev_txid(&ix_data.deposit_txid) {
+    // This proves the chain: deposit TX -> sweep TX (SPV-verified).
+    // Direct-to-pool deposits skip this because the deposit tx is the
+    // SPV-verified pool UTXO itself.
+    if !direct_to_pool && !sweep_parsed.find_input_with_prev_txid(&ix_data.deposit_txid) {
         return Err(UTXOpiaError::InvalidSpvProof.into());
     }
 
@@ -321,9 +350,33 @@ pub fn process_complete_deposit(
         .map(|o| o.value)
         .unwrap_or(0);
 
-    // Extract sweep output amount and vout (what the pool received after miner fee)
-    let (deposit_output, sweep_vout) = sweep_parsed.find_deposit_output_with_vout()
-        .ok_or(UTXOpiaError::InvalidSpvProof)?;
+    // Extract sweep output amount and vout (what the pool received after miner fee).
+    // If PoolConfig is supplied, require the sweep output to match its pool_script
+    // so the recorded UTXO is controlled by the configured pool/Ika wallet.
+    let (deposit_output, sweep_vout) = if accounts.len() >= 15 {
+        let pool_config_info = &accounts[14];
+        validate_program_owner(pool_config_info, program_id)?;
+        let config_data = pool_config_info.try_borrow_data()?;
+        if config_data.len() >= PoolConfig::LEN && config_data[0] == POOL_CONFIG_DISCRIMINATOR {
+            let config = PoolConfig::from_bytes(&config_data)?;
+            let pool_script = config.get_pool_script();
+            if !pool_script.is_empty() {
+                sweep_parsed
+                    .find_output_by_script(pool_script)
+                    .ok_or(UTXOpiaError::InvalidSpvProof)?
+            } else {
+                sweep_parsed
+                    .find_deposit_output_with_vout()
+                    .ok_or(UTXOpiaError::InvalidSpvProof)?
+            }
+        } else {
+            return Err(UTXOpiaError::IkaCpiAccountsMissing.into());
+        }
+    } else {
+        sweep_parsed
+            .find_deposit_output_with_vout()
+            .ok_or(UTXOpiaError::InvalidSpvProof)?
+    };
     let amount_sats = deposit_output.value;
 
     // Validate extracted amount is within bounds

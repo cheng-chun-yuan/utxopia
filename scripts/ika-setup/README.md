@@ -50,6 +50,45 @@ UTXOPIA_NETWORK=devnet ../sync-env.sh
 
 Ika's pre-alpha devnet **wipes periodically** (per the upstream README). Plan for re-running this script before any demo. The state JSON should be considered ephemeral on devnet.
 
+## Imported-key status
+
+Do not use the placeholder Solana gRPC DKG/import payloads for BTC custody. The
+pre-alpha Solana examples accept zero-filled fields because the network signer is
+mocked, but the resulting dWallet key is not bound to the private key we intend
+to import, and signatures may not verify for the advertised dWallet public key.
+
+A real imported-key setup needs the same artifacts the upstream Ika TypeScript
+SDK generates in `prepareImportedKeyDWalletVerification`:
+
+- `protocolPublicParameters`, derived from the full network DKG public output
+- `userPublicOutput`
+- `userMessage`
+- `encryptedUserShareAndProof`
+- the retained user secret share needed later to build the imported-key sign
+  message
+
+The Solana pre-alpha docs expose the 164-byte `NetworkEncryptionKey` PDA, but
+that account is only the network encryption key metadata. It does not contain
+the full network DKG public output required to derive protocol public
+parameters. Until that output is available from the Solana pre-alpha surface or
+Ika ships a Solana SDK helper equivalent to the Sui TypeScript SDK flow, imported
+BTC pool custody cannot be made cryptographically sound through this script.
+
+Use `imported-key-probe.ts` only as a guardrail/probe: it intentionally refuses
+to accept an attested dWallet unless the attested compressed secp256k1 public key
+matches `IMPORT_PRIV`.
+
+For the Solana pre-alpha mock path, use `bun run imported:verify` to prove the
+mock imported dWallet can sign and verify. The returned public key is the mock
+dWallet key; it is expected not to match `IMPORT_PRIV`. `ImportedKeySign` with
+`TaprootSha256` verifies against `sha256(Sign.message)`, not the raw message.
+
+For BTC Taproot key-spend tests, approve/sign the BIP-341 TapSighash preimage,
+not the final 32-byte sighash. `sha256(preimage)` must equal the BTC sighash that
+Bitcoin verifies. `sign-approved-redemption.ts` now prints and sends that
+preimage to Ika, then verifies the returned Schnorr signature against the final
+BTC sighash before broadcasting.
+
 ## Why this isn't fully automated
 
 The upstream gRPC schema (`SignedRequestData` + `TransactionResponseData`) and the on-chain dWallet-creation tx call sequence are still in flux at pre-alpha. Vendoring that flow today means tracking upstream churn. We deliberately keep this as a runbook-driven script that delegates to the upstream voting example for the actual DKG, then takes its outputs and finishes the wiring locally.

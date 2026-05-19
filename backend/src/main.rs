@@ -25,6 +25,7 @@ use zkbtc::redemption::{IkaSigner, MpcSigner, RedemptionConfig, RedemptionServic
 use zkbtc::stealth::StealthDepositService;
 use std::env;
 use std::sync::Arc;
+use std::str::FromStr;
 
 #[tokio::main]
 async fn main() {
@@ -277,6 +278,12 @@ fn load_tracker_config(args: &[String]) -> TrackerConfig {
     if let Ok(addr) = env::var("POOL_RECEIVE_ADDRESS") {
         config.pool_receive_address = addr;
     }
+    if config.pool_receive_address.trim().is_empty() {
+        if let Some(addr) = derive_ika_pool_receive_address_from_env() {
+            println!("Derived POOL_RECEIVE_ADDRESS from Ika dWallet x-only pubkey: {}", addr);
+            config.pool_receive_address = addr;
+        }
+    }
     if let Ok(rpc) = env::var("UTXOPIA_SOLANA_RPC").or_else(|_| env::var("SOLANA_RPC_URL")) {
         config.solana_rpc = rpc;
     }
@@ -307,6 +314,27 @@ fn load_tracker_config(args: &[String]) -> TrackerConfig {
     config.header_batch_size = env_or("HEADER_BATCH_SIZE", config.header_batch_size);
 
     config
+}
+
+fn derive_ika_pool_receive_address_from_env() -> Option<String> {
+    let mode = env::var("UTXOPIA_SIGNING_MODE").ok()?;
+    if mode.to_lowercase() != "ika" {
+        return None;
+    }
+
+    let xonly_hex = env::var("UTXOPIA_IKA_DWALLET_XONLY_PUBKEY").ok()?;
+    let xonly_bytes = hex::decode(xonly_hex).ok()?;
+    if xonly_bytes.len() != 32 || xonly_bytes.iter().all(|b| *b == 0) {
+        return None;
+    }
+
+    let xonly = bitcoin::XOnlyPublicKey::from_slice(&xonly_bytes).ok()?;
+    let tweaked = bitcoin::key::TweakedPublicKey::dangerous_assume_tweaked(xonly);
+    let btc_network = env::var("UTXOPIA_BITCOIN_NETWORK")
+        .ok()
+        .and_then(|network| bitcoin::Network::from_str(&network).ok())
+        .unwrap_or(bitcoin::Network::Testnet);
+    Some(bitcoin::Address::p2tr_tweaked(tweaked, btc_network).to_string())
 }
 
 /// Ensure the data directory exists when using the default db path.

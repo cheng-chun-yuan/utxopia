@@ -75,6 +75,7 @@ SOLANA_RPC=$(jval solanaRpc)
 BACKEND_URL=$(jval backendUrl)
 
 SIGNING_MODE=$(python3 -c "import json,sys; d=json.load(open('$STATE_FILE')); print(d.get('signingMode','frost'))")
+DEPOSIT_MODE=$(python3 -c "import json,sys; d=json.load(open('$STATE_FILE')); s=d.get('signingMode','frost'); ika=d.get('ika',{}).get('dwalletXOnlyPubkey',''); has_ika=bool(ika and any(c not in '0' for c in ika.lower())); print(d.get('depositMode', 'direct' if s == 'ika' and has_ika else 'sweep'))")
 
 # Ika dWallet integration (nested under "ika" — fall back to empty string if absent).
 IKA_PROGRAM_ID=$(python3 -c "import json,sys; d=json.load(open('$STATE_FILE')); print(d.get('ika',{}).get('programId',''))")
@@ -136,6 +137,7 @@ POOL_RECEIVE_ADDRESS=$POOL_BTC_ADDR
 
 # ─── Signing mode (driven by state JSON's "signingMode" field) ──────────────
 UTXOPIA_SIGNING_MODE=$SIGNING_MODE
+UTXOPIA_DEPOSIT_MODE=$DEPOSIT_MODE
 
 # ─── Ika dWallet (custody for v2 — primary signing path) ────────────────────
 UTXOPIA_IKA_PROGRAM_ID=$IKA_PROGRAM_ID
@@ -250,6 +252,7 @@ networks["$NETWORK"] = {
         "network": "$BTC_NETWORK",
         "poolAddress": "$POOL_BTC_ADDR",
         "groupPubkey": "$GROUP_PUBKEY",
+        "depositMode": "$DEPOSIT_MODE",
         "explorerUrl": "$BTC_EXPLORER"
     },
     "ika": {

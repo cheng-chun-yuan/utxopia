@@ -34,6 +34,7 @@ export interface NetworkConfig {
     network: string;
     poolAddress: string;
     groupPubkey: string;
+    depositMode?: "sweep" | "direct" | "direct_vault" | "ika_direct";
     explorerUrl: string;
   };
   ika?: {

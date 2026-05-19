@@ -15,14 +15,21 @@
   "tUsdcVault": "3mtJkaU1HgNBcjGqL9MogsD49MFg1qxmPnRhhjM8xvUd",
   "tUsdtVault": "CTE9dxT29iYi56eUAJgRkRse4w8BEdmfFGpkwrCFCNk2",
   "btcXOnlyPubKey": "29485d031f6ad1ab0c4ca7183bef6cb9ce2d914d0bec8dc842a6962f0fcc3362",
-  "poolBtcAddress": "tb1p99y96qcldtg6krzv5uvrhmmvh88zmy2dp0kgmjzz56tz7r7vxd3qqn2q95",
+  "poolBtcAddress": "tb1pxakp6u8y5wrlzv2xwvnquqz82uzl78w5fsn4c7tmkyed3hmlqsysgeyh6h",
   "signingMode": "ika",
+  "depositMode": "direct",
   "ika": {
     "programId": "87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY",
     "grpcEndpoint": "pre-alpha-dev-1.ika.ika-network.net:443",
-    "dwallet": "DmZfRVeZHnFZ1ARVHRPJn88VCcJB2QhXLmSe8RuzFMfq",
-    "dwalletXOnlyPubkey": "87a1014ea16e42c825026889874902875aec7650b39c2b334a4d04d49b904c76",
-    "cpiAuthorityBump": 255
+    "dwallet": "G3aNS4cyW2KWxcBTYYrQHhfY54L8UegsB77w9SZsRHXB",
+    "dwalletXOnlyPubkey": "376c1d70e4a387f1314673260e00475705ff1dd44c275c797bb132d8df7f0409",
+    "cpiAuthorityBump": 255,
+    "attestation": {
+      "attestationData": "000000000000000000000000000000000000000000000000000000000000000000200d623bd36b5a8945f81fa8a24868c6d141a42b53e3cad55b2da3eecb5b6b44aa002102376c1d70e4a387f1314673260e00475705ff1dd44c275c797bb132d8df7f04092102376c1d70e4a387f1314673260e00475705ff1dd44c275c797bb132d8df7f04090000",
+      "networkSignature": "8ff655eda84dd75d99b04c78bff35146eb7cfd432cb5e825ecbe8805f8252b6681fe7b1c64b03d06f943d2bcedbfb57d4cb3b0a05e74a43c492867a14e120d09",
+      "networkPubkey": "ae574cfa320624c36e26428c81e65b24214b02a09373ae2a28714fd1d7a9c475",
+      "epoch": "1"
+    }
   },
   "backendUrl": "https://api-aegis.amidoggy.xyz"
 }

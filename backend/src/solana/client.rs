@@ -56,6 +56,7 @@ pub struct CompleteRedemptionParams<'a> {
 pub struct ApproveRedemptionSigningParams<'a> {
     pub redemption_pda: &'a Pubkey,
     pub btc_sighash: &'a [u8; 32],
+    pub ika_message_digest: &'a [u8; 32],
     pub miner_fee_sats: u64,
 }
 
@@ -879,7 +880,7 @@ impl SolClient {
             &ika_program,
             &ika_dwallet,
             &xonly,
-            params.btc_sighash,
+            params.ika_message_digest,
         )?;
 
         let (pool_config_pda, _) = Pubkey::find_program_address(
@@ -887,9 +888,10 @@ impl SolClient {
             &self.program_id,
         );
 
-        let mut data = Vec::with_capacity(1 + 32 + 8);
+        let mut data = Vec::with_capacity(1 + 32 + 32 + 8);
         data.push(27u8);
         data.extend_from_slice(params.btc_sighash);
+        data.extend_from_slice(params.ika_message_digest);
         data.extend_from_slice(&params.miner_fee_sats.to_le_bytes());
 
         let accounts = vec![
@@ -1088,12 +1090,10 @@ fn derive_ika_message_approval_pda(
     ika_program: &Pubkey,
     ika_dwallet: &Pubkey,
     xonly_pubkey: &[u8],
-    sighash: &[u8; 32],
+    ika_message_digest: &[u8; 32],
 ) -> Result<Pubkey, SolError> {
     const SIG_SCHEME_TAPROOT_SHA256: u16 = 3;
     let scheme_le = SIG_SCHEME_TAPROOT_SHA256.to_le_bytes();
-    use sha3::{Digest, Keccak256};
-    let ika_message_digest: [u8; 32] = Keccak256::digest(sighash).into();
 
     for parity in [0x02u8, 0x03u8] {
         let mut payload = [0u8; 35];
@@ -1114,7 +1114,7 @@ fn derive_ika_message_approval_pda(
                 &payload[32..],
                 b"message_approval",
                 &scheme_le,
-                &ika_message_digest,
+                ika_message_digest,
             ],
             ika_program,
         );

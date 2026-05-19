@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "setup": "bun run setup-dwallet.ts"
+    "setup": "bun run setup-dwallet.ts",
+    "imported:verify": "bun run imported-key-sign-verify.ts"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.3",

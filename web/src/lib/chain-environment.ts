@@ -54,6 +54,7 @@ export async function ensureChainEnvironment(networkId: NetworkId = detectNetwor
       solanaRpcUrl: env.config.solana.rpcUrl,
       groupPubKey: env.config.bitcoin.groupPubkey,
       ikaDwalletXOnlyPubkey: env.config.ika?.dwalletXOnlyPubkey,
+      depositMode: env.config.bitcoin.depositMode,
     });
     configuredNetwork = networkId;
   }

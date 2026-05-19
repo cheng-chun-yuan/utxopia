@@ -7,6 +7,7 @@ import {
   Transaction,
   TransactionInstruction,
 } from "@solana/web3.js";
+import { keccak_256 } from "../../sdk/node_modules/@noble/hashes/sha3.js";
 import { VersionedDWalletDataAttestation } from "./lib/ika-setup-vendored.ts";
 
 const STATE_PATH = process.env.STATE_PATH || "scripts/devnet-regtest-state.json";
@@ -17,15 +18,12 @@ const SOLANA_RPC_URL =
 const BTC_SIGHASH =
   process.env.BTC_SIGHASH ||
   "c49823540c6f744212d60c4e33db3538b9dce744922adb0f9d33aabeec2e1c86";
+const IKA_SIGN_MESSAGE_HEX = process.env.IKA_SIGN_MESSAGE_HEX;
 const IKA_MESSAGE_DIGEST = process.env.IKA_MESSAGE_DIGEST;
 const MINER_FEE_SATS = BigInt(process.env.MINER_FEE_SATS || "1540");
 const SIGNATURE_SCHEME = Number(process.env.SIGNATURE_SCHEME || "3");
 const REDEMPTION_PDA =
   process.env.REDEMPTION_PDA || "2mwetE7eEbqX2h9gxnFEm5nAoRpceBmVMb2BnzWtzYZg";
-
-if (!IKA_MESSAGE_DIGEST) {
-  throw new Error("IKA_MESSAGE_DIGEST env is required");
-}
 
 function hexToBytes(hex: string): Uint8Array {
   return Uint8Array.from(Buffer.from(hex, "hex"));
@@ -82,7 +80,14 @@ async function main() {
   const poolState = new PublicKey(state.poolState);
   const redemptionPda = new PublicKey(REDEMPTION_PDA);
   const dwalletPublicKey = dwalletPublicKeyFromState(state);
-  const ikaMessageDigest = hexToBytes(IKA_MESSAGE_DIGEST);
+  const ikaMessageDigest = IKA_MESSAGE_DIGEST
+    ? hexToBytes(IKA_MESSAGE_DIGEST)
+    : IKA_SIGN_MESSAGE_HEX
+      ? keccak_256(hexToBytes(IKA_SIGN_MESSAGE_HEX))
+      : undefined;
+  if (!ikaMessageDigest) {
+    throw new Error("IKA_MESSAGE_DIGEST or IKA_SIGN_MESSAGE_HEX env is required");
+  }
   if (ikaMessageDigest.length !== 32) throw new Error("IKA_MESSAGE_DIGEST must be 32 bytes");
 
   const [poolConfig] = PublicKey.findProgramAddressSync([Buffer.from("pool_config")], programId);

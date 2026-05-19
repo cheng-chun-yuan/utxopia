@@ -171,6 +171,19 @@ impl DepositTrackerService {
         self
     }
 
+    fn direct_vault_deposits_enabled(&self) -> bool {
+        let explicit_mode = std::env::var("UTXOPIA_DEPOSIT_MODE")
+            .unwrap_or_default()
+            .to_lowercase();
+        if !explicit_mode.is_empty() {
+            return matches!(explicit_mode.as_str(), "direct" | "direct_vault" | "ika_direct");
+        }
+
+        std::env::var("UTXOPIA_SIGNING_MODE")
+            .unwrap_or_default()
+            .eq_ignore_ascii_case("ika")
+    }
+
     /// Register a new deposit for tracking.
     /// If a deposit with the same taproot_address already exists, returns the existing record.
     pub fn register_deposit(
@@ -521,6 +534,10 @@ impl DepositTrackerService {
     /// outputs (ephemeralPub + npk). For each candidate, recompute the tweaked Taproot
     /// address from pool_key + H_TapTweak(pool_key || npk) and verify a matching P2TR output.
     pub async fn detect_op_return_deposits(&self) -> Result<u32, TrackerError> {
+        if self.direct_vault_deposits_enabled() {
+            return self.detect_direct_vault_deposits().await;
+        }
+
         if self.sweeper.is_none() {
             return Ok(0);
         }
@@ -572,6 +589,130 @@ impl DepositTrackerService {
         }
 
         Ok(total_detected)
+    }
+
+    async fn detect_direct_vault_deposits(&self) -> Result<u32, TrackerError> {
+        if self.config.pool_receive_address.trim().is_empty() {
+            return Ok(0);
+        }
+
+        let tip_height = self.watcher.get_tip_height().await?;
+        self.init_scan_height(tip_height);
+
+        let scan_from = self.last_scanned_height.load(Ordering::Relaxed) + 1;
+        if scan_from > tip_height {
+            return Ok(0);
+        }
+
+        let mut total_detected = 0u32;
+        for height in scan_from..=tip_height {
+            let block_hash = match self.watcher.get_block_hash(height).await {
+                Ok(h) => h,
+                Err(e) => {
+                    eprintln!("[direct-vault-scan] Failed to get block hash at {}: {}", height, e);
+                    break;
+                }
+            };
+
+            total_detected += self.scan_block_for_direct_vault_deposits(&block_hash, height).await?;
+
+            self.last_scanned_height.store(height, Ordering::Relaxed);
+            if height % 10 == 0 || height == tip_height {
+                let _ = self.db.set_metadata("last_scanned_height", &height.to_string());
+            }
+        }
+
+        let final_height = self.last_scanned_height.load(Ordering::Relaxed);
+        if final_height >= scan_from {
+            let _ = self.db.set_metadata("last_scanned_height", &final_height.to_string());
+        }
+
+        if total_detected > 0 {
+            println!(
+                "[direct-vault-scan] Detected {} new deposits in blocks {}-{}",
+                total_detected, scan_from, tip_height
+            );
+        }
+
+        Ok(total_detected)
+    }
+
+    async fn scan_block_for_direct_vault_deposits(
+        &self,
+        block_hash: &str,
+        block_height: u64,
+    ) -> Result<u32, TrackerError> {
+        use super::sweeper::extract_deposit_op_return_from_transaction;
+
+        let block_txs = match self.watcher.get_all_block_txs(block_hash).await {
+            Ok(txs) => txs,
+            Err(e) => {
+                eprintln!(
+                    "[direct-vault-scan] Failed to get txs for block {}: {}",
+                    block_hash, e
+                );
+                return Ok(0);
+            }
+        };
+
+        let mut detected = 0u32;
+        for esplora_tx in &block_txs {
+            if self.db.get_by_deposit_txid(&esplora_tx.txid)?.is_some() {
+                continue;
+            }
+            if !esplora_tx.vout.iter().any(|o| o.scriptpubkey_type == "op_return") {
+                continue;
+            }
+
+            let Some((vout, amount_sats)) = esplora_tx
+                .vout
+                .iter()
+                .enumerate()
+                .find_map(|(idx, output)| {
+                    (output.scriptpubkey_address.as_deref()
+                        == Some(self.config.pool_receive_address.as_str()))
+                    .then_some((idx as u32, output.value))
+                })
+            else {
+                continue;
+            };
+
+            let parsed_tx = match self.fetch_raw_transaction(&esplora_tx.txid).await {
+                Some(tx) => tx,
+                None => continue,
+            };
+            let op_return_data = match extract_deposit_op_return_from_transaction(&parsed_tx) {
+                Some(d) => d,
+                None => continue,
+            };
+
+            let mut record = self.build_deposit_record(
+                self.config.pool_receive_address.clone(),
+                &esplora_tx.txid,
+                vout,
+                amount_sats,
+                &op_return_data,
+            );
+            record.pool_address = Some(self.config.pool_receive_address.clone());
+            record.deposit_block_height = Some(block_height);
+            record.update_confirmations(1, Some(block_height));
+
+            if let Err(e) = self.db.insert(&record) {
+                eprintln!("[direct-vault-scan] Failed to insert deposit: {}", e);
+                continue;
+            }
+
+            println!(
+                "[{}] Direct Ika vault deposit detected: {} sats, npk={}, block={}",
+                record.id,
+                amount_sats,
+                &hex::encode(op_return_data.npk)[..16],
+                block_height
+            );
+            detected += 1;
+        }
+
+        Ok(detected)
     }
 
     /// Scan a single block for deposit transactions with valid OP_RETURN + tweaked P2TR.
@@ -746,6 +887,55 @@ impl DepositTrackerService {
     /// Detect deposit from a single mempool transaction (pre-confirmation).
     pub async fn detect_mempool_tx(&self, txid: &str) -> Result<bool, TrackerError> {
         use super::sweeper::extract_deposit_op_return_from_transaction;
+
+        if self.direct_vault_deposits_enabled() {
+            if self.db.get_by_deposit_txid(txid)?.is_some() {
+                return Ok(false);
+            }
+            let tx = match self.watcher.get_tx(txid).await {
+                Ok(tx) => tx,
+                Err(_) => return Ok(false),
+            };
+            let Some((vout, amount_sats)) = tx.vout.iter().enumerate().find_map(|(idx, output)| {
+                (output.scriptpubkey_address.as_deref()
+                    == Some(self.config.pool_receive_address.as_str()))
+                .then_some((idx as u32, output.value))
+            }) else {
+                return Ok(false);
+            };
+            let parsed_tx = match self.fetch_raw_transaction(txid).await {
+                Some(tx) => tx,
+                None => return Ok(false),
+            };
+            let op_return_data = match extract_deposit_op_return_from_transaction(&parsed_tx) {
+                Some(d) => d,
+                None => return Ok(false),
+            };
+
+            let mut record = self.build_deposit_record(
+                self.config.pool_receive_address.clone(),
+                txid,
+                vout,
+                amount_sats,
+                &op_return_data,
+            );
+            record.pool_address = Some(self.config.pool_receive_address.clone());
+            record.status = DepositStatus::Pending;
+
+            if let Err(e) = self.db.insert(&record) {
+                eprintln!("[direct-vault-mempool] Failed to insert deposit: {}", e);
+                return Ok(false);
+            }
+
+            println!(
+                "[{}] Direct Ika vault deposit seen in mempool: {} sats, npk={}, txid={}",
+                record.id,
+                amount_sats,
+                &hex::encode(op_return_data.npk)[..16],
+                &txid[..16]
+            );
+            return Ok(true);
+        }
 
         if self.sweeper.is_none() {
             return Ok(false);
@@ -972,6 +1162,10 @@ impl DepositTrackerService {
 
     /// Process a single deposit (uses pre-fetched record to avoid N+1)
     async fn process_deposit(&self, address: &str, record: &DepositRecord) -> Result<(), TrackerError> {
+        if self.direct_vault_deposits_enabled() && record.auto_detected {
+            return self.process_direct_vault_deposit(record).await;
+        }
+
         let start = std::time::Instant::now();
         let initial_status = format!("{:?}", record.status);
         match record.status {
@@ -1010,6 +1204,113 @@ impl DepositTrackerService {
             self.publish_update(&record).await;
         }
 
+        Ok(())
+    }
+
+    async fn process_direct_vault_deposit(&self, record: &DepositRecord) -> Result<(), TrackerError> {
+        let start = std::time::Instant::now();
+        let initial_status = format!("{:?}", record.status);
+
+        match record.status {
+            DepositStatus::Pending | DepositStatus::Detected | DepositStatus::Confirming => {
+                self.check_direct_vault_confirmations(&record.id).await?;
+            }
+            DepositStatus::Confirmed => {
+                self.verify_direct_vault_deposit(&record.id).await?;
+            }
+            DepositStatus::Verifying => {
+                self.check_verification_status(&record.taproot_address).await?;
+            }
+            DepositStatus::Ready | DepositStatus::Claimed | DepositStatus::Failed => {}
+            DepositStatus::Sweeping | DepositStatus::SweepConfirming => {
+                self.verify_direct_vault_deposit(&record.id).await?;
+            }
+        }
+
+        if let Some(fresh) = self.db.get_by_id(&record.id)? {
+            let new_status = format!("{:?}", fresh.status);
+            if initial_status != new_status {
+                tracing::info!(
+                    deposit_id = %fresh.id,
+                    status = %new_status,
+                    previous_status = %initial_status,
+                    duration_ms = start.elapsed().as_millis() as u64,
+                    "direct vault deposit processed"
+                );
+            }
+            self.publish_update(&fresh).await;
+        }
+
+        Ok(())
+    }
+
+    async fn check_direct_vault_confirmations(&self, id: &str) -> Result<(), TrackerError> {
+        let mut record = self
+            .db
+            .get_by_id(id)?
+            .ok_or_else(|| TrackerError::NotFound(id.to_string()))?;
+        let txid = match record.deposit_txid.clone() {
+            Some(txid) => txid,
+            None => return Ok(()),
+        };
+
+        let status = self.watcher.get_tx_confirmations(&txid).await?;
+        record.update_confirmations(status.confirmations, status.block_height);
+        if status.confirmations >= self.config.required_confirmations {
+            record.status = DepositStatus::Confirmed;
+        }
+        self.db.update(&record)?;
+        Ok(())
+    }
+
+    async fn verify_direct_vault_deposit(&self, id: &str) -> Result<(), TrackerError> {
+        let verifier = match &self.verifier {
+            Some(v) => v,
+            None => {
+                eprintln!("Verifier not configured, skipping direct vault verification");
+                return Ok(());
+            }
+        };
+
+        let mut record = self
+            .db
+            .get_by_id(id)?
+            .ok_or_else(|| TrackerError::NotFound(id.to_string()))?;
+        let record_id = record.id.clone();
+        let deposit_txid = match record.deposit_txid.clone() {
+            Some(txid) => txid,
+            None => return Ok(()),
+        };
+
+        if let Some(block_height) = record.deposit_block_height {
+            if !self.ensure_block_header_available(verifier, block_height, &record_id).await? {
+                return Ok(());
+            }
+        }
+
+        if verifier.is_already_verified(&deposit_txid).await? {
+            record.mark_ready("already_verified".to_string(), 0);
+            self.db.update(&record)?;
+            return Ok(());
+        }
+
+        record.mark_verifying();
+        self.db.update(&record)?;
+
+        println!("[{}] Submitting direct Ika vault SPV verification...", record_id);
+        let result = verifier.verify_direct_deposit(&deposit_txid).await?;
+
+        let mut record = self
+            .db
+            .get_by_id(id)?
+            .ok_or_else(|| TrackerError::NotFound(id.to_string()))?;
+        record.mark_ready(result.solana_tx.clone(), result.leaf_index);
+        self.db.update(&record)?;
+
+        println!(
+            "[{}] Direct vault deposit verified! Solana TX: {}, Leaf index: {}",
+            record_id, result.solana_tx, result.leaf_index
+        );
         Ok(())
     }
 

@@ -16,6 +16,7 @@
 
 use std::str::FromStr;
 use std::sync::Arc;
+use sha2::Digest as Sha2Digest;
 use tokio::sync::{Notify, RwLock};
 use solana_sdk::signature::Signer as SolanaSigner;
 
@@ -24,7 +25,9 @@ use crate::deposit_tracker::header_relayer::HeaderRelayer;
 use crate::config::Network;
 use crate::redemption::builder::TxBuilder;
 use crate::redemption::queue::WithdrawalQueue;
-use crate::redemption::signer::{SingleKeySigner, TxSigner};
+use crate::redemption::signer::{
+    ika_message_digest, taproot_key_spend_sighash_preimage, SingleKeySigner, TxSigner,
+};
 use crate::redemption::tracking::TrackingStore;
 use crate::redemption::types::*;
 use crate::redemption::watcher::RedemptionScanner;
@@ -38,9 +41,9 @@ fn now_secs() -> u64 {
         .as_secs()
 }
 
-fn compute_taproot_sighashes(
+fn compute_taproot_signing_payloads(
     unsigned: &crate::redemption::builder::UnsignedTx,
-) -> Result<Vec<[u8; 32]>, ServiceError> {
+) -> Result<Vec<([u8; 32], [u8; 32])>, ServiceError> {
     use bitcoin::{
         hashes::Hash,
         sighash::{Prevouts, SighashCache, TapSighashType},
@@ -68,7 +71,18 @@ fn compute_taproot_sighashes(
         let sighash = sighash_cache
             .taproot_key_spend_signature_hash(i, &prevouts_ref, TapSighashType::Default)
             .map_err(|e| ServiceError::BuildError(format!("taproot sighash: {}", e)))?;
-        out.push(sighash.to_byte_array());
+        let sighash_bytes = sighash.to_byte_array();
+        let preimage = taproot_key_spend_sighash_preimage(&unsigned.tx, &prevouts, i)
+            .map_err(|e| ServiceError::BuildError(format!("taproot sighash preimage: {}", e)))?;
+        let preimage_hash: [u8; 32] = sha2::Sha256::digest(&preimage).into();
+        if preimage_hash != sighash_bytes {
+            return Err(ServiceError::BuildError(format!(
+                "taproot sighash preimage mismatch: sha256(preimage)={} sighash={}",
+                hex::encode(preimage_hash),
+                hex::encode(sighash_bytes)
+            )));
+        }
+        out.push((sighash_bytes, ika_message_digest(&preimage)));
     }
     Ok(out)
 }
@@ -764,12 +778,13 @@ impl RedemptionService {
                 .pda_address
                 .parse::<solana_sdk::pubkey::Pubkey>()
                 .map_err(|e| ServiceError::BuildError(format!("invalid PDA pubkey: {}", e)))?;
-            let sighashes = compute_taproot_sighashes(&unsigned)?;
-            for sighash in &sighashes {
+            let signing_payloads = compute_taproot_signing_payloads(&unsigned)?;
+            for (sighash, ika_message_digest) in &signing_payloads {
                 self.sol_client
                     .send_approve_redemption_signing(&ApproveRedemptionSigningParams {
                         redemption_pda: &pda_pubkey,
                         btc_sighash: sighash,
+                        ika_message_digest,
                         miner_fee_sats: unsigned.fee,
                     })
                     .await

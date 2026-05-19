@@ -75,6 +75,7 @@ import {
   computeJoinSplitNullifierSync,
 } from "./poseidon";
 import { getConfig } from "./config";
+import { deriveRawXOnlyP2TRAddress } from "./bitcoin/ika";
 
 // ========== Amount Encryption Helpers ==========
 
@@ -461,20 +462,68 @@ export async function createNonInteractiveDeposit(
 }
 
 /**
+ * Create a non-interactive deposit directly to an Ika-controlled vault.
+ *
+ * The BTC address is the raw Ika x-only Taproot witness program, so Ika can
+ * later sign and spend the UTXO. Privacy/ownership metadata stays per-deposit
+ * in OP_RETURN(ephemeralPub || npk), and Solana credits the note from that tx.
+ */
+export async function createDirectVaultDeposit(
+  recipientMeta: StealthMetaAddress,
+  vaultXOnlyPubkey: Uint8Array,
+  network: "mainnet" | "testnet" | "regtest" = "testnet",
+): Promise<NonInteractiveDepositResult> {
+  if (vaultXOnlyPubkey.length !== 32) {
+    throw new Error("vaultXOnlyPubkey must be 32 bytes");
+  }
+
+  const viewingPubKey = new Uint8Array(recipientMeta.viewingPubKey);
+  const ephemeral = ed25519GenerateKeyPair();
+  const sharedSecret = x25519Ecdh(ephemeral.privKey, viewingPubKey);
+  const stealthScalar = deriveStealthScalar(sharedSecret);
+  const recipientMPK = bytesToBigint(recipientMeta.mpk);
+  const npkBigint = computeNPKSync(recipientMPK, stealthScalar);
+  const npk = bigintToBytes(npkBigint);
+  const ephemeralPub = new Uint8Array(ephemeral.pubKey);
+
+  const { buildDepositOpReturn } = await import("./taproot");
+  const opReturnPayload = buildDepositOpReturn(ephemeralPub, npk);
+
+  return {
+    btcAddress: deriveRawXOnlyP2TRAddress(vaultXOnlyPubkey, network),
+    depositOutputKey: vaultXOnlyPubkey,
+    opReturnPayload,
+    npk,
+    ephemeralPub,
+  };
+}
+
+/**
  * Create a non-interactive deposit using the current SDK config.
  *
  * Prefers `ikaDwalletXOnlyPubkey` when set (non-zero); falls back to the
  * legacy `groupPubKey` only for older FROST-controlled pools. The chosen
- * value becomes the Taproot internal key for the BIP-341 tweak — both
- * paths produce a deterministic address bound to the recipient's npk.
+ * value becomes the Taproot internal key for the BIP-341 tweak in legacy
+ * sweep mode. In direct vault mode, deposits go to the raw Ika x-only P2TR
+ * address and the recipient binding is carried by OP_RETURN.
  */
 export async function createDepositFromConfig(
   recipientMeta: StealthMetaAddress,
   network: "mainnet" | "testnet" | "regtest" = "testnet",
 ): Promise<NonInteractiveDepositResult> {
   const config = getConfig();
+  const ikaKey = pickIkaCustodyKey(config);
+  if (ikaKey) {
+    if (config.depositMode === undefined || isDirectVaultDepositMode(config.depositMode)) {
+      return createDirectVaultDeposit(recipientMeta, ikaKey, network);
+    }
+  }
   const internalKey = pickCustodyInternalKey(config);
   return createNonInteractiveDeposit(recipientMeta, internalKey, network);
+}
+
+export function isDirectVaultDepositMode(mode?: string): boolean {
+  return mode === "direct" || mode === "direct_vault" || mode === "ika_direct";
 }
 
 /**
@@ -485,11 +534,17 @@ export function pickCustodyInternalKey(config: {
   ikaDwalletXOnlyPubkey?: string;
   groupPubKey: string;
 }): Uint8Array {
+  return pickIkaCustodyKey(config) ?? hexToBytes(config.groupPubKey);
+}
+
+export function pickIkaCustodyKey(config: {
+  ikaDwalletXOnlyPubkey?: string;
+}): Uint8Array | null {
   const ikaHex = config.ikaDwalletXOnlyPubkey ?? "";
   if (ikaHex && /[1-9a-f]/i.test(ikaHex)) {
     return hexToBytes(ikaHex);
   }
-  return hexToBytes(config.groupPubKey);
+  return null;
 }
 
 // ========== Recipient Scanning (Viewing Key Only) ==========

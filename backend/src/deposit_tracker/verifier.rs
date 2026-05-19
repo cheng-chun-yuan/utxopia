@@ -137,6 +137,22 @@ impl SpvVerifier {
         self.payer.as_ref().map(|k| k.pubkey())
     }
 
+    fn fetch_pool_script(&self, pool_config_pda: &Pubkey) -> Result<Option<Vec<u8>>, VerifierError> {
+        let account = match self.rpc.get_account(pool_config_pda) {
+            Ok(account) => account,
+            Err(_) => return Ok(None),
+        };
+        let data = account.data;
+        if data.len() < 36 || data[0] != 0x0a {
+            return Ok(None);
+        }
+        let script_len = data[1] as usize;
+        if script_len == 0 || script_len > 34 || data.len() < 2 + script_len {
+            return Ok(None);
+        }
+        Ok(Some(data[2..2 + script_len].to_vec()))
+    }
+
     // =========================================================================
     // Public API
     // =========================================================================
@@ -236,6 +252,74 @@ impl SpvVerifier {
                 // Older callers only required leaf_index. Re-fetch via the
                 // legacy path; if that also fails, propagate.
                 eprintln!("[verifier] announcement parse fallback: {}", e);
+                let li = self.get_leaf_index_from_tx(&solana_tx).await?;
+                (li, None)
+            }
+        };
+
+        Ok(VerificationResult {
+            solana_tx,
+            leaf_index,
+            block_height,
+            commitment,
+        })
+    }
+
+    /// Verify a direct-to-pool deposit. The SPV-verified transaction is the
+    /// deposit transaction itself and contains both the pool output and
+    /// OP_RETURN(ephemeralPub || npk), so no sweep tx or second tx buffer exists.
+    pub async fn verify_direct_deposit(
+        &self,
+        deposit_txid: &str,
+    ) -> Result<VerificationResult, VerifierError> {
+        let payer = self.payer.as_ref().ok_or(VerifierError::NoPayerSet)?;
+
+        let tx_status = self.watcher.get_tx_confirmations(deposit_txid).await?;
+        if !tx_status.confirmed {
+            return Err(VerifierError::TxNotConfirmed);
+        }
+        let block_height = tx_status.block_height.ok_or(VerifierError::TxNotConfirmed)?;
+
+        let merkle_proof = self.watcher.get_merkle_proof(deposit_txid).await?;
+        let block_header = self.watcher.get_block_header(block_height).await?;
+        let raw_full = self.watcher.get_raw_tx(deposit_txid).await?;
+        let raw_tx = spv::strip_witness_data(&raw_full)
+            .map_err(|e| VerifierError::VerificationFailed(e.to_string()))?;
+
+        let txid_internal = spv::txid_to_internal(deposit_txid)
+            .map_err(|e| VerifierError::VerificationFailed(e.to_string()))?;
+        let header_bytes = hex::decode(block_header.header_hex.trim())
+            .map_err(|e| VerifierError::VerificationFailed(format!("invalid header hex: {}", e)))?;
+        let block_hash = spv::double_sha256(&header_bytes);
+
+        let (buffer_pubkey, buffer_keypair) =
+            spv::upload_to_chadbuffer(&self.rpc, payer, &raw_tx)
+                .map_err(|e| VerifierError::RpcError(e.to_string()))?;
+
+        let result = self
+            .send_verify_deposit_tx(
+                payer,
+                &txid_internal,
+                &txid_internal,
+                &merkle_proof,
+                block_height,
+                &block_hash,
+                &buffer_pubkey,
+                raw_tx.len() as u32,
+                &buffer_pubkey,
+                0,
+                &raw_tx,
+            )
+            .await;
+
+        let _ = spv::close_chadbuffer(&self.rpc, payer, &buffer_pubkey);
+        drop(buffer_keypair);
+
+        let solana_tx = result?;
+        let (leaf_index, commitment) = match self.get_announcement_from_tx(&solana_tx).await {
+            Ok(pair) => (pair.0, Some(pair.1)),
+            Err(e) => {
+                eprintln!("[verifier-direct] announcement parse fallback: {}", e);
                 let li = self.get_leaf_index_from_tx(&solana_tx).await?;
                 (li, None)
             }
@@ -679,6 +763,16 @@ impl SpvVerifier {
             .map_err(|_| VerifierError::VerificationFailed("invalid pool_vault".to_string()))?;
         println!("[verifier] zkbtc_mint: {}, pool_vault: {}", zkbtc_mint, pool_vault);
 
+        let (token_config_pda, _) = Pubkey::find_program_address(
+            &[b"token_config", zkbtc_mint.as_ref()],
+            &self.program_id,
+        );
+        let (pool_config_pda, _) = Pubkey::find_program_address(
+            &[b"pool_config"],
+            &self.program_id,
+        );
+        let pool_script = self.fetch_pool_script(&pool_config_pda)?;
+
         // --- Instruction 1: btc-light-client verify_transaction (disc 2) ---
         let verify_tx_ix = self.build_verify_transaction_ix(
             payer,
@@ -708,9 +802,13 @@ impl SpvVerifier {
             &self.program_id,
         );
 
-        // Derive UTXO record PDA for the sweep tx's pool output.
-        // Find first non-OP_RETURN output with value > 0 (matches on-chain find_deposit_output_with_vout).
-        let sweep_vout = find_deposit_vout_from_raw(sweep_raw_tx).unwrap_or(0);
+        // Derive UTXO record PDA for the sweep tx's pool output. When PoolConfig
+        // has a pool_script, this must match the on-chain script-enforced vout.
+        let sweep_vout = pool_script
+            .as_deref()
+            .and_then(|script| find_output_vout_by_script_from_raw(sweep_raw_tx, script))
+            .or_else(|| find_deposit_vout_from_raw(sweep_raw_tx))
+            .unwrap_or(0);
         let vout_le = sweep_vout.to_le_bytes();
         let (utxo_record_pda, _) = Pubkey::find_program_address(
             &[b"utxo", sweep_txid, &vout_le],
@@ -732,6 +830,8 @@ impl SpvVerifier {
             AccountMeta::new_readonly(*deposit_buffer, false),          // 10: deposit_tx_buffer
             AccountMeta::new(deposit_receipt_pda, false),               // 11: deposit_receipt
             AccountMeta::new(utxo_record_pda, false),                   // 12: utxo_record
+            AccountMeta::new(token_config_pda, false),                  // 13: token_config
+            AccountMeta::new_readonly(pool_config_pda, false),          // 14: pool_config
         ];
 
         let deposit_ix = Instruction {
@@ -859,6 +959,41 @@ fn find_deposit_vout_from_raw(raw_tx: &[u8]) -> Option<u32> {
         if !is_op_return && value > 0 {
             return Some(i as u32);
         }
+    }
+    None
+}
+
+fn find_output_vout_by_script_from_raw(raw_tx: &[u8], expected_script: &[u8]) -> Option<u32> {
+    let mut offset = 4;
+    if offset >= raw_tx.len() { return None; }
+
+    let (input_count, varint_size) = read_varint(&raw_tx[offset..])?;
+    offset += varint_size;
+
+    for _ in 0..input_count {
+        offset += 36;
+        if offset >= raw_tx.len() { return None; }
+        let (script_len, vs) = read_varint(&raw_tx[offset..])?;
+        offset += vs + script_len as usize + 4;
+    }
+
+    if offset >= raw_tx.len() { return None; }
+    let (output_count, varint_size) = read_varint(&raw_tx[offset..])?;
+    offset += varint_size;
+
+    for i in 0..output_count {
+        if offset + 8 > raw_tx.len() { return None; }
+        offset += 8;
+
+        let (script_len, vs) = read_varint(&raw_tx[offset..])?;
+        offset += vs;
+        let script_end = offset + script_len as usize;
+        if script_end > raw_tx.len() { return None; }
+
+        if &raw_tx[offset..script_end] == expected_script {
+            return Some(i as u32);
+        }
+        offset = script_end;
     }
     None
 }

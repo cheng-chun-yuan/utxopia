@@ -138,6 +138,11 @@ export interface NetworkConfig {
    *  on chain. All-zero indicates a legacy FROST-controlled pool. */
   ikaDwalletXOnlyPubkey: string;
 
+  /** BTC deposit custody mode.
+   *  "sweep" keeps legacy per-deposit tweaked Taproot addresses.
+   *  "direct" sends deposits directly to the Ika raw x-only vault address. */
+  depositMode?: "sweep" | "direct" | "direct_vault" | "ika_direct";
+
   // -------------------------------------------------------------------------
   // SNS Subdomain Resolution (stealth address via .sol names)
   // -------------------------------------------------------------------------
@@ -522,6 +527,7 @@ export async function initConfig(overrides?: {
   solanaRpcUrl?: string;
   groupPubKey?: string;
   ikaDwalletXOnlyPubkey?: string;
+  depositMode?: "sweep" | "direct" | "direct_vault" | "ika_direct";
 }): Promise<NetworkConfig> {
   // Pick base config from network: param > env > devnet
   const networkId: NetworkId =
@@ -625,6 +631,9 @@ export async function initConfig(overrides?: {
   // Apply Ika dWallet x-only pubkey override (preferred for v2 pools)
   if (overrides?.ikaDwalletXOnlyPubkey) {
     config.ikaDwalletXOnlyPubkey = overrides.ikaDwalletXOnlyPubkey;
+  }
+  if (overrides?.depositMode) {
+    config.depositMode = overrides.depositMode;
   }
 
   currentConfig = config;
