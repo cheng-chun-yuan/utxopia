@@ -1,22 +1,15 @@
 // Centralized application constants
 
 // Import network config (single source of truth — no env vars needed for addresses)
-import { getNetworkConfig } from "./network-config";
-import { initConfig, getConfig } from "@utxopia/sdk";
-
-const networkCfg = getNetworkConfig();
+import { ensureChainEnvironment } from "./chain-environment";
+import { getConfig } from "@utxopia/sdk";
 
 // Initialize SDK once at module load — passes addresses from config/networks.json.
 // Env vars (NEXT_PUBLIC_SOLANA_RPC_URL) can still override RPC URL.
 let _initPromise: Promise<void> | null = null;
 export function ensureSdkInit(): Promise<void> {
   if (!_initPromise) {
-    _initPromise = initConfig({
-      utxopiaProgramId: networkCfg.solana.utxopiaProgramId,
-      zkbtcMint: networkCfg.tokens.zkbtcMint,
-      solanaRpcUrl: networkCfg.solana.rpcUrl,
-      groupPubKey: networkCfg.bitcoin.groupPubkey,
-    }).then(() => {});
+    _initPromise = ensureChainEnvironment().then(() => {});
   }
   return _initPromise;
 }

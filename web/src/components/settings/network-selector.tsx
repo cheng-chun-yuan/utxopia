@@ -1,23 +1,16 @@
 "use client";
 
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useState } from "react";
 import { AlertTriangle, ExternalLink, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  detectNetwork,
   setNetwork,
   NETWORK_META,
   getNetworkConfig,
   type NetworkId,
   type NetworkMeta,
 } from "@/lib/network-config";
-
-// Re-render when localStorage flips in another tab.
-function subscribe(onChange: () => void) {
-  if (typeof window === "undefined") return () => {};
-  window.addEventListener("storage", onChange);
-  return () => window.removeEventListener("storage", onChange);
-}
+import { useChainEnvironment } from "@/lib/chain-environment";
 
 /**
  * Network selector — flat radio-style rows, not fat cards. The active
@@ -27,11 +20,7 @@ function subscribe(onChange: () => void) {
  * of cards.
  */
 export function NetworkSelector() {
-  const active = useSyncExternalStore<NetworkId>(
-    subscribe,
-    () => detectNetwork(),
-    () => "devnet",
-  );
+  const { networkId: active } = useChainEnvironment();
   const [pending, setPending] = useState<NetworkId | null>(null);
 
   function handleSelect(id: NetworkId) {

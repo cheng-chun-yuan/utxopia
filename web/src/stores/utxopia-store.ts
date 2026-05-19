@@ -20,6 +20,7 @@ import {
 import { fetchSpentNullifierPDAs, nullifierHashToPDA } from "@/lib/nullifier-utils";
 import { VAULT_TOKENS } from "@/lib/supported-tokens";
 import { API_ENDPOINTS, getBackendUrl, getSolanaRpcUrl } from "@/lib/api/constants";
+import { ensureChainEnvironment, getChainEnvironment } from "@/lib/chain-environment";
 
 // ============================================================================
 // localStorage Key Persistence (AES-256-GCM encrypted)
@@ -118,11 +119,17 @@ let lastAnnouncementCount = -1;
 
 // Singleton EventClient (extends AnnouncementClient with tree + nullifier events)
 let eventClient: EventClient | null = null;
+let eventClientNetwork: string | null = null;
 
 export function getEventClient(): EventClient {
+  const env = getChainEnvironment();
+  if (eventClient && eventClientNetwork !== env.networkId) {
+    eventClient.close();
+    eventClient = null;
+  }
   if (!eventClient) {
     const backendUrl = "";
-    const wsBackendUrl = getBackendUrl();
+    const wsBackendUrl = getBackendUrl(env.networkId);
     const wsUrl = wsBackendUrl.replace("http://", "ws://").replace("https://", "wss://");
     eventClient = new EventClient({
       backendUrl,
@@ -131,6 +138,7 @@ export function getEventClient(): EventClient {
       programId: UTXOpiaClient.instance().config.utxopiaProgramId,
       commitmentTreeAddress: UTXOpiaClient.instance().config.commitmentTreePda,
     });
+    eventClientNetwork = env.networkId;
   }
   return eventClient;
 }
@@ -205,7 +213,7 @@ interface UTXOpiaState {
   hydrateKeys: (walletPubkey: PublicKey) => Promise<boolean>;
   deriveKeysFromPasskeySeed: (seed: Uint8Array) => Promise<void>;
   hydratePasskeyKeys: () => Promise<boolean>;
-  loadViewOnlyKeys: (encoded: string) => void;
+  loadViewOnlyKeys: (encoded: string) => Promise<void>;
   clearKeys: (walletPubkey?: string) => void;
   refreshInbox: (connection?: Connection, force?: boolean) => Promise<void>;
   startRealtimeInbox: () => () => void;
@@ -240,9 +248,7 @@ export const useUTXOpiaStore = create<UTXOpiaState>((set, get) => ({
 
   initPoseidon: async () => {
     try {
-      if (!UTXOpiaClient.isInitialized) {
-        await UTXOpiaClient.init();
-      }
+      await ensureChainEnvironment();
       set({ isPoseidonReady: true });
     } catch (err) {
       console.error("[UTXOpia] Failed to init:", err);
@@ -253,6 +259,7 @@ export const useUTXOpiaStore = create<UTXOpiaState>((set, get) => ({
     set({ isLoading: true, error: null });
 
     try {
+      await ensureChainEnvironment();
       const client = UTXOpiaClient.instance();
       const { keys: derivedKeys, stealthAddress: meta, stealthAddressEncoded: encoded } =
         await client.loginWithWallet({
@@ -294,6 +301,7 @@ export const useUTXOpiaStore = create<UTXOpiaState>((set, get) => ({
   },
 
   hydrateKeys: async (walletPubkey: PublicKey) => {
+    await ensureChainEnvironment();
     const pubkeyStr = walletPubkey.toBase58();
     const restored = await loadKeys(pubkeyStr, walletPubkey.toBytes());
     if (!restored) return false;
@@ -327,6 +335,7 @@ export const useUTXOpiaStore = create<UTXOpiaState>((set, get) => ({
   deriveKeysFromPasskeySeed: async (seed: Uint8Array) => {
     set({ isLoading: true, error: null });
     try {
+      await ensureChainEnvironment();
       const client = UTXOpiaClient.instance();
       const { keys: derivedKeys, stealthAddress: meta, stealthAddressEncoded: encoded } =
         await client.loginWithSeed(seed);
@@ -354,6 +363,7 @@ export const useUTXOpiaStore = create<UTXOpiaState>((set, get) => ({
 
   hydratePasskeyKeys: async () => {
     try {
+      await ensureChainEnvironment();
       const credentialId = typeof window !== "undefined"
         ? localStorage.getItem("utxo:passkey_credential_id")
         : null;
@@ -389,8 +399,9 @@ export const useUTXOpiaStore = create<UTXOpiaState>((set, get) => ({
     }
   },
 
-  loadViewOnlyKeys: (encoded: string) => {
+  loadViewOnlyKeys: async (encoded: string) => {
     try {
+      await ensureChainEnvironment();
       const voKeys = decodeViewOnlyKeys(encoded);
       // Sync with UTXOpiaClient so computeNullifier works in view-only mode
       const client = UTXOpiaClient.instance();
@@ -456,6 +467,10 @@ export const useUTXOpiaStore = create<UTXOpiaState>((set, get) => ({
 
     const doFetch = async () => {
       try {
+        await ensureChainEnvironment();
+        if (viewOnlyKeys) {
+          UTXOpiaClient.instance().loginViewOnly(viewOnlyKeys);
+        }
         // Fetch via EventClient (backend WS/REST → RPC fallback)
         const client = getEventClient();
         const announcements = await client.fetchAll();
@@ -471,13 +486,29 @@ export const useUTXOpiaStore = create<UTXOpiaState>((set, get) => ({
         const utxopiaClient = UTXOpiaClient.instance();
         const config = utxopiaClient.config;
         const tokensToScan: { symbol: string; tokenId: bigint }[] = [];
+        const seenTokenIds = new Set<string>();
+        const pushTokenToScan = (symbol: string, tokenId: bigint) => {
+          const key = tokenId.toString(16).padStart(64, "0");
+          if (seenTokenIds.has(key)) return;
+          seenTokenIds.add(key);
+          tokensToScan.push({ symbol, tokenId });
+        };
         for (const token of VAULT_TOKENS) {
           try {
             let mintAddr = token.mint;
             if (!mintAddr && token.symbol === "zkBTC") mintAddr = config.zkbtcMint;
             if (!mintAddr) continue; // skip tokens without mint addresses
-            tokensToScan.push({ symbol: token.shieldedSymbol, tokenId: utxopiaClient.getTokenId(mintAddr) });
+            pushTokenToScan(token.shieldedSymbol, utxopiaClient.getTokenId(mintAddr));
           } catch (err) { console.error("[UTXOpiaStore] invalid mint for token:", token.symbol, err); }
+        }
+        for (const ann of announcements) {
+          if (!ann.tokenIdHex) continue;
+          try {
+            const tokenId = BigInt(`0x${ann.tokenIdHex}`);
+            pushTokenToScan("zkBTC", tokenId);
+          } catch {
+            // Ignore malformed backend token ids.
+          }
         }
 
         // Scan locally for privacy (server doesn't know which are ours)
@@ -606,6 +637,7 @@ export const useUTXOpiaStore = create<UTXOpiaState>((set, get) => ({
       unsub();
       client.close();
       eventClient = null;
+      eventClientNetwork = null;
     };
   },
 
@@ -615,9 +647,7 @@ export const useUTXOpiaStore = create<UTXOpiaState>((set, get) => ({
       return;
     }
     try {
-      if (!UTXOpiaClient.isInitialized) {
-        await UTXOpiaClient.init();
-      }
+      await ensureChainEnvironment();
       const response = await fetch(
         API_ENDPOINTS.PUBLIC_ZKBTC_BALANCE(walletPubkey.toBase58()),
         { cache: "no-store" }

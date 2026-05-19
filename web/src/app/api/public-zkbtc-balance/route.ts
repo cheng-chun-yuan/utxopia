@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PublicKey } from "@solana/web3.js";
-import { getNetworkConfig } from "@/lib/network-config";
+import { detectNetworkFromRequest, getNetworkConfig } from "@/lib/network-config";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,7 +17,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const ownerPubkey = new PublicKey(owner);
-    const { solana, tokens } = getNetworkConfig();
+    const network = detectNetworkFromRequest(request);
+    const { solana, tokens } = getNetworkConfig(network, { applyEnvOverrides: false });
 
     const rpcResponse = await fetch(solana.rpcUrl, {
       method: "POST",

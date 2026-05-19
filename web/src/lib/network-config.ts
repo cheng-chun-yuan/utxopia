@@ -36,6 +36,12 @@ export interface NetworkConfig {
     groupPubkey: string;
     explorerUrl: string;
   };
+  ika?: {
+    programId: string;
+    grpcEndpoint: string;
+    dwallet: string;
+    dwalletXOnlyPubkey: string;
+  };
   backend: {
     url: string;
   };
@@ -110,6 +116,7 @@ const STORAGE_KEY = "utxopia.network";
 /** Cookie name — same key, browser-readable, sent on every same-origin request
  *  so server-side API routes can route to the right backend per request. */
 const COOKIE_NAME = "utxopia.network";
+export const NETWORK_CHANGE_EVENT = "utxopia:network-change";
 
 function isKnownNetwork(value: string | null | undefined): value is NetworkId {
   return !!value && value in networks;
@@ -176,6 +183,11 @@ export function setNetwork(network: NetworkId): void {
     // 1 year, same-site lax (sent on top-level navigation + XHR to same origin)
     const maxAge = 60 * 60 * 24 * 365;
     document.cookie = `${COOKIE_NAME}=${network}; Path=/; Max-Age=${maxAge}; SameSite=Lax`;
+  } catch {
+    // ignore
+  }
+  try {
+    window.dispatchEvent(new CustomEvent(NETWORK_CHANGE_EVENT, { detail: network }));
   } catch {
     // ignore
   }

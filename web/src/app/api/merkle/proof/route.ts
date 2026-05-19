@@ -11,6 +11,7 @@ import {
 } from "@utxopia/sdk";
 import { getHeliusConnection } from "@/lib/helius-server";
 import { getTreeProofFromBackend } from "@/lib/api/tree";
+import { detectNetworkFromRequest } from "@/lib/network-config";
 export const dynamic = "force-dynamic";
 
 export const runtime = "nodejs";
@@ -145,6 +146,7 @@ async function getTreeAndRoot(): Promise<{
 export async function GET(request: NextRequest) {
   try {
     const commitment = request.nextUrl.searchParams.get("commitment");
+    const network = detectNetworkFromRequest(request);
 
     if (!commitment) {
       return NextResponse.json(
@@ -174,7 +176,7 @@ export async function GET(request: NextRequest) {
     // =========================================================================
     // Fast path: try backend's cached tree first
     // =========================================================================
-    const backendResult = await getTreeProofFromBackend(commitmentHex);
+    const backendResult = await getTreeProofFromBackend(commitmentHex, network);
 
     if (backendResult?.success) {
       console.log(`[Merkle Proof API] Fast path: proof from backend for leaf ${backendResult.leaf_index}`);

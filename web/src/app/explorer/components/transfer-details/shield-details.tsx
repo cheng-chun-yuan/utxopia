@@ -19,6 +19,13 @@ export function ShieldDetails({ tx }: { tx: TransferTx }) {
   const fee = tx.inputs?.[0]?.fee ?? 0;
   const hasFee = fee > 0 && grossAmount !== netAmount;
   const btcMeta = tx.btcMeta;
+  const btcDepositAmount = btcMeta?.depositAmountSats ?? tx.inputs?.[0]?.depositAmountSats ?? null;
+  const btcSweepRemainder = btcMeta?.mintedSats ?? netAmount;
+  const btcMinerFee = btcMeta?.sweepFeeSats
+    ?? (btcDepositAmount != null && btcDepositAmount > btcSweepRemainder
+      ? btcDepositAmount - btcSweepRemainder
+      : null);
+  const fmtBtcSats = (sats: number) => `${sats.toLocaleString()} sats`;
   // Live BTC confirmations — prefer the (immutable) block height stored in
   // btcMeta and recompute against the current tip, fall back to the tracker's
   // mempool conf count for still-pending deposits.
@@ -44,7 +51,20 @@ export function ShieldDetails({ tx }: { tx: TransferTx }) {
                 {grossAmount ? formatTokenAmount(grossAmount, token) : "\u2014"}
               </span>
             </div>
-            {hasFee && (
+            {isBtc && btcDepositAmount != null ? (
+              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[10px] text-gray/55 font-mono pt-1 border-t border-btc/8">
+                <span>Deposit BTC</span>
+                <span>{fmtBtcSats(btcDepositAmount)}</span>
+                <span>Sweep remainder</span>
+                <span>{fmtBtcSats(btcSweepRemainder)} shielded</span>
+                {btcMinerFee != null && btcMinerFee > 0 && (
+                  <>
+                    <span>Miner fee</span>
+                    <span>-{fmtBtcSats(btcMinerFee)}</span>
+                  </>
+                )}
+              </div>
+            ) : hasFee && (
               <div className="flex items-center gap-1.5 text-[10px]">
                 <span className="text-gray/50">Fee: {formatTokenAmount(fee, token)}</span>
                 <span className="text-gray/30">&rarr;</span>

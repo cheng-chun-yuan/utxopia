@@ -55,7 +55,7 @@ import { VAULT_TOKENS } from "@/lib/supported-tokens";
 import { OnboardingModal } from "@/components/onboarding-modal";
 import { AuthModal } from "@/components/auth-modal";
 import { HoldButton } from "@/components/ui/hold-button";
-import { detectNetwork, getNetworkConfig } from "@/lib/network-config";
+import { useChainEnvironment } from "@/lib/chain-environment";
 
 export default function VaultPage() {
   const wallet = useWallet();
@@ -102,8 +102,7 @@ export default function VaultPage() {
 
   const tokenPrices = useTokenPrices();
   const btcPrice = tokenPrices.btc;
-  const networkId = detectNetwork();
-  const networkConfig = getNetworkConfig(networkId);
+  const { networkId, config: networkConfig } = useChainEnvironment();
   const bitcoinNetworkLabel =
     networkConfig.bitcoin.network.charAt(0).toUpperCase() +
     networkConfig.bitcoin.network.slice(1);

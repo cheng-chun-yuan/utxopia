@@ -6,8 +6,7 @@
  */
 
 import { getBackendUrl } from "@/lib/api/constants";
-
-const TRACKER_API_URL = getBackendUrl();
+import type { NetworkId } from "@/lib/network-config";
 
 export interface TreeProofResponse {
   success: boolean;
@@ -34,9 +33,10 @@ export interface TreeStatusResponse {
  */
 export async function getTreeProofFromBackend(
   commitmentHex: string,
+  network?: NetworkId,
 ): Promise<TreeProofResponse | null> {
   try {
-    const url = `${TRACKER_API_URL}/api/tree/proof?commitment=${encodeURIComponent(commitmentHex)}`;
+    const url = `${getBackendUrl(network)}/api/tree/proof?commitment=${encodeURIComponent(commitmentHex)}`;
     const res = await fetch(url, {
       signal: AbortSignal.timeout(3000),
     });
@@ -54,7 +54,7 @@ export async function getTreeProofFromBackend(
  */
 export async function getTreeStatus(): Promise<TreeStatusResponse | null> {
   try {
-    const url = `${TRACKER_API_URL}/api/tree/status`;
+    const url = `${getBackendUrl()}/api/tree/status`;
     const res = await fetch(url, {
       signal: AbortSignal.timeout(3000),
     });
@@ -64,4 +64,3 @@ export async function getTreeStatus(): Promise<TreeStatusResponse | null> {
     return null;
   }
 }
-

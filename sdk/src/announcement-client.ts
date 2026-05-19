@@ -47,6 +47,7 @@ interface BackendAnnouncementRow {
   tx_signature: string;
   slot: number;
   block_time?: number;
+  token_id?: string | null;
 }
 
 interface BackendAnnouncementsResponse {
@@ -93,6 +94,7 @@ function rowToAnnouncement(row: BackendAnnouncementRow): OnChainStealthAnnouncem
     leafIndex: row.leaf_index,
     blockTime: row.block_time ?? 0,
     slot: row.slot,
+    tokenIdHex: row.token_id ?? undefined,
   };
 }
 

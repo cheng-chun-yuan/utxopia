@@ -185,6 +185,8 @@ export interface OnChainStealthAnnouncement {
   blockTime?: number;
   /** Solana slot the announcement was emitted in. Needed for auditor slot-range scoping. */
   slot?: number;
+  /** Token id hex from the backend indexer, when available. */
+  tokenIdHex?: string;
 }
 
 // ========== Helper Functions ==========
@@ -1037,12 +1039,14 @@ export function parseAnnouncementsFromHex(rows: Array<{
   encrypted_amount: string;
   commitment: string;
   leaf_index: number;
+  token_id?: string | null;
 }>): Array<{
   announcementType: number;
   ephemeralPub: Uint8Array;
   encryptedAmount: Uint8Array;
   commitment: Uint8Array;
   leafIndex: number;
+  tokenIdHex?: string;
 }> {
   return rows.map((r) => ({
     announcementType: r.announcement_type,
@@ -1050,6 +1054,7 @@ export function parseAnnouncementsFromHex(rows: Array<{
     encryptedAmount: hexToBytes(r.encrypted_amount),
     commitment: hexToBytes(r.commitment),
     leafIndex: r.leaf_index,
+    tokenIdHex: r.token_id ?? undefined,
   }));
 }
 
@@ -1098,4 +1103,3 @@ export function isDepositForViewerHex(
     return false;
   }
 }
-

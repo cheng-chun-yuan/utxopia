@@ -51,19 +51,18 @@ function getDepositStatusDot(status: string | null): { variant: StatusDotVariant
 function DepositDetails({ deposit, config, isBtc }: { deposit: DepositRecord; config: ShieldTypeConfig; isBtc: boolean }) {
   const d = deposit;
   // For BTC deposits:
-  //   depositAmountSats = original deposit to taproot (25000, from DepositVerified event)
-  //   grossAmount = sweep output arriving at pool (24000, from ShieldMeta)
-  //   fee = protocol fee (2048, from ShieldMeta)
-  //   amountSats = shielded amount (21952)
-  //   minerFee = depositAmountSats - grossAmount (1000, computed)
+  //   depositAmountSats = original deposit to taproot
+  //   amountSats/mintedSats = sweep remainder minted into the shielded note
+  //   sweepFeeSats = BTC miner fee spent by the sweep transaction
+  // SPL shields use grossAmount/fee/amountSats instead.
   const originalDeposit = isBtc ? (d.btcMeta?.depositAmountSats ?? null) : null;
   const grossAmount = d.grossAmount ?? d.amountSats;
-  const shieldedAmount = d.amountSats;
-  const serviceFee = d.fee ?? (grossAmount - shieldedAmount);
-  // Miner fee: difference between original deposit and what arrived at pool
-  const minerFee = originalDeposit && originalDeposit > grossAmount ? originalDeposit - grossAmount : (d.btcMeta?.sweepFeeSats ?? 0);
-  // Display gross = original deposit if known, otherwise sweep amount
-  const displayGross = originalDeposit ?? grossAmount;
+  const shieldedAmount = d.btcMeta?.mintedSats ?? d.amountSats;
+  const minerFee = isBtc
+    ? (d.btcMeta?.sweepFeeSats ?? (originalDeposit && originalDeposit > shieldedAmount ? originalDeposit - shieldedAmount : 0))
+    : 0;
+  const serviceFee = isBtc ? 0 : (d.fee ?? (grossAmount - shieldedAmount));
+  const displayGross = isBtc ? (originalDeposit ?? shieldedAmount) : grossAmount;
   const fmtAmount = (sats: number) => config.showRaw
     ? sats.toLocaleString()
     : (sats / (10 ** config.decimals)).toLocaleString(undefined, { maximumFractionDigits: config.decimals });
@@ -91,6 +90,14 @@ function DepositDetails({ deposit, config, isBtc }: { deposit: DepositRecord; co
                 {fmtAmount(shieldedAmount)} <span className="text-[10px] text-gray font-normal">{config.to.label}</span>
               </span>
             </div>
+            {isBtc && originalDeposit != null && (
+              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[10px] text-gray/55 font-mono pt-1 border-t border-btc/8">
+                <span>Deposit BTC</span>
+                <span>{fmtAmount(originalDeposit)} {config.unit}</span>
+                <span>Sweep remainder</span>
+                <span>{fmtAmount(shieldedAmount)} {config.to.label}</span>
+              </div>
+            )}
             {d.btcMeta?.taprootAddress && (
               <div className="group flex items-center gap-2">
                 <span className="text-[10px] text-gray/50 shrink-0">→</span>
