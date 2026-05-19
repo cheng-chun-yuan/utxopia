@@ -52,17 +52,20 @@ function DepositDetails({ deposit, config, isBtc }: { deposit: DepositRecord; co
   const d = deposit;
   // For BTC deposits:
   //   depositAmountSats = original deposit to taproot
-  //   amountSats/mintedSats = sweep remainder minted into the shielded note
-  //   sweepFeeSats = BTC miner fee spent by the sweep transaction
+  //   amountSats/mintedSats = amount minted into the shielded note
+  //   sweepFeeSats = BTC miner fee spent by the sweep transaction, if a sweep exists
   // SPL shields use grossAmount/fee/amountSats instead.
   const originalDeposit = isBtc ? (d.btcMeta?.depositAmountSats ?? null) : null;
   const grossAmount = d.grossAmount ?? d.amountSats;
   const shieldedAmount = d.btcMeta?.mintedSats ?? d.amountSats;
-  const minerFee = isBtc
-    ? (d.btcMeta?.sweepFeeSats ?? (originalDeposit && originalDeposit > shieldedAmount ? originalDeposit - shieldedAmount : 0))
+  const btcMinerFee = isBtc ? (d.btcMeta?.sweepFeeSats ?? 0) : 0;
+  const btcServiceFee = isBtc && originalDeposit != null
+    ? Math.max(originalDeposit - btcMinerFee - shieldedAmount, 0)
     : 0;
-  const serviceFee = isBtc ? 0 : (d.fee ?? (grossAmount - shieldedAmount));
+  const minerFee = isBtc ? btcMinerFee : 0;
+  const serviceFee = isBtc ? btcServiceFee : (d.fee ?? (grossAmount - shieldedAmount));
   const displayGross = isBtc ? (originalDeposit ?? shieldedAmount) : grossAmount;
+  const isDirectVaultDeposit = isBtc && !d.btcMeta?.sweepTxid;
   const fmtAmount = (sats: number) => config.showRaw
     ? sats.toLocaleString()
     : (sats / (10 ** config.decimals)).toLocaleString(undefined, { maximumFractionDigits: config.decimals });
@@ -94,7 +97,7 @@ function DepositDetails({ deposit, config, isBtc }: { deposit: DepositRecord; co
               <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[10px] text-gray/55 font-mono pt-1 border-t border-btc/8">
                 <span>Deposit BTC</span>
                 <span>{fmtAmount(originalDeposit)} {config.unit}</span>
-                <span>Sweep remainder</span>
+                <span>{isDirectVaultDeposit ? "Shielded amount" : "Pool received"}</span>
                 <span>{fmtAmount(shieldedAmount)} {config.to.label}</span>
               </div>
             )}
@@ -146,7 +149,7 @@ function DepositDetails({ deposit, config, isBtc }: { deposit: DepositRecord; co
                 <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[10px] text-gray/50 font-mono pt-1 border-t border-green-500/8">
                   {serviceFee > 0 && (
                     <>
-                      <span>Service fee</span>
+                      <span>{isBtc ? "Protocol fee" : "Service fee"}</span>
                       <span>−{fmtFee(serviceFee)} {feeUnit}</span>
                     </>
                   )}
@@ -202,6 +205,7 @@ function DepositDetails({ deposit, config, isBtc }: { deposit: DepositRecord; co
 /** Vertical timeline showing deposit lifecycle transactions */
 function DepositTimeline({ deposit: d }: { deposit: DepositRecord }) {
   const stepOrder = DEPOSIT_STATUS_ORDER[d.status ?? ""] ?? 0;
+  const isDirectVaultDeposit = !d.btcMeta?.sweepTxid;
 
   const steps = [
     {
@@ -212,14 +216,14 @@ function DepositTimeline({ deposit: d }: { deposit: DepositRecord }) {
       txType: "btc" as const,
       badge: null,
     },
-    {
+    ...(!isDirectVaultDeposit ? [{
       title: "Sweep to Pool",
       done: stepOrder >= 3,
       icon: "btc" as const,
       txId: d.btcMeta?.sweepTxid,
       txType: "btc" as const,
       badge: null,
-    },
+    }] : []),
     {
       title: "SPV Verify",
       done: stepOrder >= 4,
