@@ -33,12 +33,12 @@
   "devnet-regtest": {
     "solana": {
       "rpcUrl": "https://api.devnet.solana.com",
-      "utxopiaProgramId": "APrMG4c2dBs766hhNvExCuihZN8pPnTAHxuMzh4RHLcm",
+      "utxopiaProgramId": "5VLurqnsjzCHFaeunGGWyxzjAvCerVLass9ZZ2uDctBF",
       "btcLightClientId": "E3Q7dNDNw9W8oL1ghm62Ecau4zHBZ1W5zxrnNVaoRs6v",
       "chadbufferId": "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF"
     },
     "tokens": {
-      "zkbtcMint": "7V7Gp2fptGmtFyvDoRaSmNUEFZf5iBFEvTmkQ5bp8ugN",
+      "zkbtcMint": "FPBYT4S79L7bvEEF8PTyU5g3V3vztMgfpY4YBdeahFsd",
       "usdcMint": "",
       "usdtMint": "",
       "wsolMint": "So11111111111111111111111111111111111111112",
@@ -46,15 +46,16 @@
     },
     "bitcoin": {
       "network": "regtest",
-      "poolAddress": "bcrt1psa4u9ws3ckn5g6fyddqzyxsx5ee5rtva6yk2dnnqsqk3c2wfwngszukxjn",
+      "poolAddress": "bcrt1plmn80xe9f36x4e9kj8wmv5r4d26tlday0nwyg9jxf3m0zh399ywscet7ef",
       "groupPubkey": "876bc2ba11c5a74469246b40221a06a67341ad9dd12ca6ce60802d1c29c974d1",
+      "depositMode": "direct",
       "explorerUrl": "https://btc.utxopia.com/regtest"
     },
     "ika": {
       "programId": "87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY",
       "grpcEndpoint": "pre-alpha-dev-1.ika.ika-network.net:443",
-      "dwallet": "11111111111111111111111111111111",
-      "dwalletXOnlyPubkey": "0000000000000000000000000000000000000000000000000000000000000000"
+      "dwallet": "7U8ZMHS2S5jERhhQcoyPW9pERydCTGt7fWpopvfLt34t",
+      "dwalletXOnlyPubkey": "fee6779b254c746ae4b691ddb650756ab4bfb7a47cdc4416464c76f15e25291d"
     },
     "backend": {
       "url": "https://api-hybrid.utxopia.com"

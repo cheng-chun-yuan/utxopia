@@ -1,5 +1,5 @@
 # UTXOpia devnet-regtest hybrid stack — backend that talks to:
-#   - Solana devnet (new utxopia program APrMG4c2... + new BTC LC E3Q7dN...)
+#   - Solana devnet (fresh utxopia program 5VLur... + BTC LC E3Q7dN...)
 #   - LOCAL regtest BTC (esplora at host port 3002, started via docker-compose.regtest.yml)
 #
 # Use cases:
@@ -44,8 +44,8 @@ services:
       UTXOPIA_SOLANA_RPC: https://api.devnet.solana.com
       SOLANA_RPC_URL: https://api.devnet.solana.com
       # ─── New hybrid program IDs ─────────────────────────────────────
-      UTXOPIA_PROGRAM_ID: APrMG4c2dBs766hhNvExCuihZN8pPnTAHxuMzh4RHLcm
-      UTXOPIA_ZKBTC_MINT: 7V7Gp2fptGmtFyvDoRaSmNUEFZf5iBFEvTmkQ5bp8ugN
+      UTXOPIA_PROGRAM_ID: 5VLurqnsjzCHFaeunGGWyxzjAvCerVLass9ZZ2uDctBF
+      UTXOPIA_ZKBTC_MINT: FPBYT4S79L7bvEEF8PTyU5g3V3vztMgfpY4YBdeahFsd
       BTC_LIGHT_CLIENT_PROGRAM_ID: E3Q7dNDNw9W8oL1ghm62Ecau4zHBZ1W5zxrnNVaoRs6v
       # ─── Ika dWallet ────────────────────────────────────────────────
       UTXOPIA_SIGNING_MODE: ika
@@ -70,6 +70,7 @@ services:
       TRACKER_API_PORT: "3001"
       MEMPOOL_WS_ENABLED: "false"
       HEADER_RELAY_ENABLED: "true"
+      DEPOSIT_SCAN_LOOKBACK_BLOCKS: "0"
       UTXOPIA_BROADCAST_MODE: real
       HEADER_BATCH_SIZE: "5"
       SERVICE_FEE_SATS: "500"

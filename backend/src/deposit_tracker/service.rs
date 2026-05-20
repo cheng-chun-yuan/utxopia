@@ -518,10 +518,16 @@ impl DepositTrackerService {
             }
         }
 
-        // No DB value — scan from genesis on localnet or tip-100 on devnet/mainnet
+        // No DB value — scan from genesis on localnet or a configurable
+        // recent lookback elsewhere. Hybrid fresh deploys can set this to 0
+        // so old regtest deposits are not imported into a new Solana pool.
         let is_localnet = self.config.solana_rpc.contains("127.0.0.1")
             || self.config.solana_rpc.contains("localhost");
-        let start = if is_localnet { 0 } else { tip_height.saturating_sub(100) };
+        let lookback = std::env::var("DEPOSIT_SCAN_LOOKBACK_BLOCKS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(100);
+        let start = if is_localnet { 0 } else { tip_height.saturating_sub(lookback) };
         self.last_scanned_height.store(start, Ordering::Relaxed);
         println!(
             "[block-scan] First run{}, scanning from block {} to {}",

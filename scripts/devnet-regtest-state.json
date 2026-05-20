@@ -1,14 +1,8 @@
 {
-  "utxopiaProgramId": "APrMG4c2dBs766hhNvExCuihZN8pPnTAHxuMzh4RHLcm",
+  "utxopiaProgramId": "5VLurqnsjzCHFaeunGGWyxzjAvCerVLass9ZZ2uDctBF",
   "btcLightClientId": "E3Q7dNDNw9W8oL1ghm62Ecau4zHBZ1W5zxrnNVaoRs6v",
   "chadbufferId": "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF",
   "network": "devnet-regtest",
-  "zkbtcMint": "7V7Gp2fptGmtFyvDoRaSmNUEFZf5iBFEvTmkQ5bp8ugN",
-  "poolState": "8xgjw1QnS2GfVT5a2SRFWicRmgnpReiZ3GZY8V12te3L",
-  "commitmentTree": "8WWem5hQxsdtovFsGAuChaF1rCAE93f5kj6GyRwyDsL1",
-  "poolVault": "7TPAzhB8xC9aZ3NQYYDBdgg7KFWVPwUxULes3xqnFceh",
-  "frostVault": "BfvFLUk1ZGw1qMHMXobfazUXvdvs2Gim6L1fpCoB1WYq",
-  "tokenConfigZkbtc": "DbE1mFfZD5KW6GZzU73P9VAeCpx6GAWF4TE4WrEsGecF",
   "authority": "uFBMJSxoGkHj2NyncPzAkhNWsGSQirQcRjUnGfEfWg1",
   "signingMode": "ika",
   "demoPool": {
@@ -33,5 +27,12 @@
       "networkPubkey": "ae574cfa320624c36e26428c81e65b24214b02a09373ae2a28714fd1d7a9c475",
       "epoch": "1"
     }
-  }
+  },
+  "previousUtxopiaProgramId": "6nHN7foxwyEQEopR4sUkKT7ZMZgcUYkQgM2WrenA4p79",
+  "zkbtcMint": "FPBYT4S79L7bvEEF8PTyU5g3V3vztMgfpY4YBdeahFsd",
+  "poolState": "4kPNxdSywqAHoPJbEhxWuyMTMyESLS6F4KEpLSoBG6kE",
+  "commitmentTree": "4mCU4pr22skmiynYcwo86qdoZdxcW6wfzrm6iLFzSv99",
+  "poolVault": "9fEieYpDxBfV2PE4NJ5tvWWymDJbHhVABNJHYWRyVwRN",
+  "frostVault": "BU6ZS2TPE9n75nKgJGFYkz1d3ADKXMpPVjgCZ3oyAduJ",
+  "tokenConfigZkbtc": "AB3t5GgSRwoSN9dNrveMFYxMuDpFXtVYfKKYaYhs3hBB"
 }
