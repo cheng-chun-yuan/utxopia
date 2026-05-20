@@ -3,11 +3,10 @@
  * Hybrid demo: end-to-end BTC deposit on devnet+regtest stack.
  *
  *   SDK (hybrid program ID overrides)
- *     → createNonInteractiveDeposit(regtest)
+ *     → createDepositFromConfig(regtest)
  *       → bitcoin-cli createOpReturnTx + broadcast
  *         → mine 1 conf for detection, then 6 for sweep
- *           → backend sweeps to demo pool address
- *             → backend SPV-verifies, calls complete_deposit
+ *           → backend SPV-verifies direct Ika vault deposit
  *               → on-chain Poseidon → leaf in commitment tree
  *
  * Persists the deposit seed at scripts/hybrid/.demo-seed.json so 02-transact
@@ -33,7 +32,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   UTXOpiaClient,
-  createNonInteractiveDeposit,
+  createDirectVaultDeposit,
   initConfig,
 } from "../../sdk/src/index";
 
@@ -126,12 +125,15 @@ async function main() {
     utxopiaProgramId: state.utxopiaProgramId,
     zkbtcMint: state.zkbtcMint,
     solanaRpcUrl: SOLANA_RPC,
-    groupPubKey: state.demoPool.xOnlyPubKey,
+    groupPubKey: state.btcXOnlyPubKey || state.demoPool?.xOnlyPubKey,
+    ikaDwalletXOnlyPubkey:
+      state.ika?.dwalletXOnlyPubkey || state.poolReceiveXOnlyPubKey || state.btcXOnlyPubKey,
+    depositMode: "direct",
   });
   console.log(`  utxopiaProgramId: ${state.utxopiaProgramId}`);
   console.log(`  zkbtcMint:        ${state.zkbtcMint}`);
-  console.log(`  groupPubKey:      ${state.demoPool.xOnlyPubKey}`);
-  console.log(`  poolBtcAddress:   ${state.demoPool.btcAddress}\n`);
+  console.log(`  groupPubKey:      ${state.btcXOnlyPubKey || state.demoPool?.xOnlyPubKey}`);
+  console.log(`  poolBtcAddress:   ${state.poolBtcAddress || state.demoPool?.btcAddress}\n`);
 
   const seed = loadOrCreateSeed();
   const client = await UTXOpiaClient.init({
@@ -149,14 +151,10 @@ async function main() {
 
   // Phase 3: build deposit
   console.log("─── 3/5 Build non-interactive deposit ───");
-  const groupPubKey = Uint8Array.from(
-    Buffer.from(state.demoPool.xOnlyPubKey, "hex"),
+  const vaultXOnly = Uint8Array.from(
+    Buffer.from(state.ika?.dwalletXOnlyPubkey || state.poolReceiveXOnlyPubKey, "hex"),
   );
-  const deposit = await createNonInteractiveDeposit(
-    setup.stealthAddress,
-    groupPubKey,
-    "regtest",
-  );
+  const deposit = await createDirectVaultDeposit(setup.stealthAddress, vaultXOnly, "regtest");
   console.log(`  deposit BTC addr: ${deposit.btcAddress}`);
   console.log(`  OP_RETURN (64B):  ${hex(deposit.opReturnPayload).slice(0, 32)}…`);
   console.log(`  npk:              ${hex(deposit.npk)}\n`);
@@ -184,31 +182,21 @@ async function main() {
   const txid = btc(`sendrawtransaction ${signed.hex}`);
   console.log(`  deposit txid:     ${txid}`);
 
-  // Mine 1 conf (so backend deposit_tracker detects per --confirmations 1)
+  // btc-light-client currently enforces 6 confirmations on-chain.
   const minerAddr = btc(`getnewaddress`);
-  btc(`generatetoaddress 1 ${minerAddr}`);
-  console.log(`  mined 1 block (deposit confirmed)\n`);
+  btc(`generatetoaddress 6 ${minerAddr}`);
+  console.log(`  mined 6 blocks (deposit confirmed for SPV)\n`);
 
   // Phase 5: poll backend
   console.log("─── 5/5 Poll backend until commitment lands ───");
-  console.log("  Backend cycle: detect → sweep → SPV verify → on-chain claim");
-  console.log("  Will mine 6 more blocks ~30s in to clear sweep confirmations\n");
+  console.log("  Backend cycle: detect → SPV verify → on-chain claim\n");
 
-  let minedExtra = false;
   const start = Date.now();
   const TIMEOUT_MS = 8 * 60_000;
 
   while (Date.now() - start < TIMEOUT_MS) {
     await new Promise((r) => setTimeout(r, 15_000));
     const elapsed = Math.round((Date.now() - start) / 1000);
-
-    // Mine the sweep-confirmation blocks once (~30s in, after backend likely
-    // queued the sweep tx).
-    if (!minedExtra && elapsed > 25) {
-      btc(`generatetoaddress 6 ${minerAddr}`);
-      console.log(`  [${elapsed}s] mined 6 more blocks (sweep confirmations)`);
-      minedExtra = true;
-    }
 
     try {
       const tree = await api("/api/tree/status");

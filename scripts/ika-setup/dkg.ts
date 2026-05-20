@@ -51,6 +51,10 @@ if (!programIdStr) {
   process.exit(1);
 }
 const utxopiaProgramId = new PublicKey(programIdStr);
+const [utxopiaCpiAuthority] = PublicKey.findProgramAddressSync(
+  [Buffer.from("__ika_cpi_authority")],
+  utxopiaProgramId,
+);
 
 const payerPath = process.env.PAYER_KEYPAIR_PATH;
 if (!payerPath || !existsSync(payerPath)) {
@@ -75,6 +79,7 @@ console.log(`Network:           ${NETWORK}`);
 console.log(`Solana RPC:        ${RPC_URL}`);
 console.log(`Ika program:       ${IKA_PROGRAM_ID.toBase58()}`);
 console.log(`UTXOpia pid:  ${utxopiaProgramId.toBase58()}`);
+console.log(`UTXOpia CPI PDA:    ${utxopiaCpiAuthority.toBase58()}`);
 console.log(`Payer:             ${payer.publicKey.toBase58()}`);
 console.log(`State file:        ${STATE_FILE}`);
 console.log();
@@ -96,6 +101,7 @@ const result = await setupDWallet(
   utxopiaProgramId,
   process.env.IKA_GRPC_URL ?? "pre-alpha-dev-1.ika.ika-network.net:443",
   "Secp256k1",
+  utxopiaCpiAuthority,
 );
 
 console.log("\n── DKG result ──");

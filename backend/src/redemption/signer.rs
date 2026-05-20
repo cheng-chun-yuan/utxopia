@@ -5,22 +5,39 @@
 
 use async_trait::async_trait;
 use bitcoin::{
+    Amount, TapTweakHash, Transaction, TxOut, Witness, XOnlyPublicKey,
     consensus::encode,
     hashes::Hash,
     secp256k1::{self, Message, Secp256k1, SecretKey},
     sighash::{Prevouts, SighashCache, TapSighashType},
-    Amount, TapTweakHash, Transaction, TxOut, Witness, XOnlyPublicKey,
 };
 use sha2::Digest as Sha2Digest;
+use tokio::process::Command;
 
 use crate::bitcoin::frost_client::{FrostClient, PrevoutInfo, SigningContext};
 use crate::redemption::builder::UnsignedTx;
+
+#[derive(Debug, Clone)]
+pub struct IkaApproval {
+    pub approval_signature: String,
+    pub message: Vec<u8>,
+    pub sighash: [u8; 32],
+}
 
 /// Trait for transaction signers
 #[async_trait]
 pub trait TxSigner: Send + Sync {
     /// Sign a transaction
     async fn sign(&self, unsigned: &UnsignedTx) -> Result<Transaction, SignerError>;
+
+    /// Sign with Ika approval proofs. Non-Ika signers ignore approvals.
+    async fn sign_with_ika_approvals(
+        &self,
+        unsigned: &UnsignedTx,
+        _approvals: &[IkaApproval],
+    ) -> Result<Transaction, SignerError> {
+        self.sign(unsigned).await
+    }
 
     /// Get the signer's public key
     fn public_key(&self) -> XOnlyPublicKey;
@@ -39,16 +56,15 @@ impl SingleKeySigner {
     /// Create from secret key bytes
     pub fn from_bytes(bytes: &[u8; 32]) -> Result<Self, SignerError> {
         let secp = Secp256k1::new();
-        let secret_key = SecretKey::from_slice(bytes)
-            .map_err(|e| SignerError::InvalidKey(e.to_string()))?;
+        let secret_key =
+            SecretKey::from_slice(bytes).map_err(|e| SignerError::InvalidKey(e.to_string()))?;
 
         Ok(Self { secret_key, secp })
     }
 
     /// Create from hex string
     pub fn from_hex(hex: &str) -> Result<Self, SignerError> {
-        let bytes = hex::decode(hex)
-            .map_err(|e| SignerError::InvalidKey(e.to_string()))?;
+        let bytes = hex::decode(hex).map_err(|e| SignerError::InvalidKey(e.to_string()))?;
 
         if bytes.len() != 32 {
             return Err(SignerError::InvalidKey("key must be 32 bytes".to_string()));
@@ -227,12 +243,20 @@ impl TxSigner for MpcSigner {
             // so we sign without merkle_root to produce a signature for the untweaked key.
             let sig_bytes = self
                 .frost_client
-                .sign_sighash_tweaked(&sighash_bytes, None, Some(signing_context), None, solana_verification)
+                .sign_sighash_tweaked(
+                    &sighash_bytes,
+                    None,
+                    Some(signing_context),
+                    None,
+                    solana_verification,
+                )
                 .await
                 .map_err(|e| SignerError::FrostSigningFailed(e.to_string()))?;
 
-            let sig = bitcoin::secp256k1::schnorr::Signature::from_slice(&sig_bytes)
-                .map_err(|e| SignerError::SigningFailed(format!("invalid schnorr signature: {}", e)))?;
+            let sig =
+                bitcoin::secp256k1::schnorr::Signature::from_slice(&sig_bytes).map_err(|e| {
+                    SignerError::SigningFailed(format!("invalid schnorr signature: {}", e))
+                })?;
 
             let signature = bitcoin::taproot::Signature {
                 signature: sig,
@@ -426,12 +450,86 @@ impl TxSigner for IkaSigner {
 
             // 2. Poll the MessageApproval PDA candidates keyed by keccak256(preimage).
             let sig_bytes = self
-                .poll_signature_candidates(&self.message_approval_pda_candidates_for_digest(&ika_digest))
+                .poll_signature_candidates(
+                    &self.message_approval_pda_candidates_for_digest(&ika_digest),
+                )
                 .await?;
 
             // 3. Build the Schnorr Taproot signature.
-            let sig = bitcoin::secp256k1::schnorr::Signature::from_slice(&sig_bytes)
+            let sig =
+                bitcoin::secp256k1::schnorr::Signature::from_slice(&sig_bytes).map_err(|e| {
+                    SignerError::SigningFailed(format!("invalid Schnorr signature: {}", e))
+                })?;
+            let signature = bitcoin::taproot::Signature {
+                signature: sig,
+                sighash_type: TapSighashType::Default,
+            };
+            let msg = Message::from_digest(sighash_bytes);
+            Secp256k1::verification_only()
+                .verify_schnorr(&signature.signature, &msg, &self.xonly_pubkey)
                 .map_err(|e| {
+                    SignerError::SigningFailed(format!(
+                        "Ika signature did not verify against BTC sighash: {}",
+                        e
+                    ))
+                })?;
+
+            tx.input[i].witness = Witness::from_slice(&[signature.to_vec()]);
+        }
+
+        Ok(tx)
+    }
+
+    async fn sign_with_ika_approvals(
+        &self,
+        unsigned: &UnsignedTx,
+        approvals: &[IkaApproval],
+    ) -> Result<Transaction, SignerError> {
+        let mut tx = unsigned.tx.clone();
+        if approvals.len() != tx.input.len() {
+            return Err(SignerError::SigningFailed(format!(
+                "Ika approvals length {} does not match input count {}",
+                approvals.len(),
+                tx.input.len()
+            )));
+        }
+
+        let prevouts: Vec<TxOut> = unsigned
+            .utxos
+            .iter()
+            .map(|utxo| {
+                let script_pubkey = hex::decode(&utxo.script_pubkey)
+                    .map(bitcoin::ScriptBuf::from_bytes)
+                    .unwrap_or_else(|_| bitcoin::ScriptBuf::new());
+                TxOut {
+                    value: Amount::from_sat(utxo.amount_sats),
+                    script_pubkey,
+                }
+            })
+            .collect();
+        let prevouts_ref = Prevouts::All(&prevouts);
+
+        for i in 0..tx.input.len() {
+            let mut sighash_cache = SighashCache::new(&tx);
+            let sighash = sighash_cache
+                .taproot_key_spend_signature_hash(i, &prevouts_ref, TapSighashType::Default)
+                .map_err(|e| SignerError::SigningFailed(e.to_string()))?;
+            let sighash_bytes: [u8; 32] = sighash.to_byte_array();
+            let preimage = taproot_key_spend_sighash_preimage(&tx, &prevouts, i)
+                .map_err(|e| SignerError::SigningFailed(e.to_string()))?;
+
+            let approval = &approvals[i];
+            if approval.sighash != sighash_bytes || approval.message != preimage {
+                return Err(SignerError::SigningFailed(
+                    "Ika approval payload does not match unsigned tx".to_string(),
+                ));
+            }
+
+            let sig_bytes = self
+                .request_grpc_signature(&approval.message, &approval.approval_signature)
+                .await?;
+            let sig =
+                bitcoin::secp256k1::schnorr::Signature::from_slice(&sig_bytes).map_err(|e| {
                     SignerError::SigningFailed(format!("invalid Schnorr signature: {}", e))
                 })?;
             let signature = bitcoin::taproot::Signature {
@@ -464,6 +562,71 @@ impl TxSigner for IkaSigner {
 }
 
 impl IkaSigner {
+    async fn request_grpc_signature(
+        &self,
+        message: &[u8],
+        approval_signature: &str,
+    ) -> Result<[u8; 64], SignerError> {
+        if let Ok(url) = std::env::var("UTXOPIA_IKA_SIGNER_URL") {
+            let resp = reqwest::Client::new()
+                .post(&url)
+                .json(&serde_json::json!({
+                    "approvalSig": approval_signature,
+                    "messageHex": hex::encode(message),
+                }))
+                .send()
+                .await
+                .map_err(|e| SignerError::IkaRpcError(format!("Ika signer sidecar HTTP: {}", e)))?;
+
+            let status = resp.status();
+            let body = resp.text().await.map_err(|e| {
+                SignerError::IkaRpcError(format!("read Ika signer sidecar body: {}", e))
+            })?;
+            if !status.is_success() {
+                return Err(SignerError::IkaRpcError(format!(
+                    "Ika signer sidecar returned {}: {}",
+                    status, body
+                )));
+            }
+
+            return parse_ika_signature_response(&body, "Ika signer sidecar");
+        }
+
+        let script = std::env::var("UTXOPIA_IKA_SIGN_MESSAGE_SCRIPT")
+            .unwrap_or_else(|_| "/app/scripts/ika-setup/sign-message.ts".to_string());
+        let state_path = std::env::var("STATE_PATH")
+            .or_else(|_| std::env::var("UTXOPIA_STATE_PATH"))
+            .unwrap_or_else(|_| "/app/scripts/devnet-regtest-state.json".to_string());
+        let payer_keypair = std::env::var("PAYER_KEYPAIR_PATH")
+            .or_else(|_| std::env::var("RELAYER_KEYPAIR"))
+            .or_else(|_| std::env::var("VERIFIER_KEYPAIR"))
+            .unwrap_or_else(|_| "/app/keypair.json".to_string());
+
+        let output = Command::new("bun")
+            .arg("run")
+            .arg(&script)
+            .env("STATE_PATH", state_path)
+            .env("PAYER_KEYPAIR_PATH", payer_keypair)
+            .env("SOLANA_RPC_URL", &self.rpc_url)
+            .env("APPROVAL_SIG", approval_signature)
+            .env("MESSAGE_HEX", hex::encode(message))
+            .output()
+            .await
+            .map_err(|e| SignerError::IkaRpcError(format!("spawn Ika signer bridge: {}", e)))?;
+
+        if !output.status.success() {
+            return Err(SignerError::IkaRpcError(format!(
+                "Ika signer bridge failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )));
+        }
+
+        parse_ika_signature_response(
+            &String::from_utf8_lossy(&output.stdout),
+            "Ika signer bridge",
+        )
+    }
+
     async fn poll_signature_candidates(
         &self,
         ma_pdas: &[solana_sdk::pubkey::Pubkey],
@@ -496,6 +659,29 @@ impl IkaSigner {
 
         Err(SignerError::IkaPollTimeout(self.poll_timeout))
     }
+}
+
+fn parse_ika_signature_response(body: &str, source: &str) -> Result<[u8; 64], SignerError> {
+    let value: serde_json::Value = serde_json::from_str(body.trim()).map_err(|e| {
+        SignerError::IkaRpcError(format!("parse {} JSON: {}; body={}", source, e, body))
+    })?;
+    let sig_hex = value
+        .get("signatureHex")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            SignerError::IkaRpcError(format!("{} missing signatureHex: {}", source, body))
+        })?;
+    let sig_vec = hex::decode(sig_hex)
+        .map_err(|e| SignerError::IkaRpcError(format!("decode Ika signature hex: {}", e)))?;
+    if sig_vec.len() != 64 {
+        return Err(SignerError::IkaRpcError(format!(
+            "Ika signature length {} != 64",
+            sig_vec.len()
+        )));
+    }
+    let mut sig = [0u8; 64];
+    sig.copy_from_slice(&sig_vec);
+    Ok(sig)
 }
 
 /// Extract the 64-byte Schnorr signature from a populated `MessageApproval`
@@ -579,7 +765,9 @@ pub fn taproot_key_spend_sighash_preimage(
     input_index: usize,
 ) -> Result<Vec<u8>, SignerError> {
     if input_index >= tx.input.len() {
-        return Err(SignerError::SigningFailed("input index out of range".into()));
+        return Err(SignerError::SigningFailed(
+            "input index out of range".into(),
+        ));
     }
     if prevouts.len() != tx.input.len() {
         return Err(SignerError::SigningFailed(
@@ -636,7 +824,8 @@ fn extract_schnorr_signature(data: &[u8]) -> Option<[u8; 64]> {
         // Pending — `CommitSignature` hasn't fired yet.
         return None;
     }
-    let sig_len = u16::from_le_bytes([data[MA_SIG_LEN_OFFSET], data[MA_SIG_LEN_OFFSET + 1]]) as usize;
+    let sig_len =
+        u16::from_le_bytes([data[MA_SIG_LEN_OFFSET], data[MA_SIG_LEN_OFFSET + 1]]) as usize;
     if sig_len != SCHNORR_SIG_LEN {
         // We only know how to unpack 64-byte Schnorr/Taproot signatures here.
         return None;
@@ -664,7 +853,9 @@ pub enum SignerError {
     #[error("MPC session error: {0}")]
     MpcSessionError(String),
 
-    #[error("Ika signing not yet wired — pre-alpha mock signer never calls CommitSignature on chain")]
+    #[error(
+        "Ika signing not yet wired — pre-alpha mock signer never calls CommitSignature on chain"
+    )]
     IkaSigningNotWired,
 
     #[error("Ika RPC error: {0}")]
@@ -703,9 +894,9 @@ mod tests {
     fn test_ika_signer() -> IkaSigner {
         // Synthetic but well-formed values; the test does not hit the network.
         let xonly = XOnlyPublicKey::from_slice(&[
-            0x79, 0xbe, 0x66, 0x7e, 0xf9, 0xdc, 0xbb, 0xac, 0x55, 0xa0, 0x62, 0x95, 0xce,
-            0x87, 0x0b, 0x07, 0x02, 0x9b, 0xfc, 0xdb, 0x2d, 0xce, 0x28, 0xd9, 0x59, 0xf2,
-            0x81, 0x5b, 0x16, 0xf8, 0x17, 0x98,
+            0x79, 0xbe, 0x66, 0x7e, 0xf9, 0xdc, 0xbb, 0xac, 0x55, 0xa0, 0x62, 0x95, 0xce, 0x87,
+            0x0b, 0x07, 0x02, 0x9b, 0xfc, 0xdb, 0x2d, 0xce, 0x28, 0xd9, 0x59, 0xf2, 0x81, 0x5b,
+            0x16, 0xf8, 0x17, 0x98,
         ])
         .unwrap();
         IkaSigner::new(
@@ -782,9 +973,8 @@ mod tests {
     #[test]
     fn taproot_preimage_hash_matches_bitcoin_sighash() {
         use bitcoin::{
-            absolute::LockTime,
-            transaction::Version,
             Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid, Witness,
+            absolute::LockTime, transaction::Version,
         };
         use std::str::FromStr;
 

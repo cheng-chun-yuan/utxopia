@@ -31,8 +31,11 @@ case "$NETWORK" in
   devnet)
     STATE_FILE="$ROOT/scripts/devnet-state.json"
     ;;
+  devnet-regtest)
+    STATE_FILE="$ROOT/scripts/devnet-regtest-state.json"
+    ;;
   *)
-    echo "ERROR: Unknown network '$NETWORK'. Use: localnet, devnet"
+    echo "ERROR: Unknown network '$NETWORK'. Use: localnet, devnet, devnet-regtest"
     exit 1
     ;;
 esac
@@ -84,8 +87,8 @@ IKA_DWALLET=$(python3 -c "import json,sys; d=json.load(open('$STATE_FILE')); pri
 IKA_DWALLET_XONLY_PUBKEY=$(python3 -c "import json,sys; d=json.load(open('$STATE_FILE')); print(d.get('ika',{}).get('dwalletXOnlyPubkey',''))")
 IKA_CPI_AUTHORITY_BUMP=$(python3 -c "import json,sys; d=json.load(open('$STATE_FILE')); print(d.get('ika',{}).get('cpiAuthorityBump',0))")
 
-# Defaults for fields not in state file
-BACKEND_URL="${BACKEND_URL:-http://localhost:3001}"
+# Defaults for fields not in state file are applied per network below.
+BACKEND_URL="${BACKEND_URL:-}"
 
 # Network-specific overrides
 case "$NETWORK" in
@@ -93,6 +96,7 @@ case "$NETWORK" in
     SOLANA_RPC="${SOLANA_RPC:-http://localhost:8899}"
     BTC_NETWORK="${BTC_NETWORK:-regtest}"
     BACKEND_URL="${BACKEND_URL:-http://localhost:3001}"
+    TRACKER_API_PORT="${TRACKER_API_PORT:-3001}"
     BTC_EXPLORER="http://localhost:3002/regtest"
     ESPLORA_URL="http://localhost:3002/regtest/api"
     MEMPOOL_WS="false"
@@ -100,9 +104,20 @@ case "$NETWORK" in
   devnet)
     SOLANA_RPC="${SOLANA_RPC:-https://api.devnet.solana.com}"
     BTC_NETWORK="${BTC_NETWORK:-testnet4}"
+    BACKEND_URL="${BACKEND_URL:-http://localhost:3001}"
     BTC_EXPLORER="https://mempool.space/testnet4"
     ESPLORA_URL="https://mempool.space/testnet4/api"
     MEMPOOL_WS="true"
+    TRACKER_API_PORT="${TRACKER_API_PORT:-3001}"
+    ;;
+  devnet-regtest)
+    SOLANA_RPC="${SOLANA_RPC:-https://api.devnet.solana.com}"
+    BTC_NETWORK="${BTC_NETWORK:-regtest}"
+    BACKEND_URL="${BACKEND_URL:-http://localhost:3020}"
+    TRACKER_API_PORT="${TRACKER_API_PORT:-3020}"
+    BTC_EXPLORER="http://localhost:3002/regtest"
+    ESPLORA_URL="http://localhost:3002/regtest/api"
+    MEMPOOL_WS="false"
     ;;
 esac
 
@@ -147,7 +162,7 @@ UTXOPIA_IKA_DWALLET_XONLY_PUBKEY=$IKA_DWALLET_XONLY_PUBKEY
 UTXOPIA_IKA_CPI_AUTHORITY_BUMP=$IKA_CPI_AUTHORITY_BUMP
 
 # ─── Tracker & Indexer ───────────────────────────────────────────────────────
-TRACKER_API_PORT=3001
+TRACKER_API_PORT=$TRACKER_API_PORT
 DEPOSIT_DB_PATH=data/deposits.db
 INDEXER_DB_PATH=data/events.db
 INDEXER_POLL_INTERVAL_SECS=10

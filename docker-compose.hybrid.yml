@@ -35,7 +35,7 @@ services:
     environment:
       RUST_LOG: info,zkbtc=debug
       PRIVACY_COIN_NETWORK: devnet
-      UTXOPIA_NETWORK: devnet
+      UTXOPIA_NETWORK: devnet-regtest
       # BTC side: REGTEST via local esplora (running on host port 3002)
       UTXOPIA_BITCOIN_NETWORK: regtest
       UTXOPIA_BITCOIN_RPC: http://host.docker.internal:3002/regtest/api
@@ -51,13 +51,13 @@ services:
       UTXOPIA_SIGNING_MODE: ika
       UTXOPIA_IKA_PROGRAM_ID: 87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY
       UTXOPIA_IKA_GRPC_ENDPOINT: pre-alpha-dev-1.ika.ika-network.net:443
-      UTXOPIA_IKA_DWALLET: 7U8ZMHS2S5jERhhQcoyPW9pERydCTGt7fWpopvfLt34t
-      UTXOPIA_IKA_DWALLET_XONLY_PUBKEY: fee6779b254c746ae4b691ddb650756ab4bfb7a47cdc4416464c76f15e25291d
+      UTXOPIA_IKA_DWALLET: m3As83YDsSeWJJgckPHUZ1HGRwLZ7o5ixk5LwigyGhD
+      UTXOPIA_IKA_DWALLET_XONLY_PUBKEY: 5d2677901d35961b623a4f9a382abb3336b92a7ad8bcdd255ac79e92d261ab50
       UTXOPIA_IKA_CPI_AUTHORITY_BUMP: "254"
       # Deposit addresses are still derived from/swept by the demo key below.
       # Sweeps land in this Ika-owned Taproot address, so redemption can prove
       # that Ika pre-alpha signs and moves regtest BTC.
-      POOL_RECEIVE_ADDRESS: bcrt1plmn80xe9f36x4e9kj8wmv5r4d26tlday0nwyg9jxf3m0zh399ywscet7ef
+      POOL_RECEIVE_ADDRESS: bcrt1pt5n80yqaxktpkc36f7drs24mxvmtj2n6mz7d6f26c70f95np4dgqnpxz4m
       UTXOPIA_FROST_GROUP_PUBKEY: 876bc2ba11c5a74469246b40221a06a67341ad9dd12ca6ce60802d1c29c974d1
       # Demo-mode deposit sweep secret. Throwaway — see
       # scripts/devnet-regtest-state.json `demoPool.privKey`.
@@ -77,10 +77,32 @@ services:
       RELAYER_FEE_SATS: "500"
       RELAYER_KEYPAIR: /app/keypair.json
       VERIFIER_KEYPAIR: /app/keypair.json
+      PAYER_KEYPAIR_PATH: /app/keypair.json
+      UTXOPIA_IKA_SIGNER_URL: http://ika-signer:3030/sign
       RELAYER_STEALTH_META: "${RELAYER_STEALTH_META:-}"
       BACKEND_API_KEY: "${BACKEND_API_KEY:?BACKEND_API_KEY must be set (see .env)}"
       # CORS: localhost + any utxopia subdomain (frontend may run anywhere)
       ALLOWED_ORIGIN: "${ALLOWED_ORIGIN_HYBRID:-http://localhost:3000,http://localhost:3002,https://utxopia.com,https://app.utxopia.com,https://hybrid.utxopia.com}"
+    depends_on:
+      ika-signer:
+        condition: service_started
+    restart: unless-stopped
+
+  ika-signer:
+    build:
+      context: .
+      dockerfile: scripts/ika-setup/Dockerfile.signer
+    image: utxopia-ika-signer-hybrid:latest
+    container_name: utxopia-ika-signer-hybrid
+    ports:
+      - "3030:3030"
+    volumes:
+      - ${HOME}/.config/solana/id.json:/app/keypair.json:ro
+    environment:
+      STATE_PATH: /app/scripts/devnet-regtest-state.json
+      PAYER_KEYPAIR_PATH: /app/keypair.json
+      SOLANA_RPC_URL: https://api.devnet.solana.com
+      IKA_SIGNER_PORT: "3030"
     restart: unless-stopped
 
 volumes:

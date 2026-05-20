@@ -372,7 +372,14 @@ export async function setupDWallet(
   exampleProgramId: PublicKey,
   grpcUrl = "pre-alpha-dev-1.ika.ika-network.net:443",
   curve: CurveName = "Curve25519",
+  intendedChainSender?: PublicKey,
 ): Promise<DWalletSetup> {
+  const [cpiAuthority, cpiAuthorityBump] = pda(
+    [SEED_CPI_AUTHORITY],
+    exampleProgramId,
+  );
+  const chainSender = intendedChainSender ?? payer.publicKey;
+
   // Wait for coordinator.
   const [coordinatorPda] = pda(
     [SEED_DWALLET_COORDINATOR],
@@ -402,7 +409,7 @@ export async function setupDWallet(
     session_identifier_preimage: Array.from(new Uint8Array(32)),
     epoch: 1n,
     chain_id: { Solana: true },
-    intended_chain_sender: Array.from(payer.publicKey.toBytes()),
+    intended_chain_sender: Array.from(chainSender.toBytes()),
     request: {
       DKG: {
         dwallet_network_encryption_public_key: Array.from(new Uint8Array(32)),
@@ -470,11 +477,25 @@ export async function setupDWallet(
   );
   ok(`dWallet on-chain: ${dwalletPda.toBase58()}`);
 
-  // Transfer authority to example program CPI PDA.
-  const [cpiAuthority, cpiAuthorityBump] = pda(
-    [SEED_CPI_AUTHORITY],
-    exampleProgramId,
-  );
+  const dwalletAccount = await connection.getAccountInfo(dwalletPda, "confirmed");
+  const authority = dwalletAccount?.data.subarray(2, 34);
+  if (authority && Buffer.from(authority).equals(cpiAuthority.toBuffer())) {
+    ok(`Authority already set to CPI PDA: ${cpiAuthority.toBase58()}`);
+    return {
+      dwalletPda,
+      dwalletAddr,
+      publicKey,
+      cpiAuthority,
+      cpiAuthorityBump,
+      grpcClient,
+      attestation: {
+        attestationData: new Uint8Array(attestation.attestation_data),
+        networkSignature: new Uint8Array(attestation.network_signature),
+        networkPubkey: new Uint8Array(attestation.network_pubkey),
+        epoch: BigInt(attestation.epoch),
+      },
+    };
+  }
 
   const transferData = Buffer.alloc(33);
   transferData[0] = IX_TRANSFER_OWNERSHIP;

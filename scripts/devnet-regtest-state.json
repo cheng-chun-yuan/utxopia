@@ -13,17 +13,17 @@
     "note": "Demo-mode placeholder while Ika devnet is unavailable. Throwaway key — do not use in prod."
   },
   "btcXOnlyPubKey": "876bc2ba11c5a74469246b40221a06a67341ad9dd12ca6ce60802d1c29c974d1",
-  "poolReceiveXOnlyPubKey": "fee6779b254c746ae4b691ddb650756ab4bfb7a47cdc4416464c76f15e25291d",
-  "poolBtcAddress": "bcrt1plmn80xe9f36x4e9kj8wmv5r4d26tlday0nwyg9jxf3m0zh399ywscet7ef",
+  "poolReceiveXOnlyPubKey": "5d2677901d35961b623a4f9a382abb3336b92a7ad8bcdd255ac79e92d261ab50",
+  "poolBtcAddress": "bcrt1pt5n80yqaxktpkc36f7drs24mxvmtj2n6mz7d6f26c70f95np4dgqnpxz4m",
   "ika": {
     "programId": "87W54kGYFQ1rgWqMeu4XTPHWXWmXSQCcjm8vCTfiq1oY",
     "grpcEndpoint": "pre-alpha-dev-1.ika.ika-network.net:443",
-    "dwallet": "7U8ZMHS2S5jERhhQcoyPW9pERydCTGt7fWpopvfLt34t",
-    "dwalletXOnlyPubkey": "fee6779b254c746ae4b691ddb650756ab4bfb7a47cdc4416464c76f15e25291d",
+    "dwallet": "m3As83YDsSeWJJgckPHUZ1HGRwLZ7o5ixk5LwigyGhD",
+    "dwalletXOnlyPubkey": "5d2677901d35961b623a4f9a382abb3336b92a7ad8bcdd255ac79e92d261ab50",
     "cpiAuthorityBump": 254,
     "attestation": {
-      "attestationData": "000000000000000000000000000000000000000000000000000000000000000000200d623bd36b5a8945f81fa8a24868c6d141a42b53e3cad55b2da3eecb5b6b44aa002102fee6779b254c746ae4b691ddb650756ab4bfb7a47cdc4416464c76f15e25291d2102fee6779b254c746ae4b691ddb650756ab4bfb7a47cdc4416464c76f15e25291d0000",
-      "networkSignature": "5bb75b614979accac8909ccea56adff71beda75f9fe7cad704ca2af963e36ef180e677f9566f8dce73f5f06e8b571349efed4cfbe6bdea5c054a3b1972909b04",
+      "attestationData": "0000000000000000000000000000000000000000000000000000000000000000002031ca11df112b1d8a55ba5f9c50fd53116956ab5911fa0fef653ada667974952b0021035d2677901d35961b623a4f9a382abb3336b92a7ad8bcdd255ac79e92d261ab5021035d2677901d35961b623a4f9a382abb3336b92a7ad8bcdd255ac79e92d261ab500000",
+      "networkSignature": "d4c656561c5c288830d479e7a8b8fa5d6a41e15ecc4f0d74ab8ebb89e8823872a2c7a517dbea174196a4e2079ddb22d8e82337ecc8b641a6650cf5662eb4a308",
       "networkPubkey": "ae574cfa320624c36e26428c81e65b24214b02a09373ae2a28714fd1d7a9c475",
       "epoch": "1"
     }

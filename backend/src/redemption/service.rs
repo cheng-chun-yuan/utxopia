@@ -14,24 +14,26 @@
 //! - SingleKey: POC mode using a local secp256k1 key
 //! - FROST: production mode using 2-of-3 threshold signing via FROST servers
 
+use sha2::Digest as Sha2Digest;
+use solana_sdk::signature::Signer as SolanaSigner;
 use std::str::FromStr;
 use std::sync::Arc;
-use sha2::Digest as Sha2Digest;
 use tokio::sync::{Notify, RwLock};
-use solana_sdk::signature::Signer as SolanaSigner;
 
 use crate::bitcoin::client::EsploraClient;
-use crate::deposit_tracker::header_relayer::HeaderRelayer;
 use crate::config::Network;
+use crate::deposit_tracker::header_relayer::HeaderRelayer;
 use crate::redemption::builder::TxBuilder;
 use crate::redemption::queue::WithdrawalQueue;
 use crate::redemption::signer::{
-    ika_message_digest, taproot_key_spend_sighash_preimage, SingleKeySigner, TxSigner,
+    IkaApproval, SingleKeySigner, TxSigner, ika_message_digest, taproot_key_spend_sighash_preimage,
 };
 use crate::redemption::tracking::TrackingStore;
 use crate::redemption::types::*;
 use crate::redemption::watcher::RedemptionScanner;
 use crate::solana::client::{ApproveRedemptionSigningParams, SolClient};
+
+const UNTRACKED_PROCESSING_SKIP_ERROR: &str = "untracked Processing PDA has no recoverable BTC tx";
 
 /// Get current Unix timestamp in seconds.
 fn now_secs() -> u64 {
@@ -41,13 +43,22 @@ fn now_secs() -> u64 {
         .as_secs()
 }
 
+fn allow_untracked_processing_rebroadcast() -> bool {
+    matches!(
+        std::env::var("UTXOPIA_REBROADCAST_UNTRACKED_PROCESSING")
+            .unwrap_or_default()
+            .as_str(),
+        "1" | "true" | "TRUE" | "yes" | "YES"
+    )
+}
+
 fn compute_taproot_signing_payloads(
     unsigned: &crate::redemption::builder::UnsignedTx,
-) -> Result<Vec<([u8; 32], [u8; 32])>, ServiceError> {
+) -> Result<Vec<([u8; 32], [u8; 32], Vec<u8>)>, ServiceError> {
     use bitcoin::{
+        Amount, TxOut,
         hashes::Hash,
         sighash::{Prevouts, SighashCache, TapSighashType},
-        Amount, TxOut,
     };
 
     let prevouts: Vec<TxOut> = unsigned
@@ -82,7 +93,8 @@ fn compute_taproot_signing_payloads(
                 hex::encode(sighash_bytes)
             )));
         }
-        out.push((sighash_bytes, ika_message_digest(&preimage)));
+        let digest = ika_message_digest(&preimage);
+        out.push((sighash_bytes, digest, preimage));
     }
     Ok(out)
 }
@@ -99,31 +111,41 @@ fn script_to_address(script: &[u8], network: bitcoin::Network) -> Result<String,
 /// matching the given scriptPubKey (pool change output).
 fn find_change_vout(raw_tx: &[u8], pool_script: &[u8]) -> Option<u32> {
     let mut offset = 4; // skip version
-    if offset >= raw_tx.len() { return None; }
+    if offset >= raw_tx.len() {
+        return None;
+    }
 
     // Skip inputs
     let (input_count, vs) = read_varint_service(&raw_tx[offset..])?;
     offset += vs;
     for _ in 0..input_count {
         offset += 36; // prev_txid + prev_vout
-        if offset >= raw_tx.len() { return None; }
+        if offset >= raw_tx.len() {
+            return None;
+        }
         let (script_len, vs) = read_varint_service(&raw_tx[offset..])?;
         offset += vs + script_len as usize + 4; // script + sequence
     }
 
     // Read output count
-    if offset >= raw_tx.len() { return None; }
+    if offset >= raw_tx.len() {
+        return None;
+    }
     let (output_count, vs) = read_varint_service(&raw_tx[offset..])?;
     offset += vs;
 
     for i in 0..output_count {
-        if offset + 8 > raw_tx.len() { return None; }
+        if offset + 8 > raw_tx.len() {
+            return None;
+        }
         offset += 8; // skip value
 
         let (script_len, vs) = read_varint_service(&raw_tx[offset..])?;
         offset += vs;
         let script_end = offset + script_len as usize;
-        if script_end > raw_tx.len() { return None; }
+        if script_end > raw_tx.len() {
+            return None;
+        }
 
         if &raw_tx[offset..script_end] == pool_script {
             return Some(i as u32);
@@ -134,12 +156,22 @@ fn find_change_vout(raw_tx: &[u8], pool_script: &[u8]) -> Option<u32> {
 }
 
 fn read_varint_service(data: &[u8]) -> Option<(u64, usize)> {
-    if data.is_empty() { return None; }
+    if data.is_empty() {
+        return None;
+    }
     match data[0] {
         0..=0xfc => Some((data[0] as u64, 1)),
         0xfd if data.len() >= 3 => Some((u16::from_le_bytes([data[1], data[2]]) as u64, 3)),
-        0xfe if data.len() >= 5 => Some((u32::from_le_bytes([data[1], data[2], data[3], data[4]]) as u64, 5)),
-        0xff if data.len() >= 9 => Some((u64::from_le_bytes([data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8]]), 9)),
+        0xfe if data.len() >= 5 => Some((
+            u32::from_le_bytes([data[1], data[2], data[3], data[4]]) as u64,
+            5,
+        )),
+        0xff if data.len() >= 9 => Some((
+            u64::from_le_bytes([
+                data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8],
+            ]),
+            9,
+        )),
         _ => None,
     }
 }
@@ -207,15 +239,20 @@ impl RedemptionService {
             Ok(pool_cfg) => {
                 println!(
                     "[redemption] Loaded on-chain PoolState: fee_bps={}, fee_base={}, min={}, max={}",
-                    pool_cfg.service_fee_bps, pool_cfg.service_fee_base,
-                    pool_cfg.min_deposit, pool_cfg.max_deposit,
+                    pool_cfg.service_fee_bps,
+                    pool_cfg.service_fee_base,
+                    pool_cfg.min_deposit,
+                    pool_cfg.max_deposit,
                 );
                 builder.set_service_fee_model(pool_cfg.service_fee_bps, pool_cfg.service_fee_base);
                 config.min_withdrawal = pool_cfg.min_deposit;
                 config.max_withdrawal = pool_cfg.max_deposit;
             }
             Err(e) => {
-                eprintln!("[redemption] Warning: failed to fetch on-chain pool config ({:?}), using fallback defaults", e);
+                eprintln!(
+                    "[redemption] Warning: failed to fetch on-chain pool config ({:?}), using fallback defaults",
+                    e
+                );
                 builder.set_service_fee_model(config.service_fee_bps, config.service_fee_base);
             }
         }
@@ -317,7 +354,9 @@ impl RedemptionService {
         }
 
         // Validate BTC address
-        self.builder.read().await
+        self.builder
+            .read()
+            .await
             .validate_address(&btc_address)
             .map_err(|e| ServiceError::InvalidAddress(e.to_string()))?;
 
@@ -445,10 +484,10 @@ impl RedemptionService {
         if now.saturating_sub(last) >= CONFIG_CACHE_SECS {
             match self.sol_client.fetch_pool_config() {
                 Ok(pool_cfg) => {
-                    self.builder.write().await.set_service_fee_model(
-                        pool_cfg.service_fee_bps,
-                        pool_cfg.service_fee_base,
-                    );
+                    self.builder
+                        .write()
+                        .await
+                        .set_service_fee_model(pool_cfg.service_fee_bps, pool_cfg.service_fee_base);
                     self.last_config_refresh.store(now, Ordering::Relaxed);
                 }
                 Err(e) => eprintln!("[tick] Warning: failed to refresh pool config: {:?}", e),
@@ -472,7 +511,11 @@ impl RedemptionService {
             }
             match self.process_new_redemption(pda).await {
                 Ok(_) => count += 1,
-                Err(e) => eprintln!("[tick] Error processing PDA {}: {}", &pda.pda_address[..8], e),
+                Err(e) => eprintln!(
+                    "[tick] Error processing PDA {}: {}",
+                    &pda.pda_address[..8],
+                    e
+                ),
             }
         }
         count
@@ -487,25 +530,43 @@ impl RedemptionService {
             if let Some(entry) = self.tracking.get(&pda.pda_address).await {
                 // Retry failed builds (no btc_txid yet)
                 if entry.local_status == LocalRedemptionStatus::Failed && entry.btc_txid.is_none() {
+                    if entry.error.as_deref() == Some(UNTRACKED_PROCESSING_SKIP_ERROR) {
+                        continue;
+                    }
                     self.tracking.remove(&pda.pda_address).await;
                     match self.build_sign_broadcast(pda).await {
                         Ok(_) => processed += 1,
-                        Err(e) => eprintln!("[tick] Retry failed for PDA {}: {}", &pda.pda_address[..8], e),
+                        Err(e) => eprintln!(
+                            "[tick] Retry failed for PDA {}: {}",
+                            &pda.pda_address[..8],
+                            e
+                        ),
                     }
                     continue;
                 }
             } else {
                 // Untracked Processing PDA — try to recover existing BTC tx
                 match self.try_recover_untracked_pda(pda).await {
-                    Ok(true) => continue,  // Recovered — will complete next tick
+                    Ok(true) => continue, // Recovered — will complete next tick
                     Ok(false) => {
-                        // No recoverable tx — sign fresh
-                        match self.build_sign_broadcast(pda).await {
-                            Ok(_) => processed += 1,
-                            Err(e) => eprintln!("[tick] Error building tx for untracked PDA {}: {}", &pda.pda_address[..8], e),
+                        if allow_untracked_processing_rebroadcast() {
+                            match self.build_sign_broadcast(pda).await {
+                                Ok(_) => processed += 1,
+                                Err(e) => eprintln!(
+                                    "[tick] Error building tx for untracked PDA {}: {}",
+                                    &pda.pda_address[..8],
+                                    e
+                                ),
+                            }
+                        } else {
+                            self.mark_untracked_processing_skipped(pda).await;
                         }
                     }
-                    Err(e) => eprintln!("[tick] Recovery failed for PDA {}: {}", &pda.pda_address[..8], e),
+                    Err(e) => eprintln!(
+                        "[tick] Recovery failed for PDA {}: {}",
+                        &pda.pda_address[..8],
+                        e
+                    ),
                 }
                 continue;
             }
@@ -513,7 +574,11 @@ impl RedemptionService {
             match self.try_complete_redemption(pda).await {
                 Ok(true) => completed += 1,
                 Ok(false) => {}
-                Err(e) => eprintln!("[tick] Error completing PDA {}: {}", &pda.pda_address[..8], e),
+                Err(e) => eprintln!(
+                    "[tick] Error completing PDA {}: {}",
+                    &pda.pda_address[..8],
+                    e
+                ),
             }
         }
 
@@ -522,13 +587,20 @@ impl RedemptionService {
 
     /// Try to recover an existing BTC tx for an untracked Processing PDA.
     /// Returns Ok(true) if recovered, Ok(false) if no valid tx found.
-    async fn try_recover_untracked_pda(&self, pda: &ParsedRedemption) -> Result<bool, ServiceError> {
+    async fn try_recover_untracked_pda(
+        &self,
+        pda: &ParsedRedemption,
+    ) -> Result<bool, ServiceError> {
         let btc_address = script_to_address(&pda.btc_script, bitcoin::Network::Testnet)
             .map_err(|e| ServiceError::BuildError(format!("cannot parse btc_script: {}", e)))?;
 
         let expected_send = pda.amount_sats.saturating_sub(pda.service_fee);
 
-        let txids = match self.esplora.get_address_txids_with_status(&btc_address).await {
+        let txids = match self
+            .esplora
+            .get_address_txids_with_status(&btc_address)
+            .await
+        {
             Ok(t) => t,
             Err(_) => return Ok(false),
         };
@@ -562,7 +634,10 @@ impl RedemptionService {
 
             println!(
                 "[tick] Recovered BTC tx {} (confirmed={}) for PDA {} (dest: {})",
-                &txid[..12], *is_confirmed, &pda.pda_address[..8], &btc_address
+                &txid[..12],
+                *is_confirmed,
+                &pda.pda_address[..8],
+                &btc_address
             );
             let entry = RedemptionTracking {
                 pda_address: pda.pda_address.clone(),
@@ -588,10 +663,48 @@ impl RedemptionService {
         }
 
         println!(
-            "[tick] No valid BTC tx for untracked PDA {}, signing fresh (send: {} sats)",
-            &pda.pda_address[..8], expected_send
+            "[tick] No valid BTC tx for untracked Processing PDA {} (send: {} sats)",
+            &pda.pda_address[..8],
+            expected_send
         );
         Ok(false)
+    }
+
+    async fn mark_untracked_processing_skipped(&self, pda: &ParsedRedemption) {
+        if let Some(entry) = self.tracking.get(&pda.pda_address).await {
+            if entry.local_status == LocalRedemptionStatus::Failed
+                && entry.error.as_deref() == Some(UNTRACKED_PROCESSING_SKIP_ERROR)
+            {
+                return;
+            }
+        }
+
+        println!(
+            "[tick] Skipping fresh BTC signing for untracked Processing PDA {}. \
+             Set UTXOPIA_REBROADCAST_UNTRACKED_PROCESSING=1 to enable unsafe recovery.",
+            &pda.pda_address[..8]
+        );
+        let now = now_secs();
+        let entry = RedemptionTracking {
+            pda_address: pda.pda_address.clone(),
+            btc_txid: None,
+            local_status: LocalRedemptionStatus::Failed,
+            retry_count: 0,
+            created_at: now,
+            last_updated: now,
+            error: Some(UNTRACKED_PROCESSING_SKIP_ERROR.to_string()),
+            verified_tx_pda: None,
+            buffer_pubkey: None,
+            tx_size: None,
+            requester: Some(pda.requester.clone()),
+            amount_sats: Some(pda.amount_sats),
+            btc_script: Some(hex::encode(&pda.btc_script)),
+            request_id: Some(pda.request_id),
+            simulated: false,
+            consumed_utxo_pdas: vec![],
+            pool_script_hex: None,
+        };
+        self.tracking.upsert(entry).await;
     }
 
     /// Phase 2: Process a newly-discovered Pending PDA.
@@ -628,12 +741,16 @@ impl RedemptionService {
         }
 
         let unsigned = self
-            .builder.read().await
+            .builder
+            .read()
+            .await
             .build_withdrawal(&request, &utxos)
             .map_err(|e| ServiceError::BuildError(e.to_string()))?;
 
         // Step 2: Match builder-selected UTXOs to on-chain UTXO PDAs
-        let derived_utxo_pdas: Vec<solana_sdk::pubkey::Pubkey> = unsigned.utxos.iter()
+        let derived_utxo_pdas: Vec<solana_sdk::pubkey::Pubkey> = unsigned
+            .utxos
+            .iter()
             .filter_map(|u| {
                 let txid_internal = crate::solana::spv::txid_to_internal(&u.txid).ok()?;
                 Some(crate::solana::client::SolClient::derive_utxo_pda(
@@ -673,7 +790,8 @@ impl RedemptionService {
         );
 
         // Step 4: Sign and broadcast (reuses pre-built unsigned tx)
-        self.sign_broadcast_with_tx(pda, &request, unsigned, &known_utxo_pdas).await
+        self.sign_broadcast_with_tx(pda, &request, unsigned, &known_utxo_pdas)
+            .await
     }
 
     /// Build, sign, and broadcast a BTC transaction for a PDA already marked Processing.
@@ -725,12 +843,15 @@ impl RedemptionService {
         }
 
         let unsigned = self
-            .builder.read().await
+            .builder
+            .read()
+            .await
             .build_withdrawal(&request, &utxos)
             .map_err(|e| ServiceError::BuildError(e.to_string()))?;
 
         // For retries, UTXOs are already reserved — pass empty list
-        self.sign_broadcast_with_tx(pda, &request, unsigned, &[]).await
+        self.sign_broadcast_with_tx(pda, &request, unsigned, &[])
+            .await
     }
 
     /// Sign and broadcast a pre-built unsigned tx, storing tracking with UTXO PDAs.
@@ -752,25 +873,30 @@ impl RedemptionService {
             };
             // Build UTXO inputs list from selected UTXOs for FROST signer verification.
             // Each signer independently verifies these against on-chain Reserved UtxoRecord PDAs.
-            let utxo_inputs: Vec<(String, u32, u64)> = unsigned.utxos.iter().map(|u| {
-                // Convert txid to internal byte order (reverse of display order) for PDA derivation
-                let txid_bytes: Vec<u8> = hex::decode(&u.txid)
-                    .unwrap_or_default()
-                    .into_iter()
-                    .rev()
-                    .collect();
-                (hex::encode(&txid_bytes), u.vout, u.amount_sats)
-            }).collect();
+            let utxo_inputs: Vec<(String, u32, u64)> = unsigned
+                .utxos
+                .iter()
+                .map(|u| {
+                    // Convert txid to internal byte order (reverse of display order) for PDA derivation
+                    let txid_bytes: Vec<u8> = hex::decode(&u.txid)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .rev()
+                        .collect();
+                    (hex::encode(&txid_bytes), u.vout, u.amount_sats)
+                })
+                .collect();
 
-            unsigned.solana_verification =
-                Some(crate::bitcoin::frost_client::SolanaVerification::Withdrawal {
+            unsigned.solana_verification = Some(
+                crate::bitcoin::frost_client::SolanaVerification::Withdrawal {
                     requester: request.user_solana_address.clone(),
                     nonce,
-                    expected_amount_sats: request.amount_sats,  // gross (PDA)
-                    expected_send_amount: Some(unsigned.send_amount),  // net (tx output)
+                    expected_amount_sats: request.amount_sats, // gross (PDA)
+                    expected_send_amount: Some(unsigned.send_amount), // net (tx output)
                     expected_btc_address: btc_script_hex,
                     utxo_inputs,
-                });
+                },
+            );
         }
 
         if self.signer.signer_type() == "ika-dwallet" {
@@ -779,8 +905,10 @@ impl RedemptionService {
                 .parse::<solana_sdk::pubkey::Pubkey>()
                 .map_err(|e| ServiceError::BuildError(format!("invalid PDA pubkey: {}", e)))?;
             let signing_payloads = compute_taproot_signing_payloads(&unsigned)?;
-            for (sighash, ika_message_digest) in &signing_payloads {
-                self.sol_client
+            let mut ika_approvals = Vec::with_capacity(signing_payloads.len());
+            for (sighash, ika_message_digest, message) in &signing_payloads {
+                let approval_signature = self
+                    .sol_client
                     .send_approve_redemption_signing(&ApproveRedemptionSigningParams {
                         redemption_pda: &pda_pubkey,
                         btc_sighash: sighash,
@@ -788,11 +916,34 @@ impl RedemptionService {
                         miner_fee_sats: unsigned.fee,
                     })
                     .await
-                    .map_err(|e| ServiceError::BuildError(format!("approve_redemption_signing: {}", e)))?;
+                    .map_err(|e| {
+                        ServiceError::BuildError(format!("approve_redemption_signing: {}", e))
+                    })?;
+                ika_approvals.push(IkaApproval {
+                    approval_signature,
+                    message: message.clone(),
+                    sighash: *sighash,
+                });
             }
+
+            let sign_start = std::time::Instant::now();
+            let signed_tx = self
+                .signer
+                .sign_with_ika_approvals(&unsigned, &ika_approvals)
+                .await
+                .map_err(|e| ServiceError::SignError(e.to_string()))?;
+            tracing::info!(
+                operation = "redemption_sign",
+                pda = %&pda.pda_address[..8],
+                amount_sats = pda.amount_sats,
+                duration_ms = sign_start.elapsed().as_millis() as u64,
+                "signing completed"
+            );
+            return self
+                .broadcast_signed_tx(pda, request, unsigned, signed_tx, reserved_utxo_pdas)
+                .await;
         }
 
-        // Sign
         let sign_start = std::time::Instant::now();
         let signed_tx = self
             .signer
@@ -807,6 +958,18 @@ impl RedemptionService {
             "signing completed"
         );
 
+        self.broadcast_signed_tx(pda, request, unsigned, signed_tx, reserved_utxo_pdas)
+            .await
+    }
+
+    async fn broadcast_signed_tx(
+        &self,
+        pda: &ParsedRedemption,
+        request: &WithdrawalRequest,
+        unsigned: crate::redemption::builder::UnsignedTx,
+        signed_tx: bitcoin::Transaction,
+        reserved_utxo_pdas: &[solana_sdk::pubkey::Pubkey],
+    ) -> Result<ProcessResult, ServiceError> {
         let tx_hex = bitcoin::consensus::encode::serialize_hex(&signed_tx);
         let txid = signed_tx.compute_txid().to_string();
 
@@ -818,8 +981,10 @@ impl RedemptionService {
             println!("=== Broadcasting Transaction (Real) ===");
             println!("TXID: {}", txid);
             println!("Size: {} bytes", tx_hex.len() / 2);
-            println!("Miner fee: {} sats | Service fee: {} sats | Send: {} sats",
-                unsigned.fee, unsigned.service_fee, unsigned.send_amount);
+            println!(
+                "Miner fee: {} sats | Service fee: {} sats | Send: {} sats",
+                unsigned.fee, unsigned.service_fee, unsigned.send_amount
+            );
             self.esplora
                 .broadcast_tx(&tx_hex)
                 .await
@@ -828,14 +993,18 @@ impl RedemptionService {
             println!("=== Broadcasting Transaction (Simulated) ===");
             println!("TXID: {}", txid);
             println!("Size: {} bytes", tx_hex.len() / 2);
-            println!("Miner fee: {} sats | Service fee: {} sats | Send: {} sats",
-                unsigned.fee, unsigned.service_fee, unsigned.send_amount);
+            println!(
+                "Miner fee: {} sats | Service fee: {} sats | Send: {} sats",
+                unsigned.fee, unsigned.service_fee, unsigned.send_amount
+            );
         }
 
         // Derive pool scriptPubKey for change detection
         let pool_script_hex = if !self.config.pool_address.is_empty() {
             match bitcoin::Address::from_str(&self.config.pool_address) {
-                Ok(addr) => Some(hex::encode(addr.assume_checked().script_pubkey().as_bytes())),
+                Ok(addr) => Some(hex::encode(
+                    addr.assume_checked().script_pubkey().as_bytes(),
+                )),
                 Err(_) => None,
             }
         } else {
@@ -892,10 +1061,7 @@ impl RedemptionService {
     /// In simulated mode (UTXOPIA_BROADCAST_MODE != "real"), skips SPV and just marks locally complete.
     ///
     /// Returns Ok(true) if completed, Ok(false) if not ready yet.
-    async fn try_complete_redemption(
-        &self,
-        pda: &ParsedRedemption,
-    ) -> Result<bool, ServiceError> {
+    async fn try_complete_redemption(&self, pda: &ParsedRedemption) -> Result<bool, ServiceError> {
         let tracking = match self.tracking.get(&pda.pda_address).await {
             Some(t) => t,
             None => return Ok(false), // not tracked by us
@@ -1109,8 +1275,9 @@ impl RedemptionService {
                 &[payer],
                 blockhash,
             );
-            rpc.send_and_confirm_transaction(&tx)
-                .map_err(|e| ServiceError::BuildError(format!("verify_transaction failed: {}", e)))?;
+            rpc.send_and_confirm_transaction(&tx).map_err(|e| {
+                ServiceError::BuildError(format!("verify_transaction failed: {}", e))
+            })?;
 
             println!(
                 "[redemption] verify_transaction succeeded for PDA {}",
@@ -1124,7 +1291,9 @@ impl RedemptionService {
             } else {
                 // Need a new buffer for complete_redemption (it reads from it)
                 let (buf_pk, _) = crate::solana::spv::upload_to_chadbuffer(rpc, payer, &stripped)
-                    .map_err(|e| ServiceError::BuildError(format!("upload_to_chadbuffer: {}", e)))?;
+                    .map_err(|e| {
+                    ServiceError::BuildError(format!("upload_to_chadbuffer: {}", e))
+                })?;
                 buf_pk
             };
         }
@@ -1154,9 +1323,10 @@ impl RedemptionService {
             .parse::<solana_sdk::pubkey::Pubkey>()
             .map_err(|e| ServiceError::BuildError(format!("invalid PDA pubkey: {}", e)))?;
 
-        let btc_txid = tracking.btc_txid.as_ref().ok_or_else(|| {
-            ServiceError::BuildError("no btc_txid in tracking".to_string())
-        })?;
+        let btc_txid = tracking
+            .btc_txid
+            .as_ref()
+            .ok_or_else(|| ServiceError::BuildError("no btc_txid in tracking".to_string()))?;
         let txid_internal = crate::solana::spv::txid_to_internal(btc_txid)
             .map_err(|e| ServiceError::BuildError(format!("txid parse: {}", e)))?;
 
@@ -1167,23 +1337,27 @@ impl RedemptionService {
             .parse::<solana_sdk::pubkey::Pubkey>()
             .map_err(|e| ServiceError::BuildError(format!("parse verified_tx_pda: {}", e)))?;
 
-        let buffer_str = tracking.buffer_pubkey.as_ref().ok_or_else(|| {
-            ServiceError::BuildError("no buffer_pubkey in tracking".to_string())
-        })?;
+        let buffer_str = tracking
+            .buffer_pubkey
+            .as_ref()
+            .ok_or_else(|| ServiceError::BuildError("no buffer_pubkey in tracking".to_string()))?;
         let buffer_pubkey = buffer_str
             .parse::<solana_sdk::pubkey::Pubkey>()
             .map_err(|e| ServiceError::BuildError(format!("parse buffer_pubkey: {}", e)))?;
 
-        let tx_size = tracking.tx_size.ok_or_else(|| {
-            ServiceError::BuildError("no tx_size in tracking".to_string())
-        })?;
+        let tx_size = tracking
+            .tx_size
+            .ok_or_else(|| ServiceError::BuildError("no tx_size in tracking".to_string()))?;
 
         // Recover pool scriptPubKey from tracking or config
-        let pool_script: Vec<u8> = tracking.pool_script_hex.as_ref()
+        let pool_script: Vec<u8> = tracking
+            .pool_script_hex
+            .as_ref()
             .and_then(|h| hex::decode(h).ok())
             .unwrap_or_else(|| {
                 if !self.config.pool_address.is_empty() {
-                    bitcoin::Address::from_str(&self.config.pool_address).ok()
+                    bitcoin::Address::from_str(&self.config.pool_address)
+                        .ok()
                         .map(|a| a.assume_checked().script_pubkey().as_bytes().to_vec())
                         .unwrap_or_default()
                 } else {
@@ -1192,7 +1366,9 @@ impl RedemptionService {
             });
 
         // Recover consumed UTXO PDAs from tracking (stored at mark_processing time)
-        let consumed_utxo_pdas: Vec<solana_sdk::pubkey::Pubkey> = tracking.consumed_utxo_pdas.iter()
+        let consumed_utxo_pdas: Vec<solana_sdk::pubkey::Pubkey> = tracking
+            .consumed_utxo_pdas
+            .iter()
             .filter_map(|s| s.parse::<solana_sdk::pubkey::Pubkey>().ok())
             .collect();
 
@@ -1228,7 +1404,8 @@ impl RedemptionService {
         };
 
         // Call complete_redemption on-chain
-        match self.sol_client
+        match self
+            .sol_client
             .send_complete_redemption(&crate::solana::client::CompleteRedemptionParams {
                 redemption_pda: &pda_pubkey,
                 btc_txid: &txid_internal,
@@ -1257,15 +1434,21 @@ impl RedemptionService {
                     e
                 );
                 self.tracking.remove(&pda.pda_address).await;
-                return Err(ServiceError::BuildError(format!("complete_redemption: {}", e)));
+                return Err(ServiceError::BuildError(format!(
+                    "complete_redemption: {}",
+                    e
+                )));
             }
         }
 
         // Close ChadBuffer to reclaim rent
-        let payer = self.sol_client.payer_keypair().ok_or_else(|| {
-            ServiceError::BuildError("no payer keypair".to_string())
-        })?;
-        if let Err(e) = crate::solana::spv::close_chadbuffer(self.sol_client.rpc(), payer, &buffer_pubkey) {
+        let payer = self
+            .sol_client
+            .payer_keypair()
+            .ok_or_else(|| ServiceError::BuildError("no payer keypair".to_string()))?;
+        if let Err(e) =
+            crate::solana::spv::close_chadbuffer(self.sol_client.rpc(), payer, &buffer_pubkey)
+        {
             eprintln!("[redemption] Warning: failed to close ChadBuffer: {}", e);
         }
 
@@ -1293,7 +1476,10 @@ impl RedemptionService {
         }
 
         println!("=== Redemption Service Started ===");
-        println!("Check interval: {} seconds", self.config.check_interval_secs);
+        println!(
+            "Check interval: {} seconds",
+            self.config.check_interval_secs
+        );
         println!("Signer type: {}", self.signer.signer_type());
         println!("Pool public key: {}", self.signer.public_key());
         println!();
@@ -1312,14 +1498,16 @@ impl RedemptionService {
         let program_id_pubkey = *self.sol_client.program_id();
         let ws_notify_clone = ws_notify.clone();
         tokio::spawn(async move {
-            use crate::redemption::events::websocket::WebSocketStream;
             use crate::redemption::events::AccountUpdateStream;
+            use crate::redemption::events::websocket::WebSocketStream;
 
             let stream = WebSocketStream::new(&ws_url, &program_id_pubkey);
             // On any PDA change (or reconnect), trigger immediate tick
-            let _ = stream.start(Box::new(move |_update| {
-                ws_notify_clone.notify_one();
-            })).await;
+            let _ = stream
+                .start(Box::new(move |_update| {
+                    ws_notify_clone.notify_one();
+                }))
+                .await;
         });
 
         // Phase 3: Main loop — react to WS events, poll as fallback
@@ -1443,9 +1631,7 @@ pub struct TickResult {
 
 impl TickResult {
     pub fn has_activity(&self) -> bool {
-        self.pending_pdas > 0
-            || self.withdrawals_processed > 0
-            || self.withdrawals_completed > 0
+        self.pending_pdas > 0 || self.withdrawals_processed > 0 || self.withdrawals_completed > 0
     }
 }
 
@@ -1454,9 +1640,7 @@ impl std::fmt::Display for TickResult {
         write!(
             f,
             "pending_pdas: {}, processed: {}, completed: {}",
-            self.pending_pdas,
-            self.withdrawals_processed,
-            self.withdrawals_completed
+            self.pending_pdas, self.withdrawals_processed, self.withdrawals_completed
         )
     }
 }

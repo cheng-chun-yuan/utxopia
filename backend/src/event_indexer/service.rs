@@ -865,9 +865,12 @@ impl EventIndexerService {
             data5.push(((acc << (5 - bits)) & 31) as u8);
         }
 
-        let hrp = match std::env::var("UTXOPIA_NETWORK").unwrap_or_default().as_str() {
+        let btc_network = std::env::var("UTXOPIA_BITCOIN_NETWORK")
+            .or_else(|_| std::env::var("UTXOPIA_NETWORK"))
+            .unwrap_or_default();
+        let hrp = match btc_network.as_str() {
             "mainnet" | "main" => "bc",
-            "regtest" | "localnet" | "local" => "bcrt",
+            "regtest" | "localnet" | "local" | "devnet-regtest" => "bcrt",
             _ => "tb",
         };
         let use_bech32m = version > 0;

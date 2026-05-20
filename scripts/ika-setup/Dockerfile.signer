@@ -1,0 +1,16 @@
+FROM oven/bun:1
+
+WORKDIR /app
+
+COPY scripts/ika-setup /app/scripts/ika-setup
+COPY scripts/devnet-regtest-state.json /app/scripts/devnet-regtest-state.json
+
+RUN cd /app/scripts/ika-setup && bun install --frozen-lockfile
+
+ENV STATE_PATH=/app/scripts/devnet-regtest-state.json
+ENV SOLANA_RPC_URL=https://api.devnet.solana.com
+ENV IKA_SIGNER_PORT=3030
+
+EXPOSE 3030
+
+CMD ["bun", "run", "/app/scripts/ika-setup/signer-server.ts"]

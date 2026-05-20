@@ -71,7 +71,7 @@ impl FromStr for Network {
         match s.to_lowercase().as_str() {
             "mainnet" | "main" => Ok(Network::Mainnet),
             "testnet" | "test" => Ok(Network::Testnet),
-            "devnet" | "dev" | "testnet4" => Ok(Network::Devnet),
+            "devnet" | "dev" | "testnet4" | "devnet-regtest" => Ok(Network::Devnet),
             "regtest" | "localnet" | "local" => Ok(Network::Regtest),
             _ => Err(ConfigError::InvalidValue(
                 "UTXOPIA_NETWORK".to_string(),
