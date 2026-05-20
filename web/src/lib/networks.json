@@ -58,7 +58,7 @@
       "dwalletXOnlyPubkey": "5d2677901d35961b623a4f9a382abb3336b92a7ad8bcdd255ac79e92d261ab50"
     },
     "backend": {
-      "url": "http://localhost:3020"
+      "url": "https://api-hybrid.utxopia.com"
     }
   },
   "testnet": {

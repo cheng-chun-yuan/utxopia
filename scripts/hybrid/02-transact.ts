@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Hybrid demo: JoinSplit 1x2 transact (split deposited note into two private notes
- * for ourselves) on the devnet+regtest stack.
+ * Hybrid demo: JoinSplit 1x2 transact on the devnet+regtest stack.
  *
  *   SDK init (hybrid overrides)
  *     → loginWithSeed (.demo-seed.json from 01-deposit)
@@ -11,8 +10,9 @@
  *             → generate Groth16 1x2 proof via Node subprocess
  *               → submit transact (disc 13) on devnet
  *
- * Persists the two output notes to scripts/hybrid/.notes.json so 03-unshield
- * can spend one of them.
+ * By default, splits a deposited note into two private notes for ourselves.
+ * If RECIPIENT=utxo:<meta-address> is set, output 1 goes to that recipient and
+ * output 2 is sender change.
  */
 
 import fs from "node:fs";
@@ -37,22 +37,19 @@ import {
   initConfig,
   initPoseidon,
   poseidonHashSync,
-  computeNPKSync,
-  computeMPKSync,
-  computeJoinSplitCommitmentSync,
-  computeJoinSplitNullifierSync,
   computeBoundParamsHash,
   createTransferBoundParams,
   computeStealthDataHash,
   bigintToBytes,
   bytesToBigint,
-  randomFieldElement,
   eddsaPoseidonSign,
-  eddsaGetPubKey,
   buildTransactInstructionData,
   TREE_DEPTH,
   prepareClaimInputs,
   computeTokenId,
+  decodeStealthMetaAddress,
+  createStealthDepositWithKeys,
+  createStealthOutputWithKeys,
 } from "../../sdk/src/index";
 
 // ── Config ────────────────────────────────────────────────────────
@@ -66,6 +63,7 @@ const STATE_PATH =
   path.join(PROJECT_ROOT, "scripts/devnet-regtest-state.json");
 const SOLANA_RPC =
   process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com";
+const RECIPIENT = process.env.RECIPIENT;
 const SEED_PATH = path.join(__dirname, ".demo-seed.json");
 const NOTES_OUT = path.join(__dirname, ".notes.json");
 const KEYPAIR_PATH = path.join(process.env.HOME!, ".config/solana/id.json");
@@ -202,10 +200,11 @@ async function main() {
   if (notes.length === 0) {
     throw new Error("No notes found — has the deposit landed? Check tree.size > 0");
   }
-  // Pick the unspent one with the largest amount.
+  // Pick the newest unspent one. Older local demo notes may have been spent
+  // by previous manual runs before local scanner state caught up.
   const note = notes
     .filter((n) => !n.isSpent)
-    .sort((a, b) => Number(b.amount) - Number(a.amount))[0];
+    .sort((a, b) => b.leafIndex - a.leafIndex)[0];
   if (!note) throw new Error("No unspent notes");
   console.log(
     `  using note: leafIndex=${note.leafIndex}, amount=${note.amount} sats, commitment=${note.commitmentHex.slice(0, 16)}…`,
@@ -250,28 +249,35 @@ async function main() {
   const halfAmount = note.amount / 2n;
   const remainder = note.amount - halfAmount;
 
-  const mpk = computeMPKSync(
-    keys.spendingPubKey.x,
-    keys.spendingPubKey.y,
-    keys.nullifyingKey,
-  );
-  const random1 = randomFieldElement();
-  const npk1 = computeNPKSync(mpk, random1);
-  const commitment1 = computeJoinSplitCommitmentSync(npk1, tokenId, halfAmount);
+  let output1;
+  let output1Label = "self-send";
+  if (RECIPIENT) {
+    const recipientMeta = decodeStealthMetaAddress(RECIPIENT);
+    output1 = await createStealthDepositWithKeys(recipientMeta, halfAmount, tokenId);
+    output1Label = `recipient ${RECIPIENT.slice(0, 48)}…`;
+  } else {
+    output1 = await createStealthOutputWithKeys(keys, halfAmount, tokenId);
+  }
 
-  const random2 = randomFieldElement();
-  const npk2 = computeNPKSync(mpk, random2);
-  const commitment2 = computeJoinSplitCommitmentSync(npk2, tokenId, remainder);
+  const output2 = await createStealthOutputWithKeys(keys, remainder, tokenId);
 
-  // Stealth data per output: ephemeralPub(32) + encryptedAmount(8) + encryptedTokenId(32)
+  const npk1 = output1.stealthPubKeyX;
+  const npk2 = output2.stealthPubKeyX;
+  const commitment1 = bytesToBigint(output1.commitment);
+  const commitment2 = bytesToBigint(output2.commitment);
+
+  // Stealth data per output: ephemeralPub(32) + encryptedAmount(8) + encryptedTokenId(32).
+  // Current scanners use the first 40 bytes; keep token ciphertext reserved.
   const stealth1 = new Uint8Array(72);
-  stealth1.set(crypto.randomBytes(32), 0);
-  stealth1.set(new Uint8Array(new BigUint64Array([halfAmount]).buffer), 32);
+  stealth1.set(output1.ephemeralPub, 0);
+  stealth1.set(output1.encryptedAmount, 32);
   stealth1.set(crypto.randomBytes(32), 40);
   const stealth2 = new Uint8Array(72);
-  stealth2.set(crypto.randomBytes(32), 0);
-  stealth2.set(new Uint8Array(new BigUint64Array([remainder]).buffer), 32);
+  stealth2.set(output2.ephemeralPub, 0);
+  stealth2.set(output2.encryptedAmount, 32);
   stealth2.set(crypto.randomBytes(32), 40);
+  console.log(`  output 1: ${halfAmount} sats → ${output1Label}`);
+  console.log(`  output 2: ${remainder} sats → sender change`);
 
   const stealthDataHash = computeStealthDataHash([stealth1, stealth2]);
   const transferParams = createTransferBoundParams(stealthDataHash, 103n);
@@ -375,14 +381,15 @@ async function main() {
   const out = {
     sendNote: {
       npk: npk1.toString(16),
-      random: random1.toString(16),
+      random: "derived-from-stealth-ecdh",
       amount: Number(halfAmount),
       commitment: commitment1.toString(16),
       tokenId: tokenId.toString(16),
+      recipient: RECIPIENT || setup.stealthAddressEncoded,
     },
     changeNote: {
       npk: npk2.toString(16),
-      random: random2.toString(16),
+      random: "derived-from-stealth-ecdh",
       amount: Number(remainder),
       commitment: commitment2.toString(16),
       tokenId: tokenId.toString(16),
