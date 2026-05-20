@@ -759,16 +759,20 @@ async fn get_explorer_transactions(
                 .unwrap_or(0);
 
             // For BTC deposits, surface a btcMeta block so the explorer can
-            // show the deposit → sweep → mint timeline + the miner-fee
-            // breakdown (original − gross). For SPL deposits this stays null.
+            // show the deposit → sweep/direct verify → mint timeline. The
+            // protocol fee comes from ShieldMeta; sweepFeeSats is only the
+            // two-step Bitcoin miner fee between original deposit and pool
+            // receipt.
             let btc_meta = if a.btc_deposit_txid.is_some() {
-                // ShieldMeta isn't emitted by complete_deposit, so
-                // deposit_gross_amount is usually None for BTC. Fall back to
-                // the announcement amount (= post-sweep value minted into
-                // the commitment) to compute the miner fee.
-                let post_sweep = a.deposit_gross_amount.unwrap_or(amount as i64);
+                let gross = a.deposit_gross_amount.unwrap_or(amount as i64);
                 let miner_fee = a.btc_deposit_amount_sats.and_then(|orig| {
-                    if orig > post_sweep { Some(orig - post_sweep) } else { None }
+                    if a.btc_sweep_txid.as_deref() == a.btc_deposit_txid.as_deref() {
+                        None
+                    } else if orig > gross {
+                        Some(orig - gross)
+                    } else {
+                        None
+                    }
                 });
                 serde_json::json!({
                     "depositTxid": a.btc_deposit_txid,

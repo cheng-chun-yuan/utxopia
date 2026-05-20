@@ -345,11 +345,6 @@ pub fn process_complete_deposit(
         .find_deposit_op_return()
         .ok_or(UTXOpiaError::InvalidStealthOpReturn)?;
 
-    // Extract original deposit amount from deposit TX (what user actually sent to taproot)
-    let original_deposit_sats = deposit_parsed.find_deposit_output()
-        .map(|o| o.value)
-        .unwrap_or(0);
-
     // Extract sweep output amount and vout (what the pool received after miner fee).
     // If PoolConfig is supplied, require the sweep output to match its pool_script
     // so the recorded UTXO is controlled by the configured pool/Ika wallet.
@@ -378,6 +373,18 @@ pub fn process_complete_deposit(
             .ok_or(UTXOpiaError::InvalidSpvProof)?
     };
     let amount_sats = deposit_output.value;
+    let original_deposit_sats = if direct_to_pool {
+        // The SPV-verified transaction is the user deposit itself. The pool
+        // output is the gross user deposit; other outputs may be wallet change.
+        amount_sats
+    } else {
+        // Two-step sweep mode: report the original user deposit output before
+        // the backend sweep miner fee reduced the pool-received amount.
+        deposit_parsed
+            .find_deposit_output()
+            .map(|o| o.value)
+            .unwrap_or(amount_sats)
+    };
 
     // Validate extracted amount is within bounds
     if amount_sats < min_deposit {
