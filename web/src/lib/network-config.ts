@@ -137,7 +137,7 @@ export const NETWORK_META: NetworkMeta[] = [
     tagline: "Sui testnet + Bitcoin testnet4",
     description: "Move-object version of the UTXOpia core proof paths: commitment insert, Sui Groth16 JoinSplit, redemption request, Ika policy approval event, and redemption completion.",
     caveats: [
-      "POC surface only: BTC SPV verification and real Sui-side Ika dWallet call are not wired yet.",
+      "BTC SPV verification and real Sui-side Ika dWallet call are still being wired.",
     ],
     enabled: true,
   },

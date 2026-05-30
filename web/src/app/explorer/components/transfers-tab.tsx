@@ -280,7 +280,9 @@ function getTxUnshieldAmount(tx: TransferTx): number | undefined {
 function getTxUnshieldPayout(tx: TransferTx): number | undefined {
   const outs = getTxUnshieldOutputs(tx);
   if (outs.length === 0) return undefined;
-  return outs.reduce((sum, o) => sum + (o.payout ?? 0), 0);
+  const withPayout = outs.filter((o) => o.payout != null);
+  if (withPayout.length === 0) return undefined;
+  return withPayout.reduce((sum, o) => sum + (o.payout ?? 0), 0);
 }
 function getTxInputCount(tx: TransferTx): number {
   return tx.inputs.length;

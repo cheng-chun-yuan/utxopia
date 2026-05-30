@@ -8,7 +8,7 @@
 
 import { NextResponse } from "next/server";
 import { getBackendUrl } from "@/lib/api/constants";
-import { detectNetworkFromRequest } from "@/lib/network-config";
+import { detectNetworkFromRequest, getNetworkConfig, networkChain } from "@/lib/network-config";
 export const dynamic = "force-dynamic";
 
 interface ExplorerTx {
@@ -61,6 +61,14 @@ export async function GET(request: Request) {
     // Resolve backend URL per-request from the network cookie so the user's
     // selection in /settings reaches the right stack.
     const network = detectNetworkFromRequest(request);
+    if (networkChain(network) === "sui") {
+      const { fetchSuiExplorerTransactions } = await import("@/lib/sui/explorer");
+      const transactions = await fetchSuiExplorerTransactions(
+        getNetworkConfig(network, { applyEnvOverrides: false }),
+      );
+      return NextResponse.json({ success: true, transactions, count: transactions.length });
+    }
+
     const backendUrl = getBackendUrl(network);
 
     // Try unified backend endpoint first

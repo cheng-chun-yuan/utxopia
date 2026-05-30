@@ -222,7 +222,7 @@ export default function Home() {
   const isSui = networkId === "sui-testnet" || networkId === "sui-regtest";
   const chainName = isSui ? "Sui" : "Solana";
   const nativeToken = isSui
-    ? { name: "SUI", label: "Sui", status: "POC", logo: "/tokens/sui.png" }
+    ? { name: "SUI", label: "Sui", status: "Live", logo: "/tokens/sui.png" }
     : { name: "SOL", label: "Solana", status: "Live", logo: "/tokens/sol.png" };
   const chainHref = (href: string) => hrefWithChain(href, networkId);
   const txCount = transactions.length;
@@ -384,7 +384,7 @@ export default function Home() {
                     className={`flex items-center gap-3 px-4 py-3 rounded-[12px] border backdrop-blur-sm shrink-0 transition-all ${
                       token.status === "Live"
                         ? "bg-muted/30 border-gray/10 hover:border-privacy/20 hover:bg-privacy/5"
-                        : token.status === "POC"
+                        : token.name === "SUI"
                           ? "bg-sui/5 border-sui/10 hover:border-sui/25 hover:bg-sui/10"
                         : "bg-muted/15 border-gray/5 opacity-50"
                     }`}
@@ -403,8 +403,8 @@ export default function Home() {
                       <p className="text-sm font-semibold text-foreground">{token.name}</p>
                       <p className="text-[10px] text-gray/50">{token.label}</p>
                     </div>
-                    {(token.status === "Live" || token.status === "POC") && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-privacy ml-1 animate-pulse" />
+                    {token.status === "Live" && (
+                      <span className={cn("ml-1 h-1.5 w-1.5 rounded-full animate-pulse", token.name === "SUI" ? "bg-sui" : "bg-privacy")} />
                     )}
                   </div>
                 ))}

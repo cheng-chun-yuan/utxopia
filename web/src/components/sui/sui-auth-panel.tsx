@@ -5,9 +5,11 @@ import {
   CheckCircle2,
   CircleAlert,
   Copy,
+  Fingerprint,
   LogIn,
   Wallet,
 } from "lucide-react";
+import { usePasskey } from "@/hooks/use-passkey";
 import {
   buildGoogleZkLoginUrl,
   clearSuiZkLoginSession,
@@ -16,6 +18,7 @@ import {
   getSuiZkLoginSession,
   type SuiZkLoginSession,
 } from "@/lib/sui/client";
+import { useUTXOpiaStore } from "@/stores";
 import { cn } from "@/lib/utils";
 
 interface BrowserSuiWallet {
@@ -34,6 +37,17 @@ export function SuiAuthPanel({ embedded = false }: { embedded?: boolean }) {
   const [session, setSession] = useState<SuiZkLoginSession | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [message, setMessage] = useState("");
+  const {
+    isSupported: passkeySupported,
+    hasCredential: hasPasskeyCredential,
+    isLoading: passkeyLoading,
+    error: passkeyError,
+    register: registerPasskey,
+    authenticate: authenticatePasskey,
+  } = usePasskey();
+  const deriveKeysFromPasskeySeed = useUTXOpiaStore((s) => s.deriveKeysFromPasskeySeed);
+  const stealthAddressEncoded = useUTXOpiaStore((s) => s.stealthAddressEncoded);
+  const displayAddress = address ?? stealthAddressEncoded;
 
   useEffect(() => {
     setSession(getSuiZkLoginSession());
@@ -102,6 +116,29 @@ export function SuiAuthPanel({ embedded = false }: { embedded?: boolean }) {
     }
   }
 
+  async function usePasskeyLogin() {
+    setStatus("loading");
+    setMessage("");
+    try {
+      if (!passkeySupported) {
+        throw new Error("Passkeys are not supported in this browser.");
+      }
+      const seed = hasPasskeyCredential
+        ? await authenticatePasskey()
+        : await registerPasskey();
+      if (!seed) {
+        setStatus("idle");
+        return;
+      }
+      await deriveKeysFromPasskeySeed(seed);
+      setStatus("ready");
+      setMessage(hasPasskeyCredential ? "Passkey signed in." : "Passkey created.");
+    } catch (error) {
+      setStatus("error");
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   function resetZkLogin() {
     clearSuiZkLoginSession();
     setSession(null);
@@ -139,6 +176,27 @@ export function SuiAuthPanel({ embedded = false }: { embedded?: boolean }) {
 
         <button
           type="button"
+          onClick={usePasskeyLogin}
+          disabled={status === "loading" || passkeyLoading || !passkeySupported}
+          className="flex w-full items-center gap-4 rounded-[14px] border border-gray/15 bg-muted/20 p-4 text-left transition-colors hover:border-sui/25 hover:bg-muted/30 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-background/55 text-foreground">
+            <Fingerprint className="h-5 w-5" />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold text-foreground">
+              {passkeyLoading
+                ? "Waiting for passkey..."
+                : hasPasskeyCredential
+                  ? "Sign in with passkey"
+                  : "Create passkey"}
+            </span>
+            <span className="mt-0.5 block text-xs text-gray">Private vault key</span>
+          </span>
+        </button>
+
+        <button
+          type="button"
           onClick={connectSuiWallet}
           disabled={status === "loading"}
           className="flex w-full items-center gap-4 rounded-[14px] border border-gray/15 bg-muted/20 p-4 text-left transition-colors hover:border-sui/25 hover:bg-muted/30 disabled:cursor-wait disabled:opacity-60"
@@ -154,12 +212,12 @@ export function SuiAuthPanel({ embedded = false }: { embedded?: boolean }) {
           </span>
         </button>
 
-        {address && (
+        {displayAddress && (
           <div className="flex items-center justify-between gap-3 rounded-[12px] border border-sui/15 bg-sui/5 px-3 py-2">
-            <span className="min-w-0 truncate font-mono text-xs text-foreground/85">{address}</span>
+            <span className="min-w-0 truncate font-mono text-xs text-foreground/85">{displayAddress}</span>
             <button
               type="button"
-              onClick={() => navigator.clipboard?.writeText(address)}
+              onClick={() => navigator.clipboard?.writeText(displayAddress)}
               className="inline-flex shrink-0 items-center gap-1 rounded-md border border-gray/10 px-2 py-1 text-[11px] text-gray transition-colors hover:text-foreground"
             >
               <Copy className="h-3 w-3" />
@@ -174,6 +232,9 @@ export function SuiAuthPanel({ embedded = false }: { embedded?: boolean }) {
               <p className={cn("text-xs leading-5", status === "error" ? "text-error" : "text-gray")}>
                 {message}
               </p>
+            )}
+            {passkeyError && !message && (
+              <p className="text-xs leading-5 text-error">{passkeyError}</p>
             )}
             {session && (
               <button

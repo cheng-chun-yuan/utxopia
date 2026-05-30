@@ -41,14 +41,14 @@
   },
   "lastSuiRegtestFlow": {
     "amountSats": "25000",
-    "depositTxid": "0c0bf1e86a6d9e5b2871221b18701bf26f54fe6a36edc3845607e7ae9173d6f9",
-    "shieldTxDigest": "8eEBdNc3JiebkVMFFrt4rZbVshW764wgSrAbL2uasntG",
-    "transactTxDigest": "Bnkt2pj4U4nheCCwNyjs1umxRxrXGnxsTzGSwvjvt21X",
-    "withdrawTxid": "792f16d654a45106f3baf676f4e866cd965179a6817b10bb9c4d95843fa801bb",
-    "redemptionId": "0",
-    "requestTxDigest": "7TMSY2J4kNuXAibtYwmDRnMG88bXbE3xtm2p86FxgzEG",
-    "ikaApprovalTxDigest": "5EXQQY1AopBDYLAHsBD29EyZJBsfcmVyLzK6HxrXfJmW",
-    "completeTxDigest": "qXzea2HFQbm3fJRApjo7GRVrbzz5pA2nyXQePq1SoHf"
+    "depositTxid": "f748c7087205d51f5f07a4d73800fc4d8cb1134356c328c021d6d159020bc014",
+    "shieldTxDigest": "9quDny6L5dtDDviojsiikQwzqPhj3HAFojpraxqAMNWM",
+    "transactTxDigest": "9Vzajn6DP7Ax8ba3ekT8vyZ41FDTyMDLHgpxQ8dRYGyD",
+    "withdrawTxid": "b39c434d1ab687a52bb6d5db4a461dda406a006da76ab4ca44ce78ab385f39fc",
+    "redemptionId": "1",
+    "requestTxDigest": "BSGAUdMyp9t2aBzFTV23GDYctavHSj9BksctfawbMR4i",
+    "ikaApprovalTxDigest": "467eWoZz9xaMoHrNFSntJD78qzb3a4kRmfAG3p9B3mBC",
+    "completeTxDigest": "7irrXcrQL9KL9Mfr1ZfbWsaD8Ccsi3LTnE1Bmm4RrW6U"
   },
   "pool": {
     "objectId": "0x0b1529ad32c87b5b333c1d94e25ad778959f4ac24fba2d7af32c4cff3c1af467",
@@ -73,8 +73,8 @@
   },
   "redemptionCap": {
     "objectId": "0x2ace6d0e8185dca9aba8ba1b266e0104b38142f1b4ae8bd53013bfa3024def27",
-    "version": "349181774",
-    "digest": "DTSQAeeyFPnyJq4CdgfM5bU5zpMQYe2DfK8WWyferHTh"
+    "version": "349181781",
+    "digest": "D5GZQpF3CqQ91rpSpKkTujRSrh5a98kzRvBxxMYk8wzG"
   },
   "verifyingKeyRegistry": {
     "objectId": "0x4b31e07c006b52e0c4b9559fbceb759e56576608d184546acecd02ee5376313b",

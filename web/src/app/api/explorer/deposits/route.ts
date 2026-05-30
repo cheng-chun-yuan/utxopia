@@ -15,7 +15,7 @@
 import { NextResponse } from "next/server";
 import { fetchAnnouncementsFromRpc } from "@/lib/api/rpc-fallback";
 import { getBackendUrl } from "@/lib/api/constants";
-import { detectNetworkFromRequest } from "@/lib/network-config";
+import { detectNetworkFromRequest, getNetworkConfig, networkChain } from "@/lib/network-config";
 export const dynamic = "force-dynamic";
 
 interface AnnouncementRow {
@@ -118,6 +118,29 @@ function decodeLeU64(hex: string): number {
 export async function GET(request: Request) {
   try {
     const network = detectNetworkFromRequest(request);
+    if (networkChain(network) === "sui") {
+      const { fetchSuiExplorerTransactions } = await import("@/lib/sui/explorer");
+      const transactions = (await fetchSuiExplorerTransactions(
+        getNetworkConfig(network, { applyEnvOverrides: false }),
+      )).filter((tx) => tx.type === "shield");
+      const deposits = transactions.map((tx) => ({
+        txSignature: tx.txSignature,
+        commitment: String(tx.outputs[0]?.commitment ?? ""),
+        amountSats: Number(tx.outputs[0]?.amount ?? 0),
+        leafIndex: Number(tx.outputs[0]?.leafIndex ?? -1),
+        timestamp: tx.timestamp,
+        status: tx.status,
+        instructionDisc: 1,
+        tokenSymbol: tx.tokenSymbol,
+        tokenId: tx.tokenId,
+        ephemeralPub: undefined,
+        grossAmount: Number(tx.inputs[0]?.grossAmount ?? tx.outputs[0]?.amount ?? 0),
+        fee: null,
+        btcMeta: tx.btcMeta ?? null,
+      }));
+      return NextResponse.json({ success: true, deposits, transactions, count: deposits.length });
+    }
+
     const backendUrl = getBackendUrl(network);
 
     // Build token ID map (async — uses Poseidon for localnet mint resolution)

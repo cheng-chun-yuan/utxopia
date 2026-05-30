@@ -48,6 +48,9 @@ export async function ensureChainEnvironment(networkId: NetworkId = detectNetwor
   const env = getChainEnvironment(networkId);
 
   if (env.config.chain === "sui") {
+    if (!UTXOpiaClient.isInitialized) {
+      await UTXOpiaClient.init({ backendUrl: "" });
+    }
     return env;
   }
 
