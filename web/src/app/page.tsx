@@ -16,6 +16,7 @@ import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { MouseSpotlight } from "@/components/ui/mouse-spotlight";
 import { useChainEnvironment } from "@/lib/chain-environment";
 import { hrefWithChain } from "@/lib/network-config";
+import { cn } from "@/lib/utils";
 
 /* ── Feature visualizations ── */
 
@@ -388,7 +389,16 @@ export default function Home() {
                         : "bg-muted/15 border-gray/5 opacity-50"
                     }`}
                   >
-                    <img src={token.logo} alt={token.name} className="w-8 h-8 rounded-full" />
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-background/70">
+                      <img
+                        src={token.logo}
+                        alt={token.name}
+                        className={cn(
+                          "object-contain",
+                          token.name === "SUI" ? "h-6 w-5" : "h-8 w-8 rounded-full",
+                        )}
+                      />
+                    </span>
                     <div>
                       <p className="text-sm font-semibold text-foreground">{token.name}</p>
                       <p className="text-[10px] text-gray/50">{token.label}</p>

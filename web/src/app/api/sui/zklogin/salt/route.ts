@@ -1,6 +1,9 @@
 import { createHmac } from "node:crypto";
 import { NextResponse } from "next/server";
 
+const BN254_FIELD =
+  21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+
 export async function POST(request: Request) {
   const secret = process.env.ZKLOGIN_SALT_SECRET;
   if (!secret) {
@@ -27,7 +30,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "JWT missing iss, sub, or aud" }, { status: 400 });
   }
 
-  const salt = createHmac("sha256", secret)
+  const saltHex = createHmac("sha256", secret)
     .update("utxopia:sui:zklogin:salt:v1")
     .update("\0")
     .update(issuer)
@@ -36,6 +39,7 @@ export async function POST(request: Request) {
     .update("\0")
     .update(subject)
     .digest("hex");
+  const salt = (BigInt(`0x${saltHex}`) % BN254_FIELD).toString(10);
 
   return NextResponse.json({ salt });
 }

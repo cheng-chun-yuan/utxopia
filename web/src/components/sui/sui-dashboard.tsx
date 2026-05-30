@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import * as Dialog from "@radix-ui/react-dialog";
 import { motion } from "framer-motion";
 import {
   ArrowDownToLine,
@@ -10,6 +11,8 @@ import {
   History,
   Send,
   Settings,
+  Shield,
+  X,
 } from "lucide-react";
 import { SuiAuthPanel } from "@/components/sui/sui-auth-panel";
 import { detectNetwork, getNetworkConfig, hrefWithChain, type NetworkId } from "@/lib/network-config";
@@ -45,6 +48,7 @@ export function SuiDashboard() {
 function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig }) {
   const explorer = useMemo(() => makeExplorer(sui.explorerUrl), [sui.explorerUrl]);
   const [poolProbe, setPoolProbe] = useState<ObjectProbe>({ state: "idle" });
+  const [authOpen, setAuthOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,6 +62,12 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
       cancelled = true;
     };
   }, [sui.pool.objectId, sui.rpcUrl]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    if (hash.get("id_token") || hash.get("error")) setAuthOpen(true);
+  }, []);
 
   return (
     <div className="flex-1 flex flex-col items-center pt-24 pb-8 px-4">
@@ -83,6 +93,14 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
         <div className="flex flex-col items-center pb-5 pt-3 text-center">
           <h1 className="mb-1 text-[22px] font-bold text-foreground">Your Wallet</h1>
           <p className="mb-6 text-caption text-gray/60">Private Sui test vault.</p>
+          <button
+            type="button"
+            onClick={() => setAuthOpen(true)}
+            className="mb-6 inline-flex items-center gap-2 rounded-full bg-sui px-7 py-3 text-body2 font-semibold text-background transition-opacity hover:opacity-90 active:scale-95"
+          >
+            <Shield className="h-4 w-4" />
+            Get Started
+          </button>
 
           <div className="flex items-center justify-center gap-5 sm:gap-8">
             <VaultAction href={hrefWithChain("/vault/deposit", networkId)} icon={<ArrowDownToLine className="h-5 w-5" />} label="Deposit" />
@@ -90,8 +108,6 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
             <VaultAction href={hrefWithChain("/vault/activity", networkId)} icon={<History className="h-5 w-5" />} label="Activity" />
           </div>
         </div>
-
-        <SuiAuthPanel />
 
         <details className="group mt-4 rounded-[10px] bg-muted/20 px-3 py-3">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] text-gray/60">
@@ -129,7 +145,50 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
           </span>
         </div>
       </motion.div>
+
+      <SuiAuthModal open={authOpen} onOpenChange={setAuthOpen} />
     </div>
+  );
+}
+
+function SuiAuthModal({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md animate-in fade-in-0 duration-200" />
+        <Dialog.Content
+          className={cn(
+            "fixed left-1/2 top-1/2 z-50 w-[92vw] max-w-[520px] -translate-x-1/2 -translate-y-1/2",
+            "rounded-[20px] border border-gray/20 bg-card/95 p-5 shadow-[0_0_80px_rgba(111,188,240,0.08)] backdrop-blur-xl",
+            "animate-in fade-in-0 zoom-in-95 duration-200 focus:outline-none",
+          )}
+          aria-describedby="sui-auth-description"
+        >
+          <Dialog.Close asChild>
+            <button
+              className="absolute right-4 top-4 rounded-full bg-gray/10 p-1.5 text-gray transition-colors hover:bg-gray/20"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </Dialog.Close>
+
+          <div className="mb-4 text-center">
+            <div className="mb-3 inline-flex rounded-full border border-sui/20 bg-sui/10 p-3">
+              <Shield className="h-6 w-6 text-sui" />
+            </div>
+            <Dialog.Title className="text-[20px] font-bold text-foreground">
+              Sign In
+            </Dialog.Title>
+            <Dialog.Description id="sui-auth-description" className="mt-1 text-body2 text-gray">
+              Choose how to access your Sui vault.
+            </Dialog.Description>
+          </div>
+
+          <SuiAuthPanel embedded />
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 

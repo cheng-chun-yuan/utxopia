@@ -35,7 +35,7 @@ declare global {
   }
 }
 
-export function SuiAuthPanel() {
+export function SuiAuthPanel({ embedded = false }: { embedded?: boolean }) {
   const [mode, setMode] = useState<AuthMode>("zklogin");
   const [address, setAddress] = useState<string | null>(null);
   const [session, setSession] = useState<SuiZkLoginSession | null>(null);
@@ -121,13 +121,15 @@ export function SuiAuthPanel() {
   }
 
   return (
-    <section className="rounded-[14px] border border-gray/10 bg-muted/10 p-4">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-foreground">Sign in</h2>
-        <Status state={status} />
-      </div>
+    <section className={cn(!embedded && "rounded-[14px] border border-gray/10 bg-muted/10 p-4")}>
+      {!embedded && (
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-foreground">Sign in</h2>
+          <Status state={status} />
+        </div>
+      )}
 
-      <div className="mt-4 grid gap-3 lg:grid-cols-[0.95fr_1.05fr]">
+      <div className={cn("grid gap-3 lg:grid-cols-[0.95fr_1.05fr]", !embedded && "mt-4")}>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2 rounded-md border border-gray/10 bg-background/35 p-1">
             <ModeButton active={mode === "zklogin"} icon={<KeyRound className="h-4 w-4" />} onClick={() => setMode("zklogin")}>
