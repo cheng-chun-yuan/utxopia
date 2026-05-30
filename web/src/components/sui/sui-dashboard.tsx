@@ -2,19 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { motion } from "framer-motion";
 import {
-  ArrowUpRight,
-  BadgeDollarSign,
+  ArrowDownToLine,
   CheckCircle2,
+  ChevronDown,
   CircleDashed,
   ExternalLink,
   History,
-  KeyRound,
-  Network,
   Send,
-  ShieldCheck,
-  TerminalSquare,
-  Wallet,
+  Settings,
+  Shield,
 } from "lucide-react";
 import { SuiAuthPanel } from "@/components/sui/sui-auth-panel";
 import { detectNetwork, getNetworkConfig, hrefWithChain, type NetworkId } from "@/lib/network-config";
@@ -44,250 +42,137 @@ export function SuiDashboard() {
     );
   }
 
-  return <SuiContent networkId={networkId} sui={sui} />;
+  return <SuiVaultCard networkId={networkId} sui={sui} />;
 }
 
-function SuiContent({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig }) {
+function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig }) {
   const explorer = useMemo(() => makeExplorer(sui.explorerUrl), [sui.explorerUrl]);
   const [poolProbe, setPoolProbe] = useState<ObjectProbe>({ state: "idle" });
-  const [capProbe, setCapProbe] = useState<ObjectProbe>({ state: "idle" });
 
   useEffect(() => {
     let cancelled = false;
     async function run() {
       setPoolProbe({ state: "loading" });
-      setCapProbe({ state: "loading" });
-      const [pool, cap] = await Promise.all([
-        fetchObject(sui.rpcUrl, sui.pool.objectId),
-        fetchObject(sui.rpcUrl, sui.redemptionCap.objectId),
-      ]);
-      if (cancelled) return;
-      setPoolProbe(pool);
-      setCapProbe(cap);
+      const pool = await fetchObject(sui.rpcUrl, sui.pool.objectId);
+      if (!cancelled) setPoolProbe(pool);
     }
     run();
     return () => {
       cancelled = true;
     };
-  }, [sui.pool.objectId, sui.redemptionCap.objectId, sui.rpcUrl]);
+  }, [sui.pool.objectId, sui.rpcUrl]);
 
   return (
-    <div className="w-full">
-      <section className="relative overflow-hidden border-b border-gray/10 pt-28">
-        <div className="absolute inset-0 pointer-events-none opacity-60">
-          <div className="absolute left-1/2 top-0 h-px w-[80vw] -translate-x-1/2 bg-gradient-to-r from-transparent via-sui/30 to-transparent" />
-          <div className="absolute right-[-10%] top-24 h-72 w-72 rounded-full border border-sui/10" />
-          <div className="absolute left-[-8%] bottom-[-20%] h-80 w-80 rounded-full border border-warning/10" />
-        </div>
-
-        <div className="relative mx-auto max-w-6xl px-6 pb-16">
-          <div className="grid gap-10 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
-            <div className="space-y-6">
-              <div className="inline-flex items-center gap-2 rounded-full border border-sui/15 bg-sui/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-sui">
-                <Network className="h-3.5 w-3.5" />
-                {networkId === "sui-regtest" ? "Sui hybrid" : "Sui testnet"}
-              </div>
-              <div className="space-y-4">
-                <h1 className="max-w-3xl text-[40px] font-semibold leading-[1.02] tracking-normal text-foreground sm:text-[56px]">
-                  Your Private Sui Vault
-                </h1>
-                <p className="max-w-2xl text-base leading-7 text-gray">
-                  Deposit Bitcoin into shielded commitments, prepare private sends, and test Sui-native proof settlement from the same vault route.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <VaultAction href={hrefWithChain("/vault/deposit", networkId)} icon={<BadgeDollarSign className="h-4 w-4" />} label="Deposit" primary />
-                <VaultAction href={hrefWithChain("/send", networkId)} icon={<Send className="h-4 w-4" />} label="Send" />
-                <VaultAction href={hrefWithChain("/vault/activity", networkId)} icon={<History className="h-4 w-4" />} label="Activity" />
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-gray/10 bg-muted/10 p-5">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-foreground">Vault status</h2>
-                  <p className="text-xs text-gray">Sui shared objects</p>
-                </div>
-                <StatusPill state={poolProbe.state === "ok" && capProbe.state === "ok" ? "ok" : poolProbe.state === "error" || capProbe.state === "error" ? "error" : "loading"} />
-              </div>
-              <div className="space-y-3">
-                <ProbeRow label="Pool" probe={poolProbe} objectId={sui.pool.objectId} />
-                <ProbeRow label="Redemption cap" probe={capProbe} objectId={sui.redemptionCap.objectId} />
-              </div>
-            </div>
+    <div className="flex-1 flex flex-col items-center pt-24 pb-8 px-4">
+      <motion.div
+        className={cn(
+          "bg-card border border-solid border-gray/30 p-4 sm:p-8",
+          "w-[680px] max-w-[calc(100vw-32px)] rounded-[16px]",
+          "glow-border cyber-corners relative z-10",
+        )}
+        initial={{ opacity: 0, y: 20, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+      >
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <span className="text-body2-semibold text-foreground">Wallet</span>
+          <div className="flex items-center gap-2">
+            <StatusDot state={poolProbe.state} />
+            <span className="rounded-full border border-sui/20 bg-sui/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sui">
+              {networkId === "sui-regtest" ? "Sui Hybrid" : "Sui Testnet"}
+            </span>
           </div>
         </div>
-      </section>
 
-      <section className="mx-auto max-w-6xl px-6 py-12">
-        <div className="grid gap-4 md:grid-cols-3">
-          <Capability icon={<Wallet className="h-5 w-5" />} title="Shielded notes" status="ready" detail="signature-derived UTXO keys" />
-          <Capability icon={<ShieldCheck className="h-5 w-5" />} title="Private sends" status="ready" detail={`${sui.vk?.joinsplit_1x1?.nPublic ?? 4} public Groth16 inputs`} />
-          <Capability icon={<KeyRound className="h-5 w-5" />} title="BTC withdrawal" status="poc" detail="Ika policy event path" />
+        <div className="flex flex-col items-center py-8 text-center">
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-sui/20 bg-sui/10">
+            <Shield className="h-7 w-7 text-sui" />
+          </div>
+          <h1 className="mb-1 text-[22px] font-bold text-foreground">Your Wallet</h1>
+          <p className="mb-6 max-w-sm text-caption text-gray/60">
+            Send privately on Sui. Use zkLogin or a wallet, then derive your UTXOpia keys.
+          </p>
+
+          <div className="mb-6 flex items-center justify-center gap-5 sm:gap-8">
+            <VaultAction href={hrefWithChain("/vault/deposit", networkId)} icon={<ArrowDownToLine className="h-5 w-5" />} label="Deposit" />
+            <VaultAction href={hrefWithChain("/send", networkId)} icon={<Send className="h-5 w-5" />} label="Send" />
+            <VaultAction href={hrefWithChain("/vault/activity", networkId)} icon={<History className="h-5 w-5" />} label="Activity" />
+          </div>
         </div>
 
-        <div className="mt-10">
-          <SuiAuthPanel />
-        </div>
+        <SuiAuthPanel />
 
-        <div className="mt-10 grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
-          <section>
-            <SectionTitle label="Technical" title="Shared Move state" />
-            <div className="divide-y divide-gray/10 border-y border-gray/10">
-              <ObjectRow label="Pool" value={sui.pool.objectId} href={explorer.object(sui.pool.objectId)} />
-              {sui.btcDepositRegistry?.objectId && (
-                <ObjectRow label="BTC deposits" value={sui.btcDepositRegistry.objectId} href={explorer.object(sui.btcDepositRegistry.objectId)} />
-              )}
-              <ObjectRow label="Nullifiers" value={sui.nullifierRegistry.objectId} href={explorer.object(sui.nullifierRegistry.objectId)} />
-              <ObjectRow label="VK registry" value={sui.verifyingKeyRegistry.objectId} href={explorer.object(sui.verifyingKeyRegistry.objectId)} />
-              <ObjectRow label="Redemptions" value={sui.redemptionQueue.objectId} href={explorer.object(sui.redemptionQueue.objectId)} />
-            </div>
-          </section>
+        <details className="group mt-5 rounded-[10px] bg-muted/30 px-3 py-3">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] text-gray/60">
+            <span>Technical status</span>
+            <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+          </summary>
 
-          <section>
-            <SectionTitle label="Recent test" title="Last successful chain run" />
-            <div className="grid gap-3">
-              <TxRow icon={<ShieldCheck className="h-4 w-4" />} label="JoinSplit transact" digest={sui.lastTransact?.txDigest} href={sui.lastTransact?.txDigest ? explorer.tx(sui.lastTransact.txDigest) : undefined} meta={sui.lastTransact?.circuit} />
-              <TxRow icon={<TerminalSquare className="h-4 w-4" />} label="Redemption request" digest={sui.lastRedemption?.requestTxDigest} href={sui.lastRedemption?.requestTxDigest ? explorer.tx(sui.lastRedemption.requestTxDigest) : undefined} meta={sui.lastRedemption?.redemptionId ? `id ${sui.lastRedemption.redemptionId}` : undefined} />
-              <TxRow icon={<KeyRound className="h-4 w-4" />} label="Ika approval" digest={sui.lastRedemption?.ikaApprovalTxDigest} href={sui.lastRedemption?.ikaApprovalTxDigest ? explorer.tx(sui.lastRedemption.ikaApprovalTxDigest) : undefined} meta="policy event" />
-              <TxRow icon={<CheckCircle2 className="h-4 w-4" />} label="Redemption complete" digest={sui.lastRedemption?.completeTxDigest} href={sui.lastRedemption?.completeTxDigest ? explorer.tx(sui.lastRedemption.completeTxDigest) : undefined} meta="success" />
-            </div>
-          </section>
-        </div>
-
-        <section className="mt-10 rounded-lg border border-warning/15 bg-warning/5 p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="space-y-1">
-              <h2 className="text-sm font-semibold text-foreground">Production gap</h2>
-              <p className="max-w-3xl text-sm leading-6 text-gray">
-                This Sui vault currently exposes the user flow and the Move proof surface. BTC SPV verification, Sui-side Ika dWallet package calls, and gross/net fee accounting still need to be promoted into the production bridge path.
-              </p>
-            </div>
-            <Link href={hrefWithChain("/settings", networkId)} className="inline-flex shrink-0 items-center gap-2 rounded-md border border-gray/15 px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-sui/30 hover:text-sui">
+          <div className="mt-3 space-y-3 border-t border-gray/10 pt-3">
+            <TechRow label="Package" value={shorten(sui.packageId)} href={explorer.object(sui.packageId)} />
+            <TechRow label="Pool" value={shorten(sui.pool.objectId)} href={explorer.object(sui.pool.objectId)} />
+            {sui.btcDepositRegistry?.objectId && (
+              <TechRow label="BTC deposits" value={shorten(sui.btcDepositRegistry.objectId)} href={explorer.object(sui.btcDepositRegistry.objectId)} />
+            )}
+            {sui.lastTransact?.txDigest && (
+              <TechRow label="Last JoinSplit" value={shorten(sui.lastTransact.txDigest)} href={explorer.tx(sui.lastTransact.txDigest)} />
+            )}
+            {sui.lastRedemption?.completeTxDigest && (
+              <TechRow label="Last withdrawal" value={shorten(sui.lastRedemption.completeTxDigest)} href={explorer.tx(sui.lastRedemption.completeTxDigest)} />
+            )}
+            <Link
+              href={hrefWithChain("/settings", networkId)}
+              className="inline-flex items-center gap-1 text-[11px] text-sui hover:text-sui/80"
+            >
+              <Settings className="h-3 w-3" />
               Network settings
-              <ArrowUpRight className="h-3.5 w-3.5" />
             </Link>
           </div>
-        </section>
-      </section>
+        </details>
+
+        <div className="flex items-center justify-center gap-2 py-4">
+          <span className="h-1.5 w-1.5 rounded-full bg-sui" />
+          <span className="text-[11px] text-gray/40">
+            Bitcoin {networkId === "sui-regtest" ? "Regtest" : "Testnet4"} · Sui Testnet
+          </span>
+        </div>
+      </motion.div>
     </div>
   );
 }
 
-function SectionTitle({ label, title }: { label: string; title: string }) {
+function VaultAction({ href, icon, label }: { href: string; icon: React.ReactNode; label: string }) {
   return (
-    <div className="mb-4">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-gray">{label}</div>
-      <h2 className="mt-1 text-xl font-semibold text-foreground">{title}</h2>
-    </div>
-  );
-}
-
-function VaultAction({
-  href,
-  icon,
-  label,
-  primary,
-}: {
-  href: string;
-  icon: React.ReactNode;
-  label: string;
-  primary?: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      className={cn(
-        "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition-colors",
-        primary
-          ? "bg-sui text-background hover:bg-sui/90"
-          : "border border-gray/15 bg-background/40 text-foreground hover:border-sui/30 hover:text-sui",
-      )}
-    >
-      {icon}
-      {label}
+    <Link href={href} className="group flex flex-col items-center gap-1.5">
+      <motion.div
+        className="flex h-12 w-12 items-center justify-center rounded-full border border-gray/15 bg-muted/80 text-sui transition-colors group-hover:border-sui/30 group-hover:bg-sui/10"
+        whileHover={{ scale: 1.08, y: -2 }}
+        whileTap={{ scale: 0.92 }}
+        transition={{ type: "spring", stiffness: 400, damping: 17 }}
+      >
+        {icon}
+      </motion.div>
+      <span className="text-[11px] text-gray transition-colors group-hover:text-foreground">{label}</span>
     </Link>
   );
 }
 
-function StatusPill({ state }: { state: "ok" | "loading" | "error" }) {
+function StatusDot({ state }: { state: RpcState }) {
+  const ok = state === "ok";
+  const error = state === "error";
   return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]",
-        state === "ok" && "border-sui/20 bg-sui/10 text-sui",
-        state === "loading" && "border-gray/15 bg-muted/20 text-gray",
-        state === "error" && "border-error/20 bg-error/10 text-error",
-      )}
-    >
-      {state === "ok" ? <CheckCircle2 className="h-3 w-3" /> : <CircleDashed className="h-3 w-3" />}
-      {state}
+    <span title={state} className={cn("text-gray", ok && "text-sui", error && "text-error")}>
+      {ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <CircleDashed className="h-3.5 w-3.5" />}
     </span>
   );
 }
 
-function ProbeRow({ label, probe, objectId }: { label: string; probe: ObjectProbe; objectId: string }) {
+function TechRow({ label, value, href }: { label: string; value: string; href: string }) {
   return (
-    <div className="grid grid-cols-[110px_1fr] gap-3 text-xs">
+    <a href={href} target="_blank" rel="noreferrer" className="grid grid-cols-[92px_1fr_auto] items-center gap-2 text-[11px] hover:text-sui">
       <span className="text-gray">{label}</span>
-      <div className="min-w-0">
-        <div className="break-all font-mono text-foreground/85">{shorten(objectId, 14, 10)}</div>
-        <div className="mt-1 text-[11px] text-gray">
-          {probe.state === "ok" && `v${probe.version} | ${shorten(probe.digest ?? "", 8, 8)}`}
-          {probe.state === "loading" && "checking"}
-          {probe.state === "error" && (probe.error ?? "unreachable")}
-          {probe.state === "idle" && "idle"}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Capability({ icon, title, status, detail }: { icon: React.ReactNode; title: string; status: "ready" | "poc"; detail: string }) {
-  return (
-    <div className="rounded-lg border border-gray/10 bg-muted/10 p-5">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-md border border-sui/15 bg-sui/5 text-sui">{icon}</div>
-        <span className={cn("rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]", status === "ready" ? "border-sui/20 bg-sui/10 text-sui" : "border-warning/20 bg-warning/10 text-warning")}>
-          {status}
-        </span>
-      </div>
-      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-      <p className="mt-1 break-all font-mono text-xs text-gray">{detail}</p>
-    </div>
-  );
-}
-
-function ObjectRow({ label, value, href }: { label: string; value: string; href: string }) {
-  return (
-    <a href={href} target="_blank" rel="noreferrer" className="grid grid-cols-[120px_1fr_auto] items-center gap-3 py-3 text-sm transition-colors hover:bg-muted/20">
-      <span className="text-gray">{label}</span>
-      <span className="min-w-0 break-all font-mono text-xs text-foreground/85">{value}</span>
-      <ExternalLink className="h-3.5 w-3.5 text-gray" />
-    </a>
-  );
-}
-
-function TxRow({ icon, label, digest, href, meta }: { icon: React.ReactNode; label: string; digest?: string; href?: string; meta?: string }) {
-  const content = (
-    <>
-      <div className="flex h-8 w-8 items-center justify-center rounded-md border border-gray/10 bg-background/40 text-sui">{icon}</div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-foreground">{label}</span>
-          {meta && <span className="text-[10px] uppercase tracking-[0.12em] text-gray">{meta}</span>}
-        </div>
-        <div className="mt-1 break-all font-mono text-xs text-gray">{digest ?? "not recorded"}</div>
-      </div>
-      {href && <ExternalLink className="h-3.5 w-3.5 text-gray" />}
-    </>
-  );
-
-  if (!href) return <div className="flex items-center gap-3 rounded-lg border border-gray/10 bg-muted/10 p-4">{content}</div>;
-
-  return (
-    <a href={href} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-lg border border-gray/10 bg-muted/10 p-4 transition-colors hover:border-sui/25 hover:bg-sui/5">
-      {content}
+      <span className="min-w-0 break-all font-mono text-foreground/80">{value}</span>
+      <ExternalLink className="h-3 w-3 text-gray" />
     </a>
   );
 }
