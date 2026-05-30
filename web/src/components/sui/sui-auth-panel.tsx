@@ -50,7 +50,7 @@ export function SuiAuthPanel() {
   const [authPreview, setAuthPreview] = useState<SuiUtxopiaAuthPreview | null>(null);
   const [authPreviewStatus, setAuthPreviewStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const hasGoogleClient = Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
-  const hasSaltServer = Boolean(process.env.NEXT_PUBLIC_ZKLOGIN_SALT_SERVER_URL);
+  const hasSaltServer = true;
   const hasProver = Boolean(process.env.NEXT_PUBLIC_ZKLOGIN_PROVER_URL);
 
   useEffect(() => {
@@ -115,7 +115,7 @@ export function SuiAuthPanel() {
 
   const zkLoginReadiness = useMemo(() => [
     { label: "Google OAuth client", ok: hasGoogleClient },
-    { label: "Salt server", ok: hasSaltServer },
+    { label: "Salt endpoint", ok: hasSaltServer },
     { label: "Proof service", ok: hasProver },
   ], [hasGoogleClient, hasSaltServer, hasProver]);
 

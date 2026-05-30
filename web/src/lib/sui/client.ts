@@ -140,8 +140,7 @@ export async function consumeSuiZkLoginCallback(): Promise<SuiZkLoginCallback> {
 }
 
 async function fetchZkLoginSalt(jwt: string): Promise<string | null> {
-  const saltServerUrl = process.env.NEXT_PUBLIC_ZKLOGIN_SALT_SERVER_URL;
-  if (!saltServerUrl) return null;
+  const saltServerUrl = process.env.NEXT_PUBLIC_ZKLOGIN_SALT_SERVER_URL || "/api/sui/zklogin/salt";
 
   const response = await fetch(saltServerUrl, {
     method: "POST",

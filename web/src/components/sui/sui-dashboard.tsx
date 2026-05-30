@@ -4,14 +4,17 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowUpRight,
+  BadgeDollarSign,
   CheckCircle2,
   CircleDashed,
   ExternalLink,
+  History,
   KeyRound,
   Network,
-  PackageCheck,
+  Send,
   ShieldCheck,
   TerminalSquare,
+  Wallet,
 } from "lucide-react";
 import { SuiAuthPanel } from "@/components/sui/sui-auth-panel";
 import { detectNetwork, getNetworkConfig, hrefWithChain, type NetworkId } from "@/lib/network-config";
@@ -86,28 +89,24 @@ function SuiContent({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig }
               </div>
               <div className="space-y-4">
                 <h1 className="max-w-3xl text-[40px] font-semibold leading-[1.02] tracking-normal text-foreground sm:text-[56px]">
-                  UTXOpia Move POC
+                  Your Private Sui Vault
                 </h1>
                 <p className="max-w-2xl text-base leading-7 text-gray">
-                  Same app route, Sui network selected. This surface reads the Move package, shared object refs, native Groth16 proof path, and redemption policy events.
+                  Deposit Bitcoin into shielded commitments, prepare private sends, and test Sui-native proof settlement from the same vault route.
                 </p>
               </div>
               <div className="flex flex-wrap gap-3">
-                <ExplorerLink href={explorer.object(sui.packageId)} label="Open package" />
-                {sui.lastTransact?.txDigest && (
-                  <ExplorerLink href={explorer.tx(sui.lastTransact.txDigest)} label="Last JoinSplit" />
-                )}
-                {sui.lastRedemption?.completeTxDigest && (
-                  <ExplorerLink href={explorer.tx(sui.lastRedemption.completeTxDigest)} label="Last redemption" />
-                )}
+                <VaultAction href={hrefWithChain("/vault/deposit", networkId)} icon={<BadgeDollarSign className="h-4 w-4" />} label="Deposit" primary />
+                <VaultAction href={hrefWithChain("/send", networkId)} icon={<Send className="h-4 w-4" />} label="Send" />
+                <VaultAction href={hrefWithChain("/vault/activity", networkId)} icon={<History className="h-4 w-4" />} label="Activity" />
               </div>
             </div>
 
             <div className="rounded-lg border border-gray/10 bg-muted/10 p-5">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-sm font-semibold text-foreground">Live refs</h2>
-                  <p className="text-xs text-gray">Read from Sui RPC</p>
+                  <h2 className="text-sm font-semibold text-foreground">Vault status</h2>
+                  <p className="text-xs text-gray">Sui shared objects</p>
                 </div>
                 <StatusPill state={poolProbe.state === "ok" && capProbe.state === "ok" ? "ok" : poolProbe.state === "error" || capProbe.state === "error" ? "error" : "loading"} />
               </div>
@@ -122,9 +121,9 @@ function SuiContent({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig }
 
       <section className="mx-auto max-w-6xl px-6 py-12">
         <div className="grid gap-4 md:grid-cols-3">
-          <Capability icon={<PackageCheck className="h-5 w-5" />} title="Published package" status="live" detail={shorten(sui.packageId)} />
-          <Capability icon={<ShieldCheck className="h-5 w-5" />} title="Groth16 verifier" status="live" detail={`${sui.vk?.joinsplit_1x1?.nPublic ?? 4} public inputs`} />
-          <Capability icon={<KeyRound className="h-5 w-5" />} title="Ika policy" status="poc" detail="approval event" />
+          <Capability icon={<Wallet className="h-5 w-5" />} title="Shielded notes" status="ready" detail="signature-derived UTXO keys" />
+          <Capability icon={<ShieldCheck className="h-5 w-5" />} title="Private sends" status="ready" detail={`${sui.vk?.joinsplit_1x1?.nPublic ?? 4} public Groth16 inputs`} />
+          <Capability icon={<KeyRound className="h-5 w-5" />} title="BTC withdrawal" status="poc" detail="Ika policy event path" />
         </div>
 
         <div className="mt-10">
@@ -133,7 +132,7 @@ function SuiContent({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig }
 
         <div className="mt-10 grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
           <section>
-            <SectionTitle label="Objects" title="Shared Move state" />
+            <SectionTitle label="Technical" title="Shared Move state" />
             <div className="divide-y divide-gray/10 border-y border-gray/10">
               <ObjectRow label="Pool" value={sui.pool.objectId} href={explorer.object(sui.pool.objectId)} />
               {sui.btcDepositRegistry?.objectId && (
@@ -146,7 +145,7 @@ function SuiContent({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig }
           </section>
 
           <section>
-            <SectionTitle label="Recent POC" title="Last successful chain run" />
+            <SectionTitle label="Recent test" title="Last successful chain run" />
             <div className="grid gap-3">
               <TxRow icon={<ShieldCheck className="h-4 w-4" />} label="JoinSplit transact" digest={sui.lastTransact?.txDigest} href={sui.lastTransact?.txDigest ? explorer.tx(sui.lastTransact.txDigest) : undefined} meta={sui.lastTransact?.circuit} />
               <TxRow icon={<TerminalSquare className="h-4 w-4" />} label="Redemption request" digest={sui.lastRedemption?.requestTxDigest} href={sui.lastRedemption?.requestTxDigest ? explorer.tx(sui.lastRedemption.requestTxDigest) : undefined} meta={sui.lastRedemption?.redemptionId ? `id ${sui.lastRedemption.redemptionId}` : undefined} />
@@ -161,7 +160,7 @@ function SuiContent({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig }
             <div className="space-y-1">
               <h2 className="text-sm font-semibold text-foreground">Production gap</h2>
               <p className="max-w-3xl text-sm leading-6 text-gray">
-                The Sui package proves the Move object model, Sui native Groth16, and policy event surface. BTC SPV verification, Sui-side Ika dWallet package calls, and gross/net fee accounting still need to be promoted into the production bridge path.
+                This Sui vault currently exposes the user flow and the Move proof surface. BTC SPV verification, Sui-side Ika dWallet package calls, and gross/net fee accounting still need to be promoted into the production bridge path.
               </p>
             </div>
             <Link href={hrefWithChain("/settings", networkId)} className="inline-flex shrink-0 items-center gap-2 rounded-md border border-gray/15 px-3 py-2 text-xs font-semibold text-foreground transition-colors hover:border-sui/30 hover:text-sui">
@@ -184,12 +183,30 @@ function SectionTitle({ label, title }: { label: string; title: string }) {
   );
 }
 
-function ExplorerLink({ href, label }: { href: string; label: string }) {
+function VaultAction({
+  href,
+  icon,
+  label,
+  primary,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+  primary?: boolean;
+}) {
   return (
-    <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-md bg-sui px-4 py-2 text-sm font-semibold text-background transition-opacity hover:opacity-90">
+    <Link
+      href={href}
+      className={cn(
+        "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition-colors",
+        primary
+          ? "bg-sui text-background hover:bg-sui/90"
+          : "border border-gray/15 bg-background/40 text-foreground hover:border-sui/30 hover:text-sui",
+      )}
+    >
+      {icon}
       {label}
-      <ExternalLink className="h-3.5 w-3.5" />
-    </a>
+    </Link>
   );
 }
 
@@ -226,12 +243,12 @@ function ProbeRow({ label, probe, objectId }: { label: string; probe: ObjectProb
   );
 }
 
-function Capability({ icon, title, status, detail }: { icon: React.ReactNode; title: string; status: "live" | "poc"; detail: string }) {
+function Capability({ icon, title, status, detail }: { icon: React.ReactNode; title: string; status: "ready" | "poc"; detail: string }) {
   return (
     <div className="rounded-lg border border-gray/10 bg-muted/10 p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-md border border-sui/15 bg-sui/5 text-sui">{icon}</div>
-        <span className={cn("rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]", status === "live" ? "border-sui/20 bg-sui/10 text-sui" : "border-warning/20 bg-warning/10 text-warning")}>
+        <span className={cn("rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]", status === "ready" ? "border-sui/20 bg-sui/10 text-sui" : "border-warning/20 bg-warning/10 text-warning")}>
           {status}
         </span>
       </div>

@@ -190,17 +190,31 @@ function isKnownNetwork(value: string | null | undefined): value is NetworkId {
   return !!value && value in networks;
 }
 
-function networkFromChainQuery(value: string | null | undefined): NetworkId | null {
-  if (value === "sui") {
-    const env = process.env.NEXT_PUBLIC_NETWORK || process.env.UTXOPIA_NETWORK;
-    return env === "sui-regtest" ? "sui-regtest" : "sui-testnet";
+export function networkChain(network: NetworkId): ChainQuery {
+  return network === "sui-testnet" || network === "sui-regtest" ? "sui" : "sol";
+}
+
+function defaultNetworkForChain(chain: ChainQuery): NetworkId {
+  const env = process.env.NEXT_PUBLIC_NETWORK || process.env.UTXOPIA_NETWORK;
+  if (chain === "sui") return env === "sui-regtest" ? "sui-regtest" : "sui-testnet";
+  return env === "devnet-regtest" || env === "hybrid" ? "devnet-regtest" : "devnet";
+}
+
+function networkFromQuery(params: URLSearchParams, preferred?: NetworkId | null): NetworkId | null {
+  const chain = params.get("chain") as ChainQuery | null;
+  const exact = params.get("network");
+  if (isKnownNetwork(exact) && (!chain || networkChain(exact) === chain)) {
+    return exact;
   }
-  if (value === "sol") return "devnet";
+  if (chain === "sui" || chain === "sol") {
+    if (preferred && networkChain(preferred) === chain) return preferred;
+    return defaultNetworkForChain(chain);
+  }
   return null;
 }
 
 export function chainQueryForNetwork(network: NetworkId): ChainQuery {
-  return network === "sui-testnet" || network === "sui-regtest" ? "sui" : "sol";
+  return networkChain(network);
 }
 
 export function hrefWithChain(href: string, network: NetworkId): string {
@@ -212,6 +226,7 @@ export function hrefWithChain(href: string, network: NetworkId): string {
   const [path, search = ""] = pathAndSearch.split("?");
   const params = new URLSearchParams(search);
   params.set("chain", chain);
+  params.set("network", network);
   const query = params.toString();
   return `${path}${query ? `?${query}` : ""}${hash ? `#${hash}` : ""}`;
 }
@@ -231,9 +246,9 @@ export function parseNetworkCookie(cookieHeader: string | null): NetworkId | nul
  *  the bare `detectNetwork()` (which only knows about the build-time env). */
 export function detectNetworkFromRequest(req: Request): NetworkId {
   const url = new URL(req.url);
-  const chainNet = networkFromChainQuery(url.searchParams.get("chain"));
-  if (chainNet) return chainNet;
   const cookieNet = parseNetworkCookie(req.headers.get("cookie"));
+  const queryNet = networkFromQuery(url.searchParams, cookieNet);
+  if (queryNet) return queryNet;
   if (cookieNet) return cookieNet;
   return detectNetwork();
 }
@@ -241,18 +256,22 @@ export function detectNetworkFromRequest(req: Request): NetworkId {
 export function detectNetwork(): NetworkId {
   // 1. localStorage (per-browser user preference, set via /settings)
   if (typeof window !== "undefined") {
-    const chainNet = networkFromChainQuery(new URLSearchParams(window.location.search).get("chain"));
-    if (chainNet) return chainNet;
+    const params = new URLSearchParams(window.location.search);
+    let stored: NetworkId | null = null;
 
     try {
-      const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (isKnownNetwork(stored)) return stored;
+      const rawStored = window.localStorage.getItem(STORAGE_KEY);
+      if (isKnownNetwork(rawStored)) stored = rawStored;
     } catch {
       // localStorage may be unavailable (SSR, privacy mode) — fall through.
     }
 
     // 2. cookie fallback (in case localStorage was cleared but cookie remains)
     const cookieNet = parseNetworkCookie(document.cookie);
+    const preferred = stored ?? cookieNet;
+    const queryNet = networkFromQuery(params, preferred);
+    if (queryNet) return queryNet;
+    if (stored) return stored;
     if (cookieNet) return cookieNet;
   }
 
