@@ -73,9 +73,9 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
     <div className="flex-1 flex flex-col items-center pt-24 pb-8 px-4">
       <motion.div
         className={cn(
-          "bg-card border border-solid border-gray/30 p-4 sm:p-8",
+          "bg-card border border-solid border-sui/20 p-4 shadow-[0_0_40px_rgba(111,188,240,0.08)] sm:p-8",
           "w-[680px] max-w-[calc(100vw-32px)] rounded-[16px]",
-          "glow-border cyber-corners relative z-10",
+          "relative z-10",
         )}
         initial={{ opacity: 0, y: 20, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
