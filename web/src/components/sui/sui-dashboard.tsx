@@ -5,14 +5,11 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   ArrowDownToLine,
-  CheckCircle2,
   ChevronDown,
-  CircleDashed,
   ExternalLink,
   History,
   Send,
   Settings,
-  Shield,
 } from "lucide-react";
 import { SuiAuthPanel } from "@/components/sui/sui-auth-panel";
 import { detectNetwork, getNetworkConfig, hrefWithChain, type NetworkId } from "@/lib/network-config";
@@ -74,26 +71,20 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
-        <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="mb-4 flex items-center justify-between gap-3">
           <span className="text-body2-semibold text-foreground">Wallet</span>
           <div className="flex items-center gap-2">
-            <StatusDot state={poolProbe.state} />
             <span className="rounded-full border border-sui/20 bg-sui/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sui">
               {networkId === "sui-regtest" ? "Sui Hybrid" : "Sui Testnet"}
             </span>
           </div>
         </div>
 
-        <div className="flex flex-col items-center py-8 text-center">
-          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-sui/20 bg-sui/10">
-            <Shield className="h-7 w-7 text-sui" />
-          </div>
+        <div className="flex flex-col items-center pb-5 pt-3 text-center">
           <h1 className="mb-1 text-[22px] font-bold text-foreground">Your Wallet</h1>
-          <p className="mb-6 max-w-sm text-caption text-gray/60">
-            Send privately on Sui. Use zkLogin or a wallet, then derive your UTXOpia keys.
-          </p>
+          <p className="mb-6 text-caption text-gray/60">Private Sui test vault.</p>
 
-          <div className="mb-6 flex items-center justify-center gap-5 sm:gap-8">
+          <div className="flex items-center justify-center gap-5 sm:gap-8">
             <VaultAction href={hrefWithChain("/vault/deposit", networkId)} icon={<ArrowDownToLine className="h-5 w-5" />} label="Deposit" />
             <VaultAction href={hrefWithChain("/send", networkId)} icon={<Send className="h-5 w-5" />} label="Send" />
             <VaultAction href={hrefWithChain("/vault/activity", networkId)} icon={<History className="h-5 w-5" />} label="Activity" />
@@ -102,13 +93,14 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
 
         <SuiAuthPanel />
 
-        <details className="group mt-5 rounded-[10px] bg-muted/30 px-3 py-3">
+        <details className="group mt-4 rounded-[10px] bg-muted/20 px-3 py-3">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[11px] text-gray/60">
-            <span>Technical status</span>
+            <span>Details</span>
             <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
           </summary>
 
           <div className="mt-3 space-y-3 border-t border-gray/10 pt-3">
+            <TechRow label="Status" value={poolProbe.state} />
             <TechRow label="Package" value={shorten(sui.packageId)} href={explorer.object(sui.packageId)} />
             <TechRow label="Pool" value={shorten(sui.pool.objectId)} href={explorer.object(sui.pool.objectId)} />
             {sui.btcDepositRegistry?.objectId && (
@@ -130,7 +122,7 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
           </div>
         </details>
 
-        <div className="flex items-center justify-center gap-2 py-4">
+        <div className="flex items-center justify-center gap-2 pt-4">
           <span className="h-1.5 w-1.5 rounded-full bg-sui" />
           <span className="text-[11px] text-gray/40">
             Bitcoin {networkId === "sui-regtest" ? "Regtest" : "Testnet4"} · Sui Testnet
@@ -157,22 +149,20 @@ function VaultAction({ href, icon, label }: { href: string; icon: React.ReactNod
   );
 }
 
-function StatusDot({ state }: { state: RpcState }) {
-  const ok = state === "ok";
-  const error = state === "error";
-  return (
-    <span title={state} className={cn("text-gray", ok && "text-sui", error && "text-error")}>
-      {ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <CircleDashed className="h-3.5 w-3.5" />}
-    </span>
-  );
-}
-
-function TechRow({ label, value, href }: { label: string; value: string; href: string }) {
-  return (
-    <a href={href} target="_blank" rel="noreferrer" className="grid grid-cols-[92px_1fr_auto] items-center gap-2 text-[11px] hover:text-sui">
+function TechRow({ label, value, href }: { label: string; value: string; href?: string }) {
+  const content = (
+    <>
       <span className="text-gray">{label}</span>
       <span className="min-w-0 break-all font-mono text-foreground/80">{value}</span>
-      <ExternalLink className="h-3 w-3 text-gray" />
+      {href && <ExternalLink className="h-3 w-3 text-gray" />}
+    </>
+  );
+  if (!href) {
+    return <div className="grid grid-cols-[92px_1fr_auto] items-center gap-2 text-[11px]">{content}</div>;
+  }
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className="grid grid-cols-[92px_1fr_auto] items-center gap-2 text-[11px] hover:text-sui">
+      {content}
     </a>
   );
 }
