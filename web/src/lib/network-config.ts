@@ -13,11 +13,27 @@ import networksJson from "./networks.json";
 export type NetworkId =
   | "devnet"
   | "devnet-regtest"
+  | "sui-testnet"
+  | "sui-regtest"
   | "testnet"
   | "mainnet"
   | "localnet";
 
+export type ChainQuery = "sol" | "sui";
+
+export interface SuiObjectRef {
+  objectId: string;
+  version: string;
+  digest: string;
+}
+
+export interface SuiSharedObjectRef {
+  objectId: string;
+  initialSharedVersion: string;
+}
+
 export interface NetworkConfig {
+  chain?: "solana" | "sui";
   solana: {
     rpcUrl: string;
     utxopiaProgramId: string;
@@ -45,6 +61,37 @@ export interface NetworkConfig {
   };
   backend: {
     url: string;
+  };
+  sui?: {
+    rpcUrl: string;
+    explorerUrl: string;
+    packageId: string;
+    pool: SuiSharedObjectRef;
+    btcDepositRegistry?: SuiSharedObjectRef;
+    nullifierRegistry: SuiSharedObjectRef;
+    redemptionQueue: SuiSharedObjectRef;
+    redemptionCap: SuiObjectRef;
+    verifyingKeyRegistry: SuiSharedObjectRef;
+    vk?: Record<string, {
+      nInputs: number;
+      nOutputs: number;
+      nPublic: number;
+      vkHash: string;
+      registerTxDigest?: string;
+    }>;
+    lastTransact?: {
+      circuit: string;
+      shieldTxDigest?: string;
+      txDigest: string;
+      nullifier: string;
+      commitmentOut: string;
+    };
+    lastRedemption?: {
+      redemptionId: string;
+      requestTxDigest: string;
+      ikaApprovalTxDigest?: string;
+      completeTxDigest?: string;
+    };
   };
 }
 
@@ -81,6 +128,26 @@ export const NETWORK_META: NetworkMeta[] = [
     description: "Same on-chain model as production. Blocks mine instantly — full loop in seconds.",
     caveats: [
       "Local regtest BTC; state resets with the docker stack.",
+    ],
+    enabled: true,
+  },
+  {
+    id: "sui-testnet",
+    label: "Sui Testnet",
+    tagline: "Sui testnet + Bitcoin testnet4",
+    description: "Move-object version of the UTXOpia core proof paths: commitment insert, Sui Groth16 JoinSplit, redemption request, Ika policy approval event, and redemption completion.",
+    caveats: [
+      "POC surface only: BTC SPV verification and real Sui-side Ika dWallet call are not wired yet.",
+    ],
+    enabled: true,
+  },
+  {
+    id: "sui-regtest",
+    label: "Sui Hybrid",
+    tagline: "Sui testnet + local regtest BTC",
+    description: "Sui testnet package with local Bitcoin regtest plumbing for faster deposit and withdraw iteration.",
+    caveats: [
+      "Uses local regtest BTC. Real Sui-side BTC SPV verification and native Ika dWallet signing are still being wired.",
     ],
     enabled: true,
   },
@@ -123,6 +190,32 @@ function isKnownNetwork(value: string | null | undefined): value is NetworkId {
   return !!value && value in networks;
 }
 
+function networkFromChainQuery(value: string | null | undefined): NetworkId | null {
+  if (value === "sui") {
+    const env = process.env.NEXT_PUBLIC_NETWORK || process.env.UTXOPIA_NETWORK;
+    return env === "sui-regtest" ? "sui-regtest" : "sui-testnet";
+  }
+  if (value === "sol") return "devnet";
+  return null;
+}
+
+export function chainQueryForNetwork(network: NetworkId): ChainQuery {
+  return network === "sui-testnet" || network === "sui-regtest" ? "sui" : "sol";
+}
+
+export function hrefWithChain(href: string, network: NetworkId): string {
+  const chain = chainQueryForNetwork(network);
+  if (href.startsWith("http://") || href.startsWith("https://") || href.startsWith("#")) {
+    return href;
+  }
+  const [pathAndSearch, hash = ""] = href.split("#");
+  const [path, search = ""] = pathAndSearch.split("?");
+  const params = new URLSearchParams(search);
+  params.set("chain", chain);
+  const query = params.toString();
+  return `${path}${query ? `?${query}` : ""}${hash ? `#${hash}` : ""}`;
+}
+
 /** Parse our cookie value out of an HTTP `Cookie:` header. */
 export function parseNetworkCookie(cookieHeader: string | null): NetworkId | null {
   if (!cookieHeader) return null;
@@ -137,6 +230,9 @@ export function parseNetworkCookie(cookieHeader: string | null): NetworkId | nul
  *  cookies. Falls back to env-var default. Use this in API routes instead of
  *  the bare `detectNetwork()` (which only knows about the build-time env). */
 export function detectNetworkFromRequest(req: Request): NetworkId {
+  const url = new URL(req.url);
+  const chainNet = networkFromChainQuery(url.searchParams.get("chain"));
+  if (chainNet) return chainNet;
   const cookieNet = parseNetworkCookie(req.headers.get("cookie"));
   if (cookieNet) return cookieNet;
   return detectNetwork();
@@ -145,6 +241,9 @@ export function detectNetworkFromRequest(req: Request): NetworkId {
 export function detectNetwork(): NetworkId {
   // 1. localStorage (per-browser user preference, set via /settings)
   if (typeof window !== "undefined") {
+    const chainNet = networkFromChainQuery(new URLSearchParams(window.location.search).get("chain"));
+    if (chainNet) return chainNet;
+
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
       if (isKnownNetwork(stored)) return stored;
@@ -164,6 +263,8 @@ export function detectNetwork(): NetworkId {
     "devnet";
   if (env === "mainnet" || env === "mainnet-beta") return "mainnet";
   if (env === "testnet") return "testnet";
+  if (env === "sui-regtest") return "sui-regtest";
+  if (env === "sui-testnet" || env === "sui") return "sui-testnet";
   if (env === "localnet") return "localnet";
   if (env === "devnet-regtest" || env === "hybrid") return "devnet-regtest";
   return "devnet";
@@ -217,6 +318,10 @@ export function getNetworkConfig(
   const rpcOverride =
     process.env.NEXT_PUBLIC_SOLANA_RPC_URL || process.env.SOLANA_RPC_URL;
   if (rpcOverride) cfg.solana = { ...cfg.solana, rpcUrl: rpcOverride };
+
+  const suiRpcOverride =
+    process.env.NEXT_PUBLIC_SUI_RPC_URL || process.env.UTXOPIA_SUI_RPC_URL;
+  if (suiRpcOverride && cfg.sui) cfg.sui = { ...cfg.sui, rpcUrl: suiRpcOverride };
 
   const backendOverride =
     process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL || process.env.BACKEND_API_URL;

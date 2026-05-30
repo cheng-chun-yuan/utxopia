@@ -172,16 +172,7 @@ impl DepositTrackerService {
     }
 
     fn direct_vault_deposits_enabled(&self) -> bool {
-        let explicit_mode = std::env::var("UTXOPIA_DEPOSIT_MODE")
-            .unwrap_or_default()
-            .to_lowercase();
-        if !explicit_mode.is_empty() {
-            return matches!(explicit_mode.as_str(), "direct" | "direct_vault" | "ika_direct");
-        }
-
-        std::env::var("UTXOPIA_SIGNING_MODE")
-            .unwrap_or_default()
-            .eq_ignore_ascii_case("ika")
+        true
     }
 
     /// Register a new deposit for tracking.
@@ -340,11 +331,7 @@ impl DepositTrackerService {
             // Step 1: Reset mid-operation states
             match record.status {
                 DepositStatus::Sweeping => {
-                    if record.sweep_txid.is_none() {
-                        record.status = DepositStatus::Confirmed;
-                    } else {
-                        record.status = DepositStatus::SweepConfirming;
-                    }
+                    record.status = DepositStatus::Confirmed;
                     record.error = None;
                     self.db.update(&record)?;
                     println!(
@@ -354,7 +341,7 @@ impl DepositTrackerService {
                     recovered += 1;
                 }
                 DepositStatus::Verifying => {
-                    record.status = DepositStatus::SweepConfirming;
+                    record.status = DepositStatus::Confirmed;
                     record.error = None;
                     self.db.update(&record)?;
                     println!(
@@ -366,27 +353,12 @@ impl DepositTrackerService {
                 _ => {}
             }
 
-            // Step 2: For deposits with a known txid but no sweep, check on-chain
-            if self.try_recover_external_sweep(&mut record).await? {
-                recovered += 1;
-            }
-        }
-
-        // Also recover failed deposits whose UTXO may have been swept while offline
-        let failed = self.db.get_by_status(DepositStatus::Failed).unwrap_or_default();
-        for mut record in failed {
-            if record.sweep_txid.is_some() {
-                continue; // Already has sweep tx, retry will handle
-            }
-            if self.try_recover_external_sweep(&mut record).await? {
-                record.error = None;
-                self.db.update(&record)?;
-                recovered += 1;
-            }
+            // Direct-vault deposits are verified from the deposit transaction
+            // itself; there is no sweep transaction to recover.
         }
 
         if recovered > 0 {
-            println!("Recovered {} deposits via on-chain checks", recovered);
+            println!("Recovered {} interrupted direct-vault deposits", recovered);
         }
 
         Ok(recovered)
@@ -1225,7 +1197,10 @@ impl DepositTrackerService {
                 self.verify_direct_vault_deposit(&record.id).await?;
             }
             DepositStatus::Verifying => {
-                self.check_verification_status(&record.taproot_address).await?;
+                // Previous process may have stopped after marking Verifying.
+                // Direct-vault verification is idempotent because the deposit
+                // receipt PDA is keyed by deposit_txid, so retry from here.
+                self.verify_direct_vault_deposit(&record.id).await?;
             }
             DepositStatus::Ready | DepositStatus::Claimed | DepositStatus::Failed => {}
             DepositStatus::Sweeping | DepositStatus::SweepConfirming => {

@@ -42,6 +42,11 @@
   --privacy-purple: #9945ff;
   --privacy-teal: #14f195;
   --privacy-bg: #14f1951a;
+
+  /* Sui colors */
+  --sui-blue: #6fbcf0;
+  --sui-blue-deep: #2c7be5;
+  --sui-blue-bg: #6fbcf01a;
 }
 
 @theme inline {
@@ -81,6 +86,8 @@
   --color-sol: #9945ff;
   --color-sol-dark: #8b3de8;
   --color-purple: #ffabfe;
+  --color-sui: #6fbcf0;
+  --color-sui-dark: #2c7be5;
 
   /* Status colors */
   --color-success: #4ade80;

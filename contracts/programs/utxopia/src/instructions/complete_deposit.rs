@@ -2,30 +2,28 @@
 //!
 //! Trustless npk-based deposit flow:
 //! 1. User generates npk client-side, sends BTC with OP_RETURN(ephemeralPub || npk)
-//! 2. Backend detects deposit, then either sweeps UTXO to pool wallet or verifies
-//!    direct-to-pool deposits in-place
+//! 2. Backend detects the direct Ika-vault deposit and verifies it in-place
 //! 3. Backend calls btc-light-client's verify_transaction to create VerifiedTransaction PDA
-//! 4. Backend uploads BOTH sweep TX and deposit TX to ChadBuffer accounts
+//! 4. Backend uploads the deposit TX to a ChadBuffer account
 //! 5. Backend calls this instruction — npk + ephemeral_pub extracted ON-CHAIN from deposit TX
 //!
 //! This instruction:
-//! - Checks VerifiedTransaction PDA exists (btc-light-client already verified SPV for sweep TX)
+//! - Checks VerifiedTransaction PDA exists (btc-light-client already verified SPV for deposit TX)
 //! - Verifies sufficient confirmations via light client tip height
 //! - Reads deposit TX from its ChadBuffer, extracts npk + ephemeral_pub from OP_RETURN.
 //!   For direct-to-pool deposits, `deposit_tx_size = 0` and the SPV-verified tx
 //!   itself is treated as the deposit tx.
-//! - Verifies sweep TX has an input spending from the deposit TX (proves linkage),
-//!   unless direct-to-pool mode is used.
 //! - Extracts credited amount trustlessly from the SPV-verified transaction output.
-//! - Computes commitment ON-CHAIN: Poseidon(npk, ZKBTC_TOKEN_ID, amount)
+//! - Applies Solana-side deposit fees and computes commitment ON-CHAIN:
+//!   Poseidon(npk, ZKBTC_TOKEN_ID, gross_amount - fee)
 //! - Inserts commitment into Merkle tree
 //! - Emits stealth announcement as sol_log_data event (type=0, plaintext amount)
-//! - Mints zkBTC to pool vault
+//! - Mints zkBTC collateral equal to the shielded note amount to the pool vault
 //!
 //! Instruction Data (80 bytes, fixed):
-//! - [0-31]   sweep_txid        (32 bytes) - Sweep tx ID (internal byte order)
-//! - [32-39]  block_height      (8 bytes)  - Block containing sweep tx (cross-check)
-//! - [40-43]  sweep_tx_size     (4 bytes)  - Raw sweep tx size in ChadBuffer
+//! - [0-31]   sweep_txid        (32 bytes) - SPV-verified tx ID; direct mode uses deposit_txid
+//! - [32-39]  block_height      (8 bytes)  - Block containing the verified tx
+//! - [40-43]  sweep_tx_size     (4 bytes)  - Raw verified tx size in ChadBuffer
 //! - [44-47]  deposit_tx_size   (4 bytes)  - Raw deposit tx size in ChadBuffer
 //! - [48-79]  deposit_txid      (32 bytes) - Deposit tx ID (internal byte order)
 
@@ -65,7 +63,7 @@ pub const DEMO_REQUIRED_CONFIRMATIONS: u64 = 6;
 ///
 /// The commitment is computed ON-CHAIN: Poseidon(npk, ZKBTC_TOKEN_ID, amount)
 /// npk + ephemeral_pub are extracted ON-CHAIN from the deposit TX's OP_RETURN.
-/// Amount is extracted from the SPV-verified sweep TX.
+/// Amount is extracted from the SPV-verified deposit transaction.
 pub struct CompleteDepositData {
     pub sweep_txid: [u8; 32],
     pub block_height: u64,
@@ -113,7 +111,7 @@ impl CompleteDepositData {
 /// 1.  `[]` VerifiedTransaction PDA (owned by btc-light-client)
 /// 2.  `[]` Light client (owned by btc-light-client, for confirmation count)
 /// 3.  `[writable]` Commitment tree
-/// 4.  `[]` Sweep TX buffer (ChadBuffer)
+/// 4.  `[]` Verified/deposit TX buffer (ChadBuffer)
 /// 5.  `[signer]` Authority (pool authority, pays for storage)
 /// 6.  `[]` System program
 /// 7.  `[writable]` zkBTC mint
@@ -245,7 +243,7 @@ pub fn process_complete_deposit(
     }
 
     // --- VerifiedTransaction PDA check ---
-    // Parse the VerifiedTransaction PDA and verify sweep txid matches
+    // Parse the VerifiedTransaction PDA and verify the SPV-verified txid matches.
     {
         let vt_data = verified_tx_info.try_borrow_data()?;
         let vt = VerifiedTransactionView::from_bytes(&vt_data)?;
@@ -275,7 +273,7 @@ pub fn process_complete_deposit(
         }
     }
 
-    // --- Read and verify sweep TX from ChadBuffer ---
+    // --- Read and verify SPV-verified TX from ChadBuffer ---
     crate::utils::chadbuffer::validate_chadbuffer_owner(tx_buffer_info)?;
     let sweep_buffer_data = tx_buffer_info
         .try_borrow_data()
@@ -289,7 +287,7 @@ pub fn process_complete_deposit(
         return Err(UTXOpiaError::InvalidSpvProof.into());
     }
 
-    // Parse sweep TX and extract deposit amount
+    // Parse SPV-verified TX and extract deposit amount
     let sweep_parsed = ParsedTransaction::parse(sweep_raw_tx)
         .map_err(|_| UTXOpiaError::InvalidSpvProof)?;
 
@@ -332,7 +330,7 @@ pub fn process_complete_deposit(
     let deposit_parsed = ParsedTransaction::parse(deposit_raw_tx)
         .map_err(|_| UTXOpiaError::InvalidSpvProof)?;
 
-    // --- Verify sweep TX spends from deposit TX (input linkage) ---
+    // --- Verify sweep TX spends from deposit TX (legacy input linkage) ---
     // This proves the chain: deposit TX -> sweep TX (SPV-verified).
     // Direct-to-pool deposits skip this because the deposit tx is the
     // SPV-verified pool UTXO itself.
@@ -345,9 +343,10 @@ pub fn process_complete_deposit(
         .find_deposit_op_return()
         .ok_or(UTXOpiaError::InvalidStealthOpReturn)?;
 
-    // Extract sweep output amount and vout (what the pool received after miner fee).
-    // If PoolConfig is supplied, require the sweep output to match its pool_script
-    // so the recorded UTXO is controlled by the configured pool/Ika wallet.
+    // Extract pool output amount and vout. In direct mode this is the user's
+    // deposit output to the Ika vault. If PoolConfig is supplied, require the
+    // output script to match its pool_script so the recorded UTXO is controlled
+    // by the configured pool/Ika wallet.
     let (deposit_output, sweep_vout) = if accounts.len() >= 15 {
         let pool_config_info = &accounts[14];
         validate_program_owner(pool_config_info, program_id)?;
@@ -449,10 +448,10 @@ pub fn process_complete_deposit(
         amount_sats,
     );
 
-    // Emit shield metadata (sweep amount + total fee) for indexer
+    // Emit shield metadata (gross amount + Solana-side deposit fee) for indexer
     crate::utils::events::emit_shield_meta(amount_sats, total_fee, &token_id);
 
-    // --- Create UTXO record PDA for the sweep tx's pool output ---
+    // --- Create UTXO record PDA for the pool BTC output ---
     {
         let vout_le = sweep_vout.to_le_bytes();
         let utxo_seeds: &[&[u8]] = &[UtxoRecord::SEED, &ix_data.sweep_txid, &vout_le];
@@ -489,7 +488,9 @@ pub fn process_complete_deposit(
         crate::utils::events::emit_utxo_created(&ix_data.sweep_txid, sweep_vout, amount_sats);
     }
 
-    // Mint zkBTC to pool vault
+    // Mint zkBTC collateral to pool vault for the shielded liability only.
+    // The BTC fee remainder stays in the Ika vault as protocol revenue, not as
+    // a spendable private note.
     let pool_bump_bytes = [pool_bump];
     let pool_signer_seeds: &[&[u8]] = &[PoolState::SEED, &pool_bump_bytes];
 
@@ -498,7 +499,7 @@ pub fn process_complete_deposit(
         zkbtc_mint,
         pool_vault,
         pool_state_info,
-        amount_sats,
+        shielded_amount,
         pool_signer_seeds,
     )?;
 
@@ -508,7 +509,7 @@ pub fn process_complete_deposit(
         let pool = PoolState::from_bytes_mut(&mut pool_data)?;
 
         pool.increment_deposit_count()?;
-        pool.add_minted(amount_sats)?;
+        pool.add_minted(shielded_amount)?;
         pool.add_shielded(shielded_amount)?;
         pool.add_utxo(amount_sats)?;
         pool.set_last_update(clock.unix_timestamp);

@@ -31,6 +31,7 @@
     }
   },
   "devnet-regtest": {
+    "chain": "solana",
     "solana": {
       "rpcUrl": "https://api.devnet.solana.com",
       "utxopiaProgramId": "5VLurqnsjzCHFaeunGGWyxzjAvCerVLass9ZZ2uDctBF",
@@ -61,7 +62,96 @@
       "url": "https://api-hybrid.utxopia.com"
     }
   },
+  "sui-testnet": {
+    "chain": "sui",
+    "solana": {
+      "rpcUrl": "",
+      "utxopiaProgramId": "",
+      "btcLightClientId": "",
+      "chadbufferId": "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF"
+    },
+    "tokens": {
+      "zkbtcMint": "",
+      "usdcMint": "",
+      "usdtMint": "",
+      "wsolMint": "",
+      "jupusdMint": ""
+    },
+    "bitcoin": {
+      "network": "testnet4",
+      "poolAddress": "",
+      "groupPubkey": "",
+      "depositMode": "sweep",
+      "explorerUrl": "https://mempool.space/testnet4"
+    },
+    "ika": {
+      "programId": "",
+      "grpcEndpoint": "",
+      "dwallet": "",
+      "dwalletXOnlyPubkey": ""
+    },
+    "backend": {
+      "url": ""
+    },
+    "sui": {
+      "rpcUrl": "https://fullnode.testnet.sui.io:443",
+      "explorerUrl": "https://suiexplorer.com",
+      "packageId": "0xd84463ceb5d5426b14556b7f714899cd40f75bf662a6211f9365542b657dcb7c",
+      "pool": {
+        "objectId": "0x21b6ba75a25ff642ad4f3db6d993c8f7970d8f56d6b57e7eedd485be528e7a37",
+        "initialSharedVersion": "349181714"
+      },
+      "nullifierRegistry": {
+        "objectId": "0xebfb6e5dc49ec6a63c71cbaa347c36c75ed94d1b320310eddfa5c261eb28b88d",
+        "initialSharedVersion": "349181715"
+      },
+      "redemptionQueue": {
+        "objectId": "0x19360391500caa484d169c6a805fb353941f1d318c43f1308d221383b302b8e1",
+        "initialSharedVersion": "349181716"
+      },
+      "redemptionCap": {
+        "objectId": "0x747a91f25b6c3cf615477c28691a69fa35d8a0a6d0007aa4b63fccfbb24108ec",
+        "version": "349181716",
+        "digest": "3687V7LtExQpWsMbsNabAfWJJcXSaDgnRHycSj5tVTEs"
+      },
+      "verifyingKeyRegistry": {
+        "objectId": "0x11bc97339e17eba604aef78eb37e4a3b4a7a8a57eed49c3a0553d983930be7c1",
+        "initialSharedVersion": "349181717"
+      },
+      "relayer": {
+        "address": "0x0517834683ffa77da332b1f1f7a79d17e419d007f71e0fc68595704d6edda4d1"
+      },
+      "ika": {
+        "network": "testnet",
+        "packageId": "0x1f26bb2f711ff82dcda4d02c77d5123089cb7f8418751474b9fb744ce031526a",
+        "commonPackageId": "0x96fc75633b6665cf84690587d1879858ff76f88c10c945e299f90bf4e0985eb0",
+        "systemPackageId": "0xde05f49e5f1ee13ed06c1e243c0a8e8fe858e1d8689476fdb7009af8ddc3c38b",
+        "dwallet2pcMpcPackageId": "0x6573a6c13daf26a64eb8a37d3c7a4391b353031e223072ca45b1ff9366f59293",
+        "systemObject": {
+          "objectId": "0x2172c6483ccd24930834e30102e33548b201d0607fb1fdc336ba3267d910dec6",
+          "initialSharedVersion": "508060325"
+        },
+        "dwalletCoordinator": {
+          "objectId": "0x4d157b7415a298c56ec2cb1dcab449525fa74aec17ddba376a83a7600f2062fc",
+          "initialSharedVersion": "510819272"
+        },
+        "dWalletId": "",
+        "dWalletCapObjectId": "",
+        "networkEncryptionKeyId": "0xe7c79a60931299e110297554fc02e0a0e095e96778775092c97f07a1bd1337cc"
+      },
+      "vk": {
+        "joinsplit_1x1": {
+          "nInputs": 1,
+          "nOutputs": 1,
+          "nPublic": 4,
+          "vkHash": "7d8d5d6933a079982af47e3ddf98908aa2f29ccd321fc8d43986a6a5186cf2f2",
+          "registerTxDigest": "5D2hrRaL7mP2jRL37EGjVhajsLwohgUAFdT7BCFCfzS"
+        }
+      }
+    }
+  },
   "testnet": {
+    "chain": "solana",
     "solana": {
       "rpcUrl": "https://api.testnet.solana.com",
       "utxopiaProgramId": "",
@@ -135,6 +225,98 @@
     },
     "backend": {
       "url": "http://localhost:3001"
+    }
+  },
+  "sui-regtest": {
+    "chain": "sui",
+    "solana": {
+      "rpcUrl": "",
+      "utxopiaProgramId": "",
+      "btcLightClientId": "",
+      "chadbufferId": "C5RpjtTMFXKVZCtXSzKXD4CDNTaWBg3dVeMfYvjZYHDF"
+    },
+    "tokens": {
+      "zkbtcMint": "",
+      "usdcMint": "",
+      "usdtMint": "",
+      "wsolMint": "",
+      "jupusdMint": ""
+    },
+    "bitcoin": {
+      "network": "regtest",
+      "poolAddress": "",
+      "groupPubkey": "",
+      "depositMode": "sweep",
+      "explorerUrl": "http://localhost:3002/regtest"
+    },
+    "ika": {
+      "programId": "",
+      "grpcEndpoint": "",
+      "dwallet": "",
+      "dwalletXOnlyPubkey": ""
+    },
+    "backend": {
+      "url": "http://localhost:3001"
+    },
+    "sui": {
+      "rpcUrl": "https://fullnode.testnet.sui.io:443",
+      "explorerUrl": "https://suiexplorer.com",
+      "packageId": "0x667962401f806be841f09ff6adb9e92ab3a458feb77edaeec8cf783914bc3603",
+      "pool": {
+        "objectId": "0x0b1529ad32c87b5b333c1d94e25ad778959f4ac24fba2d7af32c4cff3c1af467",
+        "initialSharedVersion": "349181771"
+      },
+      "btcDepositRegistry": {
+        "objectId": "0x528372c43ac6239d3719ce20c779da7fb7baacb7ec98b2896eead1552d62b752",
+        "initialSharedVersion": "349181772"
+      },
+      "nullifierRegistry": {
+        "objectId": "0x98477e8e66281f100acbf6afe03fc0aeae05751410a4363ff99c3abb4431a4f3",
+        "initialSharedVersion": "349181773"
+      },
+      "redemptionQueue": {
+        "objectId": "0x89712eed9918bec37dfce149881216d0eea4640ba4d9ec057d83b19f0f22759e",
+        "initialSharedVersion": "349181774"
+      },
+      "redemptionCap": {
+        "objectId": "0x2ace6d0e8185dca9aba8ba1b266e0104b38142f1b4ae8bd53013bfa3024def27",
+        "version": "349181774",
+        "digest": "DTSQAeeyFPnyJq4CdgfM5bU5zpMQYe2DfK8WWyferHTh"
+      },
+      "verifyingKeyRegistry": {
+        "objectId": "0x4b31e07c006b52e0c4b9559fbceb759e56576608d184546acecd02ee5376313b",
+        "initialSharedVersion": "349181775"
+      },
+      "relayer": {
+        "address": "0x0517834683ffa77da332b1f1f7a79d17e419d007f71e0fc68595704d6edda4d1"
+      },
+      "ika": {
+        "network": "testnet",
+        "packageId": "0x1f26bb2f711ff82dcda4d02c77d5123089cb7f8418751474b9fb744ce031526a",
+        "commonPackageId": "0x96fc75633b6665cf84690587d1879858ff76f88c10c945e299f90bf4e0985eb0",
+        "systemPackageId": "0xde05f49e5f1ee13ed06c1e243c0a8e8fe858e1d8689476fdb7009af8ddc3c38b",
+        "dwallet2pcMpcPackageId": "0x6573a6c13daf26a64eb8a37d3c7a4391b353031e223072ca45b1ff9366f59293",
+        "systemObject": {
+          "objectId": "0x2172c6483ccd24930834e30102e33548b201d0607fb1fdc336ba3267d910dec6",
+          "initialSharedVersion": "508060325"
+        },
+        "dwalletCoordinator": {
+          "objectId": "0x4d157b7415a298c56ec2cb1dcab449525fa74aec17ddba376a83a7600f2062fc",
+          "initialSharedVersion": "510819272"
+        },
+        "dWalletId": "",
+        "dWalletCapObjectId": "",
+        "networkEncryptionKeyId": "0xe7c79a60931299e110297554fc02e0a0e095e96778775092c97f07a1bd1337cc"
+      },
+      "vk": {
+        "joinsplit_1x1": {
+          "nInputs": 1,
+          "nOutputs": 1,
+          "nPublic": 4,
+          "vkHash": "7d8d5d6933a079982af47e3ddf98908aa2f29ccd321fc8d43986a6a5186cf2f2",
+          "registerTxDigest": "FNPHmVtwMg9ks2RsXhHSkn697ofRhCDUhCYC3fDFbzeJ"
+        }
+      }
     }
   }
 }

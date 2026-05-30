@@ -352,7 +352,12 @@ pub struct DepositStatusResponse {
 
 impl From<&DepositRecord> for DepositStatusResponse {
     fn from(record: &DepositRecord) -> Self {
-        let minted_sats = record.sweep_fee_sats.map(|fee| record.amount_sats.saturating_sub(fee));
+        // In Ika direct-vault mode the BTC output amount is gross deposit
+        // collateral. The shielded/minted amount is computed on-chain as
+        // gross - (pool.deposit_fee_bps + token_config.service_fee) and
+        // emitted in the stealth announcement / ShieldMeta events. The
+        // tracker does not duplicate that fee calculation.
+        let minted_sats = None;
         Self {
             id: record.id.clone(),
             status: record.status.to_string(),

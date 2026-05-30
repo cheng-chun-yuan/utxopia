@@ -26,6 +26,8 @@
     "@solana/wallet-adapter-react": "^0.15.39",
     "@solana/wallet-adapter-react-ui": "^0.9.39",
     "@solana/web3.js": "^1.98.0",
+    "@mysten/sui": "^1.0.0",
+    "@utxopia/sdk-sui": "workspace:*",
     "bs58": "^5.0.0",
     "canvas-confetti": "^1.9.4",
     "circomlibjs": "^0.1.7",

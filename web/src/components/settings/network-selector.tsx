@@ -7,6 +7,7 @@ import {
   setNetwork,
   NETWORK_META,
   getNetworkConfig,
+  hrefWithChain,
   type NetworkId,
   type NetworkMeta,
 } from "@/lib/network-config";
@@ -28,7 +29,9 @@ export function NetworkSelector() {
     setPending(id);
     setNetwork(id);
     // Hard reload — most singletons read network config at module load.
-    setTimeout(() => window.location.reload(), 50);
+    setTimeout(() => {
+      window.location.href = hrefWithChain(window.location.pathname + window.location.search + window.location.hash, id);
+    }, 50);
   }
 
   return (
@@ -178,15 +181,24 @@ function ConfigReadout({ networkId }: { networkId: NetworkId }) {
 
   if (!cfg) return null;
 
-  const rows: Array<[string, string, string?]> = [
-    ["Solana RPC", cfg.solana.rpcUrl, cfg.solana.rpcUrl],
-    ["Program", cfg.solana.utxopiaProgramId],
-    ["zkBTC mint", cfg.tokens.zkbtcMint],
-    ["BTC pool", cfg.bitcoin.poolAddress],
-    ["BTC network", cfg.bitcoin.network],
-    ["Backend", cfg.backend.url, cfg.backend.url],
-    ["BTC explorer", cfg.bitcoin.explorerUrl, cfg.bitcoin.explorerUrl],
-  ];
+  const rows: Array<[string, string, string?]> = cfg.chain === "sui" && cfg.sui
+    ? [
+        ["Sui RPC", cfg.sui.rpcUrl, cfg.sui.rpcUrl],
+        ["Package", cfg.sui.packageId],
+        ["Pool", cfg.sui.pool.objectId],
+        ["VK registry", cfg.sui.verifyingKeyRegistry.objectId],
+        ["Nullifiers", cfg.sui.nullifierRegistry.objectId],
+        ["Redemptions", cfg.sui.redemptionQueue.objectId],
+      ]
+    : [
+        ["Solana RPC", cfg.solana.rpcUrl, cfg.solana.rpcUrl],
+        ["Program", cfg.solana.utxopiaProgramId],
+        ["zkBTC mint", cfg.tokens.zkbtcMint],
+        ["BTC pool", cfg.bitcoin.poolAddress],
+        ["BTC network", cfg.bitcoin.network],
+        ["Backend", cfg.backend.url, cfg.backend.url],
+        ["BTC explorer", cfg.bitcoin.explorerUrl, cfg.bitcoin.explorerUrl],
+      ];
 
   return (
     <div className="mt-2 rounded-md bg-muted/20 overflow-hidden">

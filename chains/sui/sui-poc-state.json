@@ -1,0 +1,93 @@
+{
+  "network": "testnet",
+  "rpcUrl": "https://fullnode.testnet.sui.io:443",
+  "gasBudget": "100000000",
+  "relayer": {
+    "address": "0x0517834683ffa77da332b1f1f7a79d17e419d007f71e0fc68595704d6edda4d1",
+    "keypairPath": "/Users/zeusnetwork/.sui/sui_config/sui.keystore",
+    "keyScheme": "ed25519"
+  },
+  "ikaSui": {
+    "network": "testnet",
+    "packages": {
+      "ikaPackage": "0x1f26bb2f711ff82dcda4d02c77d5123089cb7f8418751474b9fb744ce031526a",
+      "ikaCommonPackage": "0x96fc75633b6665cf84690587d1879858ff76f88c10c945e299f90bf4e0985eb0",
+      "ikaSystemOriginalPackage": "0xae71e386fd4cff3a080001c4b74a9e485cd6a209fa98fb272ab922be68869148",
+      "ikaSystemPackage": "0xde05f49e5f1ee13ed06c1e243c0a8e8fe858e1d8689476fdb7009af8ddc3c38b",
+      "ikaDwallet2pcMpcOriginalPackage": "0xf02f5960c94fce1899a3795b5d11fd076bc70a8d0e20a2b19923d990ed490730",
+      "ikaDwallet2pcMpcPackage": "0x6573a6c13daf26a64eb8a37d3c7a4391b353031e223072ca45b1ff9366f59293"
+    },
+    "objects": {
+      "ikaSystemObject": {
+        "objectID": "0x2172c6483ccd24930834e30102e33548b201d0607fb1fdc336ba3267d910dec6",
+        "initialSharedVersion": 508060325
+      },
+      "ikaDWalletCoordinator": {
+        "objectID": "0x4d157b7415a298c56ec2cb1dcab449525fa74aec17ddba376a83a7600f2062fc",
+        "initialSharedVersion": 510819272
+      }
+    },
+    "dWalletId": "",
+    "dWalletCapObjectId": "",
+    "networkEncryptionKeyId": "0xe7c79a60931299e110297554fc02e0a0e095e96778775092c97f07a1bd1337cc",
+    "ikaCoinObjectId": "",
+    "suiCoinObjectId": "0x5221537fd86d7ac924cf19d25d35dfd3238b685ad038f603e98c1bd365939ec8"
+  },
+  "packageId": "0x667962401f806be841f09ff6adb9e92ab3a458feb77edaeec8cf783914bc3603",
+  "upgradeCap": {
+    "objectId": "0x177d28ed6453012f49a5cb515135e0734616535bc308e965d74287e5125bc9a3",
+    "version": "349181770",
+    "digest": "4Ckak9qUyT3YWmivuHh255YFwCSj8ym1DQ7TBRa5xjKH"
+  },
+  "lastSuiRegtestFlow": {
+    "amountSats": "25000",
+    "depositTxid": "0c0bf1e86a6d9e5b2871221b18701bf26f54fe6a36edc3845607e7ae9173d6f9",
+    "shieldTxDigest": "8eEBdNc3JiebkVMFFrt4rZbVshW764wgSrAbL2uasntG",
+    "transactTxDigest": "Bnkt2pj4U4nheCCwNyjs1umxRxrXGnxsTzGSwvjvt21X",
+    "withdrawTxid": "792f16d654a45106f3baf676f4e866cd965179a6817b10bb9c4d95843fa801bb",
+    "redemptionId": "0",
+    "requestTxDigest": "7TMSY2J4kNuXAibtYwmDRnMG88bXbE3xtm2p86FxgzEG",
+    "ikaApprovalTxDigest": "5EXQQY1AopBDYLAHsBD29EyZJBsfcmVyLzK6HxrXfJmW",
+    "completeTxDigest": "qXzea2HFQbm3fJRApjo7GRVrbzz5pA2nyXQePq1SoHf"
+  },
+  "pool": {
+    "objectId": "0x0b1529ad32c87b5b333c1d94e25ad778959f4ac24fba2d7af32c4cff3c1af467",
+    "initialSharedVersion": "349181771"
+  },
+  "adminCap": {
+    "objectId": "0x0fc14c43fed76f82313293b779787e5f1ae6bcbbde8a0c18b99639405fff38e6",
+    "version": "349181771",
+    "digest": "7F8Fage7XjBzKEx6HrzLePTm7YAZuMCspejx19T7aVj6"
+  },
+  "btcDepositRegistry": {
+    "objectId": "0x528372c43ac6239d3719ce20c779da7fb7baacb7ec98b2896eead1552d62b752",
+    "initialSharedVersion": "349181772"
+  },
+  "nullifierRegistry": {
+    "objectId": "0x98477e8e66281f100acbf6afe03fc0aeae05751410a4363ff99c3abb4431a4f3",
+    "initialSharedVersion": "349181773"
+  },
+  "redemptionQueue": {
+    "objectId": "0x89712eed9918bec37dfce149881216d0eea4640ba4d9ec057d83b19f0f22759e",
+    "initialSharedVersion": "349181774"
+  },
+  "redemptionCap": {
+    "objectId": "0x2ace6d0e8185dca9aba8ba1b266e0104b38142f1b4ae8bd53013bfa3024def27",
+    "version": "349181774",
+    "digest": "DTSQAeeyFPnyJq4CdgfM5bU5zpMQYe2DfK8WWyferHTh"
+  },
+  "verifyingKeyRegistry": {
+    "objectId": "0x4b31e07c006b52e0c4b9559fbceb759e56576608d184546acecd02ee5376313b",
+    "initialSharedVersion": "349181775"
+  },
+  "vk": {
+    "joinsplit_1x1": {
+      "nInputs": 1,
+      "nOutputs": 1,
+      "nPublic": 4,
+      "vkHash": "7d8d5d6933a079982af47e3ddf98908aa2f29ccd321fc8d43986a6a5186cf2f2",
+      "rawVerifyingKey": "e2f26dbea299f5223b646cb1fb33eadb059d9407559d7441dfd902e3a79a4d2dabb73dc17fbc13021e2471e0c08bd67d8401f52b73d6d07483794cad4778180e0c06f33bbc4c79a9cadef253a68084d382f17788f885c9afd176f7cb2f036789edf692d95cbdde46ddda5ef7d422436779445c5e66006a42761e1f12efde0018c212f3aeb785e49712e7a9353349aaf1255dfb31b7bf60723a480d9293938e19b3351b18c0e10ae8040e2c1e5deeef2168ef35307a05500560bb766fcb8a7b2583793fe9eee02edc654e8e5c6b7d7055712f352dbd20ef9bdd9a70fc2365a08e0500000000000000a4d7136bdba113d467d4d3dccc19c441f327a89f7c2273d97bec6c41634597278093316029f09f596a42cbea58806d3ba6d3563c52cc44ee0d523971e12e121355a2787a92bf20917c4b083d64553d65bbd15627358abf71157f6ff627920613049cc8f83beb914d399f68e0eec7023e7a391b9df94ca24bf78cc84548dcb5a02c0e2b2306ee0c5cfbfddab3e4ab9847d7335629ffb1c05e7b509c204616f4a3",
+      "registerTxDigest": "FNPHmVtwMg9ks2RsXhHSkn697ofRhCDUhCYC3fDFbzeJ"
+    }
+  }
+}

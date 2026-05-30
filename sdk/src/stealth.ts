@@ -501,11 +501,12 @@ export async function createDirectVaultDeposit(
 /**
  * Create a non-interactive deposit using the current SDK config.
  *
- * Prefers `ikaDwalletXOnlyPubkey` when set (non-zero); falls back to the
- * legacy `groupPubKey` only for older FROST-controlled pools. The chosen
- * value becomes the Taproot internal key for the BIP-341 tweak in legacy
- * sweep mode. In direct vault mode, deposits go to the raw Ika x-only P2TR
- * address and the recipient binding is carried by OP_RETURN.
+ * Direct-vault/Ika deposit helper.
+ *
+ * Deposits go to the raw Ika x-only P2TR vault address. Recipient binding
+ * stays per-deposit in OP_RETURN(ephemeralPub || npk), and Solana credits the
+ * note by SPV-verifying that deposit transaction directly. Legacy sweep-mode
+ * address derivation is intentionally not selected from config anymore.
  */
 export async function createDepositFromConfig(
   recipientMeta: StealthMetaAddress,
@@ -513,13 +514,13 @@ export async function createDepositFromConfig(
 ): Promise<NonInteractiveDepositResult> {
   const config = getConfig();
   const ikaKey = pickIkaCustodyKey(config);
-  if (ikaKey) {
-    if (config.depositMode === undefined || isDirectVaultDepositMode(config.depositMode)) {
-      return createDirectVaultDeposit(recipientMeta, ikaKey, network);
-    }
+  if (!ikaKey) {
+    throw new Error("Ika direct-vault deposits require ikaDwalletXOnlyPubkey in config");
   }
-  const internalKey = pickCustodyInternalKey(config);
-  return createNonInteractiveDeposit(recipientMeta, internalKey, network);
+  if (config.depositMode && !isDirectVaultDepositMode(config.depositMode)) {
+    throw new Error(`Unsupported depositMode "${config.depositMode}"; only Ika direct-vault deposits are supported`);
+  }
+  return createDirectVaultDeposit(recipientMeta, ikaKey, network);
 }
 
 export function isDirectVaultDepositMode(mode?: string): boolean {

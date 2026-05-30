@@ -119,6 +119,22 @@ export interface SerializedStealthMetaAddress {
   mpk: string;
 }
 
+export interface AuthSignatureKeyDerivationOptions {
+  /** Sui zkLogin address, wallet address, or app account label used as domain context. */
+  account?: string;
+  /** Chain label used for domain separation. */
+  chain?: string;
+  /** Network label used for domain separation. */
+  network?: string;
+}
+
+export interface AuthSignatureKeySetupResult {
+  keys: UTXOpiaKeys;
+  stealthMetaAddress: StealthMetaAddress;
+  encodedStealthAddress: string;
+  root: Uint8Array;
+}
+
 /**
  * View permission flags for delegated viewing keys
  */
@@ -207,6 +223,11 @@ const VIEWING_KEY_DOMAIN = "view";
 
 /** Domain separator for nullifying key derivation */
 const NULLIFYING_KEY_DOMAIN = "nullify";
+
+const AUTH_SIGNATURE_ROOT_DOMAIN = "utxopia:auth-signature-root:v1";
+const AUTH_SPENDING_DOMAIN = "utxopia:spending:eddsa-poseidon:v1";
+const AUTH_NULLIFYING_DOMAIN = "utxopia:nullifier:bn254:v1";
+const AUTH_VIEWING_DOMAIN = "utxopia:viewing:ed25519:v1";
 
 // ========== EdDSA-Poseidon Helpers ==========
 
@@ -430,6 +451,80 @@ export function deriveKeysFromSignature(
     viewingPrivKey,
     viewingPubKey,
     eddsaSeed,
+  };
+}
+
+/**
+ * Generate a random 65-byte signature-shaped seed for dev/test auth flows.
+ *
+ * Mirrors Fluidkey's "signature as deterministic key source" shape without
+ * requiring a wallet or zkLogin proof during local testing.
+ */
+export function generateRandomAuthSignature(): Uint8Array {
+  const signature = new Uint8Array(65);
+  crypto.getRandomValues(signature);
+  signature[64] = signature[64] % 2 === 0 ? 27 : 28;
+  return signature;
+}
+
+/**
+ * Derive UTXOpia keys from a wallet/zkLogin signature-shaped secret.
+ *
+ * User-facing model is two keys:
+ * - spending seed/key
+ * - viewing seed/key
+ *
+ * The protocol nullifying key is internal and derived from the spending seed,
+ * so delegated viewing keys do not automatically carry nullifier authority.
+ */
+export function deriveKeysFromAuthSignature(
+  signature: Uint8Array,
+  options: AuthSignatureKeyDerivationOptions = {},
+): UTXOpiaKeys {
+  const normalized = normalizeAuthSignature(signature);
+  const root = deriveAuthSignatureRoot(normalized, options);
+  const spendingSeed = deriveAuthSecret(root, AUTH_SPENDING_DOMAIN);
+  const viewingPrivKey = deriveAuthSecret(root, AUTH_VIEWING_DOMAIN);
+  const nullifyingSeed = deriveAuthSecret(spendingSeed, AUTH_NULLIFYING_DOMAIN);
+
+  const eddsaSeed = new Uint8Array(spendingSeed);
+  const spendingPrivKey = scalarFromBytes(spendingSeed);
+  const spendingPubKey = babyJubMul(spendingPrivKey, BABYJUB_BASE8);
+  const nullifyingKey = scalarFromBytes(nullifyingSeed);
+  const viewingPubKey = ed25519GetPublicKey(viewingPrivKey);
+  const identityHash = sha256(
+    concatBytes(root, new TextEncoder().encode("utxopia:auth-identity:v1")),
+  );
+
+  clearKey(spendingSeed);
+  clearKey(nullifyingSeed);
+
+  return {
+    solanaPublicKey: identityHash,
+    spendingPrivKey,
+    spendingPubKey,
+    nullifyingKey,
+    viewingPrivKey,
+    viewingPubKey,
+    eddsaSeed,
+  };
+}
+
+export function setupKeysFromAuthSignature(
+  signature: Uint8Array,
+  options: AuthSignatureKeyDerivationOptions = {},
+): AuthSignatureKeySetupResult {
+  const normalized = normalizeAuthSignature(signature);
+  const root = deriveAuthSignatureRoot(normalized, options);
+  const keys = deriveKeysFromAuthSignature(normalized, options);
+  const stealthMetaAddress = createStealthMetaAddress(keys);
+  const encodedStealthAddress = encodeStealthMetaAddress(stealthMetaAddress);
+
+  return {
+    keys,
+    stealthMetaAddress,
+    encodedStealthAddress,
+    root,
   };
 }
 
@@ -1027,4 +1122,33 @@ function concatBytes(...arrays: Uint8Array[]): Uint8Array {
     offset += arr.length;
   }
   return result;
+}
+
+function normalizeAuthSignature(signature: Uint8Array): Uint8Array {
+  if (signature.length === 64 || signature.length === 65) {
+    return new Uint8Array(signature);
+  }
+  throw new Error("Auth signature must be 64 or 65 bytes");
+}
+
+function deriveAuthSignatureRoot(
+  signature: Uint8Array,
+  options: AuthSignatureKeyDerivationOptions,
+): Uint8Array {
+  const context = JSON.stringify({
+    account: options.account ?? "",
+    chain: options.chain ?? "sui",
+    network: options.network ?? "testnet",
+  });
+  return sha256(
+    concatBytes(
+      new TextEncoder().encode(AUTH_SIGNATURE_ROOT_DOMAIN),
+      new TextEncoder().encode(context),
+      signature,
+    ),
+  );
+}
+
+function deriveAuthSecret(root: Uint8Array, domain: string): Uint8Array {
+  return sha256(concatBytes(new TextEncoder().encode(domain), root));
 }

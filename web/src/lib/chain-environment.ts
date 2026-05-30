@@ -47,6 +47,10 @@ export function useChainEnvironment(): ChainEnvironment {
 export async function ensureChainEnvironment(networkId: NetworkId = detectNetwork()): Promise<ChainEnvironment> {
   const env = getChainEnvironment(networkId);
 
+  if (env.config.chain === "sui") {
+    return env;
+  }
+
   if (configuredNetwork !== networkId || !configurePromise) {
     configurePromise = initConfig({
       utxopiaProgramId: env.config.solana.utxopiaProgramId,

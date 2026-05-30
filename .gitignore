@@ -46,6 +46,12 @@ sdk/dist/
 test-ledger/
 .vercel
 
+# Sui Move build/deploy artifacts
+chains/sui/contracts/build/
+chains/sui/contracts/Published.toml
+chains/sui/.tmp/
+chains/sui/.secrets/
+
 # Circom build artifacts — gitignore everything heavy (ptau, r1cs, wasm, zkey, sym).
 # Verification keys are tiny (~600 bytes each) and the on-chain program hashes them
 # via init/update_verification_key_hash, so commit those for reproducibility.

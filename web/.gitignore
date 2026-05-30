@@ -65,3 +65,4 @@ images/
 
 # Faucet cooldown state — per-deployment runtime data, never committed.
 .faucet-cooldown.json
+.faucet-limits.json

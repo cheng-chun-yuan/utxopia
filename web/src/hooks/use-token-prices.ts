@@ -20,6 +20,7 @@ interface Cache {
 }
 
 function readCache(): Cache | null {
+  if (typeof window === "undefined") return null;
   try {
     const raw = sessionStorage.getItem(CACHE_KEY);
     if (!raw) return null;
@@ -30,6 +31,7 @@ function readCache(): Cache | null {
 }
 
 function writeCache(prices: TokenPrices) {
+  if (typeof window === "undefined") return;
   try {
     sessionStorage.setItem(CACHE_KEY, JSON.stringify({ prices, ts: Date.now() }));
   } catch (err) { console.error("[TokenPrices] cache write error:", err); }

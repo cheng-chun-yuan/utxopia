@@ -2,15 +2,16 @@
  * Regtest BTC faucet.
  *
  * Talks to the `utxopia-esplora-regtest` container via `docker exec`, calling
- * bitcoin-cli the same way `scripts/hybrid/send-to.ts` does. Drips a single
- * BTC payment to the requested address and mines exactly one regtest block
- * so the recipient sees a confirmed UTXO immediately.
+ * bitcoin-cli the same way `scripts/hybrid/send-to.ts` does. It supports:
+ *   - legacy raw `bcrt1...` drips
+ *   - `utxo:...` stealth-address airdrops, where the route builds the actual
+ *     UTXOpia deposit tx with the required 64-byte OP_RETURN.
  *
  * Guard rails:
  *   - regtest-only: refuses if `NEXT_PUBLIC_BTC_NETWORK !== "regtest"`
  *   - optional `X-API-Key` check (set REGTEST_FAUCET_API_KEY to enable)
- *   - per-address cooldown (default 60s) to avoid accidental drain
- *   - amount capped at 1 BTC (100_000_000 sats)
+ *   - daily quota (default 3 successful sends/day per recipient and IP)
+ *   - amount capped at 0.001 BTC (100_000 sats) by default
  *   - auto-bootstraps spendable balance: if the regtest wallet has zero
  *     spendable BTC, runs `generatetoaddress 101 <miner>` once before the
  *     first drip so users don't have to manually mine after `docker compose up`
@@ -20,8 +21,10 @@
  *   REGTEST_FAUCET_DOCKER_CONTAINER  default "utxopia-esplora-regtest"
  *   REGTEST_FAUCET_BITCOIN_CLI       default "/srv/explorer/bitcoin/bin/bitcoin-cli"
  *   REGTEST_FAUCET_BCLI_ARGS         default "-regtest -datadir=/data/bitcoin -rpcwallet=test"
- *   REGTEST_FAUCET_COOLDOWN_SECS     default "60"
- *   REGTEST_FAUCET_CONFIRMATIONS     default "1" (blocks mined right after the send)
+ *   REGTEST_FAUCET_DAILY_LIMIT       default "3"
+ *   REGTEST_FAUCET_MAX_SATS          default "100000"
+ *   REGTEST_FAUCET_DEFAULT_SATS      default "100000"
+ *   REGTEST_FAUCET_CONFIRMATIONS     default "6" (blocks mined right after the send)
  *   REGTEST_FAUCET_API_KEY           optional shared secret; required in X-API-Key header when set
  *   REGTEST_FAUCET_AUTOMINE          default "1" — set to "0" to disable initial-fund bootstrap
  */
@@ -31,6 +34,11 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import networks from "@/lib/networks.json";
+import {
+  createDirectVaultDeposit,
+  decodeStealthMetaAddress,
+} from "@utxopia/sdk";
 
 const exec = promisify(execFile);
 
@@ -40,8 +48,13 @@ const BCLI = process.env.REGTEST_FAUCET_BITCOIN_CLI || "/srv/explorer/bitcoin/bi
 const BCLI_ARGS = (
   process.env.REGTEST_FAUCET_BCLI_ARGS || "-regtest -datadir=/data/bitcoin -rpcwallet=test"
 ).split(/\s+/).filter(Boolean);
-const COOLDOWN_SECS = Number(process.env.REGTEST_FAUCET_COOLDOWN_SECS || "60");
-const CONFIRMATIONS = Math.max(1, Number(process.env.REGTEST_FAUCET_CONFIRMATIONS || "1"));
+const DAILY_LIMIT = Math.max(1, Number(process.env.REGTEST_FAUCET_DAILY_LIMIT || "3"));
+const MAX_SATS = Math.max(1, Number(process.env.REGTEST_FAUCET_MAX_SATS || "100000"));
+const DEFAULT_SATS = Math.min(
+  MAX_SATS,
+  Math.max(1, Number(process.env.REGTEST_FAUCET_DEFAULT_SATS || "100000")),
+);
+const CONFIRMATIONS = Math.max(1, Number(process.env.REGTEST_FAUCET_CONFIRMATIONS || "6"));
 const API_KEY = process.env.REGTEST_FAUCET_API_KEY;
 const AUTOMINE = process.env.REGTEST_FAUCET_AUTOMINE !== "0";
 // Coinbase outputs need 100 confirmations before they're spendable, so mine
@@ -49,54 +62,71 @@ const AUTOMINE = process.env.REGTEST_FAUCET_AUTOMINE !== "0";
 // 100 make it spendable).
 const BOOTSTRAP_BLOCKS = 101;
 
-// File-backed per-address cooldown. Survives Next.js process restarts so
-// a hot-reload or redeploy doesn't reset everyone's cooldown to zero. The
+// File-backed daily quota. Survives Next.js process restarts so
+// a hot-reload or redeploy doesn't reset everyone's allowance to zero. The
 // map is loaded lazily on first access and written back after each drip.
 //
-// Path defaults to `.faucet-cooldown.json` in the web project root; override
-// via REGTEST_FAUCET_COOLDOWN_PATH if the deployment has a writable mount.
-const COOLDOWN_PATH = process.env.REGTEST_FAUCET_COOLDOWN_PATH
-  || path.join(process.cwd(), ".faucet-cooldown.json");
+// Path defaults to `.faucet-limits.json` in the web project root; override
+// via REGTEST_FAUCET_LIMIT_PATH if the deployment has a writable mount.
+const LIMIT_PATH = process.env.REGTEST_FAUCET_LIMIT_PATH
+  || process.env.REGTEST_FAUCET_COOLDOWN_PATH
+  || path.join(process.cwd(), ".faucet-limits.json");
 
-interface CooldownStore {
-  /** address → unix ms of last drip */
-  entries: Map<string, number>;
+interface LimitEntry {
+  day: string;
+  count: number;
+  lastAt: number;
 }
 
-function loadCooldownStore(): CooldownStore {
+interface LimitStore {
+  /** recipient/IP key → daily quota entry */
+  entries: Map<string, LimitEntry>;
+}
+
+function todayKey(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function loadLimitStore(): LimitStore {
   try {
-    const raw = fs.readFileSync(COOLDOWN_PATH, "utf8");
-    const obj = JSON.parse(raw) as Record<string, number>;
-    return { entries: new Map(Object.entries(obj)) };
+    const raw = fs.readFileSync(LIMIT_PATH, "utf8");
+    const obj = JSON.parse(raw) as Record<string, LimitEntry | number>;
+    const day = todayKey();
+    const entries = new Map<string, LimitEntry>();
+    for (const [key, value] of Object.entries(obj)) {
+      if (typeof value === "number") {
+        entries.set(key, { day, count: 1, lastAt: value });
+      } else if (value && typeof value.count === "number") {
+        entries.set(key, value);
+      }
+    }
+    return { entries };
   } catch {
     return { entries: new Map() };
   }
 }
 
-function saveCooldownStore(store: CooldownStore): void {
-  // Prune stale entries — anything older than 2× the cooldown window is
-  // useless and keeps the file bounded under load.
-  const cutoffMs = Date.now() - COOLDOWN_SECS * 2_000;
-  const live: Record<string, number> = {};
-  for (const [addr, ts] of store.entries) {
-    if (ts > cutoffMs) live[addr] = ts;
+function saveLimitStore(store: LimitStore): void {
+  const day = todayKey();
+  const live: Record<string, LimitEntry> = {};
+  for (const [key, entry] of store.entries) {
+    if (entry.day === day) live[key] = entry;
   }
   try {
-    fs.writeFileSync(COOLDOWN_PATH, JSON.stringify(live) + "\n", { mode: 0o600 });
+    fs.writeFileSync(LIMIT_PATH, JSON.stringify(live) + "\n", { mode: 0o600 });
   } catch (e) {
     // Disk failure → fall through; the in-memory map still works for this
     // process. Worst case: a restart resets the cooldown for affected
     // addresses.
-    console.warn("[Faucet] Failed to persist cooldown store:", e);
+    console.warn("[Faucet] Failed to persist limit store:", e);
   }
 }
 
-const cooldownStore: CooldownStore = (() => {
-  const g = globalThis as unknown as { __utxopiaFaucetCooldown?: CooldownStore };
-  if (!g.__utxopiaFaucetCooldown) g.__utxopiaFaucetCooldown = loadCooldownStore();
-  return g.__utxopiaFaucetCooldown;
+const limitStore: LimitStore = (() => {
+  const g = globalThis as unknown as { __utxopiaFaucetLimit?: LimitStore };
+  if (!g.__utxopiaFaucetLimit) g.__utxopiaFaucetLimit = loadLimitStore();
+  return g.__utxopiaFaucetLimit;
 })();
-const lastDripMs = cooldownStore.entries;
 
 // Once we've confirmed the wallet has spendable balance (either it always
 // did, or we just bootstrapped it), skip the balance check on future drips.
@@ -109,7 +139,17 @@ const bootstrapState: { confirmed: boolean } = (() => {
 
 interface DripBody {
   address?: string;
+  stealthAddress?: string;
   amountSats?: number;
+}
+
+interface FaucetNetworkConfig {
+  bitcoin?: {
+    network?: string;
+  };
+  ika?: {
+    dwalletXOnlyPubkey?: string;
+  };
 }
 
 async function runBitcoinCli(args: string[]): Promise<string> {
@@ -123,11 +163,75 @@ function isValidRegtestAddress(addr: string): boolean {
   return /^bcrt1[a-z0-9]{38,90}$/.test(addr);
 }
 
+function getClientIp(req: NextRequest): string {
+  const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return forwarded || req.headers.get("x-real-ip") || "unknown";
+}
+
 function satsToBtcDecimal(sats: number): string {
   // bitcoin-cli expects BTC, not sats. Print with 8 decimals to avoid
   // scientific notation tripping up the RPC parser for small amounts.
   const btc = sats / 1e8;
   return btc.toFixed(8);
+}
+
+function hex(buf: Uint8Array): string {
+  return Buffer.from(buf).toString("hex");
+}
+
+function getActiveNetworkConfig(): FaucetNetworkConfig {
+  const network = process.env.NEXT_PUBLIC_NETWORK || process.env.UTXOPIA_NETWORK || "devnet-regtest";
+  const configs = networks as Record<string, FaucetNetworkConfig>;
+  return configs[network] ?? configs["devnet-regtest"];
+}
+
+async function createDepositForStealth(stealthAddress: string): Promise<{
+  btcAddress: string;
+  opReturnPayload: Uint8Array;
+}> {
+  const cfg = getActiveNetworkConfig();
+  const meta = decodeStealthMetaAddress(stealthAddress);
+  const btcNetwork = cfg?.bitcoin?.network === "regtest" ? "regtest" : "testnet";
+  const vaultKeyHex = cfg?.ika?.dwalletXOnlyPubkey;
+
+  if (vaultKeyHex && !/^0+$/.test(vaultKeyHex)) {
+    const vaultKey = Uint8Array.from(Buffer.from(vaultKeyHex, "hex"));
+    const deposit = await createDirectVaultDeposit(meta, vaultKey, btcNetwork);
+    return { btcAddress: deposit.btcAddress, opReturnPayload: deposit.opReturnPayload };
+  }
+
+  throw new Error("active network is missing ika.dwalletXOnlyPubkey; legacy sweep deposits are disabled");
+}
+
+function limitKey(kind: "recipient" | "ip", value: string): string {
+  return `${kind}:${value.toLowerCase()}`;
+}
+
+function getLimitStatus(keys: string[]): { ok: true } | { ok: false; remaining: number } {
+  const day = todayKey();
+  for (const key of keys) {
+    const entry = limitStore.entries.get(key);
+    if (entry?.day === day && entry.count >= DAILY_LIMIT) {
+      const tomorrow = new Date(`${day}T00:00:00.000Z`).getTime() + 24 * 60 * 60 * 1000;
+      return { ok: false, remaining: Math.max(1, Math.ceil((tomorrow - Date.now()) / 1000)) };
+    }
+  }
+  return { ok: true };
+}
+
+function recordLimitHit(keys: string[]): void {
+  const day = todayKey();
+  const now = Date.now();
+  for (const key of keys) {
+    const entry = limitStore.entries.get(key);
+    if (entry?.day === day) {
+      entry.count += 1;
+      entry.lastAt = now;
+    } else {
+      limitStore.entries.set(key, { day, count: 1, lastAt: now });
+    }
+  }
+  saveLimitStore(limitStore);
 }
 
 /**
@@ -196,34 +300,51 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "invalid JSON body" }, { status: 400 });
   }
 
-  const address = (body.address ?? "").trim();
-  const amountSats = Number(body.amountSats ?? 0);
-  if (!isValidRegtestAddress(address)) {
+  const requestedAddress = (body.stealthAddress ?? body.address ?? "").trim();
+  const isStealthAirdrop = requestedAddress.startsWith("utxo:");
+  const amountSats = Number(body.amountSats ?? DEFAULT_SATS);
+  if (!isStealthAirdrop && !isValidRegtestAddress(requestedAddress)) {
     return NextResponse.json(
-      { ok: false, error: "address must be a regtest bech32 (bcrt1…)" },
+      { ok: false, error: "address must be a regtest bech32 (bcrt1…) or UTXOpia stealth address (utxo:…)" },
       { status: 400 },
     );
   }
-  if (!Number.isFinite(amountSats) || amountSats <= 0 || amountSats > 100_000_000) {
+  if (!Number.isInteger(amountSats) || amountSats <= 0 || amountSats > MAX_SATS) {
     return NextResponse.json(
-      { ok: false, error: "amountSats must be 1..100_000_000" },
+      { ok: false, error: `amountSats must be an integer from 1..${MAX_SATS}` },
       { status: 400 },
     );
   }
 
-  // Cooldown check
-  const last = lastDripMs.get(address);
-  if (last !== undefined) {
-    const elapsedMs = Date.now() - last;
-    const remainingSec = Math.ceil((COOLDOWN_SECS * 1000 - elapsedMs) / 1000);
-    if (remainingSec > 0) {
+  const clientIp = getClientIp(req);
+  const quotaKeys = [
+    limitKey("recipient", requestedAddress),
+    limitKey("ip", clientIp),
+  ];
+  const quota = getLimitStatus(quotaKeys);
+  if (!quota.ok) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `daily airdrop limit reached — max ${DAILY_LIMIT} request${DAILY_LIMIT === 1 ? "" : "s"} per day`,
+        retryAfterSec: quota.remaining,
+        dailyLimit: DAILY_LIMIT,
+      },
+      { status: 429, headers: { "Retry-After": String(quota.remaining) } },
+    );
+  }
+
+  let btcAddress = requestedAddress;
+  let opReturnHex: string | undefined;
+  if (isStealthAirdrop) {
+    try {
+      const deposit = await createDepositForStealth(requestedAddress);
+      btcAddress = deposit.btcAddress;
+      opReturnHex = hex(deposit.opReturnPayload);
+    } catch (e) {
       return NextResponse.json(
-        {
-          ok: false,
-          error: `cooldown active — try again in ${remainingSec}s`,
-          retryAfterSec: remainingSec,
-        },
-        { status: 429, headers: { "Retry-After": String(remainingSec) } },
+        { ok: false, error: `invalid stealth address or deposit config: ${truncate(e instanceof Error ? e.message : String(e), 300)}` },
+        { status: 400 },
       );
     }
   }
@@ -243,10 +364,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // 1. Send the BTC
+  // 1. Send the BTC. For `utxo:` airdrops this is a full UTXOpia deposit tx:
+  // payment output to the pool/vault plus OP_RETURN(ephemeralPub || npk).
   let txid: string;
   try {
-    txid = await runBitcoinCli(["sendtoaddress", address, satsToBtcDecimal(amountSats)]);
+    if (opReturnHex) {
+      const outputs = JSON.stringify([
+        { [btcAddress]: Number(satsToBtcDecimal(amountSats)) },
+        { data: opReturnHex },
+      ]);
+      const rawHex = await runBitcoinCli(["createrawtransaction", "[]", outputs]);
+      const fundedJson = await runBitcoinCli(["fundrawtransaction", rawHex]);
+      const fundedHex = JSON.parse(fundedJson).hex;
+      const signedJson = await runBitcoinCli(["signrawtransactionwithwallet", fundedHex]);
+      const signed = JSON.parse(signedJson);
+      if (!signed.complete) throw new Error(`sign failed: ${JSON.stringify(signed.errors ?? [])}`);
+      txid = await runBitcoinCli(["sendrawtransaction", signed.hex]);
+    } else {
+      txid = await runBitcoinCli(["sendtoaddress", btcAddress, satsToBtcDecimal(amountSats)]);
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return NextResponse.json(
@@ -279,14 +415,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // Record cooldown only on full success — if it failed before mining, the
-  // user can retry without waiting (their address didn't actually get funds).
-  lastDripMs.set(address, Date.now());
-  saveCooldownStore(cooldownStore);
+  // Record quota only on full success — if it failed before mining, the user
+  // can retry without burning one of the daily attempts.
+  recordLimitHit(quotaKeys);
 
   return NextResponse.json({
     ok: true,
     txid,
+    mode: isStealthAirdrop ? "utxo_airdrop" : "btc_drip",
+    depositAddress: isStealthAirdrop ? btcAddress : undefined,
+    opReturn: opReturnHex,
+    amountSats,
+    dailyLimit: DAILY_LIMIT,
     blocksMined,
     minerAddress: minerAddr,
   });

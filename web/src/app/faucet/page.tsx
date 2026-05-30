@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Droplets, Bitcoin, ExternalLink } from "lucide-react";
-import { getNetworkConfig } from "@/lib/network-config";
+import { ArrowLeft, Droplets, Wallet, ExternalLink } from "lucide-react";
+import { detectNetwork, getNetworkConfig } from "@/lib/network-config";
 import { cn } from "@/lib/utils";
 
 /**
@@ -12,20 +12,20 @@ import { cn } from "@/lib/utils";
  * "not available on this network" hint instead of a working form, so the
  * route is safe to merge even before the backend wiring lands.
  *
- * Backend wiring lives at `/api/faucet/regtest` (stub until the regtest
- * `sendtoaddress` route is implemented — see TODOS.md "Regtest faucet
- * backend route").
+ * Backend wiring lives at `/api/faucet/regtest`.
  */
 export default function FaucetPage() {
-  const cfg = useMemo(() => {
+  const network = useMemo(() => {
     try {
-      return getNetworkConfig();
+      const currentNetwork = detectNetwork();
+      getNetworkConfig(currentNetwork);
+      return currentNetwork;
     } catch {
       return null;
     }
   }, []);
 
-  const isRegtest = cfg?.bitcoin.network === "regtest";
+  const isHybrid = network === "devnet-regtest";
 
   return (
     <main className="min-h-screen bg-background hacker-bg noise-overlay flex flex-col items-center justify-center p-4">
@@ -38,7 +38,7 @@ export default function FaucetPage() {
           Back home
         </Link>
         <span className="text-caption text-gray font-mono">
-          {cfg?.bitcoin.network ?? "?"}
+          {network ?? "?"}
         </span>
       </div>
 
@@ -54,14 +54,14 @@ export default function FaucetPage() {
             <Droplets className="w-5 h-5 text-warning" />
           </div>
           <div>
-            <h1 className="text-heading6 text-foreground">Regtest BTC faucet</h1>
+            <h1 className="text-heading6 text-foreground">Regtest zkBTC airdrop</h1>
             <p className="text-caption text-gray">
-              Drip a few regtest BTC to your own address so you can deposit.
+              Deposit 0.001 regtest BTC into a UTXOpia stealth address.
             </p>
           </div>
         </div>
 
-        {isRegtest ? <FaucetForm /> : <NotAvailableNotice network={cfg?.bitcoin.network} />}
+        {isHybrid ? <FaucetForm /> : <NotAvailableNotice network={network ?? "unknown"} />}
       </div>
     </main>
   );
@@ -107,13 +107,22 @@ docker compose -f docker-compose.hybrid.yml up --build -d
 }
 
 type DripResult =
-  | { kind: "ok"; txid: string; blocksMined?: number; warning?: string }
+  | {
+      kind: "ok";
+      txid: string;
+      blocksMined?: number;
+      warning?: string;
+      depositAddress?: string;
+      opReturn?: string;
+      amountSats?: number;
+      dailyLimit?: number;
+    }
   | { kind: "cooldown"; retryAfterSec: number; message: string }
   | { kind: "err"; message: string };
 
 function FaucetForm() {
   const [address, setAddress] = useState("");
-  const [amountSats, setAmountSats] = useState(1_000_000);
+  const [amountSats, setAmountSats] = useState(100_000);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<DripResult | null>(null);
 
@@ -135,7 +144,7 @@ function FaucetForm() {
     return () => clearInterval(iv);
   }, [result]);
 
-  const validAddress = /^bcrt1[a-z0-9]{38,90}$/.test(address.trim());
+  const validAddress = /^utxo:[0-9a-fA-F]{192}$/.test(address.trim());
 
   async function handleDrip() {
     setSubmitting(true);
@@ -151,6 +160,10 @@ function FaucetForm() {
         txid?: string;
         blocksMined?: number;
         warning?: string;
+        depositAddress?: string;
+        opReturn?: string;
+        amountSats?: number;
+        dailyLimit?: number;
         retryAfterSec?: number;
         error?: string;
       };
@@ -168,6 +181,10 @@ function FaucetForm() {
           txid: body.txid ?? "",
           blocksMined: body.blocksMined,
           warning: body.warning,
+          depositAddress: body.depositAddress,
+          opReturn: body.opReturn,
+          amountSats: body.amountSats,
+          dailyLimit: body.dailyLimit,
         });
       }
     } catch (e) {
@@ -184,15 +201,15 @@ function FaucetForm() {
     <div className="space-y-4">
       <div>
         <label className="text-body2 text-gray-light pl-2 mb-2 block">
-          Your regtest BTC address
+          Recipient UTXOpia address
         </label>
         <div className="relative">
-          <Bitcoin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray" />
+          <Wallet className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray" />
           <input
             type="text"
             value={address}
             onChange={(e) => setAddress(e.target.value)}
-            placeholder="bcrt1q… or bcrt1p…"
+            placeholder="utxo:..."
             className={cn(
               "w-full p-3 pl-10 bg-muted border border-gray/15 rounded-[12px]",
               "text-body2 font-mono text-foreground placeholder:text-gray",
@@ -208,8 +225,8 @@ function FaucetForm() {
         </label>
         <input
           type="number"
-          min={1000}
-          max={100_000_000}
+          min={1}
+          max={100_000}
           step={1000}
           value={amountSats}
           onChange={(e) => setAmountSats(Number(e.target.value) || 0)}
@@ -220,7 +237,7 @@ function FaucetForm() {
           )}
         />
         <p className="text-caption text-gray mt-1 pl-2">
-          {(amountSats / 1e8).toFixed(8)} BTC
+          {(amountSats / 1e8).toFixed(8)} BTC. Limit: 3 airdrops per day.
         </p>
       </div>
 
@@ -231,18 +248,28 @@ function FaucetForm() {
       >
         <Droplets className="w-5 h-5" />
         {submitting
-          ? "Dripping…"
+          ? "Creating deposit…"
           : cooldownActive
             ? `Wait ${cooldownLeft}s`
-            : "Send regtest BTC"}
+            : "Airdrop zkBTC deposit"}
       </button>
 
       {result?.kind === "ok" && (
         <div className="p-3 rounded-[10px] border border-success/30 bg-success/5 text-caption text-success space-y-1">
           <div>
-            Sent + confirmed{result.blocksMined != null ? ` (${result.blocksMined} block${result.blocksMined === 1 ? "" : "s"} mined)` : ""}.
+            Deposit broadcast + confirmed{result.blocksMined != null ? ` (${result.blocksMined} block${result.blocksMined === 1 ? "" : "s"} mined)` : ""}.
           </div>
           <div className="font-mono break-all">{result.txid || "(see backend log)"}</div>
+          {result.depositAddress && (
+            <div className="pt-1 text-success/80">
+              Pool address: <span className="font-mono break-all">{result.depositAddress}</span>
+            </div>
+          )}
+          {result.opReturn && (
+            <div className="pt-1 text-success/80">
+              OP_RETURN: <span className="font-mono break-all">{result.opReturn}</span>
+            </div>
+          )}
           {result.warning && (
             <div className="text-warning pt-1 border-t border-success/10">⚠ {result.warning}</div>
           )}
@@ -260,9 +287,8 @@ function FaucetForm() {
       )}
 
       <p className="text-caption text-gray">
-        After receiving BTC, head to <Link href="/send" className="text-privacy hover:underline">Send</Link>{" "}
-        and create a deposit — paste the OP_RETURN payload from{" "}
-        <span className="font-mono">scripts/deposit-for-stealth.ts</span>.
+        Share this page with a tester and ask them for their <span className="font-mono">utxo:</span>{" "}
+        address. The backend creates the regtest BTC deposit and the tracker credits the note after it sees the transaction.
       </p>
     </div>
   );

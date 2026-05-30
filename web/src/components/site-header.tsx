@@ -1,15 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Rocket, Menu, X, Settings as SettingsIcon } from "lucide-react";
+import { Droplets, Rocket, Menu, X, Settings as SettingsIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AdvancedModeBadge } from "@/components/ui/advanced-mode-badge";
 import { NetworkBadge } from "@/components/ui/network-badge";
+import { detectNetwork, hrefWithChain } from "@/lib/network-config";
 
 export function SiteHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const network = useMemo(() => detectNetwork(), []);
+  const isHybrid = network === "devnet-regtest";
+  const chainHref = (href: string) => hrefWithChain(href, network);
 
   return (
     <>
@@ -21,7 +25,7 @@ export function SiteHeader() {
           transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
         >
           {/* Logo — capybara mark, transparent, floats naturally */}
-          <Link href="/" className="flex items-center gap-2.5 group shrink-0">
+          <Link href={chainHref("/")} className="flex items-center gap-2.5 group shrink-0">
             <motion.div
               className="relative w-8 h-8 flex items-center justify-center transition-all duration-300 group-hover:drop-shadow-[0_0_8px_rgba(208,173,92,0.4)]"
               whileHover={{ scale: 1.08 }}
@@ -49,7 +53,7 @@ export function SiteHeader() {
             ].map(({ href, label }) => (
               <motion.div key={href} whileHover={{ y: -1 }}>
                 <Link
-                  href={href}
+                  href={chainHref(href)}
                   className="text-xs font-medium text-gray hover:text-foreground transition-all py-3 px-2"
                 >
                   {label}
@@ -62,8 +66,19 @@ export function SiteHeader() {
           <div className="hidden md:flex items-center gap-2 shrink-0">
             <NetworkBadge />
             <AdvancedModeBadge />
+            {isHybrid && (
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <Link
+                  href={chainHref("/faucet")}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold border border-warning/15 px-3.5 py-2.5 rounded-full transition-all text-warning bg-warning/10 hover:bg-warning/15 hover:border-warning/30"
+                >
+                  <Droplets className="w-3 h-3" />
+                  Faucet
+                </Link>
+              </motion.div>
+            )}
             <Link
-              href="/settings"
+              href={chainHref("/settings")}
               aria-label="Settings"
               className="p-2 rounded-full text-gray hover:text-foreground hover:bg-muted/50 transition-colors"
             >
@@ -71,7 +86,7 @@ export function SiteHeader() {
             </Link>
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
               <Link
-                href="/vault"
+                href={chainHref("/vault")}
                 className="inline-flex items-center gap-1.5 text-xs font-semibold border border-privacy/10 px-4 py-2.5 rounded-full transition-all text-privacy bg-privacy/10 hover:bg-privacy/10 hover:border-privacy/30 hover:shadow-[0_0_15px_rgba(20,241,149,0.15)]"
               >
                 <Rocket className="w-3 h-3" />
@@ -114,13 +129,14 @@ export function SiteHeader() {
               <div className="space-y-1">
                 {[
                   { href: "/vault", label: "Vault" },
+                  ...(isHybrid ? [{ href: "/faucet", label: "Faucet" }] : []),
                   { href: "/explorer", label: "Explorer" },
                   { href: "/docs", label: "Docs" },
                   { href: "/settings", label: "Settings" },
                 ].map(({ href, label }) => (
                   <Link
                     key={href}
-                    href={href}
+                    href={chainHref(href)}
                     onClick={() => setMobileOpen(false)}
                     className="flex items-center px-4 py-3 rounded-xl text-sm font-medium text-gray-light hover:text-foreground hover:bg-muted/50 transition-colors"
                   >

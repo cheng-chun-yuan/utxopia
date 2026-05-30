@@ -14,6 +14,8 @@ import { ScrollReveal } from "@/components/ui/scroll-reveal";
 import { GradientBorderCard } from "@/components/ui/gradient-border-card";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { MouseSpotlight } from "@/components/ui/mouse-spotlight";
+import { useChainEnvironment } from "@/lib/chain-environment";
+import { hrefWithChain } from "@/lib/network-config";
 
 /* ── Feature visualizations ── */
 
@@ -119,7 +121,7 @@ const SpeedViz = () => (
     </div>
     <div className="flex items-center gap-2 z-10 mt-1">
       <Zap className="w-3 h-3 text-sol/50" />
-      <span className="text-[9px] font-mono text-sol/40">Solana 65k TPS</span>
+      <span className="text-[9px] font-mono text-sol/40">high-throughput settlement</span>
     </div>
   </div>
 );
@@ -194,7 +196,7 @@ FeatureCard.displayName = "FeatureCard";
 
 const FEATURE_CARDS = [
   { icon: EyeOff, title: "ZK Private", description: "Amounts & addresses hidden by zero-knowledge proofs", iconColor: "text-privacy", hoverGlow: "rgba(20, 241, 149, 0.12)", step: "01", visualization: PrivacyViz },
-  { icon: Layers, title: "Cross-Chain Shielding", description: "Bitcoin and any Solana token shielded into one pool", iconColor: "text-privacy", hoverGlow: "rgba(20, 241, 149, 0.12)", step: "02", visualization: BackedViz },
+  { icon: Layers, title: "Cross-Chain Shielding", description: "Bitcoin and supported native tokens shielded into one pool", iconColor: "text-privacy", hoverGlow: "rgba(20, 241, 149, 0.12)", step: "02", visualization: BackedViz },
   { icon: Zap, title: "Instant", description: "Auto-confirmed deposits, sub-second settlement", iconColor: "text-sol", hoverGlow: "rgba(153, 69, 255, 0.12)", step: "03", visualization: SpeedViz },
   { icon: ShieldCheck, title: "Audit-Ready", description: "Selective disclosure on demand. Your viewing keys, your control.", iconColor: "text-cyan", hoverGlow: "rgba(0, 255, 255, 0.08)", step: "04", visualization: ComplianceViz },
 ];
@@ -215,6 +217,13 @@ export default function Home() {
   const { stats, isLoading } = usePoolStats();
   const prices = useTokenPrices();
   const { transactions } = useExplorer();
+  const { networkId } = useChainEnvironment();
+  const isSui = networkId === "sui-testnet" || networkId === "sui-regtest";
+  const chainName = isSui ? "Sui" : "Solana";
+  const nativeToken = isSui
+    ? { name: "SUI", label: "Sui", status: "POC", logo: "/brand/logo-transparent-128.png" }
+    : { name: "SOL", label: "Solana", status: "Live", logo: "/tokens/sol.png" };
+  const chainHref = (href: string) => hrefWithChain(href, networkId);
   const txCount = transactions.length;
 
   return (
@@ -232,30 +241,16 @@ export default function Home() {
           </div>
 
           <div className="max-w-4xl mx-auto text-center relative z-10">
-            <ScrollReveal delay={0}>
-              <div className="flex items-center justify-center mb-5">
-                <motion.div
-                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple/10 border border-purple/20 backdrop-blur-sm cursor-default hover:border-purple/40 transition-all duration-300"
-                  whileHover={{ scale: 1.05 }}
-                >
-                  <img src="/zeus_network.svg" alt="Zeus" className="w-4 h-4" />
-                  <span className="text-caption">
-                    <span className="text-gray-light">Powered by</span>{" "}
-                    <span className="text-purple">Zeus Network</span>
-                  </span>
-                </motion.div>
-              </div>
-            </ScrollReveal>
-
             <ScrollReveal delay={0.1}>
               <h1 className="hero-title text-foreground">
-                Private. <span className="text-privacy">Audit-ready.</span> Solana.
+                Private. <span className="text-privacy">Audit-ready.</span>{" "}
+                <span className={isSui ? "text-sui" : "text-sol"}>{chainName}.</span>
               </h1>
             </ScrollReveal>
 
             <ScrollReveal delay={0.15}>
               <p className="mt-6 text-base md:text-lg text-gray font-light max-w-lg mx-auto leading-relaxed">
-                One shielded pool for Bitcoin and any Solana token. Privacy by default, auditable on demand.
+                One shielded pool for Bitcoin and supported {chainName} assets. Privacy by default, auditable on demand.
               </p>
             </ScrollReveal>
 
@@ -280,7 +275,7 @@ export default function Home() {
               <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}>
                   <Link
-                    href="/vault"
+                    href={chainHref("/vault")}
                     className="btn-privacy btn-pill btn-shimmer inline-flex items-center gap-2 px-7 py-2.5 text-base shadow-[0_0_20px_rgba(20,241,149,0.2)] hover:shadow-[0_0_35px_rgba(20,241,149,0.4)] transition-shadow"
                   >
                     <Rocket className="w-5 h-5" />
@@ -290,7 +285,7 @@ export default function Home() {
                 </motion.div>
                 <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}>
                   <Link
-                    href="/docs"
+                    href={chainHref("/docs")}
                     className="btn-tertiary btn-pill inline-flex items-center gap-2 px-5 py-2.5 border border-gray/10 backdrop-blur-md hover:bg-muted/50 hover:border-gray/20 transition-all"
                   >
                     <Shield className="w-4 h-4" />
@@ -368,7 +363,7 @@ export default function Home() {
                     Deposit and shield tokens into private commitments.
                   </p>
                 </div>
-                <Link href="/vault" className="text-sm text-privacy/70 hover:text-privacy transition-colors flex items-center gap-1 shrink-0">
+                <Link href={chainHref("/vault")} className="text-sm text-privacy/70 hover:text-privacy transition-colors flex items-center gap-1 shrink-0">
                   Start shielding <ArrowRight className="w-3.5 h-3.5" />
                 </Link>
               </div>
@@ -377,7 +372,7 @@ export default function Home() {
               <div className="flex gap-3 overflow-x-auto pb-2">
                 {[
                   { name: "BTC", label: "Bitcoin", status: "Live", logo: "/tokens/btc.png" },
-                  { name: "SOL", label: "Solana", status: "Live", logo: "/tokens/sol.png" },
+                  nativeToken,
                   { name: "USDC", label: "USD Coin", status: "Live", logo: "/tokens/usdc.png" },
                   { name: "USDT", label: "Tether", status: "Live", logo: "/tokens/usdt.png" },
                   { name: "ETH", label: "Ethereum", status: "Soon", logo: "/tokens/eth.png" },
@@ -396,7 +391,7 @@ export default function Home() {
                       <p className="text-sm font-semibold text-foreground">{token.name}</p>
                       <p className="text-[10px] text-gray/50">{token.label}</p>
                     </div>
-                    {token.status === "Live" && (
+                    {(token.status === "Live" || token.status === "POC") && (
                       <span className="w-1.5 h-1.5 rounded-full bg-privacy ml-1 animate-pulse" />
                     )}
                   </div>
@@ -419,7 +414,7 @@ export default function Home() {
                   How It <span className="text-privacy">Works</span>
                 </h2>
                 <p className="text-sm text-gray font-light">
-                  Four layers of protection for your tokens on Solana.
+                  Four layers of protection for your tokens on {chainName}.
                 </p>
               </div>
             </ScrollReveal>
@@ -447,7 +442,7 @@ export default function Home() {
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                     <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}>
                       <Link
-                        href="/vault"
+                        href={chainHref("/vault")}
                         className="btn-privacy btn-pill btn-shimmer inline-flex items-center gap-2 px-7 py-3 text-base shadow-[0_0_20px_rgba(20,241,149,0.2)] hover:shadow-[0_0_35px_rgba(20,241,149,0.4)] transition-shadow"
                       >
                         <Rocket className="w-5 h-5" />
@@ -457,7 +452,7 @@ export default function Home() {
                     </motion.div>
                     <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}>
                       <Link
-                        href="/explorer"
+                        href={chainHref("/explorer")}
                         className="btn-tertiary btn-pill inline-flex items-center gap-2 px-5 py-3 border border-gray/10 backdrop-blur-md hover:bg-muted/50 hover:border-gray/20 transition-all"
                       >
                         View Explorer

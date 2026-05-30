@@ -48,6 +48,9 @@ export {
   deriveKeysFromWallet,
   deriveKeysFromSeed,
   deriveKeysFromSeedCircuit,
+  deriveKeysFromAuthSignature,
+  setupKeysFromAuthSignature,
+  generateRandomAuthSignature,
   // Key setup (combined derivation + stealth address)
   setupKeysFromWallet,
   setupKeysFromSeed,
@@ -71,6 +74,8 @@ export {
   // Types
   type UTXOpiaKeys,
   type KeySetupResult,
+  type AuthSignatureKeyDerivationOptions,
+  type AuthSignatureKeySetupResult,
   type SerializedKeysForStorage,
   type StealthMetaAddress,
   type WalletSignerAdapter,

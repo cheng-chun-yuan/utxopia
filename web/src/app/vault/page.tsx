@@ -24,6 +24,7 @@ import { motion } from "framer-motion";
 import {
   ArrowDownToLine,
   ArrowRight,
+  Droplets,
   Wallet,
   Shield,
   Key,
@@ -56,6 +57,7 @@ import { OnboardingModal } from "@/components/onboarding-modal";
 import { AuthModal } from "@/components/auth-modal";
 import { HoldButton } from "@/components/ui/hold-button";
 import { useChainEnvironment } from "@/lib/chain-environment";
+import { SuiDashboard } from "@/components/sui/sui-dashboard";
 
 export default function VaultPage() {
   const wallet = useWallet();
@@ -132,13 +134,21 @@ export default function VaultPage() {
   const [viewKeyModalOpen, setViewKeyModalOpen] = useState(false);
 
   const isPasskeyUser = keys && keys.solanaPublicKey.every((b: number) => b === 0);
+  const [showSnsInput, setShowSnsInput] = useState(false);
+  const [snsNameInput, setSnsNameInput] = useState("");
+
+  if (networkId === "sui-testnet" || networkId === "sui-regtest") {
+    return (
+      <main className="min-h-screen bg-background hacker-bg noise-overlay flex flex-col">
+        <SiteHeader />
+        <SuiDashboard />
+        <SiteFooter />
+      </main>
+    );
+  }
 
   const snsConfig = getConfig();
   const parentDomain = snsConfig.snsParentDomain || "btcpro";
-
-  // SNS registration state
-  const [showSnsInput, setShowSnsInput] = useState(false);
-  const [snsNameInput, setSnsNameInput] = useState("");
 
   const handleRegisterSnsName = async () => {
     if (!snsNameInput) return;
@@ -429,6 +439,9 @@ export default function VaultPage() {
               <div className="flex items-center justify-center gap-5 sm:gap-8 mb-6">
                 {[
                   { icon: <ArrowDownToLine className="w-5 h-5" />, label: "Deposit", href: "/vault/deposit", color: "text-green-400" },
+                  ...(networkId === "devnet-regtest"
+                    ? [{ icon: <Droplets className="w-5 h-5" />, label: "Faucet", href: "/faucet", color: "text-warning" }]
+                    : []),
                   { icon: <Send className="w-5 h-5" />, label: "Send", href: "/send", color: "text-purple-400" },
                 ].filter((a) => !isViewOnly || a.label === "Send")
                   .map((action) => (

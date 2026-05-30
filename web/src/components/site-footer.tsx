@@ -3,8 +3,13 @@
 import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
+import { useChainEnvironment } from "@/lib/chain-environment";
+import { hrefWithChain } from "@/lib/network-config";
 
 export function SiteFooter() {
+  const { networkId } = useChainEnvironment();
+  const chainName = networkId === "sui-testnet" || networkId === "sui-regtest" ? "Sui" : "Solana";
+
   return (
     <footer className="w-full border-t border-gray/10 bg-background/80 backdrop-blur-lg py-12 px-6 relative overflow-hidden">
       {/* Subtle top gradient line */}
@@ -17,7 +22,7 @@ export function SiteFooter() {
         viewport={{ once: true }}
         transition={{ duration: 0.5 }}
       >
-        <Link href="/" className="flex items-center gap-2 group">
+        <Link href={hrefWithChain("/", networkId)} className="flex items-center gap-2 group">
           <div className="relative w-6 h-6 flex items-center justify-center transition-transform group-hover:scale-110">
             <Image
               src="/brand/logo-transparent-128.png"
@@ -33,12 +38,12 @@ export function SiteFooter() {
         </Link>
 
         <div className="text-caption text-gray">
-          ZK Privacy for Every Token on Solana
+          ZK Privacy for Every Token on {chainName}
         </div>
 
-        <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption text-gray/60 hover:text-gray-light transition-all hover:-translate-y-0.5 flex items-center gap-1.5">
-          Powered by <Image src="/zeus_network.svg" alt="Zeus Network" width={16} height={16} className="w-4 h-4" />Zeus Network
-        </a>
+        <div className="text-caption text-gray/60">
+          Privacy-preserving bridge infrastructure
+        </div>
       </motion.div>
     </footer>
   );

@@ -1,10 +1,10 @@
 //! UTXO record account (zero-copy)
 //!
-//! Tracks pool BTC UTXOs on-chain for trustless miner fee computation.
+//! Tracks pool BTC UTXOs on-chain for trustless withdrawal/miner-fee accounting.
 //! PDA seeds = ["utxo", txid(32), vout_le(4)], so each UTXO has a unique address.
 //!
 //! Lifecycle:
-//! 1. Created by complete_deposit (Unspent) when sweep tx deposits to pool
+//! 1. Created by complete_deposit (Unspent) when a direct Ika-vault BTC deposit lands
 //! 2. Marked Reserved by mark_processing when selected for a withdrawal tx
 //! 3. Closed by complete_redemption after BTC tx is confirmed (reclaim rent)
 //! 4. Change output in withdrawal tx creates a new UTXO PDA (Unspent)

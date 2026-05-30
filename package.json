@@ -3,7 +3,9 @@
   "private": true,
   "workspaces": [
     "sdk",
-    "web"
+    "web",
+    "packages/*",
+    "chains/sui/indexer"
   ],
   "scripts": {
     "build:sdk": "cd sdk && bun run build",
@@ -18,6 +20,25 @@
     "setup:seed": "./scripts/setup.sh localnet --seed-only",
     "test": "bun run test:sdk && bun run test:web",
     "test:sdk": "bun test sdk/test/",
+    "test:sdk-core": "cd packages/sdk-core && bun test test",
+    "test:sdk-sui": "cd packages/sdk-sui && bun test test",
+    "test:btc-client": "cd packages/btc-client && bun test test",
+    "test:sui-indexer": "cd chains/sui/indexer && bun test test",
+    "test:sui-contracts": "cd chains/sui/contracts && sui move test",
+    "test:sui": "bun run test:sui-contracts && bun run test:sdk-core && bun run test:sdk-sui && bun run test:btc-client && bun run test:sui-indexer",
+    "poc:sui-core": "bun run chains/sui/scripts/core-poc.ts",
+    "sui:poc:deploy": "bun run chains/sui/scripts/deploy.ts",
+    "sui:poc:init": "bun run chains/sui/scripts/init.ts",
+    "sui:poc:register-vkey": "bun run chains/sui/scripts/register-vkey.ts",
+    "sui:ika:status": "bun run chains/sui/scripts/ika-status.ts",
+    "sui:ika:discover": "bun run chains/sui/scripts/ika-discover.ts",
+    "sui:ika:import-key": "bun run chains/sui/scripts/ika-import-key.ts",
+    "sui:poc:live-core": "bun run chains/sui/scripts/live-core-poc.ts",
+    "sui:poc:live-transact": "bun run chains/sui/scripts/live-transact.ts",
+    "sui:poc:regtest-flow": "bun run chains/sui/scripts/regtest-flow.ts",
+    "sui:poc:all": "bun run chains/sui/scripts/live-all.ts",
+    "sui:poc:fresh-all": "bun run chains/sui/scripts/live-all.ts --fresh",
+    "export:sui-vkey": "cargo run --manifest-path tools/sui-groth16-exporter/Cargo.toml -- vkey",
     "test:web": "cd web && bun test src/",
     "test:chain": "bun run scripts/e2e/run-all.ts",
     "test:full-stack": "bun run scripts/e2e/full-stack-smoke.ts",
@@ -25,6 +46,8 @@
     "vercel-build": "bun run build:sdk && bun run build:frontend"
   },
   "dependencies": {
+    "@ika.xyz/sdk": "^0.4.1",
+    "@mysten/sui": "^2.17.0",
     "@noble/curves": "^2.0.1",
     "@noble/hashes": "^2.0.1",
     "bech32": "^2.0.0",
