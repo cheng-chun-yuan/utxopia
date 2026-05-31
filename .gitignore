@@ -73,5 +73,6 @@ backend/data/*.db
 
 # Superpowers design docs (generated, not tracked)
 docs/superpowers/
+outputs/
 scripts/.demo-seed.json
 contracts/programs/chadbuffer/*.so
