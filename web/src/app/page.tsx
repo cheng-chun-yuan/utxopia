@@ -218,10 +218,10 @@ export default function Home() {
   const { stats, isLoading } = usePoolStats();
   const prices = useTokenPrices();
   const { transactions } = useExplorer();
-  const { networkId } = useChainEnvironment();
-  const isSui = networkId === "sui-testnet" || networkId === "sui-regtest";
-  const chainName = isSui ? "Sui" : "Solana";
-  const nativeToken = isSui
+  const { networkId, config } = useChainEnvironment();
+  const chain = config.chain ?? "solana";
+  const chainName = chain === "sui" ? "Sui" : "Solana";
+  const nativeToken = chain === "sui"
     ? { name: "SUI", label: "Sui", status: "Live", logo: "/tokens/sui.png" }
     : { name: "SOL", label: "Solana", status: "Live", logo: "/tokens/sol.png" };
   const chainHref = (href: string) => hrefWithChain(href, networkId);
@@ -245,7 +245,7 @@ export default function Home() {
             <ScrollReveal delay={0.1}>
               <h1 className="hero-title text-foreground">
                 Private. <span className="text-privacy">Audit-ready.</span>{" "}
-                <span className={isSui ? "text-sui" : "text-sol"}>{chainName}.</span>
+                <span className={chain === "sui" ? "text-sui" : "text-sol"}>{chainName}.</span>
               </h1>
             </ScrollReveal>
 

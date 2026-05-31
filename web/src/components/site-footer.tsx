@@ -7,8 +7,9 @@ import { useChainEnvironment } from "@/lib/chain-environment";
 import { hrefWithChain } from "@/lib/network-config";
 
 export function SiteFooter() {
-  const { networkId } = useChainEnvironment();
-  const chainName = networkId === "sui-testnet" || networkId === "sui-regtest" ? "Sui" : "Solana";
+  const { networkId, config } = useChainEnvironment();
+  const chain = config.chain ?? "solana";
+  const chainName = chain === "sui" ? "Sui" : "Solana";
 
   return (
     <footer className="w-full border-t border-gray/10 bg-background/80 backdrop-blur-lg py-12 px-6 relative overflow-hidden">

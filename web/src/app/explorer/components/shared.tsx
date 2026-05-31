@@ -278,8 +278,8 @@ export function Td({ children, className, colSpan }: { children?: React.ReactNod
 
 export function ChainTxLink({ signature }: { signature: string }) {
   const { config } = useChainEnvironment();
-  const isSui = config.chain === "sui";
-  const href = isSui && config.sui
+  const chain = config.chain ?? "solana";
+  const href = chain === "sui" && config.sui
     ? `${config.sui.explorerUrl.replace(/\/$/, "")}/txblock/${signature}?network=testnet`
     : getSolanaExplorerTxUrl(signature);
 
@@ -288,7 +288,7 @@ export function ChainTxLink({ signature }: { signature: string }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className={cn("transition-colors", isSui ? "text-sui/70 hover:text-sui" : "text-gray hover:text-gray-light")}
+      className={cn("transition-colors", chain === "sui" ? "text-sui/70 hover:text-sui" : "text-gray hover:text-gray-light")}
       aria-label="View transaction"
     >
       <ExternalLink className="w-3.5 h-3.5" />

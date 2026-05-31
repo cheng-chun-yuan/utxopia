@@ -112,10 +112,10 @@ export function RedeemDetails({ tx, redemption }: { tx: TransferTx; redemption?:
 /** Vertical timeline showing withdrawal lifecycle */
 function WithdrawTimeline({ tx, redemption: r }: { tx: TransferTx; redemption?: RedemptionRecord }) {
   const { config } = useChainEnvironment();
-  const isSui = config.chain === "sui";
-  const chainName = isSui ? "Sui" : "Solana";
-  const chainIcon = isSui ? "/tokens/sui.png" : "/tokens/sol.png";
-  const chainTxUrl = (id: string) => isSui && config.sui
+  const chain = config.chain ?? "solana";
+  const chainName = chain === "sui" ? "Sui" : "Solana";
+  const chainIcon = chain === "sui" ? "/tokens/sui.png" : "/tokens/sol.png";
+  const chainTxUrl = (id: string) => chain === "sui" && config.sui
     ? `${config.sui.explorerUrl.replace(/\/$/, "")}/txblock/${id}?network=testnet`
     : getSolanaExplorerTxUrl(id);
   const statusOrder: Record<string, number> = { Pending: 1, Processing: 2, "BTC Sent": 3, Completed: 4 };
@@ -188,7 +188,7 @@ function WithdrawTimeline({ tx, redemption: r }: { tx: TransferTx; redemption?: 
                   href={step.icon === "btc" ? `${getMempoolExplorerUrl()}/tx/${step.txId}` : chainTxUrl(step.txId)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={cn("transition-colors p-0.5", step.icon === "btc" ? "text-btc/40 hover:text-btc" : isSui ? "text-sui/40 hover:text-sui" : "text-purple-400/40 hover:text-purple-400")}
+                  className={cn("transition-colors p-0.5", step.icon === "btc" ? "text-btc/40 hover:text-btc" : chain === "sui" ? "text-sui/40 hover:text-sui" : "text-purple-400/40 hover:text-purple-400")}
                 >
                   <ExternalLink className="w-2.5 h-2.5" />
                 </a>
