@@ -495,7 +495,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       opReturn: opReturnHex,
     });
     if (remote) {
-      if (remote.ok) recordLimitHit(quotaKeys);
       return remote;
     }
   }

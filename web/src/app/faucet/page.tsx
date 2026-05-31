@@ -134,6 +134,12 @@ function FaucetForm({ isSui = false, network }: { isSui?: boolean; network: stri
     setResult(null);
   }, [address, amountSats]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const initialAddress = params.get("address");
+    if (initialAddress) setAddress(initialAddress);
+  }, []);
+
   // Live cooldown countdown so the user sees the seconds tick down.
   const [cooldownLeft, setCooldownLeft] = useState(0);
   useEffect(() => {
