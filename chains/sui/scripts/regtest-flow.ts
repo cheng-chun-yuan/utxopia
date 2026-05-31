@@ -5,11 +5,13 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
+import { Curve, SignatureAlgorithm } from "@ika.xyz/sdk";
 import { computeBoundParamsHash } from "../../../sdk/src/bound-params";
 import { BN254_FIELD_PRIME, bytesToBigint } from "../../../sdk/src/crypto";
 import { eddsaGetPubKey, eddsaPoseidonSign } from "../../../sdk/src/keys";
 import { poseidonHashSync } from "../../../sdk/src/poseidon";
 import { UTXOpiaSuiAdapter } from "../../../packages/sdk-sui/src/sui-adapter";
+import { UTXOpiaSuiIkaAdapter } from "../../../packages/sdk-sui/src/ika";
 import {
   createOpReturnTx,
   getNewAddress,
@@ -27,6 +29,7 @@ const ZKBTC_TOKEN_ID = 0x7a627463n;
 const CIRCUIT = "joinsplit_1x1";
 
 const state = readState();
+const SUI_RPC_URL = process.env.UTXOPIA_SUI_RPC_URL ?? state.rpcUrl ?? "https://fullnode.testnet.sui.io:443";
 const packageId = requireState(state.packageId, "packageId");
 const pool = requireState(state.pool, "pool");
 const btcDepositRegistry = requireState(state.btcDepositRegistry, "btcDepositRegistry");
@@ -45,26 +48,27 @@ if (amount <= minerFee + 546n) {
 if (withdrawalSignerMode !== "relayer" && withdrawalSignerMode !== "ika") {
   throw new Error("UTXOPIA_SUI_WITHDRAW_SIGNER_MODE must be `relayer` or `ika`");
 }
+const ikaSigningConfig = withdrawalSignerMode === "ika" ? requireIkaSuiSigningConfig() : null;
 
 let adapter = createAdapter(redemptionCap);
 
 function createAdapter(cap: typeof redemptionCap) {
   return new UTXOpiaSuiAdapter({
-  rpcUrl: process.env.UTXOPIA_SUI_RPC_URL ?? "https://fullnode.testnet.sui.io:443",
-  packageId,
-  poolObjectId: pool.objectId,
-  poolInitialSharedVersion: pool.initialSharedVersion,
-  btcDepositRegistryObjectId: btcDepositRegistry.objectId,
-  btcDepositRegistryInitialSharedVersion: btcDepositRegistry.initialSharedVersion,
-  nullifierRegistryObjectId: nullifierRegistry.objectId,
-  nullifierRegistryInitialSharedVersion: nullifierRegistry.initialSharedVersion,
-  redemptionQueueObjectId: redemptionQueue.objectId,
-  redemptionQueueInitialSharedVersion: redemptionQueue.initialSharedVersion,
-  redemptionCapObjectId: redemptionCap.objectId,
+    rpcUrl: SUI_RPC_URL,
+    packageId,
+    poolObjectId: pool.objectId,
+    poolInitialSharedVersion: pool.initialSharedVersion,
+    btcDepositRegistryObjectId: btcDepositRegistry.objectId,
+    btcDepositRegistryInitialSharedVersion: btcDepositRegistry.initialSharedVersion,
+    nullifierRegistryObjectId: nullifierRegistry.objectId,
+    nullifierRegistryInitialSharedVersion: nullifierRegistry.initialSharedVersion,
+    redemptionQueueObjectId: redemptionQueue.objectId,
+    redemptionQueueInitialSharedVersion: redemptionQueue.initialSharedVersion,
+    redemptionCapObjectId: redemptionCap.objectId,
     redemptionCapVersion: cap.version,
     redemptionCapDigest: cap.digest,
-  verifyingKeyRegistryObjectId: verifyingKeyRegistry.objectId,
-  verifyingKeyRegistryInitialSharedVersion: verifyingKeyRegistry.initialSharedVersion,
+    verifyingKeyRegistryObjectId: verifyingKeyRegistry.objectId,
+    verifyingKeyRegistryInitialSharedVersion: verifyingKeyRegistry.initialSharedVersion,
   });
 }
 
@@ -127,14 +131,17 @@ if (redemptionId === undefined) {
 }
 
 let approveResult: Awaited<ReturnType<typeof executeTransactionKind>> | null = null;
+let ikaSigningResult: Awaited<ReturnType<typeof submitNativeIkaSigning>> | null = null;
 if (withdrawalSignerMode === "ika") {
-  console.log("Submitting Sui Ika policy approval placeholder...");
+  console.log("Submitting Sui Ika policy approval...");
+  const withdrawalSighash = createHash("sha256").update(withdrawal.rawTxHex).digest();
   const approveTx = await adapter.buildIkaApprovalTransaction({
     redemptionId: BigInt(redemptionId),
-    sighash: createHash("sha256").update(withdrawal.rawTxHex).digest(),
+    sighash: withdrawalSighash,
   });
   approveResult = await executeTransactionKind(approveTx.bytes);
   assertSuiSuccess("Ika policy approval", approveResult);
+  ikaSigningResult = await submitNativeIkaSigning(withdrawalSighash, ikaSigningConfig!);
 } else {
   console.log("Skipping Sui Ika policy approval; regtest withdrawal uses the local relayer signer.");
 }
@@ -160,6 +167,7 @@ assertSuiSuccess("complete redemption", completeResult);
   redemptionId: String(redemptionId),
   requestTxDigest: requestResult.digest,
   ...(approveResult ? { ikaApprovalTxDigest: approveResult.digest } : {}),
+  ...(ikaSigningResult ? { ikaSigning: ikaSigningResult } : {}),
   completeTxDigest: completeResult.digest,
 };
 writeState(state);
@@ -187,13 +195,14 @@ console.log(JSON.stringify({
       ikaApprovalTxDigest: approveResult.digest,
       ikaApprovalStatus: approveResult.effects?.status,
     } : {}),
+    ...(ikaSigningResult ? { ikaSigning: ikaSigningResult } : {}),
     completeTxDigest: completeResult.digest,
     completeStatus: completeResult.effects?.status,
   },
   limitations: [
     "Sui BTC deposit is now routed through btc_deposit::complete_verified_deposit with OP_RETURN validation and duplicate-claim protection; full header/merkle SPV verification is the remaining deposit hardening step.",
     withdrawalSignerMode === "ika"
-      ? "Native Sui Ika dWallet signing is not executed here; policy approval uses the withdrawal transaction hash as a 32-byte placeholder."
+      ? "Native Sui Ika policy approval, global Taproot presign, and Taproot sign request are executed; this regtest BTC broadcast still uses the local regtest wallet because the PoC deposit UTXO is created under the local regtest pool address."
       : "BTC withdrawal is signed by the local regtest relayer wallet; native Sui Ika dWallet signing remains optional for later testnet work.",
   ],
 }, null, 2));
@@ -496,9 +505,133 @@ function assertSuiSuccess(label: string, result: any) {
   }
 }
 
+interface IkaSuiSigningConfig {
+  network: "testnet" | "mainnet";
+  dWalletId: string;
+  dWalletCapObjectId: string;
+  networkEncryptionKeyId: string;
+  ikaCoinObjectId: string;
+  suiCoinObjectId: string;
+}
+
+function requireIkaSuiSigningConfig(): IkaSuiSigningConfig {
+  const ikaState = state.ikaSui ?? {};
+  const config = {
+    network: (process.env.UTXOPIA_SUI_IKA_NETWORK || ikaState.network || "testnet") as "testnet" | "mainnet",
+    dWalletId: process.env.UTXOPIA_SUI_IKA_DWALLET_ID || ikaState.dWalletId || "",
+    dWalletCapObjectId: process.env.UTXOPIA_SUI_IKA_DWALLET_CAP_ID || ikaState.dWalletCapObjectId || "",
+    networkEncryptionKeyId:
+      process.env.UTXOPIA_SUI_IKA_NETWORK_ENCRYPTION_KEY_ID || ikaState.networkEncryptionKeyId || "",
+    ikaCoinObjectId: process.env.UTXOPIA_SUI_IKA_COIN_ID || ikaState.ikaCoinObjectId || "",
+    suiCoinObjectId: process.env.UTXOPIA_SUI_IKA_SUI_COIN_ID || ikaState.suiCoinObjectId || "",
+  };
+  const missing = Object.entries(config)
+    .filter(([key, value]) => key !== "network" && !value)
+    .map(([key]) => key);
+  if (missing.length > 0) {
+    throw new Error(
+      [
+        `Sui Ika signing mode is missing: ${missing.join(", ")}`,
+        "Fund the relayer with Coin<IKA> and make sure it owns a dWallet cap, then run:",
+        "  UTXOPIA_SUI_IKA_AUTO_SELECT=1 bun run sui:ika:discover",
+        "You can also provide explicit UTXOPIA_SUI_IKA_* object ID env vars.",
+      ].join("\n"),
+    );
+  }
+  if (config.network !== "testnet" && config.network !== "mainnet") {
+    throw new Error("UTXOPIA_SUI_IKA_NETWORK must be `testnet` or `mainnet`");
+  }
+  return config;
+}
+
+async function submitNativeIkaSigning(message: Uint8Array, config: IkaSuiSigningConfig) {
+  const ikaAdapter = new UTXOpiaSuiIkaAdapter({
+    rpcUrl: SUI_RPC_URL,
+    network: config.network,
+    dWalletId: config.dWalletId,
+    dWalletCapObjectId: config.dWalletCapObjectId,
+    networkEncryptionKeyId: config.networkEncryptionKeyId,
+    ikaCoinObjectId: config.ikaCoinObjectId,
+    suiCoinObjectId: config.suiCoinObjectId,
+  });
+  const ikaClient = ikaAdapter.createClient();
+  await ikaClient.initialize();
+
+  console.log("Requesting Sui Ika global Taproot presign...");
+  const presignTx = await ikaAdapter.buildRequestGlobalTaprootPresignTransaction();
+  const presignRequestResult = await executeTransactionKind(presignTx.bytes);
+  assertSuiSuccess("Ika global Taproot presign request", presignRequestResult);
+  const presignId = findCreatedObjectId(presignRequestResult, "coordinator_inner::PresignSession");
+  if (!presignId) {
+    throw new Error(`Ika presign request ${presignRequestResult.digest} did not create a PresignSession`);
+  }
+
+  const waitOptions = {
+    timeout: Number(process.env.UTXOPIA_SUI_IKA_WAIT_TIMEOUT_MS ?? "120000"),
+    interval: Number(process.env.UTXOPIA_SUI_IKA_WAIT_INTERVAL_MS ?? "1000"),
+    maxInterval: Number(process.env.UTXOPIA_SUI_IKA_WAIT_MAX_INTERVAL_MS ?? "5000"),
+  };
+  console.log(`Waiting for Sui Ika presign ${presignId} to complete...`);
+  await ikaClient.getPresignInParticularState(presignId, "Completed", waitOptions);
+
+  console.log("Requesting Sui Ika Taproot signature...");
+  const signTx = await ikaAdapter.buildTaprootSignWithPublicSharesTransaction({
+    presignId,
+    message,
+  });
+  const signRequestResult = await executeTransactionKind(signTx.bytes);
+  assertSuiSuccess("Ika Taproot sign request", signRequestResult);
+  const signId = findCreatedObjectId(signRequestResult, "coordinator_inner::SignSession");
+  if (!signId) {
+    throw new Error(`Ika sign request ${signRequestResult.digest} did not create a SignSession`);
+  }
+
+  console.log(`Waiting for Sui Ika signature ${signId} to complete...`);
+  const sign = await ikaClient.getSignInParticularState(
+    signId,
+    Curve.SECP256K1,
+    SignatureAlgorithm.Taproot,
+    "Completed",
+    waitOptions,
+  );
+
+  return {
+    dWalletId: config.dWalletId,
+    dWalletCapObjectId: config.dWalletCapObjectId,
+    presignRequestTxDigest: presignRequestResult.digest,
+    presignId,
+    signRequestTxDigest: signRequestResult.digest,
+    signId,
+    signatureHex: extractCompletedSignatureHex(sign),
+  };
+}
+
+function findCreatedObjectId(result: any, objectTypeSuffix: string): string | undefined {
+  const created = result.objectChanges?.find((change: any) =>
+    change.type === "created" &&
+    typeof change.objectType === "string" &&
+    change.objectType.endsWith(objectTypeSuffix)
+  );
+  return created?.objectId;
+}
+
+function extractCompletedSignatureHex(sign: any): string {
+  const signature =
+    sign?.state?.Completed?.signature ??
+    sign?.state?.completed?.signature ??
+    sign?.state?.fields?.Completed?.fields?.signature;
+  if (Array.isArray(signature)) {
+    return Buffer.from(signature).toString("hex");
+  }
+  if (signature instanceof Uint8Array) {
+    return Buffer.from(signature).toString("hex");
+  }
+  return typeof signature === "string" ? signature : "";
+}
+
 async function refreshObjectRef(objectId: string) {
   const client = new SuiJsonRpcClient({
-    url: process.env.UTXOPIA_SUI_RPC_URL ?? "https://fullnode.testnet.sui.io:443",
+    url: SUI_RPC_URL,
     network: "testnet",
   });
   const object = await client.getObject({ id: objectId });
