@@ -3,7 +3,7 @@
 /**
  * Shared UI components for the Explorer page.
  * Includes TypeFilterBar, TokenFilterDropdown, table primitives (Th, Td),
- * state indicators (Loading, Error, Empty), SolanaLink, RefreshButton, and StatCard.
+ * state indicators (Loading, Error, Empty), chain explorer links, RefreshButton, and StatCard.
  */
 
 import { useState, useRef, useEffect } from "react";
@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
+import { useChainEnvironment } from "@/lib/chain-environment";
 import { EXPLORER_FILTER_TOKENS, type TokenFilterId } from "@/lib/supported-tokens";
 
 // --- Types ---
@@ -275,19 +276,27 @@ export function Td({ children, className, colSpan }: { children?: React.ReactNod
 
 // --- Links ---
 
-export function SolanaLink({ signature }: { signature: string }) {
+export function ChainTxLink({ signature }: { signature: string }) {
+  const { config } = useChainEnvironment();
+  const isSui = config.chain === "sui";
+  const href = isSui && config.sui
+    ? `${config.sui.explorerUrl.replace(/\/$/, "")}/txblock/${signature}?network=testnet`
+    : getSolanaExplorerTxUrl(signature);
+
   return (
     <a
-      href={getSolanaExplorerTxUrl(signature)}
+      href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-gray hover:text-gray-light transition-colors"
+      className={cn("transition-colors", isSui ? "text-sui/70 hover:text-sui" : "text-gray hover:text-gray-light")}
       aria-label="View transaction"
     >
       <ExternalLink className="w-3.5 h-3.5" />
     </a>
   );
 }
+
+export const SolanaLink = ChainTxLink;
 
 // --- States ---
 

@@ -47,6 +47,11 @@ export async function fetchSuiExplorerTransactions(config: NetworkConfig): Promi
   }
 
   const txs: ExplorerTx[] = [];
+  const redemptions = new Map<string, {
+    request?: SuiEvent;
+    completion?: SuiEvent;
+  }>();
+
   for (const [txDigest, txEvents] of grouped) {
     const primary = pickPrimaryEvent(txEvents);
     if (!primary) continue;
@@ -119,49 +124,55 @@ export async function fetchSuiExplorerTransactions(config: NetworkConfig): Promi
     }
 
     if (type === "RedemptionRequested") {
-      txs.push({
-        txSignature: txDigest,
-        type: "withdraw",
-        tokenId: "zkbtc",
-        tokenSymbol: "BTC",
-        timestamp,
-        status: "processing",
-        inputs: [{
-          requestId: stringField(payload.redemption_id),
-          grossAmount: numberString(payload.amount_sats),
-          fee: numberString(payload.max_fee_sats),
-        }],
-        outputs: [{
-          type: "withdraw",
-          amount: numberString(payload.amount_sats),
-          fee: numberString(payload.max_fee_sats),
-          payout: Math.max(
-            0,
-            (numberString(payload.amount_sats) ?? 0) - (numberString(payload.max_fee_sats) ?? 0),
-          ),
-          requestId: stringField(payload.redemption_id),
-          btcScript: bytesField(payload.btc_address_hash),
-        }],
-      });
+      const redemptionId = stringField(payload.redemption_id);
+      if (redemptionId) {
+        redemptions.set(redemptionId, {
+          ...redemptions.get(redemptionId),
+          request: primary,
+        });
+      }
       continue;
     }
 
     if (type === "RedemptionCompleted") {
-      txs.push({
-        txSignature: txDigest,
-        type: "withdraw",
-        tokenId: "zkbtc",
-        tokenSymbol: "BTC",
-        timestamp,
-        status: "confirmed",
-        inputs: [{ requestId: stringField(payload.redemption_id) }],
-        outputs: [{
-          type: "withdraw",
-          requestId: stringField(payload.redemption_id),
-          btcTxid: bytesField(payload.btc_txid, true),
-        }],
-      });
+      const redemptionId = stringField(payload.redemption_id);
+      if (redemptionId) {
+        redemptions.set(redemptionId, {
+          ...redemptions.get(redemptionId),
+          completion: primary,
+        });
+      }
     }
+  }
+
+  for (const [redemptionId, redemption] of redemptions) {
+    const requestPayload = objectPayload(redemption.request?.parsedJson);
+    const completionPayload = objectPayload(redemption.completion?.parsedJson);
+    const amount = numberString(requestPayload.amount_sats);
+    const fee = numberString(requestPayload.max_fee_sats);
+    txs.push({
+      txSignature: redemption.request?.id.txDigest ?? redemption.completion?.id.txDigest ?? redemptionId,
+      type: "withdraw",
+      tokenId: "zkbtc",
+      tokenSymbol: "BTC",
+      timestamp: Number((redemption.completion ?? redemption.request)?.timestampMs ?? 0),
+      status: redemption.completion ? "confirmed" : "processing",
+      inputs: [{
+        requestId: redemptionId,
+        grossAmount: amount,
+        fee,
+      }],
+      outputs: [{
+        type: "withdraw",
+        amount,
+        fee,
+        payout: amount == null || fee == null ? undefined : Math.max(0, amount - fee),
+        requestId: redemptionId,
+        btcScript: bytesField(requestPayload.btc_address_hash),
+        btcTxid: bytesField(completionPayload.btc_txid, true),
+        localStatus: redemption.completion ? "Completed" : "Processing",
+      }],
+    });
   }
 
   txs.sort((a, b) => b.timestamp - a.timestamp);

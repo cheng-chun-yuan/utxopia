@@ -9,6 +9,7 @@ import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
 import type { RedemptionRecord } from "@/hooks/use-explorer";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
 import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
+import { useChainEnvironment } from "@/lib/chain-environment";
 import { truncate } from "../helpers";
 import { SUPPORTED_TOKENS, formatTokenAmount, getTokenBySymbol } from "@/lib/supported-tokens";
 import { resolveTokenSymbolSync } from "@/lib/token-map";
@@ -110,8 +111,16 @@ export function RedeemDetails({ tx, redemption }: { tx: TransferTx; redemption?:
 
 /** Vertical timeline showing withdrawal lifecycle */
 function WithdrawTimeline({ tx, redemption: r }: { tx: TransferTx; redemption?: RedemptionRecord }) {
+  const { config } = useChainEnvironment();
+  const isSui = config.chain === "sui";
+  const chainName = isSui ? "Sui" : "Solana";
+  const chainIcon = isSui ? "/tokens/sui.png" : "/tokens/sol.png";
+  const chainTxUrl = (id: string) => isSui && config.sui
+    ? `${config.sui.explorerUrl.replace(/\/$/, "")}/txblock/${id}?network=testnet`
+    : getSolanaExplorerTxUrl(id);
   const statusOrder: Record<string, number> = { Pending: 1, Processing: 2, "BTC Sent": 3, Completed: 4 };
-  const current = statusOrder[r?.status ?? "Pending"] ?? 0;
+  const completedFromTx = tx.status === "confirmed" && tx.outputs.some((output) => output.type === "withdraw" && output.btcTxid);
+  const current = completedFromTx ? 4 : (statusOrder[r?.status ?? "Pending"] ?? (tx.status === "confirmed" ? 2 : 1));
 
   const steps = [
     {
@@ -136,7 +145,7 @@ function WithdrawTimeline({ tx, redemption: r }: { tx: TransferTx; redemption?: 
       title: "Complete Redemption",
       done: current >= 4,
       icon: "sol" as const,
-      txId: r?.completeTxSignature ?? null,
+      txId: r?.completeTxSignature ?? (completedFromTx ? tx.txSignature : null),
     },
   ];
 
@@ -164,7 +173,7 @@ function WithdrawTimeline({ tx, redemption: r }: { tx: TransferTx; redemption?: 
               {step.icon === "btc" ? (
                 <BitcoinIcon className="w-3.5 h-3.5 text-btc/70" />
               ) : (
-                <img src="/tokens/sol.png" alt="SOL" className="w-3.5 h-3.5 rounded-full opacity-70" />
+                <img src={chainIcon} alt={chainName} className="w-3.5 h-3.5 rounded-full opacity-70" />
               )}
               <span className={cn("text-[12px] font-medium", step.done ? "text-foreground" : "text-gray/50")}>
                 {step.title}
@@ -172,14 +181,14 @@ function WithdrawTimeline({ tx, redemption: r }: { tx: TransferTx; redemption?: 
             </div>
             {step.txId && step.done && (
               <div className="group flex items-center gap-1.5 mt-1">
-                <span className="text-[10px] text-gray/40">{step.icon === "btc" ? "Transaction ID" : "Signature"}</span>
+                <span className="text-[10px] text-gray/40">{step.icon === "btc" ? "Transaction ID" : `${chainName} tx`}</span>
                 <code className="text-[10px] font-mono text-gray/60 truncate max-w-[280px]">{step.txId}</code>
                 <CopyButton text={step.txId} label={step.title} variant="default" iconSize="sm" />
                 <a
-                  href={step.icon === "btc" ? `${getMempoolExplorerUrl()}/tx/${step.txId}` : getSolanaExplorerTxUrl(step.txId)}
+                  href={step.icon === "btc" ? `${getMempoolExplorerUrl()}/tx/${step.txId}` : chainTxUrl(step.txId)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={cn("transition-colors p-0.5", step.icon === "btc" ? "text-btc/40 hover:text-btc" : "text-purple-400/40 hover:text-purple-400")}
+                  className={cn("transition-colors p-0.5", step.icon === "btc" ? "text-btc/40 hover:text-btc" : isSui ? "text-sui/40 hover:text-sui" : "text-purple-400/40 hover:text-purple-400")}
                 >
                   <ExternalLink className="w-2.5 h-2.5" />
                 </a>
