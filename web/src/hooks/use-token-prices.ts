@@ -8,11 +8,12 @@ const STALE_MS = 60_000; // refresh every 60s
 export interface TokenPrices {
   btc: number | null;
   sol: number | null;
+  sui: number | null;
   usdc: number | null;
   usdt: number | null;
 }
 
-const EMPTY: TokenPrices = { btc: null, sol: null, usdc: null, usdt: null };
+const EMPTY: TokenPrices = { btc: null, sol: null, sui: null, usdc: null, usdt: null };
 
 interface Cache {
   prices: TokenPrices;
@@ -45,6 +46,7 @@ async function fetchPricesFromApi(): Promise<TokenPrices | null> {
     return {
       btc: data?.btc ?? null,
       sol: data?.sol ?? null,
+      sui: data?.sui ?? null,
       usdc: data?.usdc ?? null,
       usdt: data?.usdt ?? null,
     };

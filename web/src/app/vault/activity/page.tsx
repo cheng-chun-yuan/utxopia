@@ -392,9 +392,6 @@ export default function ActivityPage() {
           {/* Footer inside card */}
           <div className="flex flex-row justify-between items-center gap-2 mt-2 text-gray px-2 pt-2">
             <a href="/docs" className="hover:text-gray-light transition-colors text-caption">UTXOpia</a>
-            <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption hover:text-gray-light transition-colors flex items-center gap-1.5">
-              Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network
-            </a>
           </div>
         </div>
       </div>

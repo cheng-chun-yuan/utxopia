@@ -6,13 +6,15 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { motion } from "framer-motion";
 import {
   ArrowDownToLine,
-  CheckCircle2,
+  ArrowRight,
   ChevronDown,
   Copy,
   Droplets,
   ExternalLink,
-  History,
+  Key,
+  Loader2,
   LogOut,
+  RefreshCw,
   Send,
   Settings,
   Shield,
@@ -28,6 +30,7 @@ import {
 } from "@/lib/sui/client";
 import { cn } from "@/lib/utils";
 import { useUTXOpiaStore } from "@/stores";
+import { useTokenPrices, type TokenPrices } from "@/hooks/use-token-prices";
 
 type RpcState = "idle" | "loading" | "ok" | "error";
 type SuiConfig = NonNullable<ReturnType<typeof getNetworkConfig>["sui"]>;
@@ -38,6 +41,25 @@ interface ObjectProbe {
   digest?: string;
   error?: string;
 }
+
+const SUI_VAULT_TOKENS = [
+  {
+    symbol: "zkBTC",
+    aliases: ["zkBTC", "BTC"],
+    name: "Shielded Bitcoin",
+    decimals: 8,
+    logo: "/tokens/zkbtc.png",
+    priceKey: "btc",
+  },
+  {
+    symbol: "zkSUI",
+    aliases: ["zkSUI", "SUI"],
+    name: "Shielded Sui",
+    decimals: 9,
+    logo: "/tokens/sui.png",
+    priceKey: "sui",
+  },
+] as const;
 
 export function SuiDashboard() {
   const detected = detectNetwork();
@@ -59,18 +81,28 @@ export function SuiDashboard() {
 function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig }) {
   const explorer = useMemo(() => makeExplorer(sui.explorerUrl), [sui.explorerUrl]);
   const [poolProbe, setPoolProbe] = useState<ObjectProbe>({ state: "idle" });
-  const [authOpen, setAuthOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    return !!(hash.get("id_token") || hash.get("error"));
+  });
   const [suiAuth, setSuiAuth] = useState<SuiAuthState | null>(null);
+  const tokenPrices = useTokenPrices();
+  const {
+    balancesByToken,
+    depositCount,
+    isLoading: isLoadingInbox,
+    refresh: refreshInbox,
+  } = useSuiVaultBalances();
   const stealthAddressEncoded = useUTXOpiaStore((s) => s.stealthAddressEncoded);
   const clearKeys = useUTXOpiaStore((s) => s.clearKeys);
-  const identity = stealthAddressEncoded ?? suiAuth?.address ?? null;
-  const identityKind = stealthAddressEncoded
-    ? "Private vault"
-    : suiAuth?.method === "zklogin"
-      ? "zkLogin"
-      : suiAuth?.method === "wallet"
-        ? "Sui wallet"
-        : null;
+  const identity = stealthAddressEncoded;
+  const suiAccount = suiAuth?.address ?? null;
+  const totalUsd = useMemo(
+    () => computeSuiVaultUsd(balancesByToken, tokenPrices),
+    [balancesByToken, tokenPrices],
+  );
+  const btcEquivalent = tokenPrices.btc && tokenPrices.btc > 0 ? totalUsd / tokenPrices.btc : 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -84,12 +116,6 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
       cancelled = true;
     };
   }, [sui.pool.objectId, sui.rpcUrl]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-    if (hash.get("id_token") || hash.get("error")) setAuthOpen(true);
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -121,66 +147,164 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       >
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <span className="text-body2-semibold text-foreground">Wallet</span>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            {identity ? (
+              <button
+                type="button"
+                onClick={() => navigator.clipboard?.writeText(identity)}
+                className="group flex min-w-0 items-center gap-1.5 rounded-full bg-sui/10 px-2.5 py-1.5 transition-colors hover:bg-sui/15"
+                title="Copy UTXO address"
+              >
+                <Key className="h-3.5 w-3.5 shrink-0 text-sui" />
+                <code className="truncate font-mono text-[12px] text-sui">
+                  {shorten(identity, 10, 8)}
+                </code>
+                <Copy className="h-3 w-3 shrink-0 text-sui/40 transition-colors group-hover:text-sui" />
+              </button>
+            ) : (
+              <span className="text-body2-semibold text-foreground">UTXO Address</span>
+            )}
+            {suiAccount && !identity && (
+              <span className="max-w-[180px] truncate rounded-full border border-sui/15 bg-sui/5 px-2 py-1 font-mono text-[10px] text-sui/70">
+                {shorten(suiAccount, 8, 6)}
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full border border-sui/20 bg-sui/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sui">
               {networkId === "sui-regtest" ? "Sui Hybrid" : "Sui Testnet"}
             </span>
+            {identity && (
+              <button
+                type="button"
+                onClick={signOut}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-gray/50 transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sui/40"
+                aria-label="Log out"
+                title="Log out"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </div>
 
         <div className="flex flex-col items-center pb-5 pt-3 text-center">
-          <h1 className="mb-1 text-[22px] font-bold text-foreground">Your Wallet</h1>
-          <p className="mb-5 text-caption text-gray/60">
-            {identity ? "Private Sui vault ready." : "Sign in to open your private Sui vault."}
-          </p>
           {identity ? (
-            <div className="mb-6 flex w-full max-w-[420px] flex-wrap items-center justify-center gap-2 rounded-[14px] border border-sui/15 bg-sui/5 px-3 py-3">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-sui/20 bg-sui/10 px-2.5 py-1 text-[11px] font-semibold text-sui">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                {identityKind}
-              </span>
-              <span className="min-w-0 max-w-full truncate font-mono text-xs text-foreground/85">
-                {shorten(identity, identity.startsWith("utxo:") ? 12 : 10, 8)}
-              </span>
-              <button
-                type="button"
-                onClick={() => navigator.clipboard?.writeText(identity)}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray/10 text-gray transition-colors hover:border-sui/25 hover:text-sui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sui/40"
-                aria-label="Copy account"
-                title="Copy account"
-              >
-                <Copy className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={signOut}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray/10 text-gray transition-colors hover:border-sui/25 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sui/40"
-                aria-label="Sign out"
-                title="Sign out"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-              </button>
+            <div className="w-full">
+              <div className="py-6">
+                {isLoadingInbox ? (
+                  <Loader2 className="mx-auto mb-2 h-6 w-6 animate-spin text-sui" />
+                ) : (
+                  <>
+                    <motion.p
+                      className="mb-1 text-[36px] font-bold leading-none tracking-tight text-foreground sm:text-[42px]"
+                      key={totalUsd.toFixed(2)}
+                      initial={{ opacity: 0.6, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.35, ease: "easeOut" }}
+                    >
+                      ${totalUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </motion.p>
+                    <p className="flex items-center justify-center gap-1.5 font-mono text-body2 text-gray/60">
+                      {btcEquivalent.toFixed(8)} BTC
+                      <button
+                        type="button"
+                        onClick={() => refreshInbox(undefined, true)}
+                        disabled={isLoadingInbox}
+                        className="rounded p-0.5 text-gray/30 transition-colors hover:text-sui disabled:opacity-50"
+                        title="Refresh"
+                      >
+                        <RefreshCw className={cn("h-3 w-3", isLoadingInbox && "animate-spin")} />
+                      </button>
+                    </p>
+                  </>
+                )}
+              </div>
+
+              <div className="mb-6 flex items-center justify-center gap-5 sm:gap-8">
+                <VaultAction href={hrefWithChain("/vault/deposit", networkId)} icon={<ArrowDownToLine className="h-5 w-5" />} label="Deposit" />
+                {networkId === "sui-regtest" && (
+                  <VaultAction href={hrefWithChain("/faucet", networkId)} icon={<Droplets className="h-5 w-5" />} label="Faucet" />
+                )}
+                <VaultAction href={hrefWithChain("/send", networkId)} icon={<Send className="h-5 w-5" />} label="Send" />
+              </div>
+
+              {depositCount > 0 && (
+                <div className="mb-5 flex justify-center">
+                  <Link
+                    href={hrefWithChain("/vault/activity", networkId)}
+                    className="flex items-center gap-1 text-[11px] text-gray/40 transition-colors hover:text-gray/60"
+                  >
+                    View History <ChevronDown className="-rotate-90 h-3 w-3" />
+                  </Link>
+                </div>
+              )}
+
+              <div className="mb-5 text-left">
+                <div className="mb-2 flex items-center justify-between px-1">
+                  <span className="text-[11px] font-medium uppercase tracking-wider text-gray/50">Tokens</span>
+                  {depositCount > 0 && (
+                    <Link
+                      href={hrefWithChain("/vault/activity?tab=notes", networkId)}
+                      className="inline-flex items-center gap-0.5 text-[11px] text-sui/70 transition-colors hover:text-sui"
+                    >
+                      View All
+                      <ChevronDown className="-rotate-90 h-3 w-3" />
+                    </Link>
+                  )}
+                </div>
+                <div className="overflow-hidden rounded-[14px] border border-gray/10 divide-y divide-gray/8">
+                  <SuiTokenRows
+                    balancesByToken={balancesByToken}
+                    isLoading={isLoadingInbox}
+                    networkId={networkId}
+                    tokenPrices={tokenPrices}
+                  />
+                </div>
+              </div>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={() => setAuthOpen(true)}
-              className="mb-6 inline-flex items-center gap-2 rounded-full bg-sui px-7 py-3 text-body2 font-semibold text-background transition-opacity hover:opacity-90 active:scale-95"
-            >
-              <Shield className="h-4 w-4" />
-              Get Started
-            </button>
+            <div className="flex flex-col items-center py-10">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-sui/20 bg-sui/10">
+                <Shield className="h-7 w-7 text-sui" />
+              </div>
+              <h1 className="mb-1 text-[22px] font-bold text-foreground">UTXO Address</h1>
+              <p className="mb-6 text-caption text-gray/60">
+                Unlock your private vault to view zkBTC and zkSUI balances.
+              </p>
+              <button
+                type="button"
+                onClick={() => setAuthOpen(true)}
+                className="inline-flex items-center gap-2 rounded-full bg-sui px-7 py-3 text-body2 font-semibold text-background transition-opacity hover:opacity-90 active:scale-95"
+              >
+                <Key className="h-4 w-4" />
+                Get Started
+              </button>
+            </div>
           )}
+        </div>
 
-          <div className="flex items-center justify-center gap-5 sm:gap-8">
-            <VaultAction href={hrefWithChain("/vault/deposit", networkId)} icon={<ArrowDownToLine className="h-5 w-5" />} label="Deposit" />
-            {networkId === "sui-regtest" && (
-              <VaultAction href={hrefWithChain("/faucet", networkId)} icon={<Droplets className="h-5 w-5" />} label="Faucet" />
-            )}
-            <VaultAction href={hrefWithChain("/send", networkId)} icon={<Send className="h-5 w-5" />} label="Send" />
-            <VaultAction href={hrefWithChain("/vault/activity", networkId)} icon={<History className="h-5 w-5" />} label="Activity" />
+        <div className="mb-4 rounded-[10px] bg-muted/30 px-3 py-3">
+          <div className="flex items-center gap-4">
+            {[
+              { step: "1", label: "Deposit" },
+              { step: "2", label: "Send" },
+              { step: "3", label: "Cash Out" },
+            ].map((s, i) => (
+              <div key={s.step} className="flex items-center gap-4">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-[11px] font-bold text-sui/45">{s.step}</span>
+                  <span className="text-[11px] text-gray/50">{s.label}</span>
+                </div>
+                {i < 2 && <ChevronDown className="-rotate-90 h-3 w-3 text-gray/15" />}
+              </div>
+            ))}
+            <div className="flex-1" />
+            <div className="flex items-center gap-1.5">
+              <Shield className="h-3 w-3 text-sui/45" />
+              <span className="text-[10px] font-medium text-sui/45">ZK</span>
+            </div>
           </div>
         </div>
 
@@ -283,6 +407,92 @@ function VaultAction({ href, icon, label }: { href: string; icon: React.ReactNod
   );
 }
 
+function SuiTokenRows({
+  balancesByToken,
+  isLoading,
+  networkId,
+  tokenPrices,
+}: {
+  balancesByToken: Record<string, bigint>;
+  isLoading: boolean;
+  networkId: NetworkId;
+  tokenPrices: TokenPrices;
+}) {
+  const hasAnyBalance = SUI_VAULT_TOKENS.some((token) => getTokenBalance(balancesByToken, token.aliases) > 0n);
+
+  if (!hasAnyBalance && !isLoading) {
+    return (
+      <div className="flex flex-col items-center px-4 py-8 text-center">
+        <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-sui/20 bg-sui/10">
+          <ArrowDownToLine className="h-5 w-5 text-sui" />
+        </div>
+        <p className="mb-1 text-sm font-medium text-foreground">Ready to go private?</p>
+        <p className="mb-4 text-xs text-gray/50">
+          Deposit BTC or SUI to start.
+        </p>
+        <Link
+          href={hrefWithChain("/vault/deposit", networkId)}
+          className="inline-flex items-center gap-2 rounded-full bg-sui px-5 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90 active:scale-[0.98]"
+        >
+          Make Your First Deposit
+          <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </div>
+    );
+  }
+
+  const sorted = [...SUI_VAULT_TOKENS].sort((a, b) => {
+    const aRaw = getTokenBalance(balancesByToken, a.aliases);
+    const bRaw = getTokenBalance(balancesByToken, b.aliases);
+    if (aRaw > 0n && bRaw === 0n) return -1;
+    if (aRaw === 0n && bRaw > 0n) return 1;
+    const aUsd = tokenUsdValue(aRaw, a.decimals, tokenPrices[a.priceKey]);
+    const bUsd = tokenUsdValue(bRaw, b.decimals, tokenPrices[b.priceKey]);
+    return bUsd - aUsd;
+  });
+
+  return sorted.map((token) => {
+    const rawBalance = getTokenBalance(balancesByToken, token.aliases);
+    const balanceNum = Number(rawBalance) / 10 ** token.decimals;
+    const hasBalance = rawBalance > 0n;
+    const balance = balanceNum.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: Math.min(token.decimals, 6),
+    });
+    const usdValue = tokenUsdValue(rawBalance, token.decimals, tokenPrices[token.priceKey]);
+
+    return (
+      <div
+        key={token.symbol}
+        className={cn(
+          "flex h-[60px] items-center gap-3 px-4 transition-colors",
+          hasBalance ? "hover:bg-muted/40" : "opacity-40",
+        )}
+      >
+        <img src={token.logo} alt={token.symbol} className="h-9 w-9 rounded-full" />
+        <div className="min-w-0 flex-1">
+          <p className="text-body2-semibold text-foreground">{token.symbol}</p>
+          <p className="text-[11px] text-gray/50">{token.name}</p>
+        </div>
+        <div className="text-right">
+          {isLoading ? (
+            <Loader2 className="ml-auto h-4 w-4 animate-spin text-sui" />
+          ) : hasBalance ? (
+            <>
+              <p className="font-mono text-body2-semibold text-foreground">{balance}</p>
+              <p className="font-mono text-[11px] text-gray/45">
+                ${usdValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+            </>
+          ) : (
+            <p className="font-mono text-body2 text-gray/30">0.00</p>
+          )}
+        </div>
+      </div>
+    );
+  });
+}
+
 function TechRow({ label, value, href }: { label: string; value: string; href?: string }) {
   const content = (
     <>
@@ -313,6 +523,34 @@ function shorten(value: string, start = 10, end = 8): string {
   if (!value) return "";
   if (value.length <= start + end + 3) return value;
   return `${value.slice(0, start)}...${value.slice(-end)}`;
+}
+
+function useSuiVaultBalances() {
+  const balancesByToken = useUTXOpiaStore((s) => s.inboxBalancesByToken);
+  const depositCount = useUTXOpiaStore((s) => s.inboxDepositCount);
+  const isLoading = useUTXOpiaStore((s) => s.inboxLoading);
+  const refresh = useUTXOpiaStore((s) => s.refreshInbox);
+
+  return { balancesByToken, depositCount, isLoading, refresh };
+}
+
+function computeSuiVaultUsd(
+  balancesByToken: Record<string, bigint>,
+  tokenPrices: TokenPrices,
+): number {
+  return SUI_VAULT_TOKENS.reduce((total, token) => {
+    const raw = getTokenBalance(balancesByToken, token.aliases);
+    return total + tokenUsdValue(raw, token.decimals, tokenPrices[token.priceKey]);
+  }, 0);
+}
+
+function getTokenBalance(balancesByToken: Record<string, bigint>, aliases: readonly string[]): bigint {
+  return aliases.reduce((sum, alias) => sum + (balancesByToken[alias] ?? 0n), 0n);
+}
+
+function tokenUsdValue(rawBalance: bigint, decimals: number, price: number | null): number {
+  if (!price) return 0;
+  return (Number(rawBalance) / 10 ** decimals) * price;
 }
 
 async function fetchObject(rpcUrl: string, objectId: string): Promise<ObjectProbe> {

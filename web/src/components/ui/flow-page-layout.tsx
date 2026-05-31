@@ -109,7 +109,6 @@ function Footer() {
           UTXOpia
         </a>
       </div>
-      <a href="https://zeusnetwork.xyz/" target="_blank" rel="noopener noreferrer" className="text-caption hover:text-gray-light transition-colors flex items-center gap-1.5">Powered by <img src="/zeus_network.svg" alt="Zeus Network" className="w-4 h-4" />Zeus Network</a>
     </div>
   );
 }

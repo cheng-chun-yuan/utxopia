@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 
-const BINANCE_SYMBOLS = ["BTCUSDT", "SOLUSDT", "USDCUSDT"];
+const BINANCE_SYMBOLS = ["BTCUSDT", "SOLUSDT", "SUIUSDT", "USDCUSDT"];
 const BINANCE_URL = `https://api.binance.com/api/v3/ticker/price?symbols=${JSON.stringify(BINANCE_SYMBOLS)}`;
 
-const COINGECKO_IDS = "bitcoin,solana,usd-coin,tether";
+const COINGECKO_IDS = "bitcoin,solana,sui,usd-coin,tether";
 const COINGECKO_URL = `https://api.coingecko.com/api/v3/simple/price?ids=${COINGECKO_IDS}&vs_currencies=usd`;
 
 export async function GET() {
@@ -36,6 +36,7 @@ async function fetchFromBinance() {
     return {
       btc: map.BTCUSDT ?? null,
       sol: map.SOLUSDT ?? null,
+      sui: map.SUIUSDT ?? null,
       usdc: map.USDCUSDT ?? null,
       usdt: 1.0,
     };
@@ -53,6 +54,7 @@ async function fetchFromCoinGecko() {
     return {
       btc: data?.bitcoin?.usd ?? null,
       sol: data?.solana?.usd ?? null,
+      sui: data?.sui?.usd ?? null,
       usdc: data?.["usd-coin"]?.usd ?? null,
       usdt: data?.tether?.usd ?? null,
     };
