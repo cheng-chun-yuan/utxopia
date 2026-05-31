@@ -15,7 +15,59 @@ interface ExplorerTx {
   btcMeta?: Record<string, unknown> | null;
 }
 
+export interface SuiExplorerStats {
+  totalShielded: bigint;
+  depositCount: number;
+  totalCommitments: number;
+  volume: bigint;
+}
+
 export async function fetchSuiExplorerTransactions(config: NetworkConfig): Promise<ExplorerTx[]> {
+  const events = await fetchSuiExplorerEvents(config);
+  return buildSuiExplorerTransactions(config, events);
+}
+
+export async function fetchSuiExplorerStats(config: NetworkConfig): Promise<SuiExplorerStats> {
+  const events = await fetchSuiExplorerEvents(config);
+  const commitments = new Set<string>();
+  let maxLeafIndex = -1;
+  let totalShielded = 0n;
+  let depositCount = 0;
+  let redeemed = 0n;
+
+  for (const event of events) {
+    const type = eventName(event);
+    const payload = objectPayload(event.parsedJson);
+
+    if (type === "CommitmentInserted") {
+      const commitment = bytesField(payload.commitment);
+      if (commitment) commitments.add(commitment);
+      const leafIndex = bigintField(payload.leaf_index);
+      if (leafIndex != null && leafIndex <= BigInt(Number.MAX_SAFE_INTEGER)) {
+        maxLeafIndex = Math.max(maxLeafIndex, Number(leafIndex));
+      }
+    } else if (type === "BtcDepositVerified") {
+      const amount = bigintField(payload.amount_sats);
+      if (amount != null) {
+        totalShielded += amount;
+        depositCount += 1;
+      }
+    } else if (type === "RedemptionRequested") {
+      const amount = bigintField(payload.amount_sats);
+      if (amount != null) redeemed += amount;
+    }
+  }
+
+  const totalCommitments = Math.max(commitments.size, maxLeafIndex + 1, 0);
+  return {
+    totalShielded: totalShielded > redeemed ? totalShielded - redeemed : 0n,
+    depositCount,
+    totalCommitments,
+    volume: totalShielded + redeemed,
+  };
+}
+
+async function fetchSuiExplorerEvents(config: NetworkConfig): Promise<SuiEvent[]> {
   if (!config.sui) return [];
 
   const client = new SuiClient({ url: config.sui.rpcUrl });
@@ -38,6 +90,12 @@ export async function fetchSuiExplorerTransactions(config: NetworkConfig): Promi
     if (!result.hasNextPage || !result.nextCursor) break;
     cursor = result.nextCursor;
   }
+
+  return events;
+}
+
+function buildSuiExplorerTransactions(config: NetworkConfig, events: SuiEvent[]): ExplorerTx[] {
+  if (!config.sui) return [];
 
   const grouped = new Map<string, SuiEvent[]>();
   for (const event of events) {
@@ -68,16 +126,16 @@ export async function fetchSuiExplorerTransactions(config: NetworkConfig): Promi
         timestamp,
         status: "confirmed",
         inputs: [{
-          grossAmount: numberString(payload.amount_sats),
-          netAmount: numberString(payload.amount_sats),
+          grossAmount: numberField(payload.amount_sats),
+          netAmount: numberField(payload.amount_sats),
           btcDepositTxid: bytesField(payload.deposit_txid, true),
-          depositAmountSats: numberString(payload.amount_sats),
+          depositAmountSats: numberField(payload.amount_sats),
         }],
         outputs: [{
           type: "commitment",
           commitment: bytesField(payload.commitment),
-          leafIndex: numberString(payload.leaf_index),
-          amount: numberString(payload.amount_sats),
+          leafIndex: numberField(payload.leaf_index),
+          amount: numberField(payload.amount_sats),
         }],
         btcMeta: {
           depositTxid: bytesField(payload.deposit_txid, true),
@@ -86,8 +144,8 @@ export async function fetchSuiExplorerTransactions(config: NetworkConfig): Promi
           confirmations: null,
           sweepConfirmations: null,
           sweepFeeSats: null,
-          mintedSats: numberString(payload.amount_sats),
-          depositAmountSats: numberString(payload.amount_sats),
+          mintedSats: numberField(payload.amount_sats),
+          depositAmountSats: numberField(payload.amount_sats),
           depositBlockHeight: null,
           sweepBlockHeight: null,
           trackerError: null,
@@ -107,7 +165,7 @@ export async function fetchSuiExplorerTransactions(config: NetworkConfig): Promi
           return {
             type: "commitment",
             commitment: bytesField(eventPayload.commitment),
-            leafIndex: numberString(eventPayload.leaf_index),
+            leafIndex: numberField(eventPayload.leaf_index),
           };
         });
       txs.push({
@@ -148,8 +206,8 @@ export async function fetchSuiExplorerTransactions(config: NetworkConfig): Promi
   for (const [redemptionId, redemption] of redemptions) {
     const requestPayload = objectPayload(redemption.request?.parsedJson);
     const completionPayload = objectPayload(redemption.completion?.parsedJson);
-    const amount = numberString(requestPayload.amount_sats);
-    const fee = numberString(requestPayload.max_fee_sats);
+    const amount = numberField(requestPayload.amount_sats);
+    const fee = numberField(requestPayload.max_fee_sats);
     txs.push({
       txSignature: redemption.request?.id.txDigest ?? redemption.completion?.id.txDigest ?? redemptionId,
       type: "withdraw",
@@ -202,13 +260,32 @@ function objectPayload(value: unknown): Record<string, unknown> {
 function stringField(value: unknown): string | undefined {
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "bigint") return String(value);
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (typeof record.value === "string" || typeof record.value === "number" || typeof record.value === "bigint") {
+      return String(record.value);
+    }
+    if (typeof record.fields === "object" && record.fields) {
+      return stringField((record.fields as Record<string, unknown>).value);
+    }
+  }
   return undefined;
 }
 
-function numberString(value: unknown): number | undefined {
+function bigintField(value: unknown): bigint | undefined {
   const text = stringField(value);
   if (!text) return undefined;
-  const parsed = Number(text);
+  try {
+    return BigInt(text);
+  } catch {
+    return undefined;
+  }
+}
+
+function numberField(value: unknown): number | undefined {
+  const parsedBigint = bigintField(value);
+  if (parsedBigint == null || parsedBigint > BigInt(Number.MAX_SAFE_INTEGER)) return undefined;
+  const parsed = Number(parsedBigint);
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 

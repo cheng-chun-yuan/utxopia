@@ -65,7 +65,7 @@ export default function FaucetPage() {
           </div>
         </div>
 
-        {isHybrid ? <FaucetForm isSui={isSui} /> : <NotAvailableNotice network={network ?? "unknown"} />}
+        {isHybrid ? <FaucetForm isSui={isSui} network={network} /> : <NotAvailableNotice network={network ?? "unknown"} />}
       </div>
     </main>
   );
@@ -124,7 +124,7 @@ type DripResult =
   | { kind: "cooldown"; retryAfterSec: number; message: string }
   | { kind: "err"; message: string };
 
-function FaucetForm({ isSui = false }: { isSui?: boolean }) {
+function FaucetForm({ isSui = false, network }: { isSui?: boolean; network: string }) {
   const [address, setAddress] = useState("");
   const [amountSats, setAmountSats] = useState(100_000);
   const [submitting, setSubmitting] = useState(false);
@@ -154,7 +154,8 @@ function FaucetForm({ isSui = false }: { isSui?: boolean }) {
     setSubmitting(true);
     setResult(null);
     try {
-      const res = await fetch("/api/faucet/regtest", {
+      const params = new URLSearchParams({ network });
+      const res = await fetch(`/api/faucet/regtest?${params.toString()}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address: address.trim(), amountSats }),

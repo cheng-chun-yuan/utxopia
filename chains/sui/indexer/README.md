@@ -22,7 +22,6 @@ RedemptionRequested
 RedemptionCompleted
 PoolPaused
 PoolConfigUpdated
-IkaSigningApproved
 VerifyingKeyRegistered
 JoinSplitVerified
 ```

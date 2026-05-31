@@ -8,6 +8,7 @@
  */
 
 import useSWR from "swr";
+import { detectNetwork, type NetworkId } from "@/lib/network-config";
 import { getTokenBySymbol } from "@/lib/supported-tokens";
 import { buildTokenIdMap } from "@/lib/token-map";
 
@@ -27,8 +28,8 @@ export interface PoolStats {
   tokenTVL: TokenTVL[];
 }
 
-async function fetchPoolStats(): Promise<PoolStats> {
-  const resp = await fetch("/api/pool/stats", {
+async function fetchPoolStats(network: NetworkId): Promise<PoolStats> {
+  const resp = await fetch(`/api/pool/stats?network=${encodeURIComponent(network)}`, {
     signal: AbortSignal.timeout(5000),
   });
 
@@ -89,9 +90,10 @@ async function fetchPoolStats(): Promise<PoolStats> {
 }
 
 export function usePoolStats() {
+  const network = detectNetwork();
   const { data: stats, error, isLoading, mutate } = useSWR<PoolStats>(
-    "pool-stats",
-    fetchPoolStats,
+    ["pool-stats", network],
+    () => fetchPoolStats(network),
     {
       refreshInterval: 30000,
       dedupingInterval: 10000,

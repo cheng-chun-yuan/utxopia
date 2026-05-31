@@ -1,8 +1,10 @@
-# UTXOpia — Bridgeless, Private Bitcoin on Solana
+# UTXOpia — Bridgeless, Private Bitcoin on Solana and Sui
 
-**Native BTC custody held by an [Ika](https://ika.xyz) dWallet whose authority is a Solana PDA — withdrawal signing is policy-gated by an on-chain program, not by an off-chain signer cluster.**
+**A shielded Bitcoin privacy layer with Groth16 JoinSplit proofs, stealth addresses, and chain-native verifier implementations.**
 
-UTXOpia is a privacy-preserving Bitcoin-to-Solana bridge using Groth16 ZK proofs. Users deposit BTC and receive **shielded commitments** in a Merkle tree on Solana. All transfers use JoinSplit(N,M) proofs — there is no public zkBTC token on-chain, and amount is revealed only at BTC withdrawal time. Custody of the pool's BTC has been moved off a 2-of-3 FROST committee and onto an Ika dWallet whose owner is a PDA of the UTXOpia program itself.
+UTXOpia is a privacy-preserving Bitcoin bridge using Groth16 ZK proofs. Users deposit BTC and receive **shielded commitments** in a Merkle tree on the destination chain. All transfers use JoinSplit(N,M) proofs — there is no public zkBTC token on-chain, and amount is revealed only at BTC withdrawal time.
+
+The Solana implementation is the current reference deployment. Its BTC custody path has moved off a 2-of-3 FROST committee and onto an [Ika](https://ika.xyz) dWallet whose owner is a PDA of the UTXOpia program itself. A Sui Move implementation is now included under `chains/sui`, with object/capability-based pool state, native BN254 Groth16 verification work, SDK adapters, and regtest/testnet proof-of-concept scripts.
 
 > **Hackathon track:** Encrypt + Ika (Bridgeless Capital Markets). This README documents the live devnet deployment of the FROST → Ika pivot.
 
@@ -75,11 +77,45 @@ This also collapses the operational surface. v1 required running a 2-of-3 FROST 
 
 ---
 
+## Sui implementation status
+
+The Sui implementation is a parallel chain adapter, not a line-by-line Solana port. It uses Sui Move objects, shared objects, capability-gated admin paths, programmable transaction blocks, and events instead of Solana PDAs, accounts, and logs.
+
+Current Sui scope:
+
+| Area | Status |
+|---|---|
+| Move package | `chains/sui/contracts` with pool, BTC deposit, Merkle, nullifier, redemption, verifier, and transact modules |
+| SDK adapter | `packages/sdk-sui` builds Sui transaction blocks for shield, transact, redemption, and completion flows |
+| Shared SDK core | `packages/sdk-core` holds chain-agnostic adapter types and Sui circuit metadata |
+| BTC helpers | `packages/btc-client` covers Esplora and OP_RETURN deposit helpers |
+| Indexer scaffold | `chains/sui/indexer` tracks planned event ingestion and API responsibilities |
+| Proof tooling | `tools/sui-groth16-exporter` converts snarkjs verification keys/proofs into Arkworks-style bytes for Sui's BN254 verifier |
+
+Sui redemption is currently modeled through a local relayer/test signer for regtest and testnet proof-of-concept flows.
+
+Useful Sui commands:
+
+```bash
+bun run test:sui                 # Sui Move tests + SDK/core/indexer tests
+bun run test:sui-contracts       # Sui Move tests only
+bun run sui:poc:deploy           # Publish the Sui Move package
+bun run sui:poc:init             # Initialize pool, registries, and caps
+bun run sui:poc:register-vkey    # Register exported Groth16 verifying key
+bun run sui:poc:regtest-flow     # BTC regtest-backed Sui flow
+```
+
+Detailed notes live in [docs/chains/SUI.md](docs/chains/SUI.md).
+
+---
+
 ## Try it
+
+### Solana devnet
 
 ```bash
 # 1. Clone + install
-git clone https://github.com/<org>/private_coin && cd private_coin
+git clone https://github.com/<org>/utxopia && cd utxopia
 bun install
 
 # 2. Build the contracts (Pinocchio) and the SDK
@@ -103,6 +139,19 @@ UTXOPIA_PROGRAM_ID=G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy \
 ```
 
 Full operational guide: [docs/RUNNING.md](docs/RUNNING.md).
+
+### Sui proof of concept
+
+```bash
+# Requires Sui CLI configured for the target network.
+bun install
+bun run test:sui
+
+# Publish + initialize a fresh Sui package.
+bun run sui:poc:deploy
+bun run sui:poc:init
+bun run sui:poc:register-vkey
+```
 
 ---
 
@@ -135,7 +184,7 @@ SOL/USDC/USDT → shield (disc 12) ───────────────
                                                                                                BTC via Ika dWallet (Taproot key-spend)
 ```
 
-The full architectural picture — JoinSplit circuit design, BTC SPV light client, stealth address protocol, three-key model, on-chain account layouts, error codes — lives in [docs/TECHNICAL.md](docs/TECHNICAL.md). The pivot narrative (what changed, what didn't) is in [docs/MIGRATION_v1_to_v2.md](docs/MIGRATION_v1_to_v2.md). The Ika CPI surface (instruction layout, account ordering, signature scheme values) is in [docs/recon/2026-05-09-ika-sdk-brief.md](docs/recon/2026-05-09-ika-sdk-brief.md).
+The full Solana architectural picture — JoinSplit circuit design, BTC SPV light client, stealth address protocol, three-key model, on-chain account layouts, error codes — lives in [docs/TECHNICAL.md](docs/TECHNICAL.md). The pivot narrative (what changed, what didn't) is in [docs/MIGRATION_v1_to_v2.md](docs/MIGRATION_v1_to_v2.md). The Ika CPI surface for Solana BTC custody (instruction layout, account ordering, signature scheme values) is in [docs/recon/2026-05-09-ika-sdk-brief.md](docs/recon/2026-05-09-ika-sdk-brief.md). Sui-specific implementation notes are in [docs/chains/SUI.md](docs/chains/SUI.md).
 
 ---
 
@@ -146,7 +195,7 @@ Bitcoin's transparent blockchain makes privacy challenging:
 - Cross-chain bridges expose user activity on both chains
 - DeFi participation requires revealing transaction history
 
-**UTXOpia solves this** by creating a privacy layer between Bitcoin and Solana using zero-knowledge proofs — with no public token, no transaction graph, and (now) no off-chain custodian.
+**UTXOpia solves this** by creating a privacy layer between Bitcoin and smart-contract chains using zero-knowledge proofs — with no public token and no transaction graph.
 
 ---
 
@@ -157,13 +206,14 @@ Bitcoin's transparent blockchain makes privacy challenging:
 | **ZK Circuits** | circom + Groth16 (BN254) | Parameterized JoinSplit(N,M) circuits, client-side proving |
 | **On-Chain Verifier** | BN254 alt_bn128 pairing syscalls | Inline Groth16 proof verification (~95k CU) |
 | **Smart Contracts** | Pinocchio (Solana) | Zero-copy state, CU-optimized with LTO |
+| **Sui Package** | Sui Move | Object/capability implementation with native BN254 verifier integration |
 | **Bitcoin Integration** | Taproot + SPV light client | Permissionless deposit verification |
 | **Stealth Addresses** | Baby Jubjub + Ed25519 ECDH | Unlinkable one-time addresses (EIP-5564/DKSAP) |
 | **Name Service** | `.btcpro.sol` (SNS subdomains) | Human-readable stealth addresses |
-| **Custody** | Ika dWallet (2PC-MPC, Solana-native pre-alpha) | BTC signing gated by the program via `approve_message` CPI |
-| **Client SDK** | TypeScript | Full privacy toolkit |
+| **Solana BTC Custody** | Ika dWallet (2PC-MPC, Solana-native pre-alpha) | BTC signing gated by the program via `approve_message` CPI |
+| **Client SDK** | TypeScript | Full privacy toolkit with Solana and Sui adapters |
 | **Frontend** | Next.js | Unified `/send` flow (deposit / transfer / unshield / redeem) |
-| **Backend** | Rust (Axum) + Ika watcher | API server + off-chain `MessageApproval` PDA poller that assembles the Taproot witness |
+| **Backend** | Rust (Axum) + Solana Ika watcher | API server + off-chain `MessageApproval` PDA poller that assembles the Taproot witness |
 
 ---
 
@@ -228,9 +278,22 @@ When a user redeems shielded zkBTC for native BTC:
 3. The program **CPIs into the Ika dWallet program** calling `approve_message` (disc 8). Our CPI helper at `contracts/programs/utxopia/src/cpi/ika.rs` constructs the call by hand. The CPI seeds the signing authority via `["__ika_cpi_authority"]`.
 4. The Ika network's mock signer (pre-alpha) asynchronously fills a `Sign` PDA. The backend watcher (`backend/src/redemption/signer.rs::IkaSigner`) polls for it, decodes the 64-byte Schnorr signature, assembles the Taproot witness, and broadcasts to Bitcoin testnet.
 
-Architecturally the design extends to any chain Ika supports (Ethereum, Sui, Cardano via EdDSA, …). This hackathon ships BTC only; multi-chain is a config change, not a redesign.
+This custody path is Solana-specific in the current codebase. Other chain adapters can reuse the same JoinSplit, note, and Bitcoin deposit model while implementing their own chain-native policy and completion flow.
 
-### 5. `.btcpro.sol` Name Registry
+### 5. Sui Move Adapter
+
+The Sui implementation keeps the same privacy model while replacing Solana-specific accounts and PDAs with Sui-native shared objects, capability objects, events, and programmable transaction blocks.
+
+Current Sui flows cover:
+
+- BTC deposit claim state
+- Commitment insertion and Merkle root updates
+- Nullifier tracking
+- Groth16 verifying-key registration
+- JoinSplit proof verification plumbing
+- Redemption request and completion state
+
+### 6. `.btcpro.sol` Name Registry
 
 Human-readable stealth addresses via SNS subdomains:
 
@@ -247,13 +310,22 @@ await sendPrivate(config, myNote, meta.stealthMetaAddress);
 ```
 utxopia/
 ├── contracts/                  # Solana programs (Pinocchio)
-│   ├── programs/utxopia/  # Main program (15 instructions; src/cpi/ika.rs hosts the Ika CPI helper)
+│   ├── programs/utxopia/       # Main Solana program; src/cpi/ika.rs hosts the Ika CPI helper
 │   └── programs/btc-light-client/ # Bitcoin header tracking (standalone)
+├── chains/sui/                 # Sui Move package, scripts, state, and indexer scaffold
+│   ├── contracts/              # Move modules for pool, deposits, nullifiers, redemption, verifier
+│   ├── scripts/                # Deploy/init/register-vkey/regtest proof-of-concept scripts
+│   └── indexer/                # Sui event ingestion scaffold
 ├── circuits/                   # Zero-knowledge circuits (circom)
 │   ├── circom/joinsplit.circom # Parameterized JoinSplit(N,M,16) template
 │   └── circom/lib/             # Shared (commitment, nullifier, merkle, mpk)
 ├── sdk/                        # TypeScript client SDK
 │   └── src/bitcoin/ika.ts      # P2TR address derivation from Ika dWallet pubkey
+├── packages/                   # Shared packages for multichain work
+│   ├── sdk-core/               # Chain-agnostic adapter contracts and circuit metadata
+│   ├── sdk-sui/                # Sui transaction builders and adapter
+│   └── btc-client/             # Esplora and OP_RETURN helpers
+├── tools/sui-groth16-exporter/ # snarkjs → Sui/Arkworks BN254 export tool
 ├── web/                        # Next.js web interface (/send unified flow)
 ├── backend/                    # Rust API + deposit tracker + redemption
 │   └── src/redemption/signer.rs # IkaSigner (primary) + SingleKeySigner (sweep fallback)
@@ -266,7 +338,7 @@ utxopia/
 
 ---
 
-## On-Chain Instructions
+## Solana On-Chain Instructions
 
 | Disc | Name | Purpose |
 |------|------|---------|
@@ -318,6 +390,28 @@ const proof = await generateJoinSplitProof(inputs);
 
 // 3. BUILD: Create Solana instruction
 const ix = buildTransactInstruction(options);
+```
+
+Sui transaction builders live in `packages/sdk-sui`:
+
+```typescript
+import { UTXOpiaSuiAdapter } from '@utxopia/sdk-sui';
+
+const adapter = new UTXOpiaSuiAdapter({
+  rpcUrl: 'https://fullnode.testnet.sui.io:443',
+  packageId,
+  poolObjectId,
+  poolInitialSharedVersion,
+  nullifierRegistryObjectId,
+  nullifierRegistryInitialSharedVersion,
+  redemptionQueueObjectId,
+  redemptionQueueInitialSharedVersion,
+  redemptionCapObjectId,
+  redemptionCapVersion,
+  redemptionCapDigest,
+  verifyingKeyRegistryObjectId,
+  verifyingKeyRegistryInitialSharedVersion,
+});
 ```
 
 ---
@@ -382,6 +476,7 @@ A 60-second walkthrough script (timing + voiceover + screen actions) lives at [d
 > **This is hackathon software.** Not audited for production use.
 
 - Solana devnet + Bitcoin testnet4 + Ika devnet (pre-alpha) only
+- Sui support is proof-of-concept/testnet/regtest work, not production custody
 - Full security audit required before any mainnet deployment
 - Ika cryptographic backend is a mock signer until Ika mainnet — see "What's still pre-alpha" above
 

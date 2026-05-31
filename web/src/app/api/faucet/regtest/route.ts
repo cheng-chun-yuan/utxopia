@@ -8,7 +8,7 @@
  *     UTXOpia deposit tx with the required 64-byte OP_RETURN.
  *
  * Guard rails:
- *   - regtest-only: refuses if `NEXT_PUBLIC_BTC_NETWORK !== "regtest"`
+ *   - regtest-only: refuses unless the active network config uses regtest BTC
  *   - optional `X-API-Key` check (set REGTEST_FAUCET_API_KEY to enable)
  *   - daily quota (default 3 successful sends/day per recipient and IP)
  *   - amount capped at 0.001 BTC (100_000 sats) by default
@@ -36,6 +36,12 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import networks from "@/lib/networks.json";
 import {
+  detectNetworkFromRequest,
+  getNetworkConfig,
+  type NetworkConfig,
+  type NetworkId,
+} from "@/lib/network-config";
+import {
   createNonInteractiveDeposit,
   createDirectVaultDeposit,
   decodeStealthMetaAddress,
@@ -43,7 +49,6 @@ import {
 
 const exec = promisify(execFile);
 
-const BTC_NETWORK = process.env.NEXT_PUBLIC_BTC_NETWORK ?? "";
 const CONTAINER = process.env.REGTEST_FAUCET_DOCKER_CONTAINER || "utxopia-esplora-regtest";
 const BCLI = process.env.REGTEST_FAUCET_BITCOIN_CLI || "/srv/explorer/bitcoin/bin/bitcoin-cli";
 const BCLI_ARGS = (
@@ -85,7 +90,17 @@ interface LimitStore {
 }
 
 function todayKey(): string {
-  return new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+function nextLocalDayStartMs(): number {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
 }
 
 function loadLimitStore(): LimitStore {
@@ -192,17 +207,36 @@ function hexToBytes(value: string): Uint8Array {
   return Uint8Array.from(Buffer.from(normalized, "hex"));
 }
 
-function getActiveNetworkConfig(): FaucetNetworkConfig {
+function getFallbackNetworkConfig(): FaucetNetworkConfig {
   const network = process.env.NEXT_PUBLIC_NETWORK || process.env.UTXOPIA_NETWORK || "devnet-regtest";
   const configs = networks as Record<string, FaucetNetworkConfig>;
   return configs[network] ?? configs["devnet-regtest"];
 }
 
-async function createDepositForStealth(stealthAddress: string): Promise<{
+function getRequestNetwork(req: NextRequest): NetworkId {
+  try {
+    return detectNetworkFromRequest(req);
+  } catch {
+    const env = process.env.NEXT_PUBLIC_NETWORK || process.env.UTXOPIA_NETWORK;
+    return env === "sui-regtest" ? "sui-regtest" : "devnet-regtest";
+  }
+}
+
+function getRequestNetworkConfig(network: NetworkId): NetworkConfig | FaucetNetworkConfig {
+  try {
+    return getNetworkConfig(network, { applyEnvOverrides: false });
+  } catch {
+    return getFallbackNetworkConfig();
+  }
+}
+
+async function createDepositForStealth(
+  stealthAddress: string,
+  cfg: NetworkConfig | FaucetNetworkConfig,
+): Promise<{
   btcAddress: string;
   opReturnPayload: Uint8Array;
 }> {
-  const cfg = getActiveNetworkConfig();
   const meta = decodeStealthMetaAddress(stealthAddress);
   const btcNetwork = cfg?.bitcoin?.network === "regtest" ? "regtest" : "testnet";
   const vaultKeyHex = cfg?.ika?.dwalletXOnlyPubkey;
@@ -234,8 +268,7 @@ function getLimitStatus(keys: string[]): { ok: true } | { ok: false; remaining: 
   for (const key of keys) {
     const entry = limitStore.entries.get(key);
     if (entry?.day === day && entry.count >= DAILY_LIMIT) {
-      const tomorrow = new Date(`${day}T00:00:00.000Z`).getTime() + 24 * 60 * 60 * 1000;
-      return { ok: false, remaining: Math.max(1, Math.ceil((tomorrow - Date.now()) / 1000)) };
+      return { ok: false, remaining: Math.max(1, Math.ceil((nextLocalDayStartMs() - Date.now()) / 1000)) };
     }
   }
   return { ok: true };
@@ -297,9 +330,16 @@ async function ensureWalletFunded(): Promise<string | null> {
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  if (BTC_NETWORK !== "regtest") {
+  const activeNetwork = getRequestNetwork(req);
+  const activeConfig = getRequestNetworkConfig(activeNetwork);
+  const btcNetwork = activeConfig?.bitcoin?.network || process.env.NEXT_PUBLIC_BTC_NETWORK || "";
+
+  if (btcNetwork !== "regtest") {
     return NextResponse.json(
-      { ok: false, error: `faucet only available on regtest; current network=${BTC_NETWORK || "unknown"}` },
+      {
+        ok: false,
+        error: `faucet only available on regtest; current network=${activeNetwork}, btcNetwork=${btcNetwork || "unknown"}`,
+      },
       { status: 400 },
     );
   }
@@ -360,7 +400,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let opReturnHex: string | undefined;
   if (isStealthAirdrop) {
     try {
-      const deposit = await createDepositForStealth(requestedAddress);
+      const deposit = await createDepositForStealth(requestedAddress, activeConfig);
       btcAddress = deposit.btcAddress;
       opReturnHex = hex(deposit.opReturnPayload);
     } catch (e) {
