@@ -4,6 +4,7 @@ import {
   formatSats,
   formatSatsWithBtc,
   formatUsd,
+  timeAgo,
   truncateMiddle,
 } from "../formatting";
 
@@ -100,5 +101,18 @@ describe("truncateMiddle", () => {
     const str = "abcdefghijklmnopqrst";
     const result = truncateMiddle(str);
     expect(result).toBe("abcdef...opqrst");
+  });
+});
+
+describe("timeAgo", () => {
+  it("accepts unix seconds timestamps", () => {
+    const now = Date.now();
+    const timestampSeconds = Math.floor((now - 2 * 60 * 60 * 1000) / 1000);
+    expect(timeAgo(timestampSeconds)).toBe("2h ago");
+  });
+
+  it("accepts unix millisecond timestamps", () => {
+    const timestampMs = Date.now() - 2 * 60 * 60 * 1000;
+    expect(timeAgo(timestampMs)).toBe("2h ago");
   });
 });

@@ -70,11 +70,11 @@ export function truncateMiddle(str: string, visibleChars: number = 6): string {
  */
 export function timeAgo(timestamp: number): string {
   if (timestamp === 0) return "—";
-  const now = Date.now() / 1000;
-  const diff = now - timestamp;
+  const timestampMs = timestamp > 1_000_000_000_000 ? timestamp : timestamp * 1000;
+  const diff = (Date.now() - timestampMs) / 1000;
   if (diff < 60) return "Just now";
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
-  return new Date(timestamp * 1000).toLocaleDateString();
+  return new Date(timestampMs).toLocaleDateString();
 }
