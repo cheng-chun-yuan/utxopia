@@ -14,6 +14,8 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::process::Command;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use crate::common::cors::cors_from_env;
@@ -62,6 +64,28 @@ pub struct WithdrawalStatusResponse {
 pub struct ErrorResponse {
     pub error: String,
     pub details: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegtestFaucetRequest {
+    pub address: String,
+    pub amount_sats: u64,
+    #[serde(default)]
+    pub op_return: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegtestFaucetResponse {
+    pub ok: bool,
+    pub txid: Option<String>,
+    pub blocks_mined: u64,
+    pub deposit_address: String,
+    pub op_return: Option<String>,
+    pub amount_sats: u64,
+    pub warning: Option<String>,
+    pub error: Option<String>,
 }
 
 pub struct CombinedAppState {
@@ -297,6 +321,281 @@ async fn handle_stealth_announce(
     (StatusCode::GONE, Json(response))
 }
 
+fn faucet_env(name: &str, default: &str) -> String {
+    std::env::var(name).unwrap_or_else(|_| default.to_string())
+}
+
+fn faucet_bcli_args() -> Vec<String> {
+    faucet_env("REGTEST_FAUCET_BCLI_ARGS", "-regtest -datadir=/data/bitcoin -rpcwallet=test")
+        .split_whitespace()
+        .map(ToString::to_string)
+        .collect()
+}
+
+fn is_valid_regtest_address(addr: &str) -> bool {
+    addr.starts_with("bcrt1")
+        && addr.len() >= 42
+        && addr.len() <= 94
+        && addr.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+}
+
+fn is_valid_op_return_hex(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 160
+        && value.len() % 2 == 0
+        && value.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+fn sats_to_btc_decimal(sats: u64) -> String {
+    format!("{}.{:08}", sats / 100_000_000, sats % 100_000_000)
+}
+
+fn run_bitcoin_cli(args: &[&str]) -> Result<String, String> {
+    let docker = faucet_env("REGTEST_FAUCET_DOCKER_BIN", "docker");
+    let container = faucet_env("REGTEST_FAUCET_DOCKER_CONTAINER", "utxopia-esplora-regtest");
+    let bcli = faucet_env("REGTEST_FAUCET_BITCOIN_CLI", "/srv/explorer/bitcoin/bin/bitcoin-cli");
+    let bcli_args = faucet_bcli_args();
+
+    let output = Command::new(&docker)
+        .arg("exec")
+        .arg(container)
+        .arg(bcli)
+        .args(bcli_args)
+        .args(args)
+        .output()
+        .map_err(|e| format!("failed to run docker/bitcoin-cli: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        return Err(if stderr.is_empty() { stdout } else { stderr });
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn ensure_regtest_wallet_funded() -> Result<(), String> {
+    let balance = run_bitcoin_cli(&["getbalance"])
+        .map_err(|e| format!("getbalance failed: {e}"))?;
+    if balance.parse::<f64>().unwrap_or(0.0) > 0.0 {
+        return Ok(());
+    }
+
+    if std::env::var("REGTEST_FAUCET_AUTOMINE").unwrap_or_else(|_| "1".to_string()) == "0" {
+        return Err("wallet has zero spendable balance and REGTEST_FAUCET_AUTOMINE=0".to_string());
+    }
+
+    let miner = run_bitcoin_cli(&["getnewaddress"])
+        .map_err(|e| format!("getnewaddress failed during bootstrap: {e}"))?;
+    run_bitcoin_cli(&["generatetoaddress", "101", &miner])
+        .map_err(|e| format!("bootstrap mining failed: {e}"))?;
+    Ok(())
+}
+
+async fn handle_regtest_faucet(Json(req): Json<RegtestFaucetRequest>) -> impl IntoResponse {
+    let max_sats = std::env::var("REGTEST_FAUCET_MAX_SATS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(100_000);
+    let confirmations = std::env::var("REGTEST_FAUCET_CONFIRMATIONS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(6)
+        .max(1);
+
+    if std::env::var("UTXOPIA_BITCOIN_NETWORK").unwrap_or_default() != "regtest" {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(RegtestFaucetResponse {
+                ok: false,
+                txid: None,
+                blocks_mined: 0,
+                deposit_address: req.address,
+                op_return: req.op_return,
+                amount_sats: req.amount_sats,
+                warning: None,
+                error: Some("faucet only available when backend UTXOPIA_BITCOIN_NETWORK=regtest".to_string()),
+            }),
+        );
+    }
+
+    if !is_valid_regtest_address(&req.address) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(RegtestFaucetResponse {
+                ok: false,
+                txid: None,
+                blocks_mined: 0,
+                deposit_address: req.address,
+                op_return: req.op_return,
+                amount_sats: req.amount_sats,
+                warning: None,
+                error: Some("address must be a regtest bech32 address".to_string()),
+            }),
+        );
+    }
+    if req.amount_sats == 0 || req.amount_sats > max_sats {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(RegtestFaucetResponse {
+                ok: false,
+                txid: None,
+                blocks_mined: 0,
+                deposit_address: req.address,
+                op_return: req.op_return,
+                amount_sats: req.amount_sats,
+                warning: None,
+                error: Some(format!("amountSats must be an integer from 1..{max_sats}")),
+            }),
+        );
+    }
+    if let Some(ref op_return) = req.op_return {
+        if !is_valid_op_return_hex(op_return) {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(RegtestFaucetResponse {
+                    ok: false,
+                    txid: None,
+                    blocks_mined: 0,
+                    deposit_address: req.address,
+                    op_return: req.op_return,
+                    amount_sats: req.amount_sats,
+                    warning: None,
+                    error: Some("opReturn must be hex and at most 80 bytes".to_string()),
+                }),
+            );
+        }
+    }
+
+    if let Err(e) = ensure_regtest_wallet_funded() {
+        return (
+            StatusCode::BAD_GATEWAY,
+            Json(RegtestFaucetResponse {
+                ok: false,
+                txid: None,
+                blocks_mined: 0,
+                deposit_address: req.address,
+                op_return: req.op_return,
+                amount_sats: req.amount_sats,
+                warning: None,
+                error: Some(e),
+            }),
+        );
+    }
+
+    let amount_btc = sats_to_btc_decimal(req.amount_sats);
+    let txid = if let Some(ref op_return) = req.op_return {
+        let outputs = serde_json::json!([
+            { req.address.clone(): amount_btc.parse::<f64>().unwrap_or(0.0) },
+            { "data": op_return },
+        ]);
+        let outputs = outputs.to_string();
+        let raw = match run_bitcoin_cli(&["createrawtransaction", "[]", &outputs]) {
+            Ok(v) => v,
+            Err(e) => return faucet_error(StatusCode::BAD_GATEWAY, req, format!("createrawtransaction failed: {e}")),
+        };
+        let funded = match run_bitcoin_cli(&["fundrawtransaction", &raw]) {
+            Ok(v) => v,
+            Err(e) => return faucet_error(StatusCode::BAD_GATEWAY, req, format!("fundrawtransaction failed: {e}")),
+        };
+        let funded_hex = match serde_json::from_str::<Value>(&funded)
+            .ok()
+            .and_then(|v| v.get("hex").and_then(|h| h.as_str()).map(ToString::to_string))
+        {
+            Some(v) => v,
+            None => return faucet_error(StatusCode::BAD_GATEWAY, req, "fundrawtransaction returned no hex".to_string()),
+        };
+        let signed = match run_bitcoin_cli(&["signrawtransactionwithwallet", &funded_hex]) {
+            Ok(v) => v,
+            Err(e) => return faucet_error(StatusCode::BAD_GATEWAY, req, format!("signrawtransactionwithwallet failed: {e}")),
+        };
+        let signed_json = match serde_json::from_str::<Value>(&signed) {
+            Ok(v) => v,
+            Err(e) => return faucet_error(StatusCode::BAD_GATEWAY, req, format!("invalid sign result: {e}")),
+        };
+        if !signed_json.get("complete").and_then(|v| v.as_bool()).unwrap_or(false) {
+            return faucet_error(StatusCode::BAD_GATEWAY, req, "signrawtransactionwithwallet did not complete".to_string());
+        }
+        let signed_hex = match signed_json.get("hex").and_then(|h| h.as_str()) {
+            Some(v) => v,
+            None => return faucet_error(StatusCode::BAD_GATEWAY, req, "signrawtransactionwithwallet returned no hex".to_string()),
+        };
+        match run_bitcoin_cli(&["sendrawtransaction", signed_hex]) {
+            Ok(v) => v,
+            Err(e) => return faucet_error(StatusCode::BAD_GATEWAY, req, format!("sendrawtransaction failed: {e}")),
+        }
+    } else {
+        match run_bitcoin_cli(&["sendtoaddress", &req.address, &amount_btc]) {
+            Ok(v) => v,
+            Err(e) => return faucet_error(StatusCode::BAD_GATEWAY, req, format!("sendtoaddress failed: {e}")),
+        }
+    };
+
+    let miner = match run_bitcoin_cli(&["getnewaddress"]) {
+        Ok(v) => v,
+        Err(e) => {
+            return (
+                StatusCode::OK,
+                Json(RegtestFaucetResponse {
+                    ok: true,
+                    txid: Some(txid),
+                    blocks_mined: 0,
+                    deposit_address: req.address,
+                    op_return: req.op_return,
+                    amount_sats: req.amount_sats,
+                    warning: Some(format!("deposit broadcast but mining failed at getnewaddress: {e}")),
+                    error: None,
+                }),
+            )
+        }
+    };
+    if let Err(e) = run_bitcoin_cli(&["generatetoaddress", &confirmations.to_string(), &miner]) {
+        return (
+            StatusCode::OK,
+            Json(RegtestFaucetResponse {
+                ok: true,
+                txid: Some(txid),
+                blocks_mined: 0,
+                deposit_address: req.address,
+                op_return: req.op_return,
+                amount_sats: req.amount_sats,
+                warning: Some(format!("deposit broadcast but mining failed: {e}")),
+                error: None,
+            }),
+        );
+    }
+
+    (
+        StatusCode::OK,
+        Json(RegtestFaucetResponse {
+            ok: true,
+            txid: Some(txid),
+            blocks_mined: confirmations,
+            deposit_address: req.address,
+            op_return: req.op_return,
+            amount_sats: req.amount_sats,
+            warning: None,
+            error: None,
+        }),
+    )
+}
+
+fn faucet_error(status: StatusCode, req: RegtestFaucetRequest, error: String) -> (StatusCode, Json<RegtestFaucetResponse>) {
+    (
+        status,
+        Json(RegtestFaucetResponse {
+            ok: false,
+            txid: None,
+            blocks_mined: 0,
+            deposit_address: req.address,
+            op_return: req.op_return,
+            amount_sats: req.amount_sats,
+            warning: None,
+            error: Some(error),
+        }),
+    )
+}
+
 pub fn create_router(service: RedemptionService) -> Router {
     let state: AppState = Arc::new(RwLock::new(service));
     let rate_limiter = create_rate_limiter();
@@ -398,6 +697,7 @@ pub fn create_combined_router(
         .route("/api/stealth/prepare", post(handle_stealth_prepare))
         .route("/api/stealth/status/{id}", get(handle_stealth_status))
         .route("/api/stealth/announce", post(handle_stealth_announce))
+        .route("/api/faucet/regtest", post(handle_regtest_faucet))
         .layer(axum::middleware::from_fn(api_key_auth_middleware))
         .with_state(state.clone());
 

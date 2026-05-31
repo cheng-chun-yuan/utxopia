@@ -41,6 +41,7 @@ import {
   type NetworkConfig,
   type NetworkId,
 } from "@/lib/network-config";
+import { getBackendUrl } from "@/lib/api/constants";
 import {
   createNonInteractiveDeposit,
   createDirectVaultDeposit,
@@ -69,6 +70,8 @@ const DEFAULT_SATS = Math.min(
 );
 const CONFIRMATIONS = Math.max(1, Number(process.env.REGTEST_FAUCET_CONFIRMATIONS || "6"));
 const API_KEY = process.env.REGTEST_FAUCET_API_KEY;
+const BACKEND_API_KEY = process.env.BACKEND_API_KEY || "";
+const REMOTE_FAUCET_MODE = process.env.REGTEST_FAUCET_MODE || (process.env.VERCEL ? "backend" : "local");
 const AUTOMINE = process.env.REGTEST_FAUCET_AUTOMINE !== "0";
 // Coinbase outputs need 100 confirmations before they're spendable, so mine
 // 101 blocks on bootstrap (first block creates the coinbase reward, the next
@@ -178,6 +181,53 @@ interface FaucetNetworkConfig {
 
 const DEFAULT_REGTEST_GROUP_PUBKEY =
   "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+
+async function callBackendFaucet(
+  network: NetworkId,
+  payload: {
+    address: string;
+    amountSats: number;
+    opReturn?: string;
+  },
+): Promise<NextResponse | null> {
+  const backendUrl = process.env.REGTEST_FAUCET_BACKEND_URL || getBackendUrl(network);
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (BACKEND_API_KEY) headers["X-API-Key"] = BACKEND_API_KEY;
+
+  let res: Response;
+  try {
+    res = await fetch(`${backendUrl}/api/faucet/regtest`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+      cache: "no-store",
+    });
+  } catch (e) {
+    if (REMOTE_FAUCET_MODE === "backend") {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: `backend faucet unreachable: ${e instanceof Error ? e.message : String(e)}`,
+        },
+        { status: 502 },
+      );
+    }
+    return null;
+  }
+
+  const text = await res.text();
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    body = {
+      ok: false,
+      error: `backend faucet returned non-JSON response: ${truncate(text, 300)}`,
+    };
+  }
+
+  return NextResponse.json(body, { status: res.status });
+}
 
 async function runBitcoinCli(args: string[]): Promise<string> {
   const fullArgs = ["exec", CONTAINER, BCLI, ...BCLI_ARGS, ...args];
@@ -435,6 +485,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         { ok: false, error: `invalid stealth address or deposit config: ${truncate(e instanceof Error ? e.message : String(e), 300)}` },
         { status: 400 },
       );
+    }
+  }
+
+  if (REMOTE_FAUCET_MODE === "backend") {
+    const remote = await callBackendFaucet(activeNetwork, {
+      address: btcAddress,
+      amountSats,
+      opReturn: opReturnHex,
+    });
+    if (remote) {
+      if (remote.ok) recordLimitHit(quotaKeys);
+      return remote;
     }
   }
 

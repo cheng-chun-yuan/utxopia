@@ -158,7 +158,7 @@ case "$NETWORK" in
   devnet-regtest)
     SOLANA_RPC="${SOLANA_RPC:-https://api.devnet.solana.com}"
     BTC_NETWORK="${BTC_NETWORK:-regtest}"
-    BACKEND_URL="${BACKEND_URL:-http://localhost:3020}"
+    BACKEND_URL="${BACKEND_URL:-https://api-hybrid.utxopia.com}"
     TRACKER_API_PORT="${TRACKER_API_PORT:-3020}"
     BTC_EXPLORER="$PUBLIC_REGTEST_BTC_EXPLORER"
     ESPLORA_URL="http://localhost:3002/regtest/api"
@@ -176,7 +176,7 @@ case "$NETWORK" in
   sui-regtest)
     SOLANA_RPC=""
     BTC_NETWORK="${BTC_NETWORK:-regtest}"
-    BACKEND_URL="${BACKEND_URL:-http://localhost:3001}"
+    BACKEND_URL="${BACKEND_URL:-https://api-hybrid.utxopia.com}"
     TRACKER_API_PORT="${TRACKER_API_PORT:-3001}"
     BTC_EXPLORER="$PUBLIC_REGTEST_BTC_EXPLORER"
     ESPLORA_URL="http://localhost:3002/regtest/api"

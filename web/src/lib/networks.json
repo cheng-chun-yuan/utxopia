@@ -257,7 +257,7 @@
       "dwalletXOnlyPubkey": ""
     },
     "backend": {
-      "url": "http://localhost:3001"
+      "url": "https://api-hybrid.utxopia.com"
     },
     "sui": {
       "rpcUrl": "https://fullnode.testnet.sui.io:443",
