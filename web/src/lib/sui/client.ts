@@ -12,7 +12,18 @@ import { UTXOpiaSuiAdapter } from "@utxopia/sdk-sui";
 import { detectNetwork, getNetworkConfig } from "@/lib/network-config";
 
 const ZKLOGIN_SESSION_KEY = "utxopia.sui.zklogin";
+const SUI_AUTH_STATE_KEY = "utxopia.sui.auth";
 const DEFAULT_EPOCH_WINDOW = 2;
+
+export const SUI_AUTH_CHANGE_EVENT = "utxopia:sui-auth-change";
+
+export type SuiAuthMethod = "zklogin" | "wallet";
+
+export interface SuiAuthState {
+  method: SuiAuthMethod;
+  address: string;
+  updatedAt: number;
+}
 
 export interface SuiZkLoginSession {
   provider: "google";
@@ -123,6 +134,45 @@ export function clearSuiZkLoginSession() {
   window.sessionStorage.removeItem(ZKLOGIN_SESSION_KEY);
 }
 
+export function getSuiAuthState(): SuiAuthState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(SUI_AUTH_STATE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<SuiAuthState>;
+    if (
+      (parsed.method !== "zklogin" && parsed.method !== "wallet") ||
+      typeof parsed.address !== "string" ||
+      !parsed.address
+    ) {
+      return null;
+    }
+    return {
+      method: parsed.method,
+      address: parsed.address,
+      updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function saveSuiAuthState(input: { method: SuiAuthMethod; address: string }) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(
+    SUI_AUTH_STATE_KEY,
+    JSON.stringify({ ...input, updatedAt: Date.now() }),
+  );
+  window.dispatchEvent(new CustomEvent(SUI_AUTH_CHANGE_EVENT));
+}
+
+export function clearSuiAuthState() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(SUI_AUTH_STATE_KEY);
+  clearSuiZkLoginSession();
+  window.dispatchEvent(new CustomEvent(SUI_AUTH_CHANGE_EVENT));
+}
+
 export async function consumeSuiZkLoginCallback(): Promise<SuiZkLoginCallback> {
   if (typeof window === "undefined") {
     return { jwt: null, address: null, salt: null, error: null };
@@ -135,6 +185,7 @@ export async function consumeSuiZkLoginCallback(): Promise<SuiZkLoginCallback> {
 
   const salt = await fetchZkLoginSalt(jwt);
   const address = salt ? jwtToAddress(jwt, salt) : null;
+  if (address) saveSuiAuthState({ method: "zklogin", address });
   window.history.replaceState(null, "", window.location.pathname + window.location.search);
   return { jwt, address, salt, error };
 }

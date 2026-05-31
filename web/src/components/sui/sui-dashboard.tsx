@@ -6,9 +6,12 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { motion } from "framer-motion";
 import {
   ArrowDownToLine,
+  CheckCircle2,
   ChevronDown,
+  Copy,
   ExternalLink,
   History,
+  LogOut,
   Send,
   Settings,
   Shield,
@@ -16,7 +19,14 @@ import {
 } from "lucide-react";
 import { SuiAuthPanel } from "@/components/sui/sui-auth-panel";
 import { detectNetwork, getNetworkConfig, hrefWithChain, type NetworkId } from "@/lib/network-config";
+import {
+  clearSuiAuthState,
+  getSuiAuthState,
+  SUI_AUTH_CHANGE_EVENT,
+  type SuiAuthState,
+} from "@/lib/sui/client";
 import { cn } from "@/lib/utils";
+import { useUTXOpiaStore } from "@/stores";
 
 type RpcState = "idle" | "loading" | "ok" | "error";
 type SuiConfig = NonNullable<ReturnType<typeof getNetworkConfig>["sui"]>;
@@ -49,6 +59,17 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
   const explorer = useMemo(() => makeExplorer(sui.explorerUrl), [sui.explorerUrl]);
   const [poolProbe, setPoolProbe] = useState<ObjectProbe>({ state: "idle" });
   const [authOpen, setAuthOpen] = useState(false);
+  const [suiAuth, setSuiAuth] = useState<SuiAuthState | null>(null);
+  const stealthAddressEncoded = useUTXOpiaStore((s) => s.stealthAddressEncoded);
+  const clearKeys = useUTXOpiaStore((s) => s.clearKeys);
+  const identity = stealthAddressEncoded ?? suiAuth?.address ?? null;
+  const identityKind = stealthAddressEncoded
+    ? "Private vault"
+    : suiAuth?.method === "zklogin"
+      ? "zkLogin"
+      : suiAuth?.method === "wallet"
+        ? "Sui wallet"
+        : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -68,6 +89,24 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
     const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
     if (hash.get("id_token") || hash.get("error")) setAuthOpen(true);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const refresh = () => setSuiAuth(getSuiAuthState());
+    refresh();
+    window.addEventListener(SUI_AUTH_CHANGE_EVENT, refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener(SUI_AUTH_CHANGE_EVENT, refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+
+  function signOut() {
+    clearSuiAuthState();
+    clearKeys();
+    setSuiAuth(null);
+  }
 
   return (
     <div className="flex-1 flex flex-col items-center pt-24 pb-8 px-4">
@@ -92,15 +131,47 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
 
         <div className="flex flex-col items-center pb-5 pt-3 text-center">
           <h1 className="mb-1 text-[22px] font-bold text-foreground">Your Wallet</h1>
-          <p className="mb-6 text-caption text-gray/60">Private Sui test vault.</p>
-          <button
-            type="button"
-            onClick={() => setAuthOpen(true)}
-            className="mb-6 inline-flex items-center gap-2 rounded-full bg-sui px-7 py-3 text-body2 font-semibold text-background transition-opacity hover:opacity-90 active:scale-95"
-          >
-            <Shield className="h-4 w-4" />
-            Get Started
-          </button>
+          <p className="mb-5 text-caption text-gray/60">
+            {identity ? "Private Sui vault ready." : "Sign in to open your private Sui vault."}
+          </p>
+          {identity ? (
+            <div className="mb-6 flex w-full max-w-[420px] flex-wrap items-center justify-center gap-2 rounded-[14px] border border-sui/15 bg-sui/5 px-3 py-3">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-sui/20 bg-sui/10 px-2.5 py-1 text-[11px] font-semibold text-sui">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                {identityKind}
+              </span>
+              <span className="min-w-0 max-w-full truncate font-mono text-xs text-foreground/85">
+                {shorten(identity, identity.startsWith("utxo:") ? 12 : 10, 8)}
+              </span>
+              <button
+                type="button"
+                onClick={() => navigator.clipboard?.writeText(identity)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray/10 text-gray transition-colors hover:border-sui/25 hover:text-sui focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sui/40"
+                aria-label="Copy account"
+                title="Copy account"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={signOut}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-gray/10 text-gray transition-colors hover:border-sui/25 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sui/40"
+                aria-label="Sign out"
+                title="Sign out"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAuthOpen(true)}
+              className="mb-6 inline-flex items-center gap-2 rounded-full bg-sui px-7 py-3 text-body2 font-semibold text-background transition-opacity hover:opacity-90 active:scale-95"
+            >
+              <Shield className="h-4 w-4" />
+              Get Started
+            </button>
+          )}
 
           <div className="flex items-center justify-center gap-5 sm:gap-8">
             <VaultAction href={hrefWithChain("/vault/deposit", networkId)} icon={<ArrowDownToLine className="h-5 w-5" />} label="Deposit" />
@@ -185,7 +256,7 @@ function SuiAuthModal({ open, onOpenChange }: { open: boolean; onOpenChange: (op
             </Dialog.Description>
           </div>
 
-          <SuiAuthPanel embedded />
+          <SuiAuthPanel embedded onAuthenticated={() => onOpenChange(false)} />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

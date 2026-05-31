@@ -12,10 +12,12 @@ import {
 import { usePasskey } from "@/hooks/use-passkey";
 import {
   buildGoogleZkLoginUrl,
-  clearSuiZkLoginSession,
+  clearSuiAuthState,
   consumeSuiZkLoginCallback,
   createSuiZkLoginSession,
+  getSuiAuthState,
   getSuiZkLoginSession,
+  saveSuiAuthState,
   type SuiZkLoginSession,
 } from "@/lib/sui/client";
 import { useUTXOpiaStore } from "@/stores";
@@ -32,7 +34,13 @@ declare global {
   }
 }
 
-export function SuiAuthPanel({ embedded = false }: { embedded?: boolean }) {
+export function SuiAuthPanel({
+  embedded = false,
+  onAuthenticated,
+}: {
+  embedded?: boolean;
+  onAuthenticated?: () => void;
+}) {
   const [address, setAddress] = useState<string | null>(null);
   const [session, setSession] = useState<SuiZkLoginSession | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -47,9 +55,14 @@ export function SuiAuthPanel({ embedded = false }: { embedded?: boolean }) {
   } = usePasskey();
   const deriveKeysFromPasskeySeed = useUTXOpiaStore((s) => s.deriveKeysFromPasskeySeed);
   const stealthAddressEncoded = useUTXOpiaStore((s) => s.stealthAddressEncoded);
-  const displayAddress = address ?? stealthAddressEncoded;
+  const displayAddress = stealthAddressEncoded ?? address;
 
   useEffect(() => {
+    const saved = getSuiAuthState();
+    if (saved) {
+      setAddress(saved.address);
+      setStatus("ready");
+    }
     setSession(getSuiZkLoginSession());
     let cancelled = false;
     async function run() {
@@ -69,6 +82,7 @@ export function SuiAuthPanel({ embedded = false }: { embedded?: boolean }) {
               ? "Signed in with Google."
               : "Google sign-in completed, but the salt endpoint is not configured.",
           );
+          if (callback.address) onAuthenticated?.();
         }
       } catch (error) {
         if (!cancelled) {
@@ -81,7 +95,7 @@ export function SuiAuthPanel({ embedded = false }: { embedded?: boolean }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [onAuthenticated]);
 
   async function connectSuiWallet() {
     setStatus("loading");
@@ -94,9 +108,11 @@ export function SuiAuthPanel({ embedded = false }: { embedded?: boolean }) {
       await wallet.requestPermissions();
       const accounts = await wallet.getAccounts();
       if (!accounts[0]) throw new Error("No Sui account was returned by the wallet.");
+      saveSuiAuthState({ method: "wallet", address: accounts[0] });
       setAddress(accounts[0]);
       setStatus("ready");
       setMessage("Sui wallet connected.");
+      onAuthenticated?.();
     } catch (error) {
       setStatus("error");
       setMessage(error instanceof Error ? error.message : String(error));
@@ -131,8 +147,13 @@ export function SuiAuthPanel({ embedded = false }: { embedded?: boolean }) {
         return;
       }
       await deriveKeysFromPasskeySeed(seed);
+      const store = useUTXOpiaStore.getState();
+      if (!store.stealthAddressEncoded) {
+        throw new Error(store.error ?? "Passkey key derivation did not return a private vault address.");
+      }
       setStatus("ready");
       setMessage(hasPasskeyCredential ? "Passkey signed in." : "Passkey created.");
+      onAuthenticated?.();
     } catch (error) {
       setStatus("error");
       setMessage(error instanceof Error ? error.message : String(error));
@@ -140,7 +161,7 @@ export function SuiAuthPanel({ embedded = false }: { embedded?: boolean }) {
   }
 
   function resetZkLogin() {
-    clearSuiZkLoginSession();
+    clearSuiAuthState();
     setSession(null);
     setAddress(null);
     setStatus("idle");
