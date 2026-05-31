@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Copy,
+  Droplets,
   ExternalLink,
   History,
   LogOut,
@@ -175,6 +176,9 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
 
           <div className="flex items-center justify-center gap-5 sm:gap-8">
             <VaultAction href={hrefWithChain("/vault/deposit", networkId)} icon={<ArrowDownToLine className="h-5 w-5" />} label="Deposit" />
+            {networkId === "sui-regtest" && (
+              <VaultAction href={hrefWithChain("/faucet", networkId)} icon={<Droplets className="h-5 w-5" />} label="Faucet" />
+            )}
             <VaultAction href={hrefWithChain("/send", networkId)} icon={<Send className="h-5 w-5" />} label="Send" />
             <VaultAction href={hrefWithChain("/vault/activity", networkId)} icon={<History className="h-5 w-5" />} label="Activity" />
           </div>

@@ -12,7 +12,7 @@ import { detectNetwork, hrefWithChain } from "@/lib/network-config";
 export function SiteHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const network = useMemo(() => detectNetwork(), []);
-  const isHybrid = network === "devnet-regtest";
+  const isHybrid = network === "devnet-regtest" || network === "sui-regtest";
   const chainHref = (href: string) => hrefWithChain(href, network);
 
   return (

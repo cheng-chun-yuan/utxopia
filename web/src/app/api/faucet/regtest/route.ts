@@ -36,6 +36,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import networks from "@/lib/networks.json";
 import {
+  createNonInteractiveDeposit,
   createDirectVaultDeposit,
   decodeStealthMetaAddress,
 } from "@utxopia/sdk";
@@ -146,11 +147,15 @@ interface DripBody {
 interface FaucetNetworkConfig {
   bitcoin?: {
     network?: string;
+    groupPubkey?: string;
   };
   ika?: {
     dwalletXOnlyPubkey?: string;
   };
 }
+
+const DEFAULT_REGTEST_GROUP_PUBKEY =
+  "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
 
 async function runBitcoinCli(args: string[]): Promise<string> {
   const fullArgs = ["exec", CONTAINER, BCLI, ...BCLI_ARGS, ...args];
@@ -179,6 +184,14 @@ function hex(buf: Uint8Array): string {
   return Buffer.from(buf).toString("hex");
 }
 
+function hexToBytes(value: string): Uint8Array {
+  const normalized = value.trim().replace(/^0x/, "");
+  if (!/^[0-9a-fA-F]+$/.test(normalized) || normalized.length % 2 !== 0) {
+    throw new Error("invalid hex string");
+  }
+  return Uint8Array.from(Buffer.from(normalized, "hex"));
+}
+
 function getActiveNetworkConfig(): FaucetNetworkConfig {
   const network = process.env.NEXT_PUBLIC_NETWORK || process.env.UTXOPIA_NETWORK || "devnet-regtest";
   const configs = networks as Record<string, FaucetNetworkConfig>;
@@ -200,7 +213,16 @@ async function createDepositForStealth(stealthAddress: string): Promise<{
     return { btcAddress: deposit.btcAddress, opReturnPayload: deposit.opReturnPayload };
   }
 
-  throw new Error("active network is missing ika.dwalletXOnlyPubkey; legacy sweep deposits are disabled");
+  const groupPubkeyHex =
+    process.env.REGTEST_FAUCET_GROUP_PUBKEY ||
+    cfg?.bitcoin?.groupPubkey ||
+    DEFAULT_REGTEST_GROUP_PUBKEY;
+  const groupPubkey = hexToBytes(groupPubkeyHex);
+  if (groupPubkey.length !== 32) {
+    throw new Error("active network group pubkey must be 32 bytes");
+  }
+  const deposit = await createNonInteractiveDeposit(meta, groupPubkey, btcNetwork);
+  return { btcAddress: deposit.btcAddress, opReturnPayload: deposit.opReturnPayload };
 }
 
 function limitKey(kind: "recipient" | "ip", value: string): string {

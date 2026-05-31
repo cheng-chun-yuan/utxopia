@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Droplets, Wallet, ExternalLink } from "lucide-react";
-import { detectNetwork, getNetworkConfig } from "@/lib/network-config";
+import { detectNetwork, getNetworkConfig, hrefWithChain } from "@/lib/network-config";
 import { cn } from "@/lib/utils";
 
 /**
@@ -25,13 +25,15 @@ export default function FaucetPage() {
     }
   }, []);
 
-  const isHybrid = network === "devnet-regtest";
+  const isHybrid = network === "devnet-regtest" || network === "sui-regtest";
+  const chainHref = (href: string) => network ? hrefWithChain(href, network) : href;
+  const isSui = network === "sui-regtest";
 
   return (
     <main className="min-h-screen bg-background hacker-bg noise-overlay flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-[480px] mb-4 flex items-center justify-between relative z-10">
         <Link
-          href="/"
+          href={chainHref("/")}
           className="inline-flex items-center gap-2 text-body2 text-gray hover:text-gray-light transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -56,12 +58,14 @@ export default function FaucetPage() {
           <div>
             <h1 className="text-heading6 text-foreground">Regtest zkBTC airdrop</h1>
             <p className="text-caption text-gray">
-              Deposit 0.001 regtest BTC into a UTXOpia stealth address.
+              {isSui
+                ? "Create a local BTC regtest deposit for your Sui vault."
+                : "Deposit 0.001 regtest BTC into a UTXOpia stealth address."}
             </p>
           </div>
         </div>
 
-        {isHybrid ? <FaucetForm /> : <NotAvailableNotice network={network ?? "unknown"} />}
+        {isHybrid ? <FaucetForm isSui={isSui} /> : <NotAvailableNotice network={network ?? "unknown"} />}
       </div>
     </main>
   );
@@ -72,8 +76,8 @@ function NotAvailableNotice({ network }: { network?: string }) {
     <div className="space-y-3">
       <div className="p-4 rounded-[12px] bg-muted border border-gray/15">
         <p className="text-body2 text-gray-light">
-          Faucet is only available on the <span className="text-warning font-mono">regtest</span>{" "}
-          (hybrid) stack. The current network is{" "}
+          Faucet is only available on a <span className="text-warning font-mono">regtest</span>{" "}
+          hybrid stack. The current network is{" "}
           <span className="text-foreground font-mono">{network ?? "unknown"}</span>.
         </p>
       </div>
@@ -83,11 +87,11 @@ function NotAvailableNotice({ network }: { network?: string }) {
 {`# 1. Start regtest BTC + esplora
 docker compose -f docker-compose.regtest.yml up -d
 
-# 2. Switch backend to hybrid (devnet Solana + regtest BTC)
+# 2. Switch backend to hybrid (Solana or Sui + regtest BTC)
 docker compose -f docker-compose.hybrid.yml up --build -d
 
-# 3. Point web/.env.local at the hybrid backend +
-#    set NEXT_PUBLIC_BTC_NETWORK=regtest`}
+# 3. Sync the matching env
+UTXOPIA_NETWORK=sui-regtest ./scripts/sync-env.sh`}
         </pre>
         <p className="pt-1">
           Public testnet4 / mainnet users should use{" "}
@@ -120,7 +124,7 @@ type DripResult =
   | { kind: "cooldown"; retryAfterSec: number; message: string }
   | { kind: "err"; message: string };
 
-function FaucetForm() {
+function FaucetForm({ isSui = false }: { isSui?: boolean }) {
   const [address, setAddress] = useState("");
   const [amountSats, setAmountSats] = useState(100_000);
   const [submitting, setSubmitting] = useState(false);
@@ -287,8 +291,14 @@ function FaucetForm() {
       )}
 
       <p className="text-caption text-gray">
-        Share this page with a tester and ask them for their <span className="font-mono">utxo:</span>{" "}
-        address. The backend creates the regtest BTC deposit and the tracker credits the note after it sees the transaction.
+        {isSui
+          ? "Use this during Sui Hybrid demos to create the same regtest BTC deposit shape: BTC output plus OP_RETURN metadata for the private note."
+          : (
+            <>
+              Share this page with a tester and ask them for their <span className="font-mono">utxo:</span>{" "}
+              address. The backend creates the regtest BTC deposit and the tracker credits the note after it sees the transaction.
+            </>
+          )}
       </p>
     </div>
   );
