@@ -38,8 +38,12 @@ const vk = requireState(state.vk?.[CIRCUIT], `${CIRCUIT} vk`);
 
 const amount = BigInt(process.env.UTXOPIA_SUI_REGTEST_AMOUNT_SATS ?? "25000");
 const minerFee = BigInt(process.env.UTXOPIA_SUI_REGTEST_WITHDRAW_FEE_SATS ?? "1000");
+const withdrawalSignerMode = process.env.UTXOPIA_SUI_WITHDRAW_SIGNER_MODE ?? "relayer";
 if (amount <= minerFee + 546n) {
   throw new Error("UTXOPIA_SUI_REGTEST_AMOUNT_SATS must exceed fee plus dust threshold");
+}
+if (withdrawalSignerMode !== "relayer" && withdrawalSignerMode !== "ika") {
+  throw new Error("UTXOPIA_SUI_WITHDRAW_SIGNER_MODE must be `relayer` or `ika`");
 }
 
 let adapter = createAdapter(redemptionCap);
@@ -122,13 +126,18 @@ if (redemptionId === undefined) {
   throw new Error(`RedemptionRequested event missing from ${requestResult.digest}`);
 }
 
-console.log("Submitting Sui Ika policy approval placeholder...");
-const approveTx = await adapter.buildIkaApprovalTransaction({
-  redemptionId: BigInt(redemptionId),
-  sighash: createHash("sha256").update(withdrawal.rawTxHex).digest(),
-});
-const approveResult = await executeTransactionKind(approveTx.bytes);
-assertSuiSuccess("Ika policy approval", approveResult);
+let approveResult: Awaited<ReturnType<typeof executeTransactionKind>> | null = null;
+if (withdrawalSignerMode === "ika") {
+  console.log("Submitting Sui Ika policy approval placeholder...");
+  const approveTx = await adapter.buildIkaApprovalTransaction({
+    redemptionId: BigInt(redemptionId),
+    sighash: createHash("sha256").update(withdrawal.rawTxHex).digest(),
+  });
+  approveResult = await executeTransactionKind(approveTx.bytes);
+  assertSuiSuccess("Ika policy approval", approveResult);
+} else {
+  console.log("Skipping Sui Ika policy approval; regtest withdrawal uses the local relayer signer.");
+}
 
 console.log("Submitting Sui redemption completion...");
 const freshRedemptionCap = await refreshObjectRef(redemptionCap.objectId);
@@ -147,9 +156,10 @@ assertSuiSuccess("complete redemption", completeResult);
   shieldTxDigest: shieldResult.digest,
   transactTxDigest: transactResult.digest,
   withdrawTxid: withdrawal.withdrawTxid,
+  withdrawalSignerMode,
   redemptionId: String(redemptionId),
   requestTxDigest: requestResult.digest,
-  ikaApprovalTxDigest: approveResult.digest,
+  ...(approveResult ? { ikaApprovalTxDigest: approveResult.digest } : {}),
   completeTxDigest: completeResult.digest,
 };
 writeState(state);
@@ -172,14 +182,19 @@ console.log(JSON.stringify({
     redemptionId: String(redemptionId),
     requestTxDigest: requestResult.digest,
     requestStatus: requestResult.effects?.status,
-    ikaApprovalTxDigest: approveResult.digest,
-    ikaApprovalStatus: approveResult.effects?.status,
+    withdrawalSignerMode,
+    ...(approveResult ? {
+      ikaApprovalTxDigest: approveResult.digest,
+      ikaApprovalStatus: approveResult.effects?.status,
+    } : {}),
     completeTxDigest: completeResult.digest,
     completeStatus: completeResult.effects?.status,
   },
   limitations: [
     "Sui BTC deposit is now routed through btc_deposit::complete_verified_deposit with OP_RETURN validation and duplicate-claim protection; full header/merkle SPV verification is the remaining deposit hardening step.",
-    "Native Sui Ika dWallet signing is not executed here; policy approval uses the withdrawal transaction hash as a 32-byte placeholder.",
+    withdrawalSignerMode === "ika"
+      ? "Native Sui Ika dWallet signing is not executed here; policy approval uses the withdrawal transaction hash as a 32-byte placeholder."
+      : "BTC withdrawal is signed by the local regtest relayer wallet; native Sui Ika dWallet signing remains optional for later testnet work.",
   ],
 }, null, 2));
 
@@ -216,7 +231,7 @@ async function createDirectDeposit(inputNpk: bigint, depositAmount: bigint) {
 }
 
 async function broadcastWithdrawal(depositTxid: string, depositVout: number, inputAmountSats: bigint, sendAmountSats: bigint) {
-  console.log("Broadcasting regtest BTC withdrawal from direct pool deposit UTXO...");
+  console.log("Broadcasting regtest BTC withdrawal from direct pool deposit UTXO with the local relayer signer...");
   const destinationAddress = process.env.UTXOPIA_SUI_REGTEST_WITHDRAW_BTC_ADDRESS ?? getNewAddress("bech32m");
   const poolChangeAddress = process.env.UTXOPIA_SUI_REGTEST_POOL_BTC_ADDRESS ?? getNewAddress("bech32m");
   const changeSats = inputAmountSats - sendAmountSats - minerFee;

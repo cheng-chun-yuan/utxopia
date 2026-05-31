@@ -85,7 +85,7 @@ BTC_NETWORK=$(jval btcNetwork)
 SOLANA_RPC=$(jval solanaRpc)
 BACKEND_URL=$(jval backendUrl)
 
-SIGNING_MODE=$(python3 -c "import json,sys; d=json.load(open('$STATE_FILE')); print(d.get('signingMode','frost'))")
+SIGNING_MODE=$(python3 -c "import json,sys; d=json.load(open('$STATE_FILE')); print(d.get('signingMode','relayer' if '$NETWORK' in ('sui-testnet','sui-regtest') else 'frost'))")
 DEPOSIT_MODE=$(python3 -c "import json,sys; d=json.load(open('$STATE_FILE')); s=d.get('signingMode','frost'); ika=d.get('ika',{}).get('dwalletXOnlyPubkey',''); has_ika=bool(ika and any(c not in '0' for c in ika.lower())); print(d.get('depositMode', 'direct' if s == 'ika' and has_ika else 'sweep'))")
 
 # Ika dWallet integration (nested under "ika" — fall back to empty string if absent).
@@ -254,6 +254,7 @@ UTXOPIA_SUI_RELAYER_ADDRESS=$SUI_RELAYER_ADDRESS
 UTXOPIA_SUI_RELAYER_KEYPAIR_PATH=$SUI_RELAYER_KEYPAIR_PATH
 UTXOPIA_SUI_RELAYER_KEY_SCHEME=$SUI_RELAYER_KEY_SCHEME
 UTXOPIA_SUI_GAS_BUDGET=$SUI_GAS_BUDGET
+UTXOPIA_SUI_WITHDRAW_SIGNER_MODE=$SIGNING_MODE
 UTXOPIA_SUI_IKA_NETWORK=$SUI_IKA_NETWORK
 UTXOPIA_SUI_IKA_PACKAGE=$SUI_IKA_PACKAGE
 UTXOPIA_SUI_IKA_COMMON_PACKAGE=$SUI_IKA_COMMON_PACKAGE
@@ -326,6 +327,7 @@ NEXT_PUBLIC_SUI_REDEMPTION_QUEUE_ID=$SUI_REDEMPTION_QUEUE_ID
 NEXT_PUBLIC_SUI_REDEMPTION_CAP_ID=$SUI_REDEMPTION_CAP_ID
 NEXT_PUBLIC_SUI_VERIFYING_KEY_REGISTRY_ID=$SUI_VERIFYING_KEY_REGISTRY_ID
 NEXT_PUBLIC_SUI_RELAYER_ADDRESS=$SUI_RELAYER_ADDRESS
+NEXT_PUBLIC_SUI_WITHDRAW_SIGNER_MODE=$SIGNING_MODE
 NEXT_PUBLIC_SUI_IKA_NETWORK=$SUI_IKA_NETWORK
 NEXT_PUBLIC_SUI_IKA_PACKAGE=$SUI_IKA_PACKAGE
 NEXT_PUBLIC_SUI_IKA_SYSTEM_OBJECT_ID=$SUI_IKA_SYSTEM_OBJECT_ID
@@ -403,6 +405,9 @@ if network in ("sui-testnet", "sui-regtest"):
         },
         "relayer": {
             "address": "$SUI_RELAYER_ADDRESS",
+        },
+        "signing": {
+            "btcWithdrawal": "$SIGNING_MODE",
         },
         "ika": {
             "network": "$SUI_IKA_NETWORK",

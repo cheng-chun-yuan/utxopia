@@ -17,7 +17,7 @@ The first Sui Move package should implement:
 | `nullifier` | Nullifier registry using object storage/dynamic fields |
 | `notes` | Commitment insertion and note events |
 | `redemption` | BTC withdrawal request and completion state |
-| `ika_policy` | Policy gate before Ika signing authorization |
+| `ika_policy` | Optional policy event before native Ika signing authorization |
 | `verifier` | Groth16 BN254 prepared verification-key registry and proof gate |
 | `transact` | JoinSplit verification, nullifier spend, output commitment insertion |
 | `events` | Stable event structs for indexers |
@@ -37,7 +37,7 @@ Initial objects:
 | `AdminCap` | Address-owned | Pause/unpause and config updates |
 | `UpgradeCap` | Address-owned | Package upgrade control |
 | `RedemptionCap` | Address-owned or controlled object | Authority for redemption completion workers |
-| `DWalletPolicyCap` | Ika-controlled/capability flow | Authorize Ika signing after policy checks |
+| `DWalletPolicyCap` | Optional Ika-controlled/capability flow | Authorize Ika signing after policy checks |
 
 Shared objects are publicly accessible, so every mutating entry function must
 enforce protocol rules internally. Owned capability objects should gate admin,
@@ -63,17 +63,21 @@ Client flows should be designed as PTBs instead of one-instruction equivalents:
 | --- | --- |
 | Shield | create/fetch note inputs, call `shield_deposit`, emit commitment event |
 | Private transfer | prepare proof inputs, spend nullifiers, insert output commitments |
-| BTC redemption | spend note, create redemption request, optionally prepare Ika approval inputs |
-| Completion | fetch redemption object/event state, run policy gate, complete request |
+| BTC redemption | spend note, create redemption request |
+| Completion | fetch redemption object/event state, have the relayer sign/broadcast BTC, complete request with `RedemptionCap` |
 
 The SDK should expose PTB builders so the web app can compose wallet, coin, and
 UTXOpia calls atomically where Sui allows it.
 
 ## Ika Integration
 
-The Solana implementation calls Ika through CPI. On Sui, the design should be
-based on Ika-controlled dWallet objects/capabilities. The Sui package should
-own the redemption policy and authorize signing only after these checks pass:
+The default Sui regtest path uses a relayer/local signer so app and indexer
+work can continue without testnet IKA. Native Ika signing remains the intended
+production hardening path once testnet IKA and dWallet setup are available.
+
+For the Ika path, the design should be based on Ika-controlled dWallet
+objects/capabilities. The Sui package should own the redemption policy and
+authorize signing only after these checks pass:
 
 - pool is not paused
 - redemption request exists and is uncompleted

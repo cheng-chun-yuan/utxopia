@@ -5,8 +5,8 @@ app wiring:
 
 1. Bitcoin deposit evidence can be parsed and mapped to UTXOpia note metadata.
 2. JoinSplit proof transfer can be built and verified through Sui Groth16.
-3. BTC withdrawal can request redemption and pass the Ika signing policy gate.
-4. Redemption can be marked complete after the signing policy approval.
+3. BTC withdrawal can request redemption.
+4. Redemption can be marked complete by the relayer-held `RedemptionCap`.
 
 ## Local Mechanical POC
 
@@ -24,7 +24,6 @@ Current checks:
   Groth16 bytes.
 - Builds a Sui PTB for `transact::transact`.
 - Builds a Sui PTB for `redemption::request_redemption`.
-- Builds a Sui PTB for `ika_policy::approve_signing`.
 - Builds a Sui PTB for `redemption::complete_redemption`.
 
 This is the compile/build POC that proves the core paths have concrete code
@@ -42,8 +41,8 @@ Replace the demo object refs and bytes with:
 - `AdminCap` object ref
 - exported real `rawVerifyingKey` and `vkHash`
 - real `proofPoints` and `publicInputs`
-- real Ika dWallet package/object/capability calls when the Sui-side Ika package
-  interface is finalized
+- optional real Ika dWallet package/object/capability calls when testnet IKA is
+  available and the Sui-side Ika package interface is finalized
 - regtest/testnet Bitcoin transaction evidence
 
 ## Live Script Order
@@ -99,7 +98,6 @@ This executes:
 - input commitment insert
 - `transact::transact`
 - `redemption::request_redemption`
-- `ika_policy::approve_signing`
 - `redemption::complete_redemption`
 
 For a fresh package publish, shared-object initialization, VK registration, and
@@ -109,10 +107,10 @@ the live flow in one command:
 bun run sui:poc:fresh-all
 ```
 
-`ika_policy::approve_signing` is currently the on-chain policy gate and event
-surface. The final production step is replacing that placeholder event with the
-real Sui-side Ika dWallet signing package call once that package/object API is
-stable.
+`sui-regtest` currently uses the local relayer signer for BTC regtest
+withdrawals and the relayer-held `RedemptionCap` for Sui completion. Ika remains
+behind an explicit optional path because testnet IKA is required for native
+dWallet operations.
 
 ## Validation Commands
 

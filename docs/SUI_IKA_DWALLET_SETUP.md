@@ -1,8 +1,12 @@
 # Sui Ika dWallet Setup
 
-This guide sets up the native Sui Ika path used for real BTC withdrawal signing.
+This guide sets up the optional native Sui Ika path used for real BTC withdrawal signing.
 
 `sui-regtest` means Bitcoin regtest plus Sui testnet. Ika is also testnet in this mode.
+
+Current default: `sui-regtest` uses the local relayer signer for BTC regtest
+withdrawals. Use this Ika guide only when testnet IKA is available and you want
+to exercise native Ika dWallet signing instead.
 
 ## What This Enables
 

@@ -92,6 +92,9 @@ export interface NetworkConfig {
       ikaApprovalTxDigest?: string;
       completeTxDigest?: string;
     };
+    signing?: {
+      btcWithdrawal: "relayer" | "ika";
+    };
   };
 }
 
@@ -135,9 +138,9 @@ export const NETWORK_META: NetworkMeta[] = [
     id: "sui-testnet",
     label: "Sui Testnet",
     tagline: "Sui testnet + Bitcoin testnet4",
-    description: "Move-object version of the UTXOpia core proof paths: commitment insert, Sui Groth16 JoinSplit, redemption request, Ika policy approval event, and redemption completion.",
+    description: "Move-object version of the UTXOpia core proof paths: commitment insert, Sui Groth16 JoinSplit, redemption request, and relayer-gated redemption completion.",
     caveats: [
-      "BTC SPV verification and real Sui-side Ika dWallet call are still being wired.",
+      "BTC SPV verification is still being wired. Native Sui-side Ika dWallet signing is optional and waiting on testnet IKA access.",
     ],
     enabled: true,
   },
@@ -147,7 +150,7 @@ export const NETWORK_META: NetworkMeta[] = [
     tagline: "Sui testnet + local regtest BTC",
     description: "Sui testnet package with local Bitcoin regtest plumbing for faster deposit and withdraw iteration.",
     caveats: [
-      "Uses local regtest BTC. Real Sui-side BTC SPV verification and native Ika dWallet signing are still being wired.",
+      "Uses local regtest BTC and local relayer signing. Native Ika signing is intentionally disabled until testnet IKA is available.",
     ],
     enabled: true,
   },

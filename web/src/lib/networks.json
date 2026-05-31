@@ -280,8 +280,8 @@
       },
       "redemptionCap": {
         "objectId": "0x2ace6d0e8185dca9aba8ba1b266e0104b38142f1b4ae8bd53013bfa3024def27",
-        "version": "349181781",
-        "digest": "D5GZQpF3CqQ91rpSpKkTujRSrh5a98kzRvBxxMYk8wzG"
+        "version": "349181786",
+        "digest": "2sS83eTdaVUqnb19rDMK4Sk1WQjq8h3xCZYCCWhaymUt"
       },
       "verifyingKeyRegistry": {
         "objectId": "0x4b31e07c006b52e0c4b9559fbceb759e56576608d184546acecd02ee5376313b",
@@ -289,6 +289,9 @@
       },
       "relayer": {
         "address": "0x0517834683ffa77da332b1f1f7a79d17e419d007f71e0fc68595704d6edda4d1"
+      },
+      "signing": {
+        "btcWithdrawal": "relayer"
       },
       "ika": {
         "network": "testnet",
