@@ -133,6 +133,7 @@ SUI_VERIFYING_KEY_REGISTRY_VERSION=$(python3 -c "import json,sys; d=json.load(op
 
 # Defaults for fields not in state file are applied per network below.
 BACKEND_URL="${BACKEND_URL:-}"
+PUBLIC_REGTEST_BTC_EXPLORER="${PUBLIC_REGTEST_BTC_EXPLORER:-${BTC_EXPLORER_URL:-https://btc.utxopia.com/regtest}}"
 
 # Network-specific overrides
 case "$NETWORK" in
@@ -141,7 +142,7 @@ case "$NETWORK" in
     BTC_NETWORK="${BTC_NETWORK:-regtest}"
     BACKEND_URL="${BACKEND_URL:-http://localhost:3001}"
     TRACKER_API_PORT="${TRACKER_API_PORT:-3001}"
-    BTC_EXPLORER="http://localhost:3002/regtest"
+    BTC_EXPLORER="$PUBLIC_REGTEST_BTC_EXPLORER"
     ESPLORA_URL="http://localhost:3002/regtest/api"
     MEMPOOL_WS="false"
     ;;
@@ -159,7 +160,7 @@ case "$NETWORK" in
     BTC_NETWORK="${BTC_NETWORK:-regtest}"
     BACKEND_URL="${BACKEND_URL:-http://localhost:3020}"
     TRACKER_API_PORT="${TRACKER_API_PORT:-3020}"
-    BTC_EXPLORER="http://localhost:3002/regtest"
+    BTC_EXPLORER="$PUBLIC_REGTEST_BTC_EXPLORER"
     ESPLORA_URL="http://localhost:3002/regtest/api"
     MEMPOOL_WS="false"
     ;;
@@ -177,7 +178,7 @@ case "$NETWORK" in
     BTC_NETWORK="${BTC_NETWORK:-regtest}"
     BACKEND_URL="${BACKEND_URL:-http://localhost:3001}"
     TRACKER_API_PORT="${TRACKER_API_PORT:-3001}"
-    BTC_EXPLORER="http://localhost:3002/regtest"
+    BTC_EXPLORER="$PUBLIC_REGTEST_BTC_EXPLORER"
     ESPLORA_URL="http://localhost:3002/regtest/api"
     MEMPOOL_WS="false"
     ;;
