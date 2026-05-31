@@ -50,6 +50,13 @@ import {
 const exec = promisify(execFile);
 
 const CONTAINER = process.env.REGTEST_FAUCET_DOCKER_CONTAINER || "utxopia-esplora-regtest";
+const DOCKER_BIN_CANDIDATES = [
+  process.env.REGTEST_FAUCET_DOCKER_BIN,
+  process.env.DOCKER_BIN,
+  "docker",
+  "/usr/local/bin/docker",
+  "/opt/homebrew/bin/docker",
+].filter((candidate): candidate is string => Boolean(candidate));
 const BCLI = process.env.REGTEST_FAUCET_BITCOIN_CLI || "/srv/explorer/bitcoin/bin/bitcoin-cli";
 const BCLI_ARGS = (
   process.env.REGTEST_FAUCET_BCLI_ARGS || "-regtest -datadir=/data/bitcoin -rpcwallet=test"
@@ -174,8 +181,28 @@ const DEFAULT_REGTEST_GROUP_PUBKEY =
 
 async function runBitcoinCli(args: string[]): Promise<string> {
   const fullArgs = ["exec", CONTAINER, BCLI, ...BCLI_ARGS, ...args];
-  const { stdout } = await exec("docker", fullArgs, { maxBuffer: 1024 * 1024 });
-  return stdout.trim();
+  let dockerNotFound: Error | null = null;
+  for (const dockerBin of DOCKER_BIN_CANDIDATES) {
+    try {
+      const { stdout } = await exec(dockerBin, fullArgs, { maxBuffer: 1024 * 1024 });
+      return stdout.trim();
+    } catch (e) {
+      if (isEnoent(e)) {
+        dockerNotFound = e;
+        continue;
+      }
+      throw e;
+    }
+  }
+  const tried = DOCKER_BIN_CANDIDATES.join(", ");
+  throw new Error(
+    `docker CLI not found (tried: ${tried}). Set REGTEST_FAUCET_DOCKER_BIN to the absolute docker path.`,
+    { cause: dockerNotFound ?? undefined },
+  );
+}
+
+function isEnoent(e: unknown): e is NodeJS.ErrnoException {
+  return e instanceof Error && "code" in e && (e as NodeJS.ErrnoException).code === "ENOENT";
 }
 
 function isValidRegtestAddress(addr: string): boolean {
