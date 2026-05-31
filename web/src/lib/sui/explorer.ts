@@ -1,4 +1,5 @@
 import { SuiClient } from "@mysten/sui/client";
+import { CommitmentTreeIndex, getMerkleProofFromTree, initPoseidon } from "@utxopia/sdk";
 import type { NetworkConfig } from "@/lib/network-config";
 
 type SuiEvent = Awaited<ReturnType<SuiClient["queryEvents"]>>["data"][number];
@@ -20,6 +21,17 @@ export interface SuiExplorerStats {
   depositCount: number;
   totalCommitments: number;
   volume: bigint;
+}
+
+export interface SuiMerkleProofResponse {
+  success: true;
+  commitment: string;
+  leafIndex: string;
+  root: string;
+  computedRoot: string;
+  siblings: string[];
+  indices: number[];
+  source: "sui-events";
 }
 
 export async function fetchSuiExplorerTransactions(config: NetworkConfig): Promise<ExplorerTx[]> {
@@ -64,6 +76,41 @@ export async function fetchSuiExplorerStats(config: NetworkConfig): Promise<SuiE
     depositCount,
     totalCommitments,
     volume: totalShielded + redeemed,
+  };
+}
+
+export async function fetchSuiMerkleProof(
+  config: NetworkConfig,
+  commitmentHex: string,
+): Promise<SuiMerkleProofResponse | null> {
+  const normalized = normalizeHex(commitmentHex);
+  if (!normalized) return null;
+
+  await initPoseidon();
+  const events = await fetchSuiExplorerEvents(config);
+  const commitments = extractSuiCommitments(events);
+  if (!commitments.some((item) => item.commitment === normalized)) {
+    return null;
+  }
+
+  const tree = new CommitmentTreeIndex();
+  for (const item of commitments) {
+    tree.addCommitment(BigInt(`0x${item.commitment}`), BigInt(item.amount ?? 0));
+  }
+
+  const proof = getMerkleProofFromTree(tree, BigInt(`0x${normalized}`));
+  if (!proof) return null;
+
+  const root = proof.root.toString(16).padStart(64, "0");
+  return {
+    success: true,
+    commitment: normalized,
+    leafIndex: String(proof.leafIndex),
+    root,
+    computedRoot: root,
+    siblings: proof.siblings.map((sibling) => sibling.toString(16).padStart(64, "0")),
+    indices: proof.indices,
+    source: "sui-events",
   };
 }
 
@@ -237,6 +284,31 @@ function buildSuiExplorerTransactions(config: NetworkConfig, events: SuiEvent[])
   return txs;
 }
 
+function extractSuiCommitments(events: SuiEvent[]): Array<{ commitment: string; leafIndex: number; amount?: number }> {
+  const seen = new Set<number>();
+  const commitments: Array<{ commitment: string; leafIndex: number; amount?: number }> = [];
+
+  for (const event of events) {
+    const type = eventName(event);
+    if (type !== "BtcDepositVerified" && type !== "CommitmentInserted") continue;
+
+    const payload = objectPayload(event.parsedJson);
+    const commitment = bytesField(payload.commitment);
+    const leafIndex = numberField(payload.leaf_index);
+    if (!commitment || leafIndex == null || seen.has(leafIndex)) continue;
+
+    seen.add(leafIndex);
+    commitments.push({
+      commitment,
+      leafIndex,
+      amount: numberField(payload.amount_sats),
+    });
+  }
+
+  commitments.sort((a, b) => a.leafIndex - b.leafIndex);
+  return commitments;
+}
+
 function pickPrimaryEvent(events: SuiEvent[]): SuiEvent | null {
   return (
     events.find((event) => eventName(event) === "BtcDepositVerified") ??
@@ -297,4 +369,10 @@ function bytesField(value: unknown, reverse = false): string | undefined {
   if (bytes.length !== value.length) return undefined;
   const ordered = reverse ? bytes.reverse() : bytes;
   return ordered.map((item) => item.toString(16).padStart(2, "0")).join("");
+}
+
+function normalizeHex(value: string): string | null {
+  const normalized = value.startsWith("0x") ? value.slice(2) : value;
+  if (!/^[0-9a-fA-F]+$/.test(normalized) || normalized.length > 64) return null;
+  return normalized.padStart(64, "0").toLowerCase();
 }
