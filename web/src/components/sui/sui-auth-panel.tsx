@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { parseSerializedSignature } from "@mysten/sui/cryptography";
 import {
   CheckCircle2,
   CircleAlert,
@@ -20,12 +21,15 @@ import {
   saveSuiAuthState,
   type SuiZkLoginSession,
 } from "@/lib/sui/client";
+import { detectNetwork } from "@/lib/network-config";
 import { useUTXOpiaStore } from "@/stores";
 import { cn } from "@/lib/utils";
 
 interface BrowserSuiWallet {
   requestPermissions?: () => Promise<void>;
   getAccounts?: () => Promise<string[]>;
+  signPersonalMessage?: (input: { message: Uint8Array }) => Promise<{ signature?: string } | string>;
+  signMessage?: (input: { message: Uint8Array }) => Promise<{ signature?: string } | string>;
 }
 
 declare global {
@@ -54,6 +58,7 @@ export function SuiAuthPanel({
     authenticate: authenticatePasskey,
   } = usePasskey();
   const deriveKeysFromPasskeySeed = useUTXOpiaStore((s) => s.deriveKeysFromPasskeySeed);
+  const deriveKeysFromAuthSignature = useUTXOpiaStore((s) => s.deriveKeysFromAuthSignature);
   const stealthAddressEncoded = useUTXOpiaStore((s) => s.stealthAddressEncoded);
   const displayAddress = stealthAddressEncoded ?? address;
 
@@ -110,8 +115,23 @@ export function SuiAuthPanel({
       if (!accounts[0]) throw new Error("No Sui account was returned by the wallet.");
       saveSuiAuthState({ method: "wallet", address: accounts[0] });
       setAddress(accounts[0]);
+      const signature = await signSuiVaultMessage(wallet);
+      if (signature) {
+        await deriveKeysFromAuthSignature({
+          signature,
+          account: accounts[0],
+          chain: "sui",
+          network: detectNetwork(),
+        });
+      }
+      const store = useUTXOpiaStore.getState();
+      if (!store.stealthAddressEncoded) {
+        throw new Error(
+          "Sui wallet connected, but this wallet does not support personal-message signing for private vault keys. Use passkey for deposits.",
+        );
+      }
       setStatus("ready");
-      setMessage("Sui wallet connected.");
+      setMessage("Sui wallet connected. Private vault unlocked.");
       onAuthenticated?.();
     } catch (error) {
       setStatus("error");
@@ -272,6 +292,37 @@ export function SuiAuthPanel({
 
     </section>
   );
+}
+
+const SUI_VAULT_DERIVATION_MESSAGE =
+  "UTXOpia Sui private vault key\n\nSign this message to unlock your private UTXO address. This does not spend funds.";
+
+async function signSuiVaultMessage(wallet: BrowserSuiWallet): Promise<Uint8Array | null> {
+  const signer = wallet.signPersonalMessage ?? wallet.signMessage;
+  if (!signer) return null;
+
+  const result = await signer.call(wallet, {
+    message: new TextEncoder().encode(SUI_VAULT_DERIVATION_MESSAGE),
+  });
+  const serialized = typeof result === "string" ? result : result.signature;
+  if (!serialized) return null;
+
+  try {
+    const parsed = parseSerializedSignature(serialized);
+    if (!parsed.signature) return null;
+    return parsed.signature;
+  } catch {
+    return base64ToBytes(serialized);
+  }
+}
+
+function base64ToBytes(value: string): Uint8Array {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
 }
 
 function Status({ state }: { state: "idle" | "loading" | "ready" | "error" }) {

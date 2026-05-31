@@ -25,10 +25,12 @@ import { eddsaPoseidonSign } from "./keys";
 import {
   setupKeysFromWallet,
   setupKeysFromSeed,
+  setupKeysFromAuthSignature,
   recreateStealthAddress,
   serializeKeysForStorage,
   deserializeKeysFromStorage,
   clearUTXOpiaKeys,
+  type AuthSignatureKeyDerivationOptions,
   type UTXOpiaKeys,
   type StealthMetaAddress,
   type WalletSignerAdapter,
@@ -174,6 +176,26 @@ export class UTXOpiaClient {
     this._isViewOnly = false;
     this._viewOnlyKeys = null;
     return result;
+  }
+
+  /**
+   * Derive keys from a chain-specific auth signature, e.g. Sui personal-message signing.
+   */
+  async loginWithAuthSignature(
+    signature: Uint8Array,
+    options: AuthSignatureKeyDerivationOptions = {},
+  ): Promise<KeySetupResult> {
+    const result = setupKeysFromAuthSignature(signature, options);
+    this._keys = result.keys;
+    this._stealthAddress = result.stealthMetaAddress;
+    this._stealthAddressEncoded = result.encodedStealthAddress;
+    this._isViewOnly = false;
+    this._viewOnlyKeys = null;
+    return {
+      keys: result.keys,
+      stealthAddress: result.stealthMetaAddress,
+      stealthAddressEncoded: result.encodedStealthAddress,
+    };
   }
 
   /**
