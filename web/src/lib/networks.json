@@ -1,5 +1,6 @@
 {
   "devnet": {
+    "chain": "solana",
     "solana": {
       "rpcUrl": "https://api.devnet.solana.com",
       "utxopiaProgramId": "G1bj9Vw9ipZ2Z7zKa9HrcHHPNqeWjg7uu51TsDr3ixUy",
