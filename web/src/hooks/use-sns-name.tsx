@@ -6,6 +6,7 @@ import { PublicKey, Transaction, TransactionInstruction, SystemProgram, SYSVAR_R
 import { TOKEN_PROGRAM_ID, NATIVE_MINT, getAssociatedTokenAddressSync, createAssociatedTokenAccountIdempotentInstruction, createSyncNativeInstruction, createCloseAccountInstruction } from "@solana/spl-token";
 import { useUTXOpiaKeys } from "./use-utxopia";
 import { getConnectionAdapter } from "@/lib/adapters/connection-adapter";
+import { usePrivySolanaAuthority } from "@/lib/privy-solana";
 import {
   getConfig,
   resolveSnsName,
@@ -51,6 +52,8 @@ interface UseSnsNameReturn {
   /** Set or clear the 32-byte auditor pubkey on the user's SNS subdomain.
    *  Pass null to zero out the slot. */
   setAuditorPubkey: (value: PublicKey | null) => Promise<boolean>;
+  canRegister: boolean;
+  authorityLabel: "wallet" | "privy" | null;
 }
 
 /**
@@ -64,6 +67,7 @@ interface UseSnsNameReturn {
 export function useSnsName(): UseSnsNameReturn {
   const { connection } = useConnection();
   const wallet = useWallet();
+  const privySolana = usePrivySolanaAuthority();
   const { stealthAddress } = useUTXOpiaKeys();
 
   const [registeredSnsName, setRegisteredSnsName] = useState<string | null>(null);
@@ -75,6 +79,27 @@ export function useSnsName(): UseSnsNameReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const walletAuthority = wallet.publicKey && wallet.signTransaction
+    ? { publicKey: wallet.publicKey, label: "wallet" as const }
+    : null;
+  const privyAuthority = privySolana.publicKey
+    ? { publicKey: privySolana.publicKey, label: "privy" as const }
+    : null;
+  const activeAuthority = walletAuthority ?? privyAuthority;
+  const canRegister = Boolean(walletAuthority || privySolana.enabled);
+
+  const signAndSubmitSnsTransaction = useCallback(async (
+    tx: Transaction,
+    signer: PublicKey,
+  ) => {
+    if (wallet.publicKey?.equals(signer) && wallet.signTransaction) {
+      return wallet.signTransaction(tx);
+    }
+    if (privySolana.publicKey?.equals(signer)) {
+      return privySolana.signTransaction(tx);
+    }
+    throw new Error("No Solana signer available for SNS transaction");
+  }, [privySolana, wallet]);
 
   // Resolve an SNS name to stealth keys
   const lookupSnsName = useCallback(async (name: string): Promise<SnsStealthAddress | null> => {
@@ -84,7 +109,8 @@ export function useSnsName(): UseSnsNameReturn {
 
   // Check if connected wallet owns a *.utxopia.sol subdomain
   const lookupMySnsName = useCallback(async () => {
-    if (!wallet.publicKey || !stealthAddress) return;
+    const owner = activeAuthority?.publicKey;
+    if (!owner || !stealthAddress) return;
 
     const config = getConfig();
     if (!config.snsNameServiceProgramId || !config.snsParentDomain) return;
@@ -103,7 +129,7 @@ export function useSnsName(): UseSnsNameReturn {
           // parent field at offset 0 = parentKey (32 bytes)
           { memcmp: { offset: 0, bytes: parentKey } },
           // owner field at offset 32 = wallet pubkey (32 bytes)
-          { memcmp: { offset: 32, bytes: wallet.publicKey.toBase58() } },
+          { memcmp: { offset: 32, bytes: owner.toBase58() } },
         ],
       });
 
@@ -166,14 +192,14 @@ export function useSnsName(): UseSnsNameReturn {
     } finally {
       setIsLoading(false);
     }
-  }, [wallet.publicKey, stealthAddress, connection]);
+  }, [activeAuthority?.publicKey, stealthAddress, connection]);
 
   // Register a new subdomain + write stealth data (2-transaction flow)
   // TX1: Register via Bonfida sub-registrar (creates subdomain + reverse lookup)
   // TX2: Realloc + write stealth data (combined into one TX)
   const registerSnsSubdomain = useCallback(async (name: string): Promise<boolean> => {
-    if (!wallet.publicKey || !wallet.signTransaction || !stealthAddress) {
-      setError("Wallet not connected or keys not derived");
+    if (!stealthAddress) {
+      setError("Private keys not derived");
       return false;
     }
 
@@ -193,6 +219,14 @@ export function useSnsName(): UseSnsNameReturn {
     setError(null);
 
     try {
+      const owner = walletAuthority?.publicKey ?? await privySolana.ensureWallet();
+      if (!owner) {
+        setError(privySolana.enabled
+          ? "Finish Privy sign-in, then click Register again"
+          : "Connect a Solana wallet to register a name");
+        return false;
+      }
+
       // Check if already exists
       const existing = await lookupSnsName(subdomain);
       if (existing) {
@@ -247,7 +281,7 @@ export function useSnsName(): UseSnsNameReturn {
       const mint = new PublicKey(registrarAcct.data.slice(66, 98));
 
       // Buyer's token account for the registration fee (wSOL)
-      const feeSource = getAssociatedTokenAddressSync(mint, wallet.publicKey, true);
+      const feeSource = getAssociatedTokenAddressSync(mint, owner, true);
 
       // Bonfida fee account
       const bonfidaFee = getAssociatedTokenAddressSync(mint, BONFIDA_FEE_OWNER, true);
@@ -269,13 +303,13 @@ export function useSnsName(): UseSnsNameReturn {
 
       if (needsWrap) {
         ixs.push(createAssociatedTokenAccountIdempotentInstruction(
-          wallet.publicKey,
+          owner,
           feeSource,
-          wallet.publicKey,
+          owner,
           NATIVE_MINT,
         ));
         ixs.push(SystemProgram.transfer({
-          fromPubkey: wallet.publicKey,
+          fromPubkey: owner,
           toPubkey: feeSource,
           lamports: WSOL_WRAP_AMOUNT,
         }));
@@ -284,7 +318,7 @@ export function useSnsName(): UseSnsNameReturn {
 
       // Ensure Bonfida fee ATA exists
       ixs.push(createAssociatedTokenAccountIdempotentInstruction(
-        wallet.publicKey,
+        owner,
         bonfidaFee,
         BONFIDA_FEE_OWNER,
         mint,
@@ -314,7 +348,7 @@ export function useSnsName(): UseSnsNameReturn {
           { pubkey: parentPubkey, isSigner: false, isWritable: true },
           { pubkey: subdomainKey, isSigner: false, isWritable: true },
           { pubkey: reverseKey, isSigner: false, isWritable: true },
-          { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
+          { pubkey: owner, isSigner: true, isWritable: true },
           { pubkey: bonfidaFee, isSigner: false, isWritable: true },
           { pubkey: subRecord, isSigner: false, isWritable: true },
         ],
@@ -325,8 +359,8 @@ export function useSnsName(): UseSnsNameReturn {
       if (needsWrap) {
         ixs.push(createCloseAccountInstruction(
           feeSource,
-          wallet.publicKey,
-          wallet.publicKey,
+          owner,
+          owner,
         ));
       }
 
@@ -339,9 +373,9 @@ export function useSnsName(): UseSnsNameReturn {
         programId: nameServiceProgramId,
         keys: [
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-          { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
+          { pubkey: owner, isSigner: true, isWritable: true },
           { pubkey: subdomainKey, isSigner: false, isWritable: true },
-          { pubkey: wallet.publicKey, isSigner: true, isWritable: false },
+          { pubkey: owner, isSigner: true, isWritable: false },
         ],
         data: Buffer.from(reallocData),
       }));
@@ -361,17 +395,17 @@ export function useSnsName(): UseSnsNameReturn {
         programId: nameServiceProgramId,
         keys: [
           { pubkey: subdomainKey, isSigner: false, isWritable: true },
-          { pubkey: wallet.publicKey, isSigner: true, isWritable: false },
+          { pubkey: owner, isSigner: true, isWritable: false },
         ],
         data: Buffer.from(updateData),
       }));
 
       const tx = new Transaction().add(...ixs);
-      tx.feePayer = wallet.publicKey;
+      tx.feePayer = owner;
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
       tx.recentBlockhash = blockhash;
 
-      const signed = await wallet.signTransaction(tx);
+      const signed = await signAndSubmitSnsTransaction(tx, owner);
       const txid = await connection.sendRawTransaction(signed.serialize(), {
         skipPreflight: false,
         preflightCommitment: "confirmed",
@@ -388,12 +422,13 @@ export function useSnsName(): UseSnsNameReturn {
     } finally {
       setIsRegistering(false);
     }
-  }, [wallet, stealthAddress, connection, lookupSnsName]);
+  }, [connection, lookupSnsName, privySolana, signAndSubmitSnsTransaction, stealthAddress, walletAuthority?.publicKey]);
 
   // Update existing SNS record with new stealth data format
   const updateSnsStealthData = useCallback(async (): Promise<boolean> => {
-    if (!wallet.publicKey || !wallet.signTransaction || !stealthAddress || !registeredSubdomainKey) {
-      setError("Wallet not connected or no existing registration found");
+    const owner = activeAuthority?.publicKey;
+    if (!owner || !stealthAddress || !registeredSubdomainKey) {
+      setError("Solana authority not connected or no existing registration found");
       return false;
     }
 
@@ -419,9 +454,9 @@ export function useSnsName(): UseSnsNameReturn {
         programId: nameServiceProgramId,
         keys: [
           { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-          { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
+          { pubkey: owner, isSigner: true, isWritable: true },
           { pubkey: registeredSubdomainKey, isSigner: false, isWritable: true },
-          { pubkey: wallet.publicKey, isSigner: true, isWritable: false },
+          { pubkey: owner, isSigner: true, isWritable: false },
         ],
         data: Buffer.from(reallocData),
       }));
@@ -442,17 +477,17 @@ export function useSnsName(): UseSnsNameReturn {
         programId: nameServiceProgramId,
         keys: [
           { pubkey: registeredSubdomainKey, isSigner: false, isWritable: true },
-          { pubkey: wallet.publicKey, isSigner: true, isWritable: false },
+          { pubkey: owner, isSigner: true, isWritable: false },
         ],
         data: Buffer.from(updateData),
       }));
 
       const tx = new Transaction().add(...ixs);
-      tx.feePayer = wallet.publicKey;
+      tx.feePayer = owner;
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
       tx.recentBlockhash = blockhash;
 
-      const signed = await wallet.signTransaction(tx);
+      const signed = await signAndSubmitSnsTransaction(tx, owner);
       const txid = await connection.sendRawTransaction(signed.serialize(), {
         skipPreflight: false,
         preflightCommitment: "confirmed",
@@ -468,7 +503,7 @@ export function useSnsName(): UseSnsNameReturn {
     } finally {
       setIsRegistering(false);
     }
-  }, [wallet, stealthAddress, connection, registeredSubdomainKey]);
+  }, [activeAuthority?.publicKey, stealthAddress, connection, registeredSubdomainKey, signAndSubmitSnsTransaction]);
 
   /**
    * Set the compliance-flag byte on the user's registered SNS subdomain.
@@ -478,8 +513,9 @@ export function useSnsName(): UseSnsNameReturn {
    * instead of a local keypair.
    */
   const setComplianceFlag = useCallback(async (value: number): Promise<boolean> => {
-    if (!wallet.publicKey || !wallet.signTransaction || !registeredSubdomainKey) {
-      setError("Wallet not connected or no SNS subdomain registered");
+    const owner = activeAuthority?.publicKey;
+    if (!owner || !registeredSubdomainKey) {
+      setError("Solana authority not connected or no SNS subdomain registered");
       return false;
     }
     if (!Number.isInteger(value) || value < 0 || value > 0xff) {
@@ -513,9 +549,9 @@ export function useSnsName(): UseSnsNameReturn {
           programId: nameServiceProgramId,
           keys: [
             { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-            { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
+            { pubkey: owner, isSigner: true, isWritable: true },
             { pubkey: registeredSubdomainKey, isSigner: false, isWritable: true },
-            { pubkey: wallet.publicKey, isSigner: true, isWritable: false },
+            { pubkey: owner, isSigner: true, isWritable: false },
           ],
           data: Buffer.from(reallocData),
         }));
@@ -532,17 +568,17 @@ export function useSnsName(): UseSnsNameReturn {
         programId: nameServiceProgramId,
         keys: [
           { pubkey: registeredSubdomainKey, isSigner: false, isWritable: true },
-          { pubkey: wallet.publicKey, isSigner: true, isWritable: false },
+          { pubkey: owner, isSigner: true, isWritable: false },
         ],
         data: Buffer.from(updateData),
       }));
 
       const tx = new Transaction().add(...ixs);
-      tx.feePayer = wallet.publicKey;
+      tx.feePayer = owner;
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
       tx.recentBlockhash = blockhash;
 
-      const signed = await wallet.signTransaction(tx);
+      const signed = await signAndSubmitSnsTransaction(tx, owner);
       const txid = await connection.sendRawTransaction(signed.serialize(), {
         skipPreflight: false,
         preflightCommitment: "confirmed",
@@ -561,7 +597,7 @@ export function useSnsName(): UseSnsNameReturn {
     } finally {
       setIsRegistering(false);
     }
-  }, [wallet, connection, registeredSubdomainKey]);
+  }, [activeAuthority?.publicKey, connection, registeredSubdomainKey, signAndSubmitSnsTransaction]);
 
   /**
    * Set or clear the 32-byte auditor pubkey hint at offset 66 of the
@@ -569,8 +605,9 @@ export function useSnsName(): UseSnsNameReturn {
    * all-zero as "not set"). Reallocs to 98 bytes if needed.
    */
   const setAuditorPubkey = useCallback(async (value: PublicKey | null): Promise<boolean> => {
-    if (!wallet.publicKey || !wallet.signTransaction || !registeredSubdomainKey) {
-      setError("Wallet not connected or no SNS subdomain registered");
+    const owner = activeAuthority?.publicKey;
+    if (!owner || !registeredSubdomainKey) {
+      setError("Solana authority not connected or no SNS subdomain registered");
       return false;
     }
     const config = getConfig();
@@ -599,9 +636,9 @@ export function useSnsName(): UseSnsNameReturn {
           programId: nameServiceProgramId,
           keys: [
             { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-            { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
+            { pubkey: owner, isSigner: true, isWritable: true },
             { pubkey: registeredSubdomainKey, isSigner: false, isWritable: true },
-            { pubkey: wallet.publicKey, isSigner: true, isWritable: false },
+            { pubkey: owner, isSigner: true, isWritable: false },
           ],
           data: Buffer.from(reallocData),
         }));
@@ -619,16 +656,16 @@ export function useSnsName(): UseSnsNameReturn {
         programId: nameServiceProgramId,
         keys: [
           { pubkey: registeredSubdomainKey, isSigner: false, isWritable: true },
-          { pubkey: wallet.publicKey, isSigner: true, isWritable: false },
+          { pubkey: owner, isSigner: true, isWritable: false },
         ],
         data: Buffer.from(updateData),
       }));
 
       const tx = new Transaction().add(...ixs);
-      tx.feePayer = wallet.publicKey;
+      tx.feePayer = owner;
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
       tx.recentBlockhash = blockhash;
-      const signed = await wallet.signTransaction(tx);
+      const signed = await signAndSubmitSnsTransaction(tx, owner);
       const txid = await connection.sendRawTransaction(signed.serialize(), {
         skipPreflight: false,
         preflightCommitment: "confirmed",
@@ -647,11 +684,11 @@ export function useSnsName(): UseSnsNameReturn {
     } finally {
       setIsRegistering(false);
     }
-  }, [wallet, connection, registeredSubdomainKey]);
+  }, [activeAuthority?.publicKey, connection, registeredSubdomainKey, signAndSubmitSnsTransaction]);
 
   // Auto-check on mount when wallet connected
   useEffect(() => {
-    if (wallet.publicKey && stealthAddress) {
+    if (activeAuthority?.publicKey && stealthAddress) {
       lookupMySnsName();
     } else {
       setRegisteredSnsName(null);
@@ -659,7 +696,7 @@ export function useSnsName(): UseSnsNameReturn {
       setComplianceFlags(0);
       setAuditorPubkeyState(null);
     }
-  }, [wallet.publicKey, stealthAddress, lookupMySnsName]);
+  }, [activeAuthority?.publicKey, stealthAddress, lookupMySnsName]);
 
   return {
     registeredSnsName,
@@ -676,5 +713,7 @@ export function useSnsName(): UseSnsNameReturn {
     updateSnsStealthData,
     setComplianceFlag,
     setAuditorPubkey,
+    canRegister,
+    authorityLabel: activeAuthority?.label ?? (privySolana.enabled ? "privy" : null),
   };
 }

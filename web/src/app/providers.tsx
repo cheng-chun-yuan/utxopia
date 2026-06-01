@@ -9,6 +9,7 @@ import { StoreHydration } from "@/stores";
 import { HELIUS_RPC_DEVNET } from "@/lib/helius";
 import { getSolanaRpcUrl } from "@/lib/api/constants";
 import { UiModeProvider } from "@/hooks/use-ui-mode";
+import { UtxopiaPrivyProvider } from "@/lib/privy-solana";
 
 // Import wallet adapter CSS
 import "@solana/wallet-adapter-react-ui/styles.css";
@@ -35,31 +36,33 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <ConnectionProvider endpoint={endpoint}>
-      <WalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider>
-          <UiModeProvider>
-          {/* Hydrate Zustand stores (Bitcoin wallet, Poseidon) */}
-          <StoreHydration />
-          {children}
-          <Toaster
-            position="top-right"
-            toastOptions={{
-              style: {
-                background: "var(--muted)",
-                border: "1px solid rgba(139, 138, 158, 0.15)",
-                color: "var(--color-gray-light)",
-              },
-              classNames: {
-                success: "!border-privacy/30 !bg-privacy/10",
-                error: "!border-error/30 !bg-error/10",
-                warning: "!border-warning-alt/30 !bg-warning-alt/10",
-              },
-            }}
-          />
-          </UiModeProvider>
-        </WalletModalProvider>
-      </WalletProvider>
-    </ConnectionProvider>
+    <UtxopiaPrivyProvider>
+      <ConnectionProvider endpoint={endpoint}>
+        <WalletProvider wallets={wallets} autoConnect>
+          <WalletModalProvider>
+            <UiModeProvider>
+              {/* Hydrate Zustand stores (Bitcoin wallet, Poseidon) */}
+              <StoreHydration />
+              {children}
+              <Toaster
+                position="top-right"
+                toastOptions={{
+                  style: {
+                    background: "var(--muted)",
+                    border: "1px solid rgba(139, 138, 158, 0.15)",
+                    color: "var(--color-gray-light)",
+                  },
+                  classNames: {
+                    success: "!border-privacy/30 !bg-privacy/10",
+                    error: "!border-error/30 !bg-error/10",
+                    warning: "!border-warning-alt/30 !bg-warning-alt/10",
+                  },
+                }}
+              />
+            </UiModeProvider>
+          </WalletModalProvider>
+        </WalletProvider>
+      </ConnectionProvider>
+    </UtxopiaPrivyProvider>
   );
 }

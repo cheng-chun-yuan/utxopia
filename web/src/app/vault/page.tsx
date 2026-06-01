@@ -81,6 +81,7 @@ export default function VaultPage() {
     isLoading: isLoadingSnsName,
     isRegistering: isRegisteringSns,
     error: snsError,
+    canRegister: canRegisterSnsName,
     registerSnsSubdomain,
     updateSnsStealthData,
   } = useSnsName();
@@ -152,7 +153,7 @@ export default function VaultPage() {
   const showSnsTip =
     !!keys &&
     !isViewOnly &&
-    !isPasskeyUser &&
+    canRegisterSnsName &&
     !hasRegisteredSnsName &&
     !isLoadingSnsName &&
     hasVaultValue;
@@ -187,7 +188,7 @@ export default function VaultPage() {
               {(keys || isViewOnly) ? (
                 <>
                   {/* Identity chip */}
-                  {!isPasskeyUser && hasRegisteredSnsName ? (
+                  {hasRegisteredSnsName ? (
                     <button
                       onClick={() => { copySns(`${registeredSnsName}.${parentDomain}.sol`); notifyCopied(`.${parentDomain}.sol name`); }}
                       className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-green-500/10 hover:bg-green-500/15 transition-colors group cursor-pointer min-w-0"
@@ -255,7 +256,7 @@ export default function VaultPage() {
           {/* Secondary identity line — stealth address when SNS is primary + action links */}
           {(keys && !isViewOnly) && (
             <div className="flex items-center gap-3 mb-4 px-1">
-              {!isPasskeyUser && hasRegisteredSnsName && (
+              {hasRegisteredSnsName && (
                 <button
                   onClick={() => { copyStealth(stealthAddressEncoded || ""); notifyCopied("Stealth address"); }}
                   className="flex items-center gap-1 group cursor-pointer"
@@ -277,7 +278,7 @@ export default function VaultPage() {
           )}
 
           {/* SNS needs update warning */}
-          {keys && !isPasskeyUser && snsNeedsUpdate && (
+          {keys && snsNeedsUpdate && (
             <button
               onClick={updateSnsStealthData}
               disabled={isRegisteringSns}
