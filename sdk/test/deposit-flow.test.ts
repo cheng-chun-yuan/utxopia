@@ -319,7 +319,10 @@ describe("BoundParamsHash", () => {
 
   test("private vs unshield produce different hashes", () => {
     const privateHash = computeBoundParamsHash(DEFAULT_BOUND_PARAMS);
-    const unshieldParams = createUnshieldBoundParams(new Uint8Array(32).fill(0x01));
+    const unshieldParams = createUnshieldBoundParams(
+      new Uint8Array(32).fill(0x01),
+      new Uint8Array(32),
+    );
     const unshieldHash = computeBoundParamsHash(unshieldParams);
     expect(privateHash).not.toBe(unshieldHash);
   });

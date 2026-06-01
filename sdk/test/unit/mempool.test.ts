@@ -4,7 +4,7 @@
  * Tests for the MempoolClient SPV utilities.
  */
 
-import { describe, test, expect, beforeAll, mock } from "bun:test";
+import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
 import {
   MempoolClient,
   mempoolTestnet,
@@ -133,43 +133,67 @@ describe("MempoolClient", () => {
 // =============================================================================
 
 describe("MempoolClient integration", () => {
-  // Skip network tests in CI
-  const skipNetworkTests = process.env.CI === "true";
+  const originalFetch = globalThis.fetch;
+  const txid =
+    "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b";
 
-  test.skipIf(skipNetworkTests)("getBlockHeight returns valid height", async () => {
+  beforeEach(() => {
+    globalThis.fetch = mock((input: string | URL | Request) => {
+      const url = input.toString();
+      if (url.endsWith("/blocks/tip/height")) {
+        return Promise.resolve(
+          new Response("2500001", {
+            headers: { "content-type": "text/plain" },
+          }),
+        );
+      }
+      if (url.endsWith(`/tx/${txid}`)) {
+        return Promise.resolve(
+          Response.json({
+            txid,
+            version: 1,
+            locktime: 0,
+            vin: [],
+            vout: [],
+            size: 250,
+            weight: 1000,
+            fee: 1000,
+            status: {
+              confirmed: true,
+              block_height: 2500000,
+              block_hash: "00".repeat(32),
+              block_time: 1700000000,
+            },
+          }),
+        );
+      }
+      return Promise.resolve(new Response("not found", { status: 404 }));
+    }) as typeof fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  test("getBlockHeight returns valid height", async () => {
     const client = new MempoolClient("testnet");
     const height = await client.getBlockHeight();
     expect(height).toBeGreaterThan(2_000_000);
   });
 
-  test.skipIf(skipNetworkTests)("getTransaction returns tx data", async () => {
+  test("getTransaction returns tx data", async () => {
     const client = new MempoolClient("testnet");
-    const txid =
-      "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b";
 
-    try {
-      const tx = await client.getTransaction(txid);
-      expect(tx.txid).toBe(txid);
-    } catch (error) {
-      expect(error).toBeDefined();
-    }
+    const tx = await client.getTransaction(txid);
+    expect(tx.txid).toBe(txid);
   });
 
-  test.skipIf(skipNetworkTests)(
-    "getTransactionInfo returns structured data",
-    async () => {
-      const client = new MempoolClient("testnet");
-      const txid =
-        "4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b";
+  test("getTransactionInfo returns structured data", async () => {
+    const client = new MempoolClient("testnet");
 
-      try {
-        const txInfo = await client.getTransactionInfo(txid);
-        expect(txInfo.txid).toBe(txid);
-        expect(typeof txInfo.fee).toBe("number");
-      } catch (error) {
-        expect(error).toBeDefined();
-      }
-    },
-  );
+    const txInfo = await client.getTransactionInfo(txid);
+    expect(txInfo.txid).toBe(txid);
+    expect(txInfo.confirmed).toBe(true);
+    expect(txInfo.blockHeight).toBe(2500000);
+  });
 });
-

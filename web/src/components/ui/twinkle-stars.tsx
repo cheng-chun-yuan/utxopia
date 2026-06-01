@@ -7,7 +7,13 @@ interface Star {
   left: string;
   size: number;
   delay: string;
+  duration: string;
   color: string;
+}
+
+function seededUnit(seed: number): number {
+  const x = Math.sin(seed * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
 }
 
 /**
@@ -29,10 +35,11 @@ export function TwinkleStars({
       "rgba(20, 241, 149, 0.3)",  // green (lighter)
     ];
     return Array.from({ length: count }, (_, i) => ({
-      top: `${5 + Math.random() * 85}%`,
-      left: `${5 + Math.random() * 90}%`,
-      size: 1.5 + Math.random() * 2.5,
+      top: `${5 + seededUnit(i + 1) * 85}%`,
+      left: `${5 + seededUnit(i + 17) * 90}%`,
+      size: 1.5 + seededUnit(i + 33) * 2.5,
       delay: `${(i * 1.2).toFixed(1)}s`,
+      duration: `${3 + seededUnit(i + 49) * 3}s`,
       color: colors[i % colors.length],
     }));
   }, [count]);
@@ -51,7 +58,7 @@ export function TwinkleStars({
             backgroundColor: star.color,
             boxShadow: `0 0 ${star.size * 2}px ${star.color}`,
             animationDelay: star.delay,
-            animationDuration: `${3 + Math.random() * 3}s`,
+            animationDuration: star.duration,
           }}
         />
       ))}

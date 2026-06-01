@@ -123,12 +123,24 @@ export async function buildTransferParams(inputs: TransferUserInputs): Promise<T
   if (mode === "btc") {
     const result = await createStealthDepositWithKeys(selfMeta, amountSats, ZKBTC_TOKEN_ID());
     recipientNpks.push(result.stealthPubKeyX);
-    stealthResults.push({ ephemeralPub: new Uint8Array(32), encryptedAmount: new Uint8Array(8), stealthPubKeyX: result.stealthPubKeyX } as any);
+    stealthResults.push({
+      ephemeralPub: new Uint8Array(32),
+      encryptedAmount: new Uint8Array(8),
+      commitment: result.commitment,
+      stealthPubKeyX: result.stealthPubKeyX,
+      npkBytes: result.npkBytes,
+    });
   } else if (mode === "public") {
     const addrBytes = new PublicKey(recipient.solanaAddress!).toBytes();
     const addrReduced = reduceToFieldOnChain(addrBytes);
     recipientNpks.push(addrReduced);
-    stealthResults.push({ ephemeralPub: new Uint8Array(32), encryptedAmount: new Uint8Array(8), stealthPubKeyX: addrReduced } as any);
+    stealthResults.push({
+      ephemeralPub: new Uint8Array(32),
+      encryptedAmount: new Uint8Array(8),
+      commitment: new Uint8Array(32),
+      stealthPubKeyX: addrReduced,
+      npkBytes: new Uint8Array(32),
+    });
   } else {
     // stealth transfer
     const result = await createStealthDepositWithKeys(recipient.stealthMeta!, amountSats, ZKBTC_TOKEN_ID());

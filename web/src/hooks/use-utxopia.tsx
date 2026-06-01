@@ -28,20 +28,20 @@ export function useUTXOpia() {
       publicKey: wallet.publicKey,
       signMessage: wallet.signMessage,
     });
-  }, [wallet.connected, wallet.signMessage, wallet.publicKey, store.deriveKeys]);
+  }, [wallet.connected, wallet.signMessage, wallet.publicKey, store]);
 
   // Wrap refreshInbox to automatically use connection
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const refreshInbox = useCallback(async (_conn?: unknown, force?: boolean) => {
     await store.refreshInbox(connection, force);
-  }, [connection, store.refreshInbox]);
+  }, [connection, store]);
 
   // Refresh public zkBTC balance when wallet is connected
   useEffect(() => {
     if (wallet.publicKey) {
       store.refreshPublicBalance(wallet.publicKey);
     }
-  }, [wallet.publicKey, store.refreshPublicBalance]);
+  }, [wallet.publicKey, store]);
 
   // Clear keys when wallet disconnects — but only if using wallet auth (not passkey)
   // Passkey-derived keys have solanaPublicKey set to all zeros
@@ -49,7 +49,7 @@ export function useUTXOpia() {
     if (!wallet.connected && store.keys?.solanaPublicKey.some(b => b !== 0)) {
       store.clearKeys(wallet.publicKey?.toBase58());
     }
-  }, [wallet.connected, wallet.publicKey, store.clearKeys, store.keys]);
+  }, [wallet.connected, wallet.publicKey, store]);
 
   return {
     // Poseidon

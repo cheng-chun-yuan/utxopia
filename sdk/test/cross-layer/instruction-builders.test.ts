@@ -5,10 +5,10 @@
  * exactly matching what the on-chain Rust code parses.
  *
  * Tested builders:
- * 1. buildTransactInstructionData (disc 14)
- * 2. buildUnshieldInstructionData (disc 30)
- * 3. buildRedemptionRequestInstructionData (disc 5)
- * 4. buildCompleteRedemptionInstructionData (disc 6)
+ * 1. buildTransactInstructionData (disc 13)
+ * 2. buildUnshieldInstructionData (disc 14)
+ * 3. buildRedemptionRequestInstructionData (disc 16)
+ * 4. buildCompleteRedemptionInstructionData (disc 17)
  *
  * For each builder we verify:
  * - Discriminator byte
@@ -49,10 +49,10 @@ const GROTH16_PROOF_SIZE = 256;
 const STEALTH_DATA_PER_OUTPUT = 72; // ephemeral_pub(32) + encrypted_amount(8) + encrypted_token_id(32)
 
 // Instruction discriminators from contracts/programs/utxopia/src/lib.rs
-const DISC_TRANSACT = 14;
-const DISC_UNSHIELD = 30;
-const DISC_REQUEST_REDEMPTION = 5;
-const DISC_COMPLETE_REDEMPTION = 6;
+const DISC_TRANSACT = 13;
+const DISC_UNSHIELD = 14;
+const DISC_REQUEST_REDEMPTION = 16;
+const DISC_COMPLETE_REDEMPTION = 17;
 
 // =============================================================================
 // Helpers
@@ -85,25 +85,26 @@ function fakeAddress(label: string): ReturnType<typeof address> {
 }
 
 // =============================================================================
-// TRANSACT (disc 14) — contracts/programs/utxopia/src/instructions/transact.rs
+// TRANSACT (disc 13) — contracts/programs/utxopia/src/instructions/transact.rs
 // =============================================================================
 
-describe("Cross-layer: buildTransactInstructionData (disc=14)", () => {
+describe("Cross-layer: buildTransactInstructionData (disc=13)", () => {
   /**
    * Rust layout (data received AFTER disc is stripped by entrypoint):
    * [0]       n_inputs:          u8
    * [1]       n_outputs:         u8
-   * [2]       proof_source:      u8  (0=inline)
-   * [3..259]  proof:             [u8; 256]
-   * [259..291] merkle_root:      [u8; 32]
-   * [291..323] bound_params_hash: [u8; 32]
-   * [323..]   nullifiers:        [[u8; 32]; n_inputs]
+   * [2]       n_public_outputs:  u8  (0 for transact)
+   * [3]       proof_source:      u8  (0=inline)
+   * [4..260]  proof:             [u8; 256]
+   * [260..292] merkle_root:      [u8; 32]
+   * [292..324] bound_params_hash: [u8; 32]
+   * [324..]   nullifiers:        [[u8; 32]; n_inputs]
    * [..]      commitments_out:   [[u8; 32]; n_outputs]
    * [..]      stealth_data:      [72 bytes] x n_outputs
    */
 
   describe("discriminator", () => {
-    it("first byte is 14", () => {
+    it("first byte is 13", () => {
       const data = buildTransactInstructionData({
         nInputs: 1,
         nOutputs: 1,
@@ -119,9 +120,9 @@ describe("Cross-layer: buildTransactInstructionData (disc=14)", () => {
   });
 
   describe("total data length", () => {
-    it("1x1: disc(1) + header(3) + proof(256) + root(32) + bph(32) + null(1*32) + comm(1*32) + stealth(1*72) = 460", () => {
-      const expected = 1 + 3 + 256 + 32 + 32 + 32 + 32 + 72;
-      expect(expected).toBe(460);
+    it("1x1: disc(1) + header(4) + proof(256) + root(32) + bph(32) + null(1*32) + comm(1*32) + stealth(1*72) = 461", () => {
+      const expected = 1 + 4 + 256 + 32 + 32 + 32 + 32 + 72;
+      expect(expected).toBe(461);
       const data = buildTransactInstructionData({
         nInputs: 1, nOutputs: 1,
         proofBytes: fakeProof(),
@@ -134,9 +135,9 @@ describe("Cross-layer: buildTransactInstructionData (disc=14)", () => {
       expect(data.length).toBe(expected);
     });
 
-    it("2x2: disc(1) + header(3) + proof(256) + root(32) + bph(32) + null(2*32) + comm(2*32) + stealth(2*72) = 596", () => {
-      const expected = 1 + 3 + 256 + 32 + 32 + 64 + 64 + 144;
-      expect(expected).toBe(596);
+    it("2x2: disc(1) + header(4) + proof(256) + root(32) + bph(32) + null(2*32) + comm(2*32) + stealth(2*72) = 597", () => {
+      const expected = 1 + 4 + 256 + 32 + 32 + 64 + 64 + 144;
+      expect(expected).toBe(597);
       const data = buildTransactInstructionData({
         nInputs: 2, nOutputs: 2,
         proofBytes: fakeProof(),
@@ -149,9 +150,9 @@ describe("Cross-layer: buildTransactInstructionData (disc=14)", () => {
       expect(data.length).toBe(expected);
     });
 
-    it("generic NxM formula: 1 + 3 + 256 + 32 + 32 + N*32 + M*32 + M*72", () => {
+    it("generic NxM formula: 1 + 4 + 256 + 32 + 32 + N*32 + M*32 + M*72", () => {
       for (const [n, m] of [[1, 2], [2, 1], [3, 3], [1, 9], [5, 5]]) {
-        const expected = 1 + 3 + 256 + 32 + 32 + n * 32 + m * 32 + m * 72;
+        const expected = 1 + 4 + 256 + 32 + 32 + n * 32 + m * 32 + m * 72;
         const data = buildTransactInstructionData({
           nInputs: n, nOutputs: m,
           proofBytes: fakeProof(),
@@ -167,7 +168,7 @@ describe("Cross-layer: buildTransactInstructionData (disc=14)", () => {
   });
 
   describe("field offsets match Rust parsing", () => {
-    it("n_inputs at offset 1, n_outputs at offset 2, proof_source at offset 3", () => {
+    it("n_inputs, n_outputs, n_public_outputs, proof_source use the common 4-byte header", () => {
       const data = buildTransactInstructionData({
         nInputs: 2, nOutputs: 3,
         proofBytes: fakeProof(),
@@ -177,14 +178,16 @@ describe("Cross-layer: buildTransactInstructionData (disc=14)", () => {
         commitmentsOut: [filledBytes(32, 0x04), filledBytes(32, 0x14), filledBytes(32, 0x24)],
         stealthData: [fakeStealth(0), fakeStealth(1), fakeStealth(2)],
       });
-      // After disc strip, Rust reads data[0]=n_inputs, data[1]=n_outputs, data[2]=proof_source
+      // After disc strip, Rust reads data[0]=n_inputs, data[1]=n_outputs,
+      // data[2]=n_public_outputs, data[3]=proof_source.
       const contractData = data.slice(1);
       expect(contractData[0]).toBe(2); // n_inputs
       expect(contractData[1]).toBe(3); // n_outputs
-      expect(contractData[2]).toBe(0); // proof_source = 0 (inline)
+      expect(contractData[2]).toBe(0); // n_public_outputs = 0 for private transfer
+      expect(contractData[3]).toBe(0); // proof_source = 0 (inline)
     });
 
-    it("proof at offset 3 (contract offset), 256 bytes", () => {
+    it("proof at offset 4 (contract offset), 256 bytes", () => {
       const proof = fakeProof();
       const data = buildTransactInstructionData({
         nInputs: 1, nOutputs: 1,
@@ -196,12 +199,11 @@ describe("Cross-layer: buildTransactInstructionData (disc=14)", () => {
         stealthData: [fakeStealth(0)],
       });
       const contractData = data.slice(1); // strip disc
-      // Rust: offset=3, proof = &data[offset..offset + 256]
-      const parsedProof = contractData.slice(3, 3 + 256);
+      const parsedProof = contractData.slice(4, 4 + 256);
       expect(parsedProof).toEqual(proof);
     });
 
-    it("merkle_root at offset 259 (contract), bound_params_hash at 291", () => {
+    it("merkle_root at offset 260 (contract), bound_params_hash at 292", () => {
       const root = filledBytes(32, 0xaa);
       const bph = filledBytes(32, 0xbb);
       const data = buildTransactInstructionData({
@@ -214,13 +216,11 @@ describe("Cross-layer: buildTransactInstructionData (disc=14)", () => {
         stealthData: [fakeStealth(0)],
       });
       const contractData = data.slice(1);
-      // Rust: offset after proof = 3 + 256 = 259
-      expect(contractData.slice(259, 291)).toEqual(root);
-      // Rust: offset after root = 259 + 32 = 291
-      expect(contractData.slice(291, 323)).toEqual(bph);
+      expect(contractData.slice(260, 292)).toEqual(root);
+      expect(contractData.slice(292, 324)).toEqual(bph);
     });
 
-    it("nullifiers start at 323 (contract), then commitments, then stealth_data", () => {
+    it("nullifiers start at 324 (contract), then commitments, then stealth_data", () => {
       const null0 = filledBytes(32, 0xc0);
       const null1 = filledBytes(32, 0xc1);
       const comm0 = filledBytes(32, 0xd0);
@@ -239,17 +239,14 @@ describe("Cross-layer: buildTransactInstructionData (disc=14)", () => {
       });
       const cd = data.slice(1);
 
-      // Nullifiers at 323
-      expect(cd.slice(323, 355)).toEqual(null0);
-      expect(cd.slice(355, 387)).toEqual(null1);
+      expect(cd.slice(324, 356)).toEqual(null0);
+      expect(cd.slice(356, 388)).toEqual(null1);
 
-      // Commitments at 323 + 2*32 = 387
-      expect(cd.slice(387, 419)).toEqual(comm0);
-      expect(cd.slice(419, 451)).toEqual(comm1);
+      expect(cd.slice(388, 420)).toEqual(comm0);
+      expect(cd.slice(420, 452)).toEqual(comm1);
 
-      // Stealth at 387 + 2*32 = 451
-      expect(cd.slice(451, 451 + 72)).toEqual(st0.slice(0, 72));
-      expect(cd.slice(451 + 72, 451 + 144)).toEqual(st1.slice(0, 72));
+      expect(cd.slice(452, 452 + 72)).toEqual(st0.slice(0, 72));
+      expect(cd.slice(452 + 72, 452 + 144)).toEqual(st1.slice(0, 72));
     });
   });
 
@@ -332,7 +329,7 @@ describe("Cross-layer: buildTransactInstructionData (disc=14)", () => {
           commitmentsOut: [filledBytes(32, 0x04)],
           stealthData: [fakeStealth(0)],
         })
-      ).toThrow("256 bytes");
+      ).toThrow("256-byte proof");
     });
 
     it("rejects mismatched nullifier count", () => {
@@ -379,7 +376,7 @@ describe("Cross-layer: buildTransactInstructionData (disc=14)", () => {
 
     it("max variant 5x5 produces correct length", () => {
       const n = 5, m = 5;
-      const expected = 1 + 3 + 256 + 32 + 32 + n * 32 + m * 32 + m * 72;
+      const expected = 1 + 4 + 256 + 32 + 32 + n * 32 + m * 32 + m * 72;
       const data = buildTransactInstructionData({
         nInputs: n, nOutputs: m,
         proofBytes: fakeProof(),
@@ -395,25 +392,27 @@ describe("Cross-layer: buildTransactInstructionData (disc=14)", () => {
 });
 
 // =============================================================================
-// UNSHIELD (disc 30) — contracts/programs/utxopia/src/instructions/unshield.rs
+// UNSHIELD (disc 14) — contracts/programs/utxopia/src/instructions/unshield.rs
 // =============================================================================
 
-describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
+describe("Cross-layer: buildUnshieldInstructionData (disc=14)", () => {
   /**
    * Rust layout (data received AFTER disc stripped):
    * [0]       n_inputs:          u8
    * [1]       n_outputs:         u8  (includes burn output as last)
-   * [2..258]  proof:             [u8; 256]
-   * [258..290] merkle_root:      [u8; 32]
-   * [290..322] bound_params_hash: [u8; 32]
-   * [322..]   nullifiers:        [[u8; 32]; n_inputs]
+   * [2]       n_public_outputs:  u8
+   * [3]       proof_source:      u8
+   * [4..260]  proof:             [u8; 256]
+   * [260..292] merkle_root:      [u8; 32]
+   * [292..324] bound_params_hash: [u8; 32]
+   * [324..]   nullifiers:        [[u8; 32]; n_inputs]
    * [..]      commitments_out:   [[u8; 32]; n_outputs]  (last = burn)
    * [..]      stealth_data:      [72 bytes] x (n_outputs - 1)
    * [..]      unshield_amount:   u64 LE
    */
 
   describe("discriminator", () => {
-    it("first byte is 30", () => {
+    it("first byte is 14", () => {
       const data = buildUnshieldInstructionData({
         nInputs: 2, nOutputs: 2,
         proofBytes: fakeProof(),
@@ -422,18 +421,18 @@ describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
         nullifiers: [filledBytes(32, 0x03), filledBytes(32, 0x13)],
         commitmentsOut: [filledBytes(32, 0x04), filledBytes(32, 0x14)],
         stealthData: [fakeStealth(0)], // n_outputs - 1 = 1
-        unshieldAmount: 50000n,
+        unshieldAmounts: [50000n],
       });
       expect(data[0]).toBe(DISC_UNSHIELD);
     });
   });
 
   describe("total data length", () => {
-    it("2x2: disc(1) + header(2) + proof(256) + root(32) + bph(32) + null(2*32) + comm(2*32) + stealth(1*72) + amount(8) = 531", () => {
+    it("2x2: disc(1) + header(4) + proof(256) + root(32) + bph(32) + null(2*32) + comm(2*32) + stealth(1*72) + amount(8) = 533", () => {
       const n = 2, m = 2;
       const nTreeOutputs = m - 1;
-      const expected = 1 + 2 + 256 + 32 + 32 + n * 32 + m * 32 + nTreeOutputs * 72 + 8;
-      expect(expected).toBe(531);
+      const expected = 1 + 4 + 256 + 32 + 32 + n * 32 + m * 32 + nTreeOutputs * 72 + 8;
+      expect(expected).toBe(533);
       const data = buildUnshieldInstructionData({
         nInputs: n, nOutputs: m,
         proofBytes: fakeProof(),
@@ -442,14 +441,14 @@ describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
         nullifiers: [filledBytes(32, 0x03), filledBytes(32, 0x13)],
         commitmentsOut: [filledBytes(32, 0x04), filledBytes(32, 0x14)],
         stealthData: [fakeStealth(0)],
-        unshieldAmount: 50000n,
+        unshieldAmounts: [50000n],
       });
       expect(data.length).toBe(expected);
     });
 
-    it("1x1 (only burn output, 0 tree outputs): disc(1) + header(2) + proof(256) + root(32) + bph(32) + null(32) + comm(32) + stealth(0) + amount(8) = 395", () => {
-      const expected = 1 + 2 + 256 + 32 + 32 + 32 + 32 + 0 + 8;
-      expect(expected).toBe(395);
+    it("1x1 (only burn output, 0 tree outputs): disc(1) + header(4) + proof(256) + root(32) + bph(32) + null(32) + comm(32) + stealth(0) + amount(8) = 397", () => {
+      const expected = 1 + 4 + 256 + 32 + 32 + 32 + 32 + 0 + 8;
+      expect(expected).toBe(397);
       const data = buildUnshieldInstructionData({
         nInputs: 1, nOutputs: 1,
         proofBytes: fakeProof(),
@@ -458,15 +457,15 @@ describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
         nullifiers: [filledBytes(32, 0x03)],
         commitmentsOut: [filledBytes(32, 0x04)],
         stealthData: [], // n_outputs - 1 = 0
-        unshieldAmount: 10000n,
+        unshieldAmounts: [10000n],
       });
       expect(data.length).toBe(expected);
     });
 
-    it("generic NxM formula: 1 + 2 + 256 + 32 + 32 + N*32 + M*32 + (M-1)*72 + 8", () => {
+    it("generic NxM formula: 1 + 4 + 256 + 32 + 32 + N*32 + M*32 + (M-1)*72 + 8", () => {
       for (const [n, m] of [[1, 2], [2, 1], [3, 3], [2, 4]]) {
         const nTree = m - 1;
-        const expected = 1 + 2 + 256 + 32 + 32 + n * 32 + m * 32 + nTree * 72 + 8;
+        const expected = 1 + 4 + 256 + 32 + 32 + n * 32 + m * 32 + nTree * 72 + 8;
         const data = buildUnshieldInstructionData({
           nInputs: n, nOutputs: m,
           proofBytes: fakeProof(),
@@ -475,7 +474,7 @@ describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
           nullifiers: Array.from({ length: n }, (_, i) => filledBytes(32, 0x10 + i)),
           commitmentsOut: Array.from({ length: m }, (_, i) => filledBytes(32, 0x20 + i)),
           stealthData: Array.from({ length: nTree }, (_, i) => fakeStealth(i)),
-          unshieldAmount: 99999n,
+          unshieldAmounts: [99999n],
         });
         expect(data.length).toBe(expected);
       }
@@ -483,7 +482,7 @@ describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
   });
 
   describe("field offsets match Rust parsing", () => {
-    it("n_inputs at 0, n_outputs at 1, NO proof_source byte (unlike transact)", () => {
+    it("n_inputs, n_outputs, n_public_outputs, proof_source use the common 4-byte header", () => {
       const data = buildUnshieldInstructionData({
         nInputs: 2, nOutputs: 3,
         proofBytes: fakeProof(),
@@ -492,16 +491,16 @@ describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
         nullifiers: [filledBytes(32, 0x03), filledBytes(32, 0x13)],
         commitmentsOut: [filledBytes(32, 0x04), filledBytes(32, 0x14), filledBytes(32, 0x24)],
         stealthData: [fakeStealth(0), fakeStealth(1)], // n_outputs - 1 = 2
-        unshieldAmount: 12345n,
+        unshieldAmounts: [12345n],
       });
       const cd = data.slice(1); // strip disc
-      // Rust: data[0]=n_inputs, data[1]=n_outputs (NO proof_source)
       expect(cd[0]).toBe(2); // n_inputs
       expect(cd[1]).toBe(3); // n_outputs
-      // Proof starts immediately at offset 2 (not 3 like transact)
+      expect(cd[2]).toBe(1); // n_public_outputs defaults to one public output
+      expect(cd[3]).toBe(0); // proof_source = 0 (inline)
     });
 
-    it("proof at offset 2 (contract), 256 bytes", () => {
+    it("proof at offset 4 (contract), 256 bytes", () => {
       const proof = fakeProof();
       const data = buildUnshieldInstructionData({
         nInputs: 1, nOutputs: 2,
@@ -511,14 +510,13 @@ describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
         nullifiers: [filledBytes(32, 0x03)],
         commitmentsOut: [filledBytes(32, 0x04), filledBytes(32, 0x14)],
         stealthData: [fakeStealth(0)],
-        unshieldAmount: 50000n,
+        unshieldAmounts: [50000n],
       });
       const cd = data.slice(1);
-      // Rust: let proof_bytes = &data[offset..offset + GROTH16_PROOF_SIZE]; offset starts at 2
-      expect(cd.slice(2, 2 + 256)).toEqual(proof);
+      expect(cd.slice(4, 4 + 256)).toEqual(proof);
     });
 
-    it("merkle_root at 258, bound_params_hash at 290 (contract offsets)", () => {
+    it("merkle_root at 260, bound_params_hash at 292 (contract offsets)", () => {
       const root = filledBytes(32, 0xaa);
       const bph = filledBytes(32, 0xbb);
       const data = buildUnshieldInstructionData({
@@ -529,16 +527,14 @@ describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
         nullifiers: [filledBytes(32, 0x03)],
         commitmentsOut: [filledBytes(32, 0x04), filledBytes(32, 0x14)],
         stealthData: [fakeStealth(0)],
-        unshieldAmount: 50000n,
+        unshieldAmounts: [50000n],
       });
       const cd = data.slice(1);
-      // Rust: offset = 2 + 256 = 258
-      expect(cd.slice(258, 290)).toEqual(root);
-      // Rust: offset = 258 + 32 = 290
-      expect(cd.slice(290, 322)).toEqual(bph);
+      expect(cd.slice(260, 292)).toEqual(root);
+      expect(cd.slice(292, 324)).toEqual(bph);
     });
 
-    it("nullifiers at 322, commitments follow, then stealth, then unshield_amount", () => {
+    it("nullifiers at 324, commitments follow, then stealth, then unshield_amount", () => {
       const null0 = filledBytes(32, 0xc0);
       const comm0 = filledBytes(32, 0xd0);
       const comm1 = filledBytes(32, 0xd1); // burn commitment
@@ -553,22 +549,18 @@ describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
         nullifiers: [null0],
         commitmentsOut: [comm0, comm1],
         stealthData: [st0],
-        unshieldAmount: amount,
+        unshieldAmounts: [amount],
       });
       const cd = data.slice(1);
 
-      // Nullifiers at 322
-      expect(cd.slice(322, 354)).toEqual(null0);
+      expect(cd.slice(324, 356)).toEqual(null0);
 
-      // Commitments at 322 + 1*32 = 354
-      expect(cd.slice(354, 386)).toEqual(comm0);
-      expect(cd.slice(386, 418)).toEqual(comm1);
+      expect(cd.slice(356, 388)).toEqual(comm0);
+      expect(cd.slice(388, 420)).toEqual(comm1);
 
-      // Stealth at 354 + 2*32 = 418 (only 1 tree output)
-      expect(cd.slice(418, 418 + 72)).toEqual(st0.slice(0, 72));
+      expect(cd.slice(420, 420 + 72)).toEqual(st0.slice(0, 72));
 
-      // Unshield amount at 418 + 72 = 490
-      const amountOffset = 418 + 72;
+      const amountOffset = 420 + 72;
       const parsedAmount = new DataView(cd.buffer, cd.byteOffset).getBigUint64(amountOffset, true);
       expect(parsedAmount).toBe(amount);
     });
@@ -584,7 +576,7 @@ describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
         nullifiers: [filledBytes(32, 0x03), filledBytes(32, 0x13)],
         commitmentsOut: [filledBytes(32, 0x04), filledBytes(32, 0x14)],
         stealthData: [fakeStealth(0)],
-        unshieldAmount: 50000n,
+        unshieldAmounts: [50000n],
         accounts: {
           poolState: fakeAddress("pool"),
           commitmentTree: fakeAddress("tree"),
@@ -592,14 +584,14 @@ describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
           user: fakeAddress("user"),
           tokenConfig: fakeAddress("tc"),
           vault: fakeAddress("vault"),
-          userTokenAccount: fakeAddress("uta"),
+          recipientTokenAccounts: [fakeAddress("uta")],
           nullifierRecords: [fakeAddress("nr0"), fakeAddress("nr1")],
         },
       });
       expect(ix.accounts.length).toBe(11);
     });
 
-    it("account order matches Rust: pool(r), tree(w), vk(r), user(ws), sys(r), tc(w), vault(w), uta(w), token(r), nullifiers(w)", () => {
+    it("account order matches Rust: pool(r), tree(w), vk(r), user(ws), sys(r), tc(w), vault(w), token(r), recipients(w), nullifiers(w)", () => {
       const ix = buildUnshieldInstruction({
         nInputs: 1, nOutputs: 2,
         proofBytes: fakeProof(),
@@ -608,7 +600,7 @@ describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
         nullifiers: [filledBytes(32, 0x03)],
         commitmentsOut: [filledBytes(32, 0x04), filledBytes(32, 0x14)],
         stealthData: [fakeStealth(0)],
-        unshieldAmount: 50000n,
+        unshieldAmounts: [50000n],
         accounts: {
           poolState: fakeAddress("pool"),
           commitmentTree: fakeAddress("tree"),
@@ -616,7 +608,7 @@ describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
           user: fakeAddress("user"),
           tokenConfig: fakeAddress("tc"),
           vault: fakeAddress("vault"),
-          userTokenAccount: fakeAddress("uta"),
+          recipientTokenAccounts: [fakeAddress("uta")],
           nullifierRecords: [fakeAddress("nr0")],
         },
       });
@@ -627,14 +619,14 @@ describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
       expect(ix.accounts[4].role).toBe(AccountRole.READONLY);           // system_program
       expect(ix.accounts[5].role).toBe(AccountRole.WRITABLE);           // token_config
       expect(ix.accounts[6].role).toBe(AccountRole.WRITABLE);           // vault
-      expect(ix.accounts[7].role).toBe(AccountRole.WRITABLE);           // user_token_account
-      expect(ix.accounts[8].role).toBe(AccountRole.READONLY);           // token_program
+      expect(ix.accounts[7].role).toBe(AccountRole.READONLY);           // token_program
+      expect(ix.accounts[8].role).toBe(AccountRole.WRITABLE);           // recipient token account
       expect(ix.accounts[9].role).toBe(AccountRole.WRITABLE);           // nullifier_record
     });
   });
 
   describe("key difference from transact", () => {
-    it("unshield has NO proof_source byte (header is 2 bytes, not 3)", () => {
+    it("transact and unshield share the same common proof header", () => {
       const transactData = buildTransactInstructionData({
         nInputs: 1, nOutputs: 1,
         proofBytes: fakeProof(),
@@ -652,20 +644,17 @@ describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
         nullifiers: [filledBytes(32, 0x03)],
         commitmentsOut: [filledBytes(32, 0x04)],
         stealthData: [], // 0 tree outputs for 1x1 unshield
-        unshieldAmount: 50000n,
+        unshieldAmounts: [50000n],
       });
 
-      // Transact header: n_inputs(1) + n_outputs(1) + proof_source(1) = 3
-      // Unshield header: n_inputs(1) + n_outputs(1) = 2
-      // But unshield has extra 8 bytes for unshield_amount and fewer stealth entries
       const tcd = transactData.slice(1);
       const ucd = unshieldData.slice(1);
 
-      // Transact proof at offset 3
-      expect(tcd[2]).toBe(0); // proof_source byte exists
-      // Unshield proof at offset 2 (no proof_source)
-      // Both should have the same proof content, just at different offsets
-      expect(tcd.slice(3, 3 + 256)).toEqual(ucd.slice(2, 2 + 256));
+      expect(tcd[2]).toBe(0); // transact has no public outputs
+      expect(ucd[2]).toBe(1); // unshield defaults to one public output
+      expect(tcd[3]).toBe(0); // proof_source
+      expect(ucd[3]).toBe(0); // proof_source
+      expect(tcd.slice(4, 4 + 256)).toEqual(ucd.slice(4, 4 + 256));
     });
 
     it("stealth_data has (n_outputs-1) entries, not n_outputs", () => {
@@ -678,10 +667,10 @@ describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
         nullifiers: [filledBytes(32, 0x03), filledBytes(32, 0x13)],
         commitmentsOut: [filledBytes(32, 0x04), filledBytes(32, 0x14), filledBytes(32, 0x24)],
         stealthData: [fakeStealth(0), fakeStealth(1)], // 3-1=2
-        unshieldAmount: 50000n,
+        unshieldAmounts: [50000n],
       });
       const nTree = 3 - 1;
-      const expected = 1 + 2 + 256 + 32 + 32 + 2 * 32 + 3 * 32 + nTree * 72 + 8;
+      const expected = 1 + 4 + 256 + 32 + 32 + 2 * 32 + 3 * 32 + nTree * 72 + 8;
       expect(data.length).toBe(expected);
     });
   });
@@ -697,9 +686,9 @@ describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
           nullifiers: [filledBytes(32, 0x03)],
           commitmentsOut: [filledBytes(32, 0x04)],
           stealthData: [],
-          unshieldAmount: 50000n,
+          unshieldAmounts: [50000n],
         })
-      ).toThrow("256 bytes");
+      ).toThrow("256-byte proof");
     });
 
     it("rejects wrong stealth count (should be n_outputs - 1)", () => {
@@ -712,7 +701,7 @@ describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
           nullifiers: [filledBytes(32, 0x03)],
           commitmentsOut: [filledBytes(32, 0x04), filledBytes(32, 0x14)],
           stealthData: [fakeStealth(0), fakeStealth(1)], // 2 but expected 1
-          unshieldAmount: 50000n,
+          unshieldAmounts: [50000n],
         })
       ).toThrow("stealth");
     });
@@ -720,10 +709,10 @@ describe("Cross-layer: buildUnshieldInstructionData (disc=30)", () => {
 });
 
 // =============================================================================
-// REQUEST_REDEMPTION (disc 5) — contracts/programs/utxopia/src/instructions/request_redemption.rs
+// REQUEST_REDEMPTION (disc 16) — contracts/programs/utxopia/src/instructions/request_redemption.rs
 // =============================================================================
 
-describe("Cross-layer: buildRedemptionRequestInstructionData (disc=5)", () => {
+describe("Cross-layer: buildRedemptionRequestInstructionData (disc=16)", () => {
   /**
    * Rust layout (data received AFTER disc stripped):
    * [0..32]     proof_hash:     [u8; 32]
@@ -739,7 +728,7 @@ describe("Cross-layer: buildRedemptionRequestInstructionData (disc=5)", () => {
    */
 
   describe("discriminator", () => {
-    it("first byte is 5", () => {
+    it("first byte is 16", () => {
       const data = buildRedemptionRequestInstructionData({
         proofHash: filledBytes(32, 0x01),
         merkleRoot: filledBytes(32, 0x02),
@@ -1020,10 +1009,10 @@ describe("Cross-layer: buildRedemptionRequestInstructionData (disc=5)", () => {
 });
 
 // =============================================================================
-// COMPLETE_REDEMPTION (disc 6) — contracts/programs/utxopia/src/instructions/complete_redemption.rs
+// COMPLETE_REDEMPTION (disc 17) — contracts/programs/utxopia/src/instructions/complete_redemption.rs
 // =============================================================================
 
-describe("Cross-layer: buildCompleteRedemptionInstructionData (disc=6)", () => {
+describe("Cross-layer: buildCompleteRedemptionInstructionData (disc=17)", () => {
   /**
    * Rust layout (data received AFTER disc stripped):
    * [0..32]    btc_txid:          [u8; 32]
@@ -1036,7 +1025,7 @@ describe("Cross-layer: buildCompleteRedemptionInstructionData (disc=6)", () => {
    */
 
   describe("discriminator", () => {
-    it("first byte is 6", () => {
+    it("first byte is 17", () => {
       const data = buildCompleteRedemptionInstructionData({
         btcTxid: filledBytes(32, 0xaa),
         txSize: 225,

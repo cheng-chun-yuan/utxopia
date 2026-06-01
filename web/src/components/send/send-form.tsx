@@ -136,12 +136,12 @@ export function SendForm() {
   const [snsState, setSnsState] = useState<SnsState>({ kind: "idle" });
   useEffect(() => {
     if (detection.type !== "stealth_sns") {
-      setSnsState({ kind: "idle" });
+      setSnsState((prev) => (prev.kind === "idle" ? prev : { kind: "idle" }));
       return;
     }
     const sub = state.recipient.trim().toLowerCase().replace(/\.utxopia\.sol$/, "");
     if (!sub) {
-      setSnsState({ kind: "idle" });
+      setSnsState((prev) => (prev.kind === "idle" ? prev : { kind: "idle" }));
       return;
     }
     setSnsState({ kind: "resolving" });

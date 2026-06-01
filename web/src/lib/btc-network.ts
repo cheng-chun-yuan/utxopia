@@ -5,8 +5,7 @@
  */
 import { getConfig } from "@utxopia/sdk";
 import { BitcoinNetworkType } from "sats-connect";
-
-type BitcoinNetwork = ReturnType<typeof getConfig>["bitcoinNetwork"];
+import { getNetworkConfig } from "./network-config";
 
 /** sats-connect network enum for Xverse/Leather wallets */
 export function getSatsConnectNetwork(): BitcoinNetworkType {
@@ -53,9 +52,7 @@ export function getUnisatFallbackNetwork(): string {
  *  surfaces `btc.utxopia.com/regtest` instead of localhost. Falls back to
  *  per-network mempool.space defaults if no config is loaded yet. */
 export function getMempoolExplorerUrl(): string {
-  // Lazy-require to avoid pulling network-config into SDK consumers.
   try {
-    const { getNetworkConfig } = require("./network-config") as typeof import("./network-config");
     const url = getNetworkConfig().bitcoin.explorerUrl;
     if (url) return url;
   } catch {

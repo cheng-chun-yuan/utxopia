@@ -77,10 +77,10 @@ export default function IssuedDelegationsPage() {
           <div className="flex items-center gap-2">
             <h1 className="text-3xl font-semibold tracking-tight">Issued delegations</h1>
             <InfoTip label="About Issued delegations">
-              Your record of every delegated viewing key you've handed out — the
+              Your record of every delegated viewing key you&apos;ve handed out — the
               secret key material itself is never stored here, only public
               metadata. Revoke is local-only (it just marks the record; the
-              recipient's copy of the key still works until the wall-clock
+              recipient&apos;s copy of the key still works until the wall-clock
               expiry).
             </InfoTip>
           </div>

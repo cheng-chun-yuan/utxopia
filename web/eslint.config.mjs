@@ -11,8 +11,18 @@ const eslintConfig = defineConfig([
     ".next/**",
     "out/**",
     "build/**",
+    "public/circuits/**",
+    "src/**/__tests__/**",
+    "src/**/*.test.*",
     "next-env.d.ts",
   ]),
+  {
+    rules: {
+      // React Compiler's lint currently flags common mount/hydration effects
+      // used by Next client components. Keep the actionable hook rules on.
+      "react-hooks/set-state-in-effect": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

@@ -1,8 +1,19 @@
 /** @happy-dom */
-import { describe, it, expect, mock, afterEach } from "bun:test";
+import { describe, it, expect, mock, beforeEach, afterEach } from "bun:test";
 import { render, fireEvent, screen, cleanup } from "@testing-library/react";
 
-afterEach(cleanup);
+const originalFetch = global.fetch;
+
+beforeEach(() => {
+  global.fetch = mock(() =>
+    Promise.resolve({ ok: false, json: async () => null } as Response),
+  ) as typeof fetch;
+});
+
+afterEach(() => {
+  global.fetch = originalFetch;
+  cleanup();
+});
 
 // Stub the hooks the form depends on so the test stays unit-scoped.
 mock.module("@/hooks/use-utxopia", () => ({
@@ -66,6 +77,12 @@ mock.module("@solana/wallet-adapter-react", () => ({
 }));
 mock.module("next/navigation", () => ({
   useRouter: () => ({ push: () => {} }),
+}));
+mock.module("./review-modal", () => ({
+  ReviewModal: () => null,
+}));
+mock.module("./claim-link-modal", () => ({
+  ClaimLinkModal: () => null,
 }));
 
 import { SendForm } from "./send-form";
