@@ -9,6 +9,7 @@ import {
   jwtToAddress,
 } from "@mysten/sui/zklogin";
 import { UTXOpiaSuiAdapter } from "@utxopia/sdk-sui";
+import { networkForChain } from "@/lib/chain-registry";
 import { detectNetwork, getNetworkConfig } from "@/lib/network-config";
 
 const ZKLOGIN_SESSION_KEY = "utxopia.sui.zklogin";
@@ -43,15 +44,15 @@ export interface SuiZkLoginCallback {
 }
 
 export function getSuiClient() {
-  const network = detectNetwork();
-  const cfg = getNetworkConfig(network === "sui-regtest" ? "sui-regtest" : "sui-testnet");
+  const network = networkForChain(detectNetwork(), "sui");
+  const cfg = getNetworkConfig(network);
   if (!cfg.sui) throw new Error("Sui configuration is missing");
   return new SuiClient({ url: cfg.sui.rpcUrl });
 }
 
 export function getSuiAdapter() {
-  const network = detectNetwork();
-  const cfg = getNetworkConfig(network === "sui-regtest" ? "sui-regtest" : "sui-testnet");
+  const network = networkForChain(detectNetwork(), "sui");
+  const cfg = getNetworkConfig(network);
   const sui = cfg.sui;
   if (!sui) throw new Error("Sui configuration is missing");
 

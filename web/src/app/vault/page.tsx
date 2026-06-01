@@ -25,7 +25,6 @@ import {
   ArrowDownToLine,
   ArrowRight,
   Droplets,
-  Wallet,
   Shield,
   Key,
   Copy,
@@ -57,6 +56,7 @@ import { OnboardingModal } from "@/components/onboarding-modal";
 import { AuthModal } from "@/components/auth-modal";
 import { HoldButton } from "@/components/ui/hold-button";
 import { useChainEnvironment } from "@/lib/chain-environment";
+import { getChainAdapter } from "@/lib/chain-registry";
 import { SuiDashboard } from "@/components/sui/sui-dashboard";
 
 export default function VaultPage() {
@@ -137,7 +137,7 @@ export default function VaultPage() {
   const [showSnsInput, setShowSnsInput] = useState(false);
   const [snsNameInput, setSnsNameInput] = useState("");
 
-  if (networkId === "sui-testnet" || networkId === "sui-regtest") {
+  if (getChainAdapter(networkConfig).id === "sui") {
     return (
       <main className="min-h-screen bg-background hacker-bg noise-overlay flex flex-col">
         <SiteHeader />

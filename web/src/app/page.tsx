@@ -3,7 +3,7 @@
 import React, { memo } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Bitcoin, Shield, Zap, Lock, ArrowRight, EyeOff, ShieldCheck, Loader2, ChevronRight, Layers, Rocket } from "lucide-react";
+import { Shield, Zap, Lock, ArrowRight, EyeOff, ShieldCheck, Loader2, ChevronRight, Layers, Rocket } from "lucide-react";
 import { usePoolStats } from "@/hooks/use-pool-stats";
 import { useTokenPrices } from "@/hooks/use-token-prices";
 import { tvlToUsd } from "@/lib/supported-tokens";
@@ -15,6 +15,7 @@ import { GradientBorderCard } from "@/components/ui/gradient-border-card";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { MouseSpotlight } from "@/components/ui/mouse-spotlight";
 import { useChainEnvironment } from "@/lib/chain-environment";
+import { getChainAdapter } from "@/lib/chain-registry";
 import { hrefWithChain } from "@/lib/network-config";
 import { cn } from "@/lib/utils";
 
@@ -219,11 +220,14 @@ export default function Home() {
   const prices = useTokenPrices();
   const { transactions } = useExplorer();
   const { networkId, config } = useChainEnvironment();
-  const chain = config.chain ?? "solana";
-  const chainName = chain === "sui" ? "Sui" : "Solana";
-  const nativeToken = chain === "sui"
-    ? { name: "SUI", label: "Sui", status: "Live", logo: "/tokens/sui.png" }
-    : { name: "SOL", label: "Solana", status: "Live", logo: "/tokens/sol.png" };
+  const chain = getChainAdapter(config);
+  const chainName = chain.displayName;
+  const nativeToken = {
+    name: chain.nativeToken,
+    label: chain.displayName,
+    status: "Live",
+    logo: `/tokens/${chain.query}.png`,
+  };
   const chainHref = (href: string) => hrefWithChain(href, networkId);
   const txCount = transactions.length;
 
@@ -245,7 +249,7 @@ export default function Home() {
             <ScrollReveal delay={0.1}>
               <h1 className="hero-title text-foreground">
                 Private. <span className="text-privacy">Audit-ready.</span>{" "}
-                <span className={chain === "sui" ? "text-sui" : "text-sol"}>{chainName}.</span>
+                <span className={chain.id === "sui" ? "text-sui" : "text-sol"}>{chainName}.</span>
               </h1>
             </ScrollReveal>
 

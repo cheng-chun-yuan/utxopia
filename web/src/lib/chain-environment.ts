@@ -2,6 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import { initConfig, UTXOpiaClient, type NetworkConfig as SdkNetworkConfig } from "@utxopia/sdk";
+import { getChainAdapter, type ChainId } from "@/lib/chain-registry";
 import {
   detectNetwork,
   getNetworkConfig,
@@ -17,6 +18,33 @@ export interface ChainEnvironment {
 
 let configuredNetwork: NetworkId | null = null;
 let configurePromise: Promise<SdkNetworkConfig> | null = null;
+
+const SDK_INITIALIZERS: Record<ChainId, (env: ChainEnvironment) => Promise<void>> = {
+  sui: async () => {
+    if (!UTXOpiaClient.isInitialized) {
+      await UTXOpiaClient.init({ backendUrl: "" });
+    }
+  },
+  solana: async (env) => {
+    if (configuredNetwork !== env.networkId || !configurePromise) {
+      configurePromise = initConfig({
+        utxopiaProgramId: env.config.solana.utxopiaProgramId,
+        zkbtcMint: env.config.tokens.zkbtcMint,
+        solanaRpcUrl: env.config.solana.rpcUrl,
+        groupPubKey: env.config.bitcoin.groupPubkey,
+        ikaDwalletXOnlyPubkey: env.config.ika?.dwalletXOnlyPubkey,
+        depositMode: env.config.bitcoin.depositMode,
+      });
+      configuredNetwork = env.networkId;
+    }
+
+    await configurePromise;
+
+    if (!UTXOpiaClient.isInitialized) {
+      await UTXOpiaClient.init({ backendUrl: "" });
+    }
+  },
+};
 
 function subscribeToNetwork(onChange: () => void): () => void {
   if (typeof window === "undefined") return () => {};
@@ -46,31 +74,6 @@ export function useChainEnvironment(): ChainEnvironment {
 
 export async function ensureChainEnvironment(networkId: NetworkId = detectNetwork()): Promise<ChainEnvironment> {
   const env = getChainEnvironment(networkId);
-
-  if (env.config.chain === "sui") {
-    if (!UTXOpiaClient.isInitialized) {
-      await UTXOpiaClient.init({ backendUrl: "" });
-    }
-    return env;
-  }
-
-  if (configuredNetwork !== networkId || !configurePromise) {
-    configurePromise = initConfig({
-      utxopiaProgramId: env.config.solana.utxopiaProgramId,
-      zkbtcMint: env.config.tokens.zkbtcMint,
-      solanaRpcUrl: env.config.solana.rpcUrl,
-      groupPubKey: env.config.bitcoin.groupPubkey,
-      ikaDwalletXOnlyPubkey: env.config.ika?.dwalletXOnlyPubkey,
-      depositMode: env.config.bitcoin.depositMode,
-    });
-    configuredNetwork = networkId;
-  }
-
-  await configurePromise;
-
-  if (!UTXOpiaClient.isInitialized) {
-    await UTXOpiaClient.init({ backendUrl: "" });
-  }
-
+  await SDK_INITIALIZERS[getChainAdapter(env.config).id](env);
   return env;
 }

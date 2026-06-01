@@ -7,12 +7,13 @@ import { Droplets, Rocket, Menu, X, Settings as SettingsIcon } from "lucide-reac
 import { motion, AnimatePresence } from "framer-motion";
 import { AdvancedModeBadge } from "@/components/ui/advanced-mode-badge";
 import { NetworkBadge } from "@/components/ui/network-badge";
+import { isHybridNetwork } from "@/lib/chain-registry";
 import { detectNetwork, hrefWithChain } from "@/lib/network-config";
 
 export function SiteHeader() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const network = useMemo(() => detectNetwork(), []);
-  const isHybrid = network === "devnet-regtest" || network === "sui-regtest";
+  const isHybrid = isHybridNetwork(network);
   const chainHref = (href: string) => hrefWithChain(href, network);
 
   return (

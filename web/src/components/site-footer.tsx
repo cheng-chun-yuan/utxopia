@@ -4,12 +4,12 @@ import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { useChainEnvironment } from "@/lib/chain-environment";
+import { getChainAdapter } from "@/lib/chain-registry";
 import { hrefWithChain } from "@/lib/network-config";
 
 export function SiteFooter() {
   const { networkId, config } = useChainEnvironment();
-  const chain = config.chain ?? "solana";
-  const chainName = chain === "sui" ? "Sui" : "Solana";
+  const chainName = getChainAdapter(config).displayName;
 
   return (
     <footer className="w-full border-t border-gray/10 bg-background/80 backdrop-blur-lg py-12 px-6 relative overflow-hidden">

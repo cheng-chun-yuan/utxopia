@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Droplets, Wallet, ExternalLink } from "lucide-react";
+import { getChainAdapter, isHybridNetwork } from "@/lib/chain-registry";
 import { detectNetwork, getNetworkConfig, hrefWithChain } from "@/lib/network-config";
 import { cn } from "@/lib/utils";
 
@@ -25,9 +26,11 @@ export default function FaucetPage() {
     }
   }, []);
 
-  const isHybrid = network === "devnet-regtest" || network === "sui-regtest";
+  const config = network ? getNetworkConfig(network, { applyEnvOverrides: false }) : null;
+  const chain = config ? getChainAdapter(config).id : "solana";
+  const isHybrid = !!network && isHybridNetwork(network);
   const chainHref = (href: string) => network ? hrefWithChain(href, network) : href;
-  const isSui = network === "sui-regtest";
+  const isSui = chain === "sui";
 
   return (
     <main className="min-h-screen bg-background hacker-bg noise-overlay flex flex-col items-center justify-center p-4">

@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { SuiAuthPanel } from "@/components/sui/sui-auth-panel";
+import { isChainHybridNetwork, networkForChain } from "@/lib/chain-registry";
 import { detectNetwork, getNetworkConfig, hrefWithChain, type NetworkId } from "@/lib/network-config";
 import {
   clearSuiAuthState,
@@ -63,7 +64,7 @@ const SUI_VAULT_TOKENS = [
 
 export function SuiDashboard() {
   const detected = detectNetwork();
-  const networkId: NetworkId = detected === "sui-regtest" ? "sui-regtest" : "sui-testnet";
+  const networkId = networkForChain(detected, "sui");
   const cfg = getNetworkConfig(networkId, { applyEnvOverrides: false });
   const sui = cfg.sui;
 
@@ -79,6 +80,7 @@ export function SuiDashboard() {
 }
 
 function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig }) {
+  const isHybrid = isChainHybridNetwork(networkId, "sui");
   const explorer = useMemo(() => makeExplorer(sui.explorerUrl), [sui.explorerUrl]);
   const [poolProbe, setPoolProbe] = useState<ObjectProbe>({ state: "idle" });
   const [authOpen, setAuthOpen] = useState(() => {
@@ -173,7 +175,7 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
           </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full border border-sui/20 bg-sui/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sui">
-              {networkId === "sui-regtest" ? "Sui Hybrid" : "Sui Testnet"}
+              {isHybrid ? "Sui Hybrid" : "Sui Testnet"}
             </span>
             {identity && (
               <button
@@ -224,7 +226,7 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
 
               <div className="mb-6 flex items-center justify-center gap-5 sm:gap-8">
                 <VaultAction href={hrefWithChain("/vault/deposit", networkId)} icon={<ArrowDownToLine className="h-5 w-5" />} label="Deposit" />
-                {networkId === "sui-regtest" && (
+                {isHybrid && (
                   <VaultAction href={hrefWithChain("/faucet", networkId)} icon={<Droplets className="h-5 w-5" />} label="Faucet" />
                 )}
                 <VaultAction href={hrefWithChain("/send", networkId)} icon={<Send className="h-5 w-5" />} label="Send" />
@@ -340,7 +342,7 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
         <div className="flex items-center justify-center gap-2 pt-4">
           <span className="h-1.5 w-1.5 rounded-full bg-sui" />
           <span className="text-[11px] text-gray/40">
-            Bitcoin {networkId === "sui-regtest" ? "Regtest" : "Testnet4"} · Sui Testnet
+            Bitcoin {isHybrid ? "Regtest" : "Testnet4"} · Sui Testnet
           </span>
         </div>
       </motion.div>

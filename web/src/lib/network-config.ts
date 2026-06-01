@@ -9,6 +9,7 @@
  */
 
 import networksJson from "./networks.json";
+import { CHAIN_ADAPTERS, type ChainId } from "@/lib/chain-registry";
 
 export type NetworkId =
   | "devnet"
@@ -194,13 +195,17 @@ function isKnownNetwork(value: string | null | undefined): value is NetworkId {
 }
 
 export function networkChain(network: NetworkId): ChainQuery {
-  return network === "sui-testnet" || network === "sui-regtest" ? "sui" : "sol";
+  const chain = (Object.keys(CHAIN_ADAPTERS) as ChainId[])
+    .find((key) => CHAIN_ADAPTERS[key].networkIds.includes(network));
+  return chain ? CHAIN_ADAPTERS[chain].query : "sol";
 }
 
 function defaultNetworkForChain(chain: ChainQuery): NetworkId {
   const env = process.env.NEXT_PUBLIC_NETWORK || process.env.UTXOPIA_NETWORK;
-  if (chain === "sui") return env === "sui-regtest" ? "sui-regtest" : "sui-testnet";
-  return env === "devnet-regtest" || env === "hybrid" ? "devnet-regtest" : "devnet";
+  const adapter = Object.values(CHAIN_ADAPTERS).find((item) => item.query === chain) ?? CHAIN_ADAPTERS.solana;
+  return env && adapter.networkIds.includes(env as NetworkId)
+    ? env as NetworkId
+    : adapter.defaultNetwork;
 }
 
 function networkFromQuery(params: URLSearchParams, preferred?: NetworkId | null): NetworkId | null {
