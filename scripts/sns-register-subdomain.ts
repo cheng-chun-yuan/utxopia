@@ -38,10 +38,18 @@ import {
   setConfig,
   sha256Hash,
 } from "../sdk/src";
+import {
+  Numberu32,
+  Numberu64,
+  createInstruction,
+  createReverseInstruction,
+  transferInstruction,
+} from "@bonfida/spl-name-service";
 
 const HASH_PREFIX = "SPL Name Service";
 const SNS_DISC_REALLOC = 4;
 const SNS_DISC_UPDATE = 1;
+const SNS_HEADER_SIZE = 96;
 const STEALTH_DATA_SIZE = 65;
 const STEALTH_DATA_VERSION = 2;
 const WSOL_WRAP_AMOUNT = 10_000_000;
@@ -191,61 +199,109 @@ async function main() {
   );
 
   const registrarAcct = await connection.getAccountInfo(registrar);
-  if (!registrarAcct) throw new Error("sub-registrar is not initialized for utxopia.sol");
-  const feeAccount = new PublicKey(registrarAcct.data.slice(34, 66));
-  const mint = new PublicKey(registrarAcct.data.slice(66, 98));
-  const feeSource = getAssociatedTokenAddressSync(mint, owner.publicKey, true);
-  const bonfidaFee = getAssociatedTokenAddressSync(mint, BONFIDA_FEE_OWNER, true);
+  let mode = "sub-registrar";
+  let ixs: TransactionInstruction[];
 
-  const ixs: TransactionInstruction[] = [
-    createAssociatedTokenAccountIdempotentInstruction(payer.publicKey, feeSource, owner.publicKey, NATIVE_MINT),
-    SystemProgram.transfer({ fromPubkey: payer.publicKey, toPubkey: feeSource, lamports: WSOL_WRAP_AMOUNT }),
-    createSyncNativeInstruction(feeSource),
-    createAssociatedTokenAccountIdempotentInstruction(payer.publicKey, bonfidaFee, BONFIDA_FEE_OWNER, mint),
-  ];
+  if (!registrarAcct) {
+    if (!parentInfo.data.slice(32, 64).equals(payer.publicKey.toBuffer())) {
+      throw new Error("sub-registrar is not initialized and payer does not own utxopia.sol");
+    }
+    mode = "parent-owner-direct";
+    const rent = await connection.getMinimumBalanceForRentExemption(
+      SNS_HEADER_SIZE + STEALTH_DATA_SIZE,
+    );
+    ixs = [
+      createInstruction(
+        nameServiceProgramId,
+        SystemProgram.programId,
+        subdomainKey,
+        payer.publicKey,
+        payer.publicKey,
+        Buffer.from(hashedSub),
+        new Numberu64(rent),
+        new Numberu32(STEALTH_DATA_SIZE),
+        undefined,
+        parentPubkey,
+        payer.publicKey,
+      ),
+      new createReverseInstruction({ name: "\0" + subdomain }).getInstruction(
+        snsRegistrarProgramId,
+        nameServiceProgramId,
+        rootDomain,
+        reverseKey,
+        SystemProgram.programId,
+        reverseLookupClass,
+        payer.publicKey,
+        SYSVAR_RENT_PUBKEY,
+        parentPubkey,
+        payer.publicKey,
+      ),
+      transferInstruction(
+        nameServiceProgramId,
+        subdomainKey,
+        owner.publicKey,
+        payer.publicKey,
+        undefined,
+        parentPubkey,
+        payer.publicKey,
+      ),
+    ];
+  } else {
+    const feeAccount = new PublicKey(registrarAcct.data.slice(34, 66));
+    const mint = new PublicKey(registrarAcct.data.slice(66, 98));
+    const feeSource = getAssociatedTokenAddressSync(mint, owner.publicKey, true);
+    const bonfidaFee = getAssociatedTokenAddressSync(mint, BONFIDA_FEE_OWNER, true);
 
-  const domainBytes = new TextEncoder().encode("\0" + subdomain);
-  const registerData = new Uint8Array(1 + 4 + domainBytes.length);
-  registerData[0] = 2;
-  new DataView(registerData.buffer).setUint32(1, domainBytes.length, true);
-  registerData.set(domainBytes, 5);
-  ixs.push(new TransactionInstruction({
-    programId: subRegistrarProgramId,
-    keys: [
-      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
-      { pubkey: nameServiceProgramId, isSigner: false, isWritable: false },
-      { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
-      { pubkey: snsRegistrarProgramId, isSigner: false, isWritable: false },
-      { pubkey: rootDomain, isSigner: false, isWritable: false },
-      { pubkey: reverseLookupClass, isSigner: false, isWritable: false },
-      { pubkey: feeAccount, isSigner: false, isWritable: true },
-      { pubkey: feeSource, isSigner: false, isWritable: true },
-      { pubkey: registrar, isSigner: false, isWritable: true },
-      { pubkey: parentPubkey, isSigner: false, isWritable: true },
-      { pubkey: subdomainKey, isSigner: false, isWritable: true },
-      { pubkey: reverseKey, isSigner: false, isWritable: true },
-      { pubkey: owner.publicKey, isSigner: true, isWritable: true },
-      { pubkey: bonfidaFee, isSigner: false, isWritable: true },
-      { pubkey: subRecord, isSigner: false, isWritable: true },
-    ],
-    data: Buffer.from(registerData),
-  }));
-  ixs.push(createCloseAccountInstruction(feeSource, payer.publicKey, owner.publicKey));
+    ixs = [
+      createAssociatedTokenAccountIdempotentInstruction(payer.publicKey, feeSource, owner.publicKey, NATIVE_MINT),
+      SystemProgram.transfer({ fromPubkey: payer.publicKey, toPubkey: feeSource, lamports: WSOL_WRAP_AMOUNT }),
+      createSyncNativeInstruction(feeSource),
+      createAssociatedTokenAccountIdempotentInstruction(payer.publicKey, bonfidaFee, BONFIDA_FEE_OWNER, mint),
+    ];
 
-  const reallocData = new Uint8Array(5);
-  reallocData[0] = SNS_DISC_REALLOC;
-  new DataView(reallocData.buffer).setUint32(1, STEALTH_DATA_SIZE, true);
-  ixs.push(new TransactionInstruction({
-    programId: nameServiceProgramId,
-    keys: [
-      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-      { pubkey: payer.publicKey, isSigner: true, isWritable: true },
-      { pubkey: subdomainKey, isSigner: false, isWritable: true },
-      { pubkey: owner.publicKey, isSigner: true, isWritable: false },
-    ],
-    data: Buffer.from(reallocData),
-  }));
+    const domainBytes = new TextEncoder().encode("\0" + subdomain);
+    const registerData = new Uint8Array(1 + 4 + domainBytes.length);
+    registerData[0] = 2;
+    new DataView(registerData.buffer).setUint32(1, domainBytes.length, true);
+    registerData.set(domainBytes, 5);
+    ixs.push(new TransactionInstruction({
+      programId: subRegistrarProgramId,
+      keys: [
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+        { pubkey: nameServiceProgramId, isSigner: false, isWritable: false },
+        { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
+        { pubkey: snsRegistrarProgramId, isSigner: false, isWritable: false },
+        { pubkey: rootDomain, isSigner: false, isWritable: false },
+        { pubkey: reverseLookupClass, isSigner: false, isWritable: false },
+        { pubkey: feeAccount, isSigner: false, isWritable: true },
+        { pubkey: feeSource, isSigner: false, isWritable: true },
+        { pubkey: registrar, isSigner: false, isWritable: true },
+        { pubkey: parentPubkey, isSigner: false, isWritable: true },
+        { pubkey: subdomainKey, isSigner: false, isWritable: true },
+        { pubkey: reverseKey, isSigner: false, isWritable: true },
+        { pubkey: owner.publicKey, isSigner: true, isWritable: true },
+        { pubkey: bonfidaFee, isSigner: false, isWritable: true },
+        { pubkey: subRecord, isSigner: false, isWritable: true },
+      ],
+      data: Buffer.from(registerData),
+    }));
+    ixs.push(createCloseAccountInstruction(feeSource, payer.publicKey, owner.publicKey));
+
+    const reallocData = new Uint8Array(5);
+    reallocData[0] = SNS_DISC_REALLOC;
+    new DataView(reallocData.buffer).setUint32(1, STEALTH_DATA_SIZE, true);
+    ixs.push(new TransactionInstruction({
+      programId: nameServiceProgramId,
+      keys: [
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        { pubkey: payer.publicKey, isSigner: true, isWritable: true },
+        { pubkey: subdomainKey, isSigner: false, isWritable: true },
+        { pubkey: owner.publicKey, isSigner: true, isWritable: false },
+      ],
+      data: Buffer.from(reallocData),
+    }));
+  }
 
   const updateData = new Uint8Array(1 + 4 + 4 + stealthData.length);
   updateData[0] = SNS_DISC_UPDATE;
@@ -264,10 +320,11 @@ async function main() {
   const tx = new Transaction().add(...ixs);
   tx.feePayer = payer.publicKey;
   tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-  tx.sign(...(payer.publicKey.equals(owner.publicKey) ? [payer] : [payer, owner]));
+  const signers = payer.publicKey.equals(owner.publicKey) ? [payer] : [payer, owner];
+  tx.sign(...signers);
 
   console.log(JSON.stringify({
-    mode: args.submit ? "submit" : "dry-run",
+    mode: args.submit ? `submit:${mode}` : `dry-run:${mode}`,
     name: `${subdomain}.${config.snsParentDomain}.sol`,
     rpcUrl,
     owner: owner.publicKey.toBase58(),
@@ -285,7 +342,7 @@ async function main() {
     return;
   }
 
-  const sig = await sendAndConfirmTransaction(connection, tx, [payer, owner], { commitment: "confirmed" });
+  const sig = await sendAndConfirmTransaction(connection, tx, signers, { commitment: "confirmed" });
   console.log(`Registered: ${sig}`);
 }
 

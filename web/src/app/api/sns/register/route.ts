@@ -16,6 +16,13 @@ import {
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
 import { deriveParentDomainKey, getConfig, sha256Hash } from "@utxopia/sdk";
+import {
+  Numberu32,
+  Numberu64,
+  createInstruction,
+  createReverseInstruction,
+  transferInstruction,
+} from "@bonfida/spl-name-service";
 import { getHeliusRpcUrl } from "@/lib/helius-server";
 import { getRelayerKeypair } from "@/lib/server/relayer";
 import { checkRateLimit, getClientIp } from "@/lib/server/rate-limit";
@@ -25,6 +32,7 @@ export const dynamic = "force-dynamic";
 const HASH_PREFIX = "SPL Name Service";
 const SNS_DISC_REALLOC = 4;
 const SNS_DISC_UPDATE = 1;
+const SNS_HEADER_SIZE = 96;
 const STEALTH_DATA_SIZE = 65;
 const BONFIDA_FEE_OWNER = new PublicKey("5D2zKog251d6KPCyFyLMt3KroWwXXPWSgTPyhV22K2gR");
 const WSOL_WRAP_AMOUNT = 10_000_000;
@@ -96,6 +104,12 @@ async function buildSponsoredRegistrationTx(input: PrepareRequest) {
   const reverseLookupClass = new PublicKey(config.snsReverseLookupClass);
   const parentKey = await deriveParentDomainKey(config.snsParentDomain);
   const parentPubkey = new PublicKey(parentKey);
+  const parentInfo = await connection.getAccountInfo(parentPubkey);
+  if (!parentInfo) {
+    throw new Error(
+      `${config.snsParentDomain}.sol parent domain is not initialized on this network`,
+    );
+  }
 
   const hashedSub = sha256Hash(new TextEncoder().encode(HASH_PREFIX + "\0" + subdomain));
   const [subdomainKey] = PublicKey.findProgramAddressSync(
@@ -122,7 +136,77 @@ async function buildSponsoredRegistrationTx(input: PrepareRequest) {
 
   const registrarAcct = await connection.getAccountInfo(registrar);
   if (!registrarAcct) {
-    throw new Error("Sub-registrar not initialized for this domain");
+    if (!parentInfo.data.slice(32, 64).equals(relayer.publicKey.toBuffer())) {
+      throw new Error("Sub-registrar not initialized and relayer does not own parent domain");
+    }
+
+    const rent = await connection.getMinimumBalanceForRentExemption(
+      SNS_HEADER_SIZE + STEALTH_DATA_SIZE,
+    );
+    const createIx = createInstruction(
+      nameServiceProgramId,
+      SystemProgram.programId,
+      subdomainKey,
+      relayer.publicKey,
+      relayer.publicKey,
+      Buffer.from(hashedSub),
+      new Numberu64(rent),
+      new Numberu32(STEALTH_DATA_SIZE),
+      undefined,
+      parentPubkey,
+      relayer.publicKey,
+    );
+    const createReverseIx = new createReverseInstruction({ name: "\0" + subdomain }).getInstruction(
+      snsRegistrarProgramId,
+      nameServiceProgramId,
+      rootDomain,
+      reverseKey,
+      SystemProgram.programId,
+      reverseLookupClass,
+      relayer.publicKey,
+      SYSVAR_RENT_PUBKEY,
+      parentPubkey,
+      relayer.publicKey,
+    );
+    const transferIx = transferInstruction(
+      nameServiceProgramId,
+      subdomainKey,
+      owner,
+      relayer.publicKey,
+      undefined,
+      parentPubkey,
+      relayer.publicKey,
+    );
+
+    const updateData = new Uint8Array(1 + 4 + 4 + stealthData.length);
+    updateData[0] = SNS_DISC_UPDATE;
+    new DataView(updateData.buffer).setUint32(1, 0, true);
+    new DataView(updateData.buffer).setUint32(5, stealthData.length, true);
+    updateData.set(stealthData, 9);
+
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
+    const tx = new Transaction({ feePayer: relayer.publicKey, blockhash, lastValidBlockHeight })
+      .add(
+        createIx,
+        createReverseIx,
+        transferIx,
+        new TransactionInstruction({
+          programId: nameServiceProgramId,
+          keys: [
+            { pubkey: subdomainKey, isSigner: false, isWritable: true },
+            { pubkey: owner, isSigner: true, isWritable: false },
+          ],
+          data: Buffer.from(updateData),
+        }),
+      );
+    tx.partialSign(relayer);
+
+    return {
+      transaction: tx.serialize({ requireAllSignatures: false }).toString("base64"),
+      relayer: relayer.publicKey.toBase58(),
+      lastValidBlockHeight,
+      mode: "parent-owner-direct",
+    };
   }
   const feeAccount = new PublicKey(registrarAcct.data.slice(34, 66));
   const mint = new PublicKey(registrarAcct.data.slice(66, 98));
