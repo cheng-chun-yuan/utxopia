@@ -32,6 +32,10 @@ const BONFIDA_FEE_OWNER = new PublicKey("5D2zKog251d6KPCyFyLMt3KroWwXXPWSgTPyhV2
 /** SNS hash prefix used for PDA derivation */
 const HASH_PREFIX = "SPL Name Service";
 
+function bytesToHex(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString("hex");
+}
+
 interface UseSnsNameReturn {
   registeredSnsName: string | null;
   hasRegisteredSnsName: boolean;
@@ -100,6 +104,49 @@ export function useSnsName(): UseSnsNameReturn {
     }
     throw new Error("No Solana signer available for SNS transaction");
   }, [privySolana, wallet]);
+
+  const registerViaRelayer = useCallback(async (
+    name: string,
+    owner: PublicKey,
+    stealthData: Uint8Array,
+  ): Promise<"success" | "unavailable"> => {
+    const prepareResp = await fetch("/api/sns/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "prepare",
+        name,
+        owner: owner.toBase58(),
+        stealthData: bytesToHex(stealthData),
+      }),
+    });
+    const prepared = await prepareResp.json().catch(() => null) as
+      | { success?: boolean; transaction?: string; error?: string; relayerUnavailable?: boolean }
+      | null;
+
+    if (!prepareResp.ok || !prepared?.success || !prepared.transaction) {
+      if (prepared?.relayerUnavailable) return "unavailable";
+      throw new Error(prepared?.error || "Failed to prepare sponsored SNS registration");
+    }
+
+    const tx = Transaction.from(Buffer.from(prepared.transaction, "base64"));
+    const signed = await signAndSubmitSnsTransaction(tx, owner);
+    const submitResp = await fetch("/api/sns/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "submit",
+        signedTransaction: signed.serialize().toString("base64"),
+      }),
+    });
+    const submitted = await submitResp.json().catch(() => null) as
+      | { success?: boolean; error?: string }
+      | null;
+    if (!submitResp.ok || !submitted?.success) {
+      throw new Error(submitted?.error || "Failed to submit sponsored SNS registration");
+    }
+    return "success";
+  }, [signAndSubmitSnsTransaction]);
 
   // Resolve an SNS name to stealth keys
   const lookupSnsName = useCallback(async (name: string): Promise<SnsStealthAddress | null> => {
@@ -385,6 +432,13 @@ export function useSnsName(): UseSnsNameReturn {
       stealthData.set(stealthAddress.viewingPubKey, 1);
       stealthData.set(stealthAddress.mpk, 33);
 
+      const sponsoredResult = await registerViaRelayer(subdomain, owner, stealthData);
+      if (sponsoredResult === "success") {
+        setRegisteredSnsName(subdomain);
+        setHasRegisteredSnsName(true);
+        return true;
+      }
+
       const updateData = new Uint8Array(1 + 4 + 4 + stealthData.length);
       updateData[0] = SNS_DISC_UPDATE;
       new DataView(updateData.buffer).setUint32(1, 0, true);
@@ -422,7 +476,7 @@ export function useSnsName(): UseSnsNameReturn {
     } finally {
       setIsRegistering(false);
     }
-  }, [connection, lookupSnsName, privySolana, signAndSubmitSnsTransaction, stealthAddress, walletAuthority?.publicKey]);
+  }, [connection, lookupSnsName, privySolana, registerViaRelayer, signAndSubmitSnsTransaction, stealthAddress, walletAuthority?.publicKey]);
 
   // Update existing SNS record with new stealth data format
   const updateSnsStealthData = useCallback(async (): Promise<boolean> => {
