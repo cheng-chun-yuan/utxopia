@@ -23,7 +23,7 @@ import {
 // 1. Derive keys from wallet
 const keys = await deriveKeysFromWallet(walletAdapter);
 
-// 2. Look up recipient by .btcpro.sol name
+// 2. Look up recipient by .utxopia.sol name
 const recipient = await resolveSnsName(connection, 'alice');
 
 // 3. Create stealth deposit
@@ -165,7 +165,7 @@ const noirProof = proofToNoirFormat(proof);
 | `scanAnnouncements(keys, announcements)` | Scan for deposits using viewing key |
 | `prepareClaimInputs(keys, note, proof)` | Prepare inputs for ZK claim proof |
 | `scanUnifiedNotes(keys, announcements)` | Scan announcement events for owned notes |
-| `resolveSnsName(conn, name)` | Look up .btcpro.sol name to stealth address |
+| `resolveSnsName(conn, name)` | Look up .utxopia.sol name to stealth address |
 
 ### Demo Module
 

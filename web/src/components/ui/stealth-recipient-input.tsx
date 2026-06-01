@@ -42,12 +42,12 @@ export function StealthRecipientInput({
   const [resolving, setResolving] = useState(false);
 
   const config = getConfig();
-  const parentDomain = config.snsParentDomain || "btcpro";
+  const parentDomain = config.snsParentDomain || "utxopia";
 
   // resolvedMeta is only valid when current input matches what was resolved
   const isValid = !!resolvedMeta && recipient.trim() === resolvedInput;
 
-  // Auto-detect: long hex = stealth address, otherwise = .btcpro.sol name
+  // Auto-detect: long hex = stealth address, otherwise = .utxopia.sol name
   const resolveRecipient = useCallback(async () => {
     if (!recipient.trim()) {
       onError("Please enter a recipient");
@@ -63,13 +63,13 @@ export function StealthRecipientInput({
     try {
       // Reject URLs
       if (/^https?:\/\//i.test(trimmed)) {
-        onError("Please enter a .btcpro.sol name or stealth address, not a URL");
+        onError("Please enter a .utxopia.sol name or stealth address, not a URL");
         return;
       }
 
       // Reject Bitcoin addresses (bc1/tb1/1/3/n/m prefixed)
       if (/^(bc1|tb1|[13nm])[a-zA-HJ-NP-Z0-9]{25,}$/i.test(trimmed)) {
-        onError("Please enter a .btcpro.sol name or stealth address, not a BTC address");
+        onError("Please enter a .utxopia.sol name or stealth address, not a BTC address");
         return;
       }
 
@@ -92,11 +92,11 @@ export function StealthRecipientInput({
 
       // Reject Solana pubkeys (base58, 32-44 chars)
       if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed)) {
-        onError("Enter a .btcpro.sol name or stealth address, not a Solana address");
+        onError("Enter a .utxopia.sol name or stealth address, not a Solana address");
         return;
       }
 
-      // Otherwise treat as .btcpro.sol name — must be alphanumeric/hyphen only
+      // Otherwise treat as .utxopia.sol name — must be alphanumeric/hyphen only
       const subdomain = trimmed
         .replace(new RegExp(`\\.${parentDomain}\\.sol$`, "i"), "")
         .replace(new RegExp(`\\.${parentDomain}$`, "i"), "")
@@ -108,7 +108,7 @@ export function StealthRecipientInput({
       }
 
       if (subdomain.length > 32) {
-        onError("Name too long — expected a short .btcpro.sol subdomain");
+        onError("Name too long — expected a short .utxopia.sol subdomain");
         return;
       }
 

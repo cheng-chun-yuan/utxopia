@@ -159,7 +159,7 @@ export interface NetworkConfig {
   /** SNS root domain account (.sol TLD — differs per network) */
   snsRootDomain: string;
 
-  /** Parent domain for stealth address subdomains (e.g., "btcpro" for *.btcpro.sol) */
+  /** Parent domain for stealth address subdomains (e.g., "utxopia" for *.utxopia.sol) */
   snsParentDomain: string;
 
   /** SNS reverse lookup class key (used for reverse name resolution) */
@@ -271,7 +271,7 @@ export const DEVNET_CONFIG: NetworkConfig = {
   snsRegistrarProgramId: "snshBoEQ9jx4QoHBpZDQPYdNCtw7RMxJvYrKFEhwaPJ",    // SNS Registrar (devnet)
   snsSubRegistrarProgramId: "31tT5CmpphAtRL3mstu962zeYH7C6TEkJWLB5nYxciBB", // Sub-Registrar (devnet)
   snsRootDomain: "5eoDkP6vCQBXqDV9YN2NdUs3nmML3dMRNmEYpiyVNBm2",           // .sol TLD (devnet)
-  snsParentDomain: "btcpro",
+  snsParentDomain: "utxopia",
   snsReverseLookupClass: "7NbD1vprif6apthEZAqhRfYuhrqnuderB8qpnfXGCc8H",   // Reverse lookup class (devnet)
   snsStealthDataVersion: 1,
 };
@@ -328,7 +328,7 @@ export const MAINNET_CONFIG: NetworkConfig = {
   snsRegistrarProgramId: "jCebN34bUfdeUYJT13J1yG16XWQpt5PDx6Mse9GUqhR",    // SNS Registrar (mainnet)
   snsSubRegistrarProgramId: "2KkyPzjaAYaz2ojQZ9P3xYakLd96B5UH6a2isLaZ4Cgs", // Sub-Registrar (mainnet)
   snsRootDomain: "58PwtjSDuFHuUkYjH9BYod9SZaELfsvdrNMryy9iYNvo",           // .sol TLD (mainnet)
-  snsParentDomain: "btcpro",
+  snsParentDomain: "utxopia",
   snsReverseLookupClass: "33m47vH6Eav6jr5Ry86XjhRft2jRBLDnDgPSHoquXi2Z",   // Reverse lookup class (mainnet)
   snsStealthDataVersion: 1,
 };

@@ -19,7 +19,7 @@ UTXOpia is a universal shielded pool on Solana that enables private transactions
               ┌─────────────────────────┴──────────────────────────┐
               │                                                     │
     Amounts hidden in commitments                    Unlinkable stealth addresses
-    Token-agnostic: same ZK circuit for all          .btcpro.sol human-readable names
+    Token-agnostic: same ZK circuit for all          .utxopia.sol human-readable names
     Nullifier-based double-spend prevention          Multi-token in a single tree
 ```
 

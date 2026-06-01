@@ -1,5 +1,5 @@
 /**
- * Test SNS resolver against devnet alice.btcpro.sol
+ * Test SNS resolver against devnet alice.utxopia.sol
  */
 import { resolveSnsName, resolveStealthName, isSnsStealthAddress } from "../src/sns-resolver";
 import { setConfig, getConfig } from "../src/config";
@@ -29,9 +29,9 @@ async function main() {
     console.log("NOT FOUND");
   }
 
-  // Test 2: Resolve "alice.btcpro.sol" (full domain)
-  console.log("\n--- Test 2: resolveSnsName('alice.btcpro.sol') ---");
-  const r2 = await resolveSnsName(conn, "alice.btcpro.sol");
+  // Test 2: Resolve "alice.utxopia.sol" (full domain)
+  console.log("\n--- Test 2: resolveSnsName('alice.utxopia.sol') ---");
+  const r2 = await resolveSnsName(conn, "alice.utxopia.sol");
   console.log(r2 ? `Found: ${r2.fullDomain}` : "NOT FOUND");
 
   // Test 3: Unified resolver

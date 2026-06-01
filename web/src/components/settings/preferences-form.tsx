@@ -30,7 +30,7 @@ export function PreferencesForm() {
 
       <Section
         label="Identity"
-        hint="What senders see when they enter your .btcpro.sol name."
+        hint="What senders see when they enter your .utxopia.sol name."
       >
         <AuditorDisclosableRow />
         <AuditorPubkeyRow />
@@ -174,7 +174,7 @@ function Toggle({
 /* -------------------------------------------------------------------------- */
 
 /**
- * AUDITOR_DISCLOSABLE flag — surfaces on the user's .btcpro.sol record
+ * AUDITOR_DISCLOSABLE flag — surfaces on the user's .utxopia.sol record
  * as a public signal that they accept outgoing audit memos. Doesn't
  * leak any key material; that still happens via DelegatedViewKey.
  */
@@ -209,9 +209,9 @@ function AuditorDisclosableRow() {
             <Loader2 className="w-3 h-3 animate-spin text-gray" />
           )}
           <InfoTip label="About Auditor-disclosable">
-            Publishes a public signal on your `.btcpro.sol` record that
-            you're OK receiving outgoing audit memos. Senders see an
-            "Auditor-disclosable" chip when they enter your name. Your
+            Publishes a public signal on your `.utxopia.sol` record that
+            you&apos;re OK receiving outgoing audit memos. Senders see an
+            &quot;Auditor-disclosable&quot; chip when they enter your name. Your
             viewing keys are <strong>not</strong> shared by this flag —
             you still issue DelegatedViewKeys to specific auditors
             separately.
@@ -272,7 +272,7 @@ function AuditorPubkeyRow() {
             optional
           </span>
           <InfoTip label="About Designated auditor">
-            Public Solana pubkey of the auditor you've issued a
+            Public Solana pubkey of the auditor you&apos;ve issued a
             DelegatedViewKey to (off-chain). Senders see this in the
             badge when they enter your name. Leave blank to publish only
             the flag bit.

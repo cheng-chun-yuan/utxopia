@@ -54,10 +54,10 @@ interface UseSnsNameReturn {
 }
 
 /**
- * Hook for managing *.btcpro.sol SNS subdomain stealth addresses.
+ * Hook for managing *.utxopia.sol SNS subdomain stealth addresses.
  *
  * Responsibilities:
- * - Auto-detect if connected wallet owns a *.btcpro.sol subdomain
+ * - Auto-detect if connected wallet owns a *.utxopia.sol subdomain
  * - Resolve subdomain names to stealth keys
  * - Register new subdomains with stealth data (3-transaction flow)
  */
@@ -82,7 +82,7 @@ export function useSnsName(): UseSnsNameReturn {
     return resolveSnsName(connectionAdapter as Parameters<typeof resolveSnsName>[0], name);
   }, []);
 
-  // Check if connected wallet owns a *.btcpro.sol subdomain
+  // Check if connected wallet owns a *.utxopia.sol subdomain
   const lookupMySnsName = useCallback(async () => {
     if (!wallet.publicKey || !stealthAddress) return;
 

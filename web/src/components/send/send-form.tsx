@@ -125,7 +125,7 @@ export function SendForm() {
   const tokenPrices = useTokenPrices();
   const usdPerUnit = tokenPrices.btc ?? null;
 
-  // Preview-resolve `.btcpro.sol` recipients so we can surface the
+  // Preview-resolve `.utxopia.sol` recipients so we can surface the
   // "auditor-disclosable" chip + block Send if the name doesn't exist.
   // Tri-state: idle (not an SNS input) / resolving / found / not_found.
   type SnsState =
@@ -139,7 +139,7 @@ export function SendForm() {
       setSnsState({ kind: "idle" });
       return;
     }
-    const sub = state.recipient.trim().toLowerCase().replace(/\.btcpro\.sol$/, "");
+    const sub = state.recipient.trim().toLowerCase().replace(/\.utxopia\.sol$/, "");
     if (!sub) {
       setSnsState({ kind: "idle" });
       return;
@@ -254,7 +254,7 @@ export function SendForm() {
           if (intent.recipientType === "stealth_sns") {
             const sub = intent.recipientValue
               .toLowerCase()
-              .replace(/\.btcpro\.sol$/, "");
+              .replace(/\.utxopia\.sol$/, "");
             const r = await lookupSnsName(sub);
             if (!r) {
               throw new Error(

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Set / clear the compliance flag byte on a `.btcpro.sol` SNS subdomain.
+ * Set / clear the compliance flag byte on a `.utxopia.sol` SNS subdomain.
  *
  * Only the SNS owner can update the record. The script reads the current
  * stealth payload, reallocs to 66 bytes if needed, and writes a single
@@ -14,7 +14,7 @@
  *
  * Examples:
  *   bun run scripts/sns-set-compliance.ts alice --enable
- *     → sets bit 0 (AUDITOR_DISCLOSABLE) on `alice.btcpro.sol`
+ *     → sets bit 0 (AUDITOR_DISCLOSABLE) on `alice.utxopia.sol`
  *
  *   bun run scripts/sns-set-compliance.ts alice --disable
  *     → clears the flag byte
@@ -133,7 +133,7 @@ function printUsage(): void {
       "Usage: bun run scripts/sns-set-compliance.ts <subdomain> [flag op] [auditor op]",
       "",
       "Required:",
-      "  <subdomain>            The subdomain name (e.g., \"alice\" for alice.btcpro.sol)",
+      "  <subdomain>            The subdomain name (e.g., \"alice\" for alice.utxopia.sol)",
       "  At least one of:",
       "    --enable             Set AUDITOR_DISCLOSABLE (bit 0)",
       "    --disable            Clear all flag bits",
@@ -176,7 +176,7 @@ async function main(): Promise<void> {
 
   const snsProgramId = (cfg as any).sns?.nameServiceProgramId
     ?? "namesLPneVptA9Z5rqUDD9tMTWEJwofgaYwp8cawRkX"; // SPL Name Service canonical ID
-  const parentDomain = (cfg as any).sns?.parentDomain ?? "btcpro";
+  const parentDomain = (cfg as any).sns?.parentDomain ?? "utxopia";
 
   // SDK config (needed by resolveSnsName + deriveParentDomainKey).
   initConfig({

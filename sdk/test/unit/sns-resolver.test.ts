@@ -138,7 +138,7 @@ describe("isAuditorDisclosable", () => {
   function fakeAddr(flags: number): SnsStealthAddress {
     return {
       name: "alice",
-      fullDomain: "alice.btcpro.sol",
+      fullDomain: "alice.utxopia.sol",
       viewingPubKey: new Uint8Array(32),
       mpk: new Uint8Array(32),
       version: 2,

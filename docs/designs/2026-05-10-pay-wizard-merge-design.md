@@ -6,7 +6,7 @@
 
 ## Why
 
-Today's UX has six distinct verbs for what users think of as "send" and "deposit": *Shield, Unshield, Transfer, Withdraw, Cash Out, Pay.* It also exposes a Lite/Pro mode toggle on individual pay pages, an explicit auth fan-out (passkey vs wallet vs view-only), and a `.btcpro.sol` registration prompt before any value moves. The result is a high concept-count product that asks new users to learn the system before they can move money.
+Today's UX has six distinct verbs for what users think of as "send" and "deposit": *Shield, Unshield, Transfer, Withdraw, Cash Out, Pay.* It also exposes a Lite/Pro mode toggle on individual pay pages, an explicit auth fan-out (passkey vs wallet vs view-only), and a `.utxopia.sol` registration prompt before any value moves. The result is a high concept-count product that asks new users to learn the system before they can move money.
 
 This spec covers only the pay-wizard merge — the highest-leverage piece. Dashboard simplification, auth-modal redesign, and SNS deferral are tracked as separate slices.
 
@@ -16,7 +16,7 @@ This spec covers only the pay-wizard merge — the highest-leverage piece. Dashb
 |---|---|
 | New `/send` route (top-level, not under `/vault`) | Dashboard `/vault/page.tsx` redesign |
 | New `/settings` route with single Advanced-send preference | Auth modal simplification |
-| Delete `/vault/pay/{transfer,unshield,withdraw,cashout}` and `payment-wizard/` and `pay-flow/` directories | `.btcpro.sol` registration deferral |
+| Delete `/vault/pay/{transfer,unshield,withdraw,cashout}` and `payment-wizard/` and `pay-flow/` directories | `.utxopia.sol` registration deferral |
 | Preserve all existing send capabilities, including claim-link and Pro-mode multi-output | Visual / brand redesign |
 | Header gear icon and Advanced-mode badge | OP_RETURN-support precheck on the deposit flow (separate slice) |
 
@@ -79,7 +79,7 @@ This spec covers only the pay-wizard merge — the highest-leverage piece. Dashb
 Order matters; first match wins.
 
 1. Trimmed input is empty → `empty`.
-2. Ends with `.btcpro.sol` → `stealth_sns` (high confidence).
+2. Ends with `.utxopia.sol` → `stealth_sns` (high confidence).
 3. Bech32(m) prefix `bc1`/`tb1`/`bcrt1` and decode succeeds → `btc` (high).
 4. Base58check prefix `1` or `3`, valid checksum → `btc` (medium).
 5. Stealth meta-address format (specific hex prefix and length per SDK) → `stealth_meta` (high).
@@ -226,7 +226,7 @@ Out of scope: real-RPC integration tests (lives in `scripts/e2e/run-all.ts`, loc
 
 - `/vault` dashboard simplification (Balance + Receive + Send + Activity).
 - Auth modal: passkey-default, secondary "Use a wallet instead" link, view-only behind `/restore`.
-- `.btcpro.sol` registration deferral until first incoming transfer.
+- `.utxopia.sol` registration deferral until first incoming transfer.
 - OP_RETURN-support precheck on `/vault/deposit`.
 - Address book / "save recipient" feature.
 - Visual/brand redesign.

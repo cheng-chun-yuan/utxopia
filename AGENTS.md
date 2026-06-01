@@ -125,7 +125,7 @@ Single parameterized `JoinSplit(N, M, 16)` template producing circuit variants:
 | **JoinSplit Proofs** | Groth16 (~256 byte proofs) for all transfers |
 | **3-Key Model** | Spending (BJJ) + Nullifying (BN254) + Viewing (Ed25519) |
 | **Stealth Addresses** | Unlinkable one-time addresses via DKSAP (EIP-5564) |
-| **.btcpro.sol Names** | Human-readable stealth addresses (SNS subdomains) |
+| **.utxopia.sol Names** | Human-readable stealth addresses (SNS subdomains) |
 | **Merkle Tree depth 16** | 65,536 leaf capacity with Poseidon hashing |
 
 ### Key Model

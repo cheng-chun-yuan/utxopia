@@ -1,7 +1,7 @@
 /**
  * SNS Subdomain Resolver for Stealth Addresses
  *
- * Resolves `<name>.btcpro.sol` (or configured parent domain) to stealth
+ * Resolves `<name>.utxopia.sol` (or configured parent domain) to stealth
  * address keys stored in the SNS name record data field.
  *
  * On-chain data layout (after 96-byte SNS header):
@@ -43,7 +43,7 @@ export interface SnsStealthAddress {
   /** The subdomain name (e.g., "alice") */
   name: string;
 
-  /** Full domain (e.g., "alice.btcpro.sol") */
+  /** Full domain (e.g., "alice.utxopia.sol") */
   fullDomain: string;
 
   /** Ed25519 viewing public key (32 bytes) — for X25519 ECDH */
@@ -118,7 +118,7 @@ function hashSnsName(name: string): Uint8Array {
 // ========== PDA Derivation (internal) ==========
 
 /**
- * Derive the SNS key for a parent domain (e.g., "btcpro.sol")
+ * Derive the SNS key for a parent domain (e.g., "utxopia.sol")
  */
 export async function deriveParentDomainKey(parentDomain: string): Promise<string> {
   const { address, getProgramDerivedAddress, getAddressEncoder } = await import("@solana/kit");
@@ -144,7 +144,7 @@ export async function deriveParentDomainKey(parentDomain: string): Promise<strin
 }
 
 /**
- * Derive the SNS key for a subdomain (e.g., "alice" under "btcpro.sol")
+ * Derive the SNS key for a subdomain (e.g., "alice" under "utxopia.sol")
  *
  * Seeds: [hash("SPL Name Service" + "\0" + name), zeros(32), parentKey]
  */
@@ -289,8 +289,8 @@ export function parseSnsStealthData(
  *
  * Accepts multiple formats:
  *   - "alice"              → resolves alice.<parentDomain>.sol
- *   - "alice.btcpro"       → resolves alice.btcpro.sol
- *   - "alice.btcpro.sol"   → resolves alice.btcpro.sol
+ *   - "alice.utxopia"       → resolves alice.utxopia.sol
+ *   - "alice.utxopia.sol"   → resolves alice.utxopia.sol
  *
  * @param connection - RPC connection adapter
  * @param name - Name to resolve

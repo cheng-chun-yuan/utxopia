@@ -8,8 +8,8 @@ describe("detectRecipient", () => {
     expect(detectRecipient("   ").type).toBe("empty");
   });
 
-  it("detects .btcpro.sol as stealth_sns", () => {
-    const r = detectRecipient("alice.btcpro.sol");
+  it("detects .utxopia.sol as stealth_sns", () => {
+    const r = detectRecipient("alice.utxopia.sol");
     expect(r.type).toBe("stealth_sns");
     expect(r.confidence).toBe("high");
   });

@@ -20,7 +20,7 @@ export type DetectionResult = {
   reason?: string;
 };
 
-const SNS_SUFFIX = ".btcpro.sol";
+const SNS_SUFFIX = ".utxopia.sol";
 const STEALTH_META_PREFIX = "utxo:";
 // 96 bytes = spendingPubKey(32) + viewingPubKey(32) + mpk(32). See
 // sdk/src/keys.ts::decodeStealthMetaAddress.
@@ -74,7 +74,7 @@ export function detectRecipient(rawInput: string): DetectionResult {
     return {
       type: "stealth_sns",
       confidence: "high",
-      reason: "Looks like a .btcpro.sol name",
+      reason: "Looks like a .utxopia.sol name",
     };
   }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -118,15 +118,14 @@ export default function CompliancePage() {
 
   // Read delegations the user has issued (stored locally by the
   // /audit/issued page).
-  const [delegations, setDelegations] = useState<DelegationRecord[]>([]);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
+  const delegations = useMemo(() => {
+    if (typeof window === "undefined") return [];
     try {
       const raw = window.localStorage.getItem(DELEGATIONS_STORAGE_KEY);
       const parsed = raw ? (JSON.parse(raw) as DelegationRecord[]) : [];
-      setDelegations(Array.isArray(parsed) ? parsed : []);
+      return Array.isArray(parsed) ? parsed : [];
     } catch {
-      setDelegations([]);
+      return [];
     }
   }, []);
 
@@ -193,10 +192,10 @@ export default function CompliancePage() {
           <CheckRow
             icon={<KeyRound className="w-4 h-4 text-gray-light" />}
             title="SNS subdomain registered"
-            desc="Senders can resolve a memorable name (e.g. alice.btcpro.sol) to your stealth address. Without this, only people who copy-paste your `utxo:` string can pay you."
+            desc="Senders can resolve a memorable name (e.g. alice.utxopia.sol) to your stealth address. Without this, only people who copy-paste your `utxo:` string can pay you."
             status={sns.hasRegisteredSnsName ? "ok" : "off"}
             statusLabel={sns.hasRegisteredSnsName ? "Registered" : "Not set"}
-            detail={sns.registeredSnsName ? `${sns.registeredSnsName}.btcpro.sol` : undefined}
+            detail={sns.registeredSnsName ? `${sns.registeredSnsName}.utxopia.sol` : undefined}
             ctaLabel={sns.hasRegisteredSnsName ? "Manage" : "Register"}
             ctaHref="/settings"
           />

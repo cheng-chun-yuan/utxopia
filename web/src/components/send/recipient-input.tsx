@@ -7,7 +7,7 @@ import { detectRecipient, type DetectionResult } from "./recipient-detect";
 
 /**
  * SNS resolution state, fed in from the parent form so the input can
- * surface "Resolving…" / "Cannot find …btcpro.sol" / valid messaging
+ * surface "Resolving…" / "Cannot find …utxopia.sol" / valid messaging
  * without owning the lookup itself.
  */
 export type SnsStatus = "idle" | "resolving" | "found" | "not_found";
@@ -30,16 +30,16 @@ function statusFor(
 } {
   const detection = detectRecipient(value);
   // SNS-specific states override the generic detection feedback, since
-  // a syntactically-valid `.btcpro.sol` name can still point to nothing.
+  // a syntactically-valid `.utxopia.sol` name can still point to nothing.
   if (detection.type === "stealth_sns") {
     if (snsStatus === "resolving") {
-      return { detection, tone: "warn", label: "Looking up .btcpro.sol record…" };
+      return { detection, tone: "warn", label: "Looking up .utxopia.sol record…" };
     }
     if (snsStatus === "not_found") {
       return {
         detection,
         tone: "bad",
-        label: "Cannot find this .btcpro.sol — name not registered",
+        label: "Cannot find this .utxopia.sol — name not registered",
       };
     }
     if (snsStatus === "found") {
@@ -91,7 +91,7 @@ export function RecipientInput({
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Paste address or .btcpro.sol name"
+          placeholder="Paste address or .utxopia.sol name"
           className={cn(
             "w-full px-3 py-3 pr-10 rounded-lg",
             "bg-muted/40 border text-sm font-mono",

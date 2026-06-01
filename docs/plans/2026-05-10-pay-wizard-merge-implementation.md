@@ -144,8 +144,8 @@ describe("detectRecipient", () => {
     expect(detectRecipient("   ").type).toBe("empty");
   });
 
-  it("detects .btcpro.sol as stealth_sns", () => {
-    const r = detectRecipient("alice.btcpro.sol");
+  it("detects .utxopia.sol as stealth_sns", () => {
+    const r = detectRecipient("alice.utxopia.sol");
     expect(r.type).toBe("stealth_sns");
     expect(r.confidence).toBe("high");
   });
@@ -225,7 +225,7 @@ export type DetectionResult = {
   reason?: string;
 };
 
-const SNS_SUFFIX = ".btcpro.sol";
+const SNS_SUFFIX = ".utxopia.sol";
 const STEALTH_META_PREFIX = "utxo:";
 const STEALTH_META_HEX_LEN = 64 + 64; // 32-byte spending pub + 32-byte viewing pub
 
@@ -277,7 +277,7 @@ export function detectRecipient(rawInput: string): DetectionResult {
     return {
       type: "stealth_sns",
       confidence: "high",
-      reason: "Looks like a .btcpro.sol name",
+      reason: "Looks like a .utxopia.sol name",
     };
   }
 
@@ -491,7 +491,7 @@ describe("RecipientInput", () => {
   it("renders an empty input with placeholder", () => {
     render(<RecipientInput value="" onChange={() => {}} />);
     expect(
-      screen.getByPlaceholderText(/paste address or .btcpro.sol/i),
+      screen.getByPlaceholderText(/paste address or .utxopia.sol/i),
     ).toBeInTheDocument();
   });
 
@@ -522,8 +522,8 @@ describe("RecipientInput", () => {
       />,
     );
     const input = screen.getByPlaceholderText(/paste address/i);
-    fireEvent.change(input, { target: { value: "alice.btcpro.sol" } });
-    expect(captured).toBe("alice.btcpro.sol");
+    fireEvent.change(input, { target: { value: "alice.utxopia.sol" } });
+    expect(captured).toBe("alice.utxopia.sol");
   });
 });
 ```
@@ -600,7 +600,7 @@ export function RecipientInput({
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Paste address or .btcpro.sol name"
+          placeholder="Paste address or .utxopia.sol name"
           className={cn(
             "w-full px-3 py-3 pr-10 rounded-lg",
             "bg-muted/40 border text-sm font-mono",
@@ -1383,7 +1383,7 @@ describe("buildSendIntent", () => {
   it("dispatches stealth_sns to transact kind", () => {
     const intent = buildSendIntent({
       recipientType: "stealth_sns",
-      recipientValue: "alice.btcpro.sol",
+      recipientValue: "alice.utxopia.sol",
       sourceToken: "zkBTC",
       amount: "0.001",
     });
@@ -2302,7 +2302,7 @@ Expected: clean (or only pre-existing warnings unchanged from `main`).
 Spin up devnet/localnet (per CLAUDE.md). Then in `/send`:
 
 1. Paste a Bitcoin Taproot address → recipient indicator turns green → amount field appears → enter 0.0001 → review opens → Hold to confirm → tx submits.
-2. Paste a `.btcpro.sol` name → resolves → review → confirm → recipient's `/vault/received` updates.
+2. Paste a `.utxopia.sol` name → resolves → review → confirm → recipient's `/vault/received` updates.
 3. Click "Send via claim link" → enter token + amount → Generate → modal shows link + secret → open `/claim?...` in another tab → secret unlocks the funds.
 4. Paste a Solana wallet address → review → confirm → recipient SPL wallet shows balance.
 5. Paste a Bitcoin address → withdraw 0.0001 BTC → redemption row appears in `/vault/activity`.

@@ -256,7 +256,7 @@ const status = await utxopiaSDK.checkAttestation({
 
 ### 9.4 For an institutional user (corporate treasury, fund)
 
-1. **Register an SNS subdomain** (`.btcpro.sol`) for your entity.
+1. **Register an SNS subdomain** (`.utxopia.sol`) for your entity.
 2. **Set the `AUDITOR_DISCLOSABLE` compliance flag** + your designated auditor's Solana pubkey on the SNS record (Settings page).
 3. **Issue a slot-scoped DelegatedViewKey** to your auditor for ongoing reporting (e.g. monthly).
 4. **Document your internal compliance policy** referencing the screener attestations and the audit trail your wallet maintains.

@@ -518,7 +518,7 @@ export {
 
 
 // ==========================================================================
-// SNS Subdomain Resolver (*.btcpro.sol stealth addresses)
+// SNS Subdomain Resolver (*.utxopia.sol stealth addresses)
 // ==========================================================================
 
 export {

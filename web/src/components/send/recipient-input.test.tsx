@@ -9,7 +9,7 @@ describe("RecipientInput", () => {
   it("renders an empty input with placeholder", () => {
     render(<RecipientInput value="" onChange={() => {}} />);
     expect(
-      screen.getByPlaceholderText(/paste address or .btcpro.sol/i),
+      screen.getByPlaceholderText(/paste address or .utxopia.sol/i),
     ).toBeDefined();
   });
 
@@ -39,7 +39,7 @@ describe("RecipientInput", () => {
       />,
     );
     const input = screen.getByPlaceholderText(/paste address/i);
-    fireEvent.change(input, { target: { value: "alice.btcpro.sol" } });
-    expect(captured).toBe("alice.btcpro.sol");
+    fireEvent.change(input, { target: { value: "alice.utxopia.sol" } });
+    expect(captured).toBe("alice.utxopia.sol");
   });
 });

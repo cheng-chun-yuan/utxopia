@@ -16,7 +16,7 @@ describe("buildSendIntent", () => {
   it("dispatches stealth_sns to transact kind", () => {
     const intent = buildSendIntent({
       recipientType: "stealth_sns",
-      recipientValue: "alice.btcpro.sol",
+      recipientValue: "alice.utxopia.sol",
       sourceToken: "zkBTC",
       amount: "0.001",
     });

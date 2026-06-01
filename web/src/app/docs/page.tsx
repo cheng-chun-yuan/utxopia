@@ -364,7 +364,7 @@ const DISCLOSURE_ITEMS: DisclosureItem[] = [
     icon: ShieldCheck,
     title: "Per-stealth-address compliance toggle (v2)",
     status: "shipped",
-    desc: "Recipients self-publish two pieces on their `.btcpro.sol` SNS subdomain: a `complianceFlags` byte (bit 0 = AUDITOR_DISCLOSABLE) plus an optional 32-byte auditor Solana pubkey. Senders see both in the Send wizard chip — the flag tells them disclosure is OK, the pubkey tells them who specifically. Owners flip the flag / set the pubkey via the Settings page or via `scripts/sns-set-compliance.ts <subdomain> --enable --auditor <base58>`. Reader is back-compat with both the legacy 65-byte and v1 66-byte (flag-only) records.",
+    desc: "Recipients self-publish two pieces on their `.utxopia.sol` SNS subdomain: a `complianceFlags` byte (bit 0 = AUDITOR_DISCLOSABLE) plus an optional 32-byte auditor Solana pubkey. Senders see both in the Send wizard chip — the flag tells them disclosure is OK, the pubkey tells them who specifically. Owners flip the flag / set the pubkey via the Settings page or via `scripts/sns-set-compliance.ts <subdomain> --enable --auditor <base58>`. Reader is back-compat with both the legacy 65-byte and v1 66-byte (flag-only) records.",
     detail: "sdk/src/sns-resolver.ts · scripts/sns-set-compliance.ts · components/settings/preferences-form.tsx",
   },
 ];

@@ -209,7 +209,7 @@ Bitcoin's transparent blockchain makes privacy challenging:
 | **Sui Package** | Sui Move | Object/capability implementation with native BN254 verifier integration |
 | **Bitcoin Integration** | Taproot + SPV light client | Permissionless deposit verification |
 | **Stealth Addresses** | Baby Jubjub + Ed25519 ECDH | Unlinkable one-time addresses (EIP-5564/DKSAP) |
-| **Name Service** | `.btcpro.sol` (SNS subdomains) | Human-readable stealth addresses |
+| **Name Service** | `.utxopia.sol` (SNS subdomains) | Human-readable stealth addresses |
 | **Solana BTC Custody** | Ika dWallet (2PC-MPC, Solana-native pre-alpha) | BTC signing gated by the program via `approve_message` CPI |
 | **Client SDK** | TypeScript | Full privacy toolkit with Solana and Sui adapters |
 | **Frontend** | Next.js | Unified `/send` flow (deposit / transfer / unshield / redeem) |
@@ -293,12 +293,12 @@ Current Sui flows cover:
 - JoinSplit proof verification plumbing
 - Redemption request and completion state
 
-### 6. `.btcpro.sol` Name Registry
+### 6. `.utxopia.sol` Name Registry
 
 Human-readable stealth addresses via SNS subdomains:
 
 ```typescript
-// Send privately to alice.btcpro.sol
+// Send privately to alice.utxopia.sol
 const meta = await resolveStealthName(connection, 'alice');
 await sendPrivate(config, myNote, meta.stealthMetaAddress);
 ```

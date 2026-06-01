@@ -5,7 +5,7 @@
  *
  * Sections:
  * - Stealth Address: displays user's stealth address or prompts to connect
- * - SNS Name: register/update .btcpro.sol human-readable stealth address
+ * - SNS Name: register/update .utxopia.sol human-readable stealth address
  * - Claimable Notes: shows total spendable zkBTC balance from stealth inbox
  * - Feature Cards: quick links to Deposit, Transfer, Portfolio, Explorer
  * - Quick Guide: 3-step overview of how Private Bitcoin works
@@ -144,7 +144,7 @@ export default function VaultPage() {
   }
 
   const snsConfig = getConfig();
-  const parentDomain = snsConfig.snsParentDomain || "btcpro";
+  const parentDomain = snsConfig.snsParentDomain || "utxopia";
 
   const handleRegisterSnsName = async () => {
     if (!snsNameInput) return;
