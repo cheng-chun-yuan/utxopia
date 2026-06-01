@@ -8,8 +8,9 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { BitcoinIcon } from "@/components/bitcoin-wallet-selector";
 import type { RedemptionRecord } from "@/hooks/use-explorer";
 import { getMempoolExplorerUrl } from "@/lib/btc-network";
-import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 import { useChainEnvironment } from "@/lib/chain-environment";
+import { getChainAdapter } from "@/lib/chain-registry";
+import { getChainIcon, getChainMutedLinkClass, getChainTransactionUrl } from "@/lib/chain-links";
 import { truncate } from "../helpers";
 import { SUPPORTED_TOKENS, formatTokenAmount, getTokenBySymbol } from "@/lib/supported-tokens";
 import { resolveTokenSymbolSync } from "@/lib/token-map";
@@ -112,12 +113,10 @@ export function RedeemDetails({ tx, redemption }: { tx: TransferTx; redemption?:
 /** Vertical timeline showing withdrawal lifecycle */
 function WithdrawTimeline({ tx, redemption: r }: { tx: TransferTx; redemption?: RedemptionRecord }) {
   const { config } = useChainEnvironment();
-  const chain = config.chain ?? "solana";
-  const chainName = chain === "sui" ? "Sui" : "Solana";
-  const chainIcon = chain === "sui" ? "/tokens/sui.png" : "/tokens/sol.png";
-  const chainTxUrl = (id: string) => chain === "sui" && config.sui
-    ? `${config.sui.explorerUrl.replace(/\/$/, "")}/txblock/${id}?network=testnet`
-    : getSolanaExplorerTxUrl(id);
+  const chain = getChainAdapter(config);
+  const chainName = chain.displayName;
+  const chainIcon = getChainIcon(config);
+  const chainTxUrl = (id: string) => getChainTransactionUrl(config, id);
   const statusOrder: Record<string, number> = { Pending: 1, Processing: 2, "BTC Sent": 3, Completed: 4 };
   const completedFromTx = tx.status === "confirmed" && tx.outputs.some((output) => output.type === "withdraw" && output.btcTxid);
   const current = completedFromTx ? 4 : (statusOrder[r?.status ?? "Pending"] ?? (tx.status === "confirmed" ? 2 : 1));
@@ -188,7 +187,7 @@ function WithdrawTimeline({ tx, redemption: r }: { tx: TransferTx; redemption?: 
                   href={step.icon === "btc" ? `${getMempoolExplorerUrl()}/tx/${step.txId}` : chainTxUrl(step.txId)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={cn("transition-colors p-0.5", step.icon === "btc" ? "text-btc/40 hover:text-btc" : chain === "sui" ? "text-sui/40 hover:text-sui" : "text-purple-400/40 hover:text-purple-400")}
+                  className={cn("transition-colors p-0.5", step.icon === "btc" ? "text-btc/40 hover:text-btc" : getChainMutedLinkClass(config))}
                 >
                   <ExternalLink className="w-2.5 h-2.5" />
                 </a>

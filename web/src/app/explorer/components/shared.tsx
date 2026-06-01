@@ -20,8 +20,8 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 import { useChainEnvironment } from "@/lib/chain-environment";
+import { getChainLinkClass, getChainTransactionUrl } from "@/lib/chain-links";
 import { EXPLORER_FILTER_TOKENS, type TokenFilterId } from "@/lib/supported-tokens";
 
 // --- Types ---
@@ -278,17 +278,14 @@ export function Td({ children, className, colSpan }: { children?: React.ReactNod
 
 export function ChainTxLink({ signature }: { signature: string }) {
   const { config } = useChainEnvironment();
-  const chain = config.chain ?? "solana";
-  const href = chain === "sui" && config.sui
-    ? `${config.sui.explorerUrl.replace(/\/$/, "")}/txblock/${signature}?network=testnet`
-    : getSolanaExplorerTxUrl(signature);
+  const href = getChainTransactionUrl(config, signature);
 
   return (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className={cn("transition-colors", chain === "sui" ? "text-sui/70 hover:text-sui" : "text-gray hover:text-gray-light")}
+      className={cn("transition-colors", getChainLinkClass(config))}
       aria-label="View transaction"
     >
       <ExternalLink className="w-3.5 h-3.5" />

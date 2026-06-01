@@ -56,7 +56,7 @@ import { OnboardingModal } from "@/components/onboarding-modal";
 import { AuthModal } from "@/components/auth-modal";
 import { HoldButton } from "@/components/ui/hold-button";
 import { useChainEnvironment } from "@/lib/chain-environment";
-import { getChainAdapter } from "@/lib/chain-registry";
+import { getChainAdapter, isChainHybridNetwork } from "@/lib/chain-registry";
 import { SuiDashboard } from "@/components/sui/sui-dashboard";
 
 export default function VaultPage() {
@@ -439,7 +439,7 @@ export default function VaultPage() {
               <div className="flex items-center justify-center gap-5 sm:gap-8 mb-6">
                 {[
                   { icon: <ArrowDownToLine className="w-5 h-5" />, label: "Deposit", href: "/vault/deposit", color: "text-green-400" },
-                  ...(networkId === "devnet-regtest"
+                  ...(isChainHybridNetwork(networkId, "solana")
                     ? [{ icon: <Droplets className="w-5 h-5" />, label: "Faucet", href: "/faucet", color: "text-warning" }]
                     : []),
                   { icon: <Send className="w-5 h-5" />, label: "Send", href: "/send", color: "text-purple-400" },

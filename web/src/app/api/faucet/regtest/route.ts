@@ -41,6 +41,7 @@ import {
   type NetworkConfig,
   type NetworkId,
 } from "@/lib/network-config";
+import { CHAIN_ADAPTERS } from "@/lib/chain-registry";
 import { getBackendUrl } from "@/lib/api/constants";
 import {
   createNonInteractiveDeposit,
@@ -285,9 +286,9 @@ function hexToBytes(value: string): Uint8Array {
 }
 
 function getFallbackNetworkConfig(): FaucetNetworkConfig {
-  const network = process.env.NEXT_PUBLIC_NETWORK || process.env.UTXOPIA_NETWORK || "devnet-regtest";
+  const network = process.env.NEXT_PUBLIC_NETWORK || process.env.UTXOPIA_NETWORK || CHAIN_ADAPTERS.solana.hybridNetwork || CHAIN_ADAPTERS.solana.defaultNetwork;
   const configs = networks as Record<string, FaucetNetworkConfig>;
-  return configs[network] ?? configs["devnet-regtest"];
+  return configs[network] ?? configs[CHAIN_ADAPTERS.solana.hybridNetwork ?? CHAIN_ADAPTERS.solana.defaultNetwork];
 }
 
 function getRequestNetwork(req: NextRequest): NetworkId {
@@ -295,7 +296,9 @@ function getRequestNetwork(req: NextRequest): NetworkId {
     return detectNetworkFromRequest(req);
   } catch {
     const env = process.env.NEXT_PUBLIC_NETWORK || process.env.UTXOPIA_NETWORK;
-    return env === "sui-regtest" ? "sui-regtest" : "devnet-regtest";
+    return env && Object.values(CHAIN_ADAPTERS).some((adapter) => adapter.networkIds.includes(env as NetworkId))
+      ? env as NetworkId
+      : CHAIN_ADAPTERS.solana.hybridNetwork ?? CHAIN_ADAPTERS.solana.defaultNetwork;
   }
 }
 

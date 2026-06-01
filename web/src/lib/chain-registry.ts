@@ -61,3 +61,26 @@ export function isHybridNetwork(networkId: NetworkId): boolean {
 export function isChainHybridNetwork(networkId: NetworkId, chain: ChainId): boolean {
   return CHAIN_ADAPTERS[chain].hybridNetwork === networkId;
 }
+
+export function getNetworkConfigReadoutRows(config: NetworkConfig): Array<[string, string, string?]> {
+  if (config.sui) {
+    return [
+      ["Sui RPC", config.sui.rpcUrl, config.sui.rpcUrl],
+      ["Package", config.sui.packageId],
+      ["Pool", config.sui.pool.objectId],
+      ["VK registry", config.sui.verifyingKeyRegistry.objectId],
+      ["Nullifiers", config.sui.nullifierRegistry.objectId],
+      ["Redemptions", config.sui.redemptionQueue.objectId],
+    ];
+  }
+
+  return [
+    ["Solana RPC", config.solana.rpcUrl, config.solana.rpcUrl],
+    ["Program", config.solana.utxopiaProgramId],
+    ["zkBTC mint", config.tokens.zkbtcMint],
+    ["BTC pool", config.bitcoin.poolAddress],
+    ["BTC network", config.bitcoin.network],
+    ["Backend", config.backend.url, config.backend.url],
+    ["BTC explorer", config.bitcoin.explorerUrl, config.bitcoin.explorerUrl],
+  ];
+}

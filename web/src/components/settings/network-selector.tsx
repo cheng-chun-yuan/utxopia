@@ -14,6 +14,7 @@ import {
   type NetworkMeta,
 } from "@/lib/network-config";
 import { useChainEnvironment } from "@/lib/chain-environment";
+import { getNetworkConfigReadoutRows } from "@/lib/chain-registry";
 
 /**
  * Network selector — flat radio-style rows, not fat cards. The active
@@ -249,24 +250,7 @@ function ConfigReadout({ networkId }: { networkId: NetworkId }) {
 
   if (!cfg) return null;
 
-  const rows: Array<[string, string, string?]> = cfg.chain === "sui" && cfg.sui
-    ? [
-        ["Sui RPC", cfg.sui.rpcUrl, cfg.sui.rpcUrl],
-        ["Package", cfg.sui.packageId],
-        ["Pool", cfg.sui.pool.objectId],
-        ["VK registry", cfg.sui.verifyingKeyRegistry.objectId],
-        ["Nullifiers", cfg.sui.nullifierRegistry.objectId],
-        ["Redemptions", cfg.sui.redemptionQueue.objectId],
-      ]
-    : [
-        ["Solana RPC", cfg.solana.rpcUrl, cfg.solana.rpcUrl],
-        ["Program", cfg.solana.utxopiaProgramId],
-        ["zkBTC mint", cfg.tokens.zkbtcMint],
-        ["BTC pool", cfg.bitcoin.poolAddress],
-        ["BTC network", cfg.bitcoin.network],
-        ["Backend", cfg.backend.url, cfg.backend.url],
-        ["BTC explorer", cfg.bitcoin.explorerUrl, cfg.bitcoin.explorerUrl],
-      ];
+  const rows = getNetworkConfigReadoutRows(cfg);
 
   return (
     <div className="mt-2 rounded-md bg-muted/20 overflow-hidden">

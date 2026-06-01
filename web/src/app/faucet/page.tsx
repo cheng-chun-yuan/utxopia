@@ -27,10 +27,10 @@ export default function FaucetPage() {
   }, []);
 
   const config = network ? getNetworkConfig(network, { applyEnvOverrides: false }) : null;
-  const chain = config ? getChainAdapter(config).id : "solana";
+  const chain = config ? getChainAdapter(config) : null;
   const isHybrid = !!network && isHybridNetwork(network);
   const chainHref = (href: string) => network ? hrefWithChain(href, network) : href;
-  const isSui = chain === "sui";
+  const isSui = chain?.id === "sui";
 
   return (
     <main className="min-h-screen bg-background hacker-bg noise-overlay flex flex-col items-center justify-center p-4">
