@@ -18,7 +18,7 @@
  * - View-only mode (viewing key import)
  */
 
-import { useState, Fragment } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import {
   Shield,
@@ -30,7 +30,6 @@ import {
   Globe,
   RefreshCw,
   Eye,
-  ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SiteHeader } from "@/components/site-header";
@@ -46,13 +45,15 @@ import { useStealthInbox } from "@/hooks/use-utxopia";
 import { getConfig } from "@utxopia/sdk";
 import { notifyCopied } from "@/lib/notifications";
 import { useTokenPrices } from "@/hooks/use-token-prices";
-import { VAULT_TOKENS } from "@/lib/supported-tokens";
 import { OnboardingModal } from "@/components/onboarding-modal";
 import { AuthModal } from "@/components/auth-modal";
 import { useChainEnvironment } from "@/lib/chain-environment";
 import { getChainAdapter } from "@/lib/chain-registry";
 import { SuiDashboard } from "@/components/sui/sui-dashboard";
 import { VaultActions } from "@/components/vault/vault-actions";
+import { VaultBalance } from "@/components/vault/vault-balance";
+import { VaultGuide } from "@/components/vault/vault-guide";
+import { VaultNetworkStatus } from "@/components/vault/vault-network-status";
 import { VaultTokenList } from "@/components/vault/vault-token-list";
 import { ViewKeyModal } from "@/components/vault/view-key-modal";
 
@@ -384,50 +385,12 @@ export default function VaultPage() {
             </div>
           ) : (
             <>
-              {/* Big balance display — USD hero, BTC secondary */}
-              <div className="text-center py-6 mb-2">
-                {isLoadingInbox ? (
-                  <Loader2 className="w-6 h-6 animate-spin text-privacy mx-auto mb-2" />
-                ) : (
-                  <>
-                    {(() => {
-                      // Calculate total USD from all token balances
-                      let totalUsd = 0;
-                      for (const token of VAULT_TOKENS) {
-                        const rawBal = Number(balancesByToken?.[token.shieldedSymbol] ?? 0n);
-                        const price = tokenPrices[token.priceKey];
-                        if (price) totalUsd += (rawBal / 10 ** token.decimals) * price;
-                      }
-                      const btcPrice = tokenPrices["btc"] || 0;
-                      const btcEquivalent = btcPrice > 0 ? totalUsd / btcPrice : 0;
-                      return (
-                        <>
-                          <motion.p
-                            className="text-[36px] sm:text-[42px] font-bold text-foreground tracking-tight leading-none mb-1"
-                            key={totalUsd.toFixed(2)}
-                            initial={{ opacity: 0.6, y: 4 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ duration: 0.35, ease: "easeOut" }}
-                          >
-                            ${totalUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </motion.p>
-                          <p className="text-body2 text-gray/60 font-mono flex items-center justify-center gap-1.5">
-                            {btcEquivalent.toFixed(8)} BTC
-                            <button
-                              onClick={refreshInbox}
-                              disabled={isLoadingInbox}
-                              className="p-0.5 rounded text-gray/30 hover:text-privacy transition-colors disabled:opacity-50 cursor-pointer"
-                              title="Refresh"
-                            >
-                              <RefreshCw className={cn("w-3 h-3", isLoadingInbox && "animate-spin")} />
-                            </button>
-                          </p>
-                        </>
-                      );
-                    })()}
-                  </>
-                )}
-              </div>
+              <VaultBalance
+                balancesByToken={balancesByToken}
+                isLoading={isLoadingInbox}
+                tokenPrices={tokenPrices}
+                onRefresh={refreshInbox}
+              />
 
               <VaultActions
                 networkId={networkId}
@@ -444,37 +407,12 @@ export default function VaultPage() {
             </>
           )}
 
-          {/* How it works — compact */}
-          <div className="px-3 py-3 bg-muted/30 rounded-[10px] mb-4">
-            <div className="flex items-center gap-4">
-              {[
-                { step: "1", label: "Deposit" },
-                { step: "2", label: "Send" },
-                { step: "3", label: "Cash Out" },
-              ].map((s, i) => (
-                <Fragment key={s.step}>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-bold font-mono text-privacy/40">{s.step}</span>
-                    <span className="text-[11px] text-gray/50">{s.label}</span>
-                  </div>
-                  {i < 2 && <ChevronRight className="w-3 h-3 text-gray/15 shrink-0" />}
-                </Fragment>
-              ))}
-              <div className="flex-1" />
-              <div className="flex items-center gap-1.5">
-                <Shield className="w-3 h-3 text-privacy/40" />
-                <span className="text-[10px] text-privacy/40 font-medium">ZK</span>
-              </div>
-            </div>
-          </div>
+          <VaultGuide />
 
-          {/* Network Status */}
-          <div className="flex items-center justify-center gap-2 py-2">
-            <div className="w-1.5 h-1.5 rounded-full bg-warning animate-pulse" />
-            <span className="text-[11px] text-gray/40">
-              Bitcoin {bitcoinNetworkLabel} · Solana {solanaNetworkLabel}
-            </span>
-          </div>
+          <VaultNetworkStatus
+            bitcoinNetworkLabel={bitcoinNetworkLabel}
+            solanaNetworkLabel={solanaNetworkLabel}
+          />
 
 
         </motion.div>
