@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import Image from "next/image";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import {
@@ -17,24 +18,24 @@ import {
   createCloseAccountInstruction,
   NATIVE_MINT,
   TOKEN_PROGRAM_ID as SPL_TOKEN_PROGRAM_ID,
-  TOKEN_2022_PROGRAM_ID as SPL_TOKEN_2022_PROGRAM_ID,
 } from "@solana/spl-token";
 import { UTXOpiaClient } from "@utxopia/sdk";
 import { getUTXOpiaProgramId, getZkbtcMint, derivePoolStatePDA, deriveCommitmentTreePDA, deriveTokenConfigPDA } from "@/lib/solana/pdas";
 import { useUTXOpia } from "@/hooks/use-utxopia";
-import { Shield, ChevronDown, Loader2, ExternalLink, CheckCircle2, AlertCircle, LogOut, Wallet, Copy, Check, ArrowRight } from "lucide-react";
+import { Shield, ChevronDown, Loader2, AlertCircle, LogOut, Wallet, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StealthRecipientInput } from "@/components/ui/stealth-recipient-input";
 import type { StealthMetaAddress } from "@utxopia/sdk";
 import { SHIELD_TOKENS } from "@/lib/supported-tokens";
-import { getMempoolExplorerUrl } from "@/lib/btc-network";
-import { getSolanaExplorerTxUrl } from "@/lib/solana-network";
 
 import { MobileWalletGuidance } from "@/components/bitcoin-wallet-selector";
 import { useIsMobileWithoutWallet } from "@/hooks/use-mobile-wallet-detect";
 import { BTC_DUST_LIMIT, TOKEN_2022_PROGRAM_ID_STR } from "@/lib/btc-constants";
 import { useTokenBalance } from "@/hooks/use-token-balance";
 import { useBtcDeposit } from "@/hooks/use-btc-deposit";
+import { BtcDepositPreview } from "@/components/shield-flow/btc-deposit-preview";
+import { ShieldSuccess } from "@/components/shield-flow/shield-success";
+import { TokenSelector } from "@/components/shield-flow/token-selector";
 
 const TOKEN_2022_PROGRAM_ID = new PublicKey(TOKEN_2022_PROGRAM_ID_STR);
 
@@ -49,7 +50,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
   const { publicKey, sendTransaction } = wallet;
   const { connection } = useConnection();
   const { setVisible: openWalletModal } = useWalletModal();
-  const { keys, stealthAddress, stealthAddressEncoded } = useUTXOpia();
+  const { keys, stealthAddress } = useUTXOpia();
 
   // Passkey users have keys but no Solana wallet — need to connect wallet for SPL shielding
   const isPasskeyOnly = !!keys && !publicKey;
@@ -69,12 +70,12 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
 
   // ── BTC-specific state (extracted to hook) ──
   const btcDeposit = useBtcDeposit({
-    stealthAddress,
     resolvedMeta,
     onStatusChange: (s) => setStatus(s),
     onError: (msg) => setError(msg || null),
   });
   const { btcWallet } = btcDeposit;
+  const { walletPickerRef, setShowWalletPicker } = btcDeposit;
   const { solBalance, splBalance, handleMax } = useTokenBalance(selectedToken, publicKey, connection, btcWallet.balance);
   const isMobileNoWallet = useIsMobileWithoutWallet();
 
@@ -84,13 +85,13 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
       }
-      if (btcDeposit.walletPickerRef.current && !btcDeposit.walletPickerRef.current.contains(e.target as Node)) {
-        btcDeposit.setShowWalletPicker(false);
+      if (walletPickerRef.current && !walletPickerRef.current.contains(e.target as Node)) {
+        setShowWalletPicker(false);
       }
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
+  }, [setShowWalletPicker, walletPickerRef]);
 
   // No auto-resolve — user clicks the Self button or types a recipient.
   // This avoids resolvedMeta getting out of sync with the input value.
@@ -120,7 +121,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
       const client = UTXOpiaClient.instance();
       const mintAddr = mintPubkey.toBase58();
       const shieldOutput = await client.prepareShieldOutput({ amount: amountRaw, mintAddress: mintAddr });
-      const { npkBytes, tokenId: tokenIdBigint } = shieldOutput;
+      const { npkBytes } = shieldOutput;
 
       const programId = getUTXOpiaProgramId();
       const [tokenConfigPda] = deriveTokenConfigPDA(mintPubkey);
@@ -259,7 +260,6 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
 
   // Success state
   if (status === "done") {
-    const isBtc = selectedToken.isBtcNative;
     const resetDone = () => {
       setStatus("idle");
       setAmount("");
@@ -269,87 +269,26 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
     };
 
     return (
-      <div className={cn("space-y-4 text-center py-6", className)}>
-        <div className={cn("inline-flex p-3 rounded-full border", isBtc ? "bg-btc/10 border-btc/20" : "bg-privacy/10 border-privacy/20")}>
-          <CheckCircle2 className={cn("w-8 h-8", isBtc ? "text-btc" : "text-privacy")} />
-        </div>
-        <h3 className="text-lg font-semibold text-foreground">
-          {isBtc ? "BTC Shielded!" : "Tokens Shielded!"}
-        </h3>
-        <p className="text-caption text-gray">
-          {isBtc && btcDeposit.walletDepositResult
-            ? "Your BTC deposit has been broadcast. The backend will automatically detect, sweep, and verify it."
-            : `Your ${selectedToken.symbol} tokens are now private commitments.`}
-        </p>
-        {/* SPL tx link */}
-        {txSig && (
-          <a
-            href={getSolanaExplorerTxUrl(txSig)}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 text-caption text-sol hover:text-sol/80 transition-colors"
-          >
-            View transaction <ExternalLink className="w-3 h-3" />
-          </a>
-        )}
-        {/* BTC tx link */}
-        {btcDeposit.walletDepositResult?.txid && (
-          <a
-            href={`${getMempoolExplorerUrl()}/tx/${btcDeposit.walletDepositResult.txid}`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 text-caption text-btc hover:text-btc/80 transition-colors"
-          >
-            View on mempool.space <ExternalLink className="w-3 h-3" />
-          </a>
-        )}
-        <div className="pt-2">
-          <button
-            onClick={resetDone}
-            className="px-5 py-2 rounded-[10px] bg-muted border border-gray/15 text-body2 text-gray-light hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
-          >
-            Shield more
-          </button>
-        </div>
-      </div>
+      <ShieldSuccess
+        className={className}
+        selectedToken={selectedToken}
+        txSig={txSig}
+        walletDepositResult={btcDeposit.walletDepositResult}
+        onReset={resetDone}
+      />
     );
   }
 
   // Token selector dropdown — shared across both flows
   const tokenSelector = (
-    <div className="relative" ref={dropdownRef}>
-      <button
-        onClick={() => setDropdownOpen(!dropdownOpen)}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] bg-background/60 border border-gray/15 hover:border-gray/30 transition-colors cursor-pointer"
-      >
-        <img src={selectedToken.logo} alt={selectedToken.symbol} className="w-5 h-5 rounded-full" />
-        <span className="text-sm font-semibold text-foreground">{selectedToken.symbol}</span>
-        <ChevronDown className={cn("w-3.5 h-3.5 text-gray transition-transform", dropdownOpen && "rotate-180")} />
-      </button>
-      {dropdownOpen && (
-        <div className="absolute right-0 top-full mt-1 w-[200px] bg-card border border-gray/20 rounded-[12px] shadow-xl z-50 overflow-hidden">
-          {availableTokens.map((token) => (
-            <button
-              key={token.symbol}
-              onClick={() => { setSelectedToken(token); setDropdownOpen(false); }}
-              className={cn(
-                "w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted/50 transition-colors cursor-pointer",
-                selectedToken.symbol === token.symbol && "bg-privacy/5"
-              )}
-            >
-              <img src={token.logo} alt={token.symbol} className="w-5 h-5 rounded-full" />
-              <div className="flex-1 text-left">
-                <div className="text-sm font-medium text-foreground">{token.symbol}</div>
-                <div className="text-[10px] text-gray">{token.name}</div>
-              </div>
-              {token.isBtcNative && (
-                <span className="px-1.5 py-0.5 rounded bg-btc/10 text-[8px] text-btc font-semibold uppercase">Native</span>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <TokenSelector
+      selectedToken={selectedToken}
+      availableTokens={availableTokens}
+      dropdownOpen={dropdownOpen}
+      dropdownRef={dropdownRef}
+      onOpenChange={setDropdownOpen}
+      onSelect={setSelectedToken}
+    />
   );
 
   // BTC native deposit flow — unified layout matching SPL flow
@@ -359,159 +298,13 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
 
     // PSBT preview active — show transaction details
     if (btcDeposit.depositPreview) {
-      const depositPreview = btcDeposit.depositPreview;
-      const totalInput = depositPreview.cachedUtxos
-        .filter((u) => btcDeposit.selectedUtxoKeys.has(`${u.txid}:${u.vout}`))
-        .reduce((sum, u) => sum + u.value, 0);
-      const estimatedVsize = btcDeposit.selectedUtxoKeys.size * 68 + 78 + 43 + 43 + 12;
-      const estimatedFee = estimatedVsize * 2;
-      const changeAmount = totalInput - depositPreview.depositAmountSats - estimatedFee;
-      const insufficientFunds = totalInput < depositPreview.depositAmountSats + estimatedFee;
-
       return (
-        <div className={cn("space-y-3", className)}>
-          {/* Inputs */}
-          <div className="p-3 bg-muted border border-gray/15 rounded-[12px]">
-            <div className="flex items-center justify-between">
-              <p className="text-caption text-gray">
-                Inputs ({btcDeposit.selectedUtxoKeys.size} UTXO{btcDeposit.selectedUtxoKeys.size !== 1 ? "s" : ""})
-                <span className="text-foreground ml-1">{(totalInput / 1e8).toFixed(8)} BTC</span>
-              </p>
-              <div className="flex items-center gap-2">
-                {btcDeposit.showUtxoList && (
-                  <button onClick={() => btcDeposit.setEditingUtxos(!btcDeposit.editingUtxos)} className={cn("text-[10px] transition-colors cursor-pointer", btcDeposit.editingUtxos ? "text-warning hover:text-warning/80" : "text-sol hover:text-sol-light")}>
-                    {btcDeposit.editingUtxos ? "Done" : "Edit"}
-                  </button>
-                )}
-                <button onClick={() => { btcDeposit.setShowUtxoList(!btcDeposit.showUtxoList); if (btcDeposit.showUtxoList) btcDeposit.setEditingUtxos(false); }} className="text-[10px] text-gray hover:text-gray-light transition-colors cursor-pointer">
-                  {btcDeposit.showUtxoList ? "Hide" : "Show UTXOs"}
-                </button>
-              </div>
-            </div>
-            {btcDeposit.showUtxoList && (
-              <div className="space-y-1.5 max-h-36 overflow-y-auto mt-2">
-                {depositPreview.cachedUtxos.map((utxo) => {
-                  const key = `${utxo.txid}:${utxo.vout}`;
-                  const isSelected = btcDeposit.selectedUtxoKeys.has(key);
-                  if (!btcDeposit.editingUtxos && !isSelected) return null;
-                  return (
-                    <div key={key} className={cn("flex items-center gap-2 p-2 rounded-[8px] transition-colors", btcDeposit.editingUtxos ? "cursor-pointer" : "", isSelected ? "bg-btc/10 border border-btc/20" : "bg-background border border-gray/10 hover:border-gray/25")}
-                      onClick={btcDeposit.editingUtxos ? () => btcDeposit.setSelectedUtxoKeys((prev) => { const next = new Set(prev); if (next.has(key)) next.delete(key); else next.add(key); return next; }) : undefined}>
-                      {btcDeposit.editingUtxos && <input type="checkbox" checked={isSelected} readOnly className="accent-btc w-3.5 h-3.5 pointer-events-none" />}
-                      <div className="flex-1 min-w-0"><code className="text-[10px] font-mono text-gray-light block truncate">{utxo.txid.slice(0, 8)}...:{utxo.vout}</code></div>
-                      <span className="text-[11px] font-mono text-btc whitespace-nowrap">{(utxo.value / 1e8).toFixed(8)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Outputs divider */}
-          <div className="flex items-center gap-2 px-1">
-            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray/20 to-transparent" />
-            <span className="text-[10px] text-gray/50 uppercase tracking-widest">Outputs</span>
-            <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray/20 to-transparent" />
-          </div>
-
-          {/* Deposit output */}
-          <div className="p-3 bg-btc/5 border border-btc/20 rounded-[12px]">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-btc/15 flex items-center justify-center"><ArrowRight className="w-3 h-3 text-btc" /></div>
-                <span className="text-caption font-semibold text-btc">Deposit</span>
-              </div>
-              <span className="text-[10px] font-mono bg-btc/10 text-btc/70 px-1.5 py-0.5 rounded">P2TR</span>
-            </div>
-            <p className="text-body2-semibold font-mono text-foreground">{(depositPreview.depositAmountSats / 1e8).toFixed(8)} BTC</p>
-            <p className="text-caption text-gray mb-1.5">{depositPreview.depositAmountSats.toLocaleString()} sats</p>
-            <div className="flex items-center gap-1.5 p-1.5 bg-background/50 rounded-[6px]">
-              <code className="text-[10px] font-mono text-btc/60 truncate">{depositPreview.depositAddress.slice(0, 14)}...{depositPreview.depositAddress.slice(-14)}</code>
-            </div>
-          </div>
-
-          {/* ZK Metadata (OP_RETURN) */}
-          <div className="p-3 bg-privacy/5 border border-privacy/20 rounded-[12px]">
-            <button onClick={() => btcDeposit.setShowOpReturn(!btcDeposit.showOpReturn)} className="w-full flex items-center justify-between cursor-pointer">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-privacy/15 flex items-center justify-center"><Shield className="w-3 h-3 text-privacy" /></div>
-                <span className="text-caption font-semibold text-privacy">ZK Metadata</span>
-                <span className="text-[10px] text-privacy/50">64 bytes</span>
-              </div>
-              <ChevronDown className={cn("w-3.5 h-3.5 text-gray transition-transform duration-200", btcDeposit.showOpReturn && "rotate-180")} />
-            </button>
-            {btcDeposit.showOpReturn && (
-              <div className="mt-2 pt-2 border-t border-privacy/10 space-y-1.5">
-                <div><p className="text-[10px] text-gray mb-0.5">Ephemeral Public Key</p><code className="block text-[9px] font-mono text-privacy/50 break-all leading-relaxed">{depositPreview.opReturnHex.slice(0, 64)}</code></div>
-                <div><p className="text-[10px] text-gray mb-0.5">Note Public Key</p><code className="block text-[9px] font-mono text-privacy/50 break-all leading-relaxed">{depositPreview.opReturnHex.slice(64)}</code></div>
-              </div>
-            )}
-          </div>
-
-          {/* Change */}
-          {changeAmount > 0 && (
-            <div className="p-3 bg-muted border border-gray/15 rounded-[12px]">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-6 h-6 rounded-full bg-gray/15 flex items-center justify-center"><Wallet className="w-3 h-3 text-gray" /></div>
-                <span className="text-caption font-semibold text-gray-light">Change</span>
-              </div>
-              <p className="text-body2-semibold font-mono text-foreground">{(changeAmount / 1e8).toFixed(8)} BTC</p>
-              <p className="text-caption text-gray">{changeAmount.toLocaleString()} sats</p>
-            </div>
-          )}
-
-          {/* Summary */}
-          <div className="p-3 rounded-[12px] bg-muted border border-gray/15 space-y-1.5">
-            <div className="flex items-center justify-between text-caption">
-              <span className="text-gray">Deposit</span>
-              <span className="font-mono text-btc">{(depositPreview.depositAmountSats / 1e8).toFixed(8)} BTC</span>
-            </div>
-            {changeAmount > 0 && (
-              <div className="flex items-center justify-between text-caption">
-                <span className="text-gray">Change</span>
-                <span className="font-mono text-foreground">{(changeAmount / 1e8).toFixed(8)} BTC</span>
-              </div>
-            )}
-            <div className="flex items-center justify-between text-caption">
-              <span className="text-gray">Network Fee</span>
-              <span className="font-mono text-foreground">{estimatedFee.toLocaleString()} sats</span>
-            </div>
-            <div className="flex items-center justify-between text-caption pt-1.5 border-t border-gray/10">
-              <span className="text-gray-light font-medium">Total</span>
-              <span className="font-mono text-foreground font-semibold">{((depositPreview.depositAmountSats + estimatedFee) / 1e8).toFixed(8)} BTC</span>
-            </div>
-          </div>
-
-          {insufficientFunds && (
-            <div className="p-2.5 bg-error/10 border border-error/20 rounded-[10px]">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="w-3.5 h-3.5 text-error shrink-0" />
-                <span className="text-caption text-error">Insufficient funds. Select more UTXOs or reduce amount.</span>
-              </div>
-            </div>
-          )}
-
-          {/* Error */}
-          {status === "error" && error && (
-            <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-[10px]">
-              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-              <span className="text-caption text-red-400">{error}</span>
-            </div>
-          )}
-
-          {/* Action buttons */}
-          <div className="flex gap-2">
-            <button onClick={() => btcDeposit.setDepositPreview(null)} disabled={btcDeposit.walletDepositing}
-              className="flex-1 py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2 bg-muted hover:bg-gray/20 text-foreground border border-gray/20 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">
-              Back
-            </button>
-            <button onClick={btcDeposit.confirmAndSign} disabled={btcDeposit.walletDepositing || insufficientFunds || btcDeposit.selectedUtxoKeys.size === 0}
-              className={cn("flex-[2] py-3 rounded-[12px] font-medium transition-colors flex items-center justify-center gap-2 cursor-pointer",
-                "bg-btc hover:bg-btc/90 text-background disabled:bg-gray/20 disabled:text-gray disabled:cursor-not-allowed")}>
-              {btcDeposit.walletDepositing ? (<><Loader2 className="w-4 h-4 animate-spin" />Signing...</>) : (<><Wallet className="w-4 h-4" />Confirm &amp; Sign</>)}
-            </button>
-          </div>
-        </div>
+        <BtcDepositPreview
+          className={className}
+          btcDeposit={btcDeposit}
+          status={status}
+          error={error}
+        />
       );
     }
 
@@ -522,7 +315,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
         <div className="flex items-center justify-between gap-2">
           {btcWallet.connected ? (
             <div className="flex items-center gap-1.5 min-w-0">
-              <img src="/tokens/btc.png" alt="BTC" className="w-3.5 h-3.5 rounded-full shrink-0" />
+              <Image src="/tokens/btc.png" alt="BTC" width={14} height={14} className="rounded-full shrink-0" />
               <code className="text-[11px] font-mono text-gray truncate">
                 {btcWallet.address?.slice(0, 6)}...{btcWallet.address?.slice(-4)}
               </code>
@@ -675,7 +468,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
         </div>
         <div className="flex flex-col items-center py-8 space-y-4">
           <div className="w-14 h-14 rounded-full bg-sol/10 border border-sol/20 flex items-center justify-center">
-            <img src={selectedToken.logo} alt={selectedToken.symbol} className="w-7 h-7 rounded-full" />
+            <Image src={selectedToken.logo} alt={selectedToken.symbol} width={28} height={28} className="rounded-full" />
           </div>
           <div className="text-center space-y-1">
             <p className="text-body2-semibold text-foreground">Connect Wallet to Shield {selectedToken.symbol}</p>

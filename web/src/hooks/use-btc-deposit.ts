@@ -29,14 +29,12 @@ export interface WalletDepositResult {
 }
 
 interface UseBtcDepositParams {
-  stealthAddress: StealthMetaAddress | null | undefined;
   resolvedMeta: StealthMetaAddress | null;
   onStatusChange: (status: "done" | "error") => void;
   onError: (msg: string) => void;
 }
 
 export function useBtcDeposit({
-  stealthAddress,
   resolvedMeta,
   onStatusChange,
   onError,
@@ -155,7 +153,7 @@ export function useBtcDeposit({
             const res = await registerDeposit(depositPreview.depositAddress, npkHex, depositPreview.depositAmountSats, ephemeralPubHex);
             if (res.deposit_id) useNotesStore.getState().updateNote(opReturnHex, { depositId: res.deposit_id });
             return;
-          } catch (err) {
+          } catch {
             if (attempt < 2) await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
             else notifyError("Failed to register deposit with backend. Your deposit may not be tracked automatically.");
           }
@@ -202,3 +200,5 @@ export function useBtcDeposit({
     confirmAndSign,
   };
 }
+
+export type BtcDepositState = ReturnType<typeof useBtcDeposit>;
