@@ -19,6 +19,7 @@
  */
 
 import { useState, Fragment } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
@@ -48,16 +49,16 @@ import { useUTXOpiaStore } from "@/stores";
 import { useCopyToClipboard } from "@/hooks/use-copy-to-clipboard";
 import { useSnsName } from "@/hooks/use-sns-name";
 import { useStealthInbox } from "@/hooks/use-utxopia";
-import { getConfig, exportViewOnlyKeys, encodeViewOnlyKeys } from "@utxopia/sdk";
+import { getConfig } from "@utxopia/sdk";
 import { notifyCopied } from "@/lib/notifications";
 import { useTokenPrices } from "@/hooks/use-token-prices";
 import { VAULT_TOKENS } from "@/lib/supported-tokens";
 import { OnboardingModal } from "@/components/onboarding-modal";
 import { AuthModal } from "@/components/auth-modal";
-import { HoldButton } from "@/components/ui/hold-button";
 import { useChainEnvironment } from "@/lib/chain-environment";
 import { getChainAdapter, isChainHybridNetwork } from "@/lib/chain-registry";
 import { SuiDashboard } from "@/components/sui/sui-dashboard";
+import { ViewKeyModal } from "@/components/vault/view-key-modal";
 
 export default function VaultPage() {
   const wallet = useWallet();
@@ -85,7 +86,6 @@ export default function VaultPage() {
     updateSnsStealthData,
   } = useSnsName();
   const {
-    totalAmountSats,
     balancesByToken,
     depositCount,
     isLoading: isLoadingInbox,
@@ -99,11 +99,9 @@ export default function VaultPage() {
     error: passkeyError,
     register: registerPasskey,
     authenticate: authenticatePasskey,
-    clearCredential: clearPasskeyCredential,
   } = usePasskey();
 
   const tokenPrices = useTokenPrices();
-  const btcPrice = tokenPrices.btc;
   const { networkId, config: networkConfig } = useChainEnvironment();
   const bitcoinNetworkLabel =
     networkConfig.bitcoin.network.charAt(0).toUpperCase() +
@@ -547,7 +545,7 @@ export default function VaultPage() {
                       const usdValue = price ? (rawBalance / 10 ** token.decimals) * price : 0;
                       return (
                         <div key={token.symbol} className={cn("flex items-center gap-3 px-4 h-[60px] transition-colors", hasBalance ? "hover:bg-muted/40" : "opacity-40")}>
-                          <img src={token.shieldedLogo} alt={token.shieldedSymbol} className="w-9 h-9 rounded-full" />
+                          <Image src={token.shieldedLogo} alt={token.shieldedSymbol} width={36} height={36} className="rounded-full" />
                           <div className="flex-1 min-w-0">
                             <p className="text-body2-semibold text-foreground">{token.shieldedSymbol}</p>
                             <p className="text-[11px] text-gray/50">{token.name}</p>
@@ -634,51 +632,12 @@ export default function VaultPage() {
 
       {/* Export Viewing Key modal */}
       {viewKeyModalOpen && keys && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/70 backdrop-blur-md"
-            onClick={() => setViewKeyModalOpen(false)}
-          />
-          <div className={cn(
-            "relative w-[90vw] max-w-[380px] rounded-[20px] p-6",
-            "bg-card/95 backdrop-blur-xl border border-gray/20",
-            "shadow-[0_0_80px_rgba(245,158,11,0.06)]",
-            "animate-in fade-in-0 zoom-in-95 duration-200"
-          )}>
-            <div className="text-center mb-5">
-              <div className="inline-flex p-3 rounded-full bg-btc/10 border border-btc/20 mb-3">
-                <Eye className="w-5 h-5 text-btc" />
-              </div>
-              <h3 className="text-body1 font-bold text-foreground mb-1">Export Viewing Key</h3>
-              <p className="text-caption text-gray">
-                This key grants read-only access to your balances and transaction history. Do not share it publicly.
-              </p>
-            </div>
-
-            <HoldButton
-              onComplete={() => {
-                const voKeys = exportViewOnlyKeys(keys);
-                const encoded = encodeViewOnlyKeys(voKeys);
-                copyViewKey(encoded);
-                notifyCopied("Viewing key");
-                setViewKeyModalOpen(false);
-              }}
-              variant="warning"
-              className="w-full"
-              title="Hold to copy viewing key"
-            >
-              {viewKeyCopied ? <Check className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              {viewKeyCopied ? "Copied!" : "Hold to Copy"}
-            </HoldButton>
-
-            <button
-              onClick={() => setViewKeyModalOpen(false)}
-              className="w-full mt-3 px-4 py-2 rounded-[10px] text-caption text-gray hover:text-gray-light hover:bg-gray/10 transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+        <ViewKeyModal
+          keys={keys}
+          copied={viewKeyCopied}
+          onCopy={copyViewKey}
+          onClose={() => setViewKeyModalOpen(false)}
+        />
       )}
       </div>
       <SiteFooter />
