@@ -57,6 +57,7 @@ import { VaultGuide } from "@/components/vault/vault-guide";
 import { VaultNetworkStatus } from "@/components/vault/vault-network-status";
 import { VaultTokenList } from "@/components/vault/vault-token-list";
 import { ViewKeyModal } from "@/components/vault/view-key-modal";
+import { SnsNameTip } from "@/components/vault/sns-name-tip";
 
 export default function VaultPage() {
   const wallet = useWallet();
@@ -145,6 +146,16 @@ export default function VaultPage() {
 
   const snsConfig = getConfig();
   const parentDomain = snsConfig.snsParentDomain || "utxopia";
+  const hasVaultValue =
+    depositCount > 0 ||
+    Object.values(balancesByToken).some((balance) => balance > 0n);
+  const showSnsTip =
+    !!keys &&
+    !isViewOnly &&
+    !isPasskeyUser &&
+    !hasRegisteredSnsName &&
+    !isLoadingSnsName &&
+    hasVaultValue;
 
   const handleRegisterSnsName = async () => {
     if (!snsNameInput) return;
@@ -256,15 +267,6 @@ export default function VaultPage() {
                   <Copy className="w-2.5 h-2.5 text-gray/25 group-hover:text-gray/45 transition-colors shrink-0" />
                 </button>
               )}
-              {!isPasskeyUser && !registeredSnsName && !showSnsInput && !isLoadingSnsName && keys && (
-                <button
-                  onClick={() => setShowSnsInput(true)}
-                  className="flex items-center gap-1 text-[11px] text-btc/50 hover:text-btc transition-colors cursor-pointer"
-                >
-                  <Globe className="w-3 h-3" />
-                  Register .{parentDomain}.sol
-                </button>
-              )}
               {!isPasskeyUser && isLoadingSnsName && (
                 <span className="flex items-center gap-1 text-[11px] text-gray/35">
                   <Loader2 className="w-3 h-3 animate-spin" />
@@ -300,65 +302,6 @@ export default function VaultPage() {
             </button>
           )}
 
-          {/* SNS registration input (toggled) */}
-          {keys && !isPasskeyUser && showSnsInput && (
-            <div className="mb-4 p-3 bg-background/50 rounded-[10px] border border-btc/20">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="flex-1 relative">
-                  <input
-                    type="text"
-                    value={snsNameInput}
-                    onChange={(e) => setSnsNameInput(e.target.value.toLowerCase())}
-                    placeholder="yourname"
-                    className={cn(
-                      "w-full px-3 py-2 bg-muted border rounded-[8px]",
-                      "text-body2 text-foreground placeholder:text-gray",
-                      "outline-none transition-colors",
-                      "border-gray/30 focus:border-btc/50"
-                    )}
-                  />
-                </div>
-                <span className="text-body2 text-gray">.{parentDomain}.sol</span>
-              </div>
-              {snsError && (
-                <p className="text-caption text-red-400 mb-2">{snsError}</p>
-              )}
-              <div className="flex gap-2">
-                <button
-                  onClick={handleRegisterSnsName}
-                  disabled={isRegisteringSns || !snsNameInput}
-                  className={cn(
-                    "flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-[8px]",
-                    "bg-btc hover:bg-btc/80 text-background",
-                    "disabled:bg-gray/30 disabled:text-gray disabled:cursor-not-allowed",
-                    "transition-colors text-caption cursor-pointer"
-                  )}
-                >
-                  {isRegisteringSns ? (
-                    <>
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      Registering...
-                    </>
-                  ) : (
-                    <>
-                      <Globe className="w-3 h-3" />
-                      Register
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={() => {
-                    setShowSnsInput(false);
-                    setSnsNameInput("");
-                  }}
-                  className="px-3 py-2 rounded-[8px] bg-gray/20 hover:bg-gray/30 text-gray-light text-caption transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* ═══ Hero Balance ═══ */}
           {!keys && !isViewOnly ? (
             /* Not connected — centered CTA */
@@ -392,6 +335,23 @@ export default function VaultPage() {
                 tokenPrices={tokenPrices}
                 onRefresh={refreshInbox}
               />
+
+              {showSnsTip && (
+                <SnsNameTip
+                  parentDomain={parentDomain}
+                  open={showSnsInput}
+                  value={snsNameInput}
+                  error={snsError}
+                  isRegistering={isRegisteringSns}
+                  onOpen={() => setShowSnsInput(true)}
+                  onChange={setSnsNameInput}
+                  onRegister={handleRegisterSnsName}
+                  onCancel={() => {
+                    setShowSnsInput(false);
+                    setSnsNameInput("");
+                  }}
+                />
+              )}
 
               <VaultActions
                 networkId={networkId}
