@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Droplets, Rocket, Menu, X, Settings as SettingsIcon } from "lucide-react";
+import { Droplets, Menu, Wallet, X, Settings as SettingsIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AdvancedModeBadge } from "@/components/ui/advanced-mode-badge";
 import { NetworkBadge } from "@/components/ui/network-badge";
@@ -90,8 +90,8 @@ export function SiteHeader() {
                 href={chainHref("/vault")}
                 className="inline-flex items-center gap-1.5 text-xs font-semibold border border-privacy/10 px-4 py-2.5 rounded-full transition-all text-privacy bg-privacy/10 hover:bg-privacy/10 hover:border-privacy/30 hover:shadow-[0_0_15px_rgba(20,241,149,0.15)]"
               >
-                <Rocket className="w-3 h-3" />
-                Launch App
+                <Wallet className="w-3 h-3" />
+                Open wallet
               </Link>
             </motion.div>
           </div>
@@ -129,7 +129,7 @@ export function SiteHeader() {
             >
               <div className="space-y-1">
                 {[
-                  { href: "/vault", label: "Vault" },
+                  { href: "/vault", label: "Wallet" },
                   ...(isHybrid ? [{ href: "/faucet", label: "Faucet" }] : []),
                   { href: "/explorer", label: "Explorer" },
                   { href: "/docs", label: "Docs" },

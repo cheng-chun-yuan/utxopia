@@ -14,7 +14,7 @@ export function BackupRequiredCallout({ visible }: BackupRequiredCalloutProps) {
       <div className="flex items-start gap-2">
         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
         <span>
-          Back up your private vault from the Vault page before sending or withdrawing funds.
+          Back up your private wallet before sending or cashing out.
         </span>
       </div>
     </div>

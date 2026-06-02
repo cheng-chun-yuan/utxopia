@@ -47,7 +47,7 @@ export function TokenSourcePicker({
         )}
         title={
           disabled
-            ? "Bitcoin addresses can only receive zkBTC. To send other tokens, use a Solana wallet or stealth address."
+            ? "Bitcoin addresses can only receive zkBTC. To send other tokens, use a chain wallet or private address."
             : undefined
         }
       >

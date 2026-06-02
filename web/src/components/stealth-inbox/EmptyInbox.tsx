@@ -17,7 +17,7 @@ export function EmptyInbox({ hasKeys, onUnlock, onRefresh, isLoading }: EmptyInb
         <div className="rounded-full bg-privacy/10 p-4 mb-4">
           <Shield className="h-10 w-10 text-privacy" />
         </div>
-        <p className="text-heading6 text-foreground mb-2">Unlock Your Vault</p>
+        <p className="text-heading6 text-foreground mb-2">Unlock private wallet</p>
         <p className="text-body2 text-gray mb-1.5">
           Use a passkey or wallet to access your funds
         </p>
@@ -35,7 +35,7 @@ export function EmptyInbox({ hasKeys, onUnlock, onRefresh, isLoading }: EmptyInb
           )}
         >
           <Key className="w-4 h-4" />
-          {isLoading ? "Unlocking..." : "Unlock Vault"}
+          {isLoading ? "Unlocking..." : "Unlock wallet"}
         </button>
       </div>
     );
@@ -46,9 +46,9 @@ export function EmptyInbox({ hasKeys, onUnlock, onRefresh, isLoading }: EmptyInb
       <div className="rounded-full bg-gray/10 p-4 mb-4">
         <Inbox className="h-10 w-10 text-gray" />
       </div>
-      <p className="text-heading6 text-foreground mb-2">No Incoming Deposits</p>
+      <p className="text-heading6 text-foreground mb-2">No funds received</p>
       <p className="text-body2 text-gray mb-4">
-        When someone sends you zkBTC via stealth address, it will appear here
+        Payments to your private address appear here after they are confirmed
       </p>
       {onRefresh && (
         <button

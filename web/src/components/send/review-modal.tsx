@@ -31,7 +31,7 @@ export function ReviewModal({
         <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[420px] max-w-[calc(100vw-32px)] bg-background border border-gray/20 rounded-2xl p-5 shadow-xl">
           <div className="flex items-center justify-between mb-4">
             <Dialog.Title className="text-base font-semibold">
-              Review send
+              Review payment
             </Dialog.Title>
             <Dialog.Close
               aria-label="Close"
@@ -59,7 +59,7 @@ export function ReviewModal({
               variant="primary"
               className="w-full"
             >
-              Hold to send
+              Hold to confirm
             </HoldButton>
           </div>
         </Dialog.Content>

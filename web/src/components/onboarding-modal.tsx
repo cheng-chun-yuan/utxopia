@@ -2,7 +2,7 @@
 
 import { useState, useSyncExternalStore, useCallback } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { Shield, ArrowDownToLine, Send, ArrowRight, X } from "lucide-react";
+import { ArrowRight, BadgeDollarSign, LockKeyhole, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ONBOARDING_STORAGE_KEY = "utxopia-onboarding-completed";
@@ -31,16 +31,16 @@ interface OnboardingStep {
 
 const steps: OnboardingStep[] = [
   {
-    title: "Send tokens privately",
+    title: "Create a private balance",
     description:
-      "Your transactions stay hidden. No one can see who sent what, how much, or to whom.",
-    icon: <Shield className="w-8 h-8" />,
+      "Add BTC or supported tokens, then keep balances and transfers hidden from public chain history.",
+    icon: <LockKeyhole className="w-8 h-8" />,
   },
   {
-    title: "How it works",
+    title: "Use it like a wallet",
     description:
-      "Deposit any token. Send it privately to anyone. Cash out to your wallet or Bitcoin address anytime.",
-    icon: <Send className="w-8 h-8" />,
+      "Receive funds, send privately, or cash out to a Bitcoin address or chain wallet when needed.",
+    icon: <BadgeDollarSign className="w-8 h-8" />,
   },
 ];
 
@@ -167,7 +167,7 @@ export function OnboardingModal({ forceShow, onComplete }: OnboardingModalProps)
                 "flex items-center justify-center gap-2"
               )}
             >
-              {isLastStep ? "Get Started" : "Next"}
+              {isLastStep ? "Create private wallet" : "Next"}
               {!isLastStep && <ArrowRight className="w-4 h-4" />}
             </button>
           </div>

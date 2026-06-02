@@ -5,15 +5,16 @@ import Link from "next/link";
 import * as Dialog from "@radix-ui/react-dialog";
 import { motion } from "framer-motion";
 import {
-  ArrowDownToLine,
   ArrowRight,
   ChevronDown,
   Copy,
   Droplets,
   ExternalLink,
   Key,
+  LockKeyhole,
   Loader2,
   LogOut,
+  PlusCircle,
   RefreshCw,
   Send,
   Settings,
@@ -32,6 +33,9 @@ import {
 import { cn } from "@/lib/utils";
 import { useUTXOpiaStore } from "@/stores";
 import { useTokenPrices, type TokenPrices } from "@/hooks/use-token-prices";
+import { VaultFirstSteps } from "@/components/vault/vault-first-steps";
+import { VaultBackupCard } from "@/components/vault/vault-backup-card";
+import { hasBackupForKeys } from "@/lib/vault-backup";
 
 type RpcState = "idle" | "loading" | "ok" | "error";
 type SuiConfig = NonNullable<ReturnType<typeof getNetworkConfig>["sui"]>;
@@ -89,6 +93,7 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
     return !!(hash.get("id_token") || hash.get("error"));
   });
   const [suiAuth, setSuiAuth] = useState<SuiAuthState | null>(null);
+  const [hasRecoveryBackup, setHasRecoveryBackup] = useState(false);
   const tokenPrices = useTokenPrices();
   const {
     balancesByToken,
@@ -97,6 +102,7 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
     refresh: refreshInbox,
   } = useSuiVaultBalances();
   const stealthAddressEncoded = useUTXOpiaStore((s) => s.stealthAddressEncoded);
+  const keys = useUTXOpiaStore((s) => s.keys);
   const clearKeys = useUTXOpiaStore((s) => s.clearKeys);
   const identity = stealthAddressEncoded;
   const suiAccount = suiAuth?.address ?? null;
@@ -131,6 +137,10 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
     };
   }, []);
 
+  useEffect(() => {
+    setHasRecoveryBackup(hasBackupForKeys(keys));
+  }, [keys]);
+
   function signOut() {
     clearSuiAuthState();
     clearKeys();
@@ -156,7 +166,7 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
                 type="button"
                 onClick={() => navigator.clipboard?.writeText(identity)}
                 className="group flex min-w-0 items-center gap-1.5 rounded-full bg-sui/10 px-2.5 py-1.5 transition-colors hover:bg-sui/15"
-                title="Copy UTXO address"
+                title="Copy private address"
               >
                 <Key className="h-3.5 w-3.5 shrink-0 text-sui" />
                 <code className="truncate font-mono text-[12px] text-sui">
@@ -165,7 +175,7 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
                 <Copy className="h-3 w-3 shrink-0 text-sui/40 transition-colors group-hover:text-sui" />
               </button>
             ) : (
-              <span className="text-body2-semibold text-foreground">UTXO Address</span>
+              <span className="text-body2-semibold text-foreground">Private address</span>
             )}
             {suiAccount && !identity && (
               <span className="max-w-[180px] truncate rounded-full border border-sui/15 bg-sui/5 px-2 py-1 font-mono text-[10px] text-sui/70">
@@ -225,7 +235,7 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
               </div>
 
               <div className="mb-6 flex items-center justify-center gap-5 sm:gap-8">
-                <VaultAction href={hrefWithChain("/vault/deposit", networkId)} icon={<ArrowDownToLine className="h-5 w-5" />} label="Deposit" />
+                <VaultAction href={hrefWithChain("/vault/deposit", networkId)} icon={<PlusCircle className="h-5 w-5" />} label="Add funds" />
                 {isHybrid && (
                   <VaultAction href={hrefWithChain("/faucet", networkId)} icon={<Droplets className="h-5 w-5" />} label="Faucet" />
                 )}
@@ -238,7 +248,7 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
                     href={hrefWithChain("/vault/activity", networkId)}
                     className="flex items-center gap-1 text-[11px] text-gray/40 transition-colors hover:text-gray/60"
                   >
-                    View History <ChevronDown className="-rotate-90 h-3 w-3" />
+                    View activity <ChevronDown className="-rotate-90 h-3 w-3" />
                   </Link>
                 </div>
               )}
@@ -251,7 +261,7 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
                       href={hrefWithChain("/vault/activity?tab=notes", networkId)}
                       className="inline-flex items-center gap-0.5 text-[11px] text-sui/70 transition-colors hover:text-sui"
                     >
-                      View All
+                      View activity
                       <ChevronDown className="-rotate-90 h-3 w-3" />
                     </Link>
                   )}
@@ -271,9 +281,9 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
               <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-sui/20 bg-sui/10">
                 <Shield className="h-7 w-7 text-sui" />
               </div>
-              <h1 className="mb-1 text-[22px] font-bold text-foreground">UTXO Address</h1>
+              <h1 className="mb-1 text-[22px] font-bold text-foreground">Private wallet</h1>
               <p className="mb-6 text-caption text-gray/60">
-                Unlock your private vault to view zkBTC and zkSUI balances.
+                Unlock your private wallet to view zkBTC and zkSUI balances.
               </p>
               <button
                 type="button"
@@ -281,18 +291,34 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
                 className="inline-flex items-center gap-2 rounded-full bg-sui px-7 py-3 text-body2 font-semibold text-background transition-opacity hover:opacity-90 active:scale-95"
               >
                 <Key className="h-4 w-4" />
-                Get Started
+                Create private wallet
               </button>
             </div>
           )}
         </div>
 
+        {identity && (
+          <>
+            <VaultFirstSteps
+              hasBackup={hasRecoveryBackup}
+              hasFunds={depositCount > 0 || totalUsd > 0}
+              depositHref={hrefWithChain("/vault/deposit", networkId)}
+            />
+            <VaultBackupCard
+              keys={keys}
+              isViewOnly={false}
+              depositCount={depositCount}
+              onBackupComplete={() => setHasRecoveryBackup(true)}
+            />
+          </>
+        )}
+
         <div className="mb-4 rounded-[10px] bg-muted/30 px-3 py-3">
           <div className="flex items-center gap-4">
             {[
-              { step: "1", label: "Deposit" },
+              { step: "1", label: "Add funds" },
               { step: "2", label: "Send" },
-              { step: "3", label: "Cash Out" },
+              { step: "3", label: "Cash out" },
             ].map((s, i) => (
               <div key={s.step} className="flex items-center gap-4">
                 <div className="flex items-center gap-1.5">
@@ -304,8 +330,8 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
             ))}
             <div className="flex-1" />
             <div className="flex items-center gap-1.5">
-              <Shield className="h-3 w-3 text-sui/45" />
-              <span className="text-[10px] font-medium text-sui/45">ZK</span>
+              <LockKeyhole className="h-3 w-3 text-sui/45" />
+              <span className="text-[10px] font-medium text-sui/45">Private</span>
             </div>
           </div>
         </div>
@@ -426,17 +452,17 @@ function SuiTokenRows({
     return (
       <div className="flex flex-col items-center px-4 py-8 text-center">
         <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-sui/20 bg-sui/10">
-          <ArrowDownToLine className="h-5 w-5 text-sui" />
+          <PlusCircle className="h-5 w-5 text-sui" />
         </div>
         <p className="mb-1 text-sm font-medium text-foreground">Ready to go private?</p>
         <p className="mb-4 text-xs text-gray/50">
-          Deposit BTC or SUI to start.
+          Add BTC or SUI to start.
         </p>
         <Link
           href={hrefWithChain("/vault/deposit", networkId)}
           className="inline-flex items-center gap-2 rounded-full bg-sui px-5 py-2.5 text-sm font-medium text-background transition-opacity hover:opacity-90 active:scale-[0.98]"
         >
-          Make Your First Deposit
+          Add your first funds
           <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       </div>

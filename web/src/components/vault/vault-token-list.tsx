@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowDownToLine, ArrowRight, ChevronRight, Loader2 } from "lucide-react";
+import { ArrowRight, ChevronRight, Loader2, PlusCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VAULT_TOKENS } from "@/lib/supported-tokens";
 import type { TokenPrices } from "@/hooks/use-token-prices";
@@ -43,7 +43,7 @@ export function VaultTokenList({
             href="/vault/activity?tab=notes"
             className="flex items-center gap-0.5 text-[11px] text-privacy/60 hover:text-privacy transition-colors cursor-pointer"
           >
-            View All
+            View activity
             <ChevronRight className="w-3 h-3" />
           </Link>
         )}
@@ -96,17 +96,17 @@ function VaultTokenEmptyState() {
   return (
     <div className="flex flex-col items-center py-8 px-4">
       <div className="w-12 h-12 rounded-full bg-privacy/10 border border-privacy/20 flex items-center justify-center mb-3">
-        <ArrowDownToLine className="w-5 h-5 text-privacy" />
+        <PlusCircle className="w-5 h-5 text-privacy" />
       </div>
       <p className="text-sm font-medium text-foreground mb-1">Ready to go private?</p>
       <p className="text-xs text-gray/50 text-center mb-4">
-        Deposit BTC or any Solana token to start.
+        Add BTC or a supported chain token to start.
       </p>
       <Link
         href="/vault/deposit"
         className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-privacy hover:bg-privacy/85 text-background text-sm font-medium transition-all duration-200 cursor-pointer active:scale-[0.98]"
       >
-        Make Your First Deposit
+        Add your first funds
         <ArrowRight className="w-3.5 h-3.5" />
       </Link>
     </div>

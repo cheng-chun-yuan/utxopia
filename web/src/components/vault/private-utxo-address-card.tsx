@@ -31,7 +31,7 @@ export function PrivateUtxoAddressCard({
     <div className={cn("rounded-[14px] border p-4", cardClassName)}>
       <div className="mb-2 flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-foreground">Private UTXO address</p>
+          <p className="text-sm font-semibold text-foreground">Private address</p>
           <p className="text-xs text-gray">{description}</p>
         </div>
         <button
@@ -41,7 +41,7 @@ export function PrivateUtxoAddressCard({
             "inline-flex h-9 w-9 items-center justify-center rounded-[8px] border transition-colors",
             buttonClassName,
           )}
-          aria-label="Copy private UTXO address"
+          aria-label="Copy private address"
         >
           {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
         </button>

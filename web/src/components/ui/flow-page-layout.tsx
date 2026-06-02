@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Shield } from "lucide-react";
+import { ArrowLeft, LockKeyhole } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ErrorBoundary } from "@/components/error-boundary";
 
@@ -30,7 +30,7 @@ interface FlowPageLayoutProps {
   children: React.ReactNode;
   /** Widget width */
   width?: number;
-  /** Whether to show ZK badge by default */
+  /** Whether to show the private badge by default */
   showZkBadge?: boolean;
 }
 
@@ -124,9 +124,9 @@ export function FlowPageLayout({
   width = 420,
   showZkBadge = true,
 }: FlowPageLayoutProps) {
-  // Add ZK badge by default if requested
+  // Add private badge by default if requested
   const allBadges = showZkBadge
-    ? [...badges, { icon: <Shield className="w-full h-full" />, label: "ZK", color: "privacy" as FlowColor }]
+    ? [...badges, { icon: <LockKeyhole className="w-full h-full" />, label: "Private", color: "privacy" as FlowColor }]
     : badges;
 
   // Determine title icon color from first badge

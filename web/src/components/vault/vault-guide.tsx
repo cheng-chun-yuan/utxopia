@@ -1,12 +1,12 @@
 "use client";
 
 import { Fragment } from "react";
-import { ChevronRight, Shield } from "lucide-react";
+import { ChevronRight, LockKeyhole } from "lucide-react";
 
 const STEPS = [
-  { step: "1", label: "Deposit" },
+  { step: "1", label: "Add funds" },
   { step: "2", label: "Send" },
-  { step: "3", label: "Cash Out" },
+  { step: "3", label: "Cash out" },
 ];
 
 export function VaultGuide() {
@@ -24,8 +24,8 @@ export function VaultGuide() {
         ))}
         <div className="flex-1" />
         <div className="flex items-center gap-1.5">
-          <Shield className="w-3 h-3 text-privacy/40" />
-          <span className="text-[10px] text-privacy/40 font-medium">ZK</span>
+          <LockKeyhole className="w-3 h-3 text-privacy/40" />
+          <span className="text-[10px] text-privacy/40 font-medium">Private</span>
         </div>
       </div>
     </div>

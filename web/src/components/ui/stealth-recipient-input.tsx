@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Check, AlertCircle, Globe, UserRound } from "lucide-react";
 import { getConnectionAdapter } from "@/lib/adapters/connection-adapter";
 import { cn } from "@/lib/utils";
@@ -24,6 +24,9 @@ interface StealthRecipientInputProps {
   selfMeta?: StealthMetaAddress | null;
   /** Compact mode: no label, tighter padding */
   compact?: boolean;
+  /** Pre-fill with the user's own private address when available. */
+  defaultToSelf?: boolean;
+  label?: string;
 }
 
 export function StealthRecipientInput({
@@ -36,16 +39,29 @@ export function StealthRecipientInput({
   icon,
   selfMeta,
   compact = false,
+  defaultToSelf = false,
+  label = "Recipient",
 }: StealthRecipientInputProps) {
   const [recipient, setRecipient] = useState("");
   const [resolvedInput, setResolvedInput] = useState(""); // the input value that was resolved
   const [resolving, setResolving] = useState(false);
+  const hasDefaultedToSelf = useRef(false);
 
   const config = getConfig();
   const parentDomain = config.snsParentDomain || "utxopia";
 
   // resolvedMeta is only valid when current input matches what was resolved
   const isValid = !!resolvedMeta && recipient.trim() === resolvedInput;
+
+  useEffect(() => {
+    if (!defaultToSelf || !selfMeta || recipient.trim() || hasDefaultedToSelf.current) return;
+    const encoded = encodeStealthMetaAddress(selfMeta);
+    hasDefaultedToSelf.current = true;
+    setRecipient(encoded);
+    setResolvedInput(encoded);
+    onResolved(selfMeta, null);
+    onError(null);
+  }, [defaultToSelf, selfMeta, recipient, onResolved, onError]);
 
   // Auto-detect: long hex = stealth address, otherwise = .utxopia.sol name
   const resolveRecipient = useCallback(async () => {
@@ -63,13 +79,13 @@ export function StealthRecipientInput({
     try {
       // Reject URLs
       if (/^https?:\/\//i.test(trimmed)) {
-        onError("Please enter a .utxopia.sol name or stealth address, not a URL");
+        onError("Please enter a .utxopia.sol name or private address, not a URL");
         return;
       }
 
       // Reject Bitcoin addresses (bc1/tb1/1/3/n/m prefixed)
       if (/^(bc1|tb1|[13nm])[a-zA-HJ-NP-Z0-9]{25,}$/i.test(trimmed)) {
-        onError("Please enter a .utxopia.sol name or stealth address, not a BTC address");
+        onError("Please enter a .utxopia.sol name or private address, not a BTC address");
         return;
       }
 
@@ -82,7 +98,7 @@ export function StealthRecipientInput({
           const short = trimmed.length > 20
             ? `${trimmed.slice(0, 10)}...${trimmed.slice(-6)}`
             : trimmed;
-          onError(`Invalid stealth address: ${short}`);
+          onError(`Invalid private address: ${short}`);
           return;
         }
         setResolvedInput(trimmed);
@@ -92,7 +108,7 @@ export function StealthRecipientInput({
 
       // Reject Solana pubkeys (base58, 32-44 chars)
       if (/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(trimmed)) {
-        onError("Enter a .utxopia.sol name or stealth address, not a Solana address");
+        onError("Enter a .utxopia.sol name or private address, not a chain wallet address");
         return;
       }
 
@@ -103,7 +119,7 @@ export function StealthRecipientInput({
         .toLowerCase();
 
       if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(subdomain) || subdomain.length < 1) {
-        onError(`Invalid name — enter a .${parentDomain}.sol name or utxo: stealth address`);
+        onError(`Invalid name. Enter a .${parentDomain}.sol name or utxo: private address`);
         return;
       }
 
@@ -148,7 +164,7 @@ export function StealthRecipientInput({
       <div className={compact ? "" : "mb-2"}>
         {!compact && (
           <label className="text-body2 text-gray-light pl-2 mb-2 block">
-            Recipient
+            {label}
           </label>
         )}
         <div className="relative">
@@ -212,7 +228,7 @@ export function StealthRecipientInput({
                   ? "bg-purple/10 hover:bg-purple/20 border-purple/20 cursor-pointer"
                   : "bg-gray/5 border-gray/15 cursor-not-allowed opacity-40"
               )}
-              title={selfMeta ? "Fill with your stealth address" : "Connect wallet to use your address"}
+              title={selfMeta ? "Fill with your private address" : "Connect wallet to use your address"}
             >
               <UserRound className={cn("w-3.5 h-3.5", selfMeta ? "text-purple" : "text-gray")} />
             </button>
@@ -238,7 +254,7 @@ export function StealthRecipientInput({
               {resolvedName} resolved
             </>
           ) : (
-            "Valid stealth address"
+            "Valid private address"
           )}
         </p>
       )}

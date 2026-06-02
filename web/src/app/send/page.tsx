@@ -19,7 +19,7 @@ export default function SendPage() {
       ]}
       titleIcon={<Send className="w-full h-full" />}
       title="Send"
-      description="Pay a Bitcoin address, a Solana wallet, a stealth address, or a claim link."
+      description="Pay a Bitcoin address, chain wallet, private address, or claim link."
     >
       <SendForm />
     </FlowPageLayout>

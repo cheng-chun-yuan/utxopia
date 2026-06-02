@@ -17,12 +17,14 @@ interface VaultBackupCardProps {
   keys: UTXOpiaKeys | null;
   isViewOnly: boolean;
   depositCount: number;
+  onBackupComplete?: () => void;
 }
 
 export function VaultBackupCard({
   keys,
   isViewOnly,
   depositCount,
+  onBackupComplete,
 }: VaultBackupCardProps) {
   const identity = useMemo(() => getBackupIdentityForKeys(keys), [keys]);
   const [isBackedUp, setIsBackedUp] = useState(() => hasVaultBackup(identity));
@@ -36,7 +38,8 @@ export function VaultBackupCard({
     copy(JSON.stringify(payload, null, 2));
     markVaultBackupComplete(identity);
     setIsBackedUp(true);
-    notifyCopied("Vault recovery backup");
+    onBackupComplete?.();
+    notifyCopied("Private wallet recovery backup");
   };
 
   return (
@@ -53,10 +56,10 @@ export function VaultBackupCard({
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-body2-semibold text-foreground">
-            Back up your private vault
+            Back up your private wallet
           </p>
           <p className="mt-0.5 text-caption text-gray">
-            Privy or wallet login recovers your public account. This backup recovers your private UTXOpia notes if this device or passkey is lost.
+            Your sign-in recovers the public account. This backup recovers private funds if this device or passkey is lost.
           </p>
           <button
             onClick={handleBackup}

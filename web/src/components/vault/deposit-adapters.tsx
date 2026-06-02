@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
-import { ArrowDownToLine, Bitcoin, Shield, Wallet } from "lucide-react";
+import { Bitcoin, PlusCircle, Wallet } from "lucide-react";
 import { FlowPageLayout } from "@/components/ui/flow-page-layout";
 import { ShieldFlow } from "@/components/shield-flow";
 import { SuiAuthPanel } from "@/components/sui/sui-auth-panel";
@@ -44,14 +44,14 @@ function SolanaDepositPage({ networkId }: ChainDepositRouteProps) {
       width={520}
       badges={[
         {
-          icon: <Shield className="w-full h-full" />,
-          label: "Shield",
+          icon: <PlusCircle className="w-full h-full" />,
+          label: "Add funds",
           color: "privacy",
         },
       ]}
-      titleIcon={<ArrowDownToLine className="w-full h-full" />}
-      title="Shield Tokens"
-      description="Deposit any token into the privacy pool"
+      titleIcon={<PlusCircle className="w-full h-full" />}
+      title="Add Funds"
+      description="Move BTC, SOL, or supported tokens into your private balance"
     >
       <ShieldFlow />
     </FlowPageLayout>
@@ -103,7 +103,7 @@ function SuiDepositPage({ networkId }: ChainDepositRouteProps) {
       connectedAccount={suiAuth?.address}
       authPanel={<SuiAuthPanel embedded />}
       privateAddress={stealthAddress}
-      privateAddressDescription="Use this address for Sui-side BTC deposits."
+      privateAddressDescription="Use this private address for Sui-side BTC deposits."
       actions={actions}
       theme={{
         unlockCardClassName: "border-sui/15 bg-sui/5",

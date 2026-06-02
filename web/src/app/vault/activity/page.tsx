@@ -3,10 +3,11 @@
 import { useState, useMemo, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
 import {
-  ArrowDownToLine,
   ArrowUp,
   ArrowDown,
   ArrowLeft,
+  History,
+  LockKeyhole,
   Shield,
   ExternalLink,
   Copy,
@@ -156,7 +157,7 @@ function ActivityRow({ note }: { note: InboxNote }) {
             <div className="px-3.5 py-2 space-y-1.5 text-xs">
               <div className="flex justify-between">
                 <span className="text-gray/40">Type</span>
-                <span className="text-foreground/80">{isReceived ? "Shielded Deposit" : "Private Transfer"}</span>
+                <span className="text-foreground/80">{isReceived ? "Funds received" : "Private send"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray/40">Time</span>
@@ -353,12 +354,12 @@ export default function ActivityPage() {
         </Link>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border bg-privacy/10 border-privacy/20">
-            <Shield className="w-3 h-3 text-privacy" />
-            <span className="text-caption text-privacy">Vault</span>
+            <History className="w-3 h-3 text-privacy" />
+            <span className="text-caption text-privacy">Activity</span>
           </div>
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full border bg-privacy/10 border-privacy/20">
-            <Shield className="w-3 h-3 text-privacy" />
-            <span className="text-caption text-privacy">ZK</span>
+            <LockKeyhole className="w-3 h-3 text-privacy" />
+            <span className="text-caption text-privacy">Private</span>
           </div>
         </div>
       </div>
@@ -374,12 +375,12 @@ export default function ActivityPage() {
           {/* Title */}
           <div className="flex items-center gap-3 mb-4 pb-4 border-b border-gray/15">
             <div className="p-2 rounded-[10px] bg-privacy/10 border border-privacy/20">
-              <ArrowDownToLine className="w-5 h-5 text-privacy" />
+              <History className="w-5 h-5 text-privacy" />
             </div>
             <div>
               <h1 className="text-heading6 text-foreground">Activity</h1>
               <p className="text-caption text-gray">
-                Your shielded transaction history
+                Your private transaction history
               </p>
             </div>
           </div>

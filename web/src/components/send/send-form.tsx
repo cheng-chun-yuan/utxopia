@@ -3,7 +3,7 @@
 import { useReducer, useState, useMemo, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { Send, Link as LinkIcon, Loader2 } from "lucide-react";
+import { Bitcoin, Link as LinkIcon, Loader2, LockKeyhole, Send, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { detectRecipient, type RecipientType } from "./recipient-detect";
 import { buildSendIntent } from "./build-tx";
@@ -100,6 +100,52 @@ function bs58Truncated(bytes: Uint8Array): string {
       "…" +
       Array.from(bytes.slice(-4), (b) => b.toString(16).padStart(2, "0")).join("");
   }
+}
+
+function RecipientOutcome({ type }: { type: RecipientType }) {
+  const config = {
+    btc: {
+      icon: Bitcoin,
+      title: "Cash out to Bitcoin",
+      description: "The Bitcoin destination address will be visible on-chain.",
+      tone: "text-btc border-btc/20 bg-btc/8",
+    },
+    stealth_sns: {
+      icon: LockKeyhole,
+      title: "Private transfer",
+      description: "The recipient gets a private note. Amount and recipient stay hidden.",
+      tone: "text-privacy border-privacy/20 bg-privacy/8",
+    },
+    stealth_meta: {
+      icon: LockKeyhole,
+      title: "Private transfer",
+      description: "The recipient gets a private note. Amount and recipient stay hidden.",
+      tone: "text-privacy border-privacy/20 bg-privacy/8",
+    },
+    spl_wallet: {
+      icon: Wallet,
+      title: "Cash out to chain wallet",
+      description: "Funds leave the private wallet and arrive at a public wallet address.",
+      tone: "text-purple border-purple/20 bg-purple/8",
+    },
+  } satisfies Record<RecipientType, {
+    icon: typeof Bitcoin;
+    title: string;
+    description: string;
+    tone: string;
+  }>;
+
+  const item = config[type];
+  const Icon = item.icon;
+  return (
+    <div className={cn("flex items-start gap-2 rounded-lg border px-3 py-2 text-xs", item.tone)}>
+      <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <div>
+        <p className="font-semibold">{item.title}</p>
+        <p className="mt-0.5 text-gray/70">{item.description}</p>
+      </div>
+    </div>
+  );
 }
 
 export function SendForm() {
@@ -223,7 +269,7 @@ export function SendForm() {
         );
       }
       if (requiresBackup) {
-        throw new Error("Back up your private vault before sending funds.");
+        throw new Error("Back up your private wallet before sending funds.");
       }
 
       const intent = buildSendIntent({
@@ -344,7 +390,7 @@ export function SendForm() {
         );
       }
       if (requiresBackup) {
-        throw new Error("Back up your private vault before creating a claim link.");
+        throw new Error("Back up your private wallet before creating a claim link.");
       }
       const sats = parseSats(input.amount);
       if (!sats || sats <= 0) {
@@ -403,6 +449,10 @@ export function SendForm() {
         onChange={(v) => dispatch({ type: "set_recipient", value: v })}
         snsStatus={snsState.kind}
       />
+
+      {recipientValid && (
+        <RecipientOutcome type={recipientType} />
+      )}
 
       {showAuditorBadge && (
         <div className="inline-flex flex-col items-start gap-1 px-3 py-1.5 rounded-lg border border-success/30 bg-success/5 text-[11px] text-success">
@@ -488,7 +538,7 @@ export function SendForm() {
         feeLabel="≈ 125 sats"
         warning={
           detection.type === "btc"
-            ? "This will reveal your Bitcoin withdrawal address on-chain."
+            ? "Cashing out to Bitcoin reveals the destination address on-chain."
             : undefined
         }
         onConfirm={onSend}

@@ -18,7 +18,7 @@
  * - View-only mode (viewing key import)
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Shield,
@@ -58,6 +58,8 @@ import { VaultNetworkStatus } from "@/components/vault/vault-network-status";
 import { VaultTokenList } from "@/components/vault/vault-token-list";
 import { ViewKeyModal } from "@/components/vault/view-key-modal";
 import { SnsNameTip } from "@/components/vault/sns-name-tip";
+import { VaultFirstSteps } from "@/components/vault/vault-first-steps";
+import { hasBackupForKeys } from "@/lib/vault-backup";
 
 export default function VaultPage() {
   const wallet = useWallet();
@@ -130,10 +132,15 @@ export default function VaultPage() {
 
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [viewKeyModalOpen, setViewKeyModalOpen] = useState(false);
+  const [hasRecoveryBackup, setHasRecoveryBackup] = useState(false);
 
   const isPasskeyUser = keys && keys.solanaPublicKey.every((b: number) => b === 0);
   const [showSnsInput, setShowSnsInput] = useState(false);
   const [snsNameInput, setSnsNameInput] = useState("");
+
+  useEffect(() => {
+    setHasRecoveryBackup(hasBackupForKeys(keys));
+  }, [keys]);
 
   if (getChainAdapter(networkConfig).id === "sui") {
     return (
@@ -206,9 +213,9 @@ export default function VaultPage() {
                     </button>
                   ) : (
                     <button
-                      onClick={() => { copyStealth(stealthAddressEncoded || ""); notifyCopied("Stealth address"); }}
+                      onClick={() => { copyStealth(stealthAddressEncoded || ""); notifyCopied("Private address"); }}
                       className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-privacy/10 hover:bg-privacy/15 transition-colors group cursor-pointer min-w-0"
-                      title="Copy stealth address"
+                      title="Copy private address"
                     >
                       <Key className="w-3.5 h-3.5 text-privacy shrink-0" />
                       <code className="text-[12px] font-mono text-privacy truncate">
@@ -253,14 +260,14 @@ export default function VaultPage() {
             </div>
           </div>
 
-          {/* Secondary identity line — stealth address when SNS is primary + action links */}
+          {/* Secondary identity line — private address when SNS is primary + action links */}
           {(keys && !isViewOnly) && (
             <div className="flex items-center gap-3 mb-4 px-1">
               {hasRegisteredSnsName && (
                 <button
-                  onClick={() => { copyStealth(stealthAddressEncoded || ""); notifyCopied("Stealth address"); }}
+                  onClick={() => { copyStealth(stealthAddressEncoded || ""); notifyCopied("Private address"); }}
                   className="flex items-center gap-1 group cursor-pointer"
-                  title="Copy stealth address"
+                  title="Copy private address"
                 >
                   <code className="text-[11px] font-mono text-gray/35 group-hover:text-gray/55 transition-colors">
                     {stealthAddressEncoded ? `${stealthAddressEncoded.slice(0, 10)}...${stealthAddressEncoded.slice(-8)}` : ""}
@@ -310,9 +317,9 @@ export default function VaultPage() {
               <div className="w-16 h-16 rounded-2xl bg-privacy/10 border border-privacy/20 flex items-center justify-center mb-4">
                 <Shield className="w-7 h-7 text-privacy" />
               </div>
-              <h1 className="text-[22px] font-bold text-foreground mb-1">Your Wallet</h1>
+              <h1 className="text-[22px] font-bold text-foreground mb-1">Private wallet</h1>
               <p className="text-caption text-gray/60 mb-6">
-                Send any token privately. No one sees your activity.
+                Hold and send funds without exposing balances or recipients.
               </p>
               <button
                 onClick={() => setAuthModalOpen(true)}
@@ -325,7 +332,7 @@ export default function VaultPage() {
                 )}
               >
                 <Key className="w-4 h-4" />
-                Get Started
+                Create private wallet
               </button>
             </div>
           ) : (
@@ -336,6 +343,13 @@ export default function VaultPage() {
                 tokenPrices={tokenPrices}
                 onRefresh={refreshInbox}
               />
+
+              {!isViewOnly && (
+                <VaultFirstSteps
+                  hasBackup={hasRecoveryBackup}
+                  hasFunds={hasVaultValue}
+                />
+              )}
 
               {showSnsTip && (
                 <SnsNameTip
@@ -364,6 +378,7 @@ export default function VaultPage() {
                 keys={keys}
                 isViewOnly={isViewOnly}
                 depositCount={depositCount}
+                onBackupComplete={() => setHasRecoveryBackup(true)}
               />
 
               <VaultTokenList

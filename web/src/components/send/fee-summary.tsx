@@ -28,7 +28,7 @@ export function FeeSummary({
         <div className="mt-2 flex items-start gap-1.5 px-2 py-1.5 rounded bg-yellow-500/10 text-yellow-600 dark:text-yellow-400">
           <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
           <span className="text-[11px]">
-            This will reveal your Bitcoin withdrawal address on-chain.
+            Cashing out to Bitcoin reveals the destination address on-chain.
           </span>
         </div>
       )}

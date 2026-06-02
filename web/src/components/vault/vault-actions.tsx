@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowDownToLine, ChevronRight, Droplets, Send } from "lucide-react";
+import { ChevronRight, Droplets, PlusCircle, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isChainHybridNetwork } from "@/lib/chain-registry";
 import type { NetworkId } from "@/lib/network-config";
@@ -19,7 +19,7 @@ export function VaultActions({
   depositCount,
 }: VaultActionsProps) {
   const actions = [
-    { icon: <ArrowDownToLine className="w-5 h-5" />, label: "Deposit", href: "/vault/deposit", color: "text-green-400" },
+    { icon: <PlusCircle className="w-5 h-5" />, label: "Add funds", href: "/vault/deposit", color: "text-green-400" },
     ...(isChainHybridNetwork(networkId, "solana")
       ? [{ icon: <Droplets className="w-5 h-5" />, label: "Faucet", href: "/faucet", color: "text-warning" }]
       : []),
@@ -62,7 +62,7 @@ export function VaultActions({
             href="/vault/activity"
             className="flex items-center gap-1 text-[11px] text-gray/40 hover:text-gray/60 transition-colors cursor-pointer"
           >
-            View History <ChevronRight className="w-3 h-3" />
+            View activity <ChevronRight className="w-3 h-3" />
           </Link>
         </div>
       )}

@@ -251,7 +251,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
       setTxSig(sig);
       setStatus("done");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Shield failed");
+      setError(err instanceof Error ? err.message : "Add funds failed");
       setStatus("error");
     }
   }, [publicKey, keys, selectedToken, amount, resolvedMeta, connection, sendTransaction]);
@@ -417,7 +417,9 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
           resolvedName={resolvedName}
           error={error}
           onError={setError}
+          label="Private destination"
           selfMeta={stealthAddress ?? null}
+          defaultToSelf
         />
 
         {/* Error */}
@@ -428,7 +430,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
           </div>
         )}
 
-        {/* Shield / Preview button */}
+        {/* Add funds / Preview button */}
         {btcWallet.connected ? (
           <button
             onClick={btcDeposit.buildTxPreview}
@@ -441,7 +443,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
                 : "bg-gray/20 text-gray/50 cursor-not-allowed"
             )}
           >
-            {btcDeposit.buildingPreview ? (<><Loader2 className="w-4 h-4 animate-spin" />Generating...</>) : (<><Shield className="w-4 h-4" />Shield BTC</>)}
+            {btcDeposit.buildingPreview ? (<><Loader2 className="w-4 h-4 animate-spin" />Generating...</>) : (<><Shield className="w-4 h-4" />Add BTC privately</>)}
           </button>
         ) : (
           <button
@@ -449,7 +451,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
             className="w-full flex items-center justify-center gap-2 py-3.5 rounded-[12px] text-body2 font-semibold bg-gray/20 text-gray/50 cursor-not-allowed"
           >
             <Shield className="w-4 h-4" />
-            Shield BTC
+            Add BTC privately
           </button>
         )}
       </div>
@@ -471,9 +473,9 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
             <Image src={selectedToken.logo} alt={selectedToken.symbol} width={28} height={28} className="rounded-full" />
           </div>
           <div className="text-center space-y-1">
-            <p className="text-body2-semibold text-foreground">Connect Wallet to Shield {selectedToken.symbol}</p>
+            <p className="text-body2-semibold text-foreground">Connect wallet to add {selectedToken.symbol}</p>
             <p className="text-caption text-gray max-w-[280px]">
-              Shielding {selectedToken.symbol} requires a Solana wallet to sign the deposit transaction. After shielding, all private operations use your passkey.
+              Adding {selectedToken.symbol} requires a Solana wallet to sign the deposit transaction. After that, private sends can use your passkey.
             </p>
           </div>
           <button
@@ -485,10 +487,10 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
             )}
           >
             <Shield className="w-4 h-4" />
-            Connect Wallet
+            Connect wallet
           </button>
           <p className="text-[10px] text-gray/40">
-            Or select BTC for passkey-only deposits
+            Or select BTC for passkey-only funding
           </p>
         </div>
       </div>
@@ -558,7 +560,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
         </div>
         {selectedToken.isSOL && (
           <p className="text-[10px] text-gray/50 pl-1">
-            SOL will be wrapped to wSOL (Token-2022) for shielding. The wrapper account is closed after shielding.
+            SOL is wrapped to wSOL for the deposit, then the wrapper account is closed.
           </p>
         )}
       </div>
@@ -570,7 +572,9 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
         resolvedName={resolvedName}
         error={error}
         onError={setError}
+        label="Private destination"
         selfMeta={stealthAddress ?? null}
+        defaultToSelf
       />
 
       {/* Error */}
@@ -581,7 +585,7 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
         </div>
       )}
 
-      {/* Shield button */}
+      {/* Add funds button */}
       <button
         onClick={handleShield}
         disabled={!canSubmit || status === "processing"}
@@ -596,12 +600,12 @@ export function ShieldFlow({ className }: ShieldFlowProps) {
         {status === "processing" ? (
           <>
             <Loader2 className="w-4 h-4 animate-spin" />
-            Shielding...
+            Adding...
           </>
         ) : (
           <>
             <Shield className="w-4 h-4" />
-            Shield {selectedToken.symbol}
+            Add {selectedToken.symbol} privately
           </>
         )}
       </button>
