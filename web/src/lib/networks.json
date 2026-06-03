@@ -247,14 +247,14 @@
       "network": "regtest",
       "poolAddress": "",
       "groupPubkey": "",
-      "depositMode": "sweep",
+      "depositMode": "direct",
       "explorerUrl": "https://btc.utxopia.com/regtest"
     },
     "ika": {
       "programId": "",
       "grpcEndpoint": "",
       "dwallet": "",
-      "dwalletXOnlyPubkey": ""
+      "dwalletXOnlyPubkey": "087643deba0089445e4598ddb8ddab804fb0c4a5219d31ae90d58893f307bb9a"
     },
     "backend": {
       "url": "https://api-hybrid.utxopia.com"
@@ -281,8 +281,8 @@
       },
       "redemptionCap": {
         "objectId": "0x2ace6d0e8185dca9aba8ba1b266e0104b38142f1b4ae8bd53013bfa3024def27",
-        "version": "349181790",
-        "digest": "HULLZwn5vacHqVP3rK1aCdnjexQtmnMeSPgMt9cGEyBK"
+        "version": "349181799",
+        "digest": "694fQv3ChCisAGX6VM6PSznxUNs6sAPKUT5QKap7fC87"
       },
       "verifyingKeyRegistry": {
         "objectId": "0x4b31e07c006b52e0c4b9559fbceb759e56576608d184546acecd02ee5376313b",
@@ -292,7 +292,7 @@
         "address": "0x0517834683ffa77da332b1f1f7a79d17e419d007f71e0fc68595704d6edda4d1"
       },
       "signing": {
-        "btcWithdrawal": "relayer"
+        "btcWithdrawal": "ika"
       },
       "ika": {
         "network": "testnet",
@@ -308,8 +308,8 @@
           "objectId": "0x4d157b7415a298c56ec2cb1dcab449525fa74aec17ddba376a83a7600f2062fc",
           "initialSharedVersion": "510819272"
         },
-        "dWalletId": "",
-        "dWalletCapObjectId": "",
+        "dWalletId": "0x7f0b719d886f7c20003842f58d5c5d06c65eb49a22d5b9a48902da57b154b002",
+        "dWalletCapObjectId": "0xea3894048ad18ce501c1f1d266f158595a4bc8ae308eef023f0806099cb5150b",
         "networkEncryptionKeyId": "0xe7c79a60931299e110297554fc02e0a0e095e96778775092c97f07a1bd1337cc"
       },
       "vk": {

@@ -60,6 +60,7 @@ import { ViewKeyModal } from "@/components/vault/view-key-modal";
 import { SnsNameTip } from "@/components/vault/sns-name-tip";
 import { VaultFirstSteps } from "@/components/vault/vault-first-steps";
 import { hasBackupForKeys } from "@/lib/vault-backup";
+import { claimPrivateReceiveName } from "@/lib/names/private-name-claim";
 
 export default function VaultPage() {
   const wallet = useWallet();
@@ -167,10 +168,17 @@ export default function VaultPage() {
 
   const handleRegisterSnsName = async () => {
     if (!snsNameInput) return;
-    const success = await registerSnsSubdomain(snsNameInput);
-    if (success) {
+    try {
+      await claimPrivateReceiveName({
+        chain: "solana",
+        name: snsNameInput,
+        networkId,
+        solanaClaim: registerSnsSubdomain,
+      });
       setShowSnsInput(false);
       setSnsNameInput("");
+    } catch {
+      // useSnsName owns the user-facing error state for Solana registration.
     }
   };
 

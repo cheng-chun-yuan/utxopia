@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
-import { Check, AlertCircle, Globe, UserRound } from "lucide-react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { Check, AlertCircle, Globe, UserRound, LockKeyhole, Pencil } from "lucide-react";
 import { getConnectionAdapter } from "@/lib/adapters/connection-adapter";
 import { cn } from "@/lib/utils";
 import {
@@ -45,23 +45,29 @@ export function StealthRecipientInput({
   const [recipient, setRecipient] = useState("");
   const [resolvedInput, setResolvedInput] = useState(""); // the input value that was resolved
   const [resolving, setResolving] = useState(false);
+  const [showManualInput, setShowManualInput] = useState(!defaultToSelf);
   const hasDefaultedToSelf = useRef(false);
 
   const config = getConfig();
   const parentDomain = config.snsParentDomain || "utxopia";
+  const selfEncoded = useMemo(
+    () => selfMeta ? encodeStealthMetaAddress(selfMeta) : null,
+    [selfMeta],
+  );
 
   // resolvedMeta is only valid when current input matches what was resolved
   const isValid = !!resolvedMeta && recipient.trim() === resolvedInput;
 
   useEffect(() => {
     if (!defaultToSelf || !selfMeta || recipient.trim() || hasDefaultedToSelf.current) return;
-    const encoded = encodeStealthMetaAddress(selfMeta);
+    const encoded = selfEncoded ?? encodeStealthMetaAddress(selfMeta);
     hasDefaultedToSelf.current = true;
+    setShowManualInput(false);
     setRecipient(encoded);
     setResolvedInput(encoded);
     onResolved(selfMeta, null);
     onError(null);
-  }, [defaultToSelf, selfMeta, recipient, onResolved, onError]);
+  }, [defaultToSelf, selfMeta, selfEncoded, recipient, onResolved, onError]);
 
   // Auto-detect: long hex = stealth address, otherwise = .utxopia.sol name
   const resolveRecipient = useCallback(async () => {
@@ -167,6 +173,31 @@ export function StealthRecipientInput({
             {label}
           </label>
         )}
+        {defaultToSelf && selfMeta && selfEncoded && isValid && !showManualInput ? (
+          <div className="rounded-[10px] border border-privacy/25 bg-privacy/8 px-3 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-privacy/10">
+                  <LockKeyhole className="h-4 w-4 text-privacy" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-body2-semibold text-foreground">My private wallet</p>
+                  <p className="truncate font-mono text-[11px] text-gray/50">
+                    {selfEncoded.slice(0, 12)}...{selfEncoded.slice(-8)}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowManualInput(true)}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-[8px] border border-gray/15 bg-muted/40 px-2.5 py-1.5 text-[11px] text-gray-light transition-colors hover:border-privacy/30 hover:text-foreground"
+              >
+                <Pencil className="h-3 w-3" />
+                Edit
+              </button>
+            </div>
+          </div>
+        ) : (
         <div className="relative">
           {icon && (
             <div className={cn("absolute top-1/2 -translate-y-1/2", compact ? "left-3" : "left-4")}>
@@ -219,6 +250,7 @@ export function StealthRecipientInput({
                 const encoded = encodeStealthMetaAddress(selfMeta);
                 setRecipient(encoded);
                 setResolvedInput(encoded);
+                setShowManualInput(false);
                 onResolved(selfMeta, null);
                 onError(null);
               }}
@@ -234,6 +266,7 @@ export function StealthRecipientInput({
             </button>
           )}
         </div>
+        )}
       </div>
 
       {/* Error */}
@@ -245,7 +278,7 @@ export function StealthRecipientInput({
       )}
 
       {/* Resolved */}
-      {isValid && (
+      {isValid && !(defaultToSelf && selfMeta && !showManualInput) && (
         <p className="text-caption text-privacy pl-2 flex items-center gap-1">
           <Check className="w-3.5 h-3.5" />
           {resolvedName ? (

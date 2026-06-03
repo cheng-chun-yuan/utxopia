@@ -22,6 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { SuiAuthPanel } from "@/components/sui/sui-auth-panel";
+import { SuiNsPanel } from "@/components/sui/suins-panel";
 import { isChainHybridNetwork, networkForChain } from "@/lib/chain-registry";
 import { detectNetwork, getNetworkConfig, hrefWithChain, type NetworkId } from "@/lib/network-config";
 import {
@@ -102,6 +103,7 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
     refresh: refreshInbox,
   } = useSuiVaultBalances();
   const stealthAddressEncoded = useUTXOpiaStore((s) => s.stealthAddressEncoded);
+  const stealthAddress = useUTXOpiaStore((s) => s.stealthAddress);
   const keys = useUTXOpiaStore((s) => s.keys);
   const clearKeys = useUTXOpiaStore((s) => s.clearKeys);
   const identity = stealthAddressEncoded;
@@ -275,6 +277,13 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
                   />
                 </div>
               </div>
+
+              <SuiNsPanel
+                networkId={networkId}
+                stealthAddress={stealthAddress}
+                suiAddress={suiAccount}
+                explorerBaseUrl={sui.explorerUrl}
+              />
             </div>
           ) : (
             <div className="flex flex-col items-center py-10">

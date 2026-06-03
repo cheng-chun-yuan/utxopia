@@ -6,8 +6,8 @@ import { cn } from "@/lib/utils";
 import { detectRecipient, type DetectionResult } from "./recipient-detect";
 
 /**
- * SNS resolution state, fed in from the parent form so the input can
- * surface "Resolving…" / "Cannot find …utxopia.sol" / valid messaging
+ * Name resolution state, fed in from the parent form so the input can
+ * surface "Resolving…" / not-found / valid messaging
  * without owning the lookup itself.
  */
 export type SnsStatus = "idle" | "resolving" | "found" | "not_found";
@@ -15,7 +15,7 @@ export type SnsStatus = "idle" | "resolving" | "found" | "not_found";
 export interface RecipientInputProps {
   value: string;
   onChange: (next: string) => void;
-  /** SNS resolve state from the parent (only meaningful for stealth_sns). */
+  /** Name resolve state from the parent (only meaningful for stealth_sns / stealth_suins). */
   snsStatus?: SnsStatus;
   className?: string;
 }
@@ -29,17 +29,18 @@ function statusFor(
   label: string;
 } {
   const detection = detectRecipient(value);
-  // SNS-specific states override the generic detection feedback, since
-  // a syntactically-valid `.utxopia.sol` name can still point to nothing.
-  if (detection.type === "stealth_sns") {
+  // Name-specific states override the generic detection feedback, since
+  // syntactically-valid names can still point to nothing.
+  if (detection.type === "stealth_sns" || detection.type === "stealth_suins") {
+    const label = detection.type === "stealth_suins" ? "SuiNS" : ".utxopia.sol";
     if (snsStatus === "resolving") {
-      return { detection, tone: "warn", label: "Looking up .utxopia.sol record…" };
+      return { detection, tone: "warn", label: `Looking up ${label} record...` };
     }
     if (snsStatus === "not_found") {
       return {
         detection,
         tone: "bad",
-        label: "Cannot find this .utxopia.sol — name not registered",
+        label: `Cannot find this ${label} record`,
       };
     }
     if (snsStatus === "found") {
@@ -91,7 +92,7 @@ export function RecipientInput({
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Paste address or .utxopia.sol name"
+          placeholder="Paste address, alice.utxopia.sui, or .utxopia.sol name"
           className={cn(
             "w-full px-3 py-3 pr-10 rounded-lg",
             "bg-muted/40 border text-sm font-mono",

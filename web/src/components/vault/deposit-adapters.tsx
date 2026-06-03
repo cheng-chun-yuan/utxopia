@@ -77,7 +77,7 @@ function SuiDepositPage({ networkId }: ChainDepositRouteProps) {
       icon: <Bitcoin className="h-5 w-5" />,
       title: isHybrid ? "Deposit regtest BTC" : "BTC faucet unavailable",
       description: isHybrid
-        ? "Use the hosted faucet to create a BTC deposit with OP_RETURN metadata."
+        ? "Create a real regtest BTC deposit and credit this Sui private vault."
         : "Use a public testnet4 faucet once Sui testnet BTC deposits are enabled.",
       disabled: !isHybrid,
       tone: "warning",

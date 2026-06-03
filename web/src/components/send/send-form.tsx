@@ -26,6 +26,10 @@ import { PAY_TOKENS } from "@/lib/supported-tokens";
 import { hasBackupForKeys } from "@/lib/vault-backup";
 import { validateBtcAddress } from "@/components/ui/btc-address-input";
 import { parseSats } from "@/lib/utils/validation";
+import { useChainEnvironment } from "@/lib/chain-environment";
+import { getChainAdapter } from "@/lib/chain-registry";
+import { normalizePrivateNameHandle } from "@/lib/names/private-name-claim";
+import { resolveSuiNsUtxopiaRecord } from "@/lib/sui/suins";
 import {
   decodeStealthMetaAddress,
   deriveMasterKey,
@@ -102,7 +106,7 @@ function bs58Truncated(bytes: Uint8Array): string {
   }
 }
 
-function RecipientOutcome({ type }: { type: RecipientType }) {
+function RecipientOutcome({ type, chainLabel }: { type: RecipientType; chainLabel: string }) {
   const config = {
     btc: {
       icon: Bitcoin,
@@ -116,6 +120,12 @@ function RecipientOutcome({ type }: { type: RecipientType }) {
       description: "The recipient gets a private note. Amount and recipient stay hidden.",
       tone: "text-privacy border-privacy/20 bg-privacy/8",
     },
+    stealth_suins: {
+      icon: LockKeyhole,
+      title: "Private transfer",
+      description: "The recipient gets a private note. Amount and recipient stay hidden.",
+      tone: "text-sui border-sui/20 bg-sui/8",
+    },
     stealth_meta: {
       icon: LockKeyhole,
       title: "Private transfer",
@@ -124,7 +134,7 @@ function RecipientOutcome({ type }: { type: RecipientType }) {
     },
     spl_wallet: {
       icon: Wallet,
-      title: "Cash out to chain wallet",
+      title: `Cash out to ${chainLabel} wallet`,
       description: "Funds leave the private wallet and arrive at a public wallet address.",
       tone: "text-purple border-purple/20 bg-purple/8",
     },
@@ -154,59 +164,89 @@ export function SendForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const detection = useMemo(
-    () => detectRecipient(state.recipient),
-    [state.recipient],
-  );
-
-  // For BTC recipient, force zkBTC source.
-  const effectiveToken =
-    detection.type === "btc" ? "zkBTC" : state.sourceToken;
-
   const ctx = useUTXOpia();
   const { lookupSnsName } = useSnsName();
   const submitter = useJoinSplitSubmit();
   const { publicKey } = useWallet();
   const router = useRouter();
   const tokenPrices = useTokenPrices();
+  const chainEnv = useChainEnvironment();
+  const activeChainId = getChainAdapter(chainEnv.config).id;
+  const activeChainLabel = activeChainId === "sui" ? "Sui" : "Solana";
+  const detection = useMemo(
+    () => detectRecipient(state.recipient, { chain: activeChainId }),
+    [state.recipient, activeChainId],
+  );
+
+  // For BTC recipient, force zkBTC source.
+  const effectiveToken =
+    detection.type === "btc" ? "zkBTC" : state.sourceToken;
   const usdPerUnit = tokenPrices.btc ?? null;
 
-  // Preview-resolve `.utxopia.sol` recipients so we can surface the
-  // "auditor-disclosable" chip + block Send if the name doesn't exist.
-  // Tri-state: idle (not an SNS input) / resolving / found / not_found.
-  type SnsState =
+  // Preview-resolve name recipients so we can block Send if the name does not
+  // exist or has not published UTXOpia receive metadata.
+  type NameState =
     | { kind: "idle" }
     | { kind: "resolving" }
-    | { kind: "found"; resolved: SnsStealthAddress }
+    | {
+        kind: "found";
+        resolved: {
+          viewingPubKey: Uint8Array;
+          mpk: Uint8Array;
+          auditorPubkey?: Uint8Array;
+          complianceFlags?: number;
+        };
+      }
     | { kind: "not_found" };
-  const [snsState, setSnsState] = useState<SnsState>({ kind: "idle" });
+  const [snsState, setSnsState] = useState<NameState>({ kind: "idle" });
   useEffect(() => {
-    if (detection.type !== "stealth_sns") {
+    if (detection.type !== "stealth_sns" && detection.type !== "stealth_suins") {
       setSnsState((prev) => (prev.kind === "idle" ? prev : { kind: "idle" }));
       return;
     }
-    const sub = state.recipient.trim().toLowerCase().replace(/\.utxopia\.sol$/, "");
-    if (!sub) {
+    const input = state.recipient.trim();
+    if (!input) {
       setSnsState((prev) => (prev.kind === "idle" ? prev : { kind: "idle" }));
       return;
     }
     setSnsState({ kind: "resolving" });
     let cancelled = false;
-    void lookupSnsName(sub)
-      .then((r) => {
-        if (cancelled) return;
-        setSnsState(r ? { kind: "found", resolved: r } : { kind: "not_found" });
-      })
-      .catch(() => {
-        if (!cancelled) setSnsState({ kind: "not_found" });
-      });
+    if (detection.type === "stealth_sns") {
+      let sub: string;
+      try {
+        sub = normalizePrivateNameHandle(input, "solana");
+      } catch {
+        setSnsState({ kind: "not_found" });
+        return;
+      }
+      void lookupSnsName(sub)
+        .then((r) => {
+          if (cancelled) return;
+          setSnsState(r ? { kind: "found", resolved: r } : { kind: "not_found" });
+        })
+        .catch(() => {
+          if (!cancelled) setSnsState({ kind: "not_found" });
+        });
+    } else {
+      void resolveSuiNsUtxopiaRecord(input, chainEnv.networkId)
+        .then((r) => {
+          if (cancelled) return;
+          setSnsState(r?.metadata ? { kind: "found", resolved: r.metadata } : { kind: "not_found" });
+        })
+        .catch(() => {
+          if (!cancelled) setSnsState({ kind: "not_found" });
+        });
+    }
     return () => {
       cancelled = true;
     };
-  }, [detection.type, state.recipient, lookupSnsName]);
+  }, [detection.type, state.recipient, lookupSnsName, chainEnv.networkId]);
 
-  const resolvedSns = snsState.kind === "found" ? snsState.resolved : null;
-  const showAuditorBadge = resolvedSns != null && isAuditorDisclosable(resolvedSns);
+  const resolvedSns = detection.type === "stealth_sns" && snsState.kind === "found" ? snsState.resolved : null;
+  const showAuditorBadge =
+    resolvedSns != null &&
+    typeof resolvedSns.complianceFlags === "number" &&
+    isAuditorDisclosable(resolvedSns as SnsStealthAddress);
 
   const selectedPayToken = useMemo(
     () =>
@@ -228,10 +268,10 @@ export function SendForm() {
     detection.type !== "empty" &&
     detection.type !== "invalid" &&
     detection.type !== "ambiguous" &&
-    // SNS names must actually resolve on-chain before we let the rest of
+    // Name records must actually resolve on-chain before we let the rest of
     // the form unlock — otherwise the user wastes time picking notes for
     // a recipient that doesn't exist.
-    (detection.type !== "stealth_sns" || snsState.kind === "found");
+    ((detection.type !== "stealth_sns" && detection.type !== "stealth_suins") || snsState.kind === "found");
 
   // Narrowed alias used by JSX + buildSendIntent; only meaningful when
   // recipientValid is true (the JSX gates on that before reading it).
@@ -314,6 +354,20 @@ export function SendForm() {
                 mpk: r.mpk,
               } as StealthMetaAddress,
             };
+          } else if (intent.recipientType === "stealth_suins") {
+            const r = await resolveSuiNsUtxopiaRecord(intent.recipientValue, chainEnv.networkId);
+            if (!r?.metadata) {
+              throw new Error(
+                `Could not resolve UTXOpia metadata for ${intent.recipientValue}`,
+              );
+            }
+            recipientArg = {
+              stealthMeta: {
+                spendingPubKey: new Uint8Array(32),
+                viewingPubKey: r.metadata.viewingPubKey,
+                mpk: r.metadata.mpk,
+              } as StealthMetaAddress,
+            };
           } else {
             recipientArg = {
               stealthMeta: decodeStealthMetaAddress(intent.recipientValue),
@@ -356,7 +410,13 @@ export function SendForm() {
       scheduleInboxRefresh();
 
       dispatch({ type: "reset" });
-      router.push("/vault/activity");
+      const result =
+        intent.kind === "redeem"
+          ? "cashout_btc"
+          : intent.kind === "unshield"
+            ? "cashout_wallet"
+            : "private_send";
+      router.push(`/vault/activity?result=${result}`);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Send failed");
     } finally {
@@ -369,6 +429,7 @@ export function SendForm() {
     state.amount,
     effectiveToken,
     lookupSnsName,
+    chainEnv.networkId,
     noteSelector.selectedNotes,
     relayerMeta,
     effectiveRelayerFee,
@@ -451,7 +512,7 @@ export function SendForm() {
       />
 
       {recipientValid && (
-        <RecipientOutcome type={recipientType} />
+        <RecipientOutcome type={recipientType} chainLabel={activeChainLabel} />
       )}
 
       {showAuditorBadge && (

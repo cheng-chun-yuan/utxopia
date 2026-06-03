@@ -32,12 +32,12 @@ export function ShieldSuccess({
         <CheckCircle2 className={cn("w-8 h-8", isBtc ? "text-btc" : "text-privacy")} />
       </div>
       <h3 className="text-lg font-semibold text-foreground">
-        {isBtc ? "BTC Shielded!" : "Tokens Shielded!"}
+        {isBtc ? "BTC deposit submitted" : "Funds added privately"}
       </h3>
       <p className="text-caption text-gray">
         {isBtc && walletDepositResult
-          ? "Your BTC deposit has been broadcast. The backend will automatically detect, sweep, and verify it."
-          : `Your ${selectedToken.symbol} tokens are now private commitments.`}
+          ? "Your BTC deposit was broadcast. It will appear in your private balance after confirmation."
+          : `Your ${selectedToken.symbol} is now in your private balance.`}
       </p>
       {txSig && (
         <a
@@ -64,7 +64,7 @@ export function ShieldSuccess({
           onClick={onReset}
           className="px-5 py-2 rounded-[10px] bg-muted border border-gray/15 text-body2 text-gray-light hover:text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
         >
-          Shield more
+          Add more funds
         </button>
       </div>
     </div>

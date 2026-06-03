@@ -23,6 +23,16 @@ describe("buildSendIntent", () => {
     expect(intent.kind).toBe("transact");
   });
 
+  it("dispatches stealth_suins to transact kind", () => {
+    const intent = buildSendIntent({
+      recipientType: "stealth_suins",
+      recipientValue: "alice.utxopia.sui",
+      sourceToken: "zkBTC",
+      amount: "0.001",
+    });
+    expect(intent.kind).toBe("transact");
+  });
+
   it("dispatches stealth_meta to transact kind", () => {
     const intent = buildSendIntent({
       recipientType: "stealth_meta",

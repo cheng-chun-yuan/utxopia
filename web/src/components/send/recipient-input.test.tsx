@@ -9,7 +9,7 @@ describe("RecipientInput", () => {
   it("renders an empty input with placeholder", () => {
     render(<RecipientInput value="" onChange={() => {}} />);
     expect(
-      screen.getByPlaceholderText(/paste address or .utxopia.sol/i),
+      screen.getByPlaceholderText(/paste address.*utxopia\.(sui|sol)/i),
     ).toBeDefined();
   });
 

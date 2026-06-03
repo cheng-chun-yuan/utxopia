@@ -22,6 +22,7 @@ import {
 } from "../../../contracts/scripts/regtest-helpers";
 import { ROOT, readState, requireState, writeState } from "./shared";
 import { executeTransactionKind } from "./signing";
+import { loadOrCreateIkaUserShareKeys } from "./ika-user-share-keys";
 
 const ESPLORA_URL = process.env.ESPLORA_URL ?? "http://localhost:3002/regtest/api";
 const TREE_DEPTH = 16;
@@ -512,6 +513,7 @@ interface IkaSuiSigningConfig {
   networkEncryptionKeyId: string;
   ikaCoinObjectId: string;
   suiCoinObjectId: string;
+  encryptedUserSecretKeyShareId: string;
 }
 
 function requireIkaSuiSigningConfig(): IkaSuiSigningConfig {
@@ -524,6 +526,10 @@ function requireIkaSuiSigningConfig(): IkaSuiSigningConfig {
       process.env.UTXOPIA_SUI_IKA_NETWORK_ENCRYPTION_KEY_ID || ikaState.networkEncryptionKeyId || "",
     ikaCoinObjectId: process.env.UTXOPIA_SUI_IKA_COIN_ID || ikaState.ikaCoinObjectId || "",
     suiCoinObjectId: process.env.UTXOPIA_SUI_IKA_SUI_COIN_ID || ikaState.suiCoinObjectId || "",
+    encryptedUserSecretKeyShareId:
+      process.env.UTXOPIA_SUI_IKA_ENCRYPTED_USER_SECRET_KEY_SHARE_ID ||
+      ikaState.encryptedUserSecretKeyShareId ||
+      "",
   };
   const missing = Object.entries(config)
     .filter(([key, value]) => key !== "network" && !value)
@@ -553,6 +559,9 @@ async function submitNativeIkaSigning(message: Uint8Array, config: IkaSuiSigning
     networkEncryptionKeyId: config.networkEncryptionKeyId,
     ikaCoinObjectId: config.ikaCoinObjectId,
     suiCoinObjectId: config.suiCoinObjectId,
+    encryptedUserSecretKeyShareId: config.encryptedUserSecretKeyShareId,
+    userShareEncryptionKeys: await loadOrCreateIkaUserShareKeys(),
+    suiPaymentReturnAddress: process.env.UTXOPIA_SUI_RELAYER_ADDRESS || state.relayer?.address,
   });
   const ikaClient = ikaAdapter.createClient();
   await ikaClient.initialize();

@@ -27,11 +27,15 @@
         "initialSharedVersion": 510819272
       }
     },
-    "dWalletId": "",
-    "dWalletCapObjectId": "",
+    "dWalletId": "0x7f0b719d886f7c20003842f58d5c5d06c65eb49a22d5b9a48902da57b154b002",
+    "dWalletCapObjectId": "0xea3894048ad18ce501c1f1d266f158595a4bc8ae308eef023f0806099cb5150b",
     "networkEncryptionKeyId": "0xe7c79a60931299e110297554fc02e0a0e095e96778775092c97f07a1bd1337cc",
-    "ikaCoinObjectId": "",
-    "suiCoinObjectId": "0x5221537fd86d7ac924cf19d25d35dfd3238b685ad038f603e98c1bd365939ec8"
+    "ikaCoinObjectId": "0x050b18a306453d9214976eb3df4dff150346ba42b00bec31a36219cd260951cf",
+    "suiCoinObjectId": "__gas__",
+    "dWalletPublicKeyHex": "02087643deba0089445e4598ddb8ddab804fb0c4a5219d31ae90d58893f307bb9a",
+    "dWalletXOnlyPubkey": "087643deba0089445e4598ddb8ddab804fb0c4a5219d31ae90d58893f307bb9a",
+    "encryptedUserSecretKeyShareId": "0x6dc55f9de19a2e80fd870fd4862793b9c1839cc3be1dbfa912d5a11c60602121",
+    "dWalletUserPublicOutputHex": "01eb0101210291f7a443090beb47e7031e4dbad66d56204800eaa6ad8de17586d0585e54fcde2102087643deba0089445e4598ddb8ddab804fb0c4a5219d31ae90d58893f307bb9a21039604f6023a2a5221f4cdc38a8f93e4714c37f070208a7ca3f05f0021fa3b52ef202b74e47b079cb82bfc9f644630cb8ed34a9712f99cc9833ca247a43852273dda2002ab50de1f218abfea62461a925443bb10a702dedc016376f6d200477903e8672010fceeb17866cd002febd8b3b4e3632ce113e02c1300cff9011a686878248b6f20b4570f5f579cd4bab1ce6a092b4855871d47c5cbb3b5cf4bda9b30227aea2cdd"
   },
   "packageId": "0x667962401f806be841f09ff6adb9e92ab3a458feb77edaeec8cf783914bc3603",
   "upgradeCap": {
@@ -41,14 +45,24 @@
   },
   "lastSuiRegtestFlow": {
     "amountSats": "25000",
-    "depositTxid": "a7549c97891657f8c433199ace24db05c7951439c89e99cc156e746025f3d9a9",
-    "shieldTxDigest": "GK23YC83fniq2JBTDs3dfDkodctyva5nMWWoHy86WQLp",
-    "transactTxDigest": "ATExY1XEPwsTnJPNdshCKMfFXaBSjQGtWaRvexvUJbfQ",
-    "withdrawTxid": "3de23ae5e71e5281c94da762b50f5be9b20e8ed6d52db2cbcdc0b5bc2d89762c",
-    "withdrawalSignerMode": "relayer",
-    "redemptionId": "3",
-    "requestTxDigest": "GGrHjWf9fha4Dsuur1kDabFgs7fi2CTpZ3gwDJ9hKngY",
-    "completeTxDigest": "4SNV4y8NLw6nE2wDK3vTnfomc9AjW6YYD7KfT6UvP3Ux"
+    "depositTxid": "abbd95e8ea9c4d4efd7fb95baff9dfc8e45e9b6e941d10b1eb261870f6579b9a",
+    "shieldTxDigest": "7uqmRiTDcfcdMdVZGbVgrBozh3bXvcCDgG9ND2KMozUQ",
+    "transactTxDigest": "29mzPCyMdz7b5bZDc3fnu9jz8TgYchR52qKu5KfQLr8R",
+    "withdrawTxid": "078586b0e63d6031e8d68fa754c32728a4f4fa3ddd6f8bd61f436606caeac8e8",
+    "withdrawalSignerMode": "ika",
+    "redemptionId": "9",
+    "requestTxDigest": "DARresfJGjNbWdFaeuZ4pGk4wTU5UFMPVcE5YsWdFtyv",
+    "ikaApprovalTxDigest": "ELMbiFiWLWryFLFP6wWyxfLF6M7S567xNhVirCDQMwh1",
+    "ikaSigning": {
+      "dWalletId": "0x7f0b719d886f7c20003842f58d5c5d06c65eb49a22d5b9a48902da57b154b002",
+      "dWalletCapObjectId": "0xea3894048ad18ce501c1f1d266f158595a4bc8ae308eef023f0806099cb5150b",
+      "presignRequestTxDigest": "9FdY1anygq6o8exjHHTKjn8pGVcVxiEAmWrBDtvipKWS",
+      "presignId": "0xd420030b248c0273b84ba8c3c7aeec81518d4cea1ade92c9e7b515dc8774c211",
+      "signRequestTxDigest": "7YaF3jN9KRMmhcKWG8srdc2zW96hYMQF8Q6WiU7hi9SG",
+      "signId": "0x08e6c13a3fa436c21b16a2972cb85a346ab20c69ac5b5404098b1ef202e7b314",
+      "signatureHex": "31bbd14ecc6957c05b3c06682ed436ffe393bc90b2034e8da70830b7ad048d6a8e96bacf6b12835b47786643a7d9c6f25ad2f5aa7e7d1ef07f23e87a33564d96"
+    },
+    "completeTxDigest": "9trr5X1SW1zU7T6Aoc8gNej8WjHymjdap66UcKV95fME"
   },
   "pool": {
     "objectId": "0x0b1529ad32c87b5b333c1d94e25ad778959f4ac24fba2d7af32c4cff3c1af467",
@@ -73,8 +87,8 @@
   },
   "redemptionCap": {
     "objectId": "0x2ace6d0e8185dca9aba8ba1b266e0104b38142f1b4ae8bd53013bfa3024def27",
-    "version": "349181790",
-    "digest": "HULLZwn5vacHqVP3rK1aCdnjexQtmnMeSPgMt9cGEyBK"
+    "version": "349181799",
+    "digest": "694fQv3ChCisAGX6VM6PSznxUNs6sAPKUT5QKap7fC87"
   },
   "verifyingKeyRegistry": {
     "objectId": "0x4b31e07c006b52e0c4b9559fbceb759e56576608d184546acecd02ee5376313b",
@@ -89,5 +103,29 @@
       "rawVerifyingKey": "e2f26dbea299f5223b646cb1fb33eadb059d9407559d7441dfd902e3a79a4d2dabb73dc17fbc13021e2471e0c08bd67d8401f52b73d6d07483794cad4778180e0c06f33bbc4c79a9cadef253a68084d382f17788f885c9afd176f7cb2f036789edf692d95cbdde46ddda5ef7d422436779445c5e66006a42761e1f12efde0018c212f3aeb785e49712e7a9353349aaf1255dfb31b7bf60723a480d9293938e19b3351b18c0e10ae8040e2c1e5deeef2168ef35307a05500560bb766fcb8a7b2583793fe9eee02edc654e8e5c6b7d7055712f352dbd20ef9bdd9a70fc2365a08e0500000000000000a4d7136bdba113d467d4d3dccc19c441f327a89f7c2273d97bec6c41634597278093316029f09f596a42cbea58806d3ba6d3563c52cc44ee0d523971e12e121355a2787a92bf20917c4b083d64553d65bbd15627358abf71157f6ff627920613049cc8f83beb914d399f68e0eec7023e7a391b9df94ca24bf78cc84548dcb5a02c0e2b2306ee0c5cfbfddab3e4ab9847d7335629ffb1c05e7b509c204616f4a3",
       "registerTxDigest": "FNPHmVtwMg9ks2RsXhHSkn697ofRhCDUhCYC3fDFbzeJ"
     }
+  },
+  "suiDepositRelayCommitments": [
+    {
+      "commitment": "106cf2037ab14b124a85a94737715cbfd456ea8a4e185c1534b521e5c3ca2a01",
+      "amountSats": "25000"
+    }
+  ],
+  "lastSuiDepositRelay": {
+    "amountSats": "25000",
+    "depositTxid": "a2f401555ebc7f9b77ac87548bae6a880cb8c094bea5d39d24bbc6c390a8e75d",
+    "depositVout": 0,
+    "opReturn": "7f637bf9a64843e3f9d480f67ec7a82432f1d5270b2cd38b5ca27dda244f44411aeb98dfcce387cf49ab95793db3d49d0e05fbfad36dfe99b0ba8bea4ac6a31d",
+    "commitment": "106cf2037ab14b124a85a94737715cbfd456ea8a4e185c1534b521e5c3ca2a01",
+    "root": "4ccbf9dde1e145cca25267bccc6e3c7638c9486e00d05b0a116759b7f82e9b29",
+    "txDigest": "2Mbt1BwW77izCETZhhogkDS2xzUtNKjUbLvwntbSwxCG"
+  },
+  "ika": {
+    "dwalletXOnlyPubkey": "087643deba0089445e4598ddb8ddab804fb0c4a5219d31ae90d58893f307bb9a"
+  },
+  "signingMode": "ika",
+  "depositMode": "direct",
+  "suins": {
+    "parentName": "utxopia.sui",
+    "parentNftId": "0xd7fc5a74562b03922db7d2b35789a631d1e3b81713afe53def07ecad97b0463a"
   }
 }

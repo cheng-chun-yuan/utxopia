@@ -28,18 +28,23 @@ export function VaultBackupCard({
 }: VaultBackupCardProps) {
   const identity = useMemo(() => getBackupIdentityForKeys(keys), [keys]);
   const [isBackedUp, setIsBackedUp] = useState(() => hasVaultBackup(identity));
+  const [hasCopiedBackup, setHasCopiedBackup] = useState(false);
   const { copied, copy } = useCopyToClipboard();
 
   if (!keys || isViewOnly || !identity || isBackedUp) return null;
 
   const hasFunds = depositCount > 0;
-  const handleBackup = () => {
+  const handleCopyBackup = () => {
     const payload = createVaultBackupPayload(identity);
     copy(JSON.stringify(payload, null, 2));
+    setHasCopiedBackup(true);
+    notifyCopied("Private wallet recovery backup");
+  };
+
+  const handleConfirmBackup = () => {
     markVaultBackupComplete(identity);
     setIsBackedUp(true);
     onBackupComplete?.();
-    notifyCopied("Private wallet recovery backup");
   };
 
   return (
@@ -61,8 +66,13 @@ export function VaultBackupCard({
           <p className="mt-0.5 text-caption text-gray">
             Your sign-in recovers the public account. This backup recovers private funds if this device or passkey is lost.
           </p>
+          <div className="mt-3 rounded-[9px] border border-gray/15 bg-background/35 px-3 py-2">
+            <p className="text-[11px] font-mono text-gray/60">
+              Recovery backup: {"{ keys: \"...\", identity: \"...\" }"}
+            </p>
+          </div>
           <button
-            onClick={handleBackup}
+            onClick={handleCopyBackup}
             className={cn(
               "mt-3 inline-flex items-center gap-2 rounded-[9px] px-3 py-2",
               "text-caption font-semibold transition-colors cursor-pointer",
@@ -73,6 +83,20 @@ export function VaultBackupCard({
           >
             {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
             {copied ? "Backup copied" : "Copy recovery backup"}
+          </button>
+          <button
+            onClick={handleConfirmBackup}
+            disabled={!hasCopiedBackup}
+            className={cn(
+              "ml-2 mt-3 inline-flex items-center gap-2 rounded-[9px] px-3 py-2",
+              "text-caption font-semibold transition-colors",
+              hasCopiedBackup
+                ? "bg-muted text-gray-light hover:bg-muted/80 cursor-pointer"
+                : "bg-gray/10 text-gray/35 cursor-not-allowed",
+            )}
+          >
+            <Check className="h-3.5 w-3.5" />
+            I stored it safely
           </button>
         </div>
       </div>

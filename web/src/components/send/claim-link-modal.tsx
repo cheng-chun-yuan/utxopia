@@ -97,6 +97,12 @@ export function ClaimLinkModal({
             </div>
           ) : (
             <div className="space-y-3">
+              <div className="rounded-lg border border-privacy/20 bg-privacy/8 px-3 py-2">
+                <p className="text-sm font-semibold text-privacy">Private claim link created</p>
+                <p className="mt-0.5 text-xs text-gray/70">
+                  Share the link with the recipient. The secret unlocks the funds.
+                </p>
+              </div>
               <CopyRow label="Link" value={result.url} />
               <CopyRow label="Secret" value={result.secret} />
               <p className="text-[11px] text-muted-foreground">

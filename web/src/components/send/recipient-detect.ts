@@ -11,6 +11,7 @@
 export type RecipientType =
   | "btc"
   | "stealth_sns"
+  | "stealth_suins"
   | "stealth_meta"
   | "spl_wallet";
 
@@ -20,7 +21,13 @@ export type DetectionResult = {
   reason?: string;
 };
 
+export type RecipientDetectionContext = {
+  chain?: "solana" | "sui";
+};
+
 const SNS_SUFFIX = ".utxopia.sol";
+const SUINS_SUFFIX = ".utxopia.sui";
+const SUINS_NAME_RE = /^[a-z0-9]{1,63}\.utxopia\.sui$/;
 const STEALTH_META_PREFIX = "utxo:";
 // 96 bytes = spendingPubKey(32) + viewingPubKey(32) + mpk(32). See
 // sdk/src/keys.ts::decodeStealthMetaAddress.
@@ -64,17 +71,52 @@ function looksLikeStealthMeta(input: string): boolean {
   return rest.length === STEALTH_META_HEX_LEN && /^[0-9a-fA-F]+$/.test(rest);
 }
 
-export function detectRecipient(rawInput: string): DetectionResult {
+export function detectRecipient(
+  rawInput: string,
+  context: RecipientDetectionContext = {},
+): DetectionResult {
   const input = rawInput.trim();
   if (input.length === 0) {
     return { type: "empty", confidence: "high" };
   }
 
-  if (input.toLowerCase().endsWith(SNS_SUFFIX)) {
+  const lower = input.toLowerCase();
+
+  if (lower.endsWith(SNS_SUFFIX)) {
     return {
       type: "stealth_sns",
       confidence: "high",
       reason: "Looks like a .utxopia.sol name",
+    };
+  }
+
+  if (lower.endsWith(SUINS_SUFFIX) && SUINS_NAME_RE.test(lower)) {
+    return {
+      type: "stealth_suins",
+      confidence: "high",
+      reason: "Looks like a SuiNS name",
+    };
+  }
+
+  if (/^@[a-z0-9]{1,63}$/.test(lower)) {
+    if (context.chain === "solana") {
+      return {
+        type: "stealth_sns",
+        confidence: "high",
+        reason: "Looks like a .utxopia.sol handle on Solana",
+      };
+    }
+    if (context.chain === "sui") {
+      return {
+        type: "stealth_suins",
+        confidence: "high",
+        reason: "Looks like a SuiNS handle on Sui",
+      };
+    }
+    return {
+      type: "ambiguous",
+      confidence: "medium",
+      reason: "Handle requires an active chain context",
     };
   }
 

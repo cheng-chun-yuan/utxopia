@@ -4,6 +4,7 @@ import {
   IkaClient,
   IkaTransaction,
   SignatureAlgorithm,
+  type UserShareEncryptionKeys,
   getNetworkConfig,
   type IkaConfig,
   type Network,
@@ -21,6 +22,9 @@ export interface UTXOpiaSuiIkaConfig {
   networkEncryptionKeyId?: string;
   ikaCoinObjectId?: string;
   suiCoinObjectId?: string;
+  suiPaymentReturnAddress?: string;
+  encryptedUserSecretKeyShareId?: string;
+  userShareEncryptionKeys?: UserShareEncryptionKeys;
 }
 
 export interface IkaObjectIds {
@@ -89,13 +93,17 @@ export class UTXOpiaSuiIkaAdapter {
 
     const tx = new Transaction();
     const ikaTx = this.createIkaTransaction(tx);
-    ikaTx.requestGlobalPresign({
+    const suiCoin = suiPaymentCoin(tx, suiCoinObjectId);
+    const presignSession = ikaTx.requestGlobalPresign({
       dwalletNetworkEncryptionKeyId: networkEncryptionKeyId,
       curve: Curve.SECP256K1,
       signatureAlgorithm: SignatureAlgorithm.Taproot,
       ikaCoin: tx.object(ikaCoinObjectId),
-      suiCoin: tx.object(suiCoinObjectId),
+      suiCoin,
     });
+    const returnAddress = ikaReturnAddress(this.config.suiPaymentReturnAddress);
+    tx.transferObjects([presignSession], tx.pure.address(returnAddress));
+    returnSuiPaymentCoinIfNeeded(tx, suiCoinObjectId, suiCoin, returnAddress);
 
     return buildIkaPtb(this.config.rpcUrl, tx, "Ika global Taproot presign request PTB", this.ikaConfig, [
       ikaCoinObjectId,
@@ -125,9 +133,12 @@ export class UTXOpiaSuiIkaAdapter {
 
     const ikaClient = this.createClient();
     await ikaClient.initialize();
-    const [dWallet, presign] = await Promise.all([
+    const [dWallet, presign, encryptedUserSecretKeyShare] = await Promise.all([
       ikaClient.getDWallet(dWalletId),
       ikaClient.getPresign(input.presignId),
+      this.config.encryptedUserSecretKeyShareId
+        ? ikaClient.getEncryptedUserSecretKeyShare(this.config.encryptedUserSecretKeyShareId)
+        : Promise.resolve(undefined),
     ]);
 
     const tx = new Transaction();
@@ -140,6 +151,7 @@ export class UTXOpiaSuiIkaAdapter {
       message: input.message,
     });
     const verifiedPresignCap = ikaTx.verifyPresignCap({ presign });
+    const suiCoin = suiPaymentCoin(tx, suiCoinObjectId);
     const common = {
       hashScheme: Hash.SHA256,
       verifiedPresignCap,
@@ -147,10 +159,20 @@ export class UTXOpiaSuiIkaAdapter {
       message: input.message,
       signatureScheme: SignatureAlgorithm.Taproot,
       ikaCoin: tx.object(ikaCoinObjectId),
-      suiCoin: tx.object(suiCoinObjectId),
+      suiCoin,
     };
 
-    if (dWallet.kind === "shared") {
+    if (dWallet.kind === "zero-trust") {
+      if (!encryptedUserSecretKeyShare) {
+        throw new Error("encryptedUserSecretKeyShareId is required for zero-trust Ika signing");
+      }
+      await ikaTx.requestSign({
+        dWallet,
+        messageApproval,
+        encryptedUserSecretKeyShare,
+        ...common,
+      });
+    } else if (dWallet.kind === "shared") {
       await ikaTx.requestSign({
         dWallet,
         messageApproval,
@@ -174,6 +196,7 @@ export class UTXOpiaSuiIkaAdapter {
         `Ika dWallet ${dWalletId} is ${dWallet.kind}; encrypted-share signing requires a user-share integration`,
       );
     }
+    returnSuiPaymentCoinIfNeeded(tx, suiCoinObjectId, suiCoin, ikaReturnAddress(this.config.suiPaymentReturnAddress));
 
     return buildIkaPtb(this.config.rpcUrl, tx, "Ika Taproot sign request PTB", this.ikaConfig, [
       dWalletId,
@@ -188,12 +211,44 @@ export class UTXOpiaSuiIkaAdapter {
     return new IkaTransaction({
       ikaClient,
       transaction: tx,
+      userShareEncryptionKeys: this.config.userShareEncryptionKeys,
     });
   }
 }
 
 export function defaultIkaConfig(network: Network = "testnet"): IkaConfig {
   return getNetworkConfig(network);
+}
+
+function suiPaymentCoin(tx: Transaction, suiCoinObjectId: string) {
+  if (suiCoinObjectId === "__gas__") {
+    const amount = BigInt(process.env.UTXOPIA_SUI_IKA_SUI_PAYMENT_NANOS ?? "10000000");
+    return tx.splitCoins(tx.gas, [tx.pure.u64(amount)])[0];
+  }
+  return tx.object(suiCoinObjectId);
+}
+
+function returnSuiPaymentCoinIfNeeded(
+  tx: Transaction,
+  suiCoinObjectId: string,
+  suiCoin: ReturnType<typeof suiPaymentCoin>,
+  returnAddress?: string,
+) {
+  if (suiCoinObjectId !== "__gas__") {
+    return;
+  }
+  tx.transferObjects([suiCoin], tx.pure.address(ikaReturnAddress(returnAddress)));
+}
+
+function ikaReturnAddress(returnAddress?: string): string {
+  const address =
+    returnAddress ??
+    process.env.UTXOPIA_SUI_RELAYER_ADDRESS ??
+    process.env.UTXOPIA_SUI_SIGNER_ADDRESS;
+  if (!address) {
+    throw new Error("suiPaymentReturnAddress or UTXOPIA_SUI_RELAYER_ADDRESS is required for Ika PTBs");
+  }
+  return address;
 }
 
 async function buildIkaPtb(

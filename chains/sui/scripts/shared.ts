@@ -16,10 +16,17 @@ export interface SuiPocState {
   network: string;
   rpcUrl?: string;
   gasBudget?: string;
+  signingMode?: string;
+  depositMode?: string;
   relayer?: {
     address?: string;
     keypairPath?: string;
     keyScheme?: string;
+  };
+  suins?: {
+    parentName?: string;
+    parentNftId?: string;
+    targetAddress?: string;
   };
   ikaSui?: {
     network?: string;
@@ -33,6 +40,17 @@ export interface SuiPocState {
     networkEncryptionKeyId?: string;
     ikaCoinObjectId?: string;
     suiCoinObjectId?: string;
+    dWalletPublicKeyHex?: string;
+    dWalletXOnlyPubkey?: string;
+    encryptedUserSecretKeyShareId?: string;
+    dWalletUserPublicOutputHex?: string;
+  };
+  ika?: {
+    programId?: string;
+    grpcEndpoint?: string;
+    dwallet?: string;
+    dwalletXOnlyPubkey?: string;
+    cpiAuthorityBump?: number;
   };
   packageId?: string;
   adminCap?: SuiObjectRef;

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Droplets, Wallet, ExternalLink } from "lucide-react";
 import { getChainAdapter, isHybridNetwork } from "@/lib/chain-registry";
-import { detectNetwork, getNetworkConfig, hrefWithChain } from "@/lib/network-config";
+import { detectNetwork, getNetworkConfig, hrefWithChain, type NetworkId } from "@/lib/network-config";
 import { cn } from "@/lib/utils";
 
 /**
@@ -123,11 +123,18 @@ type DripResult =
       opReturn?: string;
       amountSats?: number;
       dailyLimit?: number;
+      suiDeposit?: {
+        ok: boolean;
+        txDigest?: string;
+        error?: string;
+        commitment?: string;
+        root?: string;
+      };
     }
   | { kind: "cooldown"; retryAfterSec: number; message: string }
   | { kind: "err"; message: string };
 
-function FaucetForm({ isSui = false, network }: { isSui?: boolean; network: string }) {
+function FaucetForm({ isSui = false, network }: { isSui?: boolean; network: NetworkId }) {
   const [address, setAddress] = useState("");
   const [amountSats, setAmountSats] = useState(100_000);
   const [submitting, setSubmitting] = useState(false);
@@ -178,6 +185,13 @@ function FaucetForm({ isSui = false, network }: { isSui?: boolean; network: stri
         opReturn?: string;
         amountSats?: number;
         dailyLimit?: number;
+        suiDeposit?: {
+          ok: boolean;
+          txDigest?: string;
+          error?: string;
+          commitment?: string;
+          root?: string;
+        };
         retryAfterSec?: number;
         error?: string;
       };
@@ -199,6 +213,7 @@ function FaucetForm({ isSui = false, network }: { isSui?: boolean; network: stri
           opReturn: body.opReturn,
           amountSats: body.amountSats,
           dailyLimit: body.dailyLimit,
+          suiDeposit: body.suiDeposit,
         });
       }
     } catch (e) {
@@ -285,8 +300,39 @@ function FaucetForm({ isSui = false, network }: { isSui?: boolean; network: stri
             </div>
           )}
           {result.warning && (
-            <div className="text-warning pt-1 border-t border-success/10">⚠ {result.warning}</div>
+            <div className="text-warning pt-1 border-t border-success/10">{result.warning}</div>
           )}
+          {isSui && result.opReturn && result.suiDeposit?.ok && (
+            <div className="mt-2 rounded-[8px] border border-success/25 bg-success/8 p-2 text-success">
+              Sui vault credited via <span className="font-mono">btc_deposit::complete_verified_deposit</span>.
+              {result.suiDeposit.txDigest && (
+                <div className="mt-1 font-mono break-all text-success/80">{result.suiDeposit.txDigest}</div>
+              )}
+            </div>
+          )}
+          {isSui && result.opReturn && !result.suiDeposit?.ok && (
+            <div className="mt-2 rounded-[8px] border border-warning/25 bg-warning/8 p-2 text-warning">
+              BTC funding is done. Sui vault credit still needs the relayer to submit{" "}
+              <span className="font-mono">btc_deposit::complete_verified_deposit</span>.
+              {result.suiDeposit?.error && (
+                <div className="mt-1 font-mono break-all text-warning/80">{result.suiDeposit.error}</div>
+              )}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2 pt-2">
+            <Link
+              href={hrefWithChain(isSui ? "/vault/activity?result=deposit_btc" : "/vault/activity", network)}
+              className="inline-flex items-center justify-center rounded-[8px] border border-success/25 px-3 py-2 text-[11px] font-semibold text-success transition-colors hover:bg-success/10"
+            >
+              View activity
+            </Link>
+            <Link
+              href={hrefWithChain("/vault", network)}
+              className="inline-flex items-center justify-center rounded-[8px] border border-gray/15 px-3 py-2 text-[11px] font-semibold text-gray-light transition-colors hover:border-success/25 hover:text-success"
+            >
+              Back to vault
+            </Link>
+          </div>
         </div>
       )}
       {result?.kind === "cooldown" && (
@@ -302,7 +348,7 @@ function FaucetForm({ isSui = false, network }: { isSui?: boolean; network: stri
 
       <p className="text-caption text-gray">
         {isSui
-          ? "Use this during Sui Hybrid demos to create the same regtest BTC deposit shape: BTC output plus OP_RETURN metadata for the private note."
+          ? "This creates the real regtest BTC deposit and credits the Sui vault when the local relayer key is configured."
           : (
             <>
               Share this page with a tester and ask them for their <span className="font-mono">utxo:</span>{" "}

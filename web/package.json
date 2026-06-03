@@ -13,6 +13,7 @@
   "dependencies": {
     "@farcaster/mini-app-solana": "^2.0.0",
     "@mysten/sui": "^1.0.0",
+    "@mysten/suins": "^1.1.4",
     "@noble/hashes": "^1.8.0",
     "@privy-io/react-auth": "^3.28.0",
     "@radix-ui/react-dialog": "^1.1.15",
