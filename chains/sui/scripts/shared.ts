@@ -67,6 +67,7 @@ export interface SuiPocState {
     ikaApprovalTxDigest?: string;
     completeTxDigest?: string;
   };
+  lastVerifiedBtcDeposit?: SuiObjectRef;
   lastTransact?: {
     circuit: string;
     shieldTxDigest?: string;

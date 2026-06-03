@@ -76,7 +76,6 @@ const publicInputs = hexToBytes(exportedProof.publicInputs);
 const proofPoints = hexToBytes(exportedProof.proofPoints);
 const nullifierBytes = publicInputs.slice(64, 96);
 const commitmentOutBytes = publicInputs.slice(96, 128);
-const newRoot = fieldToSuiBytes(outputCommitment);
 
 const adapter = new UTXOpiaSuiAdapter({
   rpcUrl: process.env.UTXOPIA_SUI_RPC_URL ?? "https://fullnode.testnet.sui.io:443",
@@ -107,26 +106,12 @@ const tx = await adapter.buildTransactTransaction({
   publicInputs,
   proofPoints,
   commitmentsOut: [commitmentOutBytes],
-  newRoot,
 });
-
-const shieldTx = await adapter.buildShieldTransaction({
-  recipient: "sui-poc",
-  tokenId: "zkbtc",
-  amount,
-  metadata: {
-    commitment: toHex(fieldToSuiBytes(inputCommitment)),
-    newRoot: toHex(fieldToSuiBytes(merkle.root)),
-  },
-});
-console.log("Submitting Sui input commitment insert...");
-const shieldResult = await executeTransactionKind(shieldTx.bytes);
 
 console.log("Submitting Sui transact transaction...");
 const result = await executeTransactionKind(tx.bytes);
 state.lastTransact = {
   circuit: CIRCUIT,
-  shieldTxDigest: shieldResult.digest,
   txDigest: result.digest,
   nullifier: toHex(nullifierBytes),
   commitmentOut: toHex(commitmentOutBytes),
@@ -136,8 +121,6 @@ writeState(state);
 
 console.log(JSON.stringify({
   circuit: CIRCUIT,
-  shieldTxDigest: shieldResult.digest,
-  shieldStatus: shieldResult.effects?.status,
   txDigest: result.digest,
   status: result.effects?.status,
   vkHash: vk.vkHash,

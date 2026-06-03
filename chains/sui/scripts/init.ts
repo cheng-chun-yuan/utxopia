@@ -16,7 +16,7 @@ const gasBudget = process.env.UTXOPIA_SUI_GAS_BUDGET ?? "100000000";
 const state = readState();
 const packageId = requireState(state.packageId, "packageId");
 
-call("pool", "initialize", ["16", "0x00"]);
+call("pool", "initialize", ["16", `0x${"00".repeat(32)}`]);
 call("btc_deposit", "initialize_registry", []);
 call("nullifier", "initialize_registry", []);
 call("redemption", "initialize_queue", []);

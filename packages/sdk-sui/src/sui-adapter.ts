@@ -68,32 +68,26 @@ export class UTXOpiaSuiAdapter implements UTXOpiaChainAdapter {
   }
 
   async buildShieldTransaction(input: ShieldInput): Promise<SuiUnsignedTransaction> {
-    const tx = new Transaction();
-    tx.moveCall({
-      target: `${this.config.packageId}::merkle::insert_commitment`,
-      arguments: [
-        this.sharedObject(tx, this.config.poolObjectId, this.config.poolInitialSharedVersion, true),
-        tx.pure.vector("u8", bytesFromHexOrUtf8(input.metadata?.commitment ?? "")),
-        tx.pure.vector("u8", bytesFromHexOrUtf8(input.metadata?.newRoot ?? "")),
-      ],
-    });
-
-    return this.buildPtb(tx, "Sui shield deposit PTB", [this.config.poolObjectId]);
+    void input;
+    throw new Error("Sui generic shield PTBs are disabled; use buildBtcDepositTransaction with a verified BTC deposit object");
   }
 
   async buildBtcDepositTransaction(input: {
-    depositTxid: Uint8Array;
-    depositVout: number;
-    amountSats: bigint | number;
-    opReturnPayload: Uint8Array;
-    commitment: Uint8Array;
-    newRoot: Uint8Array;
+    verifiedDepositObjectId: string;
+    verifiedDepositVersion: string;
+    verifiedDepositDigest: string;
   }): Promise<SuiUnsignedTransaction> {
     if (!this.config.btcDepositRegistryObjectId) {
       throw new Error("Sui BTC deposit registry object ID is required to build BTC deposit PTBs");
     }
 
     const tx = new Transaction();
+    const verifiedDeposit = tx.objectRef({
+      objectId: input.verifiedDepositObjectId,
+      version: input.verifiedDepositVersion,
+      digest: input.verifiedDepositDigest,
+    });
+
     tx.moveCall({
       target: `${this.config.packageId}::btc_deposit::complete_verified_deposit`,
       arguments: [
@@ -104,16 +98,12 @@ export class UTXOpiaSuiAdapter implements UTXOpiaChainAdapter {
           this.config.btcDepositRegistryInitialSharedVersion,
           true,
         ),
-        tx.pure.vector("u8", input.depositTxid),
-        tx.pure.u32(input.depositVout),
-        tx.pure.u64(input.amountSats.toString()),
-        tx.pure.vector("u8", input.opReturnPayload),
-        tx.pure.vector("u8", input.commitment),
-        tx.pure.vector("u8", input.newRoot),
+        verifiedDeposit,
       ],
     });
 
     return this.buildPtb(tx, "Sui verified BTC deposit PTB", [
+      input.verifiedDepositObjectId,
       this.config.poolObjectId,
       this.config.btcDepositRegistryObjectId,
     ]);
@@ -126,8 +116,8 @@ export class UTXOpiaSuiAdapter implements UTXOpiaChainAdapter {
     if (!this.config.verifyingKeyRegistryObjectId) {
       throw new Error("Sui verifying-key registry object ID is required to build transact PTBs");
     }
-    if (!input.vkHash || !input.publicInputs || !input.proofPoints || !input.commitmentsOut || !input.newRoot) {
-      throw new Error("Sui transact PTBs require vkHash, publicInputs, proofPoints, commitmentsOut, and newRoot");
+    if (!input.vkHash || !input.publicInputs || !input.proofPoints || !input.commitmentsOut) {
+      throw new Error("Sui transact PTBs require vkHash, publicInputs, proofPoints, and commitmentsOut");
     }
 
     const tx = new Transaction();
@@ -161,7 +151,6 @@ export class UTXOpiaSuiAdapter implements UTXOpiaChainAdapter {
         tx.pure.vector("u8", input.proofPoints),
         tx.pure("vector<vector<u8>>", nullifierBytes),
         tx.pure("vector<vector<u8>>", commitmentBytes),
-        tx.pure.vector("u8", input.newRoot),
       ],
     });
 
@@ -176,11 +165,21 @@ export class UTXOpiaSuiAdapter implements UTXOpiaChainAdapter {
     if (!this.config.redemptionQueueObjectId) {
       throw new Error("Sui redemption queue object ID is required to build redemption PTBs");
     }
+    if (!this.config.redemptionCapObjectId || !this.config.redemptionCapVersion || !this.config.redemptionCapDigest) {
+      throw new Error("Sui redemption cap object ref is required to request redemptions");
+    }
 
     const tx = new Transaction();
+    const redemptionCap = tx.objectRef({
+      objectId: this.config.redemptionCapObjectId,
+      version: this.config.redemptionCapVersion,
+      digest: this.config.redemptionCapDigest,
+    });
+
     tx.moveCall({
       target: `${this.config.packageId}::redemption::request_redemption`,
       arguments: [
+        redemptionCap,
         this.sharedObject(tx, this.config.poolObjectId, this.config.poolInitialSharedVersion, true),
         this.sharedObject(
           tx,
@@ -195,6 +194,7 @@ export class UTXOpiaSuiAdapter implements UTXOpiaChainAdapter {
     });
 
     return this.buildPtb(tx, "Sui BTC redemption request PTB", [
+      this.config.redemptionCapObjectId,
       this.config.poolObjectId,
       this.config.redemptionQueueObjectId,
     ]);

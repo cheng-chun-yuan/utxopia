@@ -6,6 +6,7 @@ module utxopia::pool {
     use utxopia::events;
 
     const PROTOCOL_VERSION: u64 = 1;
+    const FIELD_BYTES_LEN: u64 = 32;
 
     public struct AdminCap has key {
         id: UID,
@@ -23,6 +24,7 @@ module utxopia::pool {
 
     public fun initialize(tree_depth: u64, initial_root: vector<u8>, ctx: &mut TxContext) {
         assert!(tree_depth > 0, errors::invalid_tree_depth());
+        assert!(vector::length(&initial_root) == FIELD_BYTES_LEN, errors::invalid_commitment());
 
         let pool = Pool {
             id: object::new(ctx),

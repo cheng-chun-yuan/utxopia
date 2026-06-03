@@ -35,6 +35,7 @@ module utxopia::redemption {
     }
 
     public fun request_redemption(
+        _: &RedemptionCap,
         pool: &mut Pool,
         queue: &mut RedemptionQueue,
         btc_address_hash: vector<u8>,

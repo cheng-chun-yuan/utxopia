@@ -1,6 +1,7 @@
 #[test_only]
 module utxopia::btc_deposit_tests {
     use sui::test_scenario;
+    use utxopia::btc_light_client;
     use utxopia::btc_deposit::{Self, BtcDepositRegistry};
     use utxopia::pool::{Self, Pool};
 
@@ -10,22 +11,27 @@ module utxopia::btc_deposit_tests {
     fun completes_verified_deposit_once() {
         let mut scenario = test_scenario::begin(SENDER);
 
-        pool::initialize(16, vector[0], test_scenario::ctx(&mut scenario));
+        pool::initialize(16, bytes32(0), test_scenario::ctx(&mut scenario));
         btc_deposit::initialize_registry(test_scenario::ctx(&mut scenario));
         test_scenario::next_tx(&mut scenario, SENDER);
 
         let mut pool = test_scenario::take_shared<Pool>(&scenario);
         let mut registry = test_scenario::take_shared<BtcDepositRegistry>(&scenario);
 
-        btc_deposit::complete_verified_deposit(
-            &mut pool,
-            &mut registry,
+        let verified_deposit = btc_light_client::new_verified_deposit(
             bytes32(1),
             0,
             25_000,
             bytes64(3),
             bytes32(4),
             bytes32(5),
+            test_scenario::ctx(&mut scenario),
+        );
+
+        btc_deposit::complete_verified_deposit(
+            &mut pool,
+            &mut registry,
+            verified_deposit,
         );
 
         assert!(btc_deposit::claimed_count(&registry) == 1, 0);
@@ -41,33 +47,34 @@ module utxopia::btc_deposit_tests {
     fun rejects_duplicate_deposit_outpoint() {
         let mut scenario = test_scenario::begin(SENDER);
 
-        pool::initialize(16, vector[0], test_scenario::ctx(&mut scenario));
+        pool::initialize(16, bytes32(0), test_scenario::ctx(&mut scenario));
         btc_deposit::initialize_registry(test_scenario::ctx(&mut scenario));
         test_scenario::next_tx(&mut scenario, SENDER);
 
         let mut pool = test_scenario::take_shared<Pool>(&scenario);
         let mut registry = test_scenario::take_shared<BtcDepositRegistry>(&scenario);
 
-        btc_deposit::complete_verified_deposit(
-            &mut pool,
-            &mut registry,
+        let verified_deposit = btc_light_client::new_verified_deposit(
             bytes32(1),
             0,
             25_000,
             bytes64(3),
             bytes32(4),
             bytes32(5),
+            test_scenario::ctx(&mut scenario),
         );
-        btc_deposit::complete_verified_deposit(
-            &mut pool,
-            &mut registry,
+        btc_deposit::complete_verified_deposit(&mut pool, &mut registry, verified_deposit);
+
+        let duplicate_verified_deposit = btc_light_client::new_verified_deposit(
             bytes32(1),
             0,
             25_000,
             bytes64(3),
             bytes32(8),
             bytes32(7),
+            test_scenario::ctx(&mut scenario),
         );
+        btc_deposit::complete_verified_deposit(&mut pool, &mut registry, duplicate_verified_deposit);
 
         test_scenario::return_shared(pool);
         test_scenario::return_shared(registry);

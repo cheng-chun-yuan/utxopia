@@ -87,6 +87,9 @@ pub fn process_redeem(
     let n_outputs = data[1] as usize;
     let n_public_outputs = data[2] as usize;
     let proof_source = data[3]; // 0 = inline, 1 = buffer account
+    if proof_source > 1 {
+        return Err(ProgramError::InvalidInstructionData);
+    }
 
     if n_inputs == 0 || n_outputs == 0 || n_inputs + n_outputs > MAX_JOINSPLIT_SIZE {
         return Err(ProgramError::InvalidInstructionData);
@@ -190,6 +193,9 @@ pub fn process_redeem(
         // Request nonce
         request_nonces[k] = u64::from_le_bytes(data[offset..offset + 8].try_into().unwrap());
         offset += 8;
+    }
+    if offset != data.len() {
+        return Err(ProgramError::InvalidInstructionData);
     }
 
     // Verify bound params hash — binds BTC scripts + stealth data to proof.

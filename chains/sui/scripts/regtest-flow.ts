@@ -33,6 +33,7 @@ const state = readState();
 const SUI_RPC_URL = process.env.UTXOPIA_SUI_RPC_URL ?? state.rpcUrl ?? "https://fullnode.testnet.sui.io:443";
 const packageId = requireState(state.packageId, "packageId");
 const pool = requireState(state.pool, "pool");
+const verifiedDeposit = requireState(state.lastVerifiedBtcDeposit, "lastVerifiedBtcDeposit");
 const btcDepositRegistry = requireState(state.btcDepositRegistry, "btcDepositRegistry");
 const nullifierRegistry = requireState(state.nullifierRegistry, "nullifierRegistry");
 const redemptionQueue = requireState(state.redemptionQueue, "redemptionQueue");
@@ -77,15 +78,21 @@ await waitForEsplora(ESPLORA_URL, 30_000);
 
 const note = await buildJoinSplitNote(amount);
 const deposit = await createDirectDeposit(note.inputNpk, amount);
-
-console.log("Submitting Sui verified BTC deposit...");
-const shieldTx = await adapter.buildBtcDepositTransaction({
+await assertVerifiedDepositMatches({
+  objectId: verifiedDeposit.objectId,
   depositTxid: reverseHexToBytes(deposit.depositTxid),
   depositVout: deposit.depositVout,
   amountSats: amount,
   opReturnPayload: deposit.opReturnPayload,
   commitment: fieldToSuiBytes(note.inputCommitment),
-  newRoot: fieldToSuiBytes(note.merkle.root),
+  verifiedRoot: fieldToSuiBytes(note.merkle.root),
+});
+
+console.log("Submitting Sui verified BTC deposit...");
+const shieldTx = await adapter.buildBtcDepositTransaction({
+  verifiedDepositObjectId: verifiedDeposit.objectId,
+  verifiedDepositVersion: verifiedDeposit.version,
+  verifiedDepositDigest: verifiedDeposit.digest,
 });
 const shieldResult = await executeTransactionKind(shieldTx.bytes);
 assertSuiSuccess("shield", shieldResult);
@@ -109,7 +116,6 @@ const transactTx = await adapter.buildTransactTransaction({
   publicInputs: note.publicInputs,
   proofPoints: note.proofPoints,
   commitmentsOut: [note.commitmentOutBytes],
-  newRoot: fieldToSuiBytes(note.outputCommitment),
 });
 const transactResult = await executeTransactionKind(transactTx.bytes);
 assertSuiSuccess("transact", transactResult);
@@ -201,7 +207,7 @@ console.log(JSON.stringify({
     completeStatus: completeResult.effects?.status,
   },
   limitations: [
-    "Sui BTC deposit is now routed through btc_deposit::complete_verified_deposit with OP_RETURN validation and duplicate-claim protection; full header/merkle SPV verification is the remaining deposit hardening step.",
+    "Sui BTC deposit now consumes btc_light_client::VerifiedBtcDeposit before btc_deposit::complete_verified_deposit; create this object with the production Sui SPV verifier before running the flow.",
     withdrawalSignerMode === "ika"
       ? "Native Sui Ika policy approval, global Taproot presign, and Taproot sign request are executed; this regtest BTC broadcast still uses the local regtest wallet because the PoC deposit UTXO is created under the local regtest pool address."
       : "BTC withdrawal is signed by the local regtest relayer wallet; native Sui Ika dWallet signing remains optional for later testnet work.",
@@ -506,6 +512,26 @@ function assertSuiSuccess(label: string, result: any) {
   }
 }
 
+function bytesField(value: unknown): Uint8Array | null {
+  if (!Array.isArray(value)) return null;
+  const bytes = value.map((entry) => Number(entry));
+  if (!bytes.every((entry) => Number.isInteger(entry) && entry >= 0 && entry <= 255)) return null;
+  return Uint8Array.from(bytes);
+}
+
+function bigintField(value: unknown): bigint | null {
+  if (typeof value === "bigint") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return BigInt(Math.trunc(value));
+  if (typeof value === "string" && /^\d+$/.test(value)) return BigInt(value);
+  return null;
+}
+
+function numberField(value: unknown): number | null {
+  const valueBigint = bigintField(value);
+  if (valueBigint == null || valueBigint > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+  return Number(valueBigint);
+}
+
 interface IkaSuiSigningConfig {
   network: "testnet" | "mainnet";
   dWalletId: string;
@@ -652,4 +678,57 @@ async function refreshObjectRef(objectId: string) {
     version: object.data.version,
     digest: object.data.digest,
   };
+}
+
+async function assertVerifiedDepositMatches(expected: {
+  objectId: string;
+  depositTxid: Uint8Array;
+  depositVout: number;
+  amountSats: bigint;
+  opReturnPayload: Uint8Array;
+  commitment: Uint8Array;
+  verifiedRoot: Uint8Array;
+}) {
+  const client = new SuiJsonRpcClient({
+    url: SUI_RPC_URL,
+    network: "testnet",
+  });
+  const object = await client.getObject({
+    id: expected.objectId,
+    options: { showContent: true, showType: true },
+  });
+  const data = object.data;
+  if (!data?.type?.endsWith("::btc_light_client::VerifiedBtcDeposit")) {
+    throw new Error(`Sui object ${expected.objectId} is not a VerifiedBtcDeposit`);
+  }
+  const content = data.content as any;
+  const fields = content?.fields as Record<string, unknown> | undefined;
+  if (!fields) {
+    throw new Error(`Sui object ${expected.objectId} has no parsed fields`);
+  }
+
+  assertHexField("deposit_txid", bytesField(fields.deposit_txid), expected.depositTxid);
+  assertNumberField("deposit_vout", numberField(fields.deposit_vout), expected.depositVout);
+  assertBigintField("amount_sats", bigintField(fields.amount_sats), expected.amountSats);
+  assertHexField("op_return_payload", bytesField(fields.op_return_payload), expected.opReturnPayload);
+  assertHexField("commitment", bytesField(fields.commitment), expected.commitment);
+  assertHexField("verified_root", bytesField(fields.verified_root), expected.verifiedRoot);
+}
+
+function assertHexField(label: string, actual: Uint8Array | null, expected: Uint8Array) {
+  if (!actual || toHex(actual) !== toHex(expected)) {
+    throw new Error(`VerifiedBtcDeposit ${label} mismatch`);
+  }
+}
+
+function assertNumberField(label: string, actual: number | null, expected: number) {
+  if (actual !== expected) {
+    throw new Error(`VerifiedBtcDeposit ${label} mismatch`);
+  }
+}
+
+function assertBigintField(label: string, actual: bigint | null, expected: bigint) {
+  if (actual !== expected) {
+    throw new Error(`VerifiedBtcDeposit ${label} mismatch`);
+  }
 }

@@ -116,6 +116,10 @@ metadata needed for confirmation and indexing. The shared interface should keep
 those envelopes discriminated by `chain` instead of flattening them into one
 opaque byte format.
 
+Adapters can reject builders that are not safe for that chain. For example, the
+current Sui adapter disables generic shield PTBs and exposes the BTC deposit path
+through a verified BTC deposit object boundary instead.
+
 ## Migration Phases
 
 1. Create additive Sui scaffolding in the current repository.

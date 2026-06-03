@@ -136,12 +136,12 @@ impl TokenConfig {
     }
 
     pub fn sub_shielded(&mut self, amount: u64) -> Result<(), ProgramError> {
-        // saturating_sub: total_shielded is informational and can lag (e.g.
-        // verify_deposit_v2 historically forgot to update it). Don't fail the
-        // unshield in that case — the on-chain accounting that actually gates
-        // funds is the merkle tree + nullifiers + token vault balance.
         let total = self.total_shielded();
-        self.set_total_shielded(total.saturating_sub(amount));
+        self.set_total_shielded(
+            total
+                .checked_sub(amount)
+                .ok_or(ProgramError::ArithmeticOverflow)?,
+        );
         Ok(())
     }
 

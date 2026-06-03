@@ -126,7 +126,6 @@ async function verifyJoinSplitPtb(adapter: UTXOpiaSuiAdapter): Promise<string> {
     publicInputs: new Uint8Array(32 * 4).fill(5),
     proofPoints: new Uint8Array(128).fill(6),
     commitmentsOut: [new Uint8Array(32).fill(7)],
-    newRoot: new Uint8Array(32).fill(8),
   });
 
   return `bytes=${tx.bytes.length}`;

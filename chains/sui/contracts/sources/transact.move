@@ -1,6 +1,7 @@
 module utxopia::transact {
     use utxopia::errors;
     use utxopia::events;
+    use utxopia::merkle;
     use utxopia::nullifier::{Self, NullifierRegistry};
     use utxopia::pool::{Self, Pool};
     use utxopia::verifier::{Self, VerifyingKeyRegistry};
@@ -16,7 +17,6 @@ module utxopia::transact {
         proof_points: vector<u8>,
         nullifiers_in: vector<vector<u8>>,
         commitments_out: vector<vector<u8>>,
-        new_root: vector<u8>,
     ) {
         pool::assert_not_paused(pool);
         assert!(nullifiers_in.length() == (n_inputs as u64), errors::invalid_join_split());
@@ -43,16 +43,11 @@ module utxopia::transact {
             i = i + 1;
         };
 
-        let mut leaf_index = pool::next_leaf_index(pool);
         let mut j = 0;
         while (j < commitments_out.length()) {
-            events::commitment_inserted(pool_id, leaf_index, commitments_out[j]);
-            pool::increment_leaf_index(pool);
-            leaf_index = leaf_index + 1;
+            merkle::insert_commitment(pool, commitments_out[j]);
             j = j + 1;
         };
-
-        pool::set_latest_root(pool, new_root);
     }
 
     fun assert_bound_public_inputs(

@@ -2,6 +2,7 @@ module utxopia::btc_deposit {
     use sui::object::{Self, UID};
     use sui::transfer;
     use sui::tx_context::TxContext;
+    use utxopia::btc_light_client::{Self, VerifiedBtcDeposit};
     use utxopia::errors;
     use utxopia::events;
     use utxopia::pool::{Self, Pool};
@@ -26,19 +27,23 @@ module utxopia::btc_deposit {
     public fun complete_verified_deposit(
         pool: &mut Pool,
         registry: &mut BtcDepositRegistry,
-        deposit_txid: vector<u8>,
-        deposit_vout: u32,
-        amount_sats: u64,
-        op_return_payload: vector<u8>,
-        commitment: vector<u8>,
-        new_root: vector<u8>,
+        verified_deposit: VerifiedBtcDeposit,
     ) {
+        let (
+            deposit_txid,
+            deposit_vout,
+            amount_sats,
+            op_return_payload,
+            commitment,
+            verified_root,
+        ) = btc_light_client::consume_verified_deposit(verified_deposit);
+
         pool::assert_not_paused(pool);
         assert!(amount_sats > 0, errors::invalid_btc_deposit());
         assert!(vector::length(&deposit_txid) == TXID_LEN, errors::invalid_btc_deposit());
         assert!(vector::length(&op_return_payload) == OP_RETURN_PAYLOAD_LEN, errors::invalid_btc_deposit());
         assert!(vector::length(&commitment) == FIELD_BYTES_LEN, errors::invalid_commitment());
-        assert!(vector::length(&new_root) == FIELD_BYTES_LEN, errors::invalid_commitment());
+        assert!(vector::length(&verified_root) == FIELD_BYTES_LEN, errors::invalid_commitment());
 
         let claim_key = outpoint_key(&deposit_txid, deposit_vout);
         assert!(!contains_claim(registry, &claim_key), errors::btc_deposit_already_claimed());
@@ -61,7 +66,7 @@ module utxopia::btc_deposit {
         );
         events::commitment_inserted(pool_id, leaf_index, commitment);
         pool::increment_leaf_index(pool);
-        pool::set_latest_root(pool, new_root);
+        pool::set_latest_root(pool, verified_root);
     }
 
     public fun claimed_count(registry: &BtcDepositRegistry): u64 {

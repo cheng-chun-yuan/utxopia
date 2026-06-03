@@ -13,7 +13,8 @@ The first Sui Move package should implement:
 | Module | Purpose |
 | --- | --- |
 | `pool` | Shared pool object, pause state, admin capability |
-| `merkle` | Commitment tree state and root updates |
+| `btc_light_client` | Verified BTC deposit object boundary; production SPV verifier should create these objects |
+| `merkle` | Package-internal commitment insertion and root updates |
 | `nullifier` | Nullifier registry using object storage/dynamic fields |
 | `notes` | Commitment insertion and note events |
 | `redemption` | BTC withdrawal request and completion state |
@@ -36,7 +37,7 @@ Initial objects:
 | `MerkleTree` | Shared or owned by `Pool` | Commitment tree state |
 | `AdminCap` | Address-owned | Pause/unpause and config updates |
 | `UpgradeCap` | Address-owned | Package upgrade control |
-| `RedemptionCap` | Address-owned or controlled object | Authority for redemption completion workers |
+| `RedemptionCap` | Address-owned or controlled object | Interim authority for redemption request/completion workers until proof-burning redemption lands |
 | `DWalletPolicyCap` | Optional Ika-controlled/capability flow | Authorize Ika signing after policy checks |
 
 Shared objects are publicly accessible, so every mutating entry function must
@@ -46,9 +47,9 @@ upgrade, and privileged worker paths.
 ## MVP Instructions
 
 1. `initialize_pool`
-2. `shield_deposit`
+2. `complete_verified_deposit` consuming `VerifiedBtcDeposit`
 3. `transact`
-4. `request_redemption`
+4. `request_redemption` with `RedemptionCap` until a proof-burning Sui path lands
 5. `complete_redemption`
 6. `set_paused`
 7. `update_pool_config`
@@ -61,9 +62,9 @@ Client flows should be designed as PTBs instead of one-instruction equivalents:
 
 | Flow | PTB Shape |
 | --- | --- |
-| Shield | create/fetch note inputs, call `shield_deposit`, emit commitment event |
+| BTC deposit | production BTC verifier creates `VerifiedBtcDeposit`, then `complete_verified_deposit` consumes it and emits commitment event |
 | Private transfer | prepare proof inputs, spend nullifiers, insert output commitments |
-| BTC redemption | spend note, create redemption request |
+| BTC redemption | interim path uses `RedemptionCap`; production path must spend a note/nullifier before creating the request |
 | Completion | fetch redemption object/event state, have the relayer sign/broadcast BTC, complete request with `RedemptionCap` |
 
 The SDK should expose PTB builders so the web app can compose wallet, coin, and
@@ -107,12 +108,21 @@ Immediate follow-ups:
 1. Use `tools/sui-groth16-exporter` to convert snarkjs verification keys and
    proofs into Arkworks compressed bytes accepted by `sui::groth16`.
 2. Register exported `rawVerifyingKey` bytes with `verifier::register_raw_key`.
-3. Wire `verify_join_split` into the shield, transact, and redemption paths.
+3. Keep `verify_join_split` on `transact`; add proof-burning redemption before production use.
 4. Decide whether the Sui launch supports only `nPublic <= 8` circuits or
    repacks the circuit public inputs for larger JoinSplit arities.
 
 Reference implementation checked: `SoundnessLabs/sp1-sui`, which uses the same
 Arkworks BN254 serialization path before calling Sui's Groth16 verifier.
+
+Current hardening note: public callers cannot directly insert commitments or set
+arbitrary roots. BTC deposit no longer requires `AdminCap`; it consumes a
+`VerifiedBtcDeposit` object created by the BTC verification boundary. That
+mirrors the Solana split where the BTC light client creates a verified
+transaction PDA and UTXOpia consumes it. The package does not expose a
+cap-gated recorder for this object. Full production parity requires the Sui BTC
+verifier module to create `VerifiedBtcDeposit` only after header/merkle SPV
+validation and after binding the post-state root.
 
 Exporter example:
 

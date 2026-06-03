@@ -87,6 +87,9 @@ pub fn process_transact(
     let n_outputs = data[1] as usize;
     let n_public_outputs = data[2] as usize;
     let proof_source = data[3]; // 0 = inline, 1 = buffer account
+    if proof_source > 1 {
+        return Err(ProgramError::InvalidInstructionData);
+    }
 
     // Transact requires n_public_outputs == 0 (all outputs go to tree)
     if n_public_outputs != 0 {
@@ -164,8 +167,11 @@ pub fn process_transact(
     // Detect optional sender-memo section by exact data length match.
     // Older clients send no memo bytes (data ends at stealth_data_end); newer
     // clients append exactly n_outputs * SENDER_MEMO_DATA_PER_OUTPUT bytes.
-    // Anything else trailing is ignored (forward-compat for future extensions).
+    // Anything else trailing is rejected; future extensions should be versioned.
     let sender_memos_len = n_outputs * SENDER_MEMO_DATA_PER_OUTPUT;
+    if data.len() != stealth_data_end && data.len() != stealth_data_end + sender_memos_len {
+        return Err(ProgramError::InvalidInstructionData);
+    }
     let has_sender_memos = data.len() == stealth_data_end + sender_memos_len;
     let sender_memos_start = stealth_data_end;
 

@@ -31,7 +31,7 @@ surfaces without mutating a live network.
 
 ## Next Live POC
 
-Replace the demo object refs and bytes with:
+Replace the local placeholder object refs and bytes with:
 
 - published Sui package ID
 - `Pool` shared object ID and initial shared version
@@ -39,6 +39,7 @@ Replace the demo object refs and bytes with:
 - `VerifyingKeyRegistry` shared object ID and initial shared version
 - `RedemptionQueue` shared object ID and initial shared version
 - `AdminCap` object ref
+- `VerifiedBtcDeposit` object ref created by the production BTC verification path
 - exported real `rawVerifyingKey` and `vkHash`
 - real `proofPoints` and `publicInputs`
 - optional real Ika dWallet package/object/capability calls when testnet IKA is

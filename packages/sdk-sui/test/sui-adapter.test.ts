@@ -27,20 +27,15 @@ function adapter() {
   });
 }
 
-test("builds shield PTB transaction-kind bytes offline", async () => {
-  const tx = await adapter().buildShieldTransaction({
+test("rejects generic Sui shield PTBs offline", async () => {
+  await expect(adapter().buildShieldTransaction({
     recipient: "recipient",
     tokenId: "zkbtc",
     amount: 1n,
     metadata: {
       commitment: "11".repeat(32),
-      newRoot: "22".repeat(32),
     },
-  });
-
-  expect(tx.kind).toBe("sui-programmable-transaction-block");
-  expect(tx.bytes.length).toBeGreaterThan(0);
-  expect(tx.objectIds).toContain(objectId);
+  })).rejects.toThrow("Sui generic shield PTBs are disabled");
 });
 
 test("builds register verifying key PTB transaction-kind bytes offline", async () => {
@@ -61,12 +56,9 @@ test("builds register verifying key PTB transaction-kind bytes offline", async (
 
 test("builds verified BTC deposit PTB transaction-kind bytes offline", async () => {
   const tx = await adapter().buildBtcDepositTransaction({
-    depositTxid: new Uint8Array(32).fill(1),
-    depositVout: 0,
-    amountSats: 25000n,
-    opReturnPayload: new Uint8Array(64).fill(3),
-    commitment: new Uint8Array(32).fill(4),
-    newRoot: new Uint8Array(32).fill(5),
+    verifiedDepositObjectId: objectId,
+    verifiedDepositVersion: "1",
+    verifiedDepositDigest: "11111111111111111111111111111111",
   });
 
   expect(tx.kind).toBe("sui-programmable-transaction-block");
@@ -97,7 +89,6 @@ test("builds transact PTB transaction-kind bytes offline", async () => {
     publicInputs: new Uint8Array(32 * 4).fill(5),
     proofPoints: new Uint8Array(128).fill(6),
     commitmentsOut: [new Uint8Array(32).fill(7)],
-    newRoot: new Uint8Array(32).fill(8),
   });
 
   expect(tx.kind).toBe("sui-programmable-transaction-block");

@@ -54,7 +54,6 @@ export interface TransactInput {
   proofPoints?: Uint8Array;
   nullifiers?: Uint8Array[];
   commitmentsOut?: Uint8Array[];
-  newRoot?: Uint8Array;
 }
 
 export interface RedemptionInput {
