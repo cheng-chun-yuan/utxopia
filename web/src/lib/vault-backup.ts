@@ -66,6 +66,21 @@ export function createVaultBackupPayload(identity: string): VaultBackupPayload {
   };
 }
 
+export function downloadVaultBackup(identity: string): void {
+  const payload = createVaultBackupPayload(identity);
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `utxopia-vault-backup-${payload.exportedAt.slice(0, 10)}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function isPasskeyVault(keys: {
   solanaPublicKey?: Uint8Array | number[];
 }): boolean {

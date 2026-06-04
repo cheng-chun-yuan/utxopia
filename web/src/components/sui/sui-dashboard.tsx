@@ -35,7 +35,6 @@ import { cn } from "@/lib/utils";
 import { useUTXOpiaStore } from "@/stores";
 import { useTokenPrices, type TokenPrices } from "@/hooks/use-token-prices";
 import { VaultFirstSteps } from "@/components/vault/vault-first-steps";
-import { VaultBackupCard } from "@/components/vault/vault-backup-card";
 import { hasBackupForKeys } from "@/lib/vault-backup";
 
 type RpcState = "idle" | "loading" | "ok" | "error";
@@ -309,14 +308,10 @@ function SuiVaultCard({ networkId, sui }: { networkId: NetworkId; sui: SuiConfig
         {identity && (
           <>
             <VaultFirstSteps
+              keys={keys}
               hasBackup={hasRecoveryBackup}
               hasFunds={depositCount > 0 || totalUsd > 0}
               depositHref={hrefWithChain("/vault/deposit", networkId)}
-            />
-            <VaultBackupCard
-              keys={keys}
-              isViewOnly={false}
-              depositCount={depositCount}
               onBackupComplete={() => setHasRecoveryBackup(true)}
             />
           </>

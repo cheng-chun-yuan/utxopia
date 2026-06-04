@@ -51,7 +51,6 @@ import { useChainEnvironment } from "@/lib/chain-environment";
 import { getChainAdapter } from "@/lib/chain-registry";
 import { SuiDashboard } from "@/components/sui/sui-dashboard";
 import { VaultActions } from "@/components/vault/vault-actions";
-import { VaultBackupCard } from "@/components/vault/vault-backup-card";
 import { VaultBalance } from "@/components/vault/vault-balance";
 import { VaultGuide } from "@/components/vault/vault-guide";
 import { VaultNetworkStatus } from "@/components/vault/vault-network-status";
@@ -354,8 +353,10 @@ export default function VaultPage() {
 
               {!isViewOnly && (
                 <VaultFirstSteps
+                  keys={keys}
                   hasBackup={hasRecoveryBackup}
                   hasFunds={hasVaultValue}
+                  onBackupComplete={() => setHasRecoveryBackup(true)}
                 />
               )}
 
@@ -380,13 +381,6 @@ export default function VaultPage() {
                 networkId={networkId}
                 isViewOnly={isViewOnly}
                 depositCount={depositCount}
-              />
-
-              <VaultBackupCard
-                keys={keys}
-                isViewOnly={isViewOnly}
-                depositCount={depositCount}
-                onBackupComplete={() => setHasRecoveryBackup(true)}
               />
 
               <VaultTokenList

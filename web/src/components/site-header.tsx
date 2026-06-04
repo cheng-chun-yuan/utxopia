@@ -91,7 +91,7 @@ export function SiteHeader() {
                 className="inline-flex items-center gap-1.5 text-xs font-semibold border border-privacy/10 px-4 py-2.5 rounded-full transition-all text-privacy bg-privacy/10 hover:bg-privacy/10 hover:border-privacy/30 hover:shadow-[0_0_15px_rgba(20,241,149,0.15)]"
               >
                 <Wallet className="w-3 h-3" />
-                Open wallet
+                Wallet
               </Link>
             </motion.div>
           </div>
