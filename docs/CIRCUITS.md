@@ -190,6 +190,33 @@ Output: computed root (compared against public merkleRoot)
 
 ## Variant System
 
+### Cross-Chain Reuse
+
+The same JoinSplit circuit source is used for Solana and Sui. The shared
+catalog lives in `packages/sdk-core/src/sui-circuits.ts` and defines:
+
+- circuit name: `joinsplit_NxM`
+- public input order: `merkleRoot`, `boundParamsHash`, `nullifiers[]`,
+  `commitmentsOut[]`
+- public input count: `2 + N + M`
+- chain-specific verifier limits
+
+The proof should still be generated per chain transaction because
+`boundParamsHash` includes the chain binding. Reusing the same circuit is good;
+reusing a proof across chains is not.
+
+Verifier encoding is chain-specific:
+
+| Chain | Circuit source | VK/proof format |
+| --- | --- | --- |
+| Solana | `circuits/circom/joinsplit.circom` | Rust verifier constants exported from snarkjs VKs |
+| Sui | `circuits/circom/joinsplit.circom` | Arkworks/Sui-formatted VK and proof bytes |
+
+Current Sui Groth16 verification supports up to 8 public inputs. That means
+Sui can use shared JoinSplit shapes where `2 + N + M <= 8`; larger Solana
+variants need public-input packing or another Sui verification backend before
+registration.
+
 ### Tier Structure
 
 | Tier | Variants | Count | Use Case |

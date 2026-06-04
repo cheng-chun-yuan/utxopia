@@ -54,6 +54,32 @@ test("builds register verifying key PTB transaction-kind bytes offline", async (
   expect(tx.bytes.length).toBeGreaterThan(0);
 });
 
+test("rejects Sui verifying keys for unsupported shared circuit shapes", async () => {
+  await expect(adapter().buildRegisterVerifyingKeyTransaction({
+    nInputs: 6,
+    nOutputs: 1,
+    nPublic: 9,
+    vkHash: new Uint8Array(32).fill(1),
+    vkGammaAbcG1Bytes: new Uint8Array([1]),
+    alphaG1BetaG2Bytes: new Uint8Array([2]),
+    gammaG2NegPcBytes: new Uint8Array([3]),
+    deltaG2NegPcBytes: new Uint8Array([4]),
+  })).rejects.toThrow("supports at most 8");
+});
+
+test("rejects Sui verifying keys with incorrect public input counts", async () => {
+  await expect(adapter().buildRegisterVerifyingKeyTransaction({
+    nInputs: 2,
+    nOutputs: 2,
+    nPublic: 7,
+    vkHash: new Uint8Array(32).fill(1),
+    vkGammaAbcG1Bytes: new Uint8Array([1]),
+    alphaG1BetaG2Bytes: new Uint8Array([2]),
+    gammaG2NegPcBytes: new Uint8Array([3]),
+    deltaG2NegPcBytes: new Uint8Array([4]),
+  })).rejects.toThrow("joinsplit_2x2 expects 6 public inputs");
+});
+
 test("builds verified BTC deposit PTB transaction-kind bytes offline", async () => {
   const tx = await adapter().buildBtcDepositTransaction({
     verifiedDepositObjectId: objectId,

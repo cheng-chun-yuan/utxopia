@@ -13,6 +13,10 @@ import type {
   TransactInput,
   UTXOpiaChainAdapter,
 } from "@utxopia/sdk-core";
+import {
+  assertSuiGroth16Compatible,
+  joinSplitShape,
+} from "@utxopia/sdk-core";
 
 export interface UTXOpiaSuiAdapterConfig {
   rpcUrl: string;
@@ -280,6 +284,11 @@ export class UTXOpiaSuiAdapter implements UTXOpiaChainAdapter {
     if (!this.config.verifyingKeyRegistryObjectId) {
       throw new Error("Sui verifying-key registry object ID is required to register verifying keys");
     }
+    const shape = joinSplitShape(input.nInputs, input.nOutputs);
+    if (input.nPublic !== shape.nPublic) {
+      throw new Error(`${shape.name} expects ${shape.nPublic} public inputs, got ${input.nPublic}`);
+    }
+    assertSuiGroth16Compatible(shape);
 
     const tx = new Transaction();
     const adminCap = tx.objectRef({

@@ -102,6 +102,9 @@ Current constraints:
   arity limits on Sui, or a different verification backend.
 - The registry expects Sui/Arkworks prepared verifying-key bytes, not the raw
   snarkjs JSON format.
+- The SDK shared circuit catalog enforces the same JoinSplit names and public
+  input order as Solana, while rejecting Sui VK registration for shapes above
+  the current Sui public-input limit.
 
 Immediate follow-ups:
 
